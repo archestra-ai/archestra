@@ -1,10 +1,13 @@
 import {
+  archestraApiSdk,
+  getManageCredentialsButtonTestId,
+} from "@archestra/shared";
+import {
   type APIRequestContext,
   type APIResponse,
   expect,
   type Page,
 } from "@playwright/test";
-import { archestraApiSdk, getManageCredentialsButtonTestId } from "@shared";
 import {
   DEFAULT_TEAM_NAME,
   E2eTestId,
@@ -14,6 +17,7 @@ import {
   MCP_GATEWAY_URL_SUFFIX,
   UI_BASE_URL,
 } from "../consts";
+import { goToPage } from "../fixtures";
 import { closeOpenDialogs } from "./dialogs";
 
 export async function verifyToolCallResultViaApi({
@@ -50,6 +54,29 @@ export async function verifyToolCallResultViaApi({
     token = await getTeamTokenForProfile(request, MARKETING_TEAM_NAME);
   } else {
     token = await getOrgTokenForProfile(request);
+  }
+
+  // The assignment dialog's Save is not awaited by the UI helpers, and the
+  // gateway's enablement check reads agent_tools live — so a direct call can
+  // win the race against the assignment mutation and get the "not enabled"
+  // recovery text instead of the tool result. On the lite harness
+  // (frontend/backend/DB in one container, sub-ms latency) the call wins
+  // deterministically. Wait until the gateway itself lists the tool, which is
+  // the same assignment set the invocation policy checks. Skipped for "Error"
+  // expectations: there the tool may legitimately never appear for this token.
+  if (expectedResult !== "Error") {
+    await expect
+      .poll(
+        async () => {
+          const tools = await listMcpTools(request, {
+            profileId: effectiveProfileId,
+            token,
+          }).catch(() => [] as McpTool[]);
+          return tools.some((tool) => tool.name === toolName);
+        },
+        { timeout: 30_000, intervals: [250, 500, 1000, 2000, 4000] },
+      )
+      .toBe(true);
   }
 
   let toolResult: Awaited<ReturnType<typeof callMcpTool>>;
@@ -177,7 +204,7 @@ export async function initializeMcpSession(
     token: string;
   },
 ): Promise<void> {
-  await makeApiRequest({
+  const response = await makeApiRequest({
     request,
     method: "post",
     urlSuffix: `${MCP_GATEWAY_URL_SUFFIX}/${options.profileId}`,
@@ -193,6 +220,22 @@ export async function initializeMcpSession(
       },
     },
   });
+
+  // MCP gateway can return 200 with a JSON-RPC `{ "error": {...} }` body when
+  // auth fails — `makeApiRequest` only throws on HTTP-level errors, so without
+  // this check `initializeMcpSession` would silently succeed on a JWT
+  // verification failure. Today this is masked because every caller of
+  // `waitForMcpGatewayJwtReady` also runs `listMcpTools` (which does check the
+  // body) — fixing it here closes the latent trap for any future
+  // `requireToolsListed: false` caller.
+  const initResult = (await response.json()) as {
+    error?: { message?: string; code?: number };
+  };
+  if (initResult.error) {
+    throw new Error(
+      `MCP initialize failed: ${initResult.error.message} (code: ${initResult.error.code})`,
+    );
+  }
 }
 
 export async function waitForGatewayIdentityProviderReady(params: {
@@ -259,7 +302,7 @@ export async function callMcpTool(
   return callResult.result;
 }
 
-export async function getTeamTokenForProfile(
+async function getTeamTokenForProfile(
   request: APIRequestContext,
   teamName: string,
 ): Promise<string> {
@@ -295,8 +338,9 @@ type McpTool = {
 /**
  * Polls initialize (+ optional tool listing) until the MCP gateway accepts
  * external-JWT auth for this agent. After `agents.identityProviderId` is set,
- * the gateway's JWT-verifier cache refreshes asynchronously, so the first
- * initialize calls can return 401. ~80 s total backoff covers cold-cache CI.
+ * the JWKS keys must be fetched from the IdP on the first validation attempt;
+ * in CI that endpoint is a cold WireMock pod and the first verify can fail
+ * for tens of seconds. ~150 s total backoff covers the worst observed cases.
  */
 export async function waitForMcpGatewayJwtReady(params: {
   request: APIRequestContext;
@@ -304,13 +348,22 @@ export async function waitForMcpGatewayJwtReady(params: {
   token: string;
   expectedToolName?: string;
   requireToolsListed?: boolean;
+  /** IdP the profile was bound to; lets the give-up probe report whether that
+   *  provider row still exists (404 = deleted, which FK-nulls the binding). */
+  identityProviderId?: string;
 }): Promise<McpTool[]> {
   const requireToolsListed = params.requireToolsListed !== false;
   const delaysMs = [
-    0, 500, 1000, 2000, 4000, 8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000,
-    8000,
+    0, 500, 1000, 2000, 4000, 8000, 8000, 8000, 10_000, 10_000, 10_000, 10_000,
+    15_000, 15_000, 15_000, 15_000, 15_000, 15_000,
   ];
   let lastError: unknown;
+  // Track every distinct failure mode encountered so the final throw points
+  // at the actual cause instead of just the last attempt's error. The real
+  // flake mode (cold JWKS vs. IdP-config not propagated vs. transient 5xx)
+  // is otherwise invisible across the ~161s retry window.
+  const seenErrors = new Map<string, number>();
+  const seenStates = new Map<string, number>();
 
   for (const delayMs of delaysMs) {
     if (delayMs > 0) {
@@ -339,19 +392,86 @@ export async function waitForMcpGatewayJwtReady(params: {
       if (matches) {
         return tools;
       }
+
+      const stateKey = params.expectedToolName
+        ? `missing-tool:${params.expectedToolName} (count=${tools.length})`
+        : `empty-tools-list`;
+      seenStates.set(stateKey, (seenStates.get(stateKey) ?? 0) + 1);
     } catch (error) {
       lastError = error;
+      const msg = error instanceof Error ? error.message : String(error);
+      seenErrors.set(msg, (seenErrors.get(msg) ?? 0) + 1);
     }
   }
 
-  throw (
-    lastError ??
-    new Error(
-      params.expectedToolName
-        ? `Tool ${params.expectedToolName} was not available via JWT auth`
-        : "MCP Gateway did not become ready for external JWT auth",
-    )
+  const errorSummary = [
+    ...[...seenErrors.entries()].map(([m, n]) => `[error×${n}] ${m}`),
+    ...[...seenStates.entries()].map(([m, n]) => `[state×${n}] ${m}`),
+  ].join(" | ");
+
+  const headline = params.expectedToolName
+    ? `Tool ${params.expectedToolName} was not available via JWT auth`
+    : "MCP Gateway did not become ready for external JWT auth";
+
+  // The 401 collapses many silent validateExternalIdpToken null branches into
+  // one opaque error, and backend logs rotate out before the CI dump. Fold the
+  // deciding state (IdP binding present? OIDC config resolvable?) into the
+  // failure message — booleans/status only, never secret config.
+  const serverState = await probeIdpServerState(
+    params.request,
+    params.profileId,
+    params.identityProviderId,
   );
+
+  const lastMsg = lastError instanceof Error ? lastError.message : "";
+  throw new Error(
+    `${headline} — ${delaysMs.length} attempts over ~${Math.round(delaysMs.reduce((a, b) => a + b, 0) / 1000)}s. ${errorSummary || "(no failure signal captured)"}${lastMsg && !errorSummary.includes(lastMsg) ? ` Last: ${lastMsg}` : ""} ${serverState}`,
+  );
+}
+
+async function probeIdpServerState(
+  request: APIRequestContext,
+  profileId: string,
+  expectedIdpId?: string,
+): Promise<string> {
+  try {
+    const agentResp = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/agents/${profileId}`,
+      ignoreStatusCheck: true,
+    });
+    const agent = (await agentResp.json().catch(() => ({}))) as {
+      identityProviderId?: string | null;
+      agentType?: string;
+    };
+    const idpId = agent.identityProviderId;
+    let state = `[agent GET=${agentResp.status()} identityProviderId=${idpId ? "set" : "MISSING"} agentType=${agent.agentType ?? "?"}`;
+    // Resolve which provider to probe: the one still on the agent, or — if the
+    // binding is gone — the one the profile was created with. A 404 on the
+    // latter proves the provider row was deleted (FK ON DELETE SET NULL nulled
+    // the binding); a 200 means the binding vanished without the row being
+    // deleted.
+    const probeIdpId = idpId ?? expectedIdpId;
+    if (probeIdpId) {
+      const idpResp = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/identity-providers/${probeIdpId}`,
+        ignoreStatusCheck: true,
+      });
+      const idp = (await idpResp.json().catch(() => ({}))) as {
+        oidcConfig?: { clientId?: string; jwksEndpoint?: string } | null;
+      };
+      const which = idpId ? "idp" : "expectedIdp";
+      state += `; ${which} GET=${idpResp.status()} hasOidcConfig=${!!idp.oidcConfig} hasJwksEndpoint=${!!idp.oidcConfig?.jwksEndpoint} hasClientId=${!!idp.oidcConfig?.clientId}]`;
+    } else {
+      state += "]";
+    }
+    return state;
+  } catch (error) {
+    return `[server-state probe failed: ${error instanceof Error ? error.message : String(error)}]`;
+  }
 }
 
 export async function listMcpTools(
@@ -416,6 +536,10 @@ export async function openManageCredentialsDialog(
   page: Page,
   catalogItemName: string,
 ): Promise<void> {
+  // The card's credentials control navigates to the item detail page's
+  // Credentials tab; chat surfaces render the same content inside the
+  // standalone ManageCredentialsDialog. Both carry the same testids, so
+  // locate the credentials surface page-wide instead of scoping to a dialog.
   const searchInput = page.getByRole("textbox", {
     name: "Search MCP servers by name",
   });
@@ -426,21 +550,13 @@ export async function openManageCredentialsDialog(
   const targetCard = page.getByTestId(
     `${E2eTestId.McpServerCard}-${catalogItemName}`,
   );
-  const settingsDialog = page.getByRole("dialog", {
-    name: new RegExp(`^${escapeRegExp(catalogItemName)} Settings$`),
-  });
-  const connectionsNavButton = settingsDialog.getByTestId(
+  const connectionsNavButton = page.getByTestId(
     E2eTestId.McpServerSettingsConnectionsNavButton,
   );
-  const connectionsHeading = settingsDialog.getByRole("heading", {
-    name: "Credentials",
-    exact: true,
-  });
-  if (await settingsDialog.isVisible().catch(() => false)) {
-    if (!(await connectionsHeading.isVisible().catch(() => false))) {
-      await connectionsNavButton.click();
-    }
-    await expect(connectionsHeading).toBeVisible({ timeout: 10_000 });
+  const connectionsContent = page.getByTestId(
+    E2eTestId.McpServerSettingsConnectionsContent,
+  );
+  if (await connectionsContent.isVisible().catch(() => false)) {
     return;
   }
 
@@ -450,15 +566,18 @@ export async function openManageCredentialsDialog(
   }
 
   await expect(async () => {
-    if (await settingsDialog.isVisible().catch(() => false)) {
-      if (!(await connectionsHeading.isVisible().catch(() => false))) {
-        await connectionsNavButton.click();
-      }
-      await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
+    if (await connectionsContent.isVisible().catch(() => false)) {
       return;
     }
 
     if (await standaloneDialog.isVisible().catch(() => false)) {
+      return;
+    }
+
+    // Already on the item detail page (another tab) — switch to Credentials.
+    if (await connectionsNavButton.isVisible().catch(() => false)) {
+      await connectionsNavButton.click();
+      await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
       return;
     }
 
@@ -468,9 +587,10 @@ export async function openManageCredentialsDialog(
     }
 
     if (!(await targetCard.isVisible().catch(() => false))) {
-      // Newly-installed servers may not be in the rendered list yet — re-fetch
-      // and re-apply the search filter rather than waiting on a stale page.
-      await page.reload();
+      // Newly-installed servers may not be in the rendered list yet (or the
+      // page is elsewhere) — go back to the registry list and re-apply the
+      // search filter.
+      await goToPage(page, "/mcp/registry");
       await page.waitForLoadState("domcontentloaded");
       if (await searchInput.isVisible().catch(() => false)) {
         await searchInput.fill(catalogItemName);
@@ -485,6 +605,7 @@ export async function openManageCredentialsDialog(
       name: /^\d+\/\d+$/,
     });
 
+    // Both controls navigate to the item detail page's Credentials tab.
     if (await manageButton.isVisible().catch(() => false)) {
       await manageButton.click({ force: true });
     } else {
@@ -492,22 +613,21 @@ export async function openManageCredentialsDialog(
       await deploymentButton.click();
     }
 
-    await expect(settingsDialog).toBeVisible({ timeout: 2_000 });
-    if (!(await connectionsHeading.isVisible().catch(() => false))) {
-      await connectionsNavButton.click();
+    if (!(await connectionsContent.isVisible().catch(() => false))) {
+      if (await connectionsNavButton.isVisible().catch(() => false)) {
+        await connectionsNavButton.click();
+      }
     }
-    await expect(connectionsHeading).toBeVisible({ timeout: 2_000 });
+    await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
 }
 
 export async function getVisibleCredentials(page: Page): Promise<string[]> {
-  const visibleDialog = page
-    .getByRole("dialog")
-    .filter({ visible: true })
-    .last();
-  const connectionsNavButton = visibleDialog.getByRole("button", {
-    name: /^Credentials\b/,
-  });
+  // Works on any credentials surface (item detail tab or dialog): the nav
+  // button/tab trigger carries the connection count, the content the rows.
+  const connectionsNavButton = page.getByTestId(
+    E2eTestId.McpServerSettingsConnectionsNavButton,
+  );
   const badgeText =
     (await connectionsNavButton.textContent().catch(() => "")) ?? "";
   const expectedConnectionCount = Number.parseInt(
@@ -518,16 +638,13 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
   if (expectedConnectionCount > 0) {
     await expect
       .poll(
-        async () =>
-          await visibleDialog.getByTestId(E2eTestId.CredentialOwner).count(),
+        async () => await page.getByTestId(E2eTestId.CredentialOwner).count(),
         { timeout: 10_000, intervals: [250, 500, 1000] },
       )
       .toBeGreaterThan(0);
   }
 
-  return await visibleDialog
-    .getByTestId(E2eTestId.CredentialOwner)
-    .allTextContents();
+  return await page.getByTestId(E2eTestId.CredentialOwner).allTextContents();
 }
 
 export async function getVisibleStaticCredentials(
@@ -657,8 +774,4 @@ export async function createTeamMcpGatewayViaApi({
     );
   }
   return { id: createResponse.data.id, name: createResponse.data.name };
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

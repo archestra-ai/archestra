@@ -1,0 +1,84 @@
+{
+  "name": "hileamlakb__prims",
+  "display_name": "PRIMS",
+  "description": "PRIMS is a lightweight, open-source Model Context Protocol (MCP) server that lets LLM agents safely execute arbitrary Python code in a secure, throw-away sandbox.",
+  "author": {
+    "name": "hileamlakB"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "server.main"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<p align=\"left\">\n  <img src=\"primslogo.png\" alt=\"PRIMS Logo\" width=\"200\"/>\n  <a href=\"#\"><img src=\"https://img.shields.io/badge/status-alpha-orange?style=for-the-badge\" alt=\"Status: Alpha\"/></a>\n  <a href=\"LICENSE\"><img src=\"https://img.shields.io/badge/license-MIT-blue?style=for-the-badge\" alt=\"License: MIT\"/></a>\n</p>\n\n# PRIMS – Python Runtime Interpreter MCP Server\n\nPRIMS is a tiny open-source **Model Context Protocol (MCP)** server that lets LLM agents run arbitrary Python code in a secure, throw-away sandbox.\n\n•   **One tool, one job.**  Exposes a single MCP tool – `run_code` – that executes user-supplied Python and streams back `stdout / stderr`.\n\n•   **Isolated & reproducible.**  Each call spins up a fresh virtual-env, installs any requested pip packages, mounts optional read-only files, then nukes the workspace.\n\n•   **Zero config.**  Works over MCP/stdio or drop it in Docker.\n\n---\n\n## Quick-start\n\n### 1. Local development environment\n\n```bash\nchmod +x scripts/setup_env.sh   # once, to make the script executable\n./scripts/setup_env.sh          # creates .venv & installs deps\n\n# activate the venv in each new shell\nsource .venv/bin/activate\n```\n\n### 2. Launch the server\n\n```bash\npython -m server.main         # binds http://0.0.0.0:9000/mcp\n```\n\n### 3. Docker\n\n```bash\n# Quick one-liner (build + run)\nchmod +x scripts/docker_run.sh\n./scripts/docker_run.sh         # prints the MCP URL when ready\n```\n\n\n## Examples\n\n### List available tools\n\nYou can use the provided script to list all tools exposed by the server:\n\n```bash\npython examples/list_tools.py\n```\n\nExpected output (tool names and descriptions may vary):\n\n```\nAvailable tools:\n- run_code: Execute Python code in a secure sandbox with optional dependencies & file mounts.\n- list_dir: List files/directories in your session workspace.\n- preview_file: Preview up to 8 KB of a text file from your session workspace.\n- persist_artifact: Upload an output/ file to a presigned URL for permanent storage.\n- mount_file: Download a remote file once per session to `mounts/<path>`.\n```\n\n### Run code via the MCP server\n\n```bash\npython examples/run_code.py\n```\n\n### Mount a dataset once & reuse it\n\n```bash\npython examples/mount_and_run.py\n```\n\nThis mounts a CSV with `mount_file` and then reads it inside `run_code` without re-supplying the URL.\n\n### Inspect your session workspace\n\n```bash\npython examples/inspect_workspace.py\n```\n\nThis shows how to use the **`list_dir`** and **`preview_file`** tools to browse files your code created.\n\n### Persist an artifact to permanent storage\n\nThe **`persist_artifact`** tool uploads a file from your `output/` directory to a presigned URL.\n\nExample (Python):\n\n```python\nawait client.call_tool(\"persist_artifact\", {\n    \"relative_path\": \"plots/plot.png\",\n    \"presigned_url\": \"https://bucket.s3.amazonaws.com/...signature...\",\n})\n```\n\n### Download an artifact\n\nSmall artifacts can be fetched directly:\n\n```bash\ncurl -H \"mcp-session-id: <your-session-id>\" \\\n     http://localhost:9000/artifacts/plots/plot.png -o plot.png\n```\n\n---\n\n## Available tools\n\n| Tool                | Purpose |\n|---------------------|---------------------------------------------------------------|\n| `run_code`          | Execute Python in an isolated sandbox with optional pip deps. |\n| `list_dir`          | List files/directories inside your session workspace.        |\n| `preview_file`      | Return up to 8 KB of a text file for quick inspection.        |\n| `persist_artifact`  | Upload an `output/` file to a client-provided presigned URL. |\n| `mount_file`        | Download a remote file once per session to `mounts/<path>`. |\n\nSee the `examples/` directory for end-to-end demos.\n\n## Contributing\nContributions are welcome! Feel free to open issues, suggest features, or submit pull requests to help improve PRIMS.\n\n\nIf you find this project useful, please consider leaving a ⭐ to show your support.\n",
+  "category": "AI Tools",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "prims": {
+        "command": "python",
+        "args": ["-m", "server.main"],
+        "env": {}
+      },
+      "prims-docker": {
+        "command": "docker",
+        "args": ["run", "prims-docker"],
+        "env": {},
+        "docker_image": "prims-docker"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hileamlakB",
+    "repo": "PRIMS",
+    "url": "https://github.com/hileamlakB/PRIMS",
+    "name": "hileamlakb__prims",
+    "path": null,
+    "stars": 15,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "d646e1f57ee9d9bf79515f39482e46dc65e525e7"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:18.886Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "aiohttp",
+      "importance": 9
+    },
+    {
+      "name": "aiofiles",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[tool.black]\nline-length = 88\ntarget-version = ['py313']\ninclude = '\\.pyi?$'\nextend-exclude = '''\n/(\n  # directories\n  \\.eggs\n  | \\.git\n  | \\.hg\n  | \\.mypy_cache\n  | \\.tox\n  | \\.venv\n  | venv\n  | _build\n  | buck-out\n  | build\n  | dist\n)/\n'''\n\n[build-system]\nrequires = [\"setuptools>=61.0\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"prims\"\nversion = \"0.1.0\"\ndescription = \"Python Runtime Interpreter MCP Server\"\nreadme = \"README.md\"\nlicense = {file = \"LICENSE\"}\nauthors = [\n    {name = \"PRIMS Contributors\"}\n]\nrequires-python = \">=3.13\"\ndependencies = [\n    \"fastmcp\",\n    \"aiohttp\",\n    \"aiofiles\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.4.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-cov>=4.1.0\",\n    \"pytest-mock>=3.11.0\",\n    \"pytest-timeout>=2.1.0\",\n    \"black>=23.7.0\",\n    \"isort>=5.12.0\",\n    \"ruff>=0.0.280\",\n    \"mypy>=1.5.0\",\n    \"bandit[toml]>=1.7.5\",\n    \"safety>=2.3.0\",\n    \"httpx>=0.24.0\",\n    \"pytest-httpx>=0.21.0\",\n    \"factory-boy>=3.3.0\",\n    \"freezegun>=1.2.0\",\n]\n\n[tool.pytest.ini_options]\nminversion = \"7.0\"\naddopts = [\n    \"-ra\",\n    \"--strict-markers\",\n    \"--strict-config\",\n    \"--cov=server\",\n    \"--cov-report=term-missing\",\n    \"--cov-report=html\",\n    \"--cov-report=xml\",\n    \"--cov-fail-under=10\",\n]\ntestpaths = [\"tests\"]\nmarkers = [\n    \"slow: marks tests as slow (deselect with '-m \\\"not slow\\\"')\",\n    \"integration: marks tests as integration tests\",\n    \"unit: marks tests as unit tests\",\n    \"e2e: marks tests as end-to-end tests\",\n]\nasyncio_mode = \"auto\"\ntimeout = 30\n\n[tool.coverage.run]\nsource = [\"server\"]\nomit = [\n    \"*/tests/*\",\n    \"*/test_*\",\n    \"server/__init__.py\",\n    \"*/venv/*\",\n    \"*/.venv/*\",\n]\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"if self.debug:\",\n    \"if settings.DEBUG\",\n    \"raise AssertionError\",\n    \"raise NotImplementedError\",\n    \"if 0:\",\n    \"if __name__ == .__main__.:\",\n    \"class .*\\\\bProtocol\\\\):\",\n    \"@(abc\\\\.)?abstractmethod\",\n]\n\n[tool.isort]\nprofile = \"black\"\nline_length = 88\nmulti_line_output = 3\ninclude_trailing_comma = true\nforce_grid_wrap = 0\nuse_parentheses = true\nensure_newline_before_comments = true\n\n[tool.ruff]\nline-length = 88\nselect = [\n    \"E\",  # pycodestyle errors\n    \"W\",  # pycodestyle warnings\n    \"F\",  # pyflakes\n    \"I\",  # isort\n    \"B\",  # flake8-bugbear\n    \"C4\", # flake8-comprehensions\n    \"UP\", # pyupgrade\n]\nignore = [\n    \"E501\",  # line too long, handled by black\n    \"B008\",  # do not perform function calls in argument defaults\n    \"C901\",  # too complex\n]\n\n[tool.ruff.per-file-ignores]\n\"__init__.py\" = [\"F401\"]\n\"tests/*\" = [\"B011\"]\n\n[tool.mypy]\npython_version = \"3.13\"\ncheck_untyped_defs = true\ndisallow_any_generics = true\ndisallow_incomplete_defs = true\ndisallow_untyped_defs = true\nno_implicit_optional = true\nwarn_redundant_casts = true\nwarn_unused_ignores = true\nwarn_return_any = true\nstrict_equality = true\n\n[[tool.mypy.overrides]]\nmodule = [\n    \"fastmcp.*\",\n    \"aiofiles.*\",\n]\nignore_missing_imports = true\n\n[tool.bandit]\nexclude_dirs = [\"tests\", \"venv\", \".venv\"]\nskips = [\"B101\", \"B601\"]\n\n\n=== requirements.txt ===\nfastmcp\naiohttp \naiofiles"
+}

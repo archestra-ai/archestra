@@ -1,6 +1,10 @@
 "use client";
 
-import { type AnyRoleName, E2eTestId, MEMBER_ROLE_NAME } from "@shared";
+import {
+  type AnyRoleName,
+  E2eTestId,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { Check, Copy, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -12,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useCreateInvitation } from "@/lib/organization.query";
 
 interface InviteByLinkCardProps {
@@ -51,7 +56,7 @@ function InviteByLinkCardContent({
   const handleCopyLink = useCallback(async () => {
     if (!invitationLink) return;
 
-    await navigator.clipboard.writeText(invitationLink);
+    await copyToClipboard(invitationLink);
     setIsCopied(true);
     toast.success("Link copied", {
       description: "Invitation link copied to clipboard",
@@ -115,6 +120,7 @@ function InviteByLinkCardContent({
             <Label>Invitation Link</Label>
             <div className="flex items-center gap-2">
               <Input
+                aria-label="Invitation link"
                 value={invitationLink}
                 readOnly
                 className="flex-1"
@@ -125,6 +131,7 @@ function InviteByLinkCardContent({
                 size="icon"
                 variant="outline"
                 onClick={handleCopyLink}
+                aria-label="Copy invitation link"
                 data-testid={E2eTestId.InvitationLinkCopyButton}
               >
                 {isCopied ? (

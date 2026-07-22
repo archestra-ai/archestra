@@ -4,7 +4,7 @@ import {
   DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
   OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
   OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
-} from "@shared";
+} from "@archestra/shared";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import {

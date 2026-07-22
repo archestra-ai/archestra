@@ -1,0 +1,129 @@
+{
+  "name": "ihor-sokoliuk__mcp-searxng",
+  "display_name": "mcp-searxng",
+  "description": "MCP Server for SearXNG",
+  "author": {
+    "name": "ihor-sokoliuk"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-searxng"],
+    "env": {
+      "SEARXNG_URL": "${user_config.searxng_url}",
+      "AUTH_USERNAME": "${user_config.auth_username}",
+      "AUTH_PASSWORD": "${user_config.auth_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "searxng_url": {
+      "type": "string",
+      "title": "SearXNG Instance URL",
+      "description": "The URL of the SearXNG instance to connect to. Choose from public instances or use your local environment.",
+      "required": true,
+      "default": "http://localhost:8080"
+    },
+    "auth_username": {
+      "type": "string",
+      "title": "Authentication Username",
+      "description": "Username for HTTP Basic Auth if you are using a password protected SearXNG instance.",
+      "sensitive": true,
+      "required": false
+    },
+    "auth_password": {
+      "type": "string",
+      "title": "Authentication Password",
+      "description": "Password for HTTP Basic Auth if you are using a password protected SearXNG instance.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# SearXNG MCP Server\n\nAn [MCP server](https://modelcontextprotocol.io/introduction) implementation that integrates the [SearXNG](https://docs.searxng.org) API, providing web search capabilities.\n\n[![https://nodei.co/npm/mcp-searxng.png?downloads=true&downloadRank=true&stars=true](https://nodei.co/npm/mcp-searxng.png?downloads=true&downloadRank=true&stars=true)](https://www.npmjs.com/package/mcp-searxng)\n\n[![https://badgen.net/docker/pulls/isokoliuk/mcp-searxng](https://badgen.net/docker/pulls/isokoliuk/mcp-searxng)](https://hub.docker.com/r/isokoliuk/mcp-searxng)\n\n<a href=\"https://glama.ai/mcp/servers/0j7jjyt7m9\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/0j7jjyt7m9/badge\" alt=\"SearXNG Server MCP server\" /></a>\n\n## Features\n\n- **Web Search**: General queries, news, articles, with pagination.\n- **Pagination**: Control which page of results to retrieve.\n- **Time Filtering**: Filter results by time range (day, month, year).\n- **Language Selection**: Filter results by preferred language.\n- **Safe Search**: Control content filtering level for search results.\n\n## Tools\n\n- **searxng_web_search**\n  - Execute web searches with pagination\n  - Inputs:\n    - `query` (string): The search query. This string is passed to external search services.\n    - `pageno` (number, optional): Search page number, starts at 1 (default 1)\n    - `time_range` (string, optional): Filter results by time range - one of: \"day\", \"month\", \"year\" (default: none)\n    - `language` (string, optional): Language code for results (e.g., \"en\", \"fr\", \"de\") or \"all\" (default: \"all\")\n    - `safesearch` (number, optional): Safe search filter level (0: None, 1: Moderate, 2: Strict) (default: instance setting)\n\n- **web_url_read**\n  - Read and convert the content from a URL to markdown\n  - Inputs:\n    - `url` (string): The URL to fetch and process\n\n## Configuration\n\n### Setting the SEARXNG_URL\n\nThe `SEARXNG_URL` environment variable defines which SearxNG instance to connect to.\n\n#### Environment Variable Format\n```bash\nSEARXNG_URL=<protocol>://<hostname>[:<port>]\n```\n\n#### Examples\n```bash\n# Local development (default)\nSEARXNG_URL=http://localhost:8080\n\n# Public instance\nSEARXNG_URL=https://search.example.com\n\n# Custom port\nSEARXNG_URL=http://my-searxng.local:3000\n```\n\n#### Setup Instructions\n1. Choose a SearxNG instance from the [list of public instances](https://searx.space/) or use your local environment\n2. Set the `SEARXNG_URL` environment variable to the complete instance URL\n3. If not specified, the default value `http://localhost:8080` will be used\n\n### Using Authentication (Optional)\n\nIf you are using a password protected SearxNG instance you can set a username and password for HTTP Basic Auth:\n\n- Set the `AUTH_USERNAME` environment variable to your username\n- Set the `AUTH_PASSWORD` environment variable to your password\n\n**Note:** Authentication is only required for password-protected SearxNG instances. See the usage examples below for how to configure authentication with different installation methods.\n\n### Proxy Support (Optional)\n\nThe server supports HTTP and HTTPS proxies through environment variables. This is useful when running behind corporate firewalls or when you need to route traffic through a specific proxy server.\n\n#### Proxy Environment Variables\n\nSet one or more of these environment variables to configure proxy support:\n\n- `HTTP_PROXY`: Proxy URL for HTTP requests\n- `HTTPS_PROXY`: Proxy URL for HTTPS requests  \n- `http_proxy`: Alternative lowercase version for HTTP requests\n- `https_proxy`: Alternative lowercase version for HTTPS requests\n\n#### Proxy URL Formats\n\nThe proxy URL can be in any of these formats:\n\n```bash\n# Basic proxy\nexport HTTP_PROXY=http://proxy.company.com:8080\nexport HTTPS_PROXY=http://proxy.company.com:8080\n\n# Proxy with authentication\nexport HTTP_PROXY=http://username:password@proxy.company.com:8080\nexport HTTPS_PROXY=http://username:password@proxy.company.com:8080\n```\n\n**Note:** If no proxy environment variables are set, the server will make direct connections as normal. See the usage examples below for how to configure proxy settings with different installation methods.\n\n### [NPX](https://www.npmjs.com/package/mcp-searxng)\n\n#### Basic Configuration\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-searxng\"],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\"\n      }\n    }\n  }\n}\n```\n\n#### With Authentication\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-searxng\"],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"AUTH_USERNAME\": \"your_username\",\n        \"AUTH_PASSWORD\": \"your_password\"\n      }\n    }\n  }\n}\n```\n\n#### With Proxy Support\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-searxng\"],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"HTTP_PROXY\": \"http://proxy.company.com:8080\",\n        \"HTTPS_PROXY\": \"http://proxy.company.com:8080\"\n      }\n    }\n  }\n}\n```\n\n#### With Authentication and Proxy Support\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-searxng\"],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"AUTH_USERNAME\": \"your_username\",\n        \"AUTH_PASSWORD\": \"your_password\",\n        \"HTTP_PROXY\": \"http://proxy.company.com:8080\",\n        \"HTTPS_PROXY\": \"http://proxy.company.com:8080\"\n      }\n    }\n  }\n}\n```\n\n### [NPM](https://www.npmjs.com/package/mcp-searxng)\n\n```bash\nnpm install -g mcp-searxng\n```\n\n#### Basic Configuration\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"mcp-searxng\",\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\"\n      }\n    }\n  }\n}\n```\n\n#### With Authentication\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"mcp-searxng\",\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"AUTH_USERNAME\": \"your_username\",\n        \"AUTH_PASSWORD\": \"your_password\"\n      }\n    }\n  }\n}\n```\n\n#### With Proxy Support\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"mcp-searxng\",\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"HTTP_PROXY\": \"http://proxy.company.com:8080\",\n        \"HTTPS_PROXY\": \"http://proxy.company.com:8080\"\n      }\n    }\n  }\n}\n```\n\n#### With Authentication and Proxy Support\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"mcp-searxng\",\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"AUTH_USERNAME\": \"your_username\",\n        \"AUTH_PASSWORD\": \"your_password\",\n        \"HTTP_PROXY\": \"http://proxy.company.com:8080\",\n        \"HTTPS_PROXY\": \"http://proxy.company.com:8080\"\n      }\n    }\n  }\n}\n```\n\n### Docker\n\n#### Using [Pre-built Image from Docker Hub](https://hub.docker.com/r/isokoliuk/mcp-searxng)\n\n```bash\ndocker pull isokoliuk/mcp-searxng:latest\n```\n\n##### Basic Configuration\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-e\", \"SEARXNG_URL\",\n        \"isokoliuk/mcp-searxng:latest\"\n      ],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\"\n      }\n    }\n  }\n}\n```\n\n##### With Authentication\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-e\", \"SEARXNG_URL\",\n        \"-e\", \"AUTH_USERNAME\",\n        \"-e\", \"AUTH_PASSWORD\",\n        \"isokoliuk/mcp-searxng:latest\"\n      ],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"AUTH_USERNAME\": \"your_username\",\n        \"AUTH_PASSWORD\": \"your_password\"\n      }\n    }\n  }\n}\n```\n\n##### With Proxy Support\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-e\", \"SEARXNG_URL\",\n        \"-e\", \"HTTP_PROXY\",\n        \"-e\", \"HTTPS_PROXY\",\n        \"isokoliuk/mcp-searxng:latest\"\n      ],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"HTTP_PROXY\": \"http://proxy.company.com:8080\",\n        \"HTTPS_PROXY\": \"http://proxy.company.com:8080\"\n      }\n    }\n  }\n}\n```\n\n##### With Authentication and Proxy Support\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-e\", \"SEARXNG_URL\",\n        \"-e\", \"AUTH_USERNAME\",\n        \"-e\", \"AUTH_PASSWORD\",\n        \"-e\", \"HTTP_PROXY\",\n        \"-e\", \"HTTPS_PROXY\",\n        \"isokoliuk/mcp-searxng:latest\"\n      ],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"AUTH_USERNAME\": \"your_username\",\n        \"AUTH_PASSWORD\": \"your_password\",\n        \"HTTP_PROXY\": \"http://proxy.company.com:8080\",\n        \"HTTPS_PROXY\": \"http://proxy.company.com:8080\"\n      }\n    }\n  }\n}\n```\n\n#### Build Locally\n\n```bash\ndocker build -t mcp-searxng:latest -f Dockerfile .\n```\n\n##### Basic Configuration\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-e\", \"SEARXNG_URL\",\n        \"mcp-searxng:latest\"\n      ],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\"\n      }\n    }\n  }\n}\n```\n\n##### With Authentication\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-e\", \"SEARXNG_URL\",\n        \"-e\", \"AUTH_USERNAME\",\n        \"-e\", \"AUTH_PASSWORD\",\n        \"mcp-searxng:latest\"\n      ],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"AUTH_USERNAME\": \"your_username\",\n        \"AUTH_PASSWORD\": \"your_password\"\n      }\n    }\n  }\n}\n```\n\n##### With Proxy Support\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-e\", \"SEARXNG_URL\",\n        \"-e\", \"HTTP_PROXY\",\n        \"-e\", \"HTTPS_PROXY\",\n        \"mcp-searxng:latest\"\n      ],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"HTTP_PROXY\": \"http://proxy.company.com:8080\",\n        \"HTTPS_PROXY\": \"http://proxy.company.com:8080\"\n      }\n    }\n  }\n}\n```\n\n##### With Authentication and Proxy Support\n```json\n{\n  \"mcpServers\": {\n    \"searxng\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-e\", \"SEARXNG_URL\",\n        \"-e\", \"AUTH_USERNAME\",\n        \"-e\", \"AUTH_PASSWORD\",\n        \"-e\", \"HTTP_PROXY\",\n        \"-e\", \"HTTPS_PROXY\",\n        \"mcp-searxng:latest\"\n      ],\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"AUTH_USERNAME\": \"your_username\",\n        \"AUTH_PASSWORD\": \"your_password\",\n        \"HTTP_PROXY\": \"http://proxy.company.com:8080\",\n        \"HTTPS_PROXY\": \"http://proxy.company.com:8080\"\n      }\n    }\n  }\n}\n```\n\n### HTTP Transport (Optional)\n\nThe server supports both STDIO (default) and HTTP transports:\n\n#### STDIO Transport (Default)\n- **Best for**: Claude Desktop and most MCP clients\n- **Usage**: Automatic - no additional configuration needed\n\n#### HTTP Transport  \n- **Best for**: Web-based applications and remote MCP clients\n- **Usage**: Set the `MCP_HTTP_PORT` environment variable\n\n##### Basic HTTP Server Configuration\n```json\n{\n  \"mcpServers\": {\n    \"searxng-http\": {\n      \"command\": \"mcp-searxng\",\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"MCP_HTTP_PORT\": \"3000\"\n      }\n    }\n  }\n}\n```\n\n##### HTTP Server with Authentication\n```json\n{\n  \"mcpServers\": {\n    \"searxng-http\": {\n      \"command\": \"mcp-searxng\",\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"MCP_HTTP_PORT\": \"3000\",\n        \"AUTH_USERNAME\": \"your_username\",\n        \"AUTH_PASSWORD\": \"your_password\"\n      }\n    }\n  }\n}\n```\n\n##### HTTP Server with Proxy Support\n```json\n{\n  \"mcpServers\": {\n    \"searxng-http\": {\n      \"command\": \"mcp-searxng\",\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"MCP_HTTP_PORT\": \"3000\",\n        \"HTTP_PROXY\": \"http://proxy.company.com:8080\",\n        \"HTTPS_PROXY\": \"http://proxy.company.com:8080\"\n      }\n    }\n  }\n}\n```\n\n##### HTTP Server with Authentication and Proxy Support\n```json\n{\n  \"mcpServers\": {\n    \"searxng-http\": {\n      \"command\": \"mcp-searxng\",\n      \"env\": {\n        \"SEARXNG_URL\": \"YOUR_SEARXNG_INSTANCE_URL\",\n        \"MCP_HTTP_PORT\": \"3000\",\n        \"AUTH_USERNAME\": \"your_username\",\n        \"AUTH_PASSWORD\": \"your_password\",\n        \"HTTP_PROXY\": \"http://proxy.company.com:8080\",\n        \"HTTPS_PROXY\": \"http://proxy.company.com:8080\"\n      }\n    }\n  }\n}\n```\n\n**HTTP Endpoints:**\n- **MCP Protocol**: `POST/GET/DELETE /mcp` \n- **Health Check**: `GET /health`\n- **CORS**: Enabled for web clients\n\n**Testing HTTP Server:**\n```bash\n# Start HTTP server\nMCP_HTTP_PORT=3000 SEARXNG_URL=http://localhost:8080 mcp-searxng\n\n# Check health\ncurl http://localhost:3000/health\n```\n\n## Running evals\n\nThe evals package loads an mcp client that then runs the src/index.ts file, so there is no need to rebuild between tests. You can see the full documentation [here](https://www.mcpevals.io/docs).\n\n```bash\nSEARXNG_URL=SEARXNG_URL OPENAI_API_KEY=your-key npx mcp-eval evals.ts src/index.ts\n```\n\n## For Developers\n\n### Contributing to the Project\n\nWe welcome contributions! Here's how to get started:\n\n#### 0. Coding Guidelines\n\n- Use TypeScript for type safety\n- Follow existing error handling patterns\n- Keep error messages concise but informative\n- Write unit tests for new functionality\n- Ensure all tests pass before submitting PRs\n- Maintain test coverage above 90%\n- Test changes with the MCP inspector\n- Run evals before submitting PRs\n\n#### 1. Fork and Clone\n\n```bash\n# Fork the repository on GitHub, then clone your fork\ngit clone https://github.com/YOUR_USERNAME/mcp-searxng.git\ncd mcp-searxng\n\n# Add the original repository as upstream\ngit remote add upstream https://github.com/ihor-sokoliuk/mcp-searxng.git\n```\n\n#### 2. Development Setup\n\n```bash\n# Install dependencies\nnpm install\n\n# Start development with file watching\nnpm run watch\n```\n\n#### 3. Development Workflow\n\n1. **Create a feature branch:**\n   ```bash\n   git checkout -b feature/your-feature-name\n   ```\n\n2. **Make your changes** in `src/` directory\n   - Main server logic: `src/index.ts`\n   - Error handling: `src/error-handler.ts`\n\n3. **Build and test:**\n   ```bash\n   npm run build               # Build the project\n   npm test                     # Run unit tests\n   npm run test:coverage       # Run tests with coverage report\n   npm run inspector            # Run MCP inspector\n   ```\n\n4. **Run evals to ensure functionality:**\n   ```bash\n   SEARXNG_URL=http://localhost:8080 OPENAI_API_KEY=your-key npx mcp-eval evals.ts src/index.ts\n   ```\n\n#### 4. Submitting Changes\n\n```bash\n# Commit your changes\ngit add .\ngit commit -m \"feat: description of your changes\"\n\n# Push to your fork\ngit push origin feature/your-feature-name\n\n# Create a Pull Request on GitHub\n```\n\n### Testing\n\nThe project includes comprehensive unit tests with excellent coverage.\n\n#### Running Tests\n\n```bash\n# Run all tests\nnpm test\n\n# Run with coverage reporting\nnpm run test:coverage\n\n# Watch mode for development\nnpm run test:watch\n```\n\n#### Test Statistics\n- **Unit tests** covering all core modules\n- **100% success rate** with dynamic coverage reporting via c8\n- **HTML coverage reports** generated in `coverage/` directory\n\n#### What's Tested\n- Error handling (network, server, configuration errors)\n- Type validation and schema guards\n- Proxy configurations and environment variables\n- Resource generation and logging functionality\n- All module imports and function availability\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "Search",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-searxng-npx": {
+        "command": "npx",
+        "args": ["-y", "mcp-searxng"],
+        "env": {
+          "SEARXNG_URL": "YOUR_SEARXNG_INSTANCE_URL"
+        }
+      },
+      "mcp-searxng-npm-direct": {
+        "command": "mcp-searxng",
+        "args": [],
+        "env": {
+          "SEARXNG_URL": "YOUR_SEARXNG_INSTANCE_URL"
+        }
+      },
+      "isokoliuk-mcp-searxng-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "SEARXNG_URL", "isokoliuk/mcp-searxng:latest"],
+        "env": {
+          "SEARXNG_URL": "YOUR_SEARXNG_INSTANCE_URL"
+        },
+        "docker_image": "isokoliuk/mcp-searxng:latest"
+      },
+      "mcp-searxng-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "SEARXNG_URL", "mcp-searxng:latest"],
+        "env": {
+          "SEARXNG_URL": "YOUR_SEARXNG_INSTANCE_URL"
+        },
+        "docker_image": "mcp-searxng:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ihor-sokoliuk",
+    "repo": "mcp-searxng",
+    "url": "https://github.com/ihor-sokoliuk/mcp-searxng",
+    "name": "mcp-searxng",
+    "path": null,
+    "stars": 166,
+    "contributors": 9,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "fea5d587ca2bcd2acbd52ecfa05ff33290eab441"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:27.926Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "mcp-evals",
+      "importance": 8
+    },
+    {
+      "name": "node-html-markdown",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"mcp-searxng\",\n    \"version\": \"0.5.1\",\n    \"description\": \"MCP server for SearXNG integration\",\n    \"license\": \"MIT\",\n    \"author\": \"Ihor Sokoliuk (https://github.com/ihor-sokoliuk)\",\n    \"homepage\": \"https://github.com/ihor-sokoliuk/mcp-searxng\",\n    \"bugs\": \"https://github.com/ihor-sokoliuk/mcp-searxng/issues\",\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"https://github.com/ihor-sokoliuk/mcp-searxng\"\n    },\n    \"keywords\": [\n        \"mcp\",\n        \"modelcontextprotocol\",\n        \"searxng\",\n        \"search\",\n        \"web-search\",\n        \"claude\",\n        \"ai\",\n        \"pagination\",\n        \"smithery\",\n        \"url-reader\"\n    ],\n    \"type\": \"module\",\n    \"bin\": {\n        \"mcp-searxng\": \"dist/index.js\"\n    },\n    \"files\": [\n        \"dist\"\n    ],\n    \"engines\": {\n        \"node\": \">=18\"\n    },\n    \"scripts\": {\n        \"build\": \"tsc && shx chmod +x dist/*.js\",\n        \"prepare\": \"npm run build\",\n        \"watch\": \"tsc --watch\",\n        \"inspector\": \"DANGEROUSLY_OMIT_AUTH=true npx @modelcontextprotocol/inspector node dist/index.js\",\n        \"postversion\": \"node scripts/update-version.js && git add index.ts && git commit --amend --no-edit\"\n    },\n    \"dependencies\": {\n        \"@modelcontextprotocol/sdk\": \"1.10.1\",\n        \"mcp-evals\": \"^1.0.18\",\n        \"@modelcontextprotocol/sdk\": \"1.15.0\",\n        \"node-html-markdown\": \"^1.3.0\"\n    },\n    \"devDependencies\": {\n        \"@types/node\": \"^22.14.1\",\n        \"shx\": \"^0.4.0\",\n        \"typescript\": \"^5.8.3\"\n    }\n}\n"
+}

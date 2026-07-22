@@ -1,0 +1,112 @@
+{
+  "name": "wong2__mcp-cli",
+  "display_name": "mcp-cli",
+  "description": "A CLI inspector for the Model Context Protocol",
+  "author": {
+    "name": "wong2"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@wong2/mcp-cli"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# mcp-cli\n\nA CLI inspector for the Model Context Protocol\n\nhttps://github.com/user-attachments/assets/4cd113e9-f097-4c9d-b391-045c5f213183\n\n## Features\n\n- Run MCP servers from various sources\n- List Tools, Resources, Prompts\n- Call Tools, Read Resources, Read Prompts\n- OAuth support for SSE and Streamable HTTP servers\n\n## Usage\n\n### Run without arguments\n\n```bash\nnpx @wong2/mcp-cli\n```\n\nThis will use the config file of Claude Desktop.\n\n### Run with a config file\n\n```bash\nnpx @wong2/mcp-cli -c config.json\n```\n\nThe config file has the same format as the Claude Desktop config file.\n\n### Run servers from NPM\n\n```bash\nnpx @wong2/mcp-cli npx <package-name> <args>\n```\n\n### Run locally developed server\n\n```bash\nnpx @wong2/mcp-cli node path/to/server/index.js args...\n```\n\n### Connect to a running server over Streamable HTTP\n\n```bash\nnpx @wong2/mcp-cli --url http://localhost:8000/mcp\n```\n\n### Connect to a running server over SSE\n\n```bash\nnpx @wong2/mcp-cli --sse http://localhost:8000/sse\n```\n\n### Non-interactive mode\n\nRun a specific tool, resource, or prompt without interactive prompts:\n\n```bash\nnpx @wong2/mcp-cli [--config config.json] <command> <server-name>:<target> [--args '{}']\n```\n\nExamples:\n\n```bash\n# Call a tool without arguments\nnpx @wong2/mcp-cli -c config.json call-tool filesystem:list_files\n\n# Call a tool with arguments\nnpx @wong2/mcp-cli -c config.json call-tool filesystem:read_file --args '{\"path\": \"package.json\"}'\n\n# Read a resource\nnpx @wong2/mcp-cli -c config.json read-resource filesystem:file://system/etc/hosts\n\n# Use a prompt\nnpx @wong2/mcp-cli -c config.json get-prompt filesystem:create_summary --args '{\"text\": \"Hello world\"}'\n```\n\nThis mode is useful for scripting and automation, as it bypasses all interactive prompts and executes the specified primitive directly.\n\n### Purge stored data (OAuth tokens, etc.)\n\n```bash\nnpx @wong2/mcp-cli purge\n```\n\n## Related\n\n- [mcpservers.org](https://mcpservers.org) - A curated list of MCP servers\n",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "wong2",
+    "repo": "mcp-cli",
+    "url": "https://github.com/wong2/mcp-cli",
+    "name": "mcp-cli",
+    "path": null,
+    "stars": 361,
+    "contributors": 3,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "10e3cc3c22aba65a51b2a3d1365490454be95f07"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:53.302Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@json-schema-tools/traverse",
+      "importance": 4
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "conf",
+      "importance": 6
+    },
+    {
+      "name": "eventsource",
+      "importance": 7
+    },
+    {
+      "name": "express",
+      "importance": 8
+    },
+    {
+      "name": "get-port",
+      "importance": 5
+    },
+    {
+      "name": "lodash-es",
+      "importance": 3
+    },
+    {
+      "name": "meow",
+      "importance": 6
+    },
+    {
+      "name": "open",
+      "importance": 5
+    },
+    {
+      "name": "prompts",
+      "importance": 6
+    },
+    {
+      "name": "uri-template",
+      "importance": 4
+    },
+    {
+      "name": "yocto-spinner",
+      "importance": 3
+    },
+    {
+      "name": "yoctocolors",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@wong2/mcp-cli\",\n  \"version\": \"1.13.0\",\n  \"description\": \"A CLI inspector for the Model Context Protocol\",\n  \"bin\": {\n    \"mcp-cli\": \"src/cli.js\"\n  },\n  \"type\": \"module\",\n  \"homepage\": \"https://github.com/wong2/mcp-cli\",\n  \"files\": [\n    \"src\",\n    \"README.md\"\n  ],\n  \"scripts\": {},\n  \"keywords\": [\n    \"MCP\"\n  ],\n  \"author\": \"wong2\",\n  \"packageManager\": \"pnpm@9.14.4+sha512.c8180b3fbe4e4bca02c94234717896b5529740a6cbadf19fa78254270403ea2f27d4e1d46a08a0f56c89b63dc8ebfd3ee53326da720273794e6200fcf0d184ab\",\n  \"dependencies\": {\n    \"@json-schema-tools/traverse\": \"^1.10.4\",\n    \"@modelcontextprotocol/sdk\": \"^1.15.1\",\n    \"conf\": \"^13.1.0\",\n    \"eventsource\": \"^3.0.6\",\n    \"express\": \"^5.1.0\",\n    \"get-port\": \"^7.1.0\",\n    \"lodash-es\": \"^4.17.21\",\n    \"meow\": \"^13.2.0\",\n    \"open\": \"^10.1.2\",\n    \"prompts\": \"^2.4.2\",\n    \"uri-template\": \"^2.0.0\",\n    \"yocto-spinner\": \"^0.2.2\",\n    \"yoctocolors\": \"^2.1.1\"\n  }\n}\n"
+}

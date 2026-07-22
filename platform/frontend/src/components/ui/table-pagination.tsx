@@ -59,6 +59,7 @@ function RowsPerPageSelect({
         onValueChange={(value) => onPageSizeChange(Number(value))}
       >
         <SelectTrigger
+          aria-label="Rows per page"
           className={compact ? "h-7 w-[68px] text-xs" : "h-8 w-[90px]"}
         >
           <SelectValue placeholder={pageSize} />

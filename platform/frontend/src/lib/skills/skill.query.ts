@@ -1,43 +1,58 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getApiErrorMessage, handleApiError } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
+import {
+  getApiErrorMessage,
+  handleApiError,
+  throwOnApiError,
+} from "@/lib/utils";
 
 const {
   getSkills,
   getSkill,
   getSkillSourceRepos,
+  getSkillUsageStatistics,
   createSkill,
   updateSkill,
+  updateSkillGithubSync,
   deleteSkill,
+  resetSkill,
   discoverGithubSkills,
+  searchSkillCatalog,
   previewGithubSkill,
   importGithubSkills,
-  enableSkillToolDefaults,
 } = archestraApiSdk;
+
+export type SkillCatalogResult =
+  archestraApiTypes.SearchSkillCatalogResponses["200"]["results"][number];
 
 type SkillsQuery = NonNullable<archestraApiTypes.GetSkillsData["query"]>;
 type SkillsPaginatedParams = Pick<
   SkillsQuery,
-  "limit" | "offset" | "search" | "sourceRepo"
+  | "limit"
+  | "offset"
+  | "search"
+  | "sourceRepo"
+  | "forAgentId"
+  | "sortBy"
+  | "sortDirection"
 >;
 
 // ===== Query hooks =====
 
 export function useSkillsPaginated(
   params: SkillsPaginatedParams,
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; toastOnError?: boolean },
 ) {
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["skills", "paginated", params],
     enabled: options?.enabled ?? true,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getSkills({ query: params });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error, { toastOnError });
       return data;
     },
   });
@@ -48,11 +63,45 @@ export function useSkillSourceRepos() {
     queryKey: ["skills", "source-repos"],
     queryFn: async () => {
       const { data, error } = await getSkillSourceRepos();
+      throwOnApiError(error);
+      return data;
+    },
+  });
+}
+
+// searches the crawled public-GitHub skill catalog on the backend. `search` is
+// already debounced by the SearchInput, so keying the query on it is enough;
+// placeholderData keeps the previous results visible while the next query runs.
+export function useSearchSkillCatalog(search: string) {
+  const query = search.trim();
+  return useQuery({
+    queryKey: ["skills", "catalog-search", query],
+    enabled: query.length > 0,
+    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const { data, error } = await searchSkillCatalog({ query: { q: query } });
       if (error) {
+        // re-throw so the query enters its error state and the page renders
+        // its "could not search" branch, rather than an empty-results state.
         handleApiError(error);
-        return { repos: [] as string[] };
+        throw new Error(getApiErrorMessage(error));
       }
       return data;
+    },
+  });
+}
+
+/** Per-user activation counts for one skill over the last 30 days. */
+export function useSkillUsageStatistics(id: string | null) {
+  return useQuery({
+    queryKey: ["skills", id, "usage-statistics"],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await getSkillUsageStatistics({
+        path: { id: id as string },
+      });
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }
@@ -62,11 +111,8 @@ export function useSkill(id: string | null) {
     queryKey: ["skills", id],
     queryFn: async () => {
       const { data, error } = await getSkill({ path: { id: id as string } });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
     enabled: !!id,
   });
@@ -87,6 +133,7 @@ export function useCreateSkill() {
     },
     onSuccess: (data) => {
       if (!data) return;
+      trackEvent("skill_created", { skillId: data.id });
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill created");
     },
@@ -138,6 +185,65 @@ export function useDeleteSkill() {
   });
 }
 
+export function useResetSkill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await resetSkill({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      queryClient.invalidateQueries({ queryKey: ["skills", data.id] });
+      toast.success("Skill reset to default");
+    },
+  });
+}
+
+/**
+ * Manage a GitHub-synced skill: change its pull frequency, trigger an
+ * immediate pull (`syncNow`), or disconnect it (`interval: null`).
+ */
+export function useUpdateSkillGithubSync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: archestraApiTypes.UpdateSkillGithubSyncData["body"];
+    }) => {
+      const { data, error } = await updateSkillGithubSync({
+        path: { id },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      queryClient.invalidateQueries({ queryKey: ["skills", variables.id] });
+      if (variables.body.syncNow) {
+        toast.success("Sync started — the skill updates in the background");
+      } else if (variables.body.disconnect) {
+        toast.success("Sync stopped — the skill is now editable");
+      } else {
+        toast.success("Sync frequency updated");
+      }
+    },
+  });
+}
+
 export function useDiscoverGithubSkills() {
   return useMutation({
     mutationFn: async (
@@ -169,40 +275,8 @@ export function usePreviewGithubSkill(
       const { data, error } = await previewGithubSkill({
         body: body as archestraApiTypes.PreviewGithubSkillData["body"],
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data;
-    },
-  });
-}
-
-export function useEnableSkillToolDefaults() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await enableSkillToolDefaults();
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
-    onSuccess: (data) => {
-      if (!data) return;
-      // Backfill has added skill tools to every agent in the org — invalidate
-      // all agent/tool caches so the gateway and other agent pages refresh.
-      queryClient.invalidateQueries({ queryKey: ["organization"] });
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
-      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      queryClient.invalidateQueries({ queryKey: ["tools"] });
-      const { agentsBackfilled } = data;
-      toast.success(
-        `Skill tools enabled for ${agentsBackfilled} agent${
-          agentsBackfilled === 1 ? "" : "s"
-        }`,
-      );
     },
   });
 }
@@ -229,6 +303,15 @@ export function useImportGithubSkills() {
         `Imported ${created} skill${created === 1 ? "" : "s"}` +
           (skipped > 0 ? ` — skipped ${skipped} already in the org` : ""),
       );
+      const droppedFiles = data.skippedFiles.reduce(
+        (sum, entry) => sum + entry.files.length,
+        0,
+      );
+      if (droppedFiles > 0) {
+        toast.warning(
+          `${droppedFiles} resource file${droppedFiles === 1 ? " was" : "s were"} not imported (oversized or unfetchable)`,
+        );
+      }
     },
   });
 }

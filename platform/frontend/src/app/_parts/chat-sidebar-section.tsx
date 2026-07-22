@@ -1,6 +1,14 @@
 "use client";
 
 import {
+  getChatItemGeneratingIndicatorTestId,
+  getChatItemUnreadIndicatorTestId,
+} from "@archestra/shared";
+import {
+  AppWindow,
+  Folder,
+  FolderPlus,
+  Loader2,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -10,8 +18,13 @@ import {
   UsersRound,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
+import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
+import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
+import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +35,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
   SidebarMenuButton,
+  SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
@@ -35,9 +53,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
+import {
+  useApps,
+  useOpenAppInChat,
+  useOpenExternalAppInChat,
+  usePinApp,
+} from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   useConversations,
   useDeleteConversation,
@@ -49,11 +72,33 @@ import {
   getConversationDisplayTitle,
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
-import { useStableConversations } from "@/lib/hooks/use-stable-conversations";
+import { useGlobalChat } from "@/lib/chat/global-chat.context";
+import { groupConversationsByDay } from "@/lib/chat/group-conversations-by-date";
+import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
+import type { Once } from "@/lib/hooks/use-once";
+import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
+import { usePinProject, useProjects } from "@/lib/projects/projects.query";
 import { cn } from "@/lib/utils";
 
-const SIDEBAR_CHAT_SLOTS = 3;
+const DEFAULT_SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
+
+function ChatListFadeIn({
+  fadeIn,
+  children,
+}: {
+  fadeIn: Once;
+  children: ReactNode;
+}) {
+  // Capture once so regular re-renders don't drop the class mid-animation.
+  const [className] = useState(() =>
+    fadeIn.pending() ? "animate-in fade-in-0 duration-300" : "",
+  );
+
+  useEffect(() => fadeIn.done(), [fadeIn.done]);
+
+  return <div className={className}>{children}</div>;
+}
 
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   return (
@@ -64,7 +109,18 @@ function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   );
 }
 
-export function ChatSidebarSection() {
+export function ChatSidebarSection({
+  slots = DEFAULT_SIDEBAR_CHAT_SLOTS,
+  flat = false,
+  fadeIn,
+}: {
+  /** How many chats to show before the "More" affordance. */
+  slots?: number;
+  /** Render without the sub-menu indentation (used by the Chats tab). */
+  flat?: boolean;
+  /** One-shot latch so the list fades in only the first time it's shown this session. */
+  fadeIn: Once;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
@@ -91,10 +147,20 @@ export function ChatSidebarSection() {
   const { data: canDeleteConversation } = useHasPermissions({
     chat: ["delete"],
   });
+  const { data: canCreateProject } = useHasPermissions({
+    project: ["create"],
+  });
+  const { data: canReadProjects } = useHasPermissions({
+    project: ["read"],
+  });
+  const [createProjectConv, setCreateProjectConv] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
 
-  // Track conversations with recently auto-generated titles for animation
-  const { recentlyGeneratedTitles, regeneratingTitles, triggerRegeneration } =
-    useRecentlyGeneratedTitles(conversations);
+  // Conversations whose title should play the typing animation (shared via chat
+  // context); getSession drives the live "generating" spinner.
+  const { animatingTitleIds, markTitleAnimating, getSession } = useGlobalChat();
 
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -102,29 +168,29 @@ export function ChatSidebarSection() {
     ? (pathname.split("/").at(-1) ?? null)
     : null;
 
-  // Stabilize conversation order to prevent sidebar "jumping" when React Query
-  // re-fetches after mutations that bump updatedAt. Order resets on page refresh.
-  const stableConversations = useStableConversations(conversations);
+  const recentUnpinnedChats = conversations.filter(
+    (c) => !c.pinnedAt && !isScheduledRunConversation(c),
+  );
 
-  // Split conversations into pinned and unpinned.
-  // Default view shows exactly SIDEBAR_CHAT_SLOTS items:
-  // pinned chats first, then recent unpinned to fill remaining slots.
-  // No re-sorting here — stable order from useStableConversations is preserved
-  // for both pinned and unpinned groups to prevent jumping.
-  const { pinnedChats, recentUnpinnedChats } = useMemo(() => {
-    const pinned = stableConversations
-      .filter((c) => c.pinnedAt)
-      .slice(0, SIDEBAR_CHAT_SLOTS);
-
-    const pinnedIds = new Set(pinned.map((c) => c.id));
-    const unpinned = stableConversations.filter((c) => !pinnedIds.has(c.id));
-    const remainingSlots = Math.max(0, SIDEBAR_CHAT_SLOTS - pinned.length);
-
-    return {
-      pinnedChats: pinned,
-      recentUnpinnedChats: unpinned.slice(0, remainingSlots),
-    };
-  }, [stableConversations]);
+  // /api/projects requires project:read; skip the fetch for roles without it
+  // so the sidebar doesn't 403 (and toast) on every chat page.
+  const { data: projectsData } = useProjects({
+    enabled: canReadProjects === true,
+  });
+  const pinProjectMutation = usePinProject();
+  const pinnedProjects = (projectsData ?? []).filter((p) => p.pinnedAt);
+  // Pinned apps join the sidebar's Pinned section exactly like pinned projects.
+  // useApps skips the request for roles without app:read.
+  const { data: appsData } = useApps({ limit: 100, offset: 0 });
+  const pinAppMutation = usePinApp();
+  const openAppMutation = useOpenAppInChat();
+  const openExternalAppMutation = useOpenExternalAppInChat();
+  const pinnedApps = (appsData?.data ?? []).filter((a) => a.pinnedAt);
+  const pinnedItems = buildPinnedSidebarItems({
+    chats: conversations.filter((c) => !isScheduledRunConversation(c)),
+    projects: pinnedProjects,
+    apps: pinnedApps,
+  });
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -183,18 +249,67 @@ export function ChatSidebarSection() {
     }
   };
 
-  const handleRegenerateTitle = async (id: string) => {
-    // Mark as regenerating (shows loading state until new title arrives)
-    triggerRegeneration(id);
+  const handleRegenerateTitle = (id: string) => {
     // Close edit mode
     setEditingId(null);
     setEditingTitle("");
     // Regenerate the title
-    await generateTitleMutation.mutateAsync({ id, regenerate: true });
+    generateTitleMutation.mutate(
+      { id, regenerate: true },
+      {
+        onSuccess: (data) => {
+          if (data) markTitleAnimating(id);
+        },
+      },
+    );
   };
 
   const handleTogglePin = (id: string, isPinned: boolean) => {
     pinConversationMutation.mutate({ id, pinned: !isPinned });
+  };
+
+  const handleSelectProject = (id: string) => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    router.push(`/projects/${id}`);
+  };
+
+  const handleUnpinProject = (id: string) => {
+    pinProjectMutation.mutate({ id, pinned: false });
+  };
+
+  // Opening a pinned app is the card's canonical open action: seed a chat with
+  // the app rendered and navigate to it.
+  const handleSelectApp = async (appItem: (typeof pinnedApps)[number]) => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    const result =
+      appItem.source === "owned"
+        ? await openAppMutation.mutateAsync(appItem.id)
+        : await openExternalAppMutation.mutateAsync({
+            mcpServerId: appItem.mcpServerId,
+            resourceUri: appItem.resourceUri,
+          });
+    if (result?.conversationId) {
+      router.push(`/chat/${result.conversationId}`);
+    }
+  };
+
+  const handleUnpinApp = (appItem: (typeof pinnedApps)[number]) => {
+    pinAppMutation.mutate({
+      pinned: false,
+      target:
+        appItem.source === "owned"
+          ? { source: "owned", appId: appItem.id }
+          : {
+              source: "external",
+              mcpServerId: appItem.mcpServerId,
+              resourceUri: appItem.resourceUri,
+              toolName: appItem.toolName,
+            },
+    });
   };
 
   const openConversationSearch = () => {
@@ -205,16 +320,27 @@ export function ChatSidebarSection() {
     );
   };
 
-  const renderConversationItem = (
-    conv: (typeof conversations)[number],
-    showPinIcon = false,
-  ) => {
+  const renderConversationItem = (conv: (typeof conversations)[number]) => {
     const isCurrentConversation = currentConversationId === conv.id;
+    const sessionStatus = getSession(conv.id)?.status;
+    const isGenerating =
+      sessionStatus === "submitted" || sessionStatus === "streaming";
+    // `unread` is server-derived (lastMessageAt > lastReadAt). Suppressed on the
+    // chat you're viewing (its read marker is being updated) and while it is
+    // actively generating (the spinner wins).
+    const isUnread =
+      !isGenerating && !isCurrentConversation && conv.unread === true;
     const displayTitle = getConversationDisplayTitle(conv.title, conv.messages);
-    const hasRecentlyGeneratedTitle = recentlyGeneratedTitles.has(conv.id);
-    const isRegenerating = regeneratingTitles.has(conv.id);
+    const hasRecentlyGeneratedTitle = animatingTitleIds.has(conv.id);
+    const isRegenerating =
+      generateTitleMutation.isPending &&
+      generateTitleMutation.variables?.id === conv.id;
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
+    const showCreateProject = canCreateProjectFromChat({
+      hasCreatePermission: canCreateProject === true,
+      conversation: conv,
+    });
 
     return (
       <SidebarMenuSubItem key={conv.id}>
@@ -223,6 +349,7 @@ export function ChatSidebarSection() {
             <div className="flex items-center gap-1 flex-1">
               <Input
                 ref={inputRef}
+                aria-label="Conversation title"
                 value={editingTitle}
                 onChange={(e) => setEditingTitle(e.target.value)}
                 onBlur={() => handleSaveEdit(conv.id)}
@@ -241,6 +368,7 @@ export function ChatSidebarSection() {
                   <TooltipTrigger asChild>
                     <Button
                       type="button"
+                      aria-label="Regenerate title"
                       size="icon-sm"
                       variant="ghost"
                       onMouseDown={(e) => {
@@ -272,9 +400,6 @@ export function ChatSidebarSection() {
               className="cursor-pointer flex-1 justify-between"
             >
               <span className="flex items-center gap-2 min-w-0 flex-1">
-                {showPinIcon && (
-                  <Pin className="h-3 w-3 shrink-0 text-muted-foreground" />
-                )}
                 {conv.share && (
                   <TooltipProvider>
                     <Tooltip>
@@ -316,120 +441,357 @@ export function ChatSidebarSection() {
                   />
                 )}
               </span>
-              {(canUpdateConversation || canDeleteConversation) && (
-                <DropdownMenu
-                  open={isMenuOpen}
-                  onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
-                >
-                  <DropdownMenuTrigger asChild>
-                    <MoreHorizontal
-                      className={cn(
-                        "h-4 w-4 p-0 shrink-0 transition-opacity",
-                        isMenuOpen
-                          ? "opacity-100"
-                          : "opacity-0 group-hover/menu-sub-item:opacity-100",
-                      )}
+              {isGenerating ? (
+                <Loader2
+                  aria-label="Generating"
+                  data-testid={getChatItemGeneratingIndicatorTestId(conv.id)}
+                  className="ml-1 h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground"
+                />
+              ) : isUnread ? (
+                <span
+                  role="img"
+                  aria-label="New messages"
+                  data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
+                  className="ml-1 h-2 w-2 shrink-0 rounded-full bg-primary"
+                />
+              ) : null}
+              {conv.projectName && (
+                <span className="ml-1 flex max-w-24 shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {conv.projectIcon ? (
+                    <AgentIcon
+                      icon={conv.projectIcon}
+                      fallbackType="project"
+                      size={10}
                     />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" side="right">
-                    {canUpdateConversation && (
-                      <>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleTogglePin(conv.id, isPinned);
-                          }}
-                        >
-                          {isPinned ? (
-                            <>
-                              <PinOff className="h-4 w-4 mr-2" />
-                              Unpin
-                            </>
-                          ) : (
-                            <>
-                              <Pin className="h-4 w-4 mr-2" />
-                              Pin
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEdit(conv.id, displayTitle);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRegenerateTitle(conv.id);
-                          }}
-                          disabled={generateTitleMutation.isPending}
-                        >
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          Regenerate title
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                    {canDeleteConversation && (
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteConfirmId(conv.id);
-                        }}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  ) : (
+                    <Folder className="h-2.5 w-2.5 shrink-0" />
+                  )}
+                  <span className="truncate">{conv.projectName}</span>
+                </span>
               )}
             </SidebarMenuButton>
           )}
+          {/* Sibling of the row button (not nested inside it): interactive
+              controls must not be nested, and the trigger must be a real
+              button rather than a bare svg. */}
+          {editingId !== conv.id &&
+            (canUpdateConversation ||
+              canDeleteConversation ||
+              showCreateProject) && (
+              <DropdownMenu
+                open={isMenuOpen}
+                onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
+              >
+                <DropdownMenuTrigger asChild>
+                  {/* A real button: ARIA menu attributes are not valid on a
+                    bare <svg>, and an svg is not keyboard-operable. */}
+                  <button
+                    type="button"
+                    aria-label="Chat actions"
+                    className={cn(
+                      "shrink-0 transition-opacity",
+                      isMenuOpen
+                        ? "opacity-100"
+                        : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
+                    )}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreHorizontal className="h-4 w-4 p-0" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="right">
+                  {canUpdateConversation && (
+                    <>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePin(conv.id, isPinned);
+                        }}
+                      >
+                        {isPinned ? (
+                          <>
+                            <PinOff className="h-4 w-4 mr-2" />
+                            Unpin
+                          </>
+                        ) : (
+                          <>
+                            <Pin className="h-4 w-4 mr-2" />
+                            Pin
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEdit(conv.id, displayTitle);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRegenerateTitle(conv.id);
+                        }}
+                        disabled={generateTitleMutation.isPending}
+                      >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Regenerate title
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {showCreateProject && (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(null);
+                        setCreateProjectConv({
+                          id: conv.id,
+                          title: displayTitle,
+                        });
+                      }}
+                    >
+                      <FolderPlus className="h-4 w-4 mr-2" />
+                      Create project
+                    </DropdownMenuItem>
+                  )}
+                  {canDeleteConversation && (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirmId(conv.id);
+                      }}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
         </div>
       </SidebarMenuSubItem>
     );
   };
 
-  if (!isLoading && conversations.length === 0) {
+  const renderProjectItem = (project: (typeof pinnedProjects)[number]) => {
+    const isActive = pathname === `/projects/${project.id}`;
+    const menuKey = `project:${project.id}`;
+    const isMenuOpen = openMenuId === menuKey;
+
+    return (
+      <SidebarMenuSubItem key={menuKey}>
+        <div className="flex items-center justify-between w-full gap-1">
+          <SidebarMenuButton
+            onClick={() => handleSelectProject(project.id)}
+            isActive={isActive}
+            className="cursor-pointer flex-1 justify-between"
+          >
+            <span className="flex items-center gap-2 min-w-0 flex-1">
+              {project.icon ? (
+                <AgentIcon
+                  icon={project.icon}
+                  fallbackType="project"
+                  size={14}
+                />
+              ) : (
+                <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              )}
+              <TruncatedText
+                message={project.name}
+                maxLength={MAX_TITLE_LENGTH}
+                className="truncate"
+                showTooltip={false}
+              />
+            </span>
+          </SidebarMenuButton>
+          {/* Sibling of the row button: interactive controls must not nest, and
+              the menu trigger must be a real button rather than a bare svg. */}
+          <DropdownMenu
+            open={isMenuOpen}
+            onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
+          >
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Project actions"
+                className={cn(
+                  "shrink-0 transition-opacity",
+                  isMenuOpen
+                    ? "opacity-100"
+                    : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
+                )}
+              >
+                <MoreHorizontal className="h-4 w-4 p-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="right">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUnpinProject(project.id);
+                }}
+              >
+                <PinOff className="h-4 w-4 mr-2" />
+                Unpin
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </SidebarMenuSubItem>
+    );
+  };
+
+  // Mirrors renderProjectItem: an icon + name row that opens the app, with an
+  // Unpin action in its overflow menu. Apps have no stable route, so no active
+  // state.
+  const renderAppItem = (appItem: (typeof pinnedApps)[number]) => {
+    const menuKey =
+      appItem.source === "owned"
+        ? `app:${appItem.id}`
+        : `app:${appItem.mcpServerId}:${appItem.resourceUri}`;
+    const isMenuOpen = openMenuId === menuKey;
+
+    return (
+      <SidebarMenuSubItem key={menuKey}>
+        <div className="flex items-center justify-between w-full gap-1">
+          <SidebarMenuButton
+            onClick={() => handleSelectApp(appItem)}
+            className="cursor-pointer flex-1 justify-between"
+          >
+            <span className="flex items-center gap-2 min-w-0 flex-1">
+              {appItem.source === "owned" ? (
+                <AppWindow className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              ) : (
+                // The backing MCP server's registry icon, matching the app's
+                // card on the Apps page (falls back to the Server glyph).
+                <McpCatalogIcon icon={appItem.icon} size={14} />
+              )}
+              <TruncatedText
+                message={appItem.name}
+                maxLength={MAX_TITLE_LENGTH}
+                className="truncate"
+                showTooltip={false}
+              />
+            </span>
+          </SidebarMenuButton>
+          {/* Sibling of the row button: interactive controls must not nest, and
+              the menu trigger must be a real button rather than a bare svg. */}
+          <DropdownMenu
+            open={isMenuOpen}
+            onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
+          >
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="App actions"
+                className={cn(
+                  "shrink-0 transition-opacity",
+                  isMenuOpen
+                    ? "opacity-100"
+                    : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
+                )}
+              >
+                <MoreHorizontal className="h-4 w-4 p-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="right">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUnpinApp(appItem);
+                }}
+              >
+                <PinOff className="h-4 w-4 mr-2" />
+                Unpin
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </SidebarMenuSubItem>
+    );
+  };
+
+  if (
+    !isLoading &&
+    conversations.length === 0 &&
+    pinnedProjects.length === 0 &&
+    pinnedApps.length === 0
+  ) {
     return null;
   }
 
+  const subClass = flat ? "mx-0 border-l-0 px-0" : "mx-0 ml-3.5 px-0 pl-2.5";
+  const showMore = recentUnpinnedChats.length > slots;
+
+  // The list arrives sorted by lastMessageAt desc, so grouping the visible
+  // slice by the same timestamp yields contiguous date sections.
+  const recentChatGroups = groupConversationsByDay(
+    recentUnpinnedChats.slice(0, slots),
+    (c) => c.lastMessageAt,
+  );
+
   return (
     <>
-      <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
-        {isLoading ? (
-          <SidebarMenuSubItem>
-            <div className="flex items-center gap-2 px-2 py-1.5">
-              <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-              <span className="text-xs text-muted-foreground">
-                Loading chats...
-              </span>
-            </div>
-          </SidebarMenuSubItem>
-        ) : (
-          <>
-            {pinnedChats.map((conv) => renderConversationItem(conv, true))}
-            {recentUnpinnedChats.map((conv) => renderConversationItem(conv))}
-            {conversations.length >
-              pinnedChats.length + recentUnpinnedChats.length && (
-              <SidebarMenuSubItem>
-                <SidebarMenuSubButton
-                  className="cursor-pointer text-sidebar-foreground/70"
-                  onClick={openConversationSearch}
-                >
-                  <MoreHorizontal />
-                  <span>More</span>
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
-            )}
-          </>
-        )}
-      </SidebarMenuSub>
+      {isLoading ? (
+        <ChatListSkeleton subClass={subClass} />
+      ) : (
+        <ChatListFadeIn fadeIn={fadeIn}>
+          {pinnedItems.length > 0 && (
+            <SidebarGroup className="pt-0">
+              <SidebarGroupLabel role="heading" aria-level={2}>
+                Pinned
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuSub className={subClass}>
+                      {pinnedItems.map((it) =>
+                        it.type === "chat"
+                          ? renderConversationItem(it.item)
+                          : it.type === "project"
+                            ? renderProjectItem(it.item)
+                            : renderAppItem(it.item),
+                      )}
+                    </SidebarMenuSub>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
+          {recentChatGroups.map((group, groupIndex) => (
+            <SidebarGroup key={group.label} className="pt-0">
+              <SidebarGroupLabel role="heading" aria-level={2}>
+                {group.label}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuSub className={subClass}>
+                      {group.chats.map((conv) => renderConversationItem(conv))}
+                      {showMore &&
+                        groupIndex === recentChatGroups.length - 1 && (
+                          <SidebarMenuSubItem>
+                            <SidebarMenuSubButton
+                              className="cursor-pointer text-sidebar-foreground/70"
+                              onClick={openConversationSearch}
+                            >
+                              <MoreHorizontal />
+                              <span>More</span>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        )}
+                    </SidebarMenuSub>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </ChatListFadeIn>
+      )}
 
       <DeleteConfirmDialog
         open={deleteConfirmId !== null}
@@ -445,6 +807,13 @@ export function ChatSidebarSection() {
         }}
         confirmLabel="Delete"
         pendingLabel="Deleting..."
+      />
+
+      <CreateProjectFromChatDialog
+        conversationId={createProjectConv?.id ?? null}
+        defaultName={createProjectConv?.title ?? ""}
+        open={createProjectConv !== null}
+        onOpenChange={(open) => !open && setCreateProjectConv(null)}
       />
     </>
   );

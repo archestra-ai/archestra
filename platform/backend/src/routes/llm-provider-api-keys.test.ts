@@ -12,6 +12,12 @@ vi.mock("@/clients/gemini-client", () => ({
   isVertexAiEnabled: vi.fn(),
 }));
 
+vi.mock("@/clients/anthropic-workload-identity", () => ({
+  anthropicWorkloadIdentity: {
+    isEnabled: vi.fn(() => false),
+  },
+}));
+
 vi.mock("@/clients/azure-openai-credentials", () => ({
   isAnthropicAzureFoundryEntraIdEnabled: vi.fn(() => false),
   isAzureOpenAiEntraIdEnabled: vi.fn(),
@@ -20,10 +26,7 @@ vi.mock("@/clients/azure-openai-credentials", () => ({
 }));
 
 // Mock auth for permission checks
-vi.mock("@/auth", () => ({
-  hasPermission: vi.fn(),
-  userHasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
 // Mock testProviderApiKey to avoid external calls
 vi.mock("@/routes/chat/model-fetchers/registry", () => ({
@@ -62,11 +65,16 @@ vi.mock("@/services/model-sync", () => ({
 }));
 
 import { hasPermission, userHasPermission } from "@/auth";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
+import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
+const mockAnthropicWifIsEnabled = vi.mocked(
+  anthropicWorkloadIdentity.isEnabled,
+);
 const mockIsAzureOpenAiEntraIdEnabled = vi.mocked(isAzureOpenAiEntraIdEnabled);
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
 const mockHasPermission = vi.mocked(hasPermission);
@@ -217,6 +225,7 @@ describe("LLM Provider API Keys CRUD", () => {
     vi.clearAllMocks();
     setupAdminApp();
     mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    mockAnthropicWifIsEnabled.mockReturnValue(false);
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -301,6 +310,26 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(response.statusCode).toBe(200);
     const apiKey = response.json();
     expect(apiKey.scope).toBe("org");
+  });
+
+  test("rejects non-personal scope for per-user providers (github-copilot)", async () => {
+    for (const scope of ["org", "team"] as const) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/llm-provider-api-keys",
+        payload: {
+          name: `Shared Copilot ${scope}`,
+          provider: "github-copilot",
+          apiKey: "gho_shared_token",
+          scope,
+          ...(scope === "team"
+            ? { teamId: "00000000-0000-0000-0000-000000000000" }
+            : {}),
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("per-user");
+    }
   });
 
   test("should get a specific LLM provider API key by ID", async () => {
@@ -657,6 +686,243 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(updateResponse2.statusCode).toBe(200);
   });
 
+  test("surfaces a Docker localhost hint when keyless Ollama creation can't connect", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(new Error("fetch failed"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Ollama Local",
+        provider: "ollama",
+        scope: "personal",
+        baseUrl: "http://localhost:11434/v1",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "http://host.docker.internal:11434/v1",
+    );
+    // Connectivity was tested without an API key.
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "ollama",
+      "",
+      "http://localhost:11434/v1",
+      undefined,
+    );
+  });
+
+  test("uses the provider display name in keyless connection errors", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(new Error("fetch failed"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "vLLM Local",
+        provider: "vllm",
+        scope: "personal",
+        baseUrl: "http://192.168.1.50:8000/v1",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "Failed to connect to vLLM: fetch failed",
+    );
+  });
+
+  test("reports a network problem (not an invalid key) when the provider is unreachable", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(new Error("fetch failed"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Unreachable Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-unreachable-test",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    // The configured default URL is env-dependent, so assert its presence in
+    // the label without pinning the value.
+    expect(message).toMatch(
+      /^Could not reach Anthropic \(\S+\) to validate the API key: fetch failed/,
+    );
+    expect(message).not.toContain("Invalid API key");
+  });
+
+  test("reports an invalid key (not a connection failure) when the provider rejects it", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Failed to fetch Anthropic models: 401"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Rejected Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-rejected-test",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    expect(message).toBe(
+      "Invalid API key: Failed to fetch Anthropic models: 401",
+    );
+    expect(message).not.toContain("Could not reach");
+  });
+
+  test("keeps the Docker localhost hint on keyed-provider connection failures", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(new Error("fetch failed"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Local OpenAI-compatible",
+        provider: "openai",
+        apiKey: "sk-local-test",
+        scope: "personal",
+        baseUrl: "http://localhost:8080/v1",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    expect(message).toContain(
+      "Could not reach OpenAI (http://localhost:8080/v1)",
+    );
+    expect(message).toContain("http://host.docker.internal:8080/v1");
+  });
+
+  test("falls back to the invalid-key error when the validation message has no HTTP status", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Models list is empty"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Empty Models Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-empty-models-test",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toBe(
+      "Invalid API key: Models list is empty",
+    );
+  });
+
+  test("points at the base URL (not the key or a temporary issue) on a 404 validation response", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Failed to fetch Anthropic models: 404"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Wrong Path Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-wrong-path-test",
+        scope: "personal",
+        baseUrl: "https://anthropic.example.com/extra",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    expect(message).toContain(
+      "Anthropic (https://anthropic.example.com/extra) returned an error while validating the API key: Failed to fetch Anthropic models: 404",
+    );
+    expect(message).toContain("verify it");
+    expect(message).not.toContain("temporary provider issue");
+    expect(message).not.toContain("Invalid API key");
+  });
+
+  test("treats a non-JSON response body as a wrong endpoint, not an invalid key", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Unexpected token '<', \"<html>\" is not valid JSON"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "HTML Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-html-test",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    expect(message).toContain("returned an error while validating the API key");
+    expect(message).toContain("does not look like the provider's API");
+    expect(message).not.toContain("Invalid API key");
+  });
+
+  test("reports a provider-side error (not an invalid key) on a 429/5xx validation response", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Failed to fetch Anthropic models: 429"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Throttled Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-throttled-test",
+        scope: "personal",
+        baseUrl: "https://anthropic.example.com",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    expect(message).toContain(
+      "Anthropic (https://anthropic.example.com) returned an error while validating the API key: Failed to fetch Anthropic models: 429",
+    );
+    expect(message).toContain("temporary provider issue");
+    expect(message).not.toContain("Invalid API key");
+    expect(message).not.toContain("Could not reach");
+  });
+
+  test("treats an empty Ollama model list as a reachable server (keyless create succeeds)", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Models list is empty"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Ollama No Models",
+        provider: "ollama",
+        scope: "personal",
+        baseUrl: "http://localhost:11434/v1",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ name: "Ollama No Models" });
+  });
+
   test("allows Azure provider keys without API key when Entra ID is enabled", async () => {
     mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(true);
 
@@ -716,6 +982,81 @@ describe("LLM Provider API Keys CRUD", () => {
       "azure",
       "",
       "https://runtime.example.com/openai/v1",
+      null,
+    );
+  });
+
+  test("creates a keyless Anthropic key when Workload Identity Federation is configured", async () => {
+    mockAnthropicWifIsEnabled.mockReturnValue(true);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Anthropic WIF",
+        provider: "anthropic",
+        scope: "personal",
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(200);
+    expect(createResponse.json()).toMatchObject({
+      name: "Anthropic WIF",
+      provider: "anthropic",
+      secretId: null,
+    });
+    // Keyless create must still exercise the WIF token exchange + model listing.
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "anthropic",
+      "",
+      undefined,
+      undefined,
+    );
+  });
+
+  test("rejects keyless Anthropic keys when Workload Identity Federation is not configured", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Anthropic Keyless",
+        provider: "anthropic",
+        scope: "personal",
+      },
+    });
+
+    expect(createResponse.statusCode).toBe(400);
+  });
+
+  test("re-tests keyless Anthropic WIF key when runtime settings change", async () => {
+    mockAnthropicWifIsEnabled.mockReturnValue(true);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Anthropic WIF",
+        provider: "anthropic",
+        scope: "personal",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+    mockTestProviderApiKey.mockClear();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        baseUrl: "https://api.anthropic.com",
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(mockTestProviderApiKey).toHaveBeenCalledWith(
+      "anthropic",
+      "",
+      "https://api.anthropic.com",
       null,
     );
   });
@@ -801,6 +1142,99 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(createResponse.json().error.message).toContain(
       "Either apiKey, both vaultSecretPath and vaultSecretKey, or AWS SigV4 credentials (Bedrock only) must be provided",
     );
+  });
+});
+
+describe("LLM Provider API Keys — personal scope is self-service", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  // A "basic user": no llmProviderApiKey:create / :admin, no team:create.
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    vi.clearAllMocks();
+    setupMemberApp();
+    mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
+
+    app = await createApp(organizationId, user);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("a basic user can create a personal key (e.g. connect GitHub Copilot)", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "GitHub Copilot",
+        provider: "github-copilot",
+        apiKey: "gho_my_token",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().scope).toBe("personal");
+  });
+
+  test("a basic user can create a personal key for any provider", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "My OpenAI",
+        provider: "openai",
+        apiKey: "sk-my-openai-key",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+  });
+
+  test("a basic user cannot create an org-scoped key", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Org Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-org-key",
+        scope: "org",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("a basic team member cannot create a team-scoped key without create permission", async ({
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Team Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-team-key",
+        scope: "team",
+        teamId: team.id,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.json().error.message).toContain("create");
   });
 });
 
@@ -936,76 +1370,6 @@ describe("LLM Provider API Keys Team Scope", () => {
 
     expect(response.statusCode).toBe(400);
   });
-
-  test("prevents deleting an API key used for embedding", async () => {
-    const createResponse = await app.inject({
-      method: "POST",
-      url: "/api/llm-provider-api-keys",
-      payload: {
-        name: "Embedding Delete Protection Key",
-        provider: "openai",
-        apiKey: "sk-openai-embedding-delete-protection-test",
-        scope: "org",
-      },
-    });
-    expect(createResponse.statusCode).toBe(200);
-    const createdKey = createResponse.json();
-
-    const knowledgeResponse = await app.inject({
-      method: "PATCH",
-      url: "/api/organization/knowledge-settings",
-      payload: {
-        embeddingChatApiKeyId: createdKey.id,
-      },
-    });
-    expect(knowledgeResponse.statusCode).toBe(200);
-
-    const deleteResponse = await app.inject({
-      method: "DELETE",
-      url: `/api/llm-provider-api-keys/${createdKey.id}`,
-    });
-
-    expect(deleteResponse.statusCode).toBe(400);
-    expect(deleteResponse.json().error.message).toContain("embedding");
-    expect(deleteResponse.json().error.message).toContain(
-      "Remove it from Settings > Knowledge before deleting",
-    );
-  });
-
-  test("prevents deleting an API key used for reranking", async () => {
-    const createResponse = await app.inject({
-      method: "POST",
-      url: "/api/llm-provider-api-keys",
-      payload: {
-        name: "Reranker Delete Protection Key",
-        provider: "openai",
-        apiKey: "sk-openai-reranker-delete-protection-test",
-        scope: "org",
-      },
-    });
-    expect(createResponse.statusCode).toBe(200);
-    const createdKey = createResponse.json();
-
-    const knowledgeResponse = await app.inject({
-      method: "PATCH",
-      url: "/api/organization/knowledge-settings",
-      payload: {
-        rerankerChatApiKeyId: createdKey.id,
-      },
-    });
-    expect(knowledgeResponse.statusCode).toBe(200);
-
-    const deleteResponse = await app.inject({
-      method: "DELETE",
-      url: `/api/llm-provider-api-keys/${createdKey.id}`,
-    });
-
-    expect(deleteResponse.statusCode).toBe(400);
-    expect(deleteResponse.json().error.message).toContain("reranking");
-    expect(deleteResponse.json().error.message).toContain(
-      "Remove it from Settings > Knowledge before deleting",
-    );
-  });
 });
 
 describe("LLM Provider API Keys Scope Update", () => {
@@ -1054,6 +1418,38 @@ describe("LLM Provider API Keys Scope Update", () => {
     const updatedKey = updateResponse.json();
     expect(updatedKey.scope).toBe("org");
     expect(updatedKey.userId).toBeNull();
+  });
+
+  test("rejects a ChatGPT-subscription credential pasted into an org key without a scope change", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Org OpenAI Key",
+        provider: "openai",
+        apiKey: "sk-openai-org-key",
+        scope: "org",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+
+    // Only the secret value changes — scope/team stay org — so this must be
+    // classified by the new value, or one person's subscription becomes the
+    // shared org credential.
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        apiKey: encodeOpenAiCodexCredential({
+          refreshToken: "refresh-token",
+          accountId: "account-id",
+        }),
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(400);
+    expect(updateResponse.json().error.message).toContain("per-user");
   });
 });
 

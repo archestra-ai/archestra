@@ -1,0 +1,78 @@
+{
+  "name": "ckanthony__gin-mcp",
+  "display_name": "gin-mcp",
+  "description": "Enable MCP features for any Gin API with a line of code",
+  "author": {
+    "name": "ckanthony"
+  },
+  "server": {
+    "command": "go",
+    "args": ["run", "main.go"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Gin-MCP: Zero-Config Gin to MCP Bridge\n\n[![Go Reference](https://pkg.go.dev/badge/github.com/ckanthony/gin-mcp.svg)](https://pkg.go.dev/github.com/ckanthony/gin-mcp)\n[![CI](https://github.com/ckanthony/gin-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ckanthony/gin-mcp/actions/workflows/ci.yml)\n[![codecov](https://codecov.io/gh/ckanthony/gin-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/ckanthony/gin-mcp)\n![](https://badge.mcpx.dev?type=dev 'MCP Dev')\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/ckanthony/gin-mcp)](https://archestra.ai/mcp-catalog/ckanthony__gin-mcp)\n\n<table border=\"0\">\n  <tr>\n    <td valign=\"top\">\n      <strong>Enable MCP features for any Gin API with a line of code.</strong>\n      <br><br>\n      Gin-MCP is an <strong>opinionated, zero-configuration</strong> library that automatically exposes your existing Gin endpoints as <a href=\"https://modelcontextprotocol.io/introduction\">Model Context Protocol (MCP)</a> tools, making them instantly usable by MCP-compatible clients like <a href=\"https://cursor.sh/\">Cursor</a>, <a href=\"https://claude.ai/desktop\">Claude Desktop</a>, <a href=\"https://continue.dev/\">Continue</a>, <a href=\"https://zed.dev/\">Zed</a>, and other MCP-enabled tools.\n      <br><br>\n      Our philosophy is simple: <strong>minimal setup, maximum productivity</strong>. Just plug Gin-MCP into your Gin application, and it handles the rest.\n    </td>\n    <td valign=\"top\" align=\"right\" width=\"200\">\n      <img src=\"gin-mcp.png\" alt=\"Gin-MCP Logo\" width=\"200\"/>\n    </td>\n  </tr>\n</table>\n\n## Why Gin-MCP?\n\n-   **Effortless Integration:** Connect your Gin API to MCP clients without writing tedious boilerplate code.\n-   **Zero Configuration (by default):** Get started instantly. Gin-MCP automatically discovers routes and infers schemas.\n-   **Developer Productivity:** Spend less time configuring tools and more time building features.\n-   **Flexibility:** While zero-config is the default, customize schemas and endpoint exposure when needed.\n-   **Existing API:** Works with your existing Gin API - no need to change any code.\n\n## Demo\n\n![gin-mcp-example](https://github.com/user-attachments/assets/ad6948ce-ed11-400b-8e96-9b020e51df78)\n\n## Features\n\n-   **Automatic Discovery:** Intelligently finds all registered Gin routes.\n-   **Schema Inference:** Automatically generates MCP tool schemas from route parameters and request/response types (where possible).\n-   **Direct Gin Integration:** Mounts the MCP server directly onto your existing `gin.Engine`.\n-   **Parameter Preservation:** Accurately reflects your Gin route parameters (path, query) in the generated MCP tools.\n-   **Dynamic BaseURL Resolution:** Support for proxy environments (Quicknode, RAGFlow) with per-user/deployment endpoints.\n-   **Customizable Schemas:** Manually register schemas for specific routes using `RegisterSchema` for fine-grained control.\n-   **Selective Exposure:** Filter which endpoints are exposed using operation IDs or tags.\n-   **Flexible Deployment:** Mount the MCP server within the same Gin app or deploy it separately.\n\n## Installation\n\n```bash\ngo get github.com/ckanthony/gin-mcp\n```\n\n## Basic Usage: Instant MCP Server\n\nGet your MCP server running in minutes with minimal code:\n\n```go\npackage main\n\nimport (\n\t\"net/http\"\n\n\tserver \"github.com/ckanthony/gin-mcp/\"\n\t\"github.com/gin-gonic/gin\"\n)\n\nfunc main() {\n\t// 1. Create your Gin engine\n\tr := gin.Default()\n\n\t// 2. Define your API routes (Gin-MCP will discover these)\n\tr.GET(\"/ping\", func(c *gin.Context) {\n\t\tc.JSON(http.StatusOK, gin.H{\"message\": \"pong\"})\n\t})\n\n\tr.GET(\"/users/:id\", func(c *gin.Context) {\n\t\t// Example handler...\n\t\tuserID := c.Param(\"id\")\n\t\tc.JSON(http.StatusOK, gin.H{\"user_id\": userID, \"status\": \"fetched\"})\n\t})\n\n\t// 3. Create and configure the MCP server\n\t//    Provide essential details for the MCP client.\n\tmcp := server.New(r, &server.Config{\n\t\tName:        \"My Simple API\",\n\t\tDescription: \"An example API automatically exposed via MCP.\",\n\t\t// BaseURL is crucial! It tells MCP clients where to send requests.\n\t\tBaseURL: \"http://localhost:8080\",\n\t})\n\n\t// 4. Mount the MCP server endpoint\n\tmcp.Mount(\"/mcp\") // MCP clients will connect here\n\n\t// 5. Run your Gin server\n\tr.Run(\":8080\") // Gin server runs as usual\n}\n\n```\n\nThat's it! Your MCP tools are now available at `http://localhost:8080/mcp`. Gin-MCP automatically created tools for `/ping` and `/users/:id`.\n\n> **Note on `BaseURL`**: Always provide an explicit `BaseURL`. This tells the MCP server the correct address to forward API requests to when a tool is executed by the client. Without it, automatic detection might fail, especially in environments with proxies or different internal/external URLs.\n\n## Advanced Usage\n\nWhile Gin-MCP strives for zero configuration, you can customize its behavior.\n\n### Fine-Grained Schema Control with `RegisterSchema`\n\nSometimes, automatic schema inference isn't enough. `RegisterSchema` allows you to explicitly define schemas for query parameters or request bodies for specific routes. This is useful when:\n\n-   You use complex structs for query parameters (`ShouldBindQuery`).\n-   You want to define distinct schemas for request bodies (e.g., for POST/PUT).\n-   Automatic inference doesn't capture specific constraints (enums, descriptions, etc.) that you want exposed in the MCP tool definition.\n\n```go\npackage main\n\nimport (\n\t// ... other imports\n\t\"github.com/ckanthony/gin-mcp/pkg/server\"\n\t\"github.com/gin-gonic/gin\"\n)\n\n// Example struct for query parameters\ntype ListProductsParams struct {\n\tPage  int    `form:\"page,default=1\" json:\"page,omitempty\" jsonschema:\"description=Page number,minimum=1\"`\n\tLimit int    `form:\"limit,default=10\" json:\"limit,omitempty\" jsonschema:\"description=Items per page,maximum=100\"`\n\tTag   string `form:\"tag\" json:\"tag,omitempty\" jsonschema:\"description=Filter by tag\"`\n}\n\n// Example struct for POST request body\ntype CreateProductRequest struct {\n\tName  string  `json:\"name\" jsonschema:\"required,description=Product name\"`\n\tPrice float64 `json:\"price\" jsonschema:\"required,minimum=0,description=Product price\"`\n}\n\nfunc main() {\n\tr := gin.Default()\n\n\t// --- Define Routes ---\n\tr.GET(\"/products\", func(c *gin.Context) { /* ... handler ... */ })\n\tr.POST(\"/products\", func(c *gin.Context) { /* ... handler ... */ })\n\tr.PUT(\"/products/:id\", func(c *gin.Context) { /* ... handler ... */ })\n\n\n\t// --- Configure MCP Server ---\n\tmcp := server.New(r, &server.Config{\n\t\tName:        \"Product API\",\n\t\tDescription: \"API for managing products.\",\n\t\tBaseURL:     \"http://localhost:8080\",\n\t})\n\n\t// --- Register Schemas ---\n\t// Register ListProductsParams as the query schema for GET /products\n\tmcp.RegisterSchema(\"GET\", \"/products\", ListProductsParams{}, nil)\n\n\t// Register CreateProductRequest as the request body schema for POST /products\n\tmcp.RegisterSchema(\"POST\", \"/products\", nil, CreateProductRequest{})\n\n\t// You can register schemas for other methods/routes as needed\n\t// e.g., mcp.RegisterSchema(\"PUT\", \"/products/:id\", nil, UpdateProductRequest{})\n\n\tmcp.Mount(\"/mcp\")\n\tr.Run(\":8080\")\n}\n```\n\n**Explanation:**\n\n-   `mcp.RegisterSchema(method, path, querySchema, bodySchema)`\n-   `method`: HTTP method (e.g., \"GET\", \"POST\").\n-   `path`: Gin route path (e.g., \"/products\", \"/products/:id\").\n-   `querySchema`: An instance of the struct used for query parameters (or `nil` if none). Gin-MCP uses reflection and `jsonschema` tags to generate the schema.\n-   `bodySchema`: An instance of the struct used for the request body (or `nil` if none).\n\n### Filtering Exposed Endpoints\n\nControl which Gin endpoints become MCP tools using operation IDs or tags (if your routes define them).\n\n```go\n// Only include specific operations by their Operation ID (if defined in your routes)\nmcp := server.New(r, &server.Config{\n    // ... other config ...\n    IncludeOperations: []string{\"getUser\", \"listUsers\"},\n})\n\n// Exclude specific operations\nmcp := server.New(r, &server.Config{\n    // ... other config ...\n    ExcludeOperations: []string{\"deleteUser\"}, // Don't expose deleteUser tool\n})\n\n// Only include operations tagged with \"public\" or \"users\"\nmcp := server.New(r, &server.Config{\n    // ... other config ...\n    IncludeTags: []string{\"public\", \"users\"},\n})\n\n// Exclude operations tagged with \"admin\" or \"internal\"\nmcp := server.New(r, &server.Config{\n    // ... other config ...\n    ExcludeTags: []string{\"admin\", \"internal\"},\n})\n```\n\n**Filtering Rules:**\n\n-   You can only use *one* inclusion filter (`IncludeOperations` OR `IncludeTags`).\n-   You can only use *one* exclusion filter (`ExcludeOperations` OR `ExcludeTags`).\n-   You *can* combine an inclusion filter with an exclusion filter (e.g., include tag \"public\" but exclude operation \"legacyPublicOp\"). Exclusion takes precedence.\n\n### Customizing Schema Descriptions (Less Common)\n\nFor advanced control over how response schemas are described in the generated tools (often not needed):\n\n```go\nmcp := server.New(r, &server.Config{\n    // ... other config ...\n    DescribeAllResponses:    true, // Include *all* possible response schemas (e.g., 200, 404) in tool descriptions\n    DescribeFullResponseSchema: true, // Include the full JSON schema object instead of just a reference\n})\n```\n\n## Examples\n\nSee the [`examples`](examples) directory for complete, runnable examples demonstrating various features:\n\n### Basic Usage Examples\n\n- **[`examples/simple/main.go`](examples/simple/main.go)** - Complete product store API with static BaseURL configuration\n- **[`examples/simple/quicknode.go`](examples/simple/quicknode.go)** - Dynamic BaseURL configuration for Quicknode proxy environments  \n- **[`examples/simple/ragflow.go`](examples/simple/ragflow.go)** - Dynamic BaseURL configuration for RAGFlow deployment scenarios\n\n### Dynamic BaseURL for Proxy Scenarios\n\nFor environments where each user/deployment has a different endpoint (like Quicknode or RAGFlow), you can configure dynamic BaseURL resolution:\n\n```go\n// Quicknode example - resolves user-specific endpoints\nmcp := server.New(r, &server.Config{\n    Name: \"Your API\",\n    Description: \"API with dynamic Quicknode endpoints\",\n    // No static BaseURL needed!\n})\n\nresolver := server.NewQuicknodeResolver(\"http://localhost:8080\")\nmcp.SetExecuteToolFunc(func(operationID string, parameters map[string]interface{}) (interface{}, error) {\n    return mcp.ExecuteToolWithResolver(operationID, parameters, resolver)\n})\n```\n\n**Environment Variables Supported:**\n- **Quicknode**: `QUICKNODE_USER_ENDPOINT`, `USER_ENDPOINT`, `HOST`\n- **RAGFlow**: `RAGFLOW_ENDPOINT`, `RAGFLOW_WORKFLOW_URL`, `RAGFLOW_BASE_URL` + `WORKFLOW_ID`\n\nThis eliminates the need for static BaseURL configuration at startup, perfect for multi-tenant proxy environments!\n\n## Connecting MCP Clients\n\nOnce your Gin application with Gin-MCP is running:\n\n1.  Start your application.\n2.  In your MCP client, provide the URL where you mounted the MCP server (e.g., `http://localhost:8080/mcp`) as the SSE endpoint:\n    - **Cursor**: Settings → MCP → Add Server\n    - **Claude Desktop**: Add to MCP configuration file\n    - **Continue**: Configure in VS Code settings\n    - **Zed**: Add to MCP settings\n3.  The client will connect and automatically discover the available API tools.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit issues or Pull Requests. \n",
+  "category": "Development",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gin-mcp": {
+        "command": "go",
+        "args": ["run", "."],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ckanthony",
+    "repo": "gin-mcp",
+    "url": "https://github.com/ckanthony/gin-mcp",
+    "name": "ckanthony__gin-mcp",
+    "path": null,
+    "stars": 49,
+    "contributors": 3,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "a80af929094290d40a185be38196c16fa4d9113c"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:35.563Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "gin-gonic/gin",
+      "importance": 10
+    },
+    {
+      "name": "google/uuid",
+      "importance": 4
+    },
+    {
+      "name": "sirupsen/logrus",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/ckanthony/gin-mcp\n\ngo 1.21\n\nrequire (\n\tgithub.com/gin-gonic/gin v1.10.0\n\tgithub.com/google/uuid v1.6.0\n\tgithub.com/sirupsen/logrus v1.9.3\n\tgithub.com/stretchr/testify v1.10.0\n)\n\nrequire (\n\tgithub.com/bytedance/sonic v1.11.6 // indirect\n\tgithub.com/bytedance/sonic/loader v0.1.1 // indirect\n\tgithub.com/cloudwego/base64x v0.1.4 // indirect\n\tgithub.com/cloudwego/iasm v0.2.0 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/gabriel-vasile/mimetype v1.4.3 // indirect\n\tgithub.com/gin-contrib/sse v0.1.0 // indirect\n\tgithub.com/go-playground/locales v0.14.1 // indirect\n\tgithub.com/go-playground/universal-translator v0.18.1 // indirect\n\tgithub.com/go-playground/validator/v10 v10.20.0 // indirect\n\tgithub.com/goccy/go-json v0.10.2 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/klauspost/cpuid/v2 v2.2.7 // indirect\n\tgithub.com/leodido/go-urn v1.4.0 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/pelletier/go-toml/v2 v2.2.2 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/twitchyliquid64/golang-asm v0.15.1 // indirect\n\tgithub.com/ugorji/go/codec v1.2.12 // indirect\n\tgolang.org/x/arch v0.8.0 // indirect\n\tgolang.org/x/crypto v0.23.0 // indirect\n\tgolang.org/x/net v0.25.0 // indirect\n\tgolang.org/x/sys v0.20.0 // indirect\n\tgolang.org/x/text v0.15.0 // indirect\n\tgoogle.golang.org/protobuf v1.34.1 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n\n// replace github.com/ckanthony/gin-mcp => ./\n"
+}

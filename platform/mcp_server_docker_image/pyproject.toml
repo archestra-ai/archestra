@@ -3,14 +3,27 @@ name = "archestra-mcp-server-python-deps"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "mcp[cli]>=1.2.0",
+  # mcp <= 1.27.1: CVE-2026-52869 (auth bypass), CVE-2026-52870 (missing authorization)
+  # mcp < 1.28.1: CVE-2026-59950 (missing WebSocket origin validation)
+  "mcp[cli]>=1.28.1",
   "httpx",
   "fastapi",
+  # starlette <= 1.0.0: CVE-2026-48710 (BadHost host-header path confusion)
+  # starlette < 1.3.1: CVE-2026-54283 (unthrottled resource allocation)
+  "starlette>=1.3.1",
   "uvicorn",
   "requests>=2.31.0",
   "python-dotenv>=1.0.0",
   # urllib3 < 2.7.0: CVE-2026-44432 (data amplification), CVE-2026-44431 (info disclosure)
   "urllib3>=2.7.0",
   # python-multipart < 0.0.27: CVE-2026-42561 (unthrottled resource allocation)
-  "python-multipart>=0.0.27",
+  # python-multipart < 0.0.30: CVE-2026-53539 (uncontrolled resource consumption)
+  "python-multipart>=0.0.30",
+  # Transitive constraints (pulled in via mcp[cli]):
+  # pyjwt < 2.13.0: CVE-2026-48526 (improper authentication)
+  "pyjwt>=2.13.0",
+  # cryptography < 48.0.1: GHSA-537c-gmf6-5ccf (out-of-bounds read)
+  "cryptography>=48.0.1",
+  # click < 8.3.3: CVE-2026-7246 (pulled in via typer and uvicorn)
+  "click>=8.3.3",
 ]

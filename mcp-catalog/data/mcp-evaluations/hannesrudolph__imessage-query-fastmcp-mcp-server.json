@@ -1,0 +1,88 @@
+{
+  "name": "hannesrudolph__imessage-query-fastmcp-mcp-server",
+  "display_name": "imessage-query-fastmcp-mcp-server",
+  "description": "An MCP server that provides safe access to your iMessage database through Model Context Protocol (MCP). This server is built with the FastMCP framework and the imessagedb library, enabling LLMs to query and analyze iMessage conversations with proper phone number validation and attachment handling.",
+  "author": {
+    "name": "hannesrudolph"
+  },
+  "server": {
+    "command": "${__dirname}/imessage-query-server.py",
+    "args": [],
+    "env": {
+      "SQLITE_DB_PATH": "${user_config.sqlite_db_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "sqlite_db_path": {
+      "type": "file",
+      "title": "iMessage Database Path",
+      "description": "Custom path to the iMessage database file. Defaults to the standard macOS location if not provided.",
+      "required": false,
+      "default": "${HOME}/Library/Messages/chat.db"
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/hannesrudolph-imessage-query-fastmcp-mcp-server-badge.png)](https://mseep.ai/app/hannesrudolph-imessage-query-fastmcp-mcp-server)\n\n# iMessage Query MCP Server\n\nAn MCP server that provides safe access to your iMessage database through Model Context Protocol (MCP). This server is built with the FastMCP framework and the imessagedb library, enabling LLMs to query and analyze iMessage conversations with proper phone number validation and automatic macOS permission handling.\n\n## 📋 System Requirements\n\n- macOS (required for iMessage database access)\n- Python 3.12+ (required for modern type hints)\n- **uv** (modern Python package manager)\n- **Full Disk Access permission** for your MCP client (Claude Desktop, Cursor, VS Code, etc.)\n\n## 📦 Dependencies\n\n### Install uv (Required)\n\nThis project uses `uv` for fast, reliable Python package management. Install it first:\n\n```bash\n# Install uv using Homebrew (recommended)\nbrew install uv\n\n# Or install using the official installer\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n### Python Dependencies\n\nThe script automatically manages its dependencies using the embedded metadata. No separate installation needed! Dependencies include:\n\n- **fastmcp**: Framework for building Model Context Protocol servers\n- **imessagedb**: Python library for accessing and querying the macOS Messages database\n- **phonenumbers**: Google's phone number handling library for proper number validation and formatting\n\nAll dependencies are automatically installed when the script runs via `uv`.\n\n## 📑 Table of Contents\n- [System Requirements](#-system-requirements)\n- [Dependencies](#-dependencies)\n- [MCP Tools](#%EF%B8%8F-mcp-tools)\n- [Getting Started](#-getting-started)\n- [Installation Options](#-installation-options)\n  - [Claude Desktop](#option-1-install-for-claude-desktop)\n  - [Cline VSCode Plugin](#option-2-install-for-cline-vscode-plugin)\n- [macOS Permissions Setup](#-macos-permissions-setup)\n- [Safety Features](#-safety-features)\n- [Development Documentation](#-development-documentation)\n- [Environment Variables](#%EF%B8%8F-environment-variables)\n\n## 🛠️ MCP Tools\n\nThe server exposes the following tools to LLMs:\n\n### get_chat_transcript\nRetrieve message history for a specific phone number with optional date filtering.\n\n**Parameters:**\n- `phone_number` (required): Phone number in any format (E.164 format preferred)\n- `start_date` (optional): Start date in ISO format (YYYY-MM-DD)\n- `end_date` (optional): End date in ISO format (YYYY-MM-DD)\n\n**Features:**\n- Automatic phone number validation and formatting\n- Message text and timestamps\n- Attachment information with missing file detection\n- Date range filtering (defaults to last 7 days if no dates specified)\n- Sender identification (is_from_me flag)\n\n## 🚀 Getting Started\n\nClone the repository:\n\n```bash\ngit clone https://github.com/hannesrudolph/imessage-query-fastmcp-mcp-server.git\ncd imessage-query-fastmcp-mcp-server\n```\n\n## 📦 Installation Options\n\nYou can install this MCP server in Claude Desktop, Cline VSCode plugin, or any other MCP client. Choose the option that best suits your needs.\n\n### Option 1: Claude Desktop\n\n1. **Find your Claude Desktop config file:**\n   - **Location**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - Create the file if it doesn't exist\n\n2. **Add the server configuration:**\n\n```json\n{\n  \"mcpServers\": {\n    \"imessage-query\": {\n      \"command\": \"/full/path/to/imessage-query-server.py\"\n    }\n  }\n}\n```\n\n3. **Replace the path** with the full path to your cloned repository (e.g., `/Users/username/Projects/imessage-query-fastmcp-mcp-server/imessage-query-server.py`)\n\n4. **Restart Claude Desktop** completely (Cmd+Q, then relaunch)\n\n### Option 2: Cline VSCode Plugin\n\nTo use this server with the [Cline VSCode plugin](http://cline.bot):\n\n1. In VSCode, click the server icon (☰) in the Cline plugin sidebar\n2. Click the \"Edit MCP Settings\" button (✎)\n3. Add the following configuration to the settings file:\n\n```json\n{\n  \"imessage-query\": {\n    \"command\": \"/full/path/to/imessage-query-server.py\"\n  }\n}\n```\n\n4. **Replace the path** with the full path to your cloned repository\n\n### Option 3: Other MCP Clients\n\nFor other MCP clients, use the direct script path as the command:\n\n```\n/full/path/to/imessage-query-server.py\n```\n\nThe script's shebang (`#!/usr/bin/env -S uv run --script`) handles dependency management automatically.\n\n> **Note**: This simplified configuration replaces the previous FastMCP installation method. The script is now self-contained and manages its own dependencies through `uv`.\n\n## 🔐 macOS Permissions Setup\n\nThis server requires **Full Disk Access** permission to read the iMessage database. The server includes intelligent permission detection and will guide you through the setup process.\n\n### Automatic Permission Detection\n\nWhen you first use the server, it will:\n1. **Detect your MCP client** (Claude Desktop, Cursor, VS Code, etc.)\n2. **Check for Full Disk Access** permission\n3. **Automatically open System Preferences** to the correct settings panel\n4. **Provide step-by-step instructions** specific to your application\n\n### Manual Permission Setup\n\nIf automatic detection doesn't work, follow these steps:\n\n1. **Open System Preferences** → **Privacy & Security** → **Full Disk Access**\n2. **Click the lock icon** and enter your password to make changes\n3. **Click the '+' button** to add an application\n4. **Navigate to and select your MCP client:**\n   - **Claude Desktop**: `/Applications/Claude.app`\n   - **Cursor**: `/Applications/Cursor.app`\n   - **VS Code**: `/Applications/Visual Studio Code.app`\n5. **Restart your MCP client** completely (Cmd+Q, then relaunch)\n\n### Common Issues\n\n- **Permission denied errors**: Make sure you've restarted your MCP client after granting permission\n- **\"uv\" instead of app name**: The server will auto-detect your actual MCP client and provide correct instructions\n- **Database not found**: Ensure you've used the Messages app and iMessage is enabled\n\n### Security Note\n\nThis server only requires **read access** to your iMessage database. It cannot modify, delete, or send messages.\n\n## 🔒 Safety Features\n\n- **Read-only access** to the iMessage database (cannot modify, delete, or send messages)\n- **Phone number validation** using Google's phonenumbers library with proper E.164 formatting\n- **Safe attachment handling** with missing file detection and metadata extraction\n- **Date range validation** to prevent invalid queries\n- **Progress output suppression** for clean JSON responses in MCP protocol\n- **Intelligent permission detection** with automatic System Preferences navigation\n- **MCP client identification** for accurate permission guidance\n\n## 📚 Development Documentation\n\nThe repository includes comprehensive documentation for development:\n\n- `dev_docs/imessagedb-documentation.txt`: Complete documentation about the iMessage database structure and the imessagedb library's capabilities\n- `dev_docs/fastmcp-documentation.txt`: FastMCP framework details and MCP tool development\n- `dev_docs/mcp-documentation.txt`: Model Context Protocol specification\n\nThis documentation serves as context when developing features and can be used with LLMs to assist in development.\n\n## ⚙️ Environment Variables\n\n| Variable | Description | Default |\n|----------|-------------|---------|\n| `SQLITE_DB_PATH` | Custom path to iMessage database | `~/Library/Messages/chat.db` |\n\nThe server automatically locates the iMessage database in the default macOS location. The environment variable is only needed for custom database locations.\n\n## 🔧 Advanced Usage\n\n### Custom Database Path\n\nIf you need to use a custom database path:\n\n```bash\nexport SQLITE_DB_PATH=\"/path/to/custom/chat.db\"\n```\n\n### Testing the Server\n\nTest the server directly using mcptools (github.com/f/mcptools):\n\n```bash\n# Navigate to the repository directory\ncd /path/to/imessage-query-fastmcp-mcp-server\n\n# List available tools\nmcp tools ./imessage-query-server.py\n\n# Test a tool call\nmcp call get_chat_transcript ./imessage-query-server.py -p '{\"phone_number\": \"+1234567890\"}'\n```\n\nThe script will automatically handle dependency installation via `uv` when first run.\n\n## 🐛 Troubleshooting\n\n### Common Error Messages\n\n**\"❌ Full Disk Access permission required\"**\n- Follow the [macOS Permissions Setup](#-macos-permissions-setup) section\n- Ensure you've restarted your MCP client after granting permission\n\n**\"Messages database not found\"**\n- Make sure you've used the Messages app at least once\n- Verify iMessage is enabled in Messages preferences\n\n**\"Invalid phone number\"**\n- Phone numbers are validated using Google's phonenumbers library\n- Try using E.164 format (e.g., \"+1234567890\")\n- US numbers without country code will be assumed to be US numbers\n\n### Getting Help\n\nIf you encounter issues:\n1. Check the error message for specific guidance\n2. Ensure your MCP client has Full Disk Access permission\n3. Verify the Messages app has been used and iMessage is enabled\n4. Try testing the server directly with mcptools (see Advanced Usage)\n",
+  "category": "AI Tools",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "imessage-query": {
+        "command": "/full/path/to/imessage-query-server.py",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hannesrudolph",
+    "repo": "imessage-query-fastmcp-mcp-server",
+    "url": "https://github.com/hannesrudolph/imessage-query-fastmcp-mcp-server",
+    "name": "hannesrudolph__imessage-query-fastmcp-mcp-server",
+    "path": null,
+    "stars": 68,
+    "contributors": 3,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "125906514df38ef201fb917bf1b7f4ec7caed868"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:22.663Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "imessagedb",
+      "importance": 9
+    },
+    {
+      "name": "phonenumbers",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": null
+}

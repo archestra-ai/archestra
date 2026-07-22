@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
-} from "@shared";
+} from "@archestra/shared";
 import { WebClient } from "@slack/web-api";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
 import { MicrosoftAppCredentials } from "botframework-connector";
@@ -14,15 +15,27 @@ import {
   buildWelcomeMessage,
   isSsoConfigured,
 } from "@/agents/chatops/auto-provision";
+import {
+  invalidateChannelAnswerAll,
+  isChannelThreadActive,
+  isThreadMuteCommand,
+  markChannelThreadActive,
+  mightBeAddressedMuteCommand,
+  muteChannelThread,
+  resolveChannelGateAction,
+} from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
+  buildThreadMutedNotice,
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
   SLACK_DEFAULT_CONNECTION_MODE,
+  TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
 import { EventDedupMap } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -32,6 +45,7 @@ import {
   OrganizationModel,
   UserModel,
 } from "@/models";
+import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import {
   ApiError,
   type ChatOpsConnectionMode,
@@ -49,6 +63,7 @@ import {
   ChatOpsChannelBindingResponseSchema,
   UpdateChatOpsChannelBindingSchema,
 } from "@/types/chatops-channel-binding";
+import { isUuid } from "@/utils/uuid";
 
 /**
  * Fastify preParsing hook that captures the raw request body before content-type
@@ -77,7 +92,14 @@ const captureSlackRawBody = async (
  */
 const slackWebhookDedup = new EventDedupMap();
 
-const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+/**
+ * MS Teams incoming webhook, split out into its own plugin so the optional
+ * public-endpoints listener (ARCHESTRA_PUBLIC_ENDPOINTS_PORT) can serve this
+ * endpoint without the rest of the chatops routes (Slack webhooks, management
+ * APIs). It is also registered by chatopsRoutes below, so the main API port
+ * always serves it too.
+ */
+export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * MS Teams webhook endpoint
    *
@@ -258,6 +280,19 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               return;
             }
 
+            // Mute reaction: a 🔇/🤫 reaction on one of the bot's OWN channel
+            // replies mutes that thread. Pure side effect, handled before
+            // message parsing since reactions aren't messages.
+            const muteReaction = provider.parseMuteReaction(context.activity);
+            if (muteReaction) {
+              await muteTeamsThreadAndNotify(context, {
+                provider: "ms-teams",
+                channelId: muteReaction.channelId,
+                threadId: muteReaction.threadId,
+              });
+              return;
+            }
+
             // Parse the activity into our message format
             const message = await provider.parseWebhookNotification(
               context.activity,
@@ -267,6 +302,57 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (!message) {
               // Not a processable message (e.g., system event)
               return;
+            }
+
+            // Team-channel auto-reply gate: in channels the bot stays quiet
+            // until @mentioned, then keeps replying to that thread without
+            // further mentions. Group chats and DMs always reply (no gate).
+            // Runs before sender resolution so we don't do Graph lookups for
+            // the many un-mentioned channel messages the bot now receives.
+            //
+            // A mute command (e.g. "@bot mute") ends the sticky behavior early —
+            // honored both when the bot is mentioned and when the thread is
+            // already active (so muting needs no re-mention) — after which the
+            // bot stays quiet until @mentioned again.
+            if (context.activity.conversation?.conversationType === "channel") {
+              const activation = {
+                provider: "ms-teams" as const,
+                channelId: message.channelId,
+                threadId: message.threadId ?? message.channelId,
+              };
+              const botMentioned = provider.wasBotMentioned(context.activity);
+              // "mute" / "shut up" etc., optionally prefixed by a name the bot
+              // answers to ("Archestra shut up") with no explicit @mention. The
+              // app name is DB-backed, so only resolve it when it might matter.
+              let wantsMute = isThreadMuteCommand(message.text);
+              if (!wantsMute && mightBeAddressedMuteCommand(message.text)) {
+                wantsMute = isThreadMuteCommand(message.text, [
+                  await OrganizationModel.getAppName(),
+                ]);
+              }
+              // isActive is only consulted when the bot wasn't mentioned (see
+              // resolveChannelGateAction), so skip the cache read on mentions.
+              const isActive = botMentioned
+                ? false
+                : await isChannelThreadActive(activation);
+              switch (
+                resolveChannelGateAction({
+                  botMentioned,
+                  wantsMute,
+                  isActive,
+                })
+              ) {
+                case "mute":
+                  await muteTeamsThreadAndNotify(context, activation);
+                  return;
+                case "activate":
+                  await markChannelThreadActive(activation);
+                  break;
+                case "ignore":
+                  return;
+                case "process":
+                  break;
+              }
             }
 
             // Attach TurnContext so the provider can send typing indicators
@@ -281,7 +367,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Resolve workspaceId to proper UUID (aadGroupId) for team channels.
             // Bot Framework may provide team.id (thread format) instead of aadGroupId.
             // TeamsInfo.getTeamDetails() uses RSC permissions — no Azure AD app permissions needed.
-            if (message.workspaceId && !isValidUUID(message.workspaceId)) {
+            if (message.workspaceId && !isUuid(message.workspaceId)) {
               try {
                 const teamDetails = await TeamsInfo.getTeamDetails(context);
                 if (teamDetails?.aadGroupId) {
@@ -335,6 +421,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               value: "Show current agent binding",
                             },
                             { title: "/help", value: "Show this help message" },
+                            {
+                              title: "mute",
+                              value:
+                                "Stop auto-replies in this thread (@mention me to resume)",
+                            },
                           ],
                         },
                         {
@@ -492,7 +583,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   inv.status?.startsWith(AUTO_PROVISIONED_INVITATION_STATUS),
                 );
                 if (autoProvInv) {
-                  const welcome = buildWelcomeMessage({
+                  const welcome = await buildWelcomeMessage({
                     invitationId: autoProvInv.id,
                     email: message.senderEmail,
                     name: message.senderName,
@@ -548,6 +639,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     },
   );
+};
+
+const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(msTeamsWebhookRoutes);
 
   /**
    * Slack webhook endpoint
@@ -654,12 +749,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         const slackBody = body as {
           type?: string;
-          event?: { type?: string; ts?: string };
+          event?: { type?: string; ts?: string; event_ts?: string };
         };
 
         if (slackBody.type === "event_callback") {
-          // Quick in-memory dedup for Slack's duplicate message+app_mention events
-          const eventTs = slackBody.event?.ts;
+          // Quick in-memory dedup for Slack's duplicate message+app_mention events.
+          // Messages carry event.ts; reaction events carry event.event_ts.
+          const eventTs = slackBody.event?.ts ?? slackBody.event?.event_ts;
           if (eventTs && slackWebhookDedup.mark(eventTs)) {
             return reply.send({ ok: true });
           }
@@ -1053,6 +1149,16 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(500, "Failed to update binding");
       }
 
+      // Drop the cached "answer all messages" flag so the message gate picks up
+      // the change without waiting for the short cache TTL to lapse.
+      if (request.body.answerAllMessages !== undefined) {
+        await invalidateChannelAnswerAll({
+          provider: updated.provider,
+          channelId: updated.channelId,
+          workspaceId: updated.workspaceId,
+        });
+      }
+
       return reply.send({
         ...updated,
         createdAt: updated.createdAt.toISOString(),
@@ -1258,6 +1364,95 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
   /**
+   * Connect an ngrok tunnel so this instance is reachable from the Internet.
+   * Persists the auth token and brings the tunnel up live — no restart needed.
+   */
+  fastify.put(
+    "/api/chatops/config/ngrok",
+    {
+      schema: {
+        operationId: RouteId.ConnectNgrok,
+        description: "Connect an ngrok tunnel for inbound chatops webhooks",
+        tags: ["ChatOps"],
+        body: z.object({
+          // Omitted = reuse the saved token (reconnect after a Stop).
+          authToken: z.string().max(512).optional(),
+          domain: z.string().max(256).optional(),
+        }),
+        response: constructResponseSchema(
+          z.object({ success: z.boolean(), domain: z.string() }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { domain } = request.body;
+      const authToken =
+        request.body.authToken ||
+        (await ChatOpsConfigModel.getNgrokConfig())?.authToken;
+      if (!authToken) {
+        throw new ApiError(
+          400,
+          "No ngrok auth token provided and none is saved — enter a token.",
+        );
+      }
+
+      let publicDomain: string;
+      try {
+        publicDomain = await ngrokTunnelManager.start({ authToken, domain });
+      } catch (error) {
+        logger.error({ err: error }, "Failed to start ngrok tunnel");
+        throw new ApiError(
+          400,
+          "Could not start the ngrok tunnel — please check your auth token (and reserved domain, if set).",
+        );
+      }
+
+      return reply.send({ success: true, domain: publicDomain });
+    },
+  );
+  /**
+   * Stop the ngrok tunnel and clear its persisted credentials.
+   */
+  fastify.delete(
+    "/api/chatops/config/ngrok",
+    {
+      schema: {
+        operationId: RouteId.DisconnectNgrok,
+        description: "Stop the ngrok tunnel and clear its credentials",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (_request, reply) => {
+      await ngrokTunnelManager.stop();
+      return reply.send({ success: true });
+    },
+  );
+  /**
+   * Read the saved ngrok config for prefilling the connect dialog. The token
+   * itself is never returned — only whether one is saved.
+   */
+  fastify.get(
+    "/api/chatops/config/ngrok",
+    {
+      schema: {
+        operationId: RouteId.GetNgrokConfig,
+        description: "Get saved ngrok configuration (token redacted)",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(
+          z.object({ hasAuthToken: z.boolean(), domain: z.string() }),
+        ),
+      },
+    },
+    async (_request, reply) => {
+      const stored = await ChatOpsConfigModel.getNgrokConfig();
+      return reply.send({
+        hasAuthToken: Boolean(stored?.authToken),
+        domain: stored?.domain ?? "",
+      });
+    },
+  );
+  /**
    * Update Slack chatops config.
    * Persists to DB and reinitializes the chatops manager (which reloads from DB).
    */
@@ -1335,6 +1530,201 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await ChatOpsConfigModel.saveSlackConfig(merged);
       await chatOpsManager.reinitialize();
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * Update Telegram chatops config.
+   * Persists to DB and reinitializes the chatops manager (which reloads from DB).
+   */
+  fastify.put(
+    "/api/chatops/config/telegram",
+    {
+      schema: {
+        operationId: RouteId.UpdateTelegramChatOpsConfig,
+        description: "Update Telegram chatops configuration",
+        tags: ["ChatOps"],
+        body: z.object({
+          enabled: z.boolean().optional(),
+          botToken: z.string().max(256).optional(),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.telegramEnabled) {
+        throw new ApiError(
+          400,
+          "The Telegram integration is not enabled on this deployment. Set ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true (or ARCHESTRA_BETA=true) and restart.",
+        );
+      }
+      const { enabled, botToken } = request.body;
+
+      // Merge new values with existing DB config (or defaults for first setup)
+      const existing = await ChatOpsConfigModel.getTelegramConfig();
+      const merged = {
+        enabled: enabled ?? existing?.enabled ?? false,
+        botToken: botToken ?? existing?.botToken ?? "",
+      };
+
+      // Validate the bot token by calling getMe
+      if (merged.enabled && merged.botToken) {
+        try {
+          const response = await fetch(
+            `https://api.telegram.org/bot${merged.botToken}/getMe`,
+          );
+          const body = (await response.json()) as { ok?: boolean };
+          if (!body.ok) throw new Error("getMe returned ok=false");
+        } catch {
+          throw new ApiError(
+            400,
+            "Invalid Telegram credentials — could not authenticate with Telegram. Please check your Bot Token.",
+          );
+        }
+      }
+
+      await ChatOpsConfigModel.saveTelegramConfig(merged);
+      await chatOpsManager.reinitialize();
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * Mint a one-shot Telegram linking code for the signed-in user.
+   * The code rides a t.me/<bot>?start=<code> deep link; when the user taps
+   * Start, the bot redeems it and ties that Telegram chat to this user's
+   * email. Open to any authenticated user (self-service).
+   */
+  fastify.post(
+    "/api/chatops/telegram/link-code",
+    {
+      schema: {
+        operationId: RouteId.GenerateTelegramLinkCode,
+        description:
+          "Generate a one-shot code that links the current user's Telegram account via a t.me deep link",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(
+          z.object({ code: z.string(), botUsername: z.string() }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.telegramEnabled) {
+        throw new ApiError(
+          400,
+          "The Telegram integration is not enabled on this deployment.",
+        );
+      }
+      const botUsername = chatOpsManager
+        .getTelegramProvider()
+        ?.getBotUsername();
+      if (!botUsername) {
+        throw new ApiError(400, "Telegram is not configured yet.");
+      }
+
+      const code = randomUUID();
+      await cacheManager.set(
+        `${CacheKey.TelegramLinkCode}-${code}`,
+        { email: request.user.email },
+        TELEGRAM_LINK_CODE_TTL_MS,
+      );
+
+      return reply.send({ code, botUsername });
+    },
+  );
+
+  /**
+   * Link the signed-in user's Telegram account.
+   * The code comes from the bot's /start reply and proves control of the
+   * Telegram chat; the email comes from the web session — so neither side
+   * can be spoofed. Open to any authenticated user (self-service).
+   */
+  fastify.post(
+    "/api/chatops/telegram/link",
+    {
+      schema: {
+        operationId: RouteId.LinkTelegramChatOpsAccount,
+        description:
+          "Link the current user's Telegram account using a code from the bot",
+        tags: ["ChatOps"],
+        body: z.object({ code: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.telegramEnabled) {
+        throw new ApiError(
+          400,
+          "The Telegram integration is not enabled on this deployment.",
+        );
+      }
+
+      const payload = await cacheManager.getAndDelete<{ chatId?: string }>(
+        `${CacheKey.TelegramLinkCode}-${request.body.code}`,
+      );
+      // Codes minted by the web UI carry an email instead of a chatId and are
+      // only redeemable from the bot side — reject them here.
+      if (!payload?.chatId) {
+        throw new ApiError(
+          400,
+          "This linking code is invalid or expired. Send /start to the bot again to get a fresh link.",
+        );
+      }
+
+      const email = request.user.email;
+      const chatBinding = await ChatOpsChannelBindingModel.findByChannel({
+        provider: "telegram",
+        channelId: payload.chatId,
+        workspaceId: null,
+      });
+      if (
+        chatBinding?.dmOwnerEmail &&
+        chatBinding.dmOwnerEmail.toLowerCase() !== email.toLowerCase()
+      ) {
+        throw new ApiError(
+          400,
+          "This Telegram account is already linked to another user.",
+        );
+      }
+
+      if (!chatBinding) {
+        // Reuse the user's pending/stale DM binding when one exists so an
+        // agent assignment made in the UI survives the link.
+        const existingDm =
+          await ChatOpsChannelBindingModel.findDmBindingByEmail(
+            "telegram",
+            email,
+          );
+        if (existingDm) {
+          await ChatOpsChannelBindingModel.fulfillDmBinding(
+            existingDm.id,
+            payload.chatId,
+            null,
+          );
+        } else {
+          await ChatOpsChannelBindingModel.create({
+            organizationId: request.organizationId,
+            provider: "telegram",
+            channelId: payload.chatId,
+            isDm: true,
+            dmOwnerEmail: email,
+            channelName: `Direct Message - ${email}`,
+            agentId: null,
+          });
+        }
+      }
+
+      // Confirm in the Telegram chat (non-blocking)
+      chatOpsManager
+        .getTelegramProvider()
+        ?.sendDirectMessage({
+          userId: payload.chatId,
+          text: `✅ Linked to ${email}. Send me a message to start!`,
+        })
+        .catch(() => {});
 
       return reply.send({ success: true });
     },
@@ -1422,7 +1812,12 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
     appLevelToken?: string;
     connectionMode?: ChatOpsConnectionMode;
   };
-  dmInfo?: { botUserId?: string; teamId?: string; appId?: string };
+  dmInfo?: {
+    botUserId?: string;
+    teamId?: string;
+    appId?: string;
+    botUsername?: string;
+  };
 }> {
   switch (providerType) {
     case "ms-teams": {
@@ -1465,6 +1860,22 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
                 teamId: provider.getWorkspaceId() ?? undefined,
               }
             : undefined,
+      };
+    }
+    case "telegram": {
+      const provider = chatOpsManager.getTelegramProvider();
+      const dbConfig = await ChatOpsConfigModel.getTelegramConfig();
+      return {
+        id: "telegram",
+        displayName: "Telegram",
+        configured: provider?.isConfigured() ?? false,
+        credentials: {
+          botToken: maskValue(dbConfig?.botToken ?? ""),
+        },
+        // The bot username builds t.me deep links (chat and account linking)
+        dmInfo: provider?.getBotUsername()
+          ? { botUsername: provider.getBotUsername() ?? undefined }
+          : undefined,
       };
     }
   }
@@ -1689,6 +2100,20 @@ function isCommand(text: string): boolean {
 }
 
 /**
+ * Mute a Teams channel thread, confirming ONLY on a real active→muted
+ * transition. Redelivered reaction activities / repeat mutes find the key
+ * already gone and stay silent, so no duplicate "muted" notices.
+ */
+async function muteTeamsThreadAndNotify(
+  context: TurnContext,
+  activation: { provider: "ms-teams"; channelId: string; threadId: string },
+): Promise<void> {
+  if (await muteChannelThread(activation)) {
+    await context.sendActivity(buildThreadMutedNotice());
+  }
+}
+
+/**
  * Resolve sender email (TeamsInfo → Graph API fallback) and verify they are a registered Archestra user.
  * Sets message.senderEmail and returns true if verified, false if rejected (with error sent to Teams).
  */
@@ -1758,10 +2183,11 @@ async function resolveAndVerifySenderForMSTeams(
       if (!isDm && !(await isSsoConfigured())) {
         const botId = context.activity.recipient.id;
         const dmDeepLink = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(botId)}`;
+        const appName = await OrganizationModel.getAppName();
         await context
           .sendActivity(
-            `Hey there 👋 We created an Archestra user for you (${message.senderEmail}). ` +
-              `To finish signing up so you can use Archestra web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
+            `Hey there 👋 We created a ${appName} user for you (${message.senderEmail}). ` +
+              `To finish signing up so you can use the ${appName} web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
               `[Open DM with me](${dmDeepLink})`,
           )
           .catch(() => {});
@@ -1922,11 +2348,4 @@ function collectWorkspaceIds(teamData: {
   if (teamData.id) ids.add(teamData.id);
   if (teamData.aadGroupId) ids.add(teamData.aadGroupId);
   return [...ids];
-}
-
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isValidUUID(value: string): boolean {
-  return UUID_REGEX.test(value);
 }

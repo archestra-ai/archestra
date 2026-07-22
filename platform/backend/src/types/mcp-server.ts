@@ -1,4 +1,4 @@
-import { LOCAL_MCP_INSTALLATION_STATES } from "@shared";
+import { LOCAL_MCP_INSTALLATION_STATES } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -22,11 +22,26 @@ export const SecretStorageTypeSchema = z.enum([
 
 export type SecretStorageType = z.infer<typeof SecretStorageTypeSchema>;
 
+/**
+ * Why a pending reinstall was flagged, persisted alongside
+ * `reinstallRequired`. "new-input": the catalog's prompted schema changed —
+ * the user owes values the install doesn't have, so the UI must collect
+ * them. "restart": stored values are still valid (execution-config change,
+ * retry after a failed sync) — an empty-body reinstall reusing the stored
+ * bag suffices. Null whenever `reinstallRequired` is false.
+ */
+export const McpServerReinstallReasonSchema = z.enum(["new-input", "restart"]);
+
+export type McpServerReinstallReason = z.infer<
+  typeof McpServerReinstallReasonSchema
+>;
+
 export const SelectMcpServerSchema = createSelectSchema(
   schema.mcpServersTable,
 ).extend({
   serverType: InternalMcpCatalogServerTypeSchema,
   scope: ResourceVisibilityScopeSchema,
+  reinstallReason: McpServerReinstallReasonSchema.nullable(),
   ownerEmail: z.string().nullable().optional(),
   catalogName: z.string().nullable().optional(),
   users: z.array(z.string()).optional(),
@@ -47,6 +62,32 @@ export const SelectMcpServerSchema = createSelectSchema(
     })
     .nullable()
     .optional(),
+  /**
+   * Agents (profiles / MCP gateways) with tools explicitly assigned from this
+   * server — statically pinned to it, or unpinned on a tool of its catalog.
+   */
+  assignedAgents: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      }),
+    )
+    .optional(),
+  /**
+   * Auto-mode agents (implicit access to all tools) in this server's
+   * organization. They reach every server without an explicit tool assignment,
+   * so they are listed separately from `assignedAgents` — the same org-wide set
+   * appears on every server.
+   */
+  autoModeAgents: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      }),
+    )
+    .optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
   secretStorageType: SecretStorageTypeSchema.optional(),
 });
@@ -64,15 +105,32 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
     id: true,
     createdAt: true,
     updatedAt: true,
+    // Frozen K8s deployment identity — computed by McpServerModel.create /
+    // the startup adopt pass, never accepted from input.
+    deploymentName: true,
+    // Server-owned OAuth refresh-failure state, written only by the refresh
+    // subsystem (routes/oauth.ts) — a freshly installed server has never
+    // attempted a refresh, and accepting these from install input would let
+    // a caller seed arbitrary (including unsanitized) diagnostic text shown
+    // to other users with access to the install.
+    oauthRefreshError: true,
+    oauthRefreshErrorMessage: true,
+    oauthRefreshErrorDescription: true,
+    oauthRefreshFailedAt: true,
+    // Server-owned reinstall bookkeeping — a fresh install is never flagged.
+    reinstallReason: true,
   });
 
 export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
   .omit({
     serverType: true, // serverType should not be updated after creation
     scope: true, // scope is install-time only; to change scope, uninstall + reinstall
+    // Frozen at creation/adopt time — renames must never touch it
+    deploymentName: true,
   })
   .extend({
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
+    reinstallReason: McpServerReinstallReasonSchema.nullable().optional(),
   });
 
 export type LocalMcpServerInstallationStatus = z.infer<

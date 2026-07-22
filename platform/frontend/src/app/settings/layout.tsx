@@ -6,19 +6,30 @@ import { PageLayout } from "@/components/page-layout";
 import { useSettingsTabs } from "./settings-tabs";
 
 const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
-  "/settings/account": {
-    title: "Your Account",
+  "/settings/service-accounts": {
+    title: "Service Accounts",
     description:
-      "Manage your personal profile, sessions, and sign-in settings.",
-  },
-  "/settings/api-keys": {
-    title: "API Keys",
-    description: "Create and manage personal API keys for programmatic access.",
+      "Organization-owned identities for automation. Each service account has a role and its own API keys for the platform API.",
   },
   "/settings/agents": {
-    title: "Agents",
+    title: "Chat",
     description:
-      "Configure default agent behavior and agent-related platform settings.",
+      "Defaults for chats and agents — default model, default agent, and file uploads.",
+  },
+  "/settings/security": {
+    title: "Security",
+    description:
+      "Organization-wide security defaults for tools your agents use.",
+  },
+  "/settings/github": {
+    title: "GitHub",
+    description:
+      "Manage organization GitHub credentials for connectors and skill sync.",
+  },
+  "/settings/environments": {
+    title: "Environments",
+    description:
+      "Manage deployment environments — namespaces, network egress, and access. Environments also isolate which tools and knowledge agents and gateways can use, and scope cost limits.",
   },
   "/settings/identity-providers": {
     title: "Identity Providers",
@@ -32,12 +43,16 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   },
   "/settings/llm": {
     title: "LLM",
-    description: "Configure platform-wide LLM defaults and behavior.",
-  },
-  "/settings/connection": {
-    title: "Connect page",
     description:
-      'Control what other users see when getting connection instructions on the "Connect" page.',
+      "Configure platform-wide LLM behavior, like tool-result compression and default cost limits.",
+  },
+  "/settings/mcp": {
+    title: "MCP",
+    description: "Configure how MCP servers are added and managed.",
+  },
+  "/settings/skills": {
+    title: "Skills",
+    description: "Configure how skills are discovered and added.",
   },
   "/settings/organization": {
     title: "Organization",
@@ -85,10 +100,12 @@ export default function SettingsLayout({
   const tabs = useSettingsTabs();
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
 
-  const config = PAGE_CONFIG[pathname] ?? {
-    title: "Settings",
-    description: "Configure your platform, teams, and integrations.",
-  };
+  const config = pathname.startsWith("/settings/service-accounts/")
+    ? PAGE_CONFIG["/settings/service-accounts"]
+    : (PAGE_CONFIG[pathname] ?? {
+        title: "Settings",
+        description: "Configure your platform, teams, and integrations.",
+      });
 
   const contextValue = useMemo(() => ({ setActionButton }), []);
 

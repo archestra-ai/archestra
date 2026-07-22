@@ -3,7 +3,7 @@
 import {
   type ChatMessagePart,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { ChevronDown, ChevronUp, ExternalLink, FileText } from "lucide-react";
 import { useState } from "react";
 import {
@@ -27,6 +27,7 @@ export interface ExtractedCitation {
   sourceUrl: string | null;
   connectorType: string | null;
   documentId: string;
+  sourceId: string | null;
 }
 
 export function extractCitations(
@@ -49,6 +50,7 @@ export function extractCitations(
         sourceUrl?: string | null;
         connectorType?: string | null;
         documentId?: string;
+        sourceId?: string | null;
       };
     }> = [];
 
@@ -85,6 +87,7 @@ export function extractCitations(
         sourceUrl: c.sourceUrl ?? null,
         connectorType: c.connectorType ?? null,
         documentId: c.documentId,
+        sourceId: c.sourceId ?? null,
       });
     }
   }

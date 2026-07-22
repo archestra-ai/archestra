@@ -1,6 +1,5 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
 import {
   type Action,
   type Permissions,
@@ -8,7 +7,8 @@ import {
   resourceCategories,
   resourceDescriptions,
   resourceLabels,
-} from "@shared";
+} from "@archestra/shared";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Check,
   ChevronDown,
@@ -61,6 +61,10 @@ const actionLabels: Record<Action, string> = {
   cancel: "Cancel",
   enable: "Enable",
   query: "Query",
+  execute: "Execute",
+  "deploy-to-restricted": "Deploy to Restricted",
+  manage: "Manage",
+  "read-all": "Read All Chats",
 };
 
 export function RolePermissionsCard() {
@@ -110,7 +114,7 @@ export function RolePermissionsCard() {
           <>
             <Separator />
             <div>
-              <h4 className="text-sm font-semibold mb-2">Permissions</h4>
+              <h4 className="text-sm font-semibold mb-2">Your Permissions</h4>
               <PermissionsGrid permissions={permissions} />
             </div>
           </>

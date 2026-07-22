@@ -1,26 +1,30 @@
 "use client";
 
 import {
+  ADMIN_ROLE_NAME,
+  DocsPage,
   E2eTestId,
   formatSecretStorageType,
-  getManageCredentialsAddToTeamOptionTestId,
+  getDocsUrl,
   type McpDeploymentStatusEntry,
-} from "@shared";
+} from "@archestra/shared";
 import { format } from "date-fns";
 import {
   AlertTriangle,
-  ChevronDown,
-  PlugZap,
+  Info,
+  KeyRound,
   Plus,
   RefreshCw,
   Trash,
   User,
+  Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ExternalDocsLink } from "@/components/external-docs-link";
+import { StaticCredentialConfirmDialog } from "@/components/static-credential-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -30,18 +34,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-} from "@/components/ui/empty";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -68,32 +64,32 @@ import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
   setOAuthCatalogId,
   setOAuthMcpServerId,
+  setOAuthReturnUrl,
   setOAuthState,
 } from "@/lib/auth/oauth-session";
 import {
-  useCatalogPresets,
   useInternalMcpCatalog,
+  useUpdateInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { usePresetEntityName } from "@/lib/organization.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams } from "@/lib/teams/team.query";
+import { AddServiceAccountDialog } from "./add-service-account-dialog";
+import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
+import { formatOAuthFailureDetail } from "./oauth-reauth-detail";
+import { useCanReauthenticate } from "./use-can-reauthenticate";
 
 interface ManageUsersDialogProps {
   isOpen: boolean;
   onClose: () => void;
   label?: string;
   catalogId: string;
-  /**
-   * Called when user wants to add a personal connection. `presetCatalogId`
-   * is set when the user clicked Install on a specific preset card; falls
-   * back to the parent catalog.
-   */
-  onAddPersonalConnection?: (presetCatalogId?: string) => void;
+  /** Called when user wants to add a personal connection. */
+  onAddPersonalConnection?: () => void;
   /** Called when user wants to add a team connection for a specific team */
-  onAddSharedConnection?: (teamId: string, presetCatalogId?: string) => void;
+  onAddSharedConnection?: (teamId: string) => void;
   /** Called when user wants to add an organization-wide connection */
-  onAddOrgConnection?: (presetCatalogId?: string) => void;
+  onAddOrgConnection?: () => void;
   /** Deployment statuses keyed by server ID */
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   /** Called when user clicks a pod name to open the debug dialog */
@@ -138,19 +134,13 @@ interface ManageUsersContentProps {
   onClose: () => void;
   label?: string;
   catalogId: string;
-  onAddPersonalConnection?: (presetCatalogId?: string) => void;
-  onAddSharedConnection?: (teamId: string, presetCatalogId?: string) => void;
-  onAddOrgConnection?: (presetCatalogId?: string) => void;
+  onAddPersonalConnection?: () => void;
+  onAddSharedConnection?: (teamId: string) => void;
+  onAddOrgConnection?: () => void;
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onOpenPodLogs?: (serverId: string) => void;
   hideHeader?: boolean;
-  /**
-   * Externally-controlled preset filter id ("all" or a presetId). When set,
-   * the internal preset Select is hidden and the parent owns the value
-   * (used by the settings dialog so the selector can live in its page header).
-   */
-  controlledPresetFilter?: string;
-  onControlledPresetFilterChange?: (value: string) => void;
+  bodyTestId?: string;
 }
 
 export function ManageUsersContent({
@@ -164,61 +154,23 @@ export function ManageUsersContent({
   deploymentStatuses = {},
   onOpenPodLogs,
   hideHeader = false,
-  controlledPresetFilter,
-  onControlledPresetFilterChange,
+  bodyTestId,
 }: ManageUsersContentProps) {
-  const isPresetFilterControlled = controlledPresetFilter !== undefined;
   // Subscribe to live mcp-servers query to get fresh data. We fetch all
-  // servers (no catalogId filter) and split by preset client-side so we can
-  // group rows by the preset/default they were installed from.
+  // servers (no catalogId filter) and keep those installed from this catalog.
   const { data: allServersUnfiltered = [], isFetched: serversFetched } =
     useMcpServers();
   const { data: catalogItems } = useInternalMcpCatalog({});
-  const { data: childPresets = [] } = useCatalogPresets(catalogId);
-  const {
-    plural: presetPlural,
-    singular: presetSingular,
-    configured: presetTermConfigured,
-    defaultLabel,
-  } = usePresetEntityName();
 
-  // Map of presetId → preset row. Parent is the "default" preset.
-  const presetEntries = [
-    { id: catalogId, name: defaultLabel, isDefault: true },
-    ...childPresets.map((c) => ({
-      id: c.id,
-      name: c.childName ?? c.name,
-      isDefault: false,
-    })),
-  ];
-  const presetIds = new Set(presetEntries.map((p) => p.id));
-
-  const allServers = allServersUnfiltered.filter((s) =>
-    s.catalogId ? presetIds.has(s.catalogId) : false,
+  const allServers = allServersUnfiltered.filter(
+    (s) => s.catalogId === catalogId,
   );
 
-  // Filter dropdown state — "all" or a specific presetId.
-  // When `controlledPresetFilter` is supplied, the parent owns this state.
-  const [internalSelectedPresetFilter, setInternalSelectedPresetFilter] =
-    useState<string>("all");
-  const selectedPresetFilter = isPresetFilterControlled
-    ? (controlledPresetFilter ?? "all")
-    : internalSelectedPresetFilter;
-  const setSelectedPresetFilter = isPresetFilterControlled
-    ? (next: string) => onControlledPresetFilterChange?.(next)
-    : setInternalSelectedPresetFilter;
-  const visiblePresets =
-    selectedPresetFilter === "all"
-      ? presetEntries
-      : presetEntries.filter((p) => p.id === selectedPresetFilter);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
   // Get user's teams and permissions for re-authentication checks
-  const { data: userTeams } = useTeams();
-  const { data: hasTeamAdminPermission } = useHasPermissions({
-    team: ["admin"],
-  });
+  const { data: userTeams } = useMyTeams();
   const { data: hasMcpServerCreatePermission } = useHasPermissions({
     mcpServerInstallation: ["create"],
   });
@@ -228,6 +180,9 @@ export function ManageUsersContent({
   const { data: hasMcpServerAdminPermission } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
+
+  const [serviceAccountDialogOpen, setServiceAccountDialogOpen] =
+    useState(false);
 
   // Use the first server for display purposes
   const firstServer = allServers?.[0];
@@ -242,35 +197,7 @@ export function ManageUsersContent({
     return mcpServer.scope ?? (mcpServer.teamId ? "team" : "personal");
   };
 
-  // Check if user can re-authenticate a credential
-  // WHY: Permission requirements match team installation rules for consistency:
-  // - Personal: mcpServer:create AND owner
-  // - Team: team:admin OR (mcpServer:update AND team membership)
-  // - Org: mcpServerInstallation:admin
-  // Members cannot re-authenticate team credentials, only editors and admins can.
-  const canReauthenticate = (mcpServer: (typeof allServers)[number]) => {
-    // Must have mcpServer create permission
-    if (!hasMcpServerCreatePermission) return false;
-    const scope = getServerScope(mcpServer);
-
-    if (scope === "org") {
-      return !!hasMcpServerAdminPermission;
-    }
-
-    // For personal credentials, only owner can re-authenticate
-    if (scope === "personal") {
-      return mcpServer.ownerId === currentUserId;
-    }
-
-    // For team credentials: team:admin OR (mcpServer:update AND team membership)
-    if (hasTeamAdminPermission) return true;
-
-    // WHY: Editors have mcpServer:update, members don't
-    // This ensures only editors and admins can manage team credentials
-    if (!hasMcpServerUpdatePermission) return false;
-
-    return userTeams?.some((team) => team.id === mcpServer.teamId) ?? false;
-  };
+  const canReauthenticate = useCanReauthenticate();
 
   // Get tooltip message for disabled re-authenticate button
   const getReauthTooltip = (mcpServer: (typeof allServers)[number]): string => {
@@ -292,7 +219,7 @@ export function ManageUsersContent({
   };
 
   // Check if user can revoke (delete) a credential
-  // Personal: owner OR mcpServer:update. Team: team:admin OR (mcpServer:update AND membership).
+  // Personal: owner OR mcpServer:update. Team: team admin role OR (mcpServer:update AND membership).
   // Org: mcpServerInstallation:admin.
   const canRevoke = (mcpServer: (typeof allServers)[number]) => {
     const scope = getServerScope(mcpServer);
@@ -302,9 +229,20 @@ export function ManageUsersContent({
         mcpServer.ownerId === currentUserId || !!hasMcpServerUpdatePermission
       );
     }
-    if (hasTeamAdminPermission) return true;
+    if (isCurrentUserTeamAdmin(mcpServer.teamId)) return true;
     if (!hasMcpServerUpdatePermission) return false;
     return userTeams?.some((team) => team.id === mcpServer.teamId) ?? false;
+  };
+
+  const isCurrentUserTeamAdmin = (teamId: string | null | undefined) => {
+    if (!teamId || !currentUserId) return false;
+    const team = userTeams?.find((team) => team.id === teamId);
+    return (
+      team?.members?.some(
+        (member) =>
+          member.userId === currentUserId && member.role === ADMIN_ROLE_NAME,
+      ) ?? false
+    );
   };
 
   // Get tooltip message for disabled revoke button
@@ -354,42 +292,34 @@ export function ManageUsersContent({
       setOAuthState(state);
       setOAuthCatalogId(catalogItem.id);
 
+      // Remember where re-authentication started so the callback returns here
+      setOAuthReturnUrl(window.location.href);
+
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
-    } catch {
+    } catch (error) {
       setOAuthMcpServerId(null);
-      toast.error("Failed to initiate re-authentication");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to initiate re-authentication",
+      );
     }
   };
 
-  // Close dialog when all credentials are revoked (only after data has loaded)
-  // But keep dialog open if add callbacks are available or if the catalog has
-  // child presets to display (preset cards are informative even when empty).
+  // Close dialog when all credentials are revoked (only after data has loaded),
+  // but keep it open if add callbacks are available.
   const hasAddCallbacks =
     !!onAddPersonalConnection ||
     !!onAddSharedConnection ||
     !!onAddOrgConnection;
-  const hasChildPresets = childPresets.length > 0;
   useEffect(() => {
-    if (
-      isActive &&
-      serversFetched &&
-      !firstServer &&
-      !hasAddCallbacks &&
-      !hasChildPresets
-    ) {
+    if (isActive && serversFetched && !firstServer && !hasAddCallbacks) {
       onClose();
     }
-  }, [
-    isActive,
-    serversFetched,
-    firstServer,
-    onClose,
-    hasAddCallbacks,
-    hasChildPresets,
-  ]);
+  }, [isActive, serversFetched, firstServer, onClose, hasAddCallbacks]);
 
-  if (!firstServer && !hasAddCallbacks && !hasChildPresets) {
+  if (!firstServer && !hasAddCallbacks) {
     return null;
   }
 
@@ -427,150 +357,146 @@ export function ManageUsersContent({
     return mcpServer.ownerEmail || "Deleted user";
   };
 
+  const split = splitByScope(allServers);
+  const canonicalStateByPod = computeCanonicalStateByPod(
+    allServers,
+    deploymentStatuses,
+  );
+
+  const personalRows: ConnectionRow[] = [
+    ...(split.myPersonalServer
+      ? [{ server: split.myPersonalServer, isYou: true } as const]
+      : []),
+    ...split.otherPersonalServers.map((s) => ({ server: s, isYou: false })),
+  ];
+  const serviceAccountRows: ConnectionRow[] = [
+    ...split.teamServers.map((s) => ({ server: s, isYou: false })),
+    ...split.orgServers.map((s) => ({ server: s, isYou: false })),
+  ];
+
+  const canAddPersonal =
+    hasAddCallbacks && !!onAddPersonalConnection && !split.myPersonalServer;
+  const canAddTeam =
+    hasAddCallbacks &&
+    !!onAddSharedConnection &&
+    split.availableTeamsForShared.length > 0;
+  const canAddOrg =
+    hasAddCallbacks &&
+    !!onAddOrgConnection &&
+    !split.hasOrgConnection &&
+    !!hasMcpServerAdminPermission;
+  const canAddServiceAccount = canAddTeam || canAddOrg;
+
+  const rowProps: RowRenderProps = {
+    isOAuthServer,
+    deploymentStatuses,
+    canonicalStateByPod,
+    getCredentialOwnerName,
+    canReauthenticate,
+    getReauthTooltip,
+    canRevoke,
+    getRevokeTooltip,
+    handleReauthenticate,
+    handleRevoke,
+    isDeleting: deleteMcpServerMutation.isPending,
+    onOpenPodLogs,
+  };
+
   return (
     <>
       {!hideHeader && (
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Manage credentials
+            Connections
             <span className="text-muted-foreground font-normal">
               {label || firstServer?.name}
             </span>
           </DialogTitle>
-          <DialogDescription className="sr-only">
-            Manage credentials
-          </DialogDescription>
+          <DialogDescription className="sr-only">Connections</DialogDescription>
         </DialogHeader>
       )}
 
-      <div className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}>
-        {/* Legacy in-content preset filter — only shown when the standalone
-            dialog renders (no external page header to host the selector). */}
-        {presetEntries.length > 1 && !isPresetFilterControlled && (
-          <div className="flex items-center justify-end gap-2">
-            <Select
-              value={selectedPresetFilter}
-              onValueChange={setSelectedPresetFilter}
-            >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All {presetPlural}</SelectItem>
-                {presetEntries.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <div
+        className={hideHeader ? "space-y-6" : "space-y-6 pb-4"}
+        data-testid={bodyTestId}
+      >
+        {catalogItem && (
+          <AgentConnectionsSection
+            item={catalogItem}
+            connections={allServers}
+          />
         )}
 
-        {visiblePresets.map((preset) => {
-          const presetServers = allServers.filter(
-            (s) => s.catalogId === preset.id,
-          );
-          const split = splitByScope(presetServers);
-          const hasContent = presetServers.length > 0;
-          // Annotate the card title with the configured preset term only
-          // when the org has set one AND non-default presets actually exist.
-          // Without both, the title row carries only the install button.
-          const showAnnotatedTitle =
-            presetTermConfigured && childPresets.length > 0;
-          // Pass undefined for default so the install flow targets the parent
-          // catalog directly (matches pre-preset behaviour).
-          const installPresetCatalogId = preset.isDefault
-            ? undefined
-            : preset.id;
+        {(personalRows.length > 0 || canAddPersonal) && (
+          <ConnectionsSection
+            title="Personal connections"
+            description="Each person connects their own account."
+            emptyText="No personal connections yet."
+            rows={personalRows}
+            tableTestId={E2eTestId.ManageCredentialsDialogTable}
+            action={
+              canAddPersonal ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    onClose();
+                    onAddPersonalConnection?.();
+                  }}
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  Connect my account
+                </Button>
+              ) : null
+            }
+            {...rowProps}
+          />
+        )}
 
-          const installMenu = (
-            <InstallMenuButton
-              onAddPersonal={
-                hasAddCallbacks &&
-                onAddPersonalConnection &&
-                !split.myPersonalServer
-                  ? () => {
-                      onClose();
-                      onAddPersonalConnection(installPresetCatalogId);
-                    }
-                  : undefined
-              }
-              onAddForTeam={
-                hasAddCallbacks && onAddSharedConnection
-                  ? (teamId) => {
-                      onClose();
-                      onAddSharedConnection(teamId, installPresetCatalogId);
-                    }
-                  : undefined
-              }
-              onAddForOrg={
-                hasAddCallbacks && onAddOrgConnection && !split.hasOrgConnection
-                  ? () => {
-                      onClose();
-                      onAddOrgConnection(installPresetCatalogId);
-                    }
-                  : undefined
-              }
-              availableTeamsForShared={split.availableTeamsForShared}
-              addOrgDisabled={!hasMcpServerAdminPermission}
-              addOrgDisabledReason={
-                !hasMcpServerAdminPermission
-                  ? "Only organization admins can install organization-wide"
-                  : undefined
-              }
-            />
-          );
-
-          return (
-            <div key={preset.id} className="space-y-2">
-              {!showAnnotatedTitle && (
-                <div className="flex justify-end">{installMenu}</div>
-              )}
-              <Card>
-                <CardContent className="p-0">
-                  {showAnnotatedTitle && (
-                    <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5">
-                      <span className="text-sm font-semibold">
-                        <span className="text-muted-foreground font-normal">
-                          {presetSingular}:{" "}
-                        </span>
-                        {preset.name}
-                      </span>
-                      {installMenu}
-                    </div>
-                  )}
-                  {hasContent ? (
-                    <UnifiedConnectionsTable
-                      myPersonalServer={split.myPersonalServer}
-                      otherPersonalServers={split.otherPersonalServers}
-                      teamServers={split.teamServers}
-                      orgServers={split.orgServers}
-                      isOAuthServer={isOAuthServer}
-                      getCredentialOwnerName={getCredentialOwnerName}
-                      canReauthenticate={canReauthenticate}
-                      getReauthTooltip={getReauthTooltip}
-                      canRevoke={canRevoke}
-                      getRevokeTooltip={getRevokeTooltip}
-                      handleReauthenticate={handleReauthenticate}
-                      handleRevoke={handleRevoke}
-                      isDeleting={deleteMcpServerMutation.isPending}
-                      deploymentStatuses={deploymentStatuses}
-                      onOpenPodLogs={onOpenPodLogs}
-                      availableTeamsForShared={split.availableTeamsForShared}
-                    />
-                  ) : (
-                    <p className="text-sm text-muted-foreground px-4 py-3">
-                      No callers yet.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          );
-        })}
+        {(serviceAccountRows.length > 0 || canAddServiceAccount) && (
+          <ConnectionsSection
+            title="Service accounts"
+            description="Shared team & organization keys."
+            emptyText="No service accounts yet."
+            rows={serviceAccountRows}
+            tableTestId={E2eTestId.ManageServiceAccountsTable}
+            action={
+              canAddServiceAccount ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  data-testid={
+                    E2eTestId.ManageCredentialsAddServiceAccountButton
+                  }
+                  onClick={() => setServiceAccountDialogOpen(true)}
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  Add service account
+                </Button>
+              ) : null
+            }
+            {...rowProps}
+          />
+        )}
       </div>
+
+      <AddServiceAccountDialog
+        open={serviceAccountDialogOpen}
+        onOpenChange={setServiceAccountDialogOpen}
+        availableTeams={canAddTeam ? split.availableTeamsForShared : []}
+        canAddOrg={canAddOrg}
+        onConfirm={(target) => {
+          onClose();
+          if (target.type === "org") {
+            onAddOrgConnection?.();
+          } else {
+            onAddSharedConnection?.(target.teamId);
+          }
+        }}
+      />
 
       {!hideHeader && (
         <DialogStickyFooter>
@@ -587,137 +513,12 @@ type ServerEntry = NonNullable<
   ReturnType<typeof useMcpServers>["data"]
 >[number];
 
-interface InstallMenuButtonProps {
-  onAddPersonal?: () => void;
-  onAddForTeam?: (teamId: string) => void;
-  onAddForOrg?: () => void;
-  availableTeamsForShared: Array<{ id: string; name: string }>;
-  addOrgDisabled?: boolean;
-  addOrgDisabledReason?: string;
-}
+type ConnectionRow = { server: ServerEntry; isYou: boolean };
 
-function InstallMenuButton({
-  onAddPersonal,
-  onAddForTeam,
-  onAddForOrg,
-  availableTeamsForShared,
-  addOrgDisabled,
-  addOrgDisabledReason,
-}: InstallMenuButtonProps) {
-  const teamItems =
-    onAddForTeam && availableTeamsForShared.length > 0
-      ? availableTeamsForShared.map((team) => ({
-          key: `team-${team.id}`,
-          label: `Install for ${team.name}`,
-          onClick: () => onAddForTeam(team.id),
-          testId: getManageCredentialsAddToTeamOptionTestId(team.name),
-        }))
-      : [];
-
-  const installItems = [
-    ...(onAddPersonal
-      ? [
-          {
-            key: "personal",
-            label: "Install for myself",
-            onClick: onAddPersonal,
-            testId: undefined as string | undefined,
-          },
-        ]
-      : []),
-    ...(onAddForOrg
-      ? [
-          {
-            key: "org",
-            label: "Install for organization",
-            onClick: onAddForOrg,
-            disabled: !!addOrgDisabled,
-            disabledReason: addOrgDisabledReason,
-            testId: E2eTestId.ManageCredentialsAddToOrgButton,
-          },
-        ]
-      : []),
-    ...teamItems,
-  ];
-
-  if (installItems.length === 0) return null;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs"
-          data-testid={E2eTestId.ManageCredentialsAddToTeamButton}
-        >
-          <Plus className="mr-1 h-3 w-3" />
-          Install
-          <ChevronDown className="ml-1 h-3 w-3" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {installItems.map((item) => {
-          const disabled = "disabled" in item && item.disabled;
-          const reason =
-            "disabledReason" in item ? item.disabledReason : undefined;
-          const node = (
-            <DropdownMenuItem
-              key={item.key}
-              onClick={disabled ? undefined : item.onClick}
-              disabled={disabled}
-              data-testid={item.testId}
-            >
-              {item.label}
-            </DropdownMenuItem>
-          );
-          if (disabled && reason) {
-            return (
-              <TooltipProvider key={item.key}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div>{node}</div>
-                  </TooltipTrigger>
-                  <TooltipContent>{reason}</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            );
-          }
-          return <div key={item.key}>{node}</div>;
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function UnifiedConnectionsTable({
-  myPersonalServer,
-  otherPersonalServers,
-  teamServers,
-  orgServers,
-  isOAuthServer,
-  getCredentialOwnerName,
-  canReauthenticate,
-  getReauthTooltip,
-  canRevoke,
-  getRevokeTooltip,
-  handleReauthenticate,
-  handleRevoke,
-  isDeleting,
-  deploymentStatuses = {},
-  onOpenPodLogs,
-  onAddPersonal,
-  availableTeamsForShared,
-  onAddForTeam,
-  onAddForOrg,
-  addOrgDisabled,
-  addOrgDisabledReason,
-}: {
-  myPersonalServer: ServerEntry | null;
-  otherPersonalServers: ServerEntry[];
-  teamServers: ServerEntry[];
-  orgServers: ServerEntry[];
+interface RowRenderProps {
   isOAuthServer: boolean;
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
+  canonicalStateByPod: Map<string, string>;
   getCredentialOwnerName: (s: ServerEntry) => string;
   canReauthenticate: (s: ServerEntry) => boolean;
   getReauthTooltip: (s: ServerEntry) => string;
@@ -726,165 +527,79 @@ function UnifiedConnectionsTable({
   handleReauthenticate: (s: ServerEntry) => void;
   handleRevoke: (s: ServerEntry) => void;
   isDeleting: boolean;
-  deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onOpenPodLogs?: (serverId: string) => void;
-  onAddPersonal?: () => void;
-  availableTeamsForShared: Array<{ id: string; name: string }>;
-  onAddForTeam?: (teamId: string) => void;
-  onAddForOrg?: () => void;
-  addOrgDisabled?: boolean;
-  addOrgDisabledReason?: string;
-}) {
-  const rows = [
-    ...(myPersonalServer
-      ? [{ server: myPersonalServer, isYou: true } as const]
-      : []),
-    ...otherPersonalServers.map((s) => ({ server: s, isYou: false }) as const),
-    ...teamServers.map((s) => ({ server: s, isYou: false }) as const),
-    ...orgServers.map((s) => ({ server: s, isYou: false }) as const),
-  ];
+}
 
+function ConnectionsSection({
+  title,
+  description,
+  action,
+  rows,
+  emptyText,
+  tableTestId,
+  ...rowProps
+}: {
+  title: string;
+  description: string;
+  action: React.ReactNode;
+  rows: ConnectionRow[];
+  emptyText: string;
+  tableTestId: string;
+} & RowRenderProps) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-0.5">
+          <h4 className="text-sm font-medium">{title}</h4>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+        {action}
+      </div>
+      <div className="overflow-hidden rounded-lg border">
+        {rows.length > 0 ? (
+          <ConnectionsTable rows={rows} testId={tableTestId} {...rowProps} />
+        ) : (
+          <p className="text-sm text-muted-foreground px-4 py-3">{emptyText}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConnectionsTable({
+  rows,
+  testId,
+  isOAuthServer,
+  deploymentStatuses,
+  canonicalStateByPod,
+  getCredentialOwnerName,
+  canReauthenticate,
+  getReauthTooltip,
+  canRevoke,
+  getRevokeTooltip,
+  handleReauthenticate,
+  handleRevoke,
+  isDeleting,
+  onOpenPodLogs,
+}: {
+  rows: ConnectionRow[];
+  testId: string;
+} & RowRenderProps) {
   const hasDeploymentStatuses = rows.some(
     (r) => deploymentStatuses[r.server.id],
   );
 
-  // Multi-tenant catalogs alias one pod across N caller rows. Each row's
-  // K8sDeployment instance tracks its own state independently, so the row
-  // that didn't observe the pod first stays "pending" while the other goes
-  // "failed". Pick a canonical state per podName so all rows agree.
-  const STATE_PRIORITY: Record<string, number> = {
-    failed: 4,
-    running: 3,
-    succeeded: 3,
-    pending: 2,
-    not_created: 1,
-  };
-  const canonicalStateByPod = new Map<string, string>();
-  for (const { server } of rows) {
-    const entry = deploymentStatuses[server.id];
-    if (!entry?.podName) continue;
-    const current = canonicalStateByPod.get(entry.podName);
-    if (
-      !current ||
-      (STATE_PRIORITY[entry.state] ?? 0) > (STATE_PRIORITY[current] ?? 0)
-    ) {
-      canonicalStateByPod.set(entry.podName, entry.state);
-    }
-  }
-
-  const teamItems =
-    onAddForTeam && availableTeamsForShared.length > 0
-      ? availableTeamsForShared.map((team) => ({
-          key: `team-${team.id}`,
-          label: `Install for ${team.name}`,
-          onClick: () => onAddForTeam(team.id),
-          testId: getManageCredentialsAddToTeamOptionTestId(team.name),
-        }))
-      : [];
-
-  const installItems = [
-    ...(onAddPersonal
-      ? [
-          {
-            key: "personal",
-            label: "Install for myself",
-            onClick: onAddPersonal,
-            testId: undefined as string | undefined,
-          },
-        ]
-      : []),
-    ...(onAddForOrg
-      ? [
-          {
-            key: "org",
-            label: "Install for organization",
-            onClick: onAddForOrg,
-            disabled: !!addOrgDisabled,
-            disabledReason: addOrgDisabledReason,
-            testId: E2eTestId.ManageCredentialsAddToOrgButton,
-          },
-        ]
-      : []),
-    ...teamItems,
-  ];
-
-  const installMenu =
-    installItems.length === 0 ? null : (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            data-testid={E2eTestId.ManageCredentialsAddToTeamButton}
-          >
-            <Plus className="mr-1 h-3 w-3" />
-            Install
-            <ChevronDown className="ml-1 h-3 w-3" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {installItems.map((item) => {
-            const disabled = "disabled" in item && item.disabled;
-            const reason =
-              "disabledReason" in item ? item.disabledReason : undefined;
-            const node = (
-              <DropdownMenuItem
-                key={item.key}
-                onClick={disabled ? undefined : item.onClick}
-                disabled={disabled}
-                data-testid={item.testId}
-              >
-                {item.label}
-              </DropdownMenuItem>
-            );
-            if (disabled && reason) {
-              return (
-                <TooltipProvider key={item.key}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div>{node}</div>
-                    </TooltipTrigger>
-                    <TooltipContent>{reason}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              );
-            }
-            return <div key={item.key}>{node}</div>;
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-
-  if (rows.length === 0) {
-    return (
-      <Empty className="border rounded-md py-8">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <PlugZap />
-          </EmptyMedia>
-          <EmptyDescription>No credentials yet.</EmptyDescription>
-        </EmptyHeader>
-        {installMenu && (
-          <EmptyContent className="flex-row justify-center">
-            {installMenu}
-          </EmptyContent>
-        )}
-      </Empty>
-    );
-  }
-
   return (
-    <Table data-testid={E2eTestId.ManageCredentialsDialogTable}>
+    <Table data-testid={testId}>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[220px]">Owner</TableHead>
+          <TableHead className="whitespace-nowrap">Owner</TableHead>
           {hasDeploymentStatuses && (
-            <TableHead className="w-[260px]">Pod</TableHead>
+            <TableHead className="whitespace-nowrap">Pod</TableHead>
           )}
-          <TableHead>Secret Storage</TableHead>
-          <TableHead>Created At</TableHead>
-          <TableHead>Action</TableHead>
+          <TableHead className="whitespace-nowrap">Secret Storage</TableHead>
+          <TableHead className="whitespace-nowrap">Created At</TableHead>
+          <TableHead className="whitespace-nowrap">Action</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -902,9 +617,7 @@ function UnifiedConnectionsTable({
                       <TooltipTrigger>
                         <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
                       </TooltipTrigger>
-                      <TooltipContent>
-                        Authentication failed. Please re-authenticate.
-                      </TooltipContent>
+                      <TooltipContent>Needs re-authentication</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}
@@ -973,8 +686,11 @@ function UnifiedConnectionsTable({
             <TableCell className="text-muted-foreground">
               {formatSecretStorageType(server.secretStorageType)}
             </TableCell>
-            <TableCell className="text-muted-foreground">
-              {format(new Date(server.createdAt), "PPp")}
+            <TableCell
+              className="whitespace-nowrap text-muted-foreground"
+              title={format(new Date(server.createdAt), "PPpp")}
+            >
+              {format(new Date(server.createdAt), "PP")}
             </TableCell>
             <TableCell>
               <div className="flex flex-col gap-1">
@@ -1002,6 +718,41 @@ function UnifiedConnectionsTable({
                       )}
                     </Tooltip>
                   </TooltipProvider>
+                )}
+                {isOAuthServer && server.oauthRefreshError && (
+                  <div
+                    className="mb-2 flex items-start gap-1 text-[11px] leading-tight text-destructive"
+                    data-testid="oauth-reauth-detail"
+                  >
+                    <p className="min-w-0 break-words">
+                      {formatOAuthFailureDetail(
+                        server.oauthRefreshErrorMessage,
+                        server.oauthRefreshFailedAt,
+                      )}
+                    </p>
+                    {server.oauthRefreshErrorDescription && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="h-4 w-4 shrink-0 text-muted-foreground hover:text-foreground"
+                            aria-label="Show OAuth error details"
+                            data-testid="oauth-reauth-detail-info"
+                          >
+                            <Info className="h-3 w-3" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="start"
+                          className="w-80 whitespace-pre-wrap break-words text-xs"
+                        >
+                          {server.oauthRefreshErrorDescription}
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                  </div>
                 )}
                 <TooltipProvider>
                   <Tooltip>
@@ -1037,5 +788,218 @@ function UnifiedConnectionsTable({
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+// Multi-tenant catalogs alias one pod across N caller rows. Each row's
+// K8sDeployment instance tracks its own state independently, so the row that
+// didn't observe the pod first stays "pending" while the other goes "failed".
+// Pick a canonical state per podName (across every connection for the catalog,
+// so the personal and service-account tables agree) so all rows match.
+const DEPLOYMENT_STATE_PRIORITY: Record<string, number> = {
+  failed: 4,
+  running: 3,
+  succeeded: 3,
+  pending: 2,
+  not_created: 1,
+};
+
+function computeCanonicalStateByPod(
+  servers: ServerEntry[],
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>,
+): Map<string, string> {
+  const canonicalStateByPod = new Map<string, string>();
+  for (const server of servers) {
+    const entry = deploymentStatuses[server.id];
+    if (!entry?.podName) continue;
+    const current = canonicalStateByPod.get(entry.podName);
+    if (
+      !current ||
+      (DEPLOYMENT_STATE_PRIORITY[entry.state] ?? 0) >
+        (DEPLOYMENT_STATE_PRIORITY[current] ?? 0)
+    ) {
+      canonicalStateByPod.set(entry.podName, entry.state);
+    }
+  }
+  return canonicalStateByPod;
+}
+
+// The catalog-level "default credential" setting as a standard settings row:
+// title, a plain-language description that names the current choice, and a
+// dedicated select whose options are self-explanatory. It governs every tool
+// assignment that resolves credentials at call time — Auto mode always, and
+// Custom-mode assignments unless a specific connection is pinned on the
+// assignment itself. NULL (default) = agents act on behalf of whoever is
+// calling, using that person's own connection; an mcp_servers.id = agents
+// always use that one connection. Saves on change; gated by the same
+// authorization as editing the catalog item.
+const ON_BEHALF_OF_VALUE = "__on_behalf_of__";
+
+function AgentConnectionsSection({
+  item,
+  connections,
+}: {
+  item: NonNullable<Parameters<typeof useCanModifyCatalogItem>[0]>;
+  connections: NonNullable<ReturnType<typeof useMcpServers>["data"]>;
+}) {
+  const { canModify } = useCanModifyCatalogItem(item);
+  const updateMutation = useUpdateInternalMcpCatalogItem();
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
+  const pinnedId = item.dynamicConnectionMcpServerId ?? null;
+  const pinnedConnection = pinnedId
+    ? connections.find((connection) => connection.id === pinnedId)
+    : undefined;
+  const pinRemoved = Boolean(pinnedId) && !pinnedConnection;
+
+  const [pendingPersonalDefault, setPendingPersonalDefault] = useState<{
+    id: string;
+    mcpName: string;
+    ownerEmail: string;
+    isCurrentUser: boolean;
+  } | null>(null);
+
+  const applyDefault = (value: string | null) =>
+    updateMutation.mutate({
+      id: item.id,
+      data: { dynamicConnectionMcpServerId: value },
+    });
+
+  // Making a personal connection the default authenticates every call-time
+  // resolution as that one owner; confirm before applying. Org/team accounts
+  // and "on behalf of the user" are shared by design and apply immediately.
+  const handleSelectDefault = (value: string) => {
+    if (value === ON_BEHALF_OF_VALUE) {
+      applyDefault(null);
+      return;
+    }
+    const connection = connections.find((c) => c.id === value);
+    const scope = connection
+      ? (connection.scope ?? (connection.teamId ? "team" : "personal"))
+      : undefined;
+    if (connection && scope === "personal") {
+      setPendingPersonalDefault({
+        id: value,
+        mcpName: connection.catalogName ?? item.name,
+        ownerEmail: connection.ownerEmail || "Deleted user",
+        isCurrentUser: !!currentUserId && connection.ownerId === currentUserId,
+      });
+      return;
+    }
+    applyDefault(value);
+  };
+
+  const connectionLabel = (connection: (typeof connections)[number]) => {
+    const scope = connection.scope ?? (connection.teamId ? "team" : "personal");
+    if (scope === "org") return "Organization account";
+    if (scope === "team")
+      return `Team — ${connection.teamDetails?.name ?? "Unknown team"}`;
+    return connection.ownerEmail ?? "Unknown user";
+  };
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <div className="max-w-xl space-y-1">
+          <h4 className="text-sm font-medium">Default credential</h4>
+          <p className="text-sm text-muted-foreground">
+            {!pinnedId ? (
+              <>
+                Agents connect on behalf of whoever is calling — each person
+                uses their own connection if they have one, otherwise a team or
+                organization connection they can access. Applies in Auto mode
+                and to Custom tool assignments that resolve at call time.
+              </>
+            ) : pinRemoved ? (
+              <>
+                The selected connection was removed. Agents connect on behalf of
+                whoever is calling until you choose another one.
+              </>
+            ) : (
+              <>
+                Agents connect as{" "}
+                <span className="font-medium text-foreground">
+                  {pinnedConnection ? connectionLabel(pinnedConnection) : ""}
+                </span>
+                , no matter who is calling. Applies in Auto mode and to Custom
+                tool assignments that resolve at call time.
+              </>
+            )}{" "}
+            <ExternalDocsLink
+              href={getDocsUrl(
+                DocsPage.McpAuthentication,
+                "resolve-at-call-time",
+              )}
+              className="underline"
+              showIcon={false}
+            >
+              Learn more
+            </ExternalDocsLink>
+          </p>
+        </div>
+        <Select
+          value={pinRemoved ? "" : (pinnedId ?? ON_BEHALF_OF_VALUE)}
+          disabled={!canModify || updateMutation.isPending}
+          onValueChange={handleSelectDefault}
+        >
+          <SelectTrigger className="w-[320px]">
+            <SelectValue placeholder="Connection removed" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem
+              value={ON_BEHALF_OF_VALUE}
+              className="cursor-pointer"
+              description="Everyone connects their own account."
+            >
+              <div className="flex items-center gap-1.5">
+                <Zap className="h-3.5! w-3.5! text-amber-500" />
+                <span>On behalf of the user (Recommended)</span>
+              </div>
+            </SelectItem>
+            {connections.length > 0 && (
+              <>
+                <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                  Always use one account
+                </div>
+                {connections.map((connection) => (
+                  <SelectItem
+                    key={connection.id}
+                    value={connection.id}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
+                      <span>{connectionLabel(connection)}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </>
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+      <StaticCredentialConfirmDialog
+        open={pendingPersonalDefault !== null}
+        context="server"
+        pins={
+          pendingPersonalDefault
+            ? [
+                {
+                  mcpName: pendingPersonalDefault.mcpName,
+                  ownerEmail: pendingPersonalDefault.ownerEmail,
+                  isCurrentUser: pendingPersonalDefault.isCurrentUser,
+                },
+              ]
+            : []
+        }
+        onConfirm={() => {
+          if (pendingPersonalDefault) {
+            applyDefault(pendingPersonalDefault.id);
+          }
+          setPendingPersonalDefault(null);
+        }}
+        onCancel={() => setPendingPersonalDefault(null)}
+      />
+    </>
   );
 }

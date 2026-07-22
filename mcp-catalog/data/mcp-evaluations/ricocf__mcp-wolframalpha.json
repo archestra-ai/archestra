@@ -1,0 +1,168 @@
+{
+  "name": "ricocf__mcp-wolframalpha",
+  "display_name": "mcp-wolframalpha",
+  "description": "A Python-powered Model Context Protocol MCP server and client that uses Wolfram Alpha via API.",
+  "author": {
+    "name": "ricocf"
+  },
+  "server": {
+    "command": "python3",
+    "args": ["${__dirname}/src/core/server.py"],
+    "env": {
+      "WOLFRAM_API_KEY": "${user_config.wolfram_api_key}",
+      "GeminiAPI": "${user_config.gemini_api}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "wolfram_api_key": {
+      "type": "string",
+      "title": "Wolfram Alpha API Key",
+      "description": "Your Wolfram Alpha App ID",
+      "sensitive": true,
+      "required": true
+    },
+    "gemini_api": {
+      "type": "string",
+      "title": "Google Gemini API Key",
+      "description": "Your Google Gemini API key (optional, primarily for client usage)",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# MCP Wolfram Alpha (Server + Client)\nSeamlessly integrate Wolfram Alpha into your chat applications.\n\nThis project implements an MCP (Model Context Protocol) server designed to interface with the Wolfram Alpha API. It enables chat-based applications to perform computational queries and retrieve structured knowledge, facilitating advanced conversational capabilities.\n\nIncluded is an MCP-Client example utilizing Gemini via LangChain, demonstrating how to connect large language models to the MCP server for real-time interactions with Wolfram Alpha’s knowledge engine.\n\n[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/akalaric/mcp-wolframalpha)\n---\n\n## Features\n\n-  **Wolfram|Alpha Integration** for math, science, and data queries.\n\n-  **Modular Architecture** Easily extendable to support additional APIs and functionalities.\n\n-  **Multi-Client Support** Seamlessly handle interactions from multiple clients or interfaces.\n\n-  **MCP-Client example** using Gemini (via LangChain).\n-  **UI Support** using Gradio for a user-friendly web interface to interact with Google AI and Wolfram Alpha MCP server.\n\n---\n\n##  Installation\n\n\n### Clone the Repo\n   ```bash\n   git clone https://github.com/ricocf/mcp-wolframalpha.git\n\n   cd mcp-wolframalpha\n   ```\n  \n\n### Set Up Environment Variables\n\nCreate a .env file based on the example:\n\n- WOLFRAM_API_KEY=your_wolframalpha_appid\n\n- GeminiAPI=your_google_gemini_api_key *(Optional if using Client method below.)*\n\n### Install Requirements\n   ```bash\n   pip install -r requirements.txt\n   ```\n\n  Install the required dependencies with uv:\n  Ensure [`uv`](https://github.com/astral-sh/uv) is installed.\n\n   ```bash\n   uv sync\n   ```\n\n### Configuration\n\nTo use with the VSCode MCP Server:\n1.  Create a configuration file at `.vscode/mcp.json` in your project root.\n2.  Use the example provided in `configs/vscode_mcp.json` as a template.\n3.  For more details, refer to the [VSCode MCP Server Guide](https://sebastian-petrus.medium.com/vscode-mcp-server-42286eed3ee7).\n\nTo use with Claude Desktop:\n```json\n{\n  \"mcpServers\": {\n    \"WolframAlphaServer\": {\n      \"command\": \"python3\",\n      \"args\": [\n        \"/path/to/src/core/server.py\"\n      ]\n    }\n  }\n}\n```\n## Client Usage Example\n\nThis project includes an LLM client that communicates with the MCP server.\n\n#### Run with Gradio UI\n- Required: GeminiAPI\n- Provides a local web interface to interact with Google AI and Wolfram Alpha.\n- To run the client directly from the command line:\n```bash\npython main.py --ui\n```\n#### Docker\nTo build and run the client inside a Docker container:\n```bash\ndocker build -t wolframalphaui -f .devops/ui.Dockerfile .\n\ndocker run wolframalphaui\n```\n#### UI\n- Intuitive interface built with Gradio to interact with both Google AI (Gemini) and the Wolfram Alpha MCP server.\n- Allows users to switch between Wolfram Alpha, Google AI (Gemini), and query history.\n  \n![UI](configs/gradio_ui.png)\n\n#### Run as CLI Tool\n- Required: GeminiAPI\n- To run the client directly from the command line:\n```bash\npython main.py\n```\n#### Docker\nTo build and run the client inside a Docker container:\n```bash\ndocker build -t wolframalpha -f .devops/llm.Dockerfile .\n\ndocker run -it wolframalpha\n```\n\n## Contact\n\nFeel free to give feedback. The e-mail address is shown if you execute this in a shell:\n\n```sh\nprintf \"\\x61\\x6b\\x61\\x6c\\x61\\x72\\x69\\x63\\x31\\x40\\x6f\\x75\\x74\\x6c\\x6f\\x6f\\x6b\\x2e\\x63\\x6f\\x6d\\x0a\"\n```\n\n",
+  "category": "AI Tools",
+  "quality_score": 24,
+  "archestra_config": {
+    "client_config_permutations": {
+      "WolframAlphaServer": {
+        "command": "python3",
+        "args": ["/path/to/src/core/server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ricocf",
+    "repo": "mcp-wolframalpha",
+    "url": "https://github.com/ricocf/mcp-wolframalpha",
+    "name": "mcp-wolframalpha",
+    "path": null,
+    "stars": 34,
+    "contributors": 0,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "286cdfd8f6defb9bca132f4fe51c04013e42bbed"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:31.313Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "gradio",
+      "importance": 9
+    },
+    {
+      "name": "wolframalpha",
+      "importance": 9
+    },
+    {
+      "name": "fastapi",
+      "importance": 9
+    },
+    {
+      "name": "google-generativeai",
+      "importance": 8
+    },
+    {
+      "name": "langchain-core",
+      "importance": 8
+    },
+    {
+      "name": "langchain-google-genai",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 8
+    },
+    {
+      "name": "aiohttp",
+      "importance": 7
+    },
+    {
+      "name": "starlette",
+      "importance": 7
+    },
+    {
+      "name": "uvicorn",
+      "importance": 7
+    },
+    {
+      "name": "pydantic",
+      "importance": 6
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "google-auth",
+      "importance": 6
+    },
+    {
+      "name": "numpy",
+      "importance": 5
+    },
+    {
+      "name": "pandas",
+      "importance": 5
+    },
+    {
+      "name": "pillow",
+      "importance": 5
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "websockets",
+      "importance": 4
+    },
+    {
+      "name": "typer",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-wolframalpha\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"aiohttp>=3.12.15\",\n    \"fastmcp>=2.11.0\",\n    \"google-generativeai>=0.8.5\",\n    \"gradio>=5.39.0\",\n    \"langchain-core>=0.3.72\",\n    \"langchain-google-genai>=2.0.10\",\n    \"python-dotenv>=1.1.1\",\n    \"wolframalpha>=5.1.3\",\n]\n\n\n=== requirements.txt ===\naiofiles==24.1.0\naiohappyeyeballs==2.6.1\naiohttp==3.12.15\naiosignal==1.4.0\nannotated-types==0.7.0\nanyio==4.9.0\nasync-timeout==4.0.3\nattrs==25.3.0\nauthlib==1.6.1\nbackports-tarfile==1.2.0\nbrotli==1.1.0\ncachetools==5.5.2\ncertifi==2025.7.14\ncffi==1.17.1\ncharset-normalizer==3.4.2\nclick==8.2.2\ncryptography==45.0.5\ncyclopts==3.22.5\ndnspython==2.7.0\ndocstring-parser==0.17.0\ndocutils==0.22\nemail-validator==2.2.0\nexceptiongroup==1.3.0\nfastapi==0.116.1\nfastmcp==2.11.0\nffmpy==0.6.1\nfilelock==3.18.0\nfiletype==1.2.0\nfrozenlist==1.7.0\nfsspec==2025.7.0\ngoogle-ai-generativelanguage==0.6.15\ngoogle-api-core==2.25.1\ngoogle-api-python-client==2.177.0\ngoogle-auth==2.40.3\ngoogle-auth-httplib2==0.2.0\ngoogle-generativeai==0.8.5\ngoogleapis-common-protos==1.70.0\ngradio==5.39.0\ngradio-client==1.11.0\ngroovy==0.1.2\ngrpcio==1.74.0\ngrpcio-status==1.71.2\nh11==0.16.0\nhf-xet==1.1.5\nhttpcore==1.0.9\nhttplib2==0.22.0\nhttpx==0.28.1\nhttpx-sse==0.4.1\nhuggingface-hub==0.34.3\nidna==3.10\nisodate==0.7.2\njaraco-context==6.0.1\njinja2==3.1.6\njsonpatch==1.33\njsonpointer==3.0.0\njsonschema==4.25.0\njsonschema-path==0.3.4\njsonschema-specifications==2025.4.1\nlangchain-core==0.3.72\nlangchain-google-genai==2.0.10\nlangsmith==0.4.10\nlazy-object-proxy==1.11.0\nmarkdown-it-py==3.0.0\nmarkupsafe==3.0.2\nmcp==1.12.3\nmdurl==0.1.2\nmore-itertools==10.7.0\nmultidict==6.6.3\nnumpy==2.2.6\nopenapi-core==0.19.5\nopenapi-pydantic==0.5.1\nopenapi-schema-validator==0.6.3\nopenapi-spec-validator==0.7.2\norjson==3.11.1\npackaging==25.0\npandas==2.3.1\nparse==1.20.2\npathable==0.4.4\npillow==11.3.0\npropcache==0.3.2\nproto-plus==1.26.1\nprotobuf==5.29.5\npyasn1==0.6.1\npyasn1-modules==0.4.2\npycparser==2.22\npydantic==2.11.7\npydantic-core==2.33.2\npydantic-settings==2.10.1\npydub==0.25.1\npygments==2.19.2\npyparsing==3.2.3\npyperclip==1.9.0\npython-dateutil==2.9.0.post0\npython-dotenv==1.1.1\npython-multipart==0.0.20\npytz==2025.2\npyyaml==6.0.2\nreferencing==0.36.2\nrequests==2.32.4\nrequests-toolbelt==1.0.0\nrfc3339-validator==0.1.4\nrich==14.1.0\nrich-rst==1.3.1\nrpds-py==0.26.0\nrsa==4.9.1\nruff==0.12.7\nsafehttpx==0.1.6\nsemantic-version==2.10.0\nshellingham==1.5.4\nsix==1.17.0\nsniffio==1.3.1\nsse-starlette==3.0.2\nstarlette==0.47.2\ntenacity==9.1.2\ntomlkit==0.13.3\ntqdm==4.67.1\ntyper==0.16.0\ntyping-extensions==4.14.1\ntyping-inspection==0.4.1\ntzdata==2025.2\nuritemplate==4.2.0\nurllib3==2.5.0\nuvicorn==0.35.0\nwebsockets==15.0.1\nwerkzeug==3.1.1\nwolframalpha==5.1.3\nxmltodict==0.14.2\nyarl==1.20.1\nzstandard==0.23.0\n"
+}

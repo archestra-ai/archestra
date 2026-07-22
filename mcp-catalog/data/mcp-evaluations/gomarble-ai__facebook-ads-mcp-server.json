@@ -1,0 +1,92 @@
+{
+  "name": "gomarble-ai__facebook-ads-mcp-server",
+  "display_name": "facebook-ads-mcp-server",
+  "description": "MCP server from gomarble-ai/facebook-ads-mcp-server",
+  "author": {
+    "name": "gomarble-ai"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server.py", "--fb-token", "${user_config.fb_token}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "fb_token": {
+      "type": "string",
+      "title": "Meta Access Token",
+      "description": "Your Meta User Access Token with necessary permissions (e.g., ads_read).",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Facebook/Meta Ads MCP Server\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/gomarble-ai/facebook-ads-mcp-server)](https://archestra.ai/mcp-catalog/gomarble-ai__facebook-ads-mcp-server)\n[![smithery badge](https://smithery.ai/badge/@gomarble-ai/facebook-ads-mcp-server)](https://smithery.ai/server/@gomarble-ai/facebook-ads-mcp-server)\n\nThis project provides an MCP server acting as an interface to the Meta Ads, enabling programmatic access to Meta Ads data and management features.\n\n<video controls width=\"1920\" height=\"512\" src=\"https://github.com/user-attachments/assets/c4a76dcf-cf5d-4a1d-b976-08165e880fe4\">Your browser does not support the video tag.</video>\n\n## Easy One-Click Setup\n\nFor a simpler setup experience, we offer ready-to-use installers:\n\n👉 **Download installer -** [https://gomarble.ai/mcp](https://gomarble.ai/mcp)\n\n## Join our community for help and updates\n\n👉 **Slack Community -** [AI in Ads](https://join.slack.com/t/ai-in-ads/shared_invite/zt-36hntbyf8-FSFixmwLb9mtEzVZhsToJQ)\n\n## Try Google ads mcp server also\n\n👉 **Google Ads MCP -** [Google Ads MCP](https://github.com/gomarble-ai/google-ads-mcp-server)\n\n### What It Does\n\n- Installs and configures the MCP server locally\n- Automatically handles environment setup\n- Prompts for Meta token authentication during the process which is optional\n- If Meta access token is not provided then connect to GoMarble's server to create the token on your behalf\n\n### Important Disclaimer\n\nThis setup **does not require** you to manually obtain a Meta Developer Access Token.\n\nInstead, it connects securely to **GoMarble's server to create the token on your behalf**.\nGoMarble **does not store** your token — it is saved locally on your machine for use with the MCP server.\n\n---\n\n## Setup\n\n### Prerequisites\n\n*   Python 3.10+\n*   Dependencies listed in `requirements.txt`\n\n\n\n1.  **(Optional but Recommended) Create and Activate a Virtual Environment:**\n    ```bash\n    python3 -m venv venv\n    source venv/bin/activate  # On Windows use `venv\\Scripts\\activate`\n    ```\n\n    Using a virtual environment helps manage project dependencies cleanly[[Source]](https://docs.python.org/3/tutorial/venv.html).\n2.  **Install Dependencies:**\n    ```bash\n    pip install -r requirements.txt\n    ```\n3.  **Obtain Meta Access Token:** Secure a Meta User Access Token with the necessary permissions (e.g., `ads_read`). You can generate this through the Meta Developer portal. Follow [this link](https://elfsight.com/blog/how-to-get-facebook-access-token/).\n\n### Usage with MCP Clients (e.g., Cursor, Claude Desktop)\n\nTo integrate this server with an MCP-compatible client, add a configuration([Claude](https://modelcontextprotocol.io/quickstart/user#2-add-the-filesystem-mcp-server)) similar to the following. Replace `YOUR_META_ACCESS_TOKEN` with your actual token and adjust the path to `server.py` if necessary.\n\n```json\n{\n  \"mcpServers\": {\n    \"fb-ads-mcp-server\": {\n      \"command\": \"python\",\n      \"args\": [\n        \"/path/to/your/fb-ads-mcp-server/server.py\",\n        \"--fb-token\",\n        \"YOUR_META_ACCESS_TOKEN\"\n      ]\n      // If using a virtual environment, you might need to specify the python executable within the venv:\n      // \"command\": \"/path/to/your/fb-ads-mcp-server/venv/bin/python\",\n      // \"args\": [\n      //   \"/path/to/your/fb-ads-mcp-server/server.py\",\n      //   \"--fb-token\",\n      //   \"YOUR_META_ACCESS_TOKEN\"\n      // ]\n    }\n  }\n}\n```\nRestart the MCP Client app after making the update in the configuration.\n\n*(Note: On Windows, you might need to adjust the command structure or use `cmd /k` depending on your setup.)*\n\n### Debugging the Server\n\nExecute `server.py`, providing the access token via the `--fb-token` argument.\n\n```bash\npython server.py --fb-token YOUR_META_ACCESS_TOKEN\n```\n\n### Available MCP Tools\n\nThis MCP server provides tools for interacting with META Ads objects and data:\n\n| Tool Name                       | Description                                              |\n| ------------------------------- | -------------------------------------------------------- |\n| **Account & Object Read**       |                                                          |\n| `list_ad_accounts`              | Lists ad accounts linked to the token.                   |\n| `get_details_of_ad_account`     | Retrieves details for a specific ad account.             |\n| `get_campaign_by_id`            | Retrieves details for a specific campaign.               |\n| `get_adset_by_id`               | Retrieves details for a specific ad set.                 |\n| `get_ad_by_id`                  | Retrieves details for a specific ad.                     |\n| `get_ad_creative_by_id`         | Retrieves details for a specific ad creative.            |\n| `get_adsets_by_ids`             | Retrieves details for multiple ad sets by their IDs.     |\n| **Fetching Collections**        |                                                          |\n| `get_campaigns_by_adaccount`    | Retrieves campaigns within an ad account.                |\n| `get_adsets_by_adaccount`       | Retrieves ad sets within an ad account.                  |\n| `get_ads_by_adaccount`          | Retrieves ads within an ad account.                      |\n| `get_adsets_by_campaign`        | Retrieves ad sets within a campaign.                     |\n| `get_ads_by_campaign`           | Retrieves ads within a campaign.                         |\n| `get_ads_by_adset`              | Retrieves ads within an ad set.                          |\n| `get_ad_creatives_by_ad_id`     | Retrieves creatives associated with an ad.               |\n| **Insights & Performance Data** |                                                          |\n| `get_adaccount_insights`        | Retrieves performance insights for an ad account.        |\n| `get_campaign_insights`         | Retrieves performance insights for a campaign.           |\n| `get_adset_insights`            | Retrieves performance insights for an ad set.            |\n| `get_ad_insights`               | Retrieves performance insights for an ad.                |\n| `fetch_pagination_url`          | Fetches data from a pagination URL (e.g., from insights).|\n| **Activity/Change History**     |                                                          |\n| `get_activities_by_adaccount`   | Retrieves change history for an ad account.              |\n| `get_activities_by_adset`       | Retrieves change history for an ad set.                  |\n\n*(Note: Most tools support additional parameters like `fields`, `filtering`, `limit`, pagination, date ranges, etc. Refer to the detailed docstrings within `server.py` for the full list and description of arguments for each tool.)*\n\n*(Note: If your Meta access token expires, you'll need to generate a new one and update the configuration file of the MCP Client with new token to continue using the tools.)*\n\n### Dependencies\n\n*   [mcp](https://pypi.org/project/mcp/) (>=1.6.0)\n*   [requests](https://pypi.org/project/requests/) (>=2.32.3)\n\n### License\nThis project is licensed under the MIT License.\n\n---\n\n## Installing via Smithery\n\nTo install Facebook Ads Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@gomarble-ai/facebook-ads-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @gomarble-ai/facebook-ads-mcp-server --client claude\n```\n",
+  "category": "Marketing",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gomarble-ai-facebook-ads-mcp-server": {
+        "command": "python",
+        "args": ["/path/to/your/fb-ads-mcp-server/server.py", "--fb-token", "YOUR_META_ACCESS_TOKEN"],
+        "env": {}
+      },
+      "gomarble-ai-facebook-ads-mcp-server-venv": {
+        "command": "/path/to/your/fb-ads-mcp-server/venv/bin/python",
+        "args": ["/path/to/your/fb-ads-mcp-server/server.py", "--fb-token", "YOUR_META_ACCESS_TOKEN"],
+        "env": {}
+      },
+      "gomarble-ai-facebook-ads-mcp-server-debug": {
+        "command": "python",
+        "args": ["server.py", "--fb-token", "YOUR_META_ACCESS_TOKEN"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gomarble-ai",
+    "repo": "facebook-ads-mcp-server",
+    "url": "https://github.com/gomarble-ai/facebook-ads-mcp-server",
+    "name": "facebook-ads-mcp-server",
+    "path": null,
+    "stars": 109,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "42070052aa6d28aa81e09ec42c6a556963192f35"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.965Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp>=1.6.0\nrequests>=2.32.3"
+}

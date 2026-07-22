@@ -1,0 +1,120 @@
+{
+  "name": "aliyun__alibabacloud-tablestore-mcp-server",
+  "display_name": "alibabacloud-tablestore-mcp-server",
+  "description": "MCP server from aliyun/alibabacloud-tablestore-mcp-server",
+  "author": {
+    "name": "aliyun"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "\n# [Tablestore](https://www.aliyun.com/product/ots) MCP servers.\n\n## 实现列表\n\n## 1. Java\n1. [入门示例: tablestore-java-mcp-server](https://github.com/aliyun/alibabacloud-tablestore-mcp-server/blob/master/tablestore-java-mcp-server/README.md)\n2. [基于 MCP 架构实现知识库答疑系统: tablestore-java-mcp-server-rag](https://github.com/aliyun/alibabacloud-tablestore-mcp-server/blob/master/tablestore-java-mcp-server-rag/README.md)\n   - 实现一个目前最常见的一类 AI 应用即答疑系统，支持基于私有知识库的问答，会对知识库构建和 RAG 做一些优化。\n\n## 2. Python \n1. [入门示例: tablestore-python-mcp-server](https://github.com/aliyun/alibabacloud-tablestore-mcp-server/blob/master/tablestore-python-mcp-server/README.md)\n\n\n## 技术支持\n\n欢迎加入我们的钉钉公开群，与我们一起探讨 AI 技术。钉钉群号：36165029092\n\n<img src=\"./docs/img/dingding_group3.png\" alt=\"store\" width=\"500\"/>",
+  "category": "AI Tools",
+  "quality_score": 37,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "aliyun",
+    "repo": "alibabacloud-tablestore-mcp-server",
+    "url": "https://github.com/aliyun/alibabacloud-tablestore-mcp-server",
+    "name": "aliyun__alibabacloud-tablestore-mcp-server",
+    "path": null,
+    "stars": 148,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "b8b09ff27037874c1444aca9c625074efc117a5d"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:26.200Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "spring-ai-mcp-server-webflux-spring-boot-starter",
+      "importance": 10
+    },
+    {
+      "name": "tablestore",
+      "importance": 8
+    },
+    {
+      "name": "ai.djl.api",
+      "importance": 9
+    },
+    {
+      "name": "ai.djl.huggingface.tokenizers",
+      "importance": 9
+    },
+    {
+      "name": "ai.djl.model-zoo",
+      "importance": 9
+    },
+    {
+      "name": "ai.djl.pytorch.pytorch-engine",
+      "importance": 9
+    },
+    {
+      "name": "ai.djl.onnxruntime.onnxruntime-engine",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 6
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 6
+    },
+    {
+      "name": "llama-index",
+      "importance": 10
+    },
+    {
+      "name": "llama-index-embeddings-huggingface",
+      "importance": 8
+    },
+    {
+      "name": "llama-index-embeddings-instructor",
+      "importance": 8
+    },
+    {
+      "name": "llama-index-vector-stores-tablestore",
+      "importance": 8
+    },
+    {
+      "name": "llama-index-embeddings-dashscope",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== tablestore-java-mcp-server/pom.xml ===\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\"\n         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n    <modelVersion>4.0.0</modelVersion>\n\n    <parent>\n        <groupId>org.springframework.boot</groupId>\n        <artifactId>spring-boot-starter-parent</artifactId>\n        <version>3.4.3</version>\n        <relativePath/> <!-- lookup parent from repository -->\n    </parent>\n\n    <groupId>com.alicloud</groupId>\n    <artifactId>tablestore-java-mcp-server</artifactId>\n    <version>1.0-SNAPSHOT</version>\n\n    <properties>\n        <maven.compiler.source>17</maven.compiler.source>\n        <maven.compiler.target>17</maven.compiler.target>\n        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n        <ai.djl.version>0.32.0</ai.djl.version>\n    </properties>\n\n    <dependencies>\n        <dependency>\n            <groupId>org.springframework.ai</groupId>\n            <artifactId>spring-ai-mcp-server-webflux-spring-boot-starter</artifactId>\n        </dependency>\n\n        <!--  TableStore 依赖   -->\n        <dependency>\n            <groupId>com.aliyun.openservices</groupId>\n            <artifactId>tablestore</artifactId>\n            <version>5.17.5</version>\n            <classifier>jar-with-dependencies</classifier>\n            <exclusions>\n                <exclusion>\n                    <groupId>com.google.protobuf</groupId>\n                    <artifactId>protobuf-java</artifactId>\n                </exclusion>\n                <exclusion>\n                    <groupId>org.apache.httpcomponents</groupId>\n                    <artifactId>httpasyncclient</artifactId>\n                </exclusion>\n            </exclusions>\n        </dependency>\n\n        <!--  开始：运行 Embedding 模型依赖   -->\n        <dependency>\n            <groupId>ai.djl</groupId>\n            <artifactId>api</artifactId>\n            <version>${ai.djl.version}</version>\n        </dependency>\n        <dependency>\n            <groupId>ai.djl.huggingface</groupId>\n            <artifactId>tokenizers</artifactId>\n            <version>${ai.djl.version}</version>\n        </dependency>\n        <dependency>\n            <groupId>ai.djl</groupId>\n            <artifactId>model-zoo</artifactId>\n            <version>${ai.djl.version}</version>\n        </dependency>\n        <dependency>\n            <groupId>ai.djl.pytorch</groupId>\n            <artifactId>pytorch-engine</artifactId>\n            <version>${ai.djl.version}</version>\n        </dependency>\n        <dependency>\n            <groupId>ai.djl.onnxruntime</groupId>\n            <artifactId>onnxruntime-engine</artifactId>\n            <version>${ai.djl.version}</version>\n        </dependency>\n        <!--  结束：运行 Embedding 模型依赖   -->\n\n        <dependency>\n            <groupId>org.projectlombok</groupId>\n            <artifactId>lombok</artifactId>\n            <version>1.18.22</version>\n            <scope>provided</scope>\n        </dependency>\n\n        <dependency>\n            <groupId>org.springframework.boot</groupId>\n            <artifactId>spring-boot-starter-test</artifactId>\n            <scope>test</scope>\n        </dependency>\n    </dependencies>\n\n    <dependencyManagement>\n        <dependencies>\n            <dependency>\n                <groupId>org.springframework.ai</groupId>\n                <artifactId>spring-ai-bom</artifactId>\n                <version>1.0.0-M6</version>\n                <type>pom</type>\n                <scope>import</scope>\n            </dependency>\n        </dependencies>\n    </dependencyManagement>\n\n    <build>\n        <plugins>\n            <plugin>\n                <groupId>org.springframework.boot</groupId>\n                <artifactId>spring-boot-maven-plugin</artifactId>\n            </plugin>\n        </plugins>\n    </build>\n</project>\n\n=== tablestore-python-mcp-server/pyproject.toml ===\n[project]\nname = \"tablestore-mcp-server\"\nversion = \"0.1.3\"\ndescription = \"MCP server for retrieving context from a tablestore vector database\"\nreadme = \"README_pypi.md\"\nrequires-python = \">=3.10,<4.0\"\nlicense = \"Apache-2.0\"\ndependencies = [\n    \"mcp[cli]>=1.4.1\",\n    \"tablestore>=6.1.0\",\n    \"pydantic>=2.10.6\",\n    \"pydantic-settings>=2.8.1\",\n    \"llama-index>=0.12.24\",\n    \"llama-index-embeddings-huggingface>=0.5.2\",\n    \"llama-index-embeddings-instructor>=0.3.0\",\n    \"llama-index-vector-stores-tablestore>=0.2.2\",\n    \"llama-index-embeddings-dashscope (>=0.3.0,<0.4.0)\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\n    \"pytest>=8.3.5\",\n    \"pytest-asyncio>=0.23.0\",\n    \"ruff>=0.11.0\",\n]\n\n[[tool.uv.index]]\nurl = \"https://mirrors.aliyun.com/pypi/simple/\"\ndefault = true\n\n[project.scripts]\ntablestore-mcp-server = \"tablestore_mcp_server.main:main\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\nasyncio_mode = \"auto\"\n\n\n[tool.ruff]\nline-length = 180\nindent-width = 4\ntarget-version = \"py310\"\nexclude = [\n    \".bzr\",\n    \".direnv\",\n    \".eggs\",\n    \".git\",\n    \".git-rewrite\",\n    \".hg\",\n    \".ipynb_checkpoints\",\n    \".mypy_cache\",\n    \".nox\",\n    \".pants.d\",\n    \".pyenv\",\n    \".pytest_cache\",\n    \".pytype\",\n    \".ruff_cache\",\n    \".svn\",\n    \".tox\",\n    \".venv\",\n    \".vscode\",\n    \"__pypackages__\",\n    \"_build\",\n    \"buck-out\",\n    \"build\",\n    \"dist\",\n    \"node_modules\",\n    \"site-packages\",\n    \"venv\",\n]\n"
+}

@@ -2,8 +2,9 @@
  * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
+
+import type { SupportedProvider } from "@archestra/shared";
 import { type APIRequestContext, test as base } from "@playwright/test";
-import type { SupportedProvider } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
@@ -47,6 +48,8 @@ export interface TestFixtures {
   deleteTrustedDataPolicy: typeof deleteTrustedDataPolicy;
   createMcpCatalogItem: typeof createMcpCatalogItem;
   deleteMcpCatalogItem: typeof deleteMcpCatalogItem;
+  createEnvironment: typeof createEnvironment;
+  deleteEnvironment: typeof deleteEnvironment;
   installMcpServer: typeof installMcpServer;
   uninstallMcpServer: typeof uninstallMcpServer;
   createRole: typeof createRole;
@@ -306,8 +309,9 @@ const deleteApiKey = async (request: APIRequestContext, keyId: string) =>
 /**
  * Create an identity provider (SSO provider) via the API with OIDC config pointing to Keycloak.
  * Returns the created provider's ID.
+ * (Also exported directly for beforeAll hooks, which cannot use test-scoped fixtures.)
  */
-const createIdentityProvider = async (
+export const createIdentityProvider = async (
   request: APIRequestContext,
   providerId: string,
   options?: {
@@ -327,6 +331,7 @@ const createIdentityProvider = async (
         | "client_secret_basic"
         | "private_key_jwt";
       jwksEndpoint?: string;
+      scopes?: string[];
     };
     enterpriseManagedCredentials?: {
       clientId?: string;
@@ -359,6 +364,7 @@ const createIdentityProvider = async (
       options?.oidcConfig?.tokenEndpointAuthentication,
     jwksEndpoint:
       options?.oidcConfig?.jwksEndpoint ?? KEYCLOAK_OIDC.jwksEndpoint,
+    scopes: options?.oidcConfig?.scopes,
   };
 
   const response = await makeApiRequest({
@@ -387,8 +393,9 @@ const createIdentityProvider = async (
 
 /**
  * Delete an identity provider (SSO provider) via the API.
+ * (Also exported directly for afterAll hooks, which cannot use test-scoped fixtures.)
  */
-const deleteIdentityProvider = async (
+export const deleteIdentityProvider = async (
   request: APIRequestContext,
   id: string,
 ): Promise<void> => {
@@ -499,6 +506,9 @@ const createMcpCatalogItem = async (
     serverUrl?: string;
     authFields?: unknown;
     labels?: Array<{ key: string; value: string }>;
+    // Bind the catalog item to an environment so its deployed pod inherits that
+    // environment's egress policy (e.g. a restricted allowlist).
+    environmentId?: string;
   },
 ) =>
   makeApiRequest({
@@ -520,6 +530,44 @@ const deleteMcpCatalogItem = async (
     request,
     method: "delete",
     urlSuffix: `/api/internal_mcp_catalog/${catalogId}`,
+  });
+
+/**
+ * Create an environment (with an optional egress network policy).
+ * (authnz is handled by the authenticated session)
+ */
+const createEnvironment = async (
+  request: APIRequestContext,
+  data: {
+    name: string;
+    namespace?: string | null;
+    networkPolicy?: {
+      egressMode?: "off" | "restricted" | "unrestricted";
+      domainPreset?: "none" | "common_dependencies" | "package_managers";
+      allowedDomains?: string[];
+      allowedCidrs?: string[];
+    } | null;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/environments",
+    data,
+  });
+
+/**
+ * Delete an environment
+ * (authnz is handled by the authenticated session)
+ */
+const deleteEnvironment = async (
+  request: APIRequestContext,
+  environmentId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/environments/${environmentId}`,
   });
 
 /**
@@ -998,14 +1046,14 @@ const updateLlmSettings = async (
   });
 
 /**
- * Update security settings (global tool policy, chat file uploads)
+ * Update security settings (chat file uploads)
  * (authnz is handled by the authenticated session)
  */
 const updateSecuritySettings = async (
   request: APIRequestContext,
   updates: {
-    globalToolPolicy?: "permissive" | "restrictive";
     allowChatFileUploads?: boolean;
+    allowToolAutoAssignment?: boolean;
   },
 ) =>
   makeApiRequest({
@@ -1280,6 +1328,12 @@ export const test = base.extend<TestFixtures>({
   },
   deleteMcpCatalogItem: async ({}, use) => {
     await use(deleteMcpCatalogItem);
+  },
+  createEnvironment: async ({}, use) => {
+    await use(createEnvironment);
+  },
+  deleteEnvironment: async ({}, use) => {
+    await use(deleteEnvironment);
   },
   installMcpServer: async ({}, use) => {
     await use(installMcpServer);

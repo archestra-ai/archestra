@@ -1,20 +1,26 @@
 "use client";
 
-import { AuthView } from "@daveyplate/better-auth-ui";
+import {
+  DocsPage,
+  E2eTestId,
+  GITHUB_REPO_NEW_ISSUE_URL,
+} from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { E2eTestId, GITHUB_REPO_NEW_ISSUE_URL } from "@shared";
 import {
   AlertCircle,
   ExternalLink,
   KeyRound,
   Loader2,
+  LockKeyhole,
   ShieldAlert,
   XCircle,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,39 +39,28 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  useChangeAccountPasswordMutation,
-  useSignInWithEmailMutation,
-} from "@/lib/auth/account.query";
-import { clearDefaultPasswordChangePending } from "@/lib/auth/default-password-change";
+import { useSignInWithEmailMutation } from "@/lib/auth/account.query";
+import { usePublicIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import {
   clearSsoSignInAttempt,
   hasSsoSignInAttempt,
 } from "@/lib/auth/sso-sign-in-attempt";
-import config from "@/lib/config/config";
-import { usePublicConfig } from "@/lib/config/config.query";
+import {
+  usePublicConfig,
+  usePublicEnterpriseCoreActive,
+} from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { RecoverAccountView } from "./recover-account-view";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
+import { TwoFactorView } from "./two-factor-view";
 
-const { IdentityProviderSelector } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with IdP selector
-    await import("@/components/identity-provider-selector.ee")
-  : {
-      IdentityProviderSelector: () => null,
-    };
-
-const { usePublicIdentityProviders } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: Conditional EE query import
-    await import("@/lib/auth/identity-provider.query.ee")
-  : {
-      usePublicIdentityProviders: () => ({
-        data: [],
-        isLoading: false,
-        isError: false,
-        error: null,
-      }),
-    };
+const IdentityProviderSelector = dynamic(() =>
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+  import("@/components/identity-provider-selector.ee").then((m) => ({
+    default: m.IdentityProviderSelector,
+  })),
+);
 
 /**
  * Map of SSO error codes to user-friendly messages.
@@ -154,20 +149,7 @@ const SignInFormSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-const DefaultPasswordChangeFormSchema = z
-  .object({
-    password: z.string().min(8, "Password must be at least 8 characters"),
-    confirmPassword: z.string().min(1, "Confirm your new password"),
-  })
-  .refine((value) => value.password === value.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  });
-
 type SignInFormValues = z.infer<typeof SignInFormSchema>;
-type DefaultPasswordChangeFormValues = z.infer<
-  typeof DefaultPasswordChangeFormSchema
->;
 
 interface AuthViewWithErrorHandlingProps {
   path: string;
@@ -179,6 +161,8 @@ export function AuthViewWithErrorHandling({
   callbackURL,
 }: AuthViewWithErrorHandlingProps) {
   const appName = useAppName();
+  // Pre-auth surface — read enterprise flag from the public config endpoint.
+  const enterpriseCoreActive = usePublicEnterpriseCoreActive() === true;
   const searchParams = useSearchParams();
   const [serverError, setServerError] = useState(false);
   const [originError, setOriginError] = useState<string | null>(null);
@@ -243,11 +227,7 @@ export function AuthViewWithErrorHandling({
         const url =
           typeof args[0] === "string" ? args[0] : (args[0] as Request)?.url;
 
-        const isAuthEndpoint =
-          url?.includes("/api/auth/sign-in") ||
-          url?.includes("/api/auth/sign-up") ||
-          url?.includes("/api/auth/forgot-password") ||
-          url?.includes("/api/auth/reset-password");
+        const isAuthEndpoint = url?.includes("/api/auth/sign-in");
 
         // Check for 403 "Invalid origin" errors
         if (isAuthEndpoint && response.status === 403) {
@@ -281,12 +261,7 @@ export function AuthViewWithErrorHandling({
         // Network errors or other fetch failures for auth endpoints
         const url =
           typeof args[0] === "string" ? args[0] : (args[0] as Request)?.url;
-        if (
-          url?.includes("/api/auth/sign-in") ||
-          url?.includes("/api/auth/sign-up") ||
-          url?.includes("/api/auth/forgot-password") ||
-          url?.includes("/api/auth/reset-password")
-        ) {
+        if (url?.includes("/api/auth/sign-in")) {
           console.error("Network error from auth endpoint:", url, error);
           setServerError(true);
         }
@@ -303,11 +278,17 @@ export function AuthViewWithErrorHandling({
     return <SignOutWithIdpLogout />;
   }
 
-  const isSignInPage = path === "sign-in";
+  if (path === "two-factor") {
+    return <TwoFactorView />;
+  }
 
-  // These paths should always render AuthView regardless of basic auth setting
-  // (callback, error, etc. are handled by better-auth-ui)
-  const alwaysShowAuthView = !isSignInPage && path !== "sign-up";
+  if (path === "recover-account") {
+    return <RecoverAccountView />;
+  }
+
+  // Only sign-in remains: sign-up is handled upstream (blocked without an
+  // invitation, redirected to /auth/sign-up-with-invitation with one).
+  const isSignInPage = path === "sign-in";
 
   if (isLoadingPublicConfig && isSignInPage) {
     return null;
@@ -374,7 +355,7 @@ export function AuthViewWithErrorHandling({
     isBasicAuthDisabled &&
     hasIdentityProviders &&
     isSignInPage &&
-    config.enterpriseFeatures.core
+    enterpriseCoreActive
   ) {
     return (
       <div className="w-full max-w-md space-y-4">
@@ -486,33 +467,10 @@ export function AuthViewWithErrorHandling({
         </Alert>
       )}
       <div className="space-y-4">
-        {!isBasicAuthDisabled && isSignInPage ? (
+        {!isBasicAuthDisabled && isSignInPage && (
           <SignInView callbackURL={callbackURL} />
-        ) : (
-          alwaysShowAuthView && (
-            <AuthView
-              path={path}
-              callbackURL={callbackURL}
-              classNames={{
-                base: "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm w-full max-w-full",
-                footer: "hidden",
-                form: { forgotPasswordLink: "hidden" },
-              }}
-            />
-          )
         )}
-        {!isSignInPage && !alwaysShowAuthView && !isBasicAuthDisabled && (
-          <AuthView
-            path={path}
-            callbackURL={callbackURL}
-            classNames={{
-              base: "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm w-full max-w-full",
-              footer: "hidden",
-              form: { forgotPasswordLink: "hidden" },
-            }}
-          />
-        )}
-        {isSignInPage && config.enterpriseFeatures.core && (
+        {isSignInPage && enterpriseCoreActive && (
           <IdentityProviderSelector
             showDivider={!isBasicAuthDisabled}
             callbackURL={callbackURL}
@@ -523,26 +481,22 @@ export function AuthViewWithErrorHandling({
   );
 }
 
+/**
+ * Number of consecutive failed sign-in attempts after which the password-reset
+ * hint is surfaced over the form. Archestra has no self-service reset, so a user
+ * who keeps failing needs an operator to run the reset CLI — point them at it.
+ */
+const FAILED_ATTEMPTS_BEFORE_RESET_HINT = 3;
+
 function SignInView({ callbackURL }: { callbackURL?: string }) {
-  const [defaultPasswordRedirectUrl, setDefaultPasswordRedirectUrl] = useState<
-    string | null
-  >(null);
-  const [defaultAdminCurrentPassword, setDefaultAdminCurrentPassword] =
-    useState<string | null>(null);
   const signIn = useSignInWithEmailMutation();
-  const changePassword = useChangeAccountPasswordMutation();
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const docsUrl = getFrontendDocsUrl(DocsPage.PlatformResetUserPassword);
   const signInForm = useForm<SignInFormValues>({
     resolver: zodResolver(SignInFormSchema),
     defaultValues: {
       email: "",
       password: "",
-    },
-  });
-  const defaultPasswordChangeForm = useForm<DefaultPasswordChangeFormValues>({
-    resolver: zodResolver(DefaultPasswordChangeFormSchema),
-    defaultValues: {
-      password: "",
-      confirmPassword: "",
     },
   });
 
@@ -553,192 +507,121 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
       callbackURL,
     });
 
-    if (!result) return;
+    // A null result is a failed attempt (wrong credentials, etc.); count
+    // consecutive failures and reset the streak on any success.
+    if (!result) {
+      setFailedAttempts((attempts) => attempts + 1);
+      return;
+    }
+    setFailedAttempts(0);
 
-    if (result.requiresDefaultPasswordChange) {
-      setDefaultPasswordRedirectUrl(result.redirectUrl);
-      setDefaultAdminCurrentPassword(values.password);
+    if (result.twoFactorRedirect) {
+      // Forward only the computed callback target (not the raw query string,
+      // which could carry an attacker-supplied totpURI) so the two-factor
+      // view can complete the original navigation after verification.
+      redirectAfterSignIn(
+        callbackURL
+          ? `/auth/two-factor?redirectTo=${encodeURIComponent(callbackURL)}`
+          : "/auth/two-factor",
+      );
       return;
     }
 
-    clearDefaultPasswordChangePending();
     redirectAfterSignIn(result.redirectUrl);
   }
 
-  async function onChangeDefaultPassword(
-    values: DefaultPasswordChangeFormValues,
-  ) {
-    if (!defaultAdminCurrentPassword) return;
+  const showResetHint = failedAttempts >= FAILED_ATTEMPTS_BEFORE_RESET_HINT;
 
-    const changed = await changePassword.mutateAsync({
-      currentPassword: defaultAdminCurrentPassword,
-      newPassword: values.password,
-      revokeOtherSessions: true,
-    });
-
-    if (changed) {
-      clearDefaultPasswordChangePending();
-      redirectAfterSignIn(defaultPasswordRedirectUrl ?? callbackURL ?? "/");
-    }
-  }
-
-  if (defaultPasswordRedirectUrl) {
-    return (
-      <Card
-        className="w-full"
-        data-testid={E2eTestId.DefaultPasswordChangePrompt}
-      >
+  return (
+    <>
+      {showResetHint && (
+        <Alert className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
+          <LockKeyhole className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertTitle className="text-amber-900 dark:text-amber-100">
+            Forgot your password?
+          </AlertTitle>
+          <AlertDescription className="text-amber-700 dark:text-amber-300">
+            {/* There is no self-service reset flow (no email provider). An
+                operator with shell access resets any user's password via the
+                reset-user-password CLI, documented on the Password Reset page. */}
+            {docsUrl ? (
+              <ExternalDocsLink
+                href={docsUrl}
+                className="text-amber-800 dark:text-amber-200"
+              >
+                Learn how to reset admin password.
+              </ExternalDocsLink>
+            ) : (
+              "Ask your administrator to reset it."
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+      <Card className="w-full">
         <CardHeader>
-          <CardTitle>Change Password</CardTitle>
+          <CardTitle className="text-xl">Sign In</CardTitle>
           <CardDescription>
-            The default administrator password is still active. Choose a new
-            password to secure this account.
+            Enter your email below to login to your account
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Form {...defaultPasswordChangeForm}>
+          <Form {...signInForm}>
             <form
               className="space-y-4"
-              onSubmit={defaultPasswordChangeForm.handleSubmit(
-                onChangeDefaultPassword,
-              )}
+              onSubmit={signInForm.handleSubmit(onSignIn)}
             >
-              <div className="grid gap-2">
-                <Label htmlFor="default-admin-new-password">New password</Label>
-                <Input
-                  id="default-admin-new-password"
-                  type="password"
-                  autoComplete="new-password"
-                  disabled={changePassword.isPending}
-                  aria-invalid={
-                    !!defaultPasswordChangeForm.formState.errors.password
-                  }
-                  {...defaultPasswordChangeForm.register("password")}
-                />
-                {defaultPasswordChangeForm.formState.errors.password && (
-                  <p className="text-destructive text-sm">
-                    {
-                      defaultPasswordChangeForm.formState.errors.password
-                        .message
-                    }
-                  </p>
+              <FormField
+                control={signInForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        autoComplete="email"
+                        disabled={signIn.isPending}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="default-admin-confirm-password">
-                  Confirm password
-                </Label>
-                <Input
-                  id="default-admin-confirm-password"
-                  type="password"
-                  autoComplete="new-password"
-                  disabled={changePassword.isPending}
-                  aria-invalid={
-                    !!defaultPasswordChangeForm.formState.errors.confirmPassword
-                  }
-                  {...defaultPasswordChangeForm.register("confirmPassword")}
-                />
-                {defaultPasswordChangeForm.formState.errors.confirmPassword && (
-                  <p className="text-destructive text-sm">
-                    {
-                      defaultPasswordChangeForm.formState.errors.confirmPassword
-                        .message
-                    }
-                  </p>
+              />
+              <FormField
+                control={signInForm.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        autoComplete="current-password"
+                        disabled={signIn.isPending}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={changePassword.isPending}
-                  data-testid={E2eTestId.DefaultPasswordChangeSkipButton}
-                  onClick={() => {
-                    clearDefaultPasswordChangePending();
-                    redirectAfterSignIn(defaultPasswordRedirectUrl);
-                  }}
-                >
-                  Skip
-                </Button>
-                <Button type="submit" disabled={changePassword.isPending}>
-                  {changePassword.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Submit
-                </Button>
-              </div>
+              />
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={signIn.isPending}
+                data-testid={E2eTestId.SignInSubmitButton}
+              >
+                {signIn.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Sign In
+              </Button>
             </form>
           </Form>
         </CardContent>
       </Card>
-    );
-  }
-
-  return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="text-xl">Sign In</CardTitle>
-        <CardDescription>
-          Enter your email below to login to your account
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...signInForm}>
-          <form
-            className="space-y-4"
-            onSubmit={signInForm.handleSubmit(onSignIn)}
-          >
-            <FormField
-              control={signInForm.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      autoComplete="email"
-                      disabled={signIn.isPending}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={signInForm.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="password"
-                      autoComplete="current-password"
-                      disabled={signIn.isPending}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={signIn.isPending}
-              data-testid={E2eTestId.SignInSubmitButton}
-            >
-              {signIn.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Sign In
-            </Button>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+    </>
   );
 }
 

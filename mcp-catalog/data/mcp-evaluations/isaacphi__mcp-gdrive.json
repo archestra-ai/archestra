@@ -1,0 +1,121 @@
+{
+  "name": "isaacphi__mcp-gdrive",
+  "display_name": "mcp-gdrive",
+  "description": "Model Context Protocol (MCP) Server for reading from Google Drive and editing Google Sheets",
+  "author": {
+    "name": "isaacphi"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@isaacphi/mcp-gdrive"],
+    "env": {
+      "GDRIVE_CREDS_DIR": "${user_config.gdrive_creds_dir}",
+      "CLIENT_ID": "${user_config.client_id}",
+      "CLIENT_SECRET": "${user_config.client_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "gdrive_creds_dir": {
+      "type": "directory",
+      "title": "Google Drive Credentials Directory",
+      "description": "Path to the directory where Google Cloud OAuth keys (gcp-oauth.keys.json) and authentication tokens will be stored. Example: /Users/username/.config/mcp-gdrive",
+      "required": true,
+      "default": "${HOME}/.config/mcp-gdrive"
+    },
+    "client_id": {
+      "type": "string",
+      "title": "Google Cloud OAuth Client ID",
+      "description": "Your OAuth Client ID from the Google Cloud Console for the Desktop App type.",
+      "sensitive": true,
+      "required": true
+    },
+    "client_secret": {
+      "type": "string",
+      "title": "Google Cloud OAuth Client Secret",
+      "description": "Your OAuth Client Secret from the Google Cloud Console for the Desktop App type.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Google Drive server\n\nThis MCP server integrates with Google Drive to allow listing, reading, and searching files, as well as the ability to read and write to Google Sheets.\n\nThis project includes code originally developed by Anthropic, PBC, licensed under the MIT License from [this repo](https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive).\n\n## Components\n\n### Tools\n\n- **gdrive_search**\n\n  - **Description**: Search for files in Google Drive.\n  - **Input**:\n    - `query` (string): Search query.\n    - `pageToken` (string, optional): Token for the next page of results.\n    - `pageSize` (number, optional): Number of results per page (max 100).\n  - **Output**: Returns file names and MIME types of matching files.\n\n- **gdrive_read_file**\n\n  - **Description**: Read contents of a file from Google Drive.\n  - **Input**:\n    - `fileId` (string): ID of the file to read.\n  - **Output**: Returns the contents of the specified file.\n\n- **gsheets_read**\n\n  - **Description**: Read data from a Google Spreadsheet with flexible options for ranges and formatting.\n  - **Input**:\n    - `spreadsheetId` (string): The ID of the spreadsheet to read.\n    - `ranges` (array of strings, optional): Optional array of A1 notation ranges (e.g., `['Sheet1!A1:B10']`). If not provided, reads the entire sheet.\n    - `sheetId` (number, optional): Specific sheet ID to read. If not provided with ranges, reads the first sheet.\n  - **Output**: Returns the specified data from the spreadsheet.\n\n- **gsheets_update_cell**\n  - **Description**: Update a cell value in a Google Spreadsheet.\n  - **Input**:\n    - `fileId` (string): ID of the spreadsheet.\n    - `range` (string): Cell range in A1 notation (e.g., `'Sheet1!A1'`).\n    - `value` (string): New cell value.\n  - **Output**: Confirms the updated value in the specified cell.\n\n### Resources\n\nThe server provides access to Google Drive files:\n\n- **Files** (`gdrive:///<file_id>`)\n  - Supports all file types\n  - Google Workspace files are automatically exported:\n    - Docs → Markdown\n    - Sheets → CSV\n    - Presentations → Plain text\n    - Drawings → PNG\n  - Other files are provided in their native format\n\n## Getting started\n\n1. [Create a new Google Cloud project](https://console.cloud.google.com/projectcreate)\n2. [Enable the Google Drive API](https://console.cloud.google.com/workspace-api/products)\n3. [Configure an OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) (\"internal\" is fine for testing)\n4. Add OAuth scopes `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/spreadsheets`\n5. In order to allow interaction with sheets and docs you will also need to enable the [Google Sheets API](https://console.cloud.google.com/apis/api/sheets.googleapis.com/) and [Google Docs API](https://console.cloud.google.com/marketplace/product/google/docs.googleapis.com) in your workspaces Enabled API and Services section.\n6. [Create an OAuth Client ID](https://console.cloud.google.com/apis/credentials/oauthclient) for application type \"Desktop App\"\n7. Download the JSON file of your client's OAuth keys\n8. Rename the key file to `gcp-oauth.keys.json` and place into the path you specify with `GDRIVE_CREDS_DIR` (i.e. `/Users/username/.config/mcp-gdrive`)\n9. Note your OAuth Client ID and Client Secret. They must be provided as environment variables along with your configuration directory.\n10. You will also need to setup a .env file within the project with the following fields. You can find the Client ID and Client Secret in the Credentials section of the Google Cloud Console.\n\n```\nGDRIVE_CREDS_DIR=/path/to/config/directory\nCLIENT_ID=<CLIENT_ID>\nCLIENT_SECRET=<CLIENT_SECRET>\n```\n\nMake sure to build the server with either `npm run build` or `npm run watch`.\n\n### Authentication\n\nNext you will need to run `node ./dist/index.js` to trigger the authentication step\n\nYou will be prompted to authenticate with your browser. You must authenticate with an account in the same organization as your Google Cloud project.\n\nYour OAuth token is saved in the directory specified by the `GDRIVE_CREDS_DIR` environment variable.\n\n![Authentication Prompt](https://i.imgur.com/TbyV6Yq.png)\n\n### Usage with Desktop App\n\nTo integrate this server with the desktop app, add the following to your app's server configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"gdrive\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@isaacphi/mcp-gdrive\"],\n      \"env\": {\n        \"CLIENT_ID\": \"<CLIENT_ID>\",\n        \"CLIENT_SECRET\": \"<CLIENT_SECRET>\",\n        \"GDRIVE_CREDS_DIR\": \"/path/to/config/directory\"\n      }\n    }\n  }\n}\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "File Management",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "isaacphi-mcp-gdrive": {
+        "command": "npx",
+        "args": ["-y", "@isaacphi/mcp-gdrive"],
+        "env": {
+          "CLIENT_ID": "<CLIENT_ID>",
+          "CLIENT_SECRET": "<CLIENT_SECRET>",
+          "GDRIVE_CREDS_DIR": "/path/to/config/directory"
+        }
+      },
+      "isaacphi-mcp-gdrive-local": {
+        "command": "node",
+        "args": ["./dist/index.js"],
+        "env": {
+          "CLIENT_ID": "<CLIENT_ID>",
+          "CLIENT_SECRET": "<CLIENT_SECRET>",
+          "GDRIVE_CREDS_DIR": "/path/to/config/directory"
+        }
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "isaacphi",
+    "repo": "mcp-gdrive",
+    "url": "https://github.com/isaacphi/mcp-gdrive",
+    "name": "isaacphi__mcp-gdrive",
+    "path": null,
+    "stars": 188,
+    "contributors": 3,
+    "issues": 9,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "5a94bdcb751975f9f6552d261da35314baf89c43"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:07.398Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@google-cloud/local-auth",
+      "importance": 8
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "googleapis",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@isaacphi/mcp-gdrive\",\n  \"version\": \"0.2.0\",\n  \"description\": \"MCP server for interacting with Google Drive and Sheets\",\n  \"license\": \"MIT\",\n  \"author\": \"Phil Isaac\",\n  \"homepage\": \"https://github.com/isaacphi/mcp-gdrive\",\n  \"bugs\": \"https://github.com/isaacphi/mcp-gdrive/issues\",\n  \"type\": \"module\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/isaacphi/mcp-gdrive.git\"\n  },\n  \"keywords\": [\n    \"Google Drive\",\n    \"Google Sheets\",\n    \"MCP\",\n    \"Model Context Protocol\",\n    \"AI\"\n  ],\n  \"bin\": {\n    \"mcp-gdrive\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@google-cloud/local-auth\": \"^3.0.1\",\n    \"@modelcontextprotocol/sdk\": \"0.5.0\",\n    \"dotenv\": \"^16.5.0\",\n    \"googleapis\": \"^144.0.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.9.3\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}\n"
+}

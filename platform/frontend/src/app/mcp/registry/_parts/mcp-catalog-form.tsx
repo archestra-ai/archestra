@@ -1,8 +1,13 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
-import { type archestraApiTypes, DocsPage } from "@shared";
 import {
+  type archestraApiTypes,
+  DocsPage,
+  isBuiltInCatalogId,
+} from "@archestra/shared";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  AlertTriangle,
   Ban,
   Code,
   ExternalLink,
@@ -20,6 +25,9 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { lazy, useEffect, useMemo, useRef, useState } from "react";
 import { type UseFormReturn, useFieldArray, useForm } from "react-hook-form";
+import type { Components } from "react-markdown";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
@@ -30,10 +38,12 @@ import {
   type EnterpriseManagedConfigInput,
   EnterpriseManagedCredentialFields,
 } from "@/components/enterprise-managed-credential-fields";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
 import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
+import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -48,9 +58,9 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { SecretInput } from "@/components/ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -71,21 +81,24 @@ import {
 } from "@/components/visibility-selector";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
+import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
-import {
-  MCP_CONFIG_AUTOCOMPLETE,
-  MCP_SECRET_AUTOCOMPLETE,
-} from "@/lib/mcp/mcp-form-autocomplete";
+import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
+import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import {
   type CascadeSnapshot,
   computeCascadeOutcome,
 } from "./cascade-decision";
+import {
+  compileValidationRegex,
+  validateFieldAgainstRegex,
+} from "./environment-validation-helpers";
 import {
   formSchema,
   type McpCatalogFormValues,
@@ -94,21 +107,6 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
-import { ReinstallConfirmBar } from "./reinstall-confirm-bar";
-
-const { useIdentityProviders } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
-    await import("@/lib/auth/identity-provider.query.ee")
-  : {
-      useIdentityProviders: (_params?: { enabled?: boolean }) => ({
-        data: [] as Array<{
-          id: string;
-          providerId: string;
-          issuer: string;
-          oidcConfig?: Record<string, unknown> | null;
-        }>,
-      }),
-    };
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -116,15 +114,72 @@ const ExternalSecretSelector = lazy(
     import("@/components/external-secret-selector.ee"),
 );
 
+// Markdown renderer for catalog-supplied setup instructions shown atop the form.
+const INSTRUCTIONS_MARKDOWN_COMPONENTS: Components = {
+  p: ({ node, ...props }) => (
+    <p className="mb-2 text-muted-foreground" {...props} />
+  ),
+  strong: ({ node, ...props }) => (
+    <strong className="font-semibold text-foreground" {...props} />
+  ),
+  ol: ({ node, ...props }) => (
+    <ol
+      className="mb-2 list-decimal space-y-1 pl-5 text-muted-foreground"
+      {...props}
+    />
+  ),
+  ul: ({ node, ...props }) => (
+    <ul
+      className="mb-2 list-disc space-y-1 pl-5 text-muted-foreground"
+      {...props}
+    />
+  ),
+  a: ({ node, children, ...props }) => (
+    <a
+      className="text-primary underline"
+      target="_blank"
+      rel="noreferrer"
+      {...props}
+    >
+      {children}
+    </a>
+  ),
+  pre: ({ node, ...props }) => (
+    <pre
+      className="my-2 overflow-x-auto rounded-md bg-muted p-3 text-xs"
+      {...props}
+    />
+  ),
+  code: ({ node, ...props }) => (
+    <code
+      className="rounded bg-muted px-1 py-0.5 font-mono text-xs"
+      {...props}
+    />
+  ),
+};
+
 interface McpCatalogFormProps {
   mode: "create" | "edit";
   initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-  onSubmit: (values: McpCatalogFormValues) => void | Promise<void>;
+  onSubmit: (
+    values: McpCatalogFormValues,
+    form: UseFormReturn<McpCatalogFormValues>,
+  ) => void | Promise<void>;
   footer?:
     | React.ReactNode
-    | ((opts: { isDirty: boolean; onReset: () => void }) => React.ReactNode);
-  nameDisabled?: boolean;
+    | ((opts: {
+        isDirty: boolean;
+        onReset: () => void;
+        /**
+         * True when stored config values violate the bound environment's
+         * validation rule — the footer's Save button should disable on it.
+         * Saving is also guarded internally, but disabling gives a visible cue.
+         */
+        hasBlockingErrors: boolean;
+      }) => React.ReactNode);
   catalogButton?: React.ReactNode;
+  /** Optional banner/notice rendered at the very top of the form body. */
+  notice?: React.ReactNode;
   formValues?: McpCatalogFormValues;
   /** Called when form dirty state changes */
   onDirtyChange?: (isDirty: boolean) => void;
@@ -143,9 +198,9 @@ export function McpCatalogForm({
   mode,
   initialValues,
   onSubmit,
-  nameDisabled,
   footer,
   catalogButton,
+  notice,
   formValues,
   onDirtyChange,
   submitRef,
@@ -175,17 +230,11 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
-  const advancedToolFeaturesEnabled =
-    useFeature("advancedToolFeaturesEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
     "upstream-mcp-server-authentication",
-  );
-  const gatewayLabelsDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformMcpGateway,
-    "tool-assignment-mode",
   );
   const mcpAuthTokenExchangeDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
@@ -235,6 +284,7 @@ export function McpCatalogForm({
                 ? `${window.location.origin}/oauth-callback`
                 : "",
             scopes: "read, write",
+            additional_scopes: "offline_access",
             supports_resource_metadata: true,
             grantType: "authorization_code",
             authServerUrl: "",
@@ -257,13 +307,16 @@ export function McpCatalogForm({
           },
           scope: "personal",
           teams: [],
+          environmentId: null,
         }),
   });
 
   // Expose imperative submit to parent
   useEffect(() => {
     if (submitRef) {
-      submitRef.current = form.handleSubmit(onSubmit) as () => Promise<void>;
+      submitRef.current = form.handleSubmit((values) =>
+        onSubmit(values, form),
+      ) as () => Promise<void>;
     }
     return () => {
       if (submitRef) submitRef.current = null;
@@ -271,6 +324,7 @@ export function McpCatalogForm({
   }, [submitRef, form, onSubmit]);
 
   const authMethod = form.watch("authMethod");
+  const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
   const currentTransportType = form.watch("localConfig.transportType");
   const isMultitenant = Boolean(form.watch("multitenant"));
@@ -358,7 +412,6 @@ export function McpCatalogForm({
           fieldName: undefined,
           headerName: "Authorization",
           promptOnInstallation: true,
-          promptOnPreset: false,
           required: true,
           value: "",
           description: "",
@@ -462,6 +515,15 @@ export function McpCatalogForm({
   // was actually edited. `isReallyDirty` walks the tree and only returns
   // true when SOME leaf is actually true.
   const isNameDirty = mode === "edit" && isReallyDirty(dirtyFields.name);
+  // Built-in items (the browser-preview Playwright server) are system-managed
+  // and app-backed catalogs' names are owned by the Apps API: the backend
+  // silently strips `name` from their PUTs, so an editable field would be a
+  // lie — lock it instead.
+  const isAppBacked = initialValues?.serverType === "app";
+  const isNameLocked =
+    mode === "edit" &&
+    initialValues !== undefined &&
+    (isBuiltInCatalogId(initialValues.id) || isAppBacked);
   const isServerUrlDirty =
     mode === "edit" && isReallyDirty(dirtyFields.serverUrl);
   const isAuthDirty =
@@ -529,8 +591,100 @@ export function McpCatalogForm({
   const { data: isAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
-  const { data: teams } = useTeams();
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  // All teams for a full admin, otherwise only the user's own teams (the only
+  // ones the backend lets a non-admin assign).
+  const { data: teams } = useAssignableTeams({
+    isResourceAdmin: !!isAdmin,
+    enabled: !!canReadTeams,
+  });
+  // Sharing with a team requires administering it (admins bypass), matching the
+  // backend gate. `myRole` is populated only on the caller's own teams.
+  const administersATeam = (teams ?? []).some((t) => t.myRole === "admin");
+  const { data: environmentList } = useEnvironments();
+  const environments = environmentList?.environments;
+  const defaultEnvironment = useDefaultEnvironment();
+  // Validate static config values (env vars + headers) against the rule of the
+  // environment this item is bound to (or the org default when unbound), so a
+  // forbidden value is flagged inline and can't be saved. Passed to both
+  // EnvironmentVariablesFormField instances below.
+  const watchedEnvironmentId = form.watch("environmentId");
+  const boundEnvironment = watchedEnvironmentId
+    ? environments?.find((e) => e.id === watchedEnvironmentId)
+    : null;
+  const boundEnvironmentName =
+    boundEnvironment?.name ?? defaultEnvironment.name;
+  const boundValidationRegex = compileValidationRegex(
+    boundEnvironment
+      ? boundEnvironment.validationRegex
+      : defaultEnvironment.validationRegex,
+  );
+  const validateConfigValue = boundValidationRegex
+    ? (value: string): string | null =>
+        validateFieldAgainstRegex({
+          value,
+          regex: boundValidationRegex,
+          valueType: "string",
+          environmentName: boundEnvironmentName,
+        })
+    : undefined;
+  // Already-stored static values that violate the bound environment's rule —
+  // e.g. after switching the item to a stricter environment. The add/edit
+  // dialogs block typing a bad value, but a value entered under a laxer
+  // environment only surfaces here, where it blocks Save until fixed.
+  //
+  // Only scan the fields actually live for the current server type: env vars
+  // for local, headers for remote. A local server submits no headers and a
+  // remote one submits no localConfig.environment, so scanning the inactive
+  // (and hidden) set would block Save on a field the user can't even see.
+  const watchedEnvVars = form.watch("localConfig.environment");
+  const watchedHeaders = form.watch("additionalHeaders");
+  const envRuleViolations: string[] = [];
+  if (validateConfigValue) {
+    if (currentServerType === "local") {
+      for (const envVar of watchedEnvVars ?? []) {
+        if (
+          envVar.type === "plain_text" &&
+          !envVar.promptOnInstallation &&
+          envVar.value &&
+          validateConfigValue(envVar.value)
+        ) {
+          envRuleViolations.push(envVar.key);
+        }
+      }
+    } else {
+      for (const header of watchedHeaders ?? []) {
+        if (
+          !header.promptOnInstallation &&
+          !header.sensitive &&
+          header.value &&
+          validateConfigValue(header.value)
+        ) {
+          envRuleViolations.push(header.headerName);
+        }
+      }
+    }
+  }
+  const hasEnvRuleViolations = envRuleViolations.length > 0;
   const currentScope = form.watch("scope");
+  const selectedTeams = form.watch("teams") ?? [];
+  // A team-scoped item may be shared with teams the editor doesn't belong to,
+  // which the assignable-teams picker never lists — take their names from the
+  // item so the access rows never fall back to a raw id.
+  const teamNameById = useMemo(
+    () =>
+      new Map([
+        ...(initialValues?.teams ?? []).map(
+          (t) => [t.id, t.name] as [string, string],
+        ),
+        ...(teams ?? []).map((t) => [t.id, t.name] as [string, string]),
+      ]),
+    [initialValues, teams],
+  );
+  const canShareWithTeams = (isAdmin ?? false) || administersATeam;
+  // Shared items are one-way: an item that is already team/org-scoped cannot be
+  // demoted back to personal (mirrors the agent dialog).
+  const initialScope = initialValues?.scope;
   const enterpriseAuthDisabledReason: ReactNode | null =
     !isEnterpriseCoreEnabled
       ? "Available with the Enterprise Core license."
@@ -564,27 +718,32 @@ export function McpCatalogForm({
         label: "Personal",
         description: "Only you can access this MCP server.",
         icon: Lock,
+        disabled: initialScope != null && initialScope !== "personal",
+        disabledReason: "Shared MCP servers cannot be made personal.",
       },
       {
         value: "team",
         label: "Teams",
         description: "Share this MCP server with selected teams.",
         icon: Users,
-        disabled: !isAdmin || !teams?.length,
-        disabledReason: !isAdmin
-          ? "Only admins can assign MCP servers to teams."
-          : "Create a team first to share this MCP server.",
+        disabled: !canShareWithTeams || !canReadTeams || !teams?.length,
+        disabledReason: !canReadTeams
+          ? "Team sharing is unavailable without team:read permission."
+          : !canShareWithTeams
+            ? "You need to be an admin of a team to share with it."
+            : "Create a team first to share this MCP server.",
       },
       {
         value: "org",
         label: "Organization",
-        description: "Anyone in your organization can access this MCP server.",
+        description:
+          "Everyone in your organization can use this MCP server. Only admins can modify it.",
         icon: Globe,
         disabled: !isAdmin,
         disabledReason: "Only admins can make MCP servers organization-wide.",
       },
     ],
-    [isAdmin, teams],
+    [isAdmin, canShareWithTeams, canReadTeams, teams, initialScope],
   );
 
   // Check if BYOS feature is available (enterprise license)
@@ -632,6 +791,41 @@ export function McpCatalogForm({
 
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
   const { data: k8sSecrets = [] } = useK8sImagePullSecrets();
+  const imagePullSecretItems = useMemo(
+    () =>
+      k8sSecrets.map((secret) => {
+        const registryLabel = formatRegistryServers(secret.registryServers);
+        const primaryLabel = registryLabel || secret.name;
+        const secondaryLabel = registryLabel ? secret.name : undefined;
+
+        return {
+          value: secret.name,
+          label: primaryLabel,
+          searchText: [secret.name, ...secret.registryServers].join(" "),
+          content: (
+            <span className="block min-w-0">
+              <span className="block truncate font-medium">{primaryLabel}</span>
+              {secondaryLabel ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {secondaryLabel}
+                </span>
+              ) : null}
+            </span>
+          ),
+          selectedContent: (
+            <span className="block min-w-0">
+              <span className="block truncate">{primaryLabel}</span>
+              {secondaryLabel ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {secondaryLabel}
+                </span>
+              ) : null}
+            </span>
+          ),
+        };
+      }),
+    [k8sSecrets],
+  );
 
   // Update form values when BYOS paths/keys change
   useEffect(() => {
@@ -687,38 +881,59 @@ export function McpCatalogForm({
   // no bar.
   const [pendingSubmit, setPendingSubmit] = useState<{
     values: McpCatalogFormValues;
-    mode: "manual" | "auto";
+    mode: "manual" | "auto" | "rename";
+    renamed: boolean;
   } | null>(null);
   // `form.formState.isSubmitting` clears the moment `handleSubmit`
   // returns (which we do early to show the bar), so it can't drive the
   // bar's spinner — track the bar→save phase ourselves.
   const [isConfirming, setIsConfirming] = useState(false);
+  // A synchronous in-flight latch. The Save button's `disabled` reflects the
+  // mutation's `isPending`, but that is React state and only takes effect on
+  // the next render — a fast double-click fires two submits before it flips.
+  // Two concurrent saves race the team-assignment delete-then-reinsert and the
+  // loser hits a unique-constraint violation. This latch drops the second call.
+  const submitInFlightRef = useRef(false);
 
   const performSubmit = async (values: McpCatalogFormValues) => {
-    // Save any unsaved label before submitting
-    const updatedLabels = labelsRef.current?.saveUnsavedLabel() || labels;
-    const submittedValues = { ...values, labels: updatedLabels };
-    await onSubmit(submittedValues);
-    // Reset baselines to what was just submitted so isDirty becomes false.
-    // initialValues from the parent may not change reference after save
-    // (TanStack Query structural sharing), and secret values are stored
-    // separately so the catalog item itself may round-trip unchanged.
-    form.reset(submittedValues, { keepValues: true });
-    setLabelsBaseline(updatedLabels);
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    try {
+      // Save any unsaved label before submitting
+      const updatedLabels = labelsRef.current?.saveUnsavedLabel() || labels;
+      const submittedValues = { ...values, labels: updatedLabels };
+      await onSubmit(submittedValues, form);
+      // Reset baselines to what was just submitted so isDirty becomes false.
+      // initialValues from the parent may not change reference after save
+      // (TanStack Query structural sharing), and secret values are stored
+      // separately so the catalog item itself may round-trip unchanged.
+      form.reset(submittedValues, { keepValues: true });
+      setLabelsBaseline(updatedLabels);
+    } finally {
+      submitInFlightRef.current = false;
+    }
   };
 
   const handleSubmit = async (values: McpCatalogFormValues) => {
+    // Stored values may violate the bound environment's rule (e.g. after an
+    // environment switch). The Save button is disabled in that state, but guard
+    // here too so an Enter-key submit can't bypass it.
+    if (hasEnvRuleViolations) return;
     // Cascade-confirm decision delegated to a pure function so it can be
     // matrix-tested without rendering, and so frontend + backend share
     // the same decision tree shape. See `cascade-decision.ts`.
     if (mode === "edit") {
-      const outcome = computeCascadeOutcome(
+      const decision = computeCascadeOutcome(
         (initialValues ?? {}) as CascadeSnapshot,
         transformFormToApiData(values) as CascadeSnapshot,
-        { affectedServerCount, labelsChanged: areLabelsChanged },
+        { affectedServerCount },
       );
-      if (outcome !== "skip") {
-        setPendingSubmit({ values, mode: outcome });
+      if (decision.mode !== "skip") {
+        setPendingSubmit({
+          values,
+          mode: decision.mode,
+          renamed: decision.renamed,
+        });
         return;
       }
     }
@@ -760,6 +975,17 @@ export function McpCatalogForm({
           <div
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 ${embedded ? "space-y-6 pt-6 pb-0" : "space-y-6 py-6"}`}
           >
+            {notice}
+            {instructions ? (
+              <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={INSTRUCTIONS_MARKDOWN_COMPONENTS}
+                >
+                  {instructions}
+                </ReactMarkdown>
+              </div>
+            ) : null}
             {catalogButton}
 
             <div className="space-y-4">
@@ -780,36 +1006,30 @@ export function McpCatalogForm({
                     <FormItem className="flex-1">
                       <FormLabel>
                         Name <span className="text-destructive">*</span>
-                        <ReinstallHint show={isNameDirty} />
+                        <ReinstallHint
+                          show={isNameDirty}
+                          label="renames tools"
+                        />
                       </FormLabel>
                       <FormControl>
-                        {nameDisabled ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Input
-                                placeholder="e.g., GitHub MCP Server"
-                                {...field}
-                                disabled
-                              />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Name cannot be changed after the server is
-                              created.
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <Input
-                            placeholder="e.g., GitHub MCP Server"
-                            {...field}
-                          />
-                        )}
+                        <Input
+                          placeholder="e.g., GitHub MCP Server"
+                          disabled={isNameLocked}
+                          {...field}
+                        />
                       </FormControl>
+                      {isNameLocked && (
+                        <FormDescription>
+                          {isAppBacked
+                            ? "This server is backed by an app — rename it from the app's settings."
+                            : "This is a built-in server — its name is system-managed and cannot be changed."}
+                        </FormDescription>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-
               <FormField
                 control={form.control}
                 name="description"
@@ -827,7 +1047,6 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={form.control}
                 name="scope"
@@ -835,6 +1054,7 @@ export function McpCatalogForm({
                   <FormItem>
                     <FormControl>
                       <VisibilitySelector
+                        label="Access"
                         value={
                           (field.value ?? "personal") as
                             | "personal"
@@ -850,24 +1070,117 @@ export function McpCatalogForm({
                         }}
                       >
                         {currentScope === "team" && (
-                          <div className="space-y-2">
-                            <Label>Teams</Label>
-                            <MultiSelectCombobox
-                              options={
-                                teams?.map((t) => ({
-                                  label: t.name,
+                          <div className="space-y-6">
+                            <div className="space-y-2">
+                              <Label>Add Team</Label>
+                              <SearchableSelect
+                                value=""
+                                onValueChange={(teamId) =>
+                                  form.setValue(
+                                    "teams",
+                                    [
+                                      ...selectedTeams,
+                                      { id: teamId, level: "use" },
+                                    ],
+                                    { shouldDirty: true },
+                                  )
+                                }
+                                items={(teams ?? []).map((t) => ({
                                   value: t.id,
-                                })) ?? []
-                              }
-                              value={form.watch("teams") ?? []}
-                              onChange={(ids) =>
-                                form.setValue("teams", ids, {
-                                  shouldDirty: true,
-                                })
-                              }
-                              placeholder="Select teams..."
-                              emptyMessage="No teams found"
-                            />
+                                  label: t.name,
+                                  disabled: selectedTeams.some(
+                                    (s) => s.id === t.id,
+                                  ),
+                                }))}
+                                placeholder="Select a team"
+                                searchPlaceholder="Search teams by name"
+                                emptyMessage="No matching teams found."
+                                className="w-full"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label>Teams ({selectedTeams.length})</Label>
+                              {selectedTeams.length === 0 ? (
+                                <div className="rounded-lg border border-dashed p-4 text-center">
+                                  <p className="text-sm text-muted-foreground">
+                                    No teams added yet
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {selectedTeams.map((selected) => (
+                                    <div
+                                      key={selected.id}
+                                      className="grid grid-cols-[minmax(0,1fr)_180px_40px] items-center gap-3 rounded-lg border p-3"
+                                    >
+                                      <p className="truncate text-sm font-medium">
+                                        {teamNameById.get(selected.id) ??
+                                          selected.id}
+                                      </p>
+                                      <Select
+                                        value={selected.level}
+                                        onValueChange={(level) =>
+                                          form.setValue(
+                                            "teams",
+                                            selectedTeams.map((t) =>
+                                              t.id === selected.id
+                                                ? {
+                                                    ...t,
+                                                    level: level as
+                                                      | "use"
+                                                      | "write",
+                                                  }
+                                                : t,
+                                            ),
+                                            { shouldDirty: true },
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger className="w-full">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="use">
+                                            Use
+                                          </SelectItem>
+                                          <SelectItem value="write">
+                                            Manage
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() =>
+                                          form.setValue(
+                                            "teams",
+                                            selectedTeams.filter(
+                                              (t) => t.id !== selected.id,
+                                            ),
+                                            { shouldDirty: true },
+                                          )
+                                        }
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                        <span className="sr-only">
+                                          Remove team
+                                        </span>
+                                      </Button>
+                                    </div>
+                                  ))}
+                                  <FormDescription>
+                                    <strong>Use</strong> — members can find this
+                                    MCP server, install it for themselves, and
+                                    use shared connections.{" "}
+                                    <strong>Manage</strong> additionally lets
+                                    the team&apos;s admins edit it, change its
+                                    environment, and manage sharing.
+                                  </FormDescription>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </VisibilitySelector>
@@ -876,7 +1189,40 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
-
+              <FormField
+                control={form.control}
+                name="environmentId"
+                render={({ field }) => (
+                  <EnvironmentSelector
+                    value={field.value ?? null}
+                    onChange={field.onChange}
+                    resource="mcpRegistry"
+                  />
+                )}
+              />
+              {hasEnvRuleViolations && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/20"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+                  <div className="space-y-1 text-foreground/90">
+                    <div className="font-semibold text-foreground">
+                      {envRuleViolations.length} value
+                      {envRuleViolations.length === 1 ? "" : "s"} not allowed in
+                      “{boundEnvironmentName}”
+                    </div>
+                    <div>
+                      Edit or remove{" "}
+                      {envRuleViolations.length === 1 ? "it" : "them"}, or
+                      choose another environment, before saving:{" "}
+                      <span className="font-mono">
+                        {envRuleViolations.join(", ")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
               {mode === "create" && (
                 <div className="space-y-2">
                   <Label>Server Type</Label>
@@ -939,7 +1285,6 @@ export function McpCatalogForm({
                   </div>
                 </div>
               )}
-
               {currentServerType === "local" && (
                 <div className="space-y-2">
                   <Label>Tenancy</Label>
@@ -1011,17 +1356,17 @@ export function McpCatalogForm({
               )}
             </div>
 
-            {currentServerType !== "remote" && <Separator />}
+            {currentServerType === "local" && <Separator />}
 
             <div className="space-y-4">
-              {currentServerType === "remote" ? null : (
+              {currentServerType === "local" ? (
                 <div className="space-y-1">
                   <h3 className="font-semibold text-base">Deployment</h3>
                   <p className="text-sm text-muted-foreground">
                     How {appName} runs this server in Kubernetes.
                   </p>
                 </div>
-              )}
+              ) : null}
 
               {currentServerType === "remote" && (
                 <FormField
@@ -1201,6 +1546,7 @@ export function McpCatalogForm({
                   remove={remove}
                   fieldNamePrefix="localConfig.environment"
                   form={form}
+                  validateValue={validateConfigValue}
                   useExternalSecretsManager={showByosOption}
                   secretKeysWithStoredValue={storedSecretKeys}
                   disablePromptOnInstallation={isMultitenant}
@@ -1335,6 +1681,7 @@ export function McpCatalogForm({
                             variant="ghost"
                             size="icon"
                             onClick={() => removeImagePullSecret(index)}
+                            aria-label="Remove image pull secret"
                           >
                             <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                           </Button>
@@ -1344,14 +1691,14 @@ export function McpCatalogForm({
                           <SearchableSelect
                             value={watchField("name")}
                             onValueChange={(val) => setField("name", val)}
-                            items={k8sSecrets.map((s) => ({
-                              value: s.name,
-                              label: s.name,
-                            }))}
+                            items={imagePullSecretItems}
                             placeholder="Select a secret..."
                             searchPlaceholder="Search secrets..."
                             allowCustom
+                            multiline
                             className="w-full"
+                            contentClassName="w-[min(var(--radix-popover-trigger-width),calc(100vw-2rem))]"
+                            emptyMessage="No image pull secrets found."
                           />
                         ) : (
                           <div className="grid grid-cols-2 gap-3">
@@ -1359,6 +1706,7 @@ export function McpCatalogForm({
                               <Label className="text-xs">Server</Label>
                               <Input
                                 placeholder="e.g. quay.io"
+                                aria-label="Server"
                                 className="font-mono"
                                 autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                                 value={watchField("server")}
@@ -1371,6 +1719,7 @@ export function McpCatalogForm({
                               <Label className="text-xs">Username</Label>
                               <Input
                                 placeholder="username"
+                                aria-label="Username"
                                 autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                                 value={watchField("username")}
                                 onChange={(e) =>
@@ -1380,9 +1729,7 @@ export function McpCatalogForm({
                             </div>
                             <div className="space-y-1">
                               <Label className="text-xs">Password</Label>
-                              <Input
-                                type="password"
-                                autoComplete={MCP_SECRET_AUTOCOMPLETE}
+                              <SecretInput
                                 placeholder={
                                   mode === "edit" && !watchField("password")
                                     ? "Saved — leave blank to keep"
@@ -1400,6 +1747,7 @@ export function McpCatalogForm({
                               </Label>
                               <Input
                                 placeholder="email@example.com"
+                                aria-label="Email"
                                 autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                                 value={watchField("email")}
                                 onChange={(e) =>
@@ -1736,13 +2084,9 @@ export function McpCatalogForm({
                                       <FormItem>
                                         <FormLabel>Client Secret</FormLabel>
                                         <FormControl>
-                                          <Input
-                                            type="password"
+                                          <SecretInput
                                             placeholder="your-client-secret (optional)"
                                             className="font-mono"
-                                            autoComplete={
-                                              MCP_SECRET_AUTOCOMPLETE
-                                            }
                                             {...field}
                                           />
                                         </FormControl>
@@ -1758,7 +2102,7 @@ export function McpCatalogForm({
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>
-                                        Redirect URIs{" "}
+                                        MCP OAuth callback URIs{" "}
                                         <span className="text-destructive">
                                           *
                                         </span>
@@ -1771,7 +2115,39 @@ export function McpCatalogForm({
                                         />
                                       </FormControl>
                                       <FormDescription>
-                                        Comma-separated list of redirect URIs
+                                        Use {appName}'s MCP install callback,
+                                        usually{" "}
+                                        <code>
+                                          {typeof window !== "undefined"
+                                            ? `${window.location.origin}/oauth-callback`
+                                            : "https://app.example.com/oauth-callback"}
+                                        </code>
+                                        . Do not use the SSO callback URL under{" "}
+                                        <code>/api/auth/sso/callback</code>.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.resource"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Protected Resource</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="https://api.example.com or api://client-id"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Optional OAuth resource/audience sent in
+                                        the authorization request and token
+                                        exchange. Leave blank to omit the OAuth
+                                        resource parameter.
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>
@@ -1793,6 +2169,31 @@ export function McpCatalogForm({
                                       </FormControl>
                                       <FormDescription>
                                         Comma-separated list of OAuth scopes.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.additional_scopes"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Additional scopes</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="offline_access"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Always appended on top of the requested
+                                        scopes. offline_access is added by
+                                        default so the provider returns a
+                                        refresh token; clear it for providers
+                                        that reject it (e.g. Google).
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>
@@ -2162,6 +2563,7 @@ export function McpCatalogForm({
                     additionalHeaderFields.length,
                     headerDialog?.mode === "edit" ? headerDialog.index : null,
                   )}
+                  validateValue={validateConfigValue}
                   onClose={() => setHeaderDialog(null)}
                   onConfirm={(draft) => {
                     if (headerDialog?.mode === "add") {
@@ -2186,23 +2588,6 @@ export function McpCatalogForm({
                     </span>
                   )}
                 </div>
-                {advancedToolFeaturesEnabled && (
-                  <p className="text-sm text-muted-foreground">
-                    Organize servers and drive automatic tool assignment.
-                    {gatewayLabelsDocsUrl && (
-                      <>
-                        {" "}
-                        <ExternalDocsLink
-                          href={gatewayLabelsDocsUrl}
-                          className="underline"
-                          showIcon={false}
-                        >
-                          Learn more
-                        </ExternalDocsLink>
-                      </>
-                    )}
-                  </p>
-                )}
               </div>
               <div className="pt-4">
                 <ProfileLabels
@@ -2222,6 +2607,8 @@ export function McpCatalogForm({
             // we honor that decision even if dirty state shifts while
             // the bar is up (e.g., user tweaks labels mid-confirm).
             mode={pendingSubmit.mode}
+            renamed={pendingSubmit.renamed}
+            newName={pendingSubmit.values.name}
             isMultitenant={isMultitenant}
             affectedServerCount={affectedServerCount}
             isSubmitting={isConfirming}
@@ -2246,6 +2633,7 @@ export function McpCatalogForm({
               form.reset();
               setLabels(labelsBaseline);
             },
+            hasBlockingErrors: hasEnvRuleViolations,
           })
         ) : (
           footer
@@ -2273,11 +2661,17 @@ function isReallyDirty(value: unknown): boolean {
   return Boolean(value);
 }
 
-function ReinstallHint({ show }: { show: boolean }) {
+function ReinstallHint({
+  show,
+  label = "requires reinstall",
+}: {
+  show: boolean;
+  label?: string;
+}) {
   if (!show) return null;
   return (
     <Badge variant="outline" className="ml-2 font-normal">
-      requires reinstall
+      {label}
     </Badge>
   );
 }
@@ -2386,7 +2780,6 @@ type AdditionalHeader = {
   description?: string;
   includeBearerPrefix?: boolean;
   promptOnInstallation?: boolean;
-  promptOnPreset?: boolean;
 };
 
 /**
@@ -2419,7 +2812,6 @@ function deriveAdditionalHeaders(userConfig: unknown): AdditionalHeader[] {
         cfg.promptOnInstallation === undefined
           ? true
           : Boolean(cfg.promptOnInstallation),
-      promptOnPreset: Boolean(cfg.promptOnPreset),
     });
   }
   return out;
@@ -2472,10 +2864,10 @@ function additionalHeadersChangeRequiresReinstall(
     if ((p.headerName ?? "") !== (n.headerName ?? "")) return true; // Routing
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage
     // Static header value rotation. `value` only matters at runtime
-    // when the header is fully static (no install or preset prompt) —
-    // for prompted headers it's just a placeholder.
-    const wasStatic = !p.promptOnInstallation && !p.promptOnPreset;
-    const isStatic = !n.promptOnInstallation && !n.promptOnPreset;
+    // when the header is fully static (no install prompt) — for prompted
+    // headers it's just a placeholder.
+    const wasStatic = !p.promptOnInstallation;
+    const isStatic = !n.promptOnInstallation;
     if (wasStatic && isStatic && (p.value ?? "") !== (n.value ?? "")) {
       return true;
     }
@@ -2598,14 +2990,9 @@ function readHeaderRowAsDraft(
 ): HeaderDraft {
   const row = form.getValues(`additionalHeaders.${index}`);
   const promptOnInstallation = Boolean(row?.promptOnInstallation);
-  const promptOnPreset = Boolean(row?.promptOnPreset);
   return {
     headerName: row?.headerName ?? "",
-    scope: promptOnInstallation
-      ? "installation"
-      : promptOnPreset
-        ? "preset"
-        : "static",
+    scope: promptOnInstallation ? "installation" : "static",
     required: Boolean(row?.required),
     value: row?.value ?? "",
     description: row?.description ?? "",
@@ -2633,7 +3020,6 @@ function headerDraftToRow(draft: HeaderDraft) {
     fieldName: undefined,
     headerName: draft.headerName,
     promptOnInstallation: draft.scope === "installation",
-    promptOnPreset: draft.scope === "preset",
     required: draft.scope === "installation" ? draft.required : false,
     value: draft.scope === "static" ? draft.value : "",
     description: draft.description,
@@ -2658,10 +3044,22 @@ function applyHeaderDraftToRow(
     );
   set("headerName", draft.headerName);
   set("promptOnInstallation", draft.scope === "installation");
-  set("promptOnPreset", draft.scope === "preset");
   set("required", draft.scope === "installation" ? draft.required : false);
   set("value", draft.scope === "static" ? draft.value : "");
   set("description", draft.description);
   set("includeBearerPrefix", draft.includeBearerPrefix);
   set("sensitive", draft.scope === "static" ? false : draft.sensitive);
+}
+
+function formatRegistryServers(registryServers: string[]): string {
+  if (registryServers.length === 0) {
+    return "";
+  }
+
+  const [firstRegistry, ...remainingRegistries] = registryServers;
+  if (remainingRegistries.length === 0) {
+    return firstRegistry;
+  }
+
+  return `${firstRegistry} +${remainingRegistries.length} more`;
 }

@@ -6,9 +6,9 @@ description: Developer guide for implementing new LLM provider support in Arches
 lastUpdated: 2026-04-29
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
+<!--
 This is a development guide for adding new LLM providers to Archestra.
 -->
 
@@ -140,11 +140,11 @@ Base URL configuration allows routing to custom endpoints (e.g., Azure OpenAI, l
 
 Tokenizers estimate token counts for provider messages. Used by Model Optimization and Tool Results Compression.
 
-| File                              | Description                                                                                                  |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `backend/src/tokenizers/base.ts`  | Add provider message type to `ProviderMessage` union                                                         |
-| `backend/src/tokenizers/base.ts`  | Update `BaseTokenizer.getMessageText()` if provider has a different message format                           |
-| `backend/src/tokenizers/index.ts` | Add entry to `tokenizerFactories` record - return appropriate tokenizer (or fallback to `TiktokenTokenizer`) |
+| File                              | Description                                                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `backend/src/tokenizers/base.ts`  | Add provider message type to `ProviderMessage` union                                                          |
+| `backend/src/tokenizers/base.ts`  | Update `BaseTokenizer.getMessageText()` if provider has a different message format                            |
+| `backend/src/tokenizers/index.ts` | Add entry to `tokenizerFactories` record - return appropriate tokenizer (or fall back to `TiktokenTokenizer`) |
 
 ### Model Optimization
 
@@ -219,15 +219,14 @@ The backend matrix covers:
 
 The preferred test seam is the provider client created by `adapterFactory.createClient()`. Return a fake SDK-shaped client from the test and let the real route, handler, policy, persistence, and metrics code run around it.
 
-#### Proxy E2E Tests
+#### Proxy Test Coverage
 
-The current proxy e2e files are:
+The current proxy coverage files are:
 
 | File | Description |
 | ---- | ----------- |
-| `e2e-tests/tests/llm-proxy/tool-invocation.spec.ts` | End-to-end policy enforcement against the running stack. |
 | `e2e-tests/tests/llm-proxy/jwks-auth.spec.ts` | Auth and JWKS smoke coverage. |
-| `e2e-tests/tests/llm-proxy/virtual-api-keys.spec.ts` | Virtual key routing and custom base URL behavior. |
+| `frontend/tests-integration/virtual-api-keys.spec.ts` | Virtual key routing and custom base URL behavior. |
 | `.github/values-ci.yaml` | Add provider base URL overrides when the remaining e2e coverage needs WireMock for that provider. |
 
 For built-in chat coverage, add provider entries to `e2e-tests/tests/chat.spec.ts`.
@@ -250,9 +249,9 @@ Each provider has a different API for listing available models.
 
 | File                                                   | Description                                                                                          |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `backend/src/routes/chat/model-fetchers/{provider}.ts` | Implement `fetch{Provider}Models()` for the provider's model listing API                             |
-| `backend/src/routes/chat/model-fetchers/index.ts`      | Register the fetcher in the shared `modelFetchers` record                                            |
-| `backend/src/routes/chat/model-fetchers/registry.ts`   | Update `fetchModelsForProvider()` only if the provider needs special auth or non-standard fetch flow |
+| `backend/src/routes/chat/model-fetchers/index.ts`      | Add the provider's descriptor (filter / mapModel / postProcess) to the shared `modelFetchers` record |
+| `backend/src/routes/chat/model-fetchers/{provider}.ts` | Add a standalone `fetch{Provider}Models()` only for a non-standard transport the shared fetcher can't express |
+| `backend/src/routes/chat/model-fetchers/registry.ts`   | Update `testProviderApiKey()` if the provider needs custom API-key validation                        |
 | `backend/src/routes/chat/routes.api-keys.ts`           | Add provider-specific API key validation rules if needed                                             |
 
 If the provider is keyless or uses cloud credentials instead of an API key, also update `backend/src/services/system-key-manager.ts`.

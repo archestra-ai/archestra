@@ -55,25 +55,15 @@ let mockOrganization: Record<string, unknown> | null = null;
 let mockOrgPending = false;
 let mockUpdateKnowledgeSettings = vi.fn();
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({
-    data: mockOrganization,
-    isPending: mockOrgPending,
-  }),
-  useUpdateKnowledgeSettings: () => ({
-    mutateAsync: mockUpdateKnowledgeSettings,
-    isPending: false,
-  }),
-  useTestEmbeddingConnection: () => ({
-    mutateAsync: vi.fn(),
-    mutate: vi.fn(),
-    isPending: false,
-  }),
-  useDropEmbeddingConfig: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-}));
+vi.mock("@/lib/organization.query");
+
+import {
+  useDropEmbeddingConfig,
+  useOrganization,
+  useTestEmbeddingConnection,
+  useTestRerankerConnection,
+  useUpdateKnowledgeSettings,
+} from "@/lib/organization.query";
 
 let mockApiKeys: Array<{
   id: string;
@@ -128,12 +118,14 @@ vi.mock("@/lib/llm-models.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => false,
-  useProviderBaseUrls: () => ({
-    data: {},
-  }),
-}));
+vi.mock("@/lib/config/config.query");
+
+import {
+  useEnterpriseFeature,
+  useFeature,
+  useProviderBaseUrls,
+  useSmallTeamTier,
+} from "@/lib/config/config.query";
 
 vi.mock("@/lib/team.query", () => ({
   useTeams: () => ({
@@ -142,21 +134,16 @@ vi.mock("@/lib/team.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true, isPending: false }),
-  useMissingPermissions: () => [],
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    useSession: vi.fn().mockReturnValue({
-      data: {
-        user: { id: "test-user", email: "test@example.com" },
-        session: { id: "test-session" },
-      },
-    }),
-  },
-}));
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+
+vi.mock("@/lib/clients/auth/auth-client");
+
+import { authClient } from "@/lib/clients/auth/auth-client";
 
 // Need to import after mocks are set up
 import KnowledgeSettingsPage from "./page";
@@ -198,6 +185,59 @@ beforeEach(() => {
       embeddingDimensions: 1536,
     },
   ];
+
+  vi.mocked(useOrganization).mockImplementation(
+    () =>
+      ({
+        data: mockOrganization,
+        isPending: mockOrgPending,
+      }) as unknown as ReturnType<typeof useOrganization>,
+  );
+  vi.mocked(useUpdateKnowledgeSettings).mockImplementation(
+    () =>
+      ({
+        mutateAsync: mockUpdateKnowledgeSettings,
+        isPending: false,
+      }) as unknown as ReturnType<typeof useUpdateKnowledgeSettings>,
+  );
+  vi.mocked(useTestEmbeddingConnection).mockReturnValue({
+    mutateAsync: vi.fn(),
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useTestEmbeddingConnection>);
+  vi.mocked(useTestRerankerConnection).mockReturnValue({
+    mutateAsync: vi.fn(),
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useTestRerankerConnection>);
+  vi.mocked(useDropEmbeddingConfig).mockReturnValue({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useDropEmbeddingConfig>);
+
+  vi.mocked(useFeature).mockReturnValue(
+    false as unknown as ReturnType<typeof useFeature>,
+  );
+  vi.mocked(useEnterpriseFeature).mockReturnValue(false);
+  vi.mocked(useSmallTeamTier).mockReturnValue(undefined);
+  vi.mocked(useProviderBaseUrls).mockReturnValue({
+    data: {},
+  } as unknown as ReturnType<typeof useProviderBaseUrls>);
+
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+    isPending: false,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useMissingPermissions).mockReturnValue(
+    [] as unknown as ReturnType<typeof useMissingPermissions>,
+  );
+
+  vi.mocked(authClient.useSession).mockReturnValue({
+    data: {
+      user: { id: "test-user", email: "test@example.com" },
+      session: { id: "test-session" },
+    },
+  } as unknown as ReturnType<typeof authClient.useSession>);
 });
 
 describe("KnowledgeSettingsPage", () => {
@@ -341,7 +381,7 @@ describe("KnowledgeSettingsPage", () => {
         screen.getByRole("link", {
           name: /Sync models and configure embedding dimensions/,
         }),
-      ).toHaveAttribute("href", "/llm/model-providers/models");
+      ).toHaveAttribute("href", "/llm/models");
     });
   });
 
@@ -428,14 +468,15 @@ describe("KnowledgeSettingsPage", () => {
 
       renderPage();
 
-      const triggers = screen.getAllByRole("combobox");
-      const embeddingKeyTrigger = triggers[0];
+      const embeddingKeyTrigger = screen.getByRole("button", {
+        name: /OpenAI Key/,
+      });
       expect(embeddingKeyTrigger).toBeDisabled();
     });
   });
 
-  describe("pulsing animation setup steps", () => {
-    it("pulses Add LLM Provider Key button when no OpenAI keys exist", () => {
+  describe("setup step highlight", () => {
+    it("highlights Add LLM Provider Key button when no OpenAI keys exist", () => {
       mockOrganization = {
         embeddingChatApiKeyId: null,
         embeddingModel: null,
@@ -449,11 +490,11 @@ describe("KnowledgeSettingsPage", () => {
         name: /Add LLM Provider Key/,
       });
       // First Add button is the embedding one
-      expect(addButtons[0].className).toContain("animate-pulse");
-      expect(addButtons[0].className).toContain("ring-primary/40");
+      expect(addButtons[0].className).toContain("ring-primary/50");
+      expect(addButtons[0].className).not.toContain("animate-pulse");
     });
 
-    it("pulses key selector dropdown when OpenAI keys exist but none selected", () => {
+    it("highlights key selector dropdown when OpenAI keys exist but none selected", () => {
       mockOrganization = {
         embeddingChatApiKeyId: null,
         embeddingModel: null,
@@ -470,14 +511,14 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
-      // The embedding key selector trigger should have pulse classes
-      const triggers = screen.getAllByRole("combobox");
-      const embeddingKeyTrigger = triggers[0];
-      expect(embeddingKeyTrigger.className).toContain("animate-pulse");
-      expect(embeddingKeyTrigger.className).toContain("ring-primary/40");
+      const embeddingKeyTrigger = screen.getByRole("button", {
+        name: /Select embedding API key/,
+      });
+      expect(embeddingKeyTrigger.className).toContain("ring-primary/50");
+      expect(embeddingKeyTrigger.className).not.toContain("animate-pulse");
     });
 
-    it("pulses model dropdown when key selected but model not selected", () => {
+    it("highlights model dropdown when key selected but model not selected", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: null,
@@ -499,11 +540,11 @@ describe("KnowledgeSettingsPage", () => {
         .getAllByRole("combobox")
         .find((el) => el.textContent?.includes("Select embedding model"));
       expect(modelTrigger).toBeDefined();
-      expect(modelTrigger?.className).toContain("animate-pulse");
-      expect(modelTrigger?.className).toContain("ring-primary/40");
+      expect(modelTrigger?.className).toContain("ring-primary/50");
+      expect(modelTrigger?.className).not.toContain("animate-pulse");
     });
 
-    it("does not pulse anything when embedding is fully configured", () => {
+    it("does not highlight anything when embedding is fully configured", () => {
       mockOrganization = {
         embeddingChatApiKeyId: "key-1",
         embeddingModel: "text-embedding-3-small",
@@ -521,9 +562,11 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
-      // No element should have animate-pulse
-      const pulsing = document.querySelectorAll(".animate-pulse");
-      expect(pulsing.length).toBe(0);
+      // No element should carry the setup-step highlight ring.
+      const highlighted = document.querySelectorAll(
+        '[class*="ring-primary/50"]',
+      );
+      expect(highlighted.length).toBe(0);
     });
   });
 

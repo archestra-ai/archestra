@@ -157,10 +157,14 @@ class GeminiOpenaiStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    // Mark the inner adapter as refusal-replaced (side effect only; its
+    // Gemini-format events are unused here) so it persists the refusal rather
+    // than the blocked calls. The finish reason is emitted once, by formatEndSSE.
+    this.inner.formatCompleteTextSSE(text);
     return [
       this.formatChunk({
         delta: { role: "assistant", content: text },
-        finishReason: "stop",
+        finishReason: null,
       }),
     ];
   }

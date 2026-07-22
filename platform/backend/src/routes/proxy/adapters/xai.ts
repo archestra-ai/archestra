@@ -5,7 +5,7 @@
  * This adapter delegates request/response/stream parsing to the OpenAI adapters
  * and only overrides provider-specific configuration (baseUrl, api key behavior).
  */
-import { ArchestraInternalErrorCode } from "@shared";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -218,12 +218,7 @@ export const xaiAdapterFactory: LLMProvider<
     }
 
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "xai",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("xai", options.agent, options.source)
       : undefined;
 
     return new OpenAIProvider({

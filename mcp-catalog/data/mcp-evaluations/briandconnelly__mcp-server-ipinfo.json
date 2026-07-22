@@ -1,0 +1,97 @@
+{
+  "name": "briandconnelly__mcp-server-ipinfo",
+  "display_name": "mcp-server-ipinfo",
+  "description": "IP Geolocation Server for MCP",
+  "author": {
+    "name": "briandconnelly"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-ipinfo"],
+    "env": {
+      "IPINFO_API_TOKEN": "${user_config.ipinfo_api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ipinfo_api_token": {
+      "type": "string",
+      "title": "IPInfo API Token",
+      "description": "Your API token for ipinfo.io",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# IP Geolocation MCP Server\n\nThis is a simple [Model Context Protocol](https://modelcontextprotocol.io) server that uses the [ipinfo.io](https://ipinfo.io) API to get detailed information about an IP address.\nThis can be used to determine where the user is located (approximately) and what network they are used.\n\n<a href=\"https://glama.ai/mcp/servers/pll7u5ak1h\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/pll7u5ak1h/badge\" alt=\"IP Geolocation Server MCP server\" />\n</a>\n\n![Example conversation using mcp-server-ipinfo](demo.png)\n\n\n## Installation\n\nYou'll need to create a token to use the IPInfo API.\nIf you don't already have one, you can sign up for a free account at https://ipinfo.io/signup.\n\nWhile each client has its own way of specifying, you'll generally use the following values:\n\n| Field | Value |\n|-------|-------|\n| **Command** | `uvx` |\n| **Arguments** | `mcp-server-ipinfo` |\n| **Environment** | `IPINFO_API_TOKEN` = `<YOUR TOKEN>` |\n\n\n### Development Version\n\nIf you'd like to use the latest and greatest, the server can be pulled straight from GitHub.\nJust add an additional `--from` argument:\n\n\n| Field | Value |\n|-------|-------|\n| **Command** | `uvx` |\n| **Arguments** | `--from`, `git+https://github.com/briandconnelly/mcp-server-ipinfo`, `mcp-server-ipinfo` |\n| **Environment** | `IPINFO_API_TOKEN` = `<YOUR TOKEN>` |\n\n\n## Components\n\n### Tools\n\n- `get_ip_details`: This tool is used to get detailed information about an IP address.\n    - **Input:** `ip`: The IP address to get information about.\n    - **Output:** `IPDetails`: A Pydantic model containing detailed information about the IP, including location, organization, and country details.\n\n### Resources   \n\n_No custom resources are included_\n\n### Prompts\n\n_No custom prompts are included_\n\n\n## License\n\nMIT License - See [LICENSE](LICENSE) file for details.\n\n## Disclaimer\n\nThis project is not affiliated with [IPInfo](https://ipinfo.io).\n",
+  "category": "Location",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-ipinfo": {
+        "command": "uvx",
+        "args": ["mcp-server-ipinfo"],
+        "env": {
+          "IPINFO_API_TOKEN": "<YOUR TOKEN>"
+        }
+      },
+      "mcp-server-ipinfo-from-git": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/briandconnelly/mcp-server-ipinfo", "mcp-server-ipinfo"],
+        "env": {
+          "IPINFO_API_TOKEN": "<YOUR TOKEN>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "briandconnelly",
+    "repo": "mcp-server-ipinfo",
+    "url": "https://github.com/briandconnelly/mcp-server-ipinfo",
+    "name": "mcp-server-ipinfo",
+    "path": null,
+    "stars": 28,
+    "contributors": 2,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "6ceb282c6535d5d353d0e8abb6e83d747d2763c1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:20.798Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "ipinfo",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-ipinfo\"\nversion = \"0.2.0\"\ndescription = \"IP Geolocation Server for MCP\"\nreadme = \"README.md\"\nlicense = { file = \"LICENSE\" }\n\nauthors = [\n    { name = \"Brian Connelly\", email = \"bdc@bconnelly.net\" }\n]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n    \"Programming Language :: Python\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.13\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n    \"Topic :: Scientific/Engineering :: Artificial Intelligence\",\n    \"Topic :: System :: Networking\",\n]\n\nrequires-python = \">=3.13\"\ndependencies = [\n    \"fastmcp>=2.9.0\",\n    \"ipinfo>=5.1.1\",\n    \"pydantic>=2.10.6\",\n]\n\n[project.urls]\nRepository = \"https://github.com/briandconnelly/mcp-server-ipinfo.git\"\nIssues = \"https://github.com/briandconnelly/mcp-server-ipinfo/issues\"\n\n[project.scripts]\nmcp-server-ipinfo = \"mcp_server_ipinfo.server:mcp.run\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n"
+}

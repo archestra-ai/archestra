@@ -2,9 +2,11 @@ import * as fs from "node:fs";
 import { PassThrough } from "node:stream";
 import * as k8s from "@kubernetes/client-node";
 import { vi } from "vitest";
-import type * as originalConfigModule from "@/config";
+// Resolve to this file's model mocks — the adopt tests assert on their calls.
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import McpServerModel from "@/models/mcp-server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { McpServer } from "@/types";
+import type { McpServer, NetworkPolicy } from "@/types";
 
 // Mock fs module first
 vi.mock("node:fs");
@@ -45,6 +47,9 @@ vi.mock("@kubernetes/client-node", () => {
     KubeConfig: MockKubeConfig,
     CoreV1Api: vi.fn(),
     AppsV1Api: vi.fn(),
+    AuthorizationV1Api: vi.fn(),
+    NetworkingV1Api: vi.fn(),
+    CustomObjectsApi: vi.fn(),
     BatchV1Api: vi.fn(),
     Attach: vi.fn(),
     Log: vi.fn(),
@@ -53,26 +58,31 @@ vi.mock("@kubernetes/client-node", () => {
 });
 
 // Mock the dependencies before importing the manager
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-      orchestrator: {
-        kubernetes: {
-          namespace: "test-namespace",
-          kubeconfig: undefined,
-          loadKubeconfigFromCurrentCluster: false,
-        },
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    orchestrator: {
+      kubernetes: {
+        namespace: "test-namespace",
+        kubeconfig: undefined,
+        loadKubeconfigFromCurrentCluster: false,
+        // Pin to empty: configModuleMock inherits the real config, so an
+        // ambient ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES (dev .env,
+        // CI's copied .env.example) would add sweep namespaces and double
+        // every reap/cleanup call count.
+        environmentNamespaces: [],
       },
     },
-  };
-});
+  }),
+);
 
 // Track K8sDeployment constructor calls and method invocations
 const mockCreateK8sSecret = vi.fn().mockResolvedValue(undefined);
 const mockStartOrCreateDeployment = vi.fn().mockResolvedValue(undefined);
 const mockCreateDockerRegistrySecrets = vi.fn().mockResolvedValue([]);
+const mockDeleteK8sNetworkPolicy = vi.fn().mockResolvedValue(undefined);
+const mockResolveHttpEndpoint = vi.fn().mockResolvedValue(undefined);
+const mockWaitForDeploymentReady = vi.fn().mockResolvedValue(undefined);
+const mockRemoveDeployment = vi.fn().mockResolvedValue(undefined);
 const mockK8sDeploymentInstances: Array<{
   options: Record<string, unknown>;
   createK8sSecret: ReturnType<typeof vi.fn>;
@@ -81,6 +91,7 @@ const mockK8sDeploymentInstances: Array<{
 vi.mock("@/models/internal-mcp-catalog", () => ({
   default: {
     findById: vi.fn(),
+    setDeploymentName: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -88,6 +99,7 @@ vi.mock("@/models/mcp-server", () => ({
   default: {
     findById: vi.fn().mockResolvedValue(null),
     findByCatalogId: vi.fn().mockResolvedValue([]),
+    setDeploymentName: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -95,6 +107,25 @@ vi.mock("@/models/mcp-http-session", () => ({
   default: {
     deleteByMcpServerId: vi.fn().mockResolvedValue(undefined),
   },
+}));
+
+vi.mock("@/models/organization", () => ({
+  default: {
+    getFirst: vi.fn().mockResolvedValue({
+      id: "test-org",
+      defaultNetworkPolicy: null,
+    }),
+    getById: vi.fn().mockResolvedValue({
+      id: "test-org",
+      defaultNetworkPolicy: null,
+    }),
+  },
+}));
+
+vi.mock("@/services/environments/network-policy", () => ({
+  resolveEffectiveNetworkPolicy: vi
+    .fn()
+    .mockResolvedValue({ source: "built_in", policy: null }),
 }));
 
 vi.mock("@/secrets-manager", () => ({
@@ -110,12 +141,20 @@ vi.mock("./k8s-deployment", () => {
       createK8sSecret: ReturnType<typeof vi.fn>;
       startOrCreateDeployment: ReturnType<typeof vi.fn>;
       createDockerRegistrySecrets: ReturnType<typeof vi.fn>;
+      deleteK8sNetworkPolicy: ReturnType<typeof vi.fn>;
+      resolveHttpEndpoint: ReturnType<typeof vi.fn>;
+      waitForDeploymentReady: ReturnType<typeof vi.fn>;
+      removeDeployment: ReturnType<typeof vi.fn>;
 
       constructor(options: Record<string, unknown>) {
         this.options = options;
         this.createK8sSecret = mockCreateK8sSecret;
         this.startOrCreateDeployment = mockStartOrCreateDeployment;
         this.createDockerRegistrySecrets = mockCreateDockerRegistrySecrets;
+        this.deleteK8sNetworkPolicy = mockDeleteK8sNetworkPolicy;
+        this.resolveHttpEndpoint = mockResolveHttpEndpoint;
+        this.waitForDeploymentReady = mockWaitForDeploymentReady;
+        this.removeDeployment = mockRemoveDeployment;
         mockK8sDeploymentInstances.push({
           options,
           createK8sSecret: this.createK8sSecret,
@@ -127,13 +166,43 @@ vi.mock("./k8s-deployment", () => {
       static collectImagePullSecretNames(): string[] {
         return [];
       }
-      static constructDeploymentName(mcpServer: { name: string }): string {
-        return `mcp-${mcpServer.name.replaceAll(" ", "-")}`;
+      // Mirrors the real frozen-first logic: the stored deploymentName wins;
+      // the name-derived recompute is only the NULL fallback.
+      static constructDeploymentName(
+        mcpServer: {
+          name: string;
+          deploymentName?: string | null;
+          catalogId?: string | null;
+        },
+        catalogItem?: {
+          multitenant?: boolean;
+          name: string;
+          deploymentName?: string | null;
+        } | null,
+      ): string {
+        if (catalogItem?.multitenant && mcpServer.catalogId) {
+          return (
+            catalogItem.deploymentName ??
+            `mcp-mt-${mcpServer.catalogId.slice(0, 8)}-${catalogItem.name.replaceAll(" ", "-")}`
+          );
+        }
+        return (
+          mcpServer.deploymentName ??
+          `mcp-${mcpServer.name.replaceAll(" ", "-")}`
+        );
       }
     },
     fetchPlatformPodNodeSelector: vi.fn().mockResolvedValue(undefined),
     fetchPlatformPodTolerations: vi.fn().mockResolvedValue(undefined),
   };
+});
+
+// Some tests stub findById with a sticky mockResolvedValue; vi.clearAllMocks()
+// clears calls but NOT implementations, so under randomized test order the
+// catalog leaked into unrelated tests (extra sweep namespaces, throwing paths).
+// Reset the implementation after every test.
+afterEach(() => {
+  vi.mocked(InternalMcpCatalogModel.findById).mockReset();
 });
 
 describe("validateKubeconfig", () => {
@@ -257,6 +326,7 @@ describe("McpServerRuntimeManager", () => {
     beforeEach(() => {
       vi.clearAllMocks();
       vi.resetModules();
+      mockK8sDeploymentInstances.length = 0;
     });
 
     test("should return false when k8s config fails to load", async () => {
@@ -397,12 +467,14 @@ describe("McpServerRuntimeManager", () => {
       const mockDeleteDockerRegistrySecrets = vi
         .fn()
         .mockResolvedValue(undefined);
+      const mockDeleteK8sNetworkPolicy = vi.fn().mockResolvedValue(undefined);
 
       const mockDeployment = {
         stopDeployment: mockStopDeployment,
         deleteK8sService: mockDeleteK8sService,
         deleteK8sSecret: mockDeleteK8sSecret,
         deleteDockerRegistrySecrets: mockDeleteDockerRegistrySecrets,
+        deleteK8sNetworkPolicy: mockDeleteK8sNetworkPolicy,
       };
 
       // Access internal map and add mock deployment
@@ -417,6 +489,7 @@ describe("McpServerRuntimeManager", () => {
       expect(mockDeleteK8sService).toHaveBeenCalledTimes(1);
       expect(mockDeleteK8sSecret).toHaveBeenCalledTimes(1);
       expect(mockDeleteDockerRegistrySecrets).toHaveBeenCalledTimes(1);
+      expect(mockDeleteK8sNetworkPolicy).toHaveBeenCalledTimes(1);
 
       // Verify deployment was removed from map
       // @ts-expect-error - accessing private property for testing
@@ -444,6 +517,162 @@ describe("McpServerRuntimeManager", () => {
       await expect(
         manager.stopServer("non-existent-server"),
       ).resolves.toBeUndefined();
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("lazy-loaded deployments receive custom-object API and network policy capabilities", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+
+      const mockK8sClient = {
+        getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+      };
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue(mockK8sClient as unknown as k8s.CoreV1Api);
+
+      const McpServerModel = (await import("@/models/mcp-server")).default;
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+
+      vi.mocked(McpServerModel.findById).mockResolvedValueOnce({
+        id: "lazy-server",
+        name: "lazy-server",
+        catalogId: "local-catalog",
+      } as Awaited<ReturnType<typeof McpServerModel.findById>>);
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValueOnce({
+        id: "local-catalog",
+        serverType: "local",
+        localConfig: null,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+      const managerAny = manager as unknown as {
+        k8sApi: unknown;
+        k8sAppsApi: unknown;
+        k8sNetworkingApi: unknown;
+        k8sCustomObjectsApi: unknown;
+        k8sAttach: unknown;
+        k8sLog: unknown;
+        k8sExec: unknown;
+      };
+      managerAny.k8sApi = mockK8sClient;
+      managerAny.k8sAppsApi = mockK8sClient;
+      managerAny.k8sNetworkingApi = mockK8sClient;
+      managerAny.k8sCustomObjectsApi = mockK8sClient;
+      managerAny.k8sAttach = {};
+      managerAny.k8sLog = {};
+      managerAny.k8sExec = {};
+
+      const deployment = await manager.getOrLoadDeployment("lazy-server");
+
+      expect(deployment).toBeDefined();
+      expect(mockResolveHttpEndpoint).toHaveBeenCalledTimes(1);
+      const deploymentOptions = mockK8sDeploymentInstances.at(-1)?.options;
+      expect(deploymentOptions).toHaveProperty("k8sCustomObjectsApi");
+      expect(deploymentOptions).toMatchObject({
+        // The mock exposes no provider CRDs, so no NetworkPolicy enforcer is
+        // detected and the capability reports "none".
+        networkPolicyCapabilities: {
+          kubernetesNetworkPolicy: false,
+          provider: "none",
+          supportsFqdn: false,
+        },
+      });
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("getOrLoadDeployment with namespaceOverride bypasses the cache and builds in the override namespace", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+      const mockK8sClient = {
+        getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+      };
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue(mockK8sClient as unknown as k8s.CoreV1Api);
+
+      const McpServerModel = (await import("@/models/mcp-server")).default;
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+      const staleServer = {
+        id: "stale-server",
+        name: "stale-server",
+        catalogId: "stale-catalog",
+      } as Awaited<ReturnType<typeof McpServerModel.findById>>;
+      // No environmentId → resolves to the manager's default namespace.
+      const staleCatalog = {
+        id: "stale-catalog",
+        serverType: "local",
+        environmentId: null,
+        localConfig: null,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >;
+      // Two loads (normal + override) look these up once each. Use *Once so the
+      // mock reverts to its default afterward and never leaks into other tests —
+      // the suite runs in a shuffled order.
+      vi.mocked(McpServerModel.findById)
+        .mockResolvedValueOnce(staleServer)
+        .mockResolvedValueOnce(staleServer);
+      vi.mocked(InternalMcpCatalogModel.findById)
+        .mockResolvedValueOnce(staleCatalog)
+        .mockResolvedValueOnce(staleCatalog);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+      const managerAny = manager as unknown as {
+        k8sApi: unknown;
+        k8sAppsApi: unknown;
+        k8sNetworkingApi: unknown;
+        k8sCustomObjectsApi: unknown;
+        k8sAttach: unknown;
+        k8sLog: unknown;
+        k8sExec: unknown;
+      };
+      managerAny.k8sApi = mockK8sClient;
+      managerAny.k8sAppsApi = mockK8sClient;
+      managerAny.k8sNetworkingApi = mockK8sClient;
+      managerAny.k8sCustomObjectsApi = mockK8sClient;
+      managerAny.k8sAttach = {};
+      managerAny.k8sLog = {};
+      managerAny.k8sExec = {};
+
+      // A normal load caches the deployment against the manager's default namespace.
+      await manager.getOrLoadDeployment("stale-server");
+      const cachedNamespace =
+        mockK8sDeploymentInstances.at(-1)?.options.namespace;
+      const builtBeforeOverride = mockK8sDeploymentInstances.length;
+
+      // The override load must IGNORE that cached entry and build a fresh
+      // deployment pinned to the supplied namespace. This is the staleness
+      // bypass the relocation teardown relies on: a cached entry can point at a
+      // now-wrong namespace, so trusting it would delete the wrong namespace and
+      // orphan the old-namespace pod.
+      const overridden = await manager.getOrLoadDeployment("stale-server", {
+        namespaceOverride: "old-env-namespace",
+      });
+      const overrideNamespace =
+        mockK8sDeploymentInstances.at(-1)?.options.namespace;
+
+      expect(cachedNamespace).not.toBe("old-env-namespace");
+      expect(overrideNamespace).toBe("old-env-namespace");
+      // A NEW deployment object was constructed for the override (cache not reused)...
+      expect(mockK8sDeploymentInstances.length).toBe(builtBeforeOverride + 1);
+      expect(overridden).toBeDefined();
+      // ...and the override (teardown-only) path skips serving-endpoint resolution.
+      expect(mockResolveHttpEndpoint).toHaveBeenCalledTimes(1);
 
       mockLoadFromDefault.mockRestore();
       mockMakeApiClient.mockRestore();
@@ -477,6 +706,9 @@ describe("McpServerRuntimeManager", () => {
         deleteDockerRegistrySecrets: vi.fn().mockImplementation(async () => {
           callOrder.push("deleteDockerRegistrySecrets");
         }),
+        deleteK8sNetworkPolicy: vi.fn().mockImplementation(async () => {
+          callOrder.push("deleteK8sNetworkPolicy");
+        }),
       };
 
       // @ts-expect-error - accessing private property for testing
@@ -490,6 +722,7 @@ describe("McpServerRuntimeManager", () => {
         "deleteK8sService",
         "deleteK8sSecret",
         "deleteDockerRegistrySecrets",
+        "deleteK8sNetworkPolicy",
       ]);
 
       mockLoadFromDefault.mockRestore();
@@ -511,6 +744,7 @@ describe("McpServerRuntimeManager", () => {
         deleteK8sService: vi.fn().mockResolvedValue(undefined),
         deleteK8sSecret: vi.fn().mockResolvedValue(undefined),
         deleteDockerRegistrySecrets: vi.fn().mockResolvedValue(undefined),
+        deleteK8sNetworkPolicy: vi.fn().mockResolvedValue(undefined),
       };
     }
 
@@ -704,6 +938,7 @@ describe("McpServerRuntimeManager", () => {
       const deleteK8sService = vi.fn().mockResolvedValue(undefined);
       const deleteK8sSecret = vi.fn().mockResolvedValue(undefined);
       const deleteDockerRegistrySecrets = vi.fn().mockResolvedValue(undefined);
+      const deleteK8sNetworkPolicy = vi.fn().mockResolvedValue(undefined);
       const waitForDeploymentReady = vi.fn().mockResolvedValue(undefined);
 
       // @ts-expect-error - accessing private property for testing
@@ -712,6 +947,7 @@ describe("McpServerRuntimeManager", () => {
         deleteK8sService,
         deleteK8sSecret,
         deleteDockerRegistrySecrets,
+        deleteK8sNetworkPolicy,
         waitForDeploymentReady,
       });
       // Also seed tenant B so we can verify its entry gets dropped too.
@@ -721,6 +957,7 @@ describe("McpServerRuntimeManager", () => {
         deleteK8sService: vi.fn(),
         deleteK8sSecret: vi.fn(),
         deleteDockerRegistrySecrets: vi.fn(),
+        deleteK8sNetworkPolicy: vi.fn(),
       });
 
       // Spy startServer so we don't exercise the full pod-creation flow —
@@ -744,10 +981,11 @@ describe("McpServerRuntimeManager", () => {
       expect(deleteK8sService).toHaveBeenCalledTimes(1);
       expect(deleteK8sSecret).toHaveBeenCalledTimes(1);
       expect(deleteDockerRegistrySecrets).toHaveBeenCalledTimes(1);
+      expect(deleteK8sNetworkPolicy).toHaveBeenCalledTimes(1);
 
-      // Both siblings' in-memory entries cleared.
+      // Tenant B's stale entry is cleared; tenant A is reloaded after recreate.
       // @ts-expect-error - accessing private property for testing
-      expect(manager.mcpServerIdToDeploymentMap.has(tenantAId)).toBe(false);
+      expect(manager.mcpServerIdToDeploymentMap.has(tenantAId)).toBe(true);
       // @ts-expect-error - accessing private property for testing
       expect(manager.mcpServerIdToDeploymentMap.has(tenantBId)).toBe(false);
 
@@ -1026,6 +1264,102 @@ describe("McpServerRuntimeManager", () => {
       cleanup();
     });
 
+    test("uses the organization default network policy for global catalog installs", async () => {
+      const defaultNetworkPolicy = {
+        egressMode: "restricted",
+        domainPreset: "package_managers",
+        allowedDomains: ["docs.example.com"],
+        allowedCidrs: [],
+      } satisfies NetworkPolicy;
+      const OrganizationModel = (await import("@/models/organization")).default;
+      // Persistent (not Once): startServer consults the org twice — once for
+      // namespace resolution, once for network-policy resolution.
+      vi.mocked(OrganizationModel.getFirst).mockResolvedValue({
+        id: "org-with-network-policy",
+        defaultNetworkPolicy,
+      } as unknown as Awaited<ReturnType<typeof OrganizationModel.getFirst>>);
+
+      const { resolveEffectiveNetworkPolicy } = await import(
+        "@/services/environments/network-policy"
+      );
+      vi.mocked(resolveEffectiveNetworkPolicy).mockResolvedValueOnce({
+        source: "organization_default",
+        policy: defaultNetworkPolicy,
+      });
+
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: {},
+        catalogEnvironment: [],
+        mcpServerOverrides: {
+          secretId: null,
+        },
+      });
+
+      await manager.startServer(mcpServer);
+
+      expect(resolveEffectiveNetworkPolicy).toHaveBeenCalledWith({
+        organizationId: "org-with-network-policy",
+        environmentId: undefined,
+        environmentNetworkPolicy: undefined,
+        defaultNetworkPolicy,
+      });
+      expect(mockK8sDeploymentInstances.at(-1)?.options).toMatchObject({
+        effectiveNetworkPolicy: {
+          source: "organization_default",
+          policy: defaultNetworkPolicy,
+        },
+      });
+
+      // Restore the module-mock default so later tests aren't polluted.
+      vi.mocked(OrganizationModel.getFirst).mockResolvedValue({
+        id: "test-org",
+        defaultNetworkPolicy: null,
+      } as unknown as Awaited<ReturnType<typeof OrganizationModel.getFirst>>);
+      cleanup();
+    });
+
+    test("deploys default-environment catalog installs into the organization's default environment namespace", async () => {
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: {},
+        catalogEnvironment: [],
+        mcpServerOverrides: { secretId: null },
+      });
+
+      // Default-environment catalog: no environmentId, org-owned.
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+        id: "catalog-1",
+        serverType: "local",
+        environmentId: null,
+        organizationId: "org-1",
+        localConfig: { environment: [] },
+        localConfigSecretId: null,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+      const OrganizationModel = (await import("@/models/organization")).default;
+      vi.mocked(OrganizationModel.getById).mockResolvedValue({
+        id: "org-1",
+        defaultEnvironmentNamespace: "org-default-ns",
+        defaultNetworkPolicy: null,
+      } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
+
+      await manager.startServer(mcpServer);
+
+      expect(mockK8sDeploymentInstances.at(-1)?.options.namespace).toBe(
+        "org-default-ns",
+      );
+
+      // Restore module-mock defaults so later tests aren't polluted.
+      vi.mocked(OrganizationModel.getById).mockResolvedValue({
+        id: "test-org",
+        defaultNetworkPolicy: null,
+      } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
+      cleanup();
+    });
+
     test("does not create K8s secret when server has no secretId", async () => {
       mockCreateK8sSecret.mockClear();
       mockStartOrCreateDeployment.mockClear();
@@ -1144,18 +1478,18 @@ describe("McpServerRuntimeManager", () => {
     // with NO `environmentValues`, so startServer must reconstruct every
     // previously-supplied env value from persistent state alone.
     //
-    // The 10 cases below cover the full env-var matrix:
-    //   scope    : static / promptOnInstallation / promptOnPreset
+    // The cases below cover the full env-var matrix:
+    //   scope    : static / promptOnInstallation
     //   type     : plain_text / secret
-    //   required : true / false   (only meaningful for prompted/preset;
+    //   required : true / false   (only meaningful for prompted;
     //                              for static the value is admin-set,
     //                              required has no runtime effect)
     //
     // The user report ("Not required prompted envs missing after auto
     // re-install") singled out the optional+plain+prompted cell — but
-    // the bug actually drops every plain prompted/preset value
-    // regardless of `required`. Per-row tests make it obvious which
-    // cells are red without requiring readers to scan a giant diff.
+    // the bug actually drops every plain prompted value regardless of
+    // `required`. Per-row tests make it obvious which cells are red
+    // without requiring readers to scan a giant diff.
     //
     // STATIC_PLAIN is the one row whose contract is "must NOT be in
     // environmentValues" — it bypasses the map entirely and reaches the
@@ -1176,11 +1510,9 @@ describe("McpServerRuntimeManager", () => {
 
       // Stage what was persisted at install time:
       //   - install Secret bag (secretManager mock below) holds every
-      //     secret-typed prompted/preset value (the only thing that
-      //     belongs in a Secret object — values referenced by
-      //     secretKeyRef from the pod spec).
-      //   - catalog row's presetFieldValues (catalogItem mock below)
-      //     holds plain preset values (per-catalog source of truth).
+      //     secret-typed prompted value (the only thing that belongs in a
+      //     Secret object — values referenced by secretKeyRef from the pod
+      //     spec).
       //   - mcp_server row's environmentValues (mcpServer mock below)
       //     holds plain `promptOnInstallation` values (per-install source
       //     of truth).
@@ -1188,8 +1520,6 @@ describe("McpServerRuntimeManager", () => {
         secret: {
           USER_REQ_SECRET: "user-req-sec-stored",
           USER_OPT_SECRET: "user-opt-sec-stored",
-          PRESET_REQ_SECRET: "preset-req-sec-stored",
-          PRESET_OPT_SECRET: "preset-opt-sec-stored",
         },
       });
       const { secretManager } = await import("@/secrets-manager");
@@ -1244,40 +1574,9 @@ describe("McpServerRuntimeManager", () => {
               promptOnInstallation: true,
               required: false,
             },
-            // promptOnPreset × required × type
-            {
-              key: "PRESET_REQ_SECRET",
-              type: "secret",
-              promptOnPreset: true,
-              required: true,
-            },
-            {
-              key: "PRESET_OPT_SECRET",
-              type: "secret",
-              promptOnPreset: true,
-              required: false,
-            },
-            {
-              key: "PRESET_REQ_PLAIN",
-              type: "plain_text",
-              promptOnPreset: true,
-              required: true,
-            },
-            {
-              key: "PRESET_OPT_PLAIN",
-              type: "plain_text",
-              promptOnPreset: true,
-              required: false,
-            },
           ],
         },
         localConfigSecretId: null,
-        // Plain preset values live on the catalog row, not the install bag.
-        presetFieldValues: {
-          PRESET_REQ_PLAIN: "preset-req-plain-stored",
-          PRESET_OPT_PLAIN: "preset-opt-plain-stored",
-        },
-        presetSecretId: null,
       } as unknown as Awaited<
         ReturnType<typeof InternalMcpCatalogModel.findById>
       >);
@@ -1344,17 +1643,13 @@ describe("McpServerRuntimeManager", () => {
     // envDef.value, never touches the env-values map). All other cells
     // assert their value is present and correct.
     test.each`
-      key                    | expected                        | via
-      ${"STATIC_PLAIN"}      | ${undefined}                    | ${"bypasses env-values; flows via envDef.value"}
-      ${"STATIC_SECRET"}     | ${"static-secret-from-catalog"} | ${"catalog static-secret merge (manager.ts:259-277)"}
-      ${"USER_REQ_SECRET"}   | ${"user-req-sec-stored"}        | ${"install Secret bag (prompted+secret, required)"}
-      ${"USER_OPT_SECRET"}   | ${"user-opt-sec-stored"}        | ${"install Secret bag (prompted+secret, optional)"}
-      ${"USER_REQ_PLAIN"}    | ${"user-req-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
-      ${"USER_OPT_PLAIN"}    | ${"user-opt-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
-      ${"PRESET_REQ_SECRET"} | ${"preset-req-sec-stored"}      | ${"install Secret bag (preset+secret, required)"}
-      ${"PRESET_OPT_SECRET"} | ${"preset-opt-sec-stored"}      | ${"install Secret bag (preset+secret, optional)"}
-      ${"PRESET_REQ_PLAIN"}  | ${"preset-req-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
-      ${"PRESET_OPT_PLAIN"}  | ${"preset-opt-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
+      key                  | expected                        | via
+      ${"STATIC_PLAIN"}    | ${undefined}                    | ${"bypasses env-values; flows via envDef.value"}
+      ${"STATIC_SECRET"}   | ${"static-secret-from-catalog"} | ${"catalog static-secret merge (manager.ts:259-277)"}
+      ${"USER_REQ_SECRET"} | ${"user-req-sec-stored"}        | ${"install Secret bag (prompted+secret, required)"}
+      ${"USER_OPT_SECRET"} | ${"user-opt-sec-stored"}        | ${"install Secret bag (prompted+secret, optional)"}
+      ${"USER_REQ_PLAIN"}  | ${"user-req-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
+      ${"USER_OPT_PLAIN"}  | ${"user-opt-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
     `(
       "auto redeploy preserves $key — $via",
       ({ key, expected }: { key: string; expected: string | undefined }) => {
@@ -1369,6 +1664,18 @@ describe("McpServerRuntimeManager", () => {
 });
 
 describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
+  function dockerConfigData(registryServers: string[]) {
+    return {
+      ".dockerconfigjson": Buffer.from(
+        JSON.stringify({
+          auths: Object.fromEntries(
+            registryServers.map((server) => [server, { auth: "redacted" }]),
+          ),
+        }),
+      ).toString("base64"),
+    };
+  }
+
   test("returns empty array when k8sApi is not initialized", async () => {
     const { McpServerRuntimeManager } = await import("./manager");
     const manager = new McpServerRuntimeManager();
@@ -1414,6 +1721,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
               "team-id": "team-a",
             },
           },
+          data: dockerConfigData(["registry-b.example.com"]),
         },
         {
           metadata: {
@@ -1424,6 +1732,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
               "team-id": "team-b",
             },
           },
+          data: dockerConfigData(["registry-a.example.com"]),
         },
       ],
     });
@@ -1433,8 +1742,14 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
 
     const result = await manager.listDockerRegistrySecrets({ isAdmin: true });
     expect(result).toEqual([
-      { name: "regcred-team-a" },
-      { name: "regcred-team-b" },
+      {
+        name: "regcred-team-a",
+        registryServers: ["registry-b.example.com"],
+      },
+      {
+        name: "regcred-team-b",
+        registryServers: ["registry-a.example.com"],
+      },
     ]);
 
     expect(mockListSecrets).toHaveBeenCalledWith(
@@ -1485,7 +1800,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
     const result = await manager.listDockerRegistrySecrets({
       teamIds: ["team-a"],
     });
-    expect(result).toEqual([{ name: "regcred-team-a" }]);
+    expect(result).toEqual([{ name: "regcred-team-a", registryServers: [] }]);
   });
 
   test("non-admin with no teams sees no secrets", async () => {
@@ -1512,6 +1827,74 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
 
     const result = await manager.listDockerRegistrySecrets({ teamIds: [] });
     expect(result).toEqual([]);
+  });
+
+  test("returns sorted registry servers parsed from docker config json", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: vi.fn().mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "regcred-private",
+              labels: {
+                app: "mcp-server",
+                type: "regcred",
+                "team-id": "team-a",
+              },
+            },
+            data: dockerConfigData([
+              "z.registry.example.com",
+              "a.registry.example.com",
+            ]),
+          },
+        ],
+      }),
+    };
+
+    const result = await manager.listDockerRegistrySecrets({
+      teamIds: ["team-a"],
+    });
+
+    expect(result).toEqual([
+      {
+        name: "regcred-private",
+        registryServers: ["a.registry.example.com", "z.registry.example.com"],
+      },
+    ]);
+  });
+
+  test("returns empty registry server list when docker config json is invalid", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: vi.fn().mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "regcred-private",
+              labels: {
+                app: "mcp-server",
+                type: "regcred",
+                "team-id": "team-a",
+              },
+            },
+            data: {
+              ".dockerconfigjson": Buffer.from("not-json").toString("base64"),
+            },
+          },
+        ],
+      }),
+    };
+
+    const result = await manager.listDockerRegistrySecrets({
+      teamIds: ["team-a"],
+    });
+
+    expect(result).toEqual([{ name: "regcred-private", registryServers: [] }]);
   });
 });
 
@@ -1719,6 +2102,28 @@ describe("McpServerRuntimeManager.backfillRegcredTeamLabels", () => {
 });
 
 describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // clearAllMocks resets call history but not implementations, so a
+    // persistent mockResolvedValue from another suite would otherwise leak in
+    // under a shuffling seed. These tests expect the frozen-name path by
+    // default, so pin findById back to null — and pin the other models the
+    // namespace-resolution path consults, since leaked implementations change
+    // which sweep branch runs.
+    const OrganizationModel = (await import("@/models/organization")).default;
+    vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue(null);
+    vi.mocked(McpServerModel.findById).mockReset();
+    vi.mocked(McpServerModel.findById).mockResolvedValue(null);
+    vi.mocked(OrganizationModel.getById).mockResolvedValue({
+      id: "test-org",
+      defaultNetworkPolicy: null,
+    } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
+    vi.mocked(OrganizationModel.getFirst).mockResolvedValue({
+      id: "test-org",
+      defaultNetworkPolicy: null,
+    } as unknown as Awaited<ReturnType<typeof OrganizationModel.getFirst>>);
+  });
+
   async function createManagerWithMockK8s(params: {
     mockK8sApi: Record<string, unknown>;
     mockK8sAppsApi: Record<string, unknown>;
@@ -1733,9 +2138,15 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
 
   function callCleanup(
     manager: unknown,
-    servers: Array<{ id: string; name: string; catalogId: string }>,
+    servers: Array<{
+      id: string;
+      name: string;
+      catalogId: string;
+      deploymentName?: string | null;
+    }>,
   ) {
     const castServers = servers.map((s) => ({
+      deploymentName: null,
       ...s,
       secretId: null,
       ownerId: null,
@@ -1790,6 +2201,8 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
         id: "123e4567-e89b-12d3-a456-426614174000",
         name: "current-name",
         catalogId: "cat-1",
+        // Frozen by the adopt pass (which always runs before the sweep).
+        deploymentName: "mcp-current-name",
       },
     ]);
 
@@ -1800,6 +2213,182 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
     expect(mockDeleteService).toHaveBeenCalledWith(
       expect.objectContaining({ name: "mcp-legacy-name-service" }),
     );
+  });
+
+  test("keeps a deployment whose name matches the FROZEN name even when it differs from the recompute", async () => {
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: vi.fn().mockResolvedValue({}) },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: "mcp-pre-rename-frozen",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": "123e4567-e89b-12d3-a456-426614174000",
+                },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+
+    // Renamed row: the recompute would be "mcp-renamed-name", but deployment
+    // identity is frozen — the live deployment must survive.
+    await callCleanup(manager, [
+      {
+        id: "123e4567-e89b-12d3-a456-426614174000",
+        name: "renamed-name",
+        catalogId: "cat-1",
+        deploymentName: "mcp-pre-rename-frozen",
+      },
+    ]);
+
+    expect(mockDeleteDeployment).not.toHaveBeenCalled();
+  });
+
+  test("skips servers whose deployment_name is still NULL instead of comparing a recomputed guess", async () => {
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: vi.fn().mockResolvedValue({}) },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: "mcp-some-live-name",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": "123e4567-e89b-12d3-a456-426614174000",
+                },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+
+    await callCleanup(manager, [
+      {
+        id: "123e4567-e89b-12d3-a456-426614174000",
+        name: "current-name",
+        catalogId: "cat-1",
+        deploymentName: null,
+      },
+    ]);
+
+    expect(mockDeleteDeployment).not.toHaveBeenCalled();
+  });
+
+  test("tears down a deployment left in a stale namespace after the catalog resolves elsewhere", async () => {
+    // Upgrade scenario: default-environment installs used to deploy into the
+    // platform namespace; once the resolver honors the org's
+    // defaultEnvironmentNamespace, the old platform-namespace copy must be
+    // reaped on startup.
+    const serverId = "123e4567-e89b-12d3-a456-426614174000";
+    const serverRow = {
+      id: serverId,
+      name: "current-name",
+      catalogId: "cat-default-env",
+      deploymentName: "mcp-current-name",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      scope: "org" as const,
+      reinstallRequired: false,
+      localInstallationStatus: "idle" as const,
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      serverType: "local" as const,
+    };
+    const catalogRow = {
+      id: "cat-default-env",
+      serverType: "local" as const,
+      multitenant: false,
+      environmentId: null,
+      organizationId: "org-1",
+      localConfig: { command: "node", arguments: ["server.js"] },
+    };
+
+    const McpServerModel = (await import("@/models/mcp-server")).default;
+    const InternalMcpCatalogModel = (
+      await import("@/models/internal-mcp-catalog")
+    ).default;
+    const OrganizationModel = (await import("@/models/organization")).default;
+    vi.mocked(McpServerModel.findById).mockResolvedValue(
+      serverRow as unknown as Awaited<
+        ReturnType<typeof McpServerModel.findById>
+      >,
+    );
+    vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue(
+      catalogRow as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >,
+    );
+    vi.mocked(OrganizationModel.getById).mockResolvedValue({
+      id: "org-1",
+      defaultEnvironmentNamespace: "org-default-ns",
+    } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
+
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const mockDeleteService = vi.fn().mockResolvedValue({});
+    const staleDeploymentItem = {
+      metadata: {
+        name: "mcp-current-name",
+        labels: { app: "mcp-server", "mcp-server-id": serverId },
+      },
+    };
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: mockDeleteService },
+      mockK8sAppsApi: {
+        // Both the platform namespace ("test-namespace") and the resolved
+        // "org-default-ns" hold a same-named deployment for this server: the
+        // former is the stale pre-upgrade copy, the latter is current.
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [staleDeploymentItem],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+    // getOrLoadDeployment (namespaceOverride teardown path) needs the full
+    // client set.
+    const managerAny = manager as unknown as Record<string, unknown>;
+    managerAny.k8sNetworkingApi = {};
+    managerAny.k8sCustomObjectsApi = {
+      getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+    };
+    managerAny.k8sAttach = {};
+    managerAny.k8sLog = {};
+    managerAny.k8sExec = {};
+
+    mockRemoveDeployment.mockClear();
+    mockK8sDeploymentInstances.length = 0;
+
+    await callCleanup(manager, [serverRow]);
+
+    // Exactly one teardown: the platform-namespace ("test-namespace") copy.
+    // The org-default-ns copy matches its resolved namespace + frozen name.
+    expect(mockRemoveDeployment).toHaveBeenCalledTimes(1);
+    const tornDown = mockK8sDeploymentInstances.find(
+      (instance) => instance.options.namespace === "test-namespace",
+    );
+    expect(tornDown).toBeDefined();
+    // Name matches the frozen name, so no additional direct deletes fire.
+    expect(mockDeleteDeployment).not.toHaveBeenCalled();
+
+    // Restore module-mock defaults so later tests aren't polluted.
+    vi.mocked(McpServerModel.findById).mockResolvedValue(null);
+    vi.mocked(InternalMcpCatalogModel.findById).mockReset();
+    vi.mocked(OrganizationModel.getById).mockResolvedValue({
+      id: "test-org",
+      defaultNetworkPolicy: null,
+    } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
   });
 
   test("ignores deployments that do not belong to installed servers", async () => {
@@ -1827,5 +2416,380 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
     await callCleanup(manager, []);
 
     expect(mockDeleteDeployment).not.toHaveBeenCalled();
+  });
+});
+
+describe("McpServerRuntimeManager.reapFailedMcpPods", () => {
+  async function createManagerWithMockK8s(mockK8sApi: Record<string, unknown>) {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sApi: unknown }).k8sApi = mockK8sApi;
+    return manager;
+  }
+
+  function callReap(manager: unknown) {
+    return (
+      manager as { reapFailedMcpPods: () => Promise<void> }
+    ).reapFailedMcpPods();
+  }
+
+  test("deletes Failed MCP pods returned by the list call", async () => {
+    const mockList = vi.fn().mockResolvedValue({
+      items: [
+        { metadata: { name: "mcp-server-a-abc123" } },
+        { metadata: { name: "mcp-server-b-def456" } },
+        // Pod without a name is skipped
+        { metadata: {} },
+      ],
+    });
+    const mockDelete = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      listNamespacedPod: mockList,
+      deleteNamespacedPod: mockDelete,
+    });
+
+    await callReap(manager);
+
+    // Sweeps only the platform namespace when no environment namespaces are
+    // configured, filtering server-side to Failed pods owned by Archestra.
+    expect(mockList).toHaveBeenCalledTimes(1);
+    expect(mockList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labelSelector: "app=mcp-server",
+        fieldSelector: "status.phase=Failed",
+      }),
+    );
+    expect(mockDelete).toHaveBeenCalledTimes(2);
+    expect(mockDelete).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-server-a-abc123" }),
+    );
+    expect(mockDelete).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-server-b-def456" }),
+    );
+  });
+
+  test("continues reaping when a single pod deletion fails", async () => {
+    const mockList = vi.fn().mockResolvedValue({
+      items: [
+        { metadata: { name: "mcp-gone-already" } },
+        { metadata: { name: "mcp-still-there" } },
+      ],
+    });
+    const mockDelete = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("404 pod not found"))
+      .mockResolvedValueOnce({});
+    const manager = await createManagerWithMockK8s({
+      listNamespacedPod: mockList,
+      deleteNamespacedPod: mockDelete,
+    });
+
+    await callReap(manager);
+
+    expect(mockDelete).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not throw when listing pods fails", async () => {
+    const manager = await createManagerWithMockK8s({
+      listNamespacedPod: vi.fn().mockRejectedValue(new Error("forbidden")),
+      deleteNamespacedPod: vi.fn(),
+    });
+
+    await expect(callReap(manager)).resolves.toBeUndefined();
+  });
+
+  test("does nothing when k8sApi is not initialized", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sApi: unknown }).k8sApi = undefined;
+    await expect(callReap(manager)).resolves.toBeUndefined();
+  });
+});
+
+describe("McpServerRuntimeManager.adoptDeploymentNames", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function makeLocalServerRow(overrides: {
+    id: string;
+    name: string;
+    catalogId?: string | null;
+    deploymentName?: string | null;
+  }) {
+    return {
+      catalogId: "cat-1",
+      deploymentName: null,
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      scope: "org" as const,
+      reinstallRequired: false,
+      localInstallationStatus: "idle" as const,
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      serverType: "local" as const,
+      ...overrides,
+    };
+  }
+
+  async function createManagerForAdopt(
+    deployments: Array<{
+      name: string;
+      selectorId: string;
+      creationTimestamp?: Date;
+      namespace?: string;
+    }>,
+  ) {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sAppsApi: unknown }).k8sAppsApi = {
+      listNamespacedDeployment: vi
+        .fn()
+        .mockImplementation(({ namespace }: { namespace: string }) =>
+          Promise.resolve({
+            items: deployments
+              .filter((d) => (d.namespace ?? "test-namespace") === namespace)
+              .map((d) => ({
+                metadata: {
+                  name: d.name,
+                  labels: { app: "mcp-server", "mcp-server-id": d.selectorId },
+                  creationTimestamp: d.creationTimestamp,
+                },
+              })),
+          }),
+        ),
+    };
+    return manager;
+  }
+
+  function callAdopt(
+    manager: unknown,
+    params: { localServers: unknown[]; localCatalogItems: unknown[] },
+  ) {
+    return (
+      manager as { adoptDeploymentNames: (p: unknown) => Promise<void> }
+    ).adoptDeploymentNames(params);
+  }
+
+  test("adopts the live deployment's ACTUAL name for a diverged row (DB name ≠ live)", async () => {
+    const server = makeLocalServerRow({ id: "srv-1", name: "current-name" });
+    const manager = await createManagerForAdopt([
+      { name: "mcp-old-diverged-name", selectorId: "srv-1" },
+    ]);
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [null],
+    });
+
+    expect(McpServerModel.setDeploymentName).toHaveBeenCalledExactlyOnceWith({
+      id: "srv-1",
+      deploymentName: "mcp-old-diverged-name",
+    });
+    // In-memory mutation — the same row object feeds startServer + sweep.
+    expect(server.deploymentName).toBe("mcp-old-diverged-name");
+  });
+
+  test("adopts the live deployment from an environment namespace (not only the platform namespace)", async () => {
+    const catalog = {
+      id: "cat-env",
+      environmentId: "env-staging",
+      multitenant: false,
+      deploymentName: null as string | null,
+      serverType: "local" as const,
+    };
+    const server = makeLocalServerRow({
+      id: "srv-env",
+      name: "current-name",
+      catalogId: "cat-env",
+    });
+    const manager = await createManagerForAdopt([
+      {
+        name: "mcp-old-diverged-name",
+        selectorId: "srv-env",
+        namespace: "env-staging-ns",
+      },
+    ]);
+    (
+      manager as unknown as {
+        resolveNamespaceForCatalog: (
+          catalogItem: typeof catalog,
+        ) => Promise<string>;
+      }
+    ).resolveNamespaceForCatalog = vi.fn().mockResolvedValue("env-staging-ns");
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [catalog],
+    });
+
+    expect(server.deploymentName).toBe("mcp-old-diverged-name");
+    expect(McpServerModel.setDeploymentName).toHaveBeenCalledExactlyOnceWith({
+      id: "srv-env",
+      deploymentName: "mcp-old-diverged-name",
+    });
+  });
+
+  test("freezes the legacy recompute for a row with no live deployment", async () => {
+    const server = makeLocalServerRow({ id: "srv-1", name: "current-name" });
+    const manager = await createManagerForAdopt([]);
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [null],
+    });
+
+    expect(McpServerModel.setDeploymentName).toHaveBeenCalledExactlyOnceWith({
+      id: "srv-1",
+      deploymentName: "mcp-current-name",
+    });
+    expect(server.deploymentName).toBe("mcp-current-name");
+  });
+
+  test("tie-break prefers the deployment matching the legacy recompute", async () => {
+    const server = makeLocalServerRow({ id: "srv-1", name: "current-name" });
+    const manager = await createManagerForAdopt([
+      {
+        name: "mcp-newer-stray",
+        selectorId: "srv-1",
+        creationTimestamp: new Date("2026-01-02"),
+      },
+      {
+        name: "mcp-current-name",
+        selectorId: "srv-1",
+        creationTimestamp: new Date("2026-01-01"),
+      },
+    ]);
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [null],
+    });
+
+    expect(server.deploymentName).toBe("mcp-current-name");
+  });
+
+  test("tie-break falls back to the newest deployment when none matches the recompute", async () => {
+    const server = makeLocalServerRow({ id: "srv-1", name: "current-name" });
+    const manager = await createManagerForAdopt([
+      {
+        name: "mcp-older",
+        selectorId: "srv-1",
+        creationTimestamp: new Date("2026-01-01"),
+      },
+      {
+        name: "mcp-newer",
+        selectorId: "srv-1",
+        creationTimestamp: new Date("2026-01-02"),
+      },
+    ]);
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [null],
+    });
+
+    expect(server.deploymentName).toBe("mcp-newer");
+  });
+
+  test("multitenant freezes onto the CATALOG row (label carries the catalog id) and updates every catalog copy", async () => {
+    // start() fetches a separate catalog object per install.
+    const catalogCopyA = {
+      id: "cat-mt",
+      name: "shared catalog",
+      multitenant: true,
+      deploymentName: null as string | null,
+      serverType: "local" as const,
+    };
+    const catalogCopyB = { ...catalogCopyA };
+    const serverA = makeLocalServerRow({
+      id: "srv-a",
+      name: "install-a",
+      catalogId: "cat-mt",
+    });
+    const serverB = makeLocalServerRow({
+      id: "srv-b",
+      name: "install-b",
+      catalogId: "cat-mt",
+    });
+    const manager = await createManagerForAdopt([
+      { name: "mcp-mt-live-name", selectorId: "cat-mt" },
+    ]);
+
+    await callAdopt(manager, {
+      localServers: [serverA, serverB],
+      localCatalogItems: [catalogCopyA, catalogCopyB],
+    });
+
+    expect(
+      InternalMcpCatalogModel.setDeploymentName,
+    ).toHaveBeenCalledExactlyOnceWith({
+      id: "cat-mt",
+      deploymentName: "mcp-mt-live-name",
+    });
+    expect(catalogCopyA.deploymentName).toBe("mcp-mt-live-name");
+    expect(catalogCopyB.deploymentName).toBe("mcp-mt-live-name");
+    // The per-install rows share the catalog deployment — never frozen here.
+    expect(McpServerModel.setDeploymentName).not.toHaveBeenCalled();
+  });
+
+  test("idempotent: already-frozen rows are skipped", async () => {
+    const server = makeLocalServerRow({
+      id: "srv-1",
+      name: "renamed-name",
+      deploymentName: "mcp-frozen-earlier",
+    });
+    const manager = await createManagerForAdopt([
+      { name: "mcp-something-else", selectorId: "srv-1" },
+    ]);
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [null],
+    });
+
+    expect(McpServerModel.setDeploymentName).not.toHaveBeenCalled();
+    expect(server.deploymentName).toBe("mcp-frozen-earlier");
+  });
+});
+
+describe("McpServerRuntimeManager.start — adopt gate settling", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // A boot failure BEFORE the adopt block (here: verifyK8sConnection's pod-list
+  // rejects, simulating a transient K8s blip) must still settle
+  // deploymentNamesAdopted. Otherwise the rename route — which awaits that
+  // promise with no timeout — hangs the request for the process lifetime, since
+  // start() is fire-and-forget with no retry.
+  test("rejects deploymentNamesAdopted when start() throws before the adopt pass", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    // All four clients set so start() clears its "not initialized" guard and
+    // reaches verifyK8sConnection; k8sApi's pod-list rejects to fail there.
+    const injected = manager as unknown as {
+      k8sApi: unknown;
+      k8sAppsApi: unknown;
+      k8sNetworkingApi: unknown;
+      k8sCustomObjectsApi: unknown;
+    };
+    injected.k8sApi = {
+      listNamespacedPod: vi.fn().mockRejectedValue(new Error("k8s boot blip")),
+    };
+    injected.k8sAppsApi = {};
+    injected.k8sNetworkingApi = {};
+    injected.k8sCustomObjectsApi = {};
+
+    // The gate is still pending after construction (the mocked kubeconfig loads
+    // fine), so this exercises start()'s outer catch, not the constructor's.
+    const adopted = manager.deploymentNamesAdopted;
+
+    // start() still rethrows (behavior unchanged); the gate now settles too.
+    await expect(manager.start()).rejects.toThrow("k8s boot blip");
+    await expect(adopted).rejects.toThrow("k8s boot blip");
   });
 });

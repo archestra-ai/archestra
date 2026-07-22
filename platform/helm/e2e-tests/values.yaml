@@ -67,35 +67,8 @@ keycloak:
     failureThreshold: 30
     periodSeconds: 10
     timeoutSeconds: 5
-  # Groups for role mapping tests
-  groups:
-    - name: "archestra-admins"
-    - name: "archestra-users"
-  # Test users for SSO E2E tests
-  # The first user (admin) should match the Archestra admin user created during onboarding
-  # so that SSO login can link to an existing account
-  testUsers:
-    # Admin user - in archestra-admins group for role mapping tests
-    - username: "admin"
-      email: "admin@example.com"
-      password: "password"
-      firstName: "Admin"
-      lastName: "User"
-      attributes:
-        demo_token_value: "admin_user_token"
-      groups:
-        - "archestra-admins"
-    # Member user - in archestra-users group, should get member role
-    - username: "member"
-      email: "member@example.com"
-      password: "memberpass"
-      firstName: "Member"
-      lastName: "User"
-      attributes:
-        demo_token_value: "member_user_token"
-      groups:
-        - "archestra-users"
-  # Realm configuration for e2e testing
+  # Realm fixture (clients, groups, test users) lives in files/archestra-realm.json,
+  # shared with the lite e2e harness which docker-mounts the same file.
   # Set import: true to auto-import the realm on startup
   realm:
     import: true

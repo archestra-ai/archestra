@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
 export interface MultiSelectOption {
   value: string;
   label: string;
+  /** Optional leading icon (provider/client logo, …). */
+  icon?: React.ReactNode;
 }
 
 interface MultiSelectComboboxProps {
@@ -44,6 +46,7 @@ export function MultiSelectCombobox({
   const [search, setSearch] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const contentRef = React.useRef<HTMLDivElement>(null);
 
   const selectedOptions = options.filter((opt) => value.includes(opt.value));
 
@@ -72,12 +75,16 @@ export function MultiSelectCombobox({
     }
   };
 
-  // Close popover when clicking outside
+  // Close popover when clicking outside. The dropdown content is portaled, so
+  // it lives outside containerRef — exclude it too, otherwise selecting an
+  // option counts as an outside click and closes the menu mid-multi-select.
   React.useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
       if (
         containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
+        !containerRef.current.contains(target) &&
+        !contentRef.current?.contains(target)
       ) {
         setOpen(false);
       }
@@ -120,11 +127,17 @@ export function MultiSelectCombobox({
           {selectedOptions.map((option) => (
             <span
               key={option.value}
-              className="inline-flex items-center gap-1 rounded-md border bg-muted px-2 py-0.5 text-sm"
+              className="inline-flex items-center gap-1.5 rounded-md border bg-muted px-2 py-0.5 text-sm"
             >
+              {option.icon && (
+                <span className="flex shrink-0 items-center">
+                  {option.icon}
+                </span>
+              )}
               {option.label}
               <button
                 type="button"
+                aria-label="Remove selected option"
                 onClick={(e) => handleRemove(option.value, e)}
                 className="hover:bg-muted-foreground/20 rounded-sm"
               >
@@ -134,6 +147,7 @@ export function MultiSelectCombobox({
           ))}
           <input
             ref={inputRef}
+            aria-label="Search options"
             value={search}
             disabled={disabled}
             onChange={(e) => {
@@ -148,7 +162,9 @@ export function MultiSelectCombobox({
         </div>
       </PopoverAnchor>
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0"
+        ref={contentRef}
+        className="p-0"
+        style={{ width: "var(--radix-popper-anchor-width)" }}
         align="start"
         onOpenAutoFocus={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
@@ -169,9 +185,16 @@ export function MultiSelectCombobox({
                       value={option.value}
                       onSelect={() => handleSelect(option.value)}
                       onMouseDown={(e) => e.preventDefault()}
-                      className="justify-between"
+                      className="justify-between gap-2"
                     >
-                      {option.label}
+                      <span className="flex min-w-0 items-center gap-2">
+                        {option.icon && (
+                          <span className="flex shrink-0 items-center">
+                            {option.icon}
+                          </span>
+                        )}
+                        <span className="truncate">{option.label}</span>
+                      </span>
                       <Check
                         className={cn(
                           "h-4 w-4",

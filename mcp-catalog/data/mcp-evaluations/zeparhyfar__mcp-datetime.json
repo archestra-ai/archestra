@@ -1,0 +1,87 @@
+{
+  "name": "zeparhyfar__mcp-datetime",
+  "display_name": "mcp-datetime",
+  "description": "A MCP server for datetime formatting and file name generation.",
+  "author": {
+    "name": "ZeparHyfar"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "mcp_datetime"],
+    "env": {
+      "PYTHON": "${user_config.python}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "python": {
+      "type": "string",
+      "title": "Python Interpreter Path",
+      "description": "Path to your Python interpreter (e.g., /usr/local/bin/python3 or /Users/username/.pyenv/versions/3.12.0/bin/python3)",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# mcp-datetime\n\n[![Python Version](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)\n[![MCP Version](https://img.shields.io/badge/mcp-1.1.1-green.svg)](https://github.com/anaisbetts/mcp)\n[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)\n\nEnglish | [日本語](README_ja.md)\n\nA datetime formatting service implemented as an MCP server for the Claude Desktop Application. Supports generation of datetime strings in various formats.\n\n> **Note**: This package has been tested only on macOS. Windows compatibility has not been verified.\n\n## Prerequisites\n\nBefore using mcp-datetime, ensure you have the following tools installed:\n\n- Python 3.12 or later\n- uv (Python package installer)\n- uvx (Python package runner)\n\n## Features\n\n- ✨ Support for various datetime formats\n- 🇯🇵 Japanese language support\n- 📁 Optimized formats for filename generation\n- 🌏 Accurate timezone handling\n- 🔧 Seamless integration with Claude Desktop App\n\n## MCP Server Components\n\n### Tools\n\nThe server implements one tool:\n\n- `get_datetime`: Get current date and time in various formats\n  - Takes \"format\" as a required string argument\n  - Returns formatted datetime string based on specified format\n  - Supports multiple format types including standard, Japanese, and ISO formats\n\n## Usage with Claude Desktop App\n\nAdd the following to your config file:\n\nConfig file location (macOS):\n`~/Library/Application Support/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-datetime\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-datetime\"]\n    }\n  }\n}\n```\n\n## About Installation\n\nIf you need to install the package directly (e.g., for development or source code inspection), you can use one of these methods:\n\n- Install from PyPI\n\n  ```bash\n  pip install mcp-datetime\n  ```\n\n- Install from GitHub Source\n\n  ```bash\n  git clone https://github.com/ZeparHyfar/mcp-datetime.git\n  cd mcp-datetime\n  pip install -e .\n  ```\n\n- Example `claude_desktop_config.json` for manual installation\n\n  ```json\n  {\n    \"mcpServers\": {\n      \"mcp-datetime\": {\n        \"command\": \"python\",\n        \"args\": [\"-m\", \"mcp_datetime\"],\n        \"env\": {\n          \"PYTHON\": \"/path/to/your/python\"\n        }\n      }\n    }\n  }\n  ```\n\n  Replace \"/path/to/your/python\" with your actual Python interpreter path\n  > e.g., \"/usr/local/bin/python3\" or \"/Users/username/.pyenv/versions/3.12.0/bin/python3\"\n\n## Basic Examples\n\n- Command format\n\n  ```\n  # Standard datetime format\n  call datetime-service.get_datetime {\"format\": \"datetime\"}\n  # Result: 2024-12-10 00:54:01\n\n  # Japanese format\n  call datetime-service.get_datetime {\"format\": \"datetime_jp\"}\n  # Result: 2024年12月10日 00時54分01秒\n\n  # Filename format\n  call datetime-service.get_datetime {\"format\": \"filename_md\"}\n  # Result: 20241210005401.md\n  ```\n\n- Claude Desktop App prompt examples\n\n  - User\n\n    ```\n    Please tell me the current time in date_slash format\n    ```\n\n  - Claude\n\n    ```\n    I'll get the current date in date_slash format.\n\n    The current date is 2024/12/12\n    ```\n\n## Supported Formats\n\n| Format Name  | Example                     | Description                  |\n| ------------ | --------------------------- | ---------------------------- |\n| date         | 2024-12-10                  | Standard date format         |\n| date_slash   | 2024/12/10                  | Date with slashes            |\n| date_jp      | 2024年12月10日              | Japanese date format         |\n| datetime     | 2024-12-10 00:54:01         | Standard datetime            |\n| datetime_jp  | 2024年12月10日 00時54分01秒 | Japanese datetime            |\n| datetime_t   | 2024-12-10T00:54:01         | DateTime with T separator    |\n| compact      | 20241210005401              | Compact format for IDs       |\n| compact_date | 20241210                    | Compact date only            |\n| compact_time | 005401                      | Compact time only            |\n| filename_md  | 20241210005401.md           | Markdown filename            |\n| filename_txt | 20241210005401.txt          | Text filename                |\n| filename_log | 20241210005401.log          | Log filename                 |\n| iso          | 2024-12-10T00:54:01+0900    | ISO 8601 format              |\n| iso_basic    | 20241210T005401+0900        | Basic ISO format             |\n| log          | 2024-12-10 00:54:01.123456  | Log format with microseconds |\n| log_compact  | 20241210_005401             | Compact log format           |\n| time         | 00:54:01                    | Time only                    |\n| time_jp      | 00時54分01秒                | Japanese time format         |\n\n## Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):\n\n- Using PyPI package\n\n  ```\n  npx @modelcontextprotocol/inspector uvx mcp-datetime\n  ```\n\n- Using downloaded source code from GitHub\n\n  ```\n  git clone https://github.com/ZeparHyfar/mcp-datetime.git\n  npx @modelcontextprotocol/inspector uvx --directory ./mcp-datetime run mcp-datetime\n  ```\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Development",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-datetime": {
+        "command": "uvx",
+        "args": ["mcp-datetime"],
+        "env": {}
+      },
+      "mcp-datetime-manual-install": {
+        "command": "python",
+        "args": ["-m", "mcp_datetime"],
+        "env": {
+          "PYTHON": "/path/to/your/python"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ZeparHyfar",
+    "repo": "mcp-datetime",
+    "url": "https://github.com/ZeparHyfar/mcp-datetime",
+    "name": "mcp-datetime",
+    "path": null,
+    "stars": 18,
+    "contributors": 1,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d517593caabae5cc3ccb5a5034033816af2c4eaf"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:53.301Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-datetime\"\nversion = \"0.1.4\"\ndescription = \"A MCP server for datetime formatting and file name generation.\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\"mcp>=1.1.1\"]\nlicense = \"MIT\"\nkeywords = [\"claude\", \"mcp\", \"datetime\", \"time\", \"format\", \"timezone\"]\nclassifiers = [\n    \"Development Status :: 3 - Alpha\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.12\",\n]\n\n[[project.authors]]\nname = \"ZeparHyfar\"\nemail = \"zeparhyfar@gmail.com\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-datetime = \"mcp_datetime:main\"\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=8.0.0\",\n    \"pylint>=3.0.3\",\n]\n\n[project.urls]\nRepository = \"https://github.com/ZeparHyfar/mcp-datetime.git\"\n"
+}

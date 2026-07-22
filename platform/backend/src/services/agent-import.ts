@@ -89,7 +89,12 @@ export async function importAgentFromPayload(
     warnings,
   );
 
-  // 7. Create the agent
+  // 7. Create the agent. An All-tools agent is created in Custom mode first
+  // and flipped in step 8b: the flip's exclusion pre-fill must see the
+  // payload's tool assignments (step 8) so an assigned built-in is not
+  // pre-excluded, and creating Custom-first keeps the agent fail-closed
+  // (assigned-tools-only) if import aborts before the flip.
+  const enableAllToolsAfterImport = data.agent.accessAllTools === true;
   const agent = await AgentModel.create(
     {
       name: agentName,
@@ -99,8 +104,10 @@ export async function importAgentFromPayload(
       icon: data.agent.icon,
       scope: "personal", // Always personal on import
       considerContextUntrusted: data.agent.considerContextUntrusted,
-      toolAssignmentMode: data.agent.toolAssignmentMode,
       toolExposureMode: data.agent.toolExposureMode,
+      accessAllTools: enableAllToolsAfterImport
+        ? false
+        : data.agent.accessAllTools,
       llmApiKeyId: null,
       identityProviderId: null,
       incomingEmailEnabled: data.agent.incomingEmailEnabled,
@@ -115,10 +122,23 @@ export async function importAgentFromPayload(
       suggestedPrompts: data.suggestedPrompts,
     },
     userId,
+    // The payload's tools (step 8) are the imported agent's authoritative
+    // assignment set; don't let create's default assignment force built-ins the
+    // payload lacked onto the imported agent.
+    { skipCreationDefaultTools: true },
   );
 
   // 8. Resolve and assign tools (after agent creation)
   await resolveAndAssignTools(data.tools, agent.id, warnings);
+
+  // 8b. Flip an All-tools agent on now that its assignments exist. The switch
+  // pre-fills the exclusion list (unassigned built-ins get pre-excluded,
+  // assigned ones stay reachable) and commits the flip + pre-fill in one
+  // transaction. Exclusions are not part of the export format, so the pre-fill
+  // is the imported agent's entire starting set.
+  if (enableAllToolsAfterImport) {
+    await AgentModel.update(agent.id, { accessAllTools: true });
+  }
 
   // 9. Resolve and assign delegations (after agent creation)
   await resolveAndAssignDelegations(
@@ -151,18 +171,12 @@ async function resolveAgentName(
   requestedName: string,
   organizationId: string,
 ): Promise<string> {
-  const existing = await db
-    .select({ id: schema.agentsTable.id })
-    .from(schema.agentsTable)
-    .where(
-      and(
-        eq(schema.agentsTable.name, requestedName),
-        eq(schema.agentsTable.organizationId, organizationId),
-      ),
-    )
-    .limit(1);
+  const existing = await AgentModel.activeNameExistsInOrganization({
+    name: requestedName,
+    organizationId,
+  });
 
-  if (existing.length === 0) {
+  if (!existing) {
     return requestedName;
   }
 
@@ -170,18 +184,12 @@ async function resolveAgentName(
   let candidate = `${requestedName} (imported)`;
 
   for (let counter = 2; counter <= 100; counter++) {
-    const dup = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.name, candidate),
-          eq(schema.agentsTable.organizationId, organizationId),
-        ),
-      )
-      .limit(1);
+    const dup = await AgentModel.activeNameExistsInOrganization({
+      name: candidate,
+      organizationId,
+    });
 
-    if (dup.length === 0) {
+    if (!dup) {
       return candidate;
     }
 
@@ -320,19 +328,13 @@ async function resolveAndAssignDelegations(
   if (delegationRefs.length === 0) return;
 
   for (const ref of delegationRefs) {
-    const [targetAgent] = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.name, ref.targetAgentName),
-          eq(schema.agentsTable.organizationId, organizationId),
-          eq(schema.agentsTable.agentType, "agent"),
-        ),
-      )
-      .limit(1);
+    const targetAgentId = await AgentModel.findActiveIdByNameInOrganization({
+      name: ref.targetAgentName,
+      organizationId,
+      agentType: "agent",
+    });
 
-    if (!targetAgent) {
+    if (!targetAgentId) {
       warnings.push({
         type: "delegation",
         name: ref.targetAgentName,
@@ -344,7 +346,7 @@ async function resolveAndAssignDelegations(
     // Enforce delegation visibility for non-admin users by using the same
     // team-filtered agent lookup pattern used in other routes.
     const accessibleTarget = await AgentModel.findById(
-      targetAgent.id,
+      targetAgentId,
       userId,
       false,
     );
@@ -358,7 +360,7 @@ async function resolveAndAssignDelegations(
     }
 
     try {
-      await AgentToolModel.assignDelegation(agentId, targetAgent.id);
+      await AgentToolModel.assignDelegation(agentId, targetAgentId);
     } catch (error) {
       logger.warn(
         { agentId, targetAgentName: ref.targetAgentName, error: String(error) },

@@ -1,4 +1,4 @@
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
 import { ADMIN_EMAIL, ADMIN_PASSWORD, UI_BASE_URL } from "../consts";
 import { expect, test } from "../fixtures";
 import {
@@ -71,13 +71,21 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
           name: "Quickstart Key",
           apiKey: "sk-quickstart-test",
           providerOptionName: "OpenAI OpenAI",
+          // Quickstart dialog redirects to /chat on success; the api-keys list
+          // row never renders here.
+          waitForRow: false,
         });
-
-        await expect(
-          page.getByText("API key created successfully"),
-        ).toBeVisible({
-          timeout: 10_000,
-        });
+        // After the org's first provider key, first-run shows a "set a default
+        // model" step before the chat composer opens. Skip it to advance to
+        // chat. Defensive because a shared-DB org that already has a default
+        // model skips the step and lands straight on chat.
+        await page
+          .getByTestId(E2eTestId.OnboardingDefaultModelSkip)
+          .waitFor({ state: "visible", timeout: 10_000 })
+          .then(() =>
+            page.getByTestId(E2eTestId.OnboardingDefaultModelSkip).click(),
+          )
+          .catch(() => {});
       } else {
         await expect(chatPrompt).toBeVisible({ timeout: 15_000 });
       }
@@ -85,9 +93,24 @@ test.describe("Quickstart", { tag: "@quickstart" }, () => {
       // 3. Chat is immediately ready — model and key are auto-selected
       await expectChatReady(page);
 
-      // 4. Send a message and get mocked response
-      // Message must contain "chat-ui-e2e-test" to match WireMock stub
+      // 4. Send a message and get mocked response.
+      // Message must contain "chat-ui-e2e-test" to match WireMock stub.
+      // Listen for the POST /api/chat response (headers only — SSE
+      // body still streams afterwards) so a 5xx surfaces as a network
+      // error in <30s instead of a 90s "text not visible" UI timeout.
+      const chatResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          /\/api\/chat(?:\?|$)/.test(response.url()),
+        { timeout: 30_000 },
+      );
       await sendChatMessage(page, "chat-ui-e2e-test quickstart: Hello!");
+      const chatResponse = await chatResponsePromise;
+      if (!chatResponse.ok()) {
+        throw new Error(
+          `POST /api/chat returned ${chatResponse.status()}: ${await chatResponse.text()}`,
+        );
+      }
 
       await expect(
         page.getByText("This is a mocked response for the chat UI e2e test."),

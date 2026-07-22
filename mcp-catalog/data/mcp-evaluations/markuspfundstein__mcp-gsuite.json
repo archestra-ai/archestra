@@ -1,0 +1,173 @@
+{
+  "name": "markuspfundstein__mcp-gsuite",
+  "display_name": "mcp-gsuite",
+  "description": "MCP Server to interact with Google Gsuite prodcuts",
+  "author": {
+    "name": "MarkusPfundstein"
+  },
+  "server": {
+    "command": "uv",
+    "args": [
+      "run",
+      "mcp-gsuite",
+      "--gauth-file",
+      "${user_config.gauth_file}",
+      "--accounts-file",
+      "${user_config.accounts_file}",
+      "--credentials-dir",
+      "${user_config.credentials_dir}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "gauth_file": {
+      "type": "file",
+      "title": "OAuth2 Client Configuration File",
+      "description": "Specifies the path to the .gauth.json file containing OAuth2 client configuration.",
+      "required": false,
+      "default": "${__dirname}/.gauth.json"
+    },
+    "accounts_file": {
+      "type": "file",
+      "title": "Google Accounts Information File",
+      "description": "Specifies the path to the .accounts.json file containing information about the Google accounts.",
+      "required": false,
+      "default": "${__dirname}/.accounts.json"
+    },
+    "credentials_dir": {
+      "type": "directory",
+      "title": "OAuth Credentials Directory",
+      "description": "Specifies the directory where OAuth credentials are stored after successful authentication.",
+      "required": false,
+      "default": "${__dirname}"
+    }
+  },
+  "readme": "# mcp-gsuite MCP server\n\n[![smithery badge](https://smithery.ai/badge/mcp-gsuite)](https://smithery.ai/server/mcp-gsuite)\nMCP server to interact with Google products.\n\n## Example prompts\n\nRight now, this MCP server supports Gmail and Calendar integration with the following capabilities:\n\n1. General\n* Multiple google accounts\n\n2. Gmail\n* Get your Gmail user information\n* Query emails with flexible search (e.g., unread, from specific senders, date ranges, with attachments)\n* Retrieve complete email content by ID\n* Create new draft emails with recipients, subject, body and CC options\n* Delete draft emails\n* Reply to existing emails (can either send immediately or save as draft)\n* Retrieve multiple emails at once by their IDs.\n* Save multiple attachments from emails to your local system.\n\n3. Calendar\n* Manage multiple calendars\n* Get calendar events within specified time ranges\n* Create calendar events with:\n  + Title, start/end times\n  + Optional location and description\n  + Optional attendees\n  + Custom timezone support\n  + Notification preferences\n* Delete calendar events\n\nExample prompts you can try:\n\n* Retrieve my latest unread messages\n* Search my emails from the Scrum Master\n* Retrieve all emails from accounting\n* Take the email about ABC and summarize it\n* Write a nice response to Alice's last email and upload a draft.\n* Reply to Bob's email with a Thank you note. Store it as draft\n\n* What do I have on my agenda tomorrow?\n* Check my private account's Family agenda for next week\n* I need to plan an event with Tim for 2hrs next week. Suggest some time slots.\n\n## Quickstart\n\n### Install\n\n### Installing via Smithery\n\nTo install mcp-gsuite for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-gsuite):\n\n```bash\nnpx -y @smithery/cli install mcp-gsuite --client claude\n```\n\n#### Oauth 2\n\nGoogle Workspace (G Suite) APIs require OAuth2 authorization. Follow these steps to set up authentication:\n\n1. Create OAuth2 Credentials:\n   - Go to the [Google Cloud Console](https://console.cloud.google.com/)\n   - Create a new project or select an existing one\n   - Enable the Gmail API and Google Calendar API for your project\n   - Go to \"Credentials\" → \"Create Credentials\" → \"OAuth client ID\"\n   - Select \"Desktop app\" or \"Web application\" as the application type\n   - Configure the OAuth consent screen with required information\n   - Add authorized redirect URIs (include `http://localhost:4100/code` for local development)\n\n2. Required OAuth2 Scopes:\n   \n\n```json\n   [\n     \"openid\",\n     \"https://mail.google.com/\",\n     \"https://www.googleapis.com/auth/calendar\",\n     \"https://www.googleapis.com/auth/userinfo.email\"\n   ]\n```\n\n3. Then create a `.gauth.json` in your working directory with client\n\n```json\n{\n    \"web\": {\n        \"client_id\": \"$your_client_id\",\n        \"client_secret\": \"$your_client_secret\",\n        \"redirect_uris\": [\"http://localhost:4100/code\"],\n        \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n        \"token_uri\": \"https://oauth2.googleapis.com/token\"\n    }\n}\n```\n\n4. Create a `.accounts.json` file with account information\n\n```json\n{\n    \"accounts\": [\n        {\n            \"email\": \"alice@bob.com\",\n            \"account_type\": \"personal\",\n            \"extra_info\": \"Additional info that you want to tell Claude: E.g. 'Contains Family Calendar'\"\n        }\n    ]\n}\n```\n\nYou can specifiy multiple accounts. Make sure they have access in your Google Auth app. The `extra_info` field is especially interesting as you can add info here that you want to tell the AI about the account (e.g. whether it has a specific agenda)\n\nNote: When you first execute one of the tools for a specific account, a browser will open, redirect you to Google and ask for your credentials, scope, etc. After a successful login, it stores the credentials in a local file called `.oauth.{email}.json` . Once you are authorized, the refresh token will be used.\n\n#### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n<details>\n  <summary>Development/Unpublished Servers Configuration</summary>\n  \n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-gsuite\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"<dir_to>/mcp-gsuite\",\n        \"run\",\n        \"mcp-gsuite\"\n      ]\n    }\n  }\n}\n```\n\n\nNote: You can also use the `uv run mcp-gsuite --accounts-file /path/to/custom/.accounts.json` to specify a different accounts file or `--credentials-dir /path/to/custom/credentials` to specify a different credentials directory.\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-gsuite\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"<dir_to>/mcp-gsuite\",\n        \"run\",\n        \"mcp-gsuite\",\n        \"--accounts-file\",\n        \"/path/to/custom/.accounts.json\",\n        \"--credentials-dir\",\n        \"/path/to/custom/credentials\"\n      ]\n    }\n  }\n}\n```\n\n</details>\n\n<details>\n  <summary>Published Servers Configuration</summary>\n  \n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-gsuite\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"mcp-gsuite\",\n        \"--accounts-file\",\n        \"/path/to/custom/.accounts.json\",\n        \"--credentials-dir\",\n        \"/path/to/custom/credentials\"\n      ]\n    }\n  }\n}\n```\n\n</details>\n\n### Configuration Options\n\nThe MCP server can be configured with several command-line options to specify custom paths for authentication and account information:\n\n* `--gauth-file`: Specifies the path to the `.gauth.json` file containing OAuth2 client configuration. Default is `./.gauth.json`.\n* `--accounts-file`: Specifies the path to the `.accounts.json` file containing information about the Google accounts. Default is `./.accounts.json`.\n* `--credentials-dir`: Specifies the directory where OAuth credentials are stored after successful authentication. Default is the current working directory with a subdirectory for each account as `.oauth.{email}.json`.\n\nThese options allow for flexibility in managing different environments or multiple sets of credentials and accounts, especially useful in development and testing scenarios.\n\nExample usage:\n\n```bash\nuv run mcp-gsuite --gauth-file /path/to/custom/.gauth.json --accounts-file /path/to/custom/.accounts.json --credentials-dir /path/to/custom/credentials\n```\n\nThis configuration is particularly useful when you have multiple instances of the server running with different configurations or when deploying to environments where the default paths are not suitable.\n\n## Development\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n\n```bash\nuv sync\n```\n\n2. Build package distributions:\n\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n3. Publish to PyPI:\n\n```bash\nuv publish\n```\n\nNote: You'll need to set PyPI credentials via environment variables or command flags:\n* Token: `--token` or `UV_PUBLISH_TOKEN`\n* Or username/password: `--username`/`UV_PUBLISH_USERNAME` and `--password`/`UV_PUBLISH_PASSWORD`\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\nYou can launch the MCP Inspector via [ `npm` ](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory /path/to/mcp-gsuite run mcp-gsuite\n```\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n\nYou can also watch the server logs with this command:\n\n```bash\ntail -n 20 -f ~/Library/Logs/Claude/mcp-server-mcp-gsuite.log\n```\n",
+  "category": "Communication",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-gsuite-dev": {
+        "command": "uv",
+        "args": ["--directory", "<dir_to>/mcp-gsuite", "run", "mcp-gsuite"],
+        "env": {}
+      },
+      "mcp-gsuite-dev-custom-paths": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "<dir_to>/mcp-gsuite",
+          "run",
+          "mcp-gsuite",
+          "--accounts-file",
+          "/path/to/custom/.accounts.json",
+          "--credentials-dir",
+          "/path/to/custom/credentials"
+        ],
+        "env": {}
+      },
+      "mcp-gsuite-published-custom-paths": {
+        "command": "uvx",
+        "args": [
+          "mcp-gsuite",
+          "--accounts-file",
+          "/path/to/custom/.accounts.json",
+          "--credentials-dir",
+          "/path/to/custom/credentials"
+        ],
+        "env": {}
+      },
+      "mcp-gsuite-cli-full-config": {
+        "command": "uv",
+        "args": [
+          "run",
+          "mcp-gsuite",
+          "--gauth-file",
+          "/path/to/custom/.gauth.json",
+          "--accounts-file",
+          "/path/to/custom/.accounts.json",
+          "--credentials-dir",
+          "/path/to/custom/credentials"
+        ],
+        "env": {}
+      },
+      "modelcontextprotocol-inspector-mcp-gsuite": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/inspector", "uv", "--directory", "/path/to/mcp-gsuite", "run", "mcp-gsuite"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "MarkusPfundstein",
+    "repo": "mcp-gsuite",
+    "url": "https://github.com/MarkusPfundstein/mcp-gsuite",
+    "name": "mcp-gsuite",
+    "path": null,
+    "stars": 414,
+    "contributors": 6,
+    "issues": 20,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "af509cf2d608537d69fd80981672c97a94116f05"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:40.350Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "beautifulsoup4",
+      "importance": 6
+    },
+    {
+      "name": "google-api-python-client",
+      "importance": 9
+    },
+    {
+      "name": "httplib2",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "oauth2client",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "pytz",
+      "importance": 5
+    },
+    {
+      "name": "requests",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-gsuite\"\nversion = \"0.4.1\"\ndescription = \"MCP Server to connect to Google G-Suite\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n \"beautifulsoup4>=4.12.3\",\n \"google-api-python-client>=2.154.0\",\n \"httplib2>=0.22.0\",\n \"mcp>=1.3.0\",\n \"oauth2client==4.1.3\",\n \"python-dotenv>=1.0.1\",\n \"pytz>=2024.2\",\n \"requests>=2.32.3\",\n]\n[[project.authors]]\nname = \"Markus Pfundstein\"\nemail = \"markus@life-electronic.nl\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[dependency-groups]\ndev = [\n    \"pyright>=1.1.389\",\n]\n\n[project.scripts]\nmcp-gsuite = \"mcp_gsuite:main\"\n"
+}

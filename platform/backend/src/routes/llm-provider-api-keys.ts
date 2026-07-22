@@ -1,20 +1,22 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
   isProviderApiKeyOptional,
+  providerDisplayNames,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   type BedrockSigV4Credentials,
   encodeBedrockSigV4Marker,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   LlmOauthClientModel,
@@ -34,6 +36,10 @@ import {
 } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
 import {
+  credentialRequiresPerUserScope,
+  perUserCredentialLabel,
+} from "@/services/openai-codex-credentials";
+import {
   ApiError,
   constructResponseSchema,
   type LlmProviderApiKey,
@@ -43,6 +49,11 @@ import {
   SelectLlmProviderApiKeySchema,
   type SelectSecret,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
+import {
+  dockerLocalhostConnectionHint,
+  isConnectionFailureMessage,
+} from "@/utils/docker-localhost-hint";
 
 async function testApiKeyOrThrow(
   provider: SupportedProvider,
@@ -53,11 +64,99 @@ async function testApiKeyOrThrow(
   try {
     await testProviderApiKey(provider, apiKey, baseUrl, extraHeaders);
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Name the URL actually tested: a base-URL override (user- or
+    // env-configured, e.g. the e2e WireMock) silently redirects validation
+    // away from the real provider, and the message is the only place that
+    // misconfiguration can surface.
+    const testedUrl = effectiveBaseUrlForHint(provider, baseUrl);
+    const providerName = providerDisplayNames[provider];
+    const providerLabel = testedUrl
+      ? `${providerName} (${testedUrl})`
+      : providerName;
+    // A connection failure means the key was never checked — surface it as a
+    // network problem, not a credentials problem.
+    if (isConnectionFailureMessage(message)) {
+      const hint = dockerLocalhostConnectionHint({
+        baseUrl: testedUrl,
+        errorMessage: message,
+      });
+      throw new ApiError(
+        400,
+        `Could not reach ${providerLabel} to validate the API key: ${message}. Check the server's outbound network connectivity.${hint ? ` ${hint}` : ""}`,
+      );
+    }
+    const providerSideSuffix = providerSideErrorSuffix(message);
+    if (providerSideSuffix) {
+      throw new ApiError(
+        400,
+        `${providerLabel} returned an error while validating the API key: ${message}. ${providerSideSuffix}`,
+      );
+    }
+    throw new ApiError(400, `Invalid API key: ${message}`);
+  }
+}
+
+/**
+ * Classifies a failure where the tested endpoint responded but the credential
+ * wasn't the problem, returning the guidance to append (null = treat as a
+ * rejected credential). Model fetchers throw `Failed to fetch <provider>
+ * models: <status>` for non-2xx responses; 400/401/403 on a plain models-list
+ * read means the credential was rejected (Gemini uses 400 for invalid keys).
+ * A 404 or a non-JSON body means the URL isn't the provider's API; other
+ * statuses — 429, 5xx — are provider-side trouble.
+ */
+function providerSideErrorSuffix(message: string): string | null {
+  const status = message.match(/: (\d{3})$/)?.[1];
+  if (status === "404" || /not valid JSON|Unexpected token/i.test(message)) {
+    return "The endpoint does not look like the provider's API — if a custom base URL is configured, verify it.";
+  }
+  if (status && !["400", "401", "403"].includes(status)) {
+    return "This may be a temporary provider issue (e.g. rate limiting or an outage).";
+  }
+  return null;
+}
+
+/**
+ * Verifies connectivity for optional-key providers (Ollama, vLLM) when no API
+ * key was supplied. Unlike {@link testApiKeyOrThrow}, an empty model list is
+ * treated as success: the server is reachable, the user simply hasn't pulled
+ * any models yet, so we shouldn't block key creation. Genuine connection
+ * failures still throw — with a Docker localhost hint when applicable.
+ */
+async function testKeylessConnectivityOrThrow(
+  provider: SupportedProvider,
+  baseUrl?: string | null,
+  extraHeaders?: Record<string, string> | null,
+): Promise<void> {
+  try {
+    await testProviderApiKey(provider, "", baseUrl, extraHeaders);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("Models list is empty")) return;
+    const hint = dockerLocalhostConnectionHint({
+      baseUrl: effectiveBaseUrlForHint(provider, baseUrl),
+      errorMessage: message,
+    });
     throw new ApiError(
       400,
-      `Invalid API key: Failed to connect to ${capitalize(provider)}: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to connect to ${providerDisplayNames[provider]}: ${message}${hint ? ` ${hint}` : ""}`,
     );
   }
+}
+
+/**
+ * The base URL connectivity is actually tested against: an explicit override if
+ * present, otherwise the provider's configured default. Needed so validation
+ * errors name the URL they hit and so the Docker hint fires when a key is
+ * created with no Base URL but a loopback default (e.g. Ollama).
+ */
+function effectiveBaseUrlForHint(
+  provider: SupportedProvider,
+  baseUrl: string | null | undefined,
+): string | null {
+  if (baseUrl) return baseUrl;
+  return getProviderConfiguredBaseUrl(provider) ?? null;
 }
 
 async function testKeylessAzureEntraOrThrow(
@@ -249,6 +348,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 isProviderApiKeyOptional({
                   provider: data.provider,
                   azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+                  anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
                 }) || data.apiKey
               );
             },
@@ -270,8 +370,30 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamId: body.teamId,
         userId: user.id,
         organizationId,
+        provider: body.provider,
+        apiKey: body.apiKey,
         headers,
       });
+
+      // Personal-scoped keys are self-service: any authenticated user can
+      // connect their own account / create a key only they can use (this is
+      // what lets "basic users" link GitHub Copilot without elevated rights).
+      // Shareable scopes (team, org) still require the create permission — org
+      // additionally requires llmProviderApiKey:admin, enforced above.
+      if (body.scope !== "personal") {
+        const canCreateSharedKeys = await userHasPermission(
+          user.id,
+          organizationId,
+          "llmProviderApiKey",
+          "create",
+        );
+        if (!canCreateSharedKeys) {
+          throw new ApiError(
+            403,
+            "You need the llmProviderApiKey:create permission to create team- or organization-scoped keys.",
+          );
+        }
+      }
 
       let secret: SelectSecret | null = null;
       let actualApiKeyValue: string | null = null;
@@ -380,6 +502,36 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             body.extraHeaders,
           );
         }
+      } else if (
+        body.provider === "anthropic" &&
+        !actualApiKeyValue &&
+        anthropicWorkloadIdentity.isEnabled()
+      ) {
+        // Keyless Anthropic key backed by Workload Identity Federation —
+        // exercises the token exchange and model listing end to end.
+        await testApiKeyOrThrow(
+          body.provider,
+          "",
+          runtimeTestBaseUrl,
+          body.extraHeaders,
+        );
+      } else if (
+        !actualApiKeyValue &&
+        isProviderApiKeyOptional({
+          provider: body.provider,
+          // azure is handled by the keyless Entra branch above; only the
+          // always-optional self-hosted providers (Ollama, vLLM) fall here.
+          azureEntraIdEnabled: false,
+        })
+      ) {
+        // No API key for a self-hosted provider — still verify connectivity so
+        // connection errors (e.g. the Docker localhost trap) surface with a
+        // helpful hint instead of silently creating an unusable key.
+        await testKeylessConnectivityOrThrow(
+          body.provider,
+          runtimeTestBaseUrl,
+          body.extraHeaders,
+        );
       }
 
       if (
@@ -387,6 +539,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !isProviderApiKeyOptional({
           provider: body.provider,
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
         })
       ) {
         throw new ApiError(
@@ -395,20 +548,35 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Create the API key record
-      const createdApiKey = await LlmProviderApiKeyModel.create({
-        organizationId,
-        name: body.name,
-        provider: body.provider,
-        secretId: secret?.id ?? null,
-        baseUrl: body.baseUrl ?? null,
-        inferenceBaseUrl: body.inferenceBaseUrl ?? null,
-        extraHeaders: body.extraHeaders ?? null,
-        scope: body.scope,
-        userId: body.scope === "personal" ? user.id : null,
-        teamId: body.scope === "team" ? body.teamId : null,
-        isPrimary: body.isPrimary ?? false,
-      });
+      // Create the API key record. The model demotes the current primary in
+      // the same transaction; a unique violation here means a concurrent
+      // writer won the race — surface it as a conflict, not a 500.
+      let createdApiKey: Awaited<
+        ReturnType<typeof LlmProviderApiKeyModel.create>
+      >;
+      try {
+        createdApiKey = await LlmProviderApiKeyModel.create({
+          organizationId,
+          name: body.name,
+          provider: body.provider,
+          secretId: secret?.id ?? null,
+          baseUrl: body.baseUrl ?? null,
+          inferenceBaseUrl: body.inferenceBaseUrl ?? null,
+          extraHeaders: body.extraHeaders ?? null,
+          scope: body.scope,
+          userId: body.scope === "personal" ? user.id : null,
+          teamId: body.scope === "team" ? body.teamId : null,
+          isPrimary: body.isPrimary ?? false,
+        });
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          throw new ApiError(
+            409,
+            "Another primary key for this provider and scope was set concurrently. Please retry.",
+          );
+        }
+        throw error;
+      }
 
       // Sync models for the new API key before returning so the frontend
       // can immediately show available models after creation.
@@ -418,6 +586,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isProviderApiKeyOptional({
           provider: body.provider,
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
         });
       if (canSync) {
         try {
@@ -598,12 +767,34 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let newSecretId: string | null = null;
 
       if (body.scope !== undefined || body.teamId !== undefined) {
+        // A scope change on an existing ChatGPT-subscription (Codex) key must be
+        // rejected too, so classify by the effective secret (new or stored).
+        const effectiveApiKey =
+          body.apiKey ??
+          (apiKeyFromDB.secretId
+            ? ((await getSecretValueForLlmProviderApiKey(
+                apiKeyFromDB.secretId,
+              )) as string | undefined)
+            : undefined);
         await validateScopeAndAuthorization({
           scope: newScope,
           teamId: newTeamId,
           userId: user.id,
           organizationId,
+          provider: apiKeyFromDB.provider,
+          apiKey: effectiveApiKey,
           headers,
+        });
+      } else if (body.apiKey) {
+        // A new secret value alone can flip an existing shared key into a
+        // per-user credential (pasting an encoded ChatGPT-subscription
+        // credential into a team/org key would share one person's account
+        // with everyone), so classify the new value even when scope/team
+        // don't change.
+        assertPerUserCredentialScope({
+          provider: apiKeyFromDB.provider,
+          apiKey: body.apiKey,
+          scope: newScope,
         });
       }
 
@@ -743,11 +934,32 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             testExtraHeaders,
           );
         } else if (
-          !isProviderApiKeyOptional({
+          apiKeyFromDB.provider === "anthropic" &&
+          anthropicWorkloadIdentity.isEnabled()
+        ) {
+          // Keyless Anthropic WIF key — re-test with the updated runtime settings.
+          await testApiKeyOrThrow(
+            apiKeyFromDB.provider,
+            "",
+            testBaseUrl,
+            testExtraHeaders,
+          );
+        } else if (
+          isProviderApiKeyOptional({
             provider: apiKeyFromDB.provider,
-            azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+            // azure is handled above; only self-hosted Ollama/vLLM fall here.
+            azureEntraIdEnabled: false,
           })
         ) {
+          // Self-hosted provider with no stored key — re-test connectivity so a
+          // newly-set Base URL that can't be reached (e.g. Docker localhost)
+          // surfaces with a helpful hint.
+          await testKeylessConnectivityOrThrow(
+            apiKeyFromDB.provider,
+            testBaseUrl,
+            testExtraHeaders,
+          );
+        } else {
           throw new ApiError(
             400,
             "Cannot update Base URL, Inference URL, or extra headers without existing API key",
@@ -803,7 +1015,17 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (Object.keys(updateData).length > 0) {
-        await LlmProviderApiKeyModel.update(params.id, updateData);
+        try {
+          await LlmProviderApiKeyModel.update(params.id, updateData);
+        } catch (error) {
+          if (isUniqueConstraintError(error)) {
+            throw new ApiError(
+              409,
+              "Another primary key for this provider and scope was set concurrently. Please retry.",
+            );
+          }
+          throw error;
+        }
       }
 
       const updated = await LlmProviderApiKeyModel.findById(params.id);
@@ -913,9 +1135,14 @@ async function validateScopeAndAuthorization(params: {
   teamId: string | null | undefined;
   userId: string;
   organizationId: string;
+  provider: SupportedProvider;
+  apiKey?: string | null;
   headers: IncomingHttpHeaders;
 }): Promise<void> {
-  const { scope, teamId, userId, organizationId, headers } = params;
+  const { scope, teamId, userId, organizationId, provider, apiKey, headers } =
+    params;
+
+  assertPerUserCredentialScope({ provider, apiKey, scope });
 
   // Validate scope-specific requirements
   if (scope === "team" && !teamId) {
@@ -938,12 +1165,12 @@ async function validateScopeAndAuthorization(params: {
 
   // For team-scoped keys, verify user has access to the team
   if (scope === "team" && teamId) {
-    const { success: isTeamAdmin } = await hasPermission(
-      { team: ["admin"] },
+    const { success: canManageAllTeams } = await hasPermission(
+      { team: ["create"] },
       headers,
     );
 
-    if (!isTeamAdmin) {
+    if (!canManageAllTeams) {
       const isUserInTeam = await TeamModel.isUserInTeam(teamId, userId);
       if (!isUserInTeam) {
         throw new ApiError(
@@ -972,6 +1199,29 @@ async function validateScopeAndAuthorization(params: {
 }
 
 /**
+ * Per-user credentials — GitHub/Microsoft Copilot, and a ChatGPT-subscription
+ * (Codex) key on `openai` — hold an individual's token, so team/org scope
+ * would share one person's credential with everyone. Only personal keys are
+ * allowed; each user links their own account.
+ */
+function assertPerUserCredentialScope(params: {
+  provider: SupportedProvider;
+  apiKey: string | null | undefined;
+  scope: ResourceVisibilityScope;
+}): void {
+  const { provider, apiKey, scope } = params;
+  if (
+    credentialRequiresPerUserScope({ provider, apiKey }) &&
+    scope !== "personal"
+  ) {
+    throw new ApiError(
+      400,
+      `${perUserCredentialLabel({ provider, apiKey })} keys are per-user — each user connects their own account, so only the "personal" scope is allowed.`,
+    );
+  }
+}
+
+/**
  * Helper to check if a user is authorized to modify an API key based on scope
  */
 async function authorizeApiKeyAccess(params: {
@@ -990,14 +1240,14 @@ async function authorizeApiKeyAccess(params: {
     return;
   }
 
-  // Team keys: require team membership or team admin
+  // Team keys: require team membership or organization-level team management
   if (apiKey.scope === "team") {
-    const { success: isTeamAdmin } = await hasPermission(
-      { team: ["admin"] },
+    const { success: canManageAllTeams } = await hasPermission(
+      { team: ["create"] },
       headers,
     );
 
-    if (!isTeamAdmin && apiKey.teamId) {
+    if (!canManageAllTeams && apiKey.teamId) {
       const isUserInTeam = await TeamModel.isUserInTeam(apiKey.teamId, userId);
       if (!isUserInTeam) {
         throw new ApiError(

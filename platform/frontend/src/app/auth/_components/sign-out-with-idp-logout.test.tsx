@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -7,7 +7,7 @@ import {
 } from "@/lib/auth/sso-sign-in-attempt";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
     getIdentityProviderIdpLogoutUrl: vi.fn(),
   },

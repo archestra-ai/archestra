@@ -1,10 +1,12 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "@/test";
 import { CreateLimitSchema } from "@/types";
+import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
+import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
 import LimitModel, { LimitValidationService } from "./limit";
-import OrganizationModel from "./organization";
+import ModelModel from "./model";
 
 describe("CreateLimitSchema", () => {
   test("normalizes empty array to null for token_cost", () => {
@@ -320,6 +322,40 @@ describe("LimitModel", () => {
       expect(agentLimits[0].entityType).toBe("agent");
       expect(agentLimits[0].entityId).toBe(agent.id);
     });
+
+    test("organization-scoped lookup excludes limits for soft-deleted agents", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const activeAgent = await makeAgent({ organizationId: org.id });
+      const deletedAgent = await makeAgent({ organizationId: org.id });
+      const activeLimit = await LimitModel.create({
+        entityType: "agent",
+        entityId: activeAgent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+      await LimitModel.create({
+        entityType: "agent",
+        entityId: deletedAgent.id,
+        limitType: "token_cost",
+        limitValue: 2000000,
+        model: ["gpt-4o"],
+      });
+
+      await AgentModel.delete(deletedAgent.id);
+
+      const limits = await LimitModel.findAll(
+        undefined,
+        undefined,
+        undefined,
+        org.id,
+      );
+
+      expect(limits.map((limit) => limit.id)).toEqual([activeLimit.id]);
+    });
   });
 
   describe("findById", () => {
@@ -345,6 +381,29 @@ describe("LimitModel", () => {
         "00000000-0000-0000-0000-000000000000",
       );
       expect(found).toBeNull();
+    });
+  });
+
+  describe("findByIdForAudit", () => {
+    test("returns null for a limit owned by a soft-deleted agent", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      await AgentModel.delete(agent.id);
+
+      const result = await LimitModel.findByIdForAudit(limit.id, org.id);
+
+      expect(result).toBeNull();
     });
   });
 
@@ -417,6 +476,68 @@ describe("LimitModel", () => {
 
       expect(updated).toBeDefined();
       expect(updated?.model).toEqual(["gpt-4o"]);
+    });
+
+    test("resets token usage when cleanup interval changes", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Interval Reset Agent" });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+        cleanupInterval: "1w",
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        500,
+        700,
+      );
+
+      const updated = await LimitModel.patch(limit.id, {
+        cleanupInterval: "calendar_month",
+      });
+
+      const usage = await LimitModel.getRawModelUsage(limit.id);
+      expect(updated?.cleanupInterval).toBe("calendar_month");
+      expect(updated?.lastCleanup).toBeInstanceOf(Date);
+      expect(usage[0].currentUsageTokensIn).toBe(0);
+      expect(usage[0].currentUsageTokensOut).toBe(0);
+    });
+
+    test("does not reset token usage when cleanup interval is unchanged", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Value Update Agent" });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+        cleanupInterval: "1w",
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        500,
+        700,
+      );
+
+      const updated = await LimitModel.patch(limit.id, {
+        limitValue: 2000000,
+        cleanupInterval: "1w",
+      });
+
+      const usage = await LimitModel.getRawModelUsage(limit.id);
+      expect(updated?.limitValue).toBe(2000000);
+      expect(usage[0].currentUsageTokensIn).toBe(500);
+      expect(usage[0].currentUsageTokensOut).toBe(700);
     });
   });
 
@@ -930,6 +1051,45 @@ describe("LimitModel", () => {
       const totalCost = breakdown.reduce((sum, b) => sum + b.cost, 0);
       expect(totalCost).toBeGreaterThanOrEqual(0);
     });
+
+    test("loads pricing records in one batch", async ({ makeAgent }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["batch-model-a", "batch-model-b", "batch-model-c"],
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "batch-model-a",
+        100,
+        50,
+      );
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "batch-model-b",
+        200,
+        100,
+      );
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "batch-model-c",
+        300,
+        150,
+      );
+      const findByModelIdsOnlySpy = vi.spyOn(ModelModel, "findByModelIdsOnly");
+      const findByModelIdOnlySpy = vi.spyOn(ModelModel, "findByModelIdOnly");
+
+      await LimitModel.getModelUsageBreakdown(limit.id);
+
+      expect(findByModelIdsOnlySpy).toHaveBeenCalledTimes(1);
+      expect(findByModelIdOnlySpy).not.toHaveBeenCalled();
+    });
   });
 
   describe("resetLimitsUsage", () => {
@@ -1158,7 +1318,7 @@ describe("LimitValidationService", () => {
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("virtual_key-level");
+      expect(result?.[1]).toContain("virtual key-level");
     });
 
     test("should check user limits before agent limits", async ({
@@ -1254,6 +1414,57 @@ describe("LimitValidationService", () => {
 
       expect(result).not.toBeNull();
       expect(result?.[1]).toContain("agent-level");
+    });
+
+    test("names the exact rule (Archestra, model scope, reset window) in the violation message", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Rule Naming Agent" });
+
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1,
+        model: ["gpt-4o"],
+        cleanupInterval: "24h",
+      });
+
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        1000000,
+        1000000,
+      );
+
+      // Prevent cleanup from resetting test data
+      await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+      });
+
+      expect(result).not.toBeNull();
+      const [refusalMessage, contentMessage] = result as unknown as [
+        string,
+        string,
+      ];
+
+      // The user-facing message must attribute the block to Archestra (not the
+      // provider) and name which rule fired: scope, model coverage, reset cadence.
+      expect(contentMessage).toContain("blocked by Archestra");
+      expect(contentMessage).toContain("agent-level cost limit");
+      expect(contentMessage).toContain("model gpt-4o");
+      expect(contentMessage).toContain("every 24 hours");
+
+      // The same details are mirrored in the metadata block the LLM can parse.
+      expect(refusalMessage).toContain(
+        "<archestra-limit-model-scope>model gpt-4o</archestra-limit-model-scope>",
+      );
+      expect(refusalMessage).toContain(
+        "<archestra-limit-reset-window>every 24 hours</archestra-limit-reset-window>",
+      );
     });
 
     test("should check team limits before organization limits", async ({
@@ -1355,7 +1566,8 @@ describe("LimitValidationService", () => {
       expect(refusalMessage).toContain("<archestra-limit-current-usage>");
       expect(refusalMessage).toContain("<archestra-limit-value>");
 
-      expect(contentMessage).toContain("token cost limit");
+      expect(contentMessage).toContain("blocked by Archestra");
+      expect(contentMessage).toContain("cost limit");
       expect(contentMessage).toContain("Current usage:");
       expect(contentMessage).toContain("Limit:");
     });
@@ -1642,7 +1854,7 @@ describe("LimitValidationService", () => {
       });
 
       expect(result).not.toBeNull();
-      expect(result?.[1]).toContain("virtual_key-level");
+      expect(result?.[1]).toContain("virtual key-level");
     });
 
     test("blocks request when org all-models limit is exceeded", async ({
@@ -1688,6 +1900,73 @@ describe("LimitValidationService", () => {
 
       expect(result).not.toBeNull();
       expect(result?.[1]).toContain("organization-level");
+    });
+
+    test("evaluates limits across all entity levels without an N+1", async ({
+      makeOrganization,
+      makeAdmin,
+      makeTeam,
+      makeMember,
+      makeAgent,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const admin = await makeAdmin();
+      const team = await makeTeam(org.id, admin.id);
+      const agent = await makeAgent({
+        name: "Test Agent",
+        organizationId: org.id,
+      });
+      await makeMember(admin.id, org.id, { role: "admin" });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id);
+
+      // A token_cost limit (with usage) at every level the pre-request check
+      // inspects. Before batching, each level issued its own limit_model_usage
+      // and models lookups, so model pricing was fetched once per level.
+      const levels: {
+        entityType: "agent" | "user" | "team" | "organization" | "virtual_key";
+        entityId: string;
+      }[] = [
+        { entityType: "virtual_key", entityId: apiKey.id },
+        { entityType: "user", entityId: admin.id },
+        { entityType: "agent", entityId: agent.id },
+        { entityType: "team", entityId: team.id },
+        { entityType: "organization", entityId: org.id },
+      ];
+      for (const { entityType, entityId } of levels) {
+        const limit = await LimitModel.create({
+          entityType,
+          entityId,
+          limitType: "token_cost",
+          limitValue: 1_000_000,
+          model: ["gpt-4o"],
+        });
+        // Keep usage well under the limit so the request is allowed and every
+        // level is evaluated (no early-exit on a violation).
+        await LimitModel.updateTokenLimitUsage(
+          entityType,
+          entityId,
+          "gpt-4o",
+          1,
+          1,
+        );
+        await LimitModel.patch(limit.id, { lastCleanup: new Date() });
+      }
+
+      const findByModelIdsOnlySpy = vi.spyOn(ModelModel, "findByModelIdsOnly");
+
+      const result = await LimitValidationService.checkLimitsBeforeRequest({
+        agentId: agent.id,
+        userId: admin.id,
+        virtualKeyId: apiKey.id,
+      });
+
+      expect(result).toBeNull();
+      // One batched pricing lookup for the whole request, not one per level.
+      expect(findByModelIdsOnlySpy).toHaveBeenCalledTimes(1);
     });
   });
 });
@@ -1986,6 +2265,81 @@ describe("cleanupLimitsIfNeeded", () => {
     expect(monthlyUsage[0].currentUsageTokensIn).toBe(500);
   });
 
+  test("resets calendar monthly limits only after the month boundary", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    const dueLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+      cleanupInterval: "calendar_month",
+    });
+    const currentMonthLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+      cleanupInterval: "calendar_month",
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "organization",
+      org.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    const previousMonth = new Date();
+    previousMonth.setMonth(previousMonth.getMonth() - 1, 15);
+    const currentMonth = new Date();
+    currentMonth.setDate(1);
+    currentMonth.setHours(12, 0, 0, 0);
+    await LimitModel.patch(dueLimit.id, { lastCleanup: previousMonth });
+    await LimitModel.patch(currentMonthLimit.id, { lastCleanup: currentMonth });
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      allForOrganizationId: org.id,
+    });
+
+    const dueUsage = await LimitModel.getRawModelUsage(dueLimit.id);
+    const currentMonthUsage = await LimitModel.getRawModelUsage(
+      currentMonthLimit.id,
+    );
+    expect(dueUsage[0].currentUsageTokensIn).toBe(0);
+    expect(currentMonthUsage[0].currentUsageTokensIn).toBe(500);
+  });
+
+  test("calendar Sunday week starts on the current Sunday", async () => {
+    const sunday = "2026-06-07 15:30:00";
+    const tuesday = "2026-06-09 15:30:00";
+
+    const result = await db.execute<{
+      sunday_period_start: string;
+      tuesday_period_start: string;
+    }>(sql`
+      select
+        to_char(
+          date_trunc('day', ${sunday}::timestamp)
+            - (extract(dow from ${sunday}::timestamp) * interval '1 day'),
+          'YYYY-MM-DD HH24:MI:SS'
+        ) as sunday_period_start,
+        to_char(
+          date_trunc('day', ${tuesday}::timestamp)
+            - (extract(dow from ${tuesday}::timestamp) * interval '1 day'),
+          'YYYY-MM-DD HH24:MI:SS'
+        ) as tuesday_period_start
+    `);
+
+    expect(result.rows[0].sunday_period_start).toBe("2026-06-07 00:00:00");
+    expect(result.rows[0].tuesday_period_start).toBe("2026-06-07 00:00:00");
+  });
+
   test("default user limits do not create per-user limit rows", async ({
     makeOrganization,
     makeUser,
@@ -2006,28 +2360,18 @@ describe("cleanupLimitsIfNeeded", () => {
       cleanupInterval: "1m",
     });
 
-    await OrganizationModel.patch(org.id, {
-      defaultUserLimitValue: 100,
-      defaultUserLimitModel: ["gpt-4o"],
-      defaultUserLimitCleanupInterval: "12h",
+    // The org-wide default lives in the unified default_user_limits store
+    // (NULL environment), never as a concrete per-user `limits` row.
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 100,
+      model: ["gpt-4o"],
+      cleanupInterval: "12h",
     });
 
-    let firstUserLimits = await LimitModel.findAll("user", firstUser.id);
-    let secondUserLimits = await LimitModel.findAll("user", secondUser.id);
-    expect(firstUserLimits).toHaveLength(1);
-    expect(secondUserLimits).toHaveLength(0);
-    expect(
-      firstUserLimits.find((limit) => limit.id === manualLimit.id),
-    ).toBeDefined();
-
-    await OrganizationModel.patch(org.id, {
-      defaultUserLimitValue: 200,
-      defaultUserLimitModel: null,
-      defaultUserLimitCleanupInterval: "1w",
-    });
-
-    firstUserLimits = await LimitModel.findAll("user", firstUser.id);
-    secondUserLimits = await LimitModel.findAll("user", secondUser.id);
+    const firstUserLimits = await LimitModel.findAll("user", firstUser.id);
+    const secondUserLimits = await LimitModel.findAll("user", secondUser.id);
     expect(firstUserLimits).toHaveLength(1);
     expect(secondUserLimits).toHaveLength(0);
     expect(
@@ -2047,10 +2391,12 @@ describe("cleanupLimitsIfNeeded", () => {
     await makeMember(user.id, org.id);
     const agent = await makeAgent({ organizationId: org.id });
 
-    await OrganizationModel.patch(org.id, {
-      defaultUserLimitValue: 1,
-      defaultUserLimitModel: ["gpt-4o"],
-      defaultUserLimitCleanupInterval: "1w",
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: ["gpt-4o"],
+      cleanupInterval: "1w",
     });
     const interaction = await makeInteraction(agent.id, {
       model: "gpt-4o",
@@ -2073,7 +2419,7 @@ describe("cleanupLimitsIfNeeded", () => {
       userId: user.id,
     });
     expect(result).not.toBeNull();
-    expect(result?.[1]).toContain("user-level token cost limit");
+    expect(result?.[1]).toContain("user-level cost limit");
   });
 
   test("custom user limits override the inherited default user limit", async ({
@@ -2088,10 +2434,12 @@ describe("cleanupLimitsIfNeeded", () => {
     await makeMember(user.id, org.id);
     const agent = await makeAgent({ organizationId: org.id });
 
-    await OrganizationModel.patch(org.id, {
-      defaultUserLimitValue: 1,
-      defaultUserLimitModel: null,
-      defaultUserLimitCleanupInterval: "1w",
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: null,
+      cleanupInterval: "1w",
     });
     await LimitModel.create({
       entityType: "user",
@@ -2596,9 +2944,11 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
       300,
     );
 
-    // Set old lastCleanup (far in the past)
+    // First day of the previous calendar month, so the default calendar_month
+    // cleanup fires regardless of today's day-of-month.
     const oldDate = new Date();
-    oldDate.setDate(oldDate.getDate() - 7);
+    oldDate.setDate(1);
+    oldDate.setMonth(oldDate.getMonth() - 1);
     await LimitModel.patch(oldLimit.id, { lastCleanup: oldDate });
 
     // Set recent lastCleanup (just now)

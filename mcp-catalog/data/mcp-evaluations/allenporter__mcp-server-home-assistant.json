@@ -1,0 +1,106 @@
+{
+  "name": "allenporter__mcp-server-home-assistant",
+  "display_name": "mcp-server-home-assistant",
+  "description": "A Model Context Protocol Server for Home Assistant",
+  "author": {
+    "name": "allenporter"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "mcp-server-home-assistant", "-v", "-v"],
+    "env": {
+      "HOME_ASSISTANT_WEB_SOCKET_URL": "${user_config.home_assistant_web_socket_url}",
+      "HOME_ASSISTANT_API_TOKEN": "${user_config.home_assistant_api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "home_assistant_web_socket_url": {
+      "type": "string",
+      "title": "Home Assistant Web Socket URL",
+      "description": "The URL for your Home Assistant WebSocket API",
+      "required": true,
+      "default": "http://localhost:8123/api/websocket"
+    },
+    "home_assistant_api_token": {
+      "type": "string",
+      "title": "Home Assistant API Token",
+      "description": "Your Long Lived Access Token for Home Assistant",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# mcp-server-home-assistant\n\nA Model Context Protocol Server for Home Assistant. See [Model Context Protocol](https://modelcontextprotocol.io/)\nfor context.\n\nThe custom component required by this integration is moving to Home Assistant Core in https://github.com/home-assistant/core/pull/134122\n\n## Usage in Claude Desktop\n\n1. Install the [home-assistant-model-context-protocol](https://github.com/allenporter/home-assistant-model-context-protocol) custom component in your Home Assistant instance\n1. Create a [Long Lived Access Token](https://www.home-assistant.io/docs/authentication/#your-account-profile)\n1. Clone this git repo to a path like `/Users/allen/Development/mcp-server-home-assistant`\n1. Edit your `claude_desktop_config.json` with something like this and include your home assistant url and api token:\n\n    ```json\n    {\n        \"mcpServers\": {\n            \"Home-assistant\": {\n                \"command\": \"uv\",\n                \"args\": [\n                    \"--directory\",\n                    \"/Users/allen/Development/mcp-server-home-assistant\",\n                    \"run\",\n                    \"mcp-server-home-assistant\",\n                    \"-v\",\n                    \"-v\"\n                ],\n                \"env\": {\n                    \"HOME_ASSISTANT_WEB_SOCKET_URL\": \"http://localhost:8123/api/websocket\",\n                    \"HOME_ASSISTANT_API_TOKEN\": \"byJhbVci0iJIUzI1ii1sInR5cCI6IkpXVCJ9.....\n                }\n            }\n        }\n    }\n    ```\n1. You can view the logs e.g. `~Library/Logs/Claude/mcp-server-Home-assistant.log` to understand what is happening\n",
+  "category": "IoT",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-home-assistant": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "/Users/allen/Development/mcp-server-home-assistant",
+          "run",
+          "mcp-server-home-assistant",
+          "-v",
+          "-v"
+        ],
+        "env": {
+          "HOME_ASSISTANT_WEB_SOCKET_URL": "http://localhost:8123/api/websocket",
+          "HOME_ASSISTANT_API_TOKEN": "byJhbVci0iJIUzI1ii1sInR5cCI6IkpXVCJ9....."
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "allenporter",
+    "repo": "mcp-server-home-assistant",
+    "url": "https://github.com/allenporter/mcp-server-home-assistant",
+    "name": "mcp-server-home-assistant",
+    "path": null,
+    "stars": 57,
+    "contributors": 2,
+    "issues": 5,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "0a82f5d157d77a73cfbef0f7d3b8c8dd46d31fbd"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:41.632Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "click",
+      "importance": 4
+    },
+    {
+      "name": "hass-client",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-home-assistant\"\nversion = \"0.1.0\"\ndescription = \"A Model Context Protocol Server for Home Assistant\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n  \"click>=8.1.7\",\n  \"hass-client>=1.2.0\",\n  \"mcp>=1.0.0\",\n]\n\n[tool.setuptools.package-data]\n\"mcp_server_home_assistant\" = [\"py.typed\"]\n\n[tool.hatch.build.targets.wheel]\npackages = [\"mcp_server_home_assistant\"]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-server-home-assistant = \"mcp_server_home_assistant.__main__:main\"\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\nlog_level = \"DEBUG\"\n\n[tool.mypy]\nexclude = [\n  \"setup.py\",\n  \"venv/\",\n]\nplatform = \"linux\"\nshow_error_codes = true\nfollow_imports = \"normal\"\nlocal_partial_types = true\nstrict_equality = true\nno_implicit_optional = true\nwarn_incomplete_stub = true\nwarn_redundant_casts = true\nwarn_unused_configs = true\nwarn_unused_ignores = true\ndisable_error_code = [\n    \"import-untyped\",\n]\nextra_checks = false\ncheck_untyped_defs = true\ndisallow_incomplete_defs = true\ndisallow_subclassing_any = true\ndisallow_untyped_calls = true\ndisallow_untyped_decorators = true\ndisallow_untyped_defs = true\nwarn_return_any = true\nwarn_unreachable = true\n\n\n=== setup.py ===\n\"\"\"Library for packaging the project.\"\"\"\n\nfrom setuptools import setup\n\nsetup()\n"
+}

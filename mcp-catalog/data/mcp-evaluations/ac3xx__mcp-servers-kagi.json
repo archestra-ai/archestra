@@ -1,0 +1,90 @@
+{
+  "name": "ac3xx__mcp-servers-kagi",
+  "display_name": "mcp-servers-kagi",
+  "description": "A Model Context Protocol server implementation for Kagi's API",
+  "author": {
+    "name": "ac3xx"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "KAGI_API_KEY": "${user_config.kagi_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "kagi_api_key": {
+      "type": "string",
+      "title": "Kagi API Key",
+      "description": "Your Kagi API key for authentication",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# kagi-server MCP Server\n\n[![smithery badge](https://smithery.ai/badge/kagi-server)](https://smithery.ai/protocol/kagi-server)\nMCP server for Kagi API integration\n\nThis is a TypeScript-based MCP server that integrates the Kagi Search API. It demonstrates core MCP concepts by providing:\n\n- Tools for performing web searches and other operations using Kagi's API (currently in private beta)\n\n## Features\n\n### Implemented Tools\n- `kagi_search` - Perform web searches using Kagi\n  - Takes a query string and optional limit as parameters\n  - Returns search results from Kagi's API\n\n### Planned Tools (Not Yet Implemented)\n- `kagi_summarize` - Generate summaries of web pages or text\n- `kagi_fastgpt` - Get quick responses using Kagi's FastGPT\n- `kagi_enrich` - Fetch enriched news results on specific topics\n\n## Development\n\nInstall dependencies:\n```bash\nnpm install\n```\n\nBuild the server:\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n```bash\nnpm run watch\n```\n\n## Environment Setup\n\nCreate a `.env` file in the root directory with your Kagi API key:\n\n```\nKAGI_API_KEY=your_api_key_here\n```\n\nMake sure to add `.env` to your `.gitignore` file to keep your API key secure.\n\n## Installation\n\n### Installing via Smithery\n\nTo install Kagi Server for Claude Desktop automatically via [Smithery](https://smithery.ai/protocol/kagi-server):\n\n```bash\nnpx @smithery/cli install kagi-server --client claude\n```\n\nTo use with Claude Desktop, add the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"kagi-server\": {\n      \"command\": \"/path/to/kagi-server/build/index.js\",\n      \"env\": {\n        \"KAGI_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nnpm run inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n\n## Usage\n\nOnce the server is running and connected to Claude Desktop, you can use it to perform web searches. For example:\n\n1. Ask Claude: \"Can you search for information about the latest advancements in quantum computing?\"\n2. Claude will use the `kagi_search` tool to fetch results from Kagi's API.\n3. Claude will then summarize or analyze the search results for you.\n\nNote: The planned tools (summarize, fastgpt, enrich) are not yet implemented and cannot be used.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request. Some areas for contribution include:\n\n- Implementing the planned tools (summarize, fastgpt, enrich)\n- Improving error handling and input validation\n- Enhancing documentation and usage examples\n\n## License\n\nThis project is licensed under the MIT License.\n\n## Roadmap\n\n- Implement `kagi_summarize` tool for webpage and text summarization\n- Implement `kagi_fastgpt` tool for quick responses\n- Implement `kagi_enrich` tool for fetching enriched news results\n- Improve error handling and add more robust input validation\n- Add more comprehensive usage examples and documentation\n- Publish the package to npm for easy installation and use with Claude Desktop and npx",
+  "category": "Search",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kagi-server": {
+        "command": "/path/to/kagi-server/build/index.js",
+        "args": [],
+        "env": {
+          "KAGI_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ac3xx",
+    "repo": "mcp-servers-kagi",
+    "url": "https://github.com/ac3xx/mcp-servers-kagi",
+    "name": "mcp-servers-kagi",
+    "path": null,
+    "stars": 35,
+    "contributors": 2,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "0d62ed32441f2121c72a919a8947210bd1017296"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:25.379Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"kagi-server\",\n  \"version\": \"0.1.0\",\n  \"description\": \"MCP server for Kagi Search API (beta) integration\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"bin\": {\n    \"kagi-server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"test\": \"jest\",\n    \"test:watch\": \"jest --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.1\",\n    \"axios\": \"^1.6.2\",\n    \"dotenv\": \"^16.4.5\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.11\",\n    \"@types/node\": \"^20.11.24\",\n    \"jest\": \"^29.7.0\",\n    \"ts-jest\": \"^29.1.1\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

@@ -1,4 +1,7 @@
-import type { SupportedEmbeddingDimension, SupportedProvider } from "@shared";
+import type {
+  SupportedEmbeddingDimension,
+  SupportedProvider,
+} from "@archestra/shared";
 import {
   boolean,
   index,
@@ -12,7 +15,11 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import type { ModelInputModality, ModelOutputModality } from "@/types";
+import type {
+  ModelDefaultParameters,
+  ModelInputModality,
+  ModelOutputModality,
+} from "@/types";
 
 /**
  * Models table - stores capability and pricing metadata fetched from models.dev API.
@@ -40,6 +47,9 @@ const modelsTable = pgTable(
     /** Maximum context window size in tokens */
     contextLength: integer("context_length"),
 
+    /** Maximum output size in tokens (from the model source's output limit) */
+    outputLength: integer("output_length"),
+
     /** Supported input modalities */
     inputModalities: jsonb("input_modalities").$type<ModelInputModality[]>(),
 
@@ -61,6 +71,26 @@ const modelsTable = pgTable(
       scale: 12,
     }),
 
+    /**
+     * Price per token for reading a cached input token (in dollars). Synced from
+     * the model registry; null when the registry omits cache pricing for this model.
+     */
+    cacheReadPricePerToken: numeric("cache_read_price_per_token", {
+      precision: 20,
+      scale: 12,
+    }),
+
+    /**
+     * Price per token for writing/creating a cached input token at the default
+     * (5-minute) TTL, in dollars. Synced from the model registry; null when the
+     * registry omits cache pricing. Longer-TTL writes (e.g. Anthropic 1h) are
+     * derived from this via a provider multiplier.
+     */
+    cacheWritePricePerToken: numeric("cache_write_price_per_token", {
+      precision: 20,
+      scale: 12,
+    }),
+
     /** Custom admin-set price per million tokens for input (nullable, overrides models.dev price) */
     customPricePerMillionInput: numeric("custom_price_per_million_input", {
       precision: 10,
@@ -73,6 +103,24 @@ const modelsTable = pgTable(
       scale: 2,
     }),
 
+    /** Custom admin-set price per million cache-read tokens (nullable, overrides synced price) */
+    customPricePerMillionCacheRead: numeric(
+      "custom_price_per_million_cache_read",
+      {
+        precision: 10,
+        scale: 2,
+      },
+    ),
+
+    /** Custom admin-set price per million cache-write tokens at the default TTL (nullable, overrides synced price) */
+    customPricePerMillionCacheWrite: numeric(
+      "custom_price_per_million_cache_write",
+      {
+        precision: 10,
+        scale: 2,
+      },
+    ),
+
     /** Whether this model should be excluded from chat model selection. */
     ignored: boolean("ignored").notNull().default(false),
 
@@ -83,6 +131,13 @@ const modelsTable = pgTable(
     embeddingDimensions: integer(
       "embedding_dimensions",
     ).$type<SupportedEmbeddingDimension>(),
+
+    /**
+     * Provider-reported default generation parameters (Ollama `/api/show`).
+     * Display-only metadata; nothing applies these at request time.
+     */
+    defaultParameters:
+      jsonb("default_parameters").$type<ModelDefaultParameters>(),
 
     /** Whether this model was discovered via an LLM Proxy request (ensureModelExists).
      * Models with this flag are preserved even without API key links,

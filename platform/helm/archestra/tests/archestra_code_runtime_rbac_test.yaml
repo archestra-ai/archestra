@@ -1,0 +1,81 @@
+suite: test archestra platform -- code runtime RBAC
+templates:
+  - code-runtime-rbac.yaml
+tests:
+  - it: should not create code runtime RBAC when code runtime is disabled
+    set:
+      archestra.codeRuntime.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create narrow Dagger pod exec Role by default
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Role
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["pods"]
+            verbs: ["get"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["pods/exec"]
+            verbs: ["create"]
+
+  - it: should bind Dagger pod exec Role to the Archestra ServiceAccount
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+      - matchRegex:
+          path: subjects[0].name
+          pattern: -archestra-platform$
+      - equal:
+          path: subjects[0].namespace
+          value: NAMESPACE
+
+  - it: should support a custom Dagger RBAC namespace
+    documentIndex: 0
+    set:
+      archestra.codeRuntime.dagger.rbac.namespace: code-runtime
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: code-runtime
+
+  - it: should use the external companion-chart namespace when managed Dagger is disabled
+    documentIndex: 0
+    set:
+      archestra.codeRuntime.dagger.managed.enabled: false
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: dagger
+
+  - it: should not create code runtime RBAC for explicit TCP runner hosts
+    set:
+      archestra.codeRuntime.dagger.runnerHost: tcp://dagger-runtime.dagger.svc.cluster.local:1234
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should allow disabling code runtime RBAC
+    set:
+      archestra.codeRuntime.dagger.rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0

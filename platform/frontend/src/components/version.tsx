@@ -1,7 +1,8 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import config from "@/lib/config/config";
 import { useHealth } from "@/lib/config/health.query";
 import { useLatestGitHubRelease } from "@/lib/github/github-release.query";
@@ -15,11 +16,15 @@ interface VersionProps {
   inline?: boolean;
 }
 
-export function Version({ inline = false }: VersionProps) {
+export const Version = memo(function Version({ inline = false }: VersionProps) {
   const { data } = useHealth();
   const { data: organization } = useOrganization();
   const { data: appearance } = useAppearanceSettings();
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   const hideReleaseLink = config.enterpriseFeatures.fullWhiteLabeling;
+  // SPDX-SnippetEnd
   // Prefer authenticated org data; fall back to public appearance for unauthenticated pages (e.g. sign-in)
   const footerText = organization?.footerText ?? appearance?.footerText;
   const version = data?.version;
@@ -101,4 +106,4 @@ export function Version({ inline = false }: VersionProps) {
       )}
     </div>
   );
-}
+});

@@ -2,10 +2,13 @@
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
+import { z } from "zod";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { __test, type ArchestraContext, executeArchestraTool } from ".";
+import { archestraMcpBranding } from "./branding";
 
 describe("executeArchestraTool", () => {
   let testAgent: Agent;
@@ -27,13 +30,20 @@ describe("executeArchestraTool", () => {
   });
 
   describe("unknown tool", () => {
-    test("should throw error for unknown tool name", async () => {
-      await expect(
-        executeArchestraTool("unknown_tool", undefined, mockContext),
-      ).rejects.toMatchObject({
-        code: -32601,
-        message: "Tool 'unknown_tool' not found",
-      });
+    test("steers an unknown tool name at the discovery path", async () => {
+      const error = await executeArchestraTool(
+        "unknown_tool",
+        undefined,
+        mockContext,
+      ).catch((e: unknown) => e);
+
+      expect(error).toMatchObject({ code: -32601 });
+      const message = (error as { message: string }).message;
+      expect(message).toContain('No tool named "unknown_tool" exists');
+      expect(message).toContain(
+        archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME),
+      );
+      expect(message).toContain("Do not guess tool names");
     });
   });
 
@@ -100,25 +110,53 @@ describe("executeArchestraTool", () => {
       });
     });
 
+    test("validation errors carry machine-readable _meta.archestraValidation", async () => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}todo_write`,
+        { todos: [{ id: 1, content: "bad status todo", status: "blocked" }] },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result._meta).toEqual({
+        archestraValidation: {
+          toolName: "archestra__todo_write",
+          issues: [{ code: "invalid_value", path: "todos.0.status" }],
+        },
+      });
+    });
+
+    // The handler-thrown ZodError catch in executeArchestraTool shares the
+    // same builder; no built-in handler lets a ZodError escape uncaught today
+    // (they wrap zod .parse in catchError), so that site is pinned here at the
+    // builder level with the schema-less formatting it uses.
+    test("zodValidationErrorResult attaches validation meta without a schema", () => {
+      const parsed = z
+        .strictObject({
+          edits: z.array(z.strictObject({ old_str: z.string() })),
+        })
+        .safeParse({ edits: [{}] });
+      expect(parsed.success).toBe(false);
+      if (parsed.success) return;
+
+      const result = __test.zodValidationErrorResult({
+        toolName: "archestra__edit_app",
+        error: parsed.error,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toHaveLength(1);
+      expect(result._meta).toEqual({
+        archestraValidation: {
+          toolName: "archestra__edit_app",
+          issues: [{ code: "invalid_type", path: "edits.0.old_str" }],
+        },
+      });
+    });
+
     test("catches output schema errors in one spot", () => {
       const result = __test.validateToolResult(
-        {
-          safeParse: (value: unknown) =>
-            value && typeof value === "object" && "requiredField" in value
-              ? ({ success: true, data: value } as const)
-              : ({
-                  success: false,
-                  error: {
-                    issues: [
-                      {
-                        code: "custom",
-                        path: ["requiredField"],
-                        message: "Missing required field",
-                      },
-                    ],
-                  },
-                } as const),
-        } as any,
+        z.object({ requiredField: z.string() }),
         {
           content: [{ type: "text", text: "bad output" }],
           structuredContent: {},

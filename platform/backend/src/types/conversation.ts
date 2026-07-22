@@ -1,4 +1,4 @@
-import { SupportedProvidersSchema } from "@shared";
+import { SupportedProvidersSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -6,6 +6,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { ToolExposureModeSchema } from "./agent";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { SelectConversationCompactionSchema } from "./conversation-compaction";
 import { ConversationShareVisibilitySchema } from "./conversation-share";
@@ -17,36 +18,64 @@ const ConversationShareSummarySchema = z
   })
   .nullable();
 
+/**
+ * How a conversation was started: a person, a scheduled trigger run, or
+ * opening an app from the apps page. `app_open` chats are drafts — hidden from
+ * the conversations list until the user writes a message (see
+ * `ConversationModel.findAll`).
+ */
+export const ConversationOriginSchema = z.enum([
+  "user",
+  "schedule_trigger",
+  "app_open",
+]);
+export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
+
 // Override selectedProvider to use the proper enum type
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
   selectedProvider: SupportedProvidersSchema.nullable(),
+  origin: ConversationOriginSchema,
 };
 
 // For insert/update schema, selectedProvider is optional
 const insertUpdateExtendedFields = {
   selectedProvider: SupportedProvidersSchema.optional(),
+  origin: ConversationOriginSchema.optional(),
 };
 
 export const SelectConversationSchema = createSelectSchema(
   schema.conversationsTable,
-).extend({
-  // Agent is nullable when the associated profile has been deleted
-  agent: z
-    .object({
-      id: z.string(),
-      name: z.string(),
-      systemPrompt: z.string().nullable(),
-      agentType: z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
-      llmApiKeyId: z.string().nullable(),
-    })
-    .nullable(),
-  share: ConversationShareSummarySchema,
-  messages: z.array(z.any()), // UIMessage[] from AI SDK
-  chatErrors: z.array(SelectConversationChatErrorSchema),
-  compactions: z.array(SelectConversationCompactionSchema),
-  ...selectExtendedFields,
-});
+)
+  // lastReadAt is the owner's private read marker; it must never reach a
+  // shared/project viewer. Keep it out of the response shape entirely — the
+  // client only needs the derived `unread` flag — so it is stripped from every
+  // response, while the model still reads the raw column to compute `unread`.
+  .omit({ lastReadAt: true })
+  .extend({
+    // Agent is nullable when the associated profile has been deleted
+    agent: z
+      .object({
+        id: z.string(),
+        name: z.string(),
+        systemPrompt: z.string().nullable(),
+        agentType: z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
+        toolExposureMode: ToolExposureModeSchema,
+        llmApiKeyId: z.string().nullable(),
+      })
+      .nullable(),
+    share: ConversationShareSummarySchema,
+    /** Project name when the chat belongs to one; populated by list queries only. */
+    projectName: z.string().nullable().optional(),
+    /** Project icon (emoji or data URL) for the chat's project; list queries only. */
+    projectIcon: z.string().nullable().optional(),
+    /** Has a message landed since the owner last read it; populated by list queries only. */
+    unread: z.boolean().optional(),
+    messages: z.array(z.any()), // UIMessage[] from AI SDK
+    chatErrors: z.array(SelectConversationChatErrorSchema),
+    compactions: z.array(SelectConversationCompactionSchema),
+    ...selectExtendedFields,
+  });
 
 export const InsertConversationSchema = createInsertSchema(
   schema.conversationsTable,

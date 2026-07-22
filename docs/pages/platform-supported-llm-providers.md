@@ -3,14 +3,10 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-02-22
+lastUpdated: 2026-07-22
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ## Overview
 
@@ -22,9 +18,12 @@ The model router exposes one OpenAI-compatible interface for models across confi
 
 ### Supported Model Router APIs
 
-- **Responses API** (`/responses`) - ✅ Supported for text requests across model-router-compatible providers
-- **Chat Completions API** (`/chat/completions`) - ✅ Supported for text chat requests across model-router-compatible providers
-- **Models API** (`/models`) - ✅ Returns provider-qualified model IDs
+- **Responses API** (`/responses`) for text requests across model-router-compatible providers
+- **Chat Completions API** (`/chat/completions`) for text chat requests across model-router-compatible providers
+- **Models API** (`/models`) for provider-qualified chat and embedding model IDs
+- **Embeddings API** (`/embeddings`) for embedding models across supported providers
+
+Embedding models use the same provider-qualified IDs as chat models (for example `openai:text-embedding-3-small` or `gemini:gemini-embedding-001`). Anthropic, Bedrock, and Cohere have no compatible embeddings API and return `501 Not Implemented`.
 
 ### Model Router Connection Details
 
@@ -33,7 +32,7 @@ The model router exposes one OpenAI-compatible interface for models across confi
 
 ### List Models
 
-Call `GET /v1/model-router/{llm-proxy-id}/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual key or LLM OAuth client used for the request. See [Authentication](/docs/platform-llm-proxy-authentication) for configuration details.
+Call `GET /v1/model-router/{llm-proxy-id}/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual key or LLM OAuth client used for the request. The list includes chat models and embedding models. See [Authentication](/docs/platform-llm-proxy-authentication) for configuration details.
 
 ### Model Resolution
 
@@ -43,14 +42,15 @@ The prefix before `:` is the provider. The value after `:` is the provider's nat
 
 The `/models` response includes model-router-compatible text models for the providers mapped on the virtual key. Providers that use native request formats, including Anthropic, Bedrock, Gemini, and Cohere, are translated between OpenAI request/response formats and provider-native formats before forwarding.
 
-Model Router translation is text-first. Anthropic, Gemini, and Cohere routes currently drop non-text content parts such as OpenAI `image_url` message parts; Bedrock supports base64 data URL images.
+Model Router translation forwards inline non-text content where the provider's native format supports it: Gemini (base64 data URL images, audio, and files), Anthropic (base64 data URL images and PDF files, plus http(s) image URLs), Cohere (images via base64 data URI or web URL in user messages), and Bedrock (base64 data URL images). Anthropic also forwards images returned inside tool results. Content the provider format cannot represent is dropped — for example http(s) image URLs to Gemini (its `fileData` accepts only Files API or `gs://` URIs), audio to Anthropic, and non-text content in Gemini and Cohere tool results.
 
 ## OpenAI
 
 ### Supported OpenAI APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
-- **Responses API** (`/responses`) - ✅ Fully supported
+- **Chat Completions API** (`/chat/completions`)
+- **Responses API** (`/responses`)
+- **Embeddings API** (`/embeddings`)
 
 ### OpenAI Connection Details
 
@@ -62,11 +62,19 @@ Model Router translation is text-first. Anthropic, Gemini, and Cohere routes cur
 - **Use Responses API for new clients**: OpenAI recommends `/responses` for new integrations. Chat Completions remains supported for existing clients.
 - **Streaming**: OpenAI streaming responses require your cloud provider's load balancer to support long-lived connections. See [Cloud Provider Configuration](/docs/platform-deployment#cloud-provider-configuration-streaming-timeout-settings) for more details.
 
+### ChatGPT Subscription (Codex)
+
+Reuse a ChatGPT/Codex subscription for chat instead of a metered API key. Add an OpenAI provider key, pick the **ChatGPT Subscription** tab, and use **Sign in with ChatGPT** to connect the account that holds your subscription.
+
+First turn on device code authorization for the account, in ChatGPT → Settings → Security → **Enable device code authorization for Codex**. It is off by default, and ChatGPT blocks the approval step until you enable it.
+
+These keys are per-user and personal-only: each person connects their own ChatGPT account. Requests are billed to the subscription. An agent set up with a subscription key always runs on the chatting user's own subscription — never someone else's. Users without a connected account get a sign-in prompt in chat.
+
 ## Anthropic
 
 ### Supported Anthropic APIs
 
-- **Messages API** (`/messages`) - ✅ Fully supported
+- **Messages API** (`/messages`)
 
 ### Anthropic Connection Details
 
@@ -84,14 +92,23 @@ Azure requires Anthropic deployment metadata when creating Claude deployments: `
 
 See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) for the Azure endpoint and authentication details.
 
+### Workload Identity Federation (keyless)
+
+Archestra can authenticate to the Anthropic API without a static API key using [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation): it exchanges a short-lived OIDC identity token from your identity provider (Kubernetes, AWS, GCP, Entra ID, GitHub Actions, and others) for an Anthropic access token and sends it as `Authorization: Bearer` upstream. Tokens are cached and refreshed automatically before expiry.
+
+Configure a federation issuer, service account, and federation rule in the Claude Console (**Settings → Workload identity**), then set the `ARCHESTRA_ANTHROPIC_*` WIF environment variables — see [Environment Variables](/docs/platform-deployment#environment-variables) in the deployment docs. When configured, Archestra creates an "Anthropic Workload Identity Federation" system key automatically and syncs the available Claude models; users can also create Anthropic provider keys without entering an API key.
+
+Note: the SDK-standard `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` environment variables take precedence over federation if present in the backend environment, matching Anthropic's documented credential precedence.
+
 ## Google Gemini
 
 Archestra supports both the [Google AI Studio](https://ai.google.dev/) (Gemini Developer API) and [Vertex AI](https://cloud.google.com/vertex-ai) implementations of the Gemini API.
 
 ### Supported Gemini APIs
 
-- **Generate Content API** (`:generateContent`) - ✅ Fully supported
-- **Stream Generate Content API** (`:streamGenerateContent`) - ✅ Fully supported
+- **Generate Content API** (`:generateContent`)
+- **Stream Generate Content API** (`:streamGenerateContent`)
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### Gemini Connection Details
 
@@ -119,25 +136,25 @@ For GKE deployments, we recommend using [Workload Identity](https://cloud.google
 
 1. **Create a GCP service account** with Vertex AI permissions:
 
-```bash
-gcloud iam service-accounts create archestra-vertex-ai \
-  --display-name="Archestra Vertex AI"
+    ```bash
+    gcloud iam service-accounts create archestra-vertex-ai \
+      --display-name="Archestra Vertex AI"
 
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="serviceAccount:archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/aiplatform.user"
-```
+    gcloud projects add-iam-policy-binding PROJECT_ID \
+      --member="serviceAccount:archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com" \
+      --role="roles/aiplatform.user"
+    ```
 
 2. **Bind the GCP service account to the Kubernetes service account**:
 
-```bash
-gcloud iam service-accounts add-iam-policy-binding \
-  archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com \
-  --role="roles/iam.workloadIdentityUser" \
-  --member="serviceAccount:PROJECT_ID.svc.id.goog[NAMESPACE/KSA_NAME]"
-```
+    ```bash
+    gcloud iam service-accounts add-iam-policy-binding \
+      archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com \
+      --role="roles/iam.workloadIdentityUser" \
+      --member="serviceAccount:PROJECT_ID.svc.id.goog[NAMESPACE/KSA_NAME]"
+    ```
 
-Replace `NAMESPACE` with your Helm release namespace and `KSA_NAME` with the Kubernetes service account name (defaults to `archestra-platform`).
+    Replace `NAMESPACE` with your Helm release namespace and `KSA_NAME` with the Kubernetes service account name (defaults to `archestra-platform`).
 
 3. **Configure Helm values** to annotate the service account:
 
@@ -173,25 +190,21 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ### Supported Cerebras APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+- **Chat Completions API** (`/chat/completions`)
 
 ### Cerebras Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/cerebras/{agent-id}`
+- **Base URL**: `http://localhost:9000/v1/cerebras/{profile-id}`
 - **Authentication**: Pass your Cerebras API key in the `Authorization` header as `Bearer <your-api-key>`
-
-### Important Notes
-
-- Usage of the llama models in the chat ⚠️ Not yet supported ([GitHub Issue #2058](https://github.com/archestra-ai/archestra/issues/2058)) 
 
 ## Cohere
 
-[Cohere](https://www.cohere.ai/) provides enterprise-grade LLMs designed for safe, controllable, and efficient AI applications. The platform offers features like safety guardrails, function calling, and both synchronous and streaming APIs.
+[Cohere](https://www.cohere.ai/) provides LLMs through an API with safety guardrails, function calling, and both synchronous and streaming responses.
 
 ### Supported Cohere APIs
 
-- **Chat API** (`/chat`) - ✅ Fully supported
-- **Streaming**: ✅ Fully supported
+- **Chat API** (`/chat`)
+- **Streaming**
 
 ### Cohere Connection Details
 
@@ -215,7 +228,7 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ### Supported Groq APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
 
 ### Groq Connection Details
 
@@ -250,8 +263,8 @@ You can generate an API key from the [Groq Console](https://console.groq.com/key
 
 ### Supported OpenRouter APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
-- **Embeddings API** (`/embeddings`) - ✅ Supported for Knowledge Base embeddings
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) for Knowledge Base embeddings
 
 ### OpenRouter Connection Details
 
@@ -274,7 +287,7 @@ You can generate an API key from the [OpenRouter dashboard](https://openrouter.a
 
 ### Popular Models
 
-- `openrouter/auto` - OpenRouter's Auto Router; picks the best model per request, billed at that model's rate. Marked "Fastest", pinned to the top of the picker.
+- `openrouter/auto` - OpenRouter's Auto Router; picks the best model per request, billed at that model's rate.
 - `openrouter/free` - OpenRouter's Free Models Router; see below.
 - `~`-prefixed ids such as `~anthropic/claude-sonnet-latest` are OpenRouter "latest" aliases that always redirect to the newest model in a family. They sync and behave like ordinary models, and are shown with a "Latest" badge in the picker.
 
@@ -282,7 +295,7 @@ You can generate an API key from the [OpenRouter dashboard](https://openrouter.a
 
 OpenRouter exposes `:free` model variants that cost nothing. An OpenRouter API key is still required to use them, but OpenRouter doesn't charge for requests that route to free models. Model providers may use the data from free model requests to improve their models, so it may be not suitable for sensitive data.
 
-**Free Models Router** (`openrouter/free`) is OpenRouter's [built-in router](https://openrouter.ai/openrouter/free) that picks a free model per request, filtering for the features the request needs (tool calling, structured outputs, image input). 
+**Free Models Router** (`openrouter/free`) is OpenRouter's [built-in router](https://openrouter.ai/openrouter/free) that picks a free model per request, filtering for the features the request needs (tool calling, structured outputs, image input).
 
 When an OpenRouter key is added to an organization that has no default model configured, Archestra sets the Free Models Router as the organization default, giving a zero-cost starting point. An explicitly chosen default is never overridden.
 
@@ -290,15 +303,16 @@ Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so 
 
 ## Mistral AI
 
-[Mistral AI](https://mistral.ai/) provides state-of-the-art open and commercial AI models through an OpenAI-compatible API.
+[Mistral AI](https://mistral.ai/) provides open and commercial AI models through an OpenAI-compatible API.
 
 ### Supported Mistral APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+- **Chat Completions API** (`/chat/completions`)
+- **Embeddings API** (`/embeddings`)
 
 ### Mistral Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/mistral/{agent-id}`
+- **Base URL**: `http://localhost:9000/v1/mistral/{profile-id}`
 - **Authentication**: Pass your Mistral API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Getting an API Key
@@ -311,11 +325,11 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 
 ### Supported Perplexity APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+- **Chat Completions API** (`/chat/completions`)
 
 ### Perplexity Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/perplexity/{agent-id}`
+- **Base URL**: `http://localhost:9000/v1/perplexity/{profile-id}`
 - **Authentication**: Pass your Perplexity API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Environment Variables
@@ -337,11 +351,12 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 
 ## vLLM
 
-[vLLM](https://github.com/vllm-project/vllm) is a high-throughput and memory-efficient inference and serving engine for LLMs. It's ideal for self-hosted deployments where you want to run open-source models on your own infrastructure.
+[vLLM](https://github.com/vllm-project/vllm) is an inference and serving engine for LLMs. Use it for self-hosted deployments to run open-source models on your own infrastructure.
 
 ### Supported vLLM APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### vLLM Connection Details
 
@@ -350,7 +365,7 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 
 ### Setup
 
-1. Go to **Settings > LLM API Keys** and add a new key with provider **vLLM**
+1. Go to **Model Providers** and add a new key with provider **vLLM**
 2. Set the **Base URL** to your vLLM server (e.g., `http://your-vllm-host:8000/v1`)
 3. API key can be left blank for most self-hosted deployments
 
@@ -366,15 +381,17 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 ### Important Notes
 
 - **Configure base URL to enable vLLM**: The vLLM provider is only available when `ARCHESTRA_VLLM_BASE_URL` is set or a per-key base URL is configured in the UI. Without either, vLLM won't appear as an option.
+- **Auto-seeding needs the base URL**: Setting `ARCHESTRA_CHAT_VLLM_API_KEY` alone does not create a vLLM key at startup. `ARCHESTRA_VLLM_BASE_URL` must also be set, otherwise the provider is skipped (a key without a base URL would silently route to the public OpenAI endpoint).
 - **No API key required for most deployments**: Unlike cloud providers, self-hosted vLLM typically doesn't require authentication. When adding a vLLM key in the platform, the API key field is marked as optional.
 
 ## Ollama
 
-[Ollama](https://ollama.ai/) is a local LLM runner that makes it easy to run open-source large language models on your machine. It's perfect for local development, testing, and privacy-conscious deployments.
+[Ollama](https://ollama.ai/) is a local LLM runner for open-source large language models on your machine. Use it for local development, testing, and privacy-conscious deployments.
 
 ### Supported Ollama APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### Ollama Connection Details
 
@@ -383,7 +400,7 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 
 ### Setup
 
-1. Go to **Settings > LLM API Keys** and add a new key with provider **Ollama**
+1. Go to **Model Providers** and add a new key with provider **Ollama**
 2. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
 3. API key can be left blank for self-hosted Ollama
 
@@ -401,14 +418,16 @@ The default base URL is `http://localhost:11434/v1`. Override it per-key in the 
 - **Enabled by default**: Ollama is enabled out of the box with a default base URL of `http://localhost:11434/v1`.
 - **No API key required**: Self-hosted Ollama doesn't require authentication. When adding an Ollama key in the platform, the API key field is marked as optional.
 - **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
+- **Running Archestra in Docker**: When Archestra runs in a container (e.g. the `docker run` quickstart) and Ollama runs on the host, `localhost` resolves to the container itself, not the host. Use `http://host.docker.internal:11434/v1` as the Base URL instead. The platform detects this case and suggests the change when a `localhost` connection fails.
 
 ## Zhipu AI
 
-[Zhipu AI (Z.ai)](https://z.ai/) is a Chinese AI company offering the GLM (General Language Model) series of large language models. The platform provides both free and commercial models with strong performance in Chinese and English language tasks.
+[Zhipu AI (Z.ai)](https://z.ai/) is a Chinese AI company offering the GLM (General Language Model) series of large language models. It provides both free and commercial models for Chinese and English language tasks.
 
 ### Supported Zhipu AI APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible
 
 ### Zhipu AI Connection Details
 
@@ -439,11 +458,11 @@ The default base URL is `http://localhost:11434/v1`. Override it per-key in the 
 
 ## xAI (Grok)
 
-[xAI](https://x.ai/) is Elon Musk's AI company offering the Grok series of large language models with real-time information access and advanced reasoning capabilities.
+[xAI](https://x.ai/) is Elon Musk's AI company offering the Grok series of large language models with real-time information access.
 
 ### Supported xAI APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
 
 ### xAI Connection Details
 
@@ -476,11 +495,11 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 
 ## MiniMax
 
-[MiniMax](https://www.minimax.io/) is a Chinese AI company offering advanced large language models with strong reasoning capabilities. The platform provides the MiniMax-M2 series with chain-of-thought reasoning capabilities and support for text, images, and multi-turn conversations.
+[MiniMax](https://www.minimax.io/) is a Chinese AI company offering large language models. It provides the MiniMax-M2 series with chain-of-thought reasoning and support for text, images, and multi-turn conversations.
 
 ### Supported MiniMax APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
 
 ### MiniMax Connection Details
 
@@ -492,7 +511,7 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 | Variable                          | Required | Description                                                                    |
 | --------------------------------- | -------- | ------------------------------------------------------------------------------ |
 | `ARCHESTRA_CHAT_MINIMAX_API_KEY`  | No       | Default API key for MiniMax (can be overridden per conversation/team/org)     |
-| `ARCHESTRA_CHAT_MINIMAX_BASE_URL` | No       | MiniMax API base URL (default: `https://api.minimax.io/v1`)                   |
+| `ARCHESTRA_MINIMAX_BASE_URL`      | No       | MiniMax API base URL (default: `https://api.minimax.io/v1`)                   |
 
 ### Available Models
 
@@ -510,14 +529,179 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 - **No /models endpoint**: MiniMax does not provide a models listing API. Available models are hardcoded in the platform configuration
 - **Chinese and English support**: MiniMax models excel at both Chinese and English language tasks
 
+## Kimi (Moonshot AI)
+
+[Kimi](https://www.moonshot.ai/) is Moonshot AI's family of large language models, including the Kimi K2 series and the `moonshot-v1` long-context models, with strong reasoning, tool use, and long-context capabilities.
+
+### Supported Kimi APIs
+
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+
+### Kimi Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/kimi/{profile-id}`
+- **Authentication**: Pass your Kimi API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                       | Required | Description                                                                |
+| ------------------------------ | -------- | ------------------------------------------------------------------------- |
+| `ARCHESTRA_CHAT_KIMI_API_KEY`  | No       | Default API key for Kimi (can be overridden per conversation/team/org)    |
+| `ARCHESTRA_KIMI_BASE_URL`      | No       | Kimi API base URL (default: `https://api.moonshot.ai/v1`)                 |
+
+### Getting an API Key
+
+Obtain your API key from the [Moonshot AI Platform](https://platform.moonshot.ai/console/api-keys).
+
+### Popular Models
+
+- `kimi-k2-0711-preview` - Kimi K2 flagship model with strong reasoning and tool use
+- `kimi-latest` - Rolling alias tracking the newest Kimi model
+- `moonshot-v1-128k` - Long-context (128K) model
+
+### Important Notes
+
+- **OpenAI-compatible API**: Kimi's API follows the OpenAI Chat Completions format, making it easy to switch between providers
+- **/models endpoint**: Kimi exposes a models listing API, so available models are synced automatically from your account
+- **International endpoint**: The default base URL uses Moonshot's international endpoint (`api.moonshot.ai`); the China endpoint (`api.moonshot.cn`) can be set via `ARCHESTRA_KIMI_BASE_URL`
+
+## GitHub Copilot
+
+[GitHub Copilot](https://github.com/features/copilot) exposes the models included with a user's Copilot subscription (GPT, Claude, Gemini, and others, depending on plan) through an OpenAI-compatible API. Unlike other providers, Copilot has no static API keys: access is tied to an individual GitHub account.
+
+### Supported GitHub Copilot APIs
+
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Models API** (`/models`) - lists the chat models the account can use
+
+### GitHub Copilot Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/github-copilot/{profile-id}`
+- **Authentication**: Pass your **GitHub OAuth token** (the credential below) in the `Authorization` header as `Bearer <token>`
+
+### Authentication
+
+A GitHub Copilot provider key stores a **long-lived GitHub OAuth token** (`gho_`/`ghu_…`) for an account with an active Copilot subscription — not a Copilot API key, which does not exist. Archestra exchanges that token for a short-lived Copilot bearer on every request (cached and refreshed automatically), so clients only ever present the GitHub token.
+
+Obtain the token in either way:
+
+- **Sign in with GitHub**: when adding a GitHub Copilot key, use the "Sign in with GitHub" button. It runs GitHub's OAuth device flow — you approve a one-time code at `github.com/login/device`, and Archestra stores the resulting token.
+- **Reuse an existing token**: the official Copilot CLI / VS Code store one in `~/.config/github-copilot/apps.json` (the `oauth_token` value); paste it into the API key field. The `/connection` setup script for the Copilot CLI reuses or obtains this token automatically.
+
+### Environment Variables
+
+| Variable                                       | Required | Description                                                                                       |
+| ---------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY`        | No       | Default GitHub OAuth token for Copilot (can be overridden per conversation/team/org)              |
+| `ARCHESTRA_GITHUB_COPILOT_BASE_URL`            | No       | Copilot API base URL (default: `https://api.githubcopilot.com`; GHE: `https://copilot-api.<domain>`) |
+| `ARCHESTRA_GITHUB_COPILOT_TOKEN_EXCHANGE_URL`  | No       | GitHub token-exchange endpoint (default: `https://api.github.com/copilot_internal/v2/token`)      |
+| `ARCHESTRA_GITHUB_COPILOT_DEVICE_AUTH_BASE_URL`| No       | Host for the device-flow sign-in (default: `https://github.com`)                                  |
+| `ARCHESTRA_GITHUB_COPILOT_CLIENT_ID`           | No       | GitHub App client id for the device flow (default: the standard VS Code client id)                |
+
+### Important Notes
+
+- **No static API keys**: access is per-user via a GitHub OAuth token; model availability follows that account's Copilot subscription tier.
+- **Per-user only**: because the token is tied to one GitHub account, Copilot keys are **personal scope only** — they can't be shared via team/org scope or wrapped in a shared (org/team or multi-provider model-router) virtual key. Each user connects their own account. When someone uses an agent with a Copilot model but hasn't connected yet, Archestra resolves *their* key (never the agent owner's) and prompts them to connect: an inline "Connect GitHub Copilot" card in chat, or a message with a Settings link in Slack/Teams. Email and scheduled runs fail with an actionable message.
+- **Chat-completions models only**: the `/models` listing is filtered to models reachable through `/chat/completions`. Copilot also serves Responses-API-only models (e.g. `gpt-5.3-codex`) and an Anthropic `/v1/messages` shim, which Archestra does not route to.
+- **GitHub Enterprise**: point the base, token-exchange, and device-auth URLs at your GHE host. Organizations with their own GitHub App can override the client id.
+
+## Microsoft 365 Copilot
+
+[Microsoft 365 Copilot](https://www.microsoft.com/en-us/microsoft-365/copilot) answers prompts grounded in the user's Microsoft 365 tenant data (mail, SharePoint, Teams) and the web. Archestra connects to it through the [Microsoft 365 Copilot Chat API](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/overview) (Microsoft Graph, beta). Like GitHub Copilot, there are no static API keys: access is tied to an individual Microsoft work account with a Microsoft 365 Copilot license.
+
+### Supported Microsoft 365 Copilot APIs
+
+- **Chat API** (`/copilot/conversations/{id}/chat`) - synchronous answers
+- **Chat streaming API** (`/copilot/conversations/{id}/chatOverStream`) - streamed answers
+
+Archestra exposes both through its standard OpenAI-compatible `/chat/completions` proxy surface. Streaming requests (the built-in chat always streams) use `chatOverStream`; non-streaming requests use `chat`. The single model is `microsoft-365-copilot` — the Chat API has no model selection.
+
+### Microsoft 365 Copilot Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/microsoft-365-copilot/{profile-id}`
+- **Authentication**: Pass the stored **Entra refresh token** (the credential below) in the `Authorization` header as `Bearer <token>`
+
+### Prerequisites: Entra App Registration
+
+The sign-in flow needs an [Entra ID app registration](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) owned by your organization:
+
+1. Register an application in the Microsoft Entra admin center. The device flow runs as a public client — skip the client secret and redirect URI.
+2. Enable **Allow public client flows** (Authentication → Advanced settings). Without it, sign-in fails after the code is entered.
+3. Add these **delegated** Microsoft Graph permissions and grant admin consent: `Sites.Read.All`, `Mail.Read`, `People.Read.All`, `OnlineMeetingTranscript.Read.All`, `Chat.Read`, `ChannelMessage.Read.All`, `ExternalItem.Read.All`. The Chat API requires all seven — one per data source Copilot searches.
+4. Set `ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID` to the Application (client) ID.
+5. For a **single-tenant** registration, also set `ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID` to your tenant ID. The default (`organizations`) only works for multi-tenant registrations.
+
+With a multi-tenant registration, users from another organization can sign in once their own tenant admin consents to the app.
+
+### Authentication
+
+A Microsoft 365 Copilot provider key stores a **long-lived Entra refresh token** for an account with a Microsoft 365 Copilot license. Archestra redeems it for a short-lived Graph access token on every request (cached and refreshed automatically). Entra rotates refresh tokens; Archestra persists the rotated token back to the key.
+
+To connect, use the **Sign in with Microsoft** button when adding a Microsoft 365 Copilot key. It runs Entra's OAuth device flow — you approve a one-time code on Microsoft's device sign-in page, and Archestra stores the resulting refresh token.
+
+### Environment Variables
+
+| Variable                                    | Required | Description                                                                              |
+| ------------------------------------------- | -------- | ---------------------------------------------------------------------------------------- |
+| `ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID`     | Yes      | Application (client) ID of your Entra app registration (sign-in is unavailable without it) |
+| `ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID`     | No       | Entra tenant of the OAuth endpoints (default: `organizations`; pin your tenant id to restrict sign-in) |
+| `ARCHESTRA_MICROSOFT_365_COPILOT_BASE_URL`      | No       | Microsoft Graph base URL (default: `https://graph.microsoft.com/beta`)                   |
+| `ARCHESTRA_MICROSOFT_365_COPILOT_AUTH_BASE_URL` | No       | Entra host for device sign-in and token redemption (default: `https://login.microsoftonline.com`) |
+
+### Important Notes
+
+- **Preview API**: the Chat API is a Microsoft Graph **beta** endpoint. Microsoft does not support it for production use and may change it without notice.
+- **License required**: each user needs a Microsoft 365 Copilot add-on license, assigned in their own tenant. The seat license covers all Chat API usage. A missing license surfaces on the first chat request.
+- **Work accounts only**: the Chat API supports delegated work or school accounts.
+- **Per-user only**: keys are **personal scope only**, same as GitHub Copilot. Each user connects their own Microsoft account; an inline "Connect Microsoft 365 Copilot" card appears in chat when a key is missing. Every request runs as the signed-in user — Copilot only sees data that user can already access.
+- **Text-only, no tools**: the Chat API returns text answers only. It cannot run tools or Copilot actions such as creating files, sending emails, or scheduling meetings. In Archestra chat, an agent with tools runs without them on this model — a notice above the composer says so. Proxy requests that declare tools are rejected with a clear error.
+- **Conversational answers only**: prompts that trigger long-running work can hit Microsoft's gateway timeout. Keep requests to questions and answers.
+- **Estimated usage**: the Chat API reports no token counts, so usage and cost figures are tokenizer estimates.
+- **Stateless mapping**: each request creates a fresh Copilot conversation; prior turns ride along as context. If a streaming response has no recognizable text, Archestra retries through the synchronous endpoint in a second conversation, so one request can appear as two conversations in Microsoft 365 activity.
+- **Conversation cleanup**: the [Copilot conversation API](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/resources/copilotconversation) currently documents no delete operation. If a chat request fails after its conversation is created, the abandoned conversation may remain visible in Microsoft 365 activity.
+
+## Archestra
+
+Use another Archestra instance as an upstream provider. One Archestra routes its traffic through a second Archestra, which applies its own policies before reaching the real model. The upstream's model router is OpenAI-compatible, so this provider follows the OpenAI chat-completions path and can reach every provider that instance has configured.
+
+### Supported Archestra APIs
+
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+
+### Archestra Connection Details
+
+- **Base URL**: the upstream Archestra's model router, for example `https://your-archestra/v1/model-router/<llm-proxy-id>`.
+- **Authentication**: pass a virtual API key (`arch_...`) minted from that LLM Proxy in the `Authorization` header as `Bearer <key>`.
+
+### Setup
+
+1. On the upstream Archestra, go to **LLM Proxies** and create an LLM Proxy, then create a virtual API key for it.
+2. On this Archestra, go to **Model Providers** and add a new key with provider **Archestra**.
+3. Set the **Base URL** to the upstream proxy's model router (for example `https://your-archestra/v1/model-router/<llm-proxy-id>`).
+4. Paste the virtual API key from the upstream LLM Proxy.
+
+Archestra fetches the model list from the upstream's `{base-url}/models` endpoint, so the picker shows exactly the models that proxy exposes. Model IDs are provider-qualified, for example `openai:gpt-5.4`.
+
+### Environment Variables
+
+| Variable                           | Required | Description                                                                                     |
+| ---------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `ARCHESTRA_ARCHESTRA_BASE_URL`     | No       | Global upstream base URL. Normally set per key in the UI; a global value only enables raw passthrough at the `/v1/archestra` proxy prefix. |
+| `ARCHESTRA_CHAT_ARCHESTRA_API_KEY` | No       | Default virtual API key for the built-in chat feature.                                          |
+
+### Important Notes
+
+- **Base URL is required**: the upstream endpoint has no default, so a per-key base URL is always needed. Without one, the provider cannot resolve an upstream and requests would fall back to the public OpenAI endpoint.
+- **Models come from the upstream**: the model list mirrors whatever the upstream LLM Proxy exposes, so it stays in sync as that instance changes.
+
 ## Amazon Bedrock
 
 ### Supported Bedrock APIs
 
-- **Converse API** (`/converse`) - ✅ Fully supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html))
-- **Converse Stream API** (`/converse-stream`) - ✅ Fully supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html))
-- **InvokeModel API** (`/invoke`) -  ⚠️ Not yet supported  ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html))
-- **OpenAI-compatible API (Mantle)** -  ⚠️ Not yet supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html))
+- **Converse API** (`/converse`) ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html))
+- **Converse Stream API** (`/converse-stream`) ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html))
+- **InvokeModel API** (`/model/{model-id}/invoke` and `/model/{model-id}/invoke-with-response-stream`) for Anthropic models ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html)). This is the API the Anthropic SDK's Bedrock client uses — point Claude Code at Archestra with `CLAUDE_CODE_USE_BEDROCK=1` and `ANTHROPIC_BEDROCK_BASE_URL=http://localhost:9000/v1/bedrock/{profile-id}`.
+- **OpenAI-compatible API (Mantle)** - ⚠️ Not yet supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html))
 
 ### Bedrock Connection Details
 
@@ -539,6 +723,7 @@ To use IAM authentication on EKS with [IRSA](https://docs.aws.amazon.com/eks/lat
 1. Create an IAM role with `AmazonBedrockFullAccess` or a scoped policy (see below)
 2. Create an [OIDC provider](https://docs.aws.amazon.com/eks/latest/userguide/enable-iam-roles-for-service-accounts.html) for your EKS cluster
 3. Configure the IAM role's trust policy to allow the Archestra service account:
+
    ```json
    {
      "Effect": "Allow",
@@ -553,16 +738,19 @@ To use IAM authentication on EKS with [IRSA](https://docs.aws.amazon.com/eks/lat
      }
    }
    ```
+
 4. Annotate the Archestra service account:
+
    ```bash
    kubectl annotate sa archestra-platform -n archestra \
      eks.amazonaws.com/role-arn=arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
    ```
+
 5. Set the environment variables below and restart the deployment
 
 #### Minimum IAM Policy
 
-Archestra uses the Bedrock **Converse API** (not InvokeModel). The IAM role needs these actions:
+Archestra calls the Bedrock **Converse API**, and the **InvokeModel API** for clients that use it (Claude Code, for example). The IAM role needs these actions:
 
 ```json
 {
@@ -570,7 +758,12 @@ Archestra uses the Bedrock **Converse API** (not InvokeModel). The IAM role need
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["bedrock:Converse", "bedrock:ConverseStream"],
+      "Action": [
+        "bedrock:Converse",
+        "bedrock:ConverseStream",
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
       "Resource": [
         "arn:aws:bedrock:*:<ACCOUNT_ID>:inference-profile/us.anthropic.*",
         "arn:aws:bedrock:*::foundation-model/anthropic.*"
@@ -667,12 +860,13 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 
 ## Azure AI Foundry
 
-[Azure AI Foundry](https://azure.microsoft.com/en-us/products/ai-foundry) (formerly Azure OpenAI) provides enterprise-grade access to OpenAI models through Microsoft Azure, with an OpenAI-compatible API.
+[Azure AI Foundry](https://azure.microsoft.com/en-us/products/ai-foundry) (formerly Azure OpenAI) provides access to OpenAI models through Microsoft Azure, with an OpenAI-compatible API.
 
 ### Supported Azure AI Foundry APIs
 
 - Chat Completions (streaming and non-streaming)
 - Responses API (streaming and non-streaming)
+- Embeddings API (`/embeddings`) - OpenAI-compatible
 
 ### Azure AI Foundry Connection Details
 
@@ -689,6 +883,8 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 | `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION` | No | Azure Responses API version (default: `2025-04-01-preview`) |
 | `ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED` | No | Set to `true` to use Microsoft Entra ID instead of an Azure API key |
 | `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY` | No | Default API key for Azure AI Foundry chat (can be overridden per conversation/team/org) |
+
+Setting `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY` alone does not create an Azure key at startup; `ARCHESTRA_AZURE_OPENAI_BASE_URL` must also be set (Azure has no usable default endpoint), otherwise the provider is skipped.
 
 ### Getting an Azure API Key
 

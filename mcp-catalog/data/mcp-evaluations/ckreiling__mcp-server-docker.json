@@ -1,0 +1,114 @@
+{
+  "name": "ckreiling__mcp-server-docker",
+  "display_name": "mcp-server-docker",
+  "description": "MCP server for Docker",
+  "author": {
+    "name": "ckreiling"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-docker"],
+    "env": {
+      "DOCKER_HOST": "${user_config.docker_host}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "docker_host": {
+      "type": "string",
+      "title": "Docker Host",
+      "description": "The Docker daemon host URL (e.g., tcp://localhost:2375, unix:///var/run/docker.sock, or ssh://user@host). If not set, the server will attempt to connect to the local Docker daemon using default environment variables.",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# 🐋 Docker MCP server\n\nAn MCP server for managing Docker with natural language!\n\n## 🪩 What can it do?\n\n- 🚀 Compose containers with natural language\n- 🔍 Introspect & debug running containers\n- 📀 Manage persistent data with Docker volumes\n\n## ❓ Who is this for?\n\n- Server administrators: connect to remote Docker engines for e.g. managing a\n  public-facing website.\n- Tinkerers: run containers locally and experiment with open-source apps\n  supporting Docker.\n- AI enthusiasts: push the limits of that an LLM is capable of!\n\n## Demo\n\nA quick demo showing a WordPress deployment using natural language:\n\nhttps://github.com/user-attachments/assets/65e35e67-bce0-4449-af7e-9f4dd773b4b3\n\n## 🏎️ Quickstart\n\n### Install\n\n#### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n<details>\n  <summary>Install from PyPi with uv</summary>\n\nIf you don't have `uv` installed, follow the installation instructions for your\nsystem:\n[link](https://docs.astral.sh/uv/getting-started/installation/#installation-methods)\n\nThen add the following to your MCP servers file:\n\n```\n\"mcpServers\": {\n  \"mcp-server-docker\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"mcp-server-docker\"\n    ]\n  }\n}\n```\n\n</details>\n\n<details>\n  <summary>Install with Docker</summary>\n\nPurely for convenience, the server can run in a Docker container.\n\nAfter cloning this repository, build the Docker image:\n\n```bash\ndocker build -t mcp-server-docker .\n```\n\nAnd then add the following to your MCP servers file:\n\n```\n\"mcpServers\": {\n  \"mcp-server-docker\": {\n    \"command\": \"docker\",\n    \"args\": [\n      \"run\",\n      \"-i\",\n      \"--rm\",\n      \"-v\",\n      \"/var/run/docker.sock:/var/run/docker.sock\",\n      \"mcp-server-docker:latest\"\n    ]\n  }\n}\n```\n\nNote that we mount the Docker socket as a volume; this ensures the MCP server\ncan connect to and control the local Docker daemon.\n\n</details>\n\n## 📝 Prompts\n\n### 🎻 `docker_compose`\n\nUse natural language to compose containers. [See above](#demo) for a demo.\n\nProvide a Project Name, and a description of desired containers, and let the LLM\ndo the rest.\n\nThis prompt instructs the LLM to enter a `plan+apply` loop. Your interaction\nwith the LLM will involve the following steps:\n\n1. You give the LLM instructions for which containers to bring up\n2. The LLM calculates a concise natural language plan and presents it to you\n3. You either:\n   - Apply the plan\n   - Provide the LLM feedback, and the LLM recalculates the plan\n\n#### Examples\n\n- name: `nginx`, containers: \"deploy an nginx container exposing it on port\n  9000\"\n- name: `wordpress`, containers: \"deploy a WordPress container and a supporting\n  MySQL container, exposing Wordpress on port 9000\"\n\n#### Resuming a Project\n\nWhen starting a new chat with this prompt, the LLM will receive the status of\nany containers, volumes, and networks created with the given project `name`.\n\nThis is mainly useful for cleaning up, in-case you lose a chat that was\nresponsible for many containers.\n\n## 📔 Resources\n\nThe server implements a couple resources for every container:\n\n- Stats: CPU, memory, etc. for a container\n- Logs: tail some logs from a container\n\n## 🔨 Tools\n\n### Containers\n\n- `list_containers`\n- `create_container`\n- `run_container`\n- `recreate_container`\n- `start_container`\n- `fetch_container_logs`\n- `stop_container`\n- `remove_container`\n\n### Images\n\n- `list_images`\n- `pull_image`\n- `push_image`\n- `build_image`\n- `remove_image`\n\n### Networks\n\n- `list_networks`\n- `create_network`\n- `remove_network`\n\n### Volumes\n\n- `list_volumes`\n- `create_volume`\n- `remove_volume`\n\n## 🚧 Disclaimers\n\n### Sensitive Data\n\n**DO NOT CONFIGURE CONTAINERS WITH SENSITIVE DATA.** This includes API keys,\ndatabase passwords, etc.\n\nAny sensitive data exchanged with the LLM is inherently compromised, unless the\nLLM is running on your local machine.\n\nIf you are interested in securely passing secrets to containers, file an issue\non this repository with your use-case.\n\n### Reviewing Created Containers\n\nBe careful to review the containers that the LLM creates. Docker is not a secure\nsandbox, and therefore the MCP server can potentially impact the host machine\nthrough Docker.\n\nFor safety reasons, this MCP server doesn't support sensitive Docker options\nlike `--privileged` or `--cap-add/--cap-drop`. If these features are of interest\nto you, file an issue on this repository with your use-case.\n\n## 🛠️ Configuration\n\nThis server uses the Python Docker SDK's `from_env` method. For configuration\ndetails, see\n[the documentation](https://docker-py.readthedocs.io/en/stable/client.html#docker.client.from_env).\n\n### Connect to Docker over SSH\n\nThis MCP server can connect to a remote Docker daemon over SSH.\n\nSimply set a `ssh://` host URL in the MCP server definition:\n\n```\n\"mcpServers\": {\n  \"mcp-server-docker\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"mcp-server-docker\"\n    ],\n    \"env\": {\n      \"DOCKER_HOST\": \"ssh://myusername@myhost.example.com\"\n    }\n  }\n}\n```\n\n## 💻 Development\n\nPrefer using Devbox to configure your development environment.\n\nSee the `devbox.json` for helpful development commands.\n\nAfter setting up devbox you can configure your Claude MCP config to use it:\n\n```\n  \"docker\": {\n    \"command\": \"/path/to/repo/.devbox/nix/profile/default/bin/uv\",\n    \"args\": [\n      \"--directory\",\n      \"/path/to/repo/\",\n      \"run\",\n      \"mcp-server-docker\"\n    ]\n  },\n```\n",
+  "category": "Cloud",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-docker": {
+        "command": "uvx",
+        "args": ["mcp-server-docker"],
+        "env": {}
+      },
+      "mcp-server-docker-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock", "mcp-server-docker:latest"],
+        "env": {},
+        "docker_image": "mcp-server-docker:latest"
+      },
+      "mcp-server-docker-ssh": {
+        "command": "uvx",
+        "args": ["mcp-server-docker"],
+        "env": {
+          "DOCKER_HOST": "ssh://myusername@myhost.example.com"
+        }
+      },
+      "mcp-server-docker-devbox": {
+        "command": "/path/to/repo/.devbox/nix/profile/default/bin/uv",
+        "args": ["--directory", "/path/to/repo/", "run", "mcp-server-docker"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ckreiling",
+    "repo": "mcp-server-docker",
+    "url": "https://github.com/ckreiling/mcp-server-docker",
+    "name": "ckreiling__mcp-server-docker",
+    "path": null,
+    "stars": 595,
+    "contributors": 3,
+    "issues": 8,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "6288015cee6b76b2e2bf2c64232f0748baf48c1c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:35.545Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "docker",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "paramiko",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-docker\"\nversion = \"0.2.1\"\ndescription = \"A Docker MCP Server\"\nreadme = \"README.md\"\ndependencies = [\n    \"docker>=7.1.0\",\n    \"mcp>=1.1.0,<2.0\",\n    \"paramiko>=3.5.1,<4.0\",\n    \"pydantic>=2.10.3\",\n    \"pydantic-settings>=2.6.1\",\n]\nlicense = { file = \"LICENSE\" }\nkeywords = [\"docker\", \"mcp\", \"server\"]\n\nrequires-python = \">=3.12\"\n\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Programming Language :: Python :: 3.12\",\n]\n\n[project.urls]\nRepository = \"https://github.com/ckreiling/mcp-server-docker\"\nIssues = \"https://github.com/ckreiling/mcp-server-docker/issues\"\n\n[[project.authors]]\nname = \"Christian Kreiling\"\nemail = \"kreiling@hey.com\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-server-docker = \"mcp_server_docker:main\"\n"
+}

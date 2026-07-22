@@ -6,9 +6,9 @@ order: 2
 lastUpdated: 2026-05-07
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
+<!--
 This is the INDEX page for identity. It lists what Archestra supports per
 provider, points readers at the relevant sub-page, and keeps short notes for
 providers that don't yet have dedicated pages (Google, GitHub, GitLab, Generic
@@ -32,7 +32,7 @@ Archestra integrates with your identity provider (IdP) for two related purposes:
 - **Sign-in (SSO)** — users authenticate with their existing IdP credentials. See [SSO](/docs/platform-sso).
 - **Downstream MCP tool calls (Enterprise-Managed Auth)** — Archestra exchanges the signed-in user's IdP token for a downstream API token at tool-call time, so the tool runs as *that user*, not a service account. See [Enterprise-Managed Auth](/docs/platform-enterprise-managed-auth).
 
-> **Enterprise feature:** please reach out to sales@archestra.ai for instructions about how to enable the feature.
+> **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
 
 ## Supported providers
 

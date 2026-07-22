@@ -1,4 +1,4 @@
-import { E2eTestId } from "@shared/e2e-test-ids";
+import { E2eTestId } from "@archestra/shared/e2e-test-ids";
 import {
   makeCreatedVirtualKey,
   makeLlmProviderApiKey,

@@ -1,0 +1,194 @@
+{
+  "name": "zhwt__go-mcp-mysql",
+  "display_name": "go-mcp-mysql",
+  "description": "Zero burden, ready-to-use Model Context Protocol (MCP) server for interacting with MySQL and automation. No Node.js or Python environment needed.",
+  "author": {
+    "name": "Zhwt"
+  },
+  "server": {
+    "command": "${__dirname}/server/go-mcp-mysql",
+    "args": [
+      "--host",
+      "${user_config.host}",
+      "--port",
+      "${user_config.port}",
+      "--user",
+      "${user_config.user}",
+      "--pass",
+      "${user_config.pass}",
+      "--db",
+      "${user_config.db}",
+      "${user_config.read_only ? '--read-only' : ''}",
+      "${user_config.disable_explain_check ? '--with-explain-check' : ''}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "host": {
+      "type": "string",
+      "title": "MySQL Host",
+      "description": "The hostname or IP address of the MySQL server.",
+      "required": true,
+      "default": "localhost"
+    },
+    "port": {
+      "type": "number",
+      "title": "MySQL Port",
+      "description": "The port number of the MySQL server.",
+      "required": true,
+      "default": 3306,
+      "min": 1,
+      "max": 65535
+    },
+    "user": {
+      "type": "string",
+      "title": "MySQL User",
+      "description": "The username for connecting to the MySQL server.",
+      "required": true,
+      "default": "root"
+    },
+    "pass": {
+      "type": "string",
+      "title": "MySQL Password",
+      "description": "The password for the MySQL user.",
+      "sensitive": true,
+      "required": true,
+      "default": "password"
+    },
+    "db": {
+      "type": "string",
+      "title": "MySQL Database",
+      "description": "The name of the database to connect to.",
+      "required": true
+    },
+    "read_only": {
+      "type": "boolean",
+      "title": "Read-Only Mode",
+      "description": "Enable read-only mode. In this mode, only tools beginning with 'list', 'read_' and 'desc_' are available.",
+      "default": false
+    },
+    "disable_explain_check": {
+      "type": "boolean",
+      "title": "Disable Explain Check",
+      "description": "If enabled, CRUD queries will NOT be executed with an EXPLAIN statement to check the query plan. By default, the check is enabled.",
+      "default": false
+    }
+  },
+  "readme": "# go-mcp-mysql\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/Zhwt/go-mcp-mysql)](https://archestra.ai/mcp-catalog/zhwt__go-mcp-mysql)\n\n## Overview\n\nZero burden, ready-to-use Model Context Protocol (MCP) server for interacting with MySQL and automation. No Node.js or Python environment needed. This server provides tools to do CRUD operations on MySQL databases and tables, and a read-only mode to prevent surprise write operations. You can also make the MCP server check the query plan by using a `EXPLAIN` statement before executing the query by adding a `--with-explain-check` flag.\n\nPlease note that this is a work in progress and may not yet be ready for production use.\n\n## Installation\n\n1. Get the latest [release](https://github.com/Zhwt/go-mcp-mysql/releases) and put it in your `$PATH` or somewhere you can easily access.\n\n2. Or if you have Go installed, you can build it from source:\n\n```sh\ngo install -v github.com/Zhwt/go-mcp-mysql@latest\n```\n\n## Usage\n\n### Method A: Using Command Line Arguments\n\n```json\n{\n  \"mcpServers\": {\n    \"mysql\": {\n      \"command\": \"go-mcp-mysql\",\n      \"args\": [\n        \"--host\", \"localhost\",\n        \"--user\", \"root\",\n        \"--pass\", \"password\",\n        \"--port\", \"3306\",\n        \"--db\", \"mydb\"\n      ]\n    }\n  }\n}\n```\n\n### Method B: Using DSN With Custom Options\n\n```json\n{\n  \"mcpServers\": {\n    \"mysql\": {\n      \"command\": \"go-mcp-mysql\",\n      \"args\": [\n        \"--dsn\", \"username:password@tcp(localhost:3306)/mydb?parseTime=true&loc=Local\"\n      ]\n    }\n  }\n}\n```\n\nPlease refer to [MySQL DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) for more details.\n\nNote: For those who put the binary outside of your `$PATH`, you need to replace `go-mcp-mysql` with the full path to the binary: e.g.: if you put the binary in the **Downloads** folder, you may use the following path:\n\n```json\n{\n  \"mcpServers\": {\n    \"mysql\": {\n      \"command\": \"C:\\\\Users\\\\<username>\\\\Downloads\\\\go-mcp-mysql.exe\",\n      \"args\": [\n        ...\n      ]\n    }\n  }\n}\n```\n\n### Optional Flags\n\n- Add a `--read-only` flag to enable read-only mode. In this mode, only tools beginning with `list`, `read_` and `desc_` are available. Make sure to refresh/restart the MCP server after adding this flag.\n- By default, CRUD queries will be first executed with a `EXPLAIN ?` statement to check whether the generated query plan matches the expected pattern. Add a `--with-explain-check` flag to disable this behavior.\n\n## Tools\n\n### Schema Tools\n\n1. `list_database`\n\n    - List all databases in the MySQL server.\n    - Parameters: None\n    - Returns: A list of matching database names.\n\n2. `list_table`\n\n    - List all tables in the MySQL server.\n    - Parameters:\n        - `name`: If provided, list tables with the specified name, same as SQL `SHOW TABLES LIKE '%name%'`. Otherwise, list all tables.\n    - Returns: A list of matching table names.\n\n3. `create_table`\n\n    - Create a new table in the MySQL server.\n    - Parameters:\n        - `query`: The SQL query to create the table.\n    - Returns: x rows affected.\n\n4. `alter_table`\n\n    - Alter an existing table in the MySQL server. The LLM is informed not to drop an existing table or column.\n    - Parameters:\n        - `query`: The SQL query to alter the table.\n    - Returns: x rows affected.\n\n5. `desc_table`\n\n    - Describe the structure of a table.\n    - Parameters:\n        - `name`: The name of the table to describe.\n    - Returns: The structure of the table.\n\n### Data Tools\n\n1. `read_query`\n\n    - Execute a read-only SQL query.\n    - Parameters:\n        - `query`: The SQL query to execute.\n    - Returns: The result of the query.\n\n2. `write_query`\n\n    - Execute a write SQL query.\n    - Parameters:\n        - `query`: The SQL query to execute.\n    - Returns: x rows affected, last insert id: <last_insert_id>.\n\n3. `update_query`\n\n    - Execute an update SQL query.\n    - Parameters:\n        - `query`: The SQL query to execute.\n    - Returns: x rows affected.\n\n4. `delete_query`\n\n    - Execute a delete SQL query.\n    - Parameters:\n        - `query`: The SQL query to execute.\n    - Returns: x rows affected.\n\n## License\n\nMIT\n",
+  "category": "Development",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "go-mcp-mysql-args": {
+        "command": "go-mcp-mysql",
+        "args": ["--host", "localhost", "--user", "root", "--pass", "password", "--port", "3306", "--db", "mydb"],
+        "env": {}
+      },
+      "go-mcp-mysql-dsn": {
+        "command": "go-mcp-mysql",
+        "args": ["--dsn", "username:password@tcp(localhost:3306)/mydb?parseTime=true&loc=Local"],
+        "env": {}
+      },
+      "go-mcp-mysql-args-read-only": {
+        "command": "go-mcp-mysql",
+        "args": [
+          "--host",
+          "localhost",
+          "--user",
+          "root",
+          "--pass",
+          "password",
+          "--port",
+          "3306",
+          "--db",
+          "mydb",
+          "--read-only"
+        ],
+        "env": {}
+      },
+      "go-mcp-mysql-dsn-read-only": {
+        "command": "go-mcp-mysql",
+        "args": ["--dsn", "username:password@tcp(localhost:3306)/mydb?parseTime=true&loc=Local", "--read-only"],
+        "env": {}
+      },
+      "go-mcp-mysql-args-with-explain-check": {
+        "command": "go-mcp-mysql",
+        "args": [
+          "--host",
+          "localhost",
+          "--user",
+          "root",
+          "--pass",
+          "password",
+          "--port",
+          "3306",
+          "--db",
+          "mydb",
+          "--with-explain-check"
+        ],
+        "env": {}
+      },
+      "go-mcp-mysql-dsn-with-explain-check": {
+        "command": "go-mcp-mysql",
+        "args": [
+          "--dsn",
+          "username:password@tcp(localhost:3306)/mydb?parseTime=true&loc=Local",
+          "--with-explain-check"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Zhwt",
+    "repo": "go-mcp-mysql",
+    "url": "https://github.com/Zhwt/go-mcp-mysql",
+    "name": "zhwt__go-mcp-mysql",
+    "path": null,
+    "stars": 44,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "04e20a5e0697154db33deb452b2c5024dbaece44"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:32.663Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "go-sql-driver/mysql",
+      "importance": 9
+    },
+    {
+      "name": "jmoiron/sqlx",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/Zhwt/go-mcp-mysql\n\ngo 1.23.1\n\nrequire (\n\tgithub.com/go-sql-driver/mysql v1.9.1\n\tgithub.com/jmoiron/sqlx v1.4.0\n\tgithub.com/mark3labs/mcp-go v0.18.0\n)\n\nrequire (\n\tfilippo.io/edwards25519 v1.1.0 // indirect\n\tgithub.com/DATA-DOG/go-sqlmock v1.5.2 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/stretchr/testify v1.10.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

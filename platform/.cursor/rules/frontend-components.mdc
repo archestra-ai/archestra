@@ -680,7 +680,7 @@ function FormFields({ form, isPending }: Props) {
 }
 ```
 
-## Reuse API Types from @shared
+## Reuse API Types from @archestra/shared
 
 **ALWAYS reuse types from `archestraApiTypes`** instead of defining duplicate types:
 
@@ -693,7 +693,7 @@ type CreateItemPayload = {
 };
 
 // ✅ Good: Reuse from generated API types
-import { type archestraApiTypes } from "@shared";
+import { type archestraApiTypes } from "@archestra/shared";
 
 type CreateItemBody = archestraApiTypes.CreateItemData["body"];
 type ItemResponse = archestraApiTypes.GetItemsResponses["200"][number];

@@ -1,12 +1,15 @@
 import {
   MODELS_DEV_PROVIDER_MAP,
   OPENROUTER_FREE_MODEL_ID,
+  SUPPORTED_EMBEDDING_DIMENSIONS,
   type SupportedEmbeddingDimension,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import {
   type ModelsDevApiResponse,
   modelsDevClient,
+  modelsDevCostToPerToken,
+  sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import {
@@ -16,6 +19,10 @@ import {
 } from "@/models";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import type { FetchedModelCapabilities } from "@/routes/chat/model-fetchers/types";
+import {
+  type CrossProviderPrices,
+  resolveCrossProviderPrices,
+} from "@/services/cross-provider-pricing";
 import type {
   CreateModel,
   ModelInputModality,
@@ -109,7 +116,7 @@ class ModelSyncService {
         "Upserted models to database",
       );
 
-      // 4. Link models to the API key with fastest/best detection
+      // 4. Link models to the API key with best-model detection
       const modelsWithIds = upsertedModels.map((m) => ({
         id: m.id,
         modelId: m.modelId,
@@ -232,27 +239,48 @@ export const modelSyncService = new ModelSyncService();
 interface ProviderModelCapabilities {
   description: string | null;
   contextLength: number | null;
+  outputLength: number | null;
   inputModalities: ModelInputModality[] | null;
   outputModalities: ModelOutputModality[] | null;
   supportsToolCalling: boolean | null;
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
+  cacheReadPricePerToken: string | null;
+  cacheWritePricePerToken: string | null;
 }
 
 export function buildModelsToUpsert(params: {
   provider: SupportedProvider;
-  models: Array<{ id: string; capabilities?: FetchedModelCapabilities }>;
+  models: Array<{
+    id: string;
+    capabilities?: FetchedModelCapabilities;
+    /** Underlying vendor model name, when the fetcher can determine it (Azure). */
+    underlyingModelName?: string | null;
+  }>;
   modelsDevData: ModelsDevApiResponse;
 }): CreateModel[] {
   const { provider, models, modelsDevData } = params;
   const capabilitiesMap = buildCapabilitiesMap(modelsDevData, provider);
 
   return models.map((model) => {
+    // Bedrock/Azure model ids don't match models.dev keys, so derive pricing
+    // from the underlying vendor entry (which also carries cache prices).
+    const crossProviderPrices =
+      provider === "bedrock" || provider === "azure"
+        ? resolveCrossProviderPrices({
+            provider,
+            modelId: model.id,
+            underlyingModelName: model.underlyingModelName,
+            modelsDevData,
+          })
+        : null;
+
     const capabilities = resolveModelCapabilities({
       provider,
       modelId: model.id,
       capabilities: capabilitiesMap.get(model.id),
       fetched: model.capabilities,
+      crossProviderPrices,
     });
 
     return {
@@ -261,15 +289,52 @@ export function buildModelsToUpsert(params: {
       modelId: model.id,
       description: capabilities.description,
       contextLength: capabilities.contextLength,
+      outputLength: capabilities.outputLength,
       inputModalities: capabilities.inputModalities,
       outputModalities: capabilities.outputModalities,
       supportsToolCalling: capabilities.supportsToolCalling,
       promptPricePerToken: capabilities.promptPricePerToken,
       completionPricePerToken: capabilities.completionPricePerToken,
-      embeddingDimensions: inferEmbeddingDimensions(model.id, provider),
+      cacheReadPricePerToken: capabilities.cacheReadPricePerToken,
+      cacheWritePricePerToken: capabilities.cacheWritePricePerToken,
+      embeddingDimensions: resolveEmbeddingDimensions({
+        modelId: model.id,
+        provider,
+        fetched: model.capabilities,
+      }),
+      defaultParameters: model.capabilities?.defaultParameters ?? null,
       lastSyncedAt: new Date(),
     };
   });
+}
+
+/**
+ * Resolve a model's embedding dimension. When the provider reports embedding
+ * capability authoritatively (Ollama `/api/show`), trust it and skip the name
+ * heuristic entirely — including for authoritatively-generative models (avoids
+ * mis-tagging a chat model whose id happens to match an embed name pattern).
+ * An authoritative embedding dimension the KB cannot store (not in
+ * SUPPORTED_EMBEDDING_DIMENSIONS) resolves to null rather than a broken value.
+ */
+function resolveEmbeddingDimensions(params: {
+  modelId: string;
+  provider: SupportedProvider;
+  fetched?: FetchedModelCapabilities;
+}): SupportedEmbeddingDimension | null {
+  const { modelId, provider, fetched } = params;
+  if (fetched?.embeddingDimensions !== undefined) {
+    const dim = fetched.embeddingDimensions;
+    return dim !== null && isSupportedEmbeddingDimension(dim) ? dim : null;
+  }
+  return inferEmbeddingDimensions(modelId, provider);
+}
+
+function isSupportedEmbeddingDimension(
+  dimension: number,
+): dimension is SupportedEmbeddingDimension {
+  return (SUPPORTED_EMBEDDING_DIMENSIONS as readonly number[]).includes(
+    dimension,
+  );
 }
 
 /**
@@ -311,6 +376,19 @@ function inferEmbeddingDimensions(
   if (id === "nomic-embed-text" || id.endsWith("/nomic-embed-text")) {
     return 768;
   }
+  // Fallback for older Ollama that omits `/api/show` capabilities; the
+  // authoritative path above wins whenever capabilities are reported. Match the
+  // base name so an optional `:tag` suffix is ignored, and gate to Ollama so a
+  // same-named model on another provider isn't mis-tagged.
+  if (provider === "ollama") {
+    const base = id.split(":")[0];
+    if (base === "mxbai-embed-large" || base === "bge-m3") {
+      return 1024;
+    }
+    if (base === "all-minilm") {
+      return 384;
+    }
+  }
   return null;
 }
 
@@ -318,18 +396,23 @@ function inferEmbeddingDimensions(
 export function resolveModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
-  /** Capabilities from models.dev enrichment. */
+  /** Capabilities from models.dev enrichment (same-provider match). */
   capabilities?: ProviderModelCapabilities;
   /** Capabilities read directly from the provider's models endpoint. Highest priority. */
   fetched?: FetchedModelCapabilities;
+  /** Prices derived from the underlying vendor entry for Bedrock/Azure. */
+  crossProviderPrices?: CrossProviderPrices | null;
 }): ProviderModelCapabilities {
-  const { provider, modelId, capabilities, fetched } = params;
+  const { provider, modelId, capabilities, fetched, crossProviderPrices } =
+    params;
   const inferredCapabilities = inferModelCapabilities({
     provider,
     modelId,
   });
 
   // Priority per field: fetcher -> models.dev -> hardcoded inference.
+  // Price priority: fetcher -> models.dev (same provider) -> cross-provider
+  // (Bedrock/Azure underlying vendor) -> null.
   return normalizeKnownModelCapabilities({
     provider,
     modelId,
@@ -339,6 +422,8 @@ export function resolveModelCapabilities(params: {
         fetched?.contextLength ??
         capabilities?.contextLength ??
         inferredCapabilities.contextLength,
+      outputLength:
+        capabilities?.outputLength ?? inferredCapabilities.outputLength,
       inputModalities:
         capabilities?.inputModalities ?? inferredCapabilities.inputModalities,
       outputModalities:
@@ -350,10 +435,22 @@ export function resolveModelCapabilities(params: {
       promptPricePerToken:
         fetched?.promptPricePerToken ??
         capabilities?.promptPricePerToken ??
+        crossProviderPrices?.promptPricePerToken ??
         null,
       completionPricePerToken:
         fetched?.completionPricePerToken ??
         capabilities?.completionPricePerToken ??
+        crossProviderPrices?.completionPricePerToken ??
+        null,
+      cacheReadPricePerToken:
+        fetched?.cacheReadPricePerToken ??
+        capabilities?.cacheReadPricePerToken ??
+        crossProviderPrices?.cacheReadPricePerToken ??
+        null,
+      cacheWritePricePerToken:
+        fetched?.cacheWritePricePerToken ??
+        capabilities?.cacheWritePricePerToken ??
+        crossProviderPrices?.cacheWritePricePerToken ??
         null,
     },
   });
@@ -375,14 +472,7 @@ function buildCapabilitiesMap(
     }
 
     for (const [, model] of Object.entries(providerData.models ?? {})) {
-      const promptPrice =
-        model.cost?.input !== undefined
-          ? (model.cost.input / 1_000_000).toString()
-          : null;
-      const completionPrice =
-        model.cost?.output !== undefined
-          ? (model.cost.output / 1_000_000).toString()
-          : null;
+      const prices = modelsDevCostToPerToken(model.cost);
 
       // Validate input modalities using Zod schema
       const inputModalities = parseModalities(
@@ -399,11 +489,14 @@ function buildCapabilitiesMap(
       map.set(model.id, {
         description: model.name,
         contextLength: model.limit?.context ?? null,
+        outputLength: sanitizeOutputLimit(model.limit?.output),
         inputModalities,
         outputModalities,
         supportsToolCalling: model.tool_call ?? null,
-        promptPricePerToken: promptPrice,
-        completionPricePerToken: completionPrice,
+        promptPricePerToken: prices.promptPricePerToken,
+        completionPricePerToken: prices.completionPricePerToken,
+        cacheReadPricePerToken: prices.cacheReadPricePerToken,
+        cacheWritePricePerToken: prices.cacheWritePricePerToken,
       });
     }
   }
@@ -535,10 +628,13 @@ function emptyCapabilities(): ProviderModelCapabilities {
   return {
     description: null,
     contextLength: null,
+    outputLength: null,
     inputModalities: null,
     outputModalities: null,
     supportsToolCalling: null,
     promptPricePerToken: null,
     completionPricePerToken: null,
+    cacheReadPricePerToken: null,
+    cacheWritePricePerToken: null,
   };
 }

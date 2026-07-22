@@ -1,3 +1,4 @@
+import { hasPersistableAssistantContent } from "@archestra/shared";
 import {
   and,
   desc,
@@ -11,13 +12,18 @@ import {
 import db, { schema } from "@/database";
 import type {
   Conversation,
+  ConversationOrigin,
   InsertConversation,
+  MessageFeedback,
+  ToolExposureMode,
   UpdateConversation,
 } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationCompactionModel from "./conversation-compaction";
 import ConversationShareModel from "./conversation-share";
+import ProjectModel from "./project";
+import ProjectShareModel from "./project-share";
 
 class ConversationModel {
   static async create(data: InsertConversation): Promise<Conversation> {
@@ -74,6 +80,17 @@ class ConversationModel {
     const conditions = [
       eq(schema.conversationsTable.userId, userId),
       eq(schema.conversationsTable.organizationId, organizationId),
+      // App-opened chats are drafts until the user writes: opening an app
+      // seeds a conversation (services/apps/app-chat-conversation.ts), and
+      // clicking through apps must not pile unused chats into the sidebar. A
+      // user-role message is the "keep it" signal — until then the chat is
+      // reachable at /chat/<id> but never listed. Derived, not a flag flip,
+      // so it needs no hook in the message write path.
+      sql`(${schema.conversationsTable.origin} != 'app_open' OR EXISTS (
+        SELECT 1 FROM ${schema.messagesTable}
+        WHERE ${schema.messagesTable.conversationId} = ${schema.conversationsTable.id}
+        AND ${schema.messagesTable.role} = 'user'
+      ))`,
     ];
 
     // Add search filter if provided
@@ -120,12 +137,16 @@ class ConversationModel {
             id: schema.conversationSharesTable.id,
             visibility: schema.conversationSharesTable.visibility,
           },
+          projectName: schema.projectsTable.name,
+          projectIcon: schema.projectsTable.icon,
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
             systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
+            toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
+            deletedAt: schema.agentsTable.deletedAt,
           },
         })
         .from(schema.conversationsTable)
@@ -160,10 +181,15 @@ class ConversationModel {
             schema.conversationSharesTable.conversationId,
           ),
         )
+        .leftJoin(
+          schema.projectsTable,
+          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+        )
         .where(and(...conditions))
         .orderBy(
-          desc(schema.conversationsTable.updatedAt),
+          desc(schema.conversationsTable.lastMessageAt),
           schema.messagesTable.createdAt,
+          schema.messagesTable.id,
         )
         .limit(
           ConversationModel.SEARCH_RESULT_LIMIT *
@@ -182,9 +208,11 @@ class ConversationModel {
             continue;
           }
           conversationMap.set(conversationId, {
-            ...row.conversation,
-            agent: row.agent,
+            ...withVisibleAgent(row.conversation, row.agent),
             share: row.share?.id ? row.share : null,
+            projectName: row.projectName ?? null,
+            projectIcon: listProjectIcon(row.projectIcon),
+            unread: isConversationUnread(row.conversation),
             messages: [],
             chatErrors: [],
             compactions: [],
@@ -192,7 +220,11 @@ class ConversationModel {
         }
 
         const conversation = conversationMap.get(conversationId);
-        if (conversation && row?.message?.content) {
+        if (
+          conversation &&
+          row?.message?.content &&
+          shouldReturnPersistedMessageRow(row.message)
+        ) {
           // Limit messages per conversation for preview
           if (
             conversation.messages.length <
@@ -217,12 +249,16 @@ class ConversationModel {
             id: schema.conversationSharesTable.id,
             visibility: schema.conversationSharesTable.visibility,
           },
+          projectName: schema.projectsTable.name,
+          projectIcon: schema.projectsTable.icon,
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
             systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
+            toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
+            deletedAt: schema.agentsTable.deletedAt,
           },
         })
         .from(schema.conversationsTable)
@@ -237,13 +273,19 @@ class ConversationModel {
             schema.conversationSharesTable.conversationId,
           ),
         )
+        .leftJoin(
+          schema.projectsTable,
+          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+        )
         .where(and(...conditions))
-        .orderBy(desc(schema.conversationsTable.updatedAt));
+        .orderBy(desc(schema.conversationsTable.lastMessageAt));
 
       return rows.map((row) => ({
-        ...row.conversation,
-        agent: row.agent,
+        ...withVisibleAgent(row.conversation, row.agent),
         share: row.share?.id ? row.share : null,
+        projectName: row.projectName ?? null,
+        projectIcon: listProjectIcon(row.projectIcon),
+        unread: isConversationUnread(row.conversation),
         messages: [], // Messages fetched separately via findById
         chatErrors: [],
         compactions: [],
@@ -273,7 +315,9 @@ class ConversationModel {
           name: schema.agentsTable.name,
           systemPrompt: schema.agentsTable.systemPrompt,
           agentType: schema.agentsTable.agentType,
+          toolExposureMode: schema.agentsTable.toolExposureMode,
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
+          deletedAt: schema.agentsTable.deletedAt,
         },
       })
       .from(schema.conversationsTable)
@@ -299,7 +343,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
       )
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     if (rows.length === 0) {
       return null;
@@ -313,15 +357,17 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      if (row.message?.content) {
+      if (
+        row.message?.content &&
+        shouldReturnPersistedMessageRow(row.message)
+      ) {
         // Merge database UUID into message content (overrides AI SDK's temporary ID)
         messages.push(addMessagePersistenceMetadata(row.message));
       }
     }
 
     return {
-      ...firstRow.conversation,
-      agent: firstRow.agent,
+      ...withVisibleAgent(firstRow.conversation, firstRow.agent),
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
       chatErrors,
@@ -329,10 +375,78 @@ class ConversationModel {
     };
   }
 
+  /**
+   * Cheap ownership check for mutating-route gates (e.g. deleting a chat's
+   * attachment): true only when `userId` owns the conversation in this org.
+   * Unlike `findById` it joins nothing and loads no messages.
+   */
+  static async isOwnedBy(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.conversationsTable.id })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /**
+   * Owner-scoped metadata for eligibility checks (e.g. turning a chat into a
+   * project) without loading the conversation's messages, errors, or
+   * compactions like {@link findById} does. Null when the chat does not exist
+   * or is not owned by the caller.
+   */
+  static async getOwnedMeta(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<{
+    id: string;
+    title: string | null;
+    origin: ConversationOrigin;
+    projectId: string | null;
+  } | null> {
+    const [row] = await db
+      .select({
+        id: schema.conversationsTable.id,
+        title: schema.conversationsTable.title,
+        origin: schema.conversationsTable.origin,
+        projectId: schema.conversationsTable.projectId,
+      })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
   static async findAccessibleById(params: {
     id: string;
     userId: string;
     organizationId: string;
+    /**
+     * Resolves whether the caller may read chats they did not author that are
+     * reachable only through project membership (i.e. holds `project:read-all`).
+     * Injected by the route layer so this model needs no `@/auth` dependency,
+     * and invoked lazily — only when access would otherwise be granted via the
+     * project-membership branch below. Owned chats and explicit conversation
+     * shares are intentional grants and bypass it.
+     */
+    canReadOthersViaProject: () => Promise<boolean>;
   }): Promise<Conversation | null> {
     const ownedConversation = await ConversationModel.findById(params);
 
@@ -347,12 +461,46 @@ class ConversationModel {
         userId: params.userId,
       });
 
-    if (!accessibleShare) {
-      return null;
+    if (accessibleShare) {
+      // Shared conversations intentionally return another user's conversation
+      // once share access has been validated for this org/user pair.
+      return ConversationModel.findByIdInOrganization({
+        id: params.id,
+        organizationId: params.organizationId,
+      });
     }
 
-    // Shared conversations intentionally return another user's conversation
-    // once share access has been validated for this org/user pair.
+    // Project membership grants a read-only view of chats in the project
+    // (writing stays author-only — every mutating route resolves the
+    // conversation by owner). Reading a chat the caller did NOT author is
+    // additionally gated by `project:read-all`, uniformly — including when the
+    // caller owns the project.
+    const [bare] = await db
+      .select({
+        projectId: schema.conversationsTable.projectId,
+        organizationId: schema.conversationsTable.organizationId,
+      })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, params.id));
+    if (
+      !bare ||
+      !bare.projectId ||
+      bare.organizationId !== params.organizationId
+    ) {
+      return null;
+    }
+    const project = await ProjectModel.findById(bare.projectId);
+    if (
+      !project ||
+      !(await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: params.userId,
+        organizationId: params.organizationId,
+      })) ||
+      !(await params.canReadOthersViaProject())
+    ) {
+      return null;
+    }
     return ConversationModel.findByIdInOrganization({
       id: params.id,
       organizationId: params.organizationId,
@@ -376,7 +524,9 @@ class ConversationModel {
           name: schema.agentsTable.name,
           systemPrompt: schema.agentsTable.systemPrompt,
           agentType: schema.agentsTable.agentType,
+          toolExposureMode: schema.agentsTable.toolExposureMode,
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
+          deletedAt: schema.agentsTable.deletedAt,
         },
       })
       .from(schema.conversationsTable)
@@ -401,7 +551,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, params.organizationId),
         ),
       )
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     if (rows.length === 0) {
       return null;
@@ -415,14 +565,16 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      if (row.message?.content) {
+      if (
+        row.message?.content &&
+        shouldReturnPersistedMessageRow(row.message)
+      ) {
         messages.push(addMessagePersistenceMetadata(row.message));
       }
     }
 
     return {
-      ...firstRow.conversation,
-      agent: firstRow.agent,
+      ...withVisibleAgent(firstRow.conversation, firstRow.agent),
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
       chatErrors,
@@ -459,6 +611,84 @@ class ConversationModel {
     })) as Conversation;
 
     return updatedWithAgent;
+  }
+
+  /**
+   * Toggle per-conversation hook debug mode. Kept off the generic
+   * {@link UpdateConversation} path on purpose: that schema backs the
+   * member-accessible update route, whereas this flag is admin-gated at the
+   * route layer. Scoped by user + org. Returns the new value, or null if no
+   * conversation matched.
+   */
+  static async setHooksDebugEnabled(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+    enabled: boolean;
+  }): Promise<boolean | null> {
+    const [updated] = await db
+      .update(schema.conversationsTable)
+      .set({ hooksDebugEnabled: params.enabled })
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .returning({
+        hooksDebugEnabled: schema.conversationsTable.hooksDebugEnabled,
+      });
+    return updated ? updated.hooksDebugEnabled : null;
+  }
+
+  /**
+   * Mark a conversation read by its owner (clears the sidebar new-messages
+   * indicator). Owner-scoped: a shared/project viewer never matches, so they
+   * cannot move the owner's read marker. Returns whether a row matched.
+   */
+  static async markRead(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [updated] = await db
+      .update(schema.conversationsTable)
+      // GREATEST: the newest message visible at read time is covered even
+      // when it landed in the same millisecond (or marginally ahead of the
+      // reader's clock) — unread is a strict lastMessageAt > lastReadAt
+      // comparison, so a read must never leave lastReadAt behind
+      // lastMessageAt.
+      .set({
+        // now() (DB clock), not a JS Date param: node-postgres serializes
+        // Dates in host-local time and the ::timestamp cast drops the offset,
+        // shifting the stamp by the host's UTC offset on non-UTC hosts.
+        lastReadAt: sql`GREATEST(now()::timestamp, ${schema.conversationsTable.lastMessageAt})`,
+      })
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .returning({ id: schema.conversationsTable.id });
+    return !!updated;
+  }
+
+  /** The owner's user + org, or null if the conversation does not exist. */
+  static async getOwner(
+    id: string,
+  ): Promise<{ userId: string; organizationId: string } | null> {
+    const [row] = await db
+      .select({
+        userId: schema.conversationsTable.userId,
+        organizationId: schema.conversationsTable.organizationId,
+      })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, id))
+      .limit(1);
+    return row ?? null;
   }
 
   static async delete(
@@ -518,9 +748,42 @@ class ConversationModel {
 
 export default ConversationModel;
 
+// Read-side guard for assistant rows that were persisted before the strict
+// persist normalization (or by an older client) and would otherwise reload as
+// an empty bubble. The DB `role` column is authoritative — a `content: ""` row
+// has no role inside its content. Read-only: bad rows are hidden, never deleted.
+// A conversation is unread when a message has landed since the owner last
+// viewed it. lastReadAt is null until the first explicit read, so fall back to
+// createdAt. Strict `>` so marking read at the same instant a message persists
+// (e.g. you sent it) does not register as unread.
+function isConversationUnread(conversation: {
+  lastMessageAt: Date;
+  lastReadAt: Date | null;
+  createdAt: Date;
+}): boolean {
+  const lastRead = conversation.lastReadAt ?? conversation.createdAt;
+  return conversation.lastMessageAt.getTime() > lastRead.getTime();
+}
+
+function shouldReturnPersistedMessageRow(message: {
+  role: string;
+  content: unknown;
+}): boolean {
+  if (message.role !== "assistant") {
+    return true;
+  }
+  if (typeof message.content !== "object" || message.content === null) {
+    return false;
+  }
+  return hasPersistableAssistantContent(
+    message.content as { parts?: ReadonlyArray<{ type: string }> },
+  );
+}
+
 function addMessagePersistenceMetadata(message: {
   id: string;
   content: unknown;
+  feedback: MessageFeedback | null;
   createdAt: Date;
 }) {
   const content =
@@ -540,6 +803,56 @@ function addMessagePersistenceMetadata(message: {
     metadata: {
       ...metadata,
       createdAt: message.createdAt.toISOString(),
+      // The column is authoritative: content JSON may carry a stale copied
+      // value (e.g. a forked conversation), so always override it here.
+      feedback: message.feedback ?? undefined,
+    },
+  };
+}
+
+type JoinedConversationAgent = {
+  id: string | null;
+  name: string | null;
+  systemPrompt: string | null;
+  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent" | null;
+  toolExposureMode: ToolExposureMode | null;
+  llmApiKeyId: string | null;
+  deletedAt: Date | null;
+} | null;
+
+/**
+ * Project icon for a conversation-list row. Only emoji icons are passed through;
+ * base64 image data URLs are dropped (the pill falls back to the folder glyph)
+ * so a large icon isn't duplicated across every conversation in the list.
+ */
+function listProjectIcon(icon: string | null | undefined): string | null {
+  if (!icon || icon.startsWith("data:")) return null;
+  return icon;
+}
+
+function withVisibleAgent(
+  conversation: typeof schema.conversationsTable.$inferSelect,
+  agent: JoinedConversationAgent,
+): typeof schema.conversationsTable.$inferSelect & {
+  agent: Conversation["agent"];
+} {
+  if (!agent?.id || agent.deletedAt !== null) {
+    return {
+      ...conversation,
+      agentId: null,
+      agent: null,
+    };
+  }
+
+  return {
+    ...conversation,
+    agent: {
+      id: agent.id,
+      name: agent.name ?? "",
+      systemPrompt: agent.systemPrompt,
+      agentType: agent.agentType ?? "agent",
+      toolExposureMode: agent.toolExposureMode ?? "full",
+      llmApiKeyId: agent.llmApiKeyId,
     },
   };
 }

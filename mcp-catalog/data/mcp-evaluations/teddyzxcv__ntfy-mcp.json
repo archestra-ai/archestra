@@ -1,0 +1,99 @@
+{
+  "name": "teddyzxcv__ntfy-mcp",
+  "display_name": "ntfy-mcp",
+  "description": "MCP server from teddyzxcv/ntfy-mcp",
+  "author": {
+    "name": "teddyzxcv"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "NTFY_TOPIC": "${user_config.ntfy_topic}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ntfy_topic": {
+      "type": "string",
+      "title": "Ntfy Topic",
+      "description": "Your ntfy topic name for receiving notifications.",
+      "required": true,
+      "sensitive": false
+    }
+  },
+  "readme": "# ntfy-mcp: Your Friendly Task Completion Notifier\n\nWelcome to ntfy-mcp, the MCP server that keeps you caffeinated and informed! 🚀☕️\n\nThis handy little server integrates with the Model Context Protocol to send you delightful ntfy notifications whenever your AI assistant completes a task. Because let's face it - you deserve that tea break while your code writes itself.\n\n<a href=\"https://glama.ai/mcp/servers/@teddyzxcv/ntfy-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@teddyzxcv/ntfy-mcp/badge\" />\n</a>\n\n## Getting Started: The Quick Brew Guide\n\n### Step 1: Clone & Navigate\n```bash\ngit clone https://github.com/teddyzxcv/ntfy-mcp.git\ncd ntfy-mcp\n```\n\n### Step 2: Install \n```bash\nnpm install\n```\n\n### Step 3: Build \n```bash\nnpm run build\n```\n\n### Step 4: Connect\nChoose your adventure:\n\n**Manual Start:**\n```bash\nnpm start\n```\n\n**Cline Configuration:**\n```json\n\"ntfy-mcp\": {\n  \"command\": \"node\",\n  \"args\": [\n    \"/path/to/ntfy-mcp/build/index.js\"\n  ],\n  \"env\": {\n    \"NTFY_TOPIC\": \"<your topic name>\"\n  },\n  \"autoApprove\": [\n    \"notify_user\" // Highly recommended for maximum chill\n  ]\n}\n```\n\n### Step 5: Get Notified in Style\n1. Download the [ntfy app](https://ntfy.sh) on your phone\n2. Subscribe to your chosen topic\n3. Kick back and relax\n\n### Step 6: The Magic Command\nWrite a prompt like this, otherwise the function won't call \n(tried use `Custom Instructions` in cline, but they are in the ring 3, so model just forget about it)\n```\nWrite me a hello world in python, notify me when the task is done\n```\n\n### Step 7: Enjoy Your Beverage of Choice\n☕️🍵 Your notification will arrive when the task is complete. No peeking!\n\n## How It Works (The Technical Tea)\n\nThis MCP server integrates seamlessly with the Model Context Protocol, acting as your personal notification butler. When tasks are completed, it sends notifications via ntfy, keeping you informed without interrupting your flow.\n\n## Dependencies: The Secret Sauce\n\n- [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/typescript-sdk)\n- [node-fetch](https://github.com/node-fetch/node-fetch)\n- [dotenv](https://github.com/motdotla/dotenv)\n- [zod](https://github.com/colinhacks/zod)\n\n\n\n## License\n\nThis project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.\n\n```\nCopyright 2025 Casey Hand @cyanheads\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.\n```\n\n---\n\nNow go forth and code with confidence, knowing your notifications are in good hands! 🎉\n",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ntfy-mcp": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "ntfy-mcp-configured": {
+        "command": "node",
+        "args": ["/path/to/ntfy-mcp/build/index.js"],
+        "env": {
+          "NTFY_TOPIC": "<your topic name>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "teddyzxcv",
+    "repo": "ntfy-mcp",
+    "url": "https://github.com/teddyzxcv/ntfy-mcp",
+    "name": "teddyzxcv__ntfy-mcp",
+    "path": null,
+    "stars": 40,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b366744f8332e2d79c10ce0ca00c1229c867418a"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:24.937Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"ntfy-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"description\": \"An MCP server that sends ntfy notifications on task completion\",\n  \"type\": \"module\",\n  \"main\": \"src/index.ts\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"node-fetch\": \"^3.3.2\",\n    \"dotenv\": \"^16.4.7\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.10\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"author\": \"\",\n  \"license\": \"ISC\"\n}\n"
+}

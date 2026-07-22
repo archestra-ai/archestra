@@ -1,4 +1,4 @@
-import { ArchestraInternalErrorCode } from "@shared";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -13,6 +13,7 @@ import type {
 } from "openai/resources/responses/responses";
 import config from "@/config";
 import { metrics } from "@/observability";
+import { decodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -29,6 +30,7 @@ import type {
   UsageView,
 } from "@/types";
 import { ApiError, createStreamAccumulatorState } from "@/types";
+import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
 
 type OpenAiResponsesRequest = OpenAi.Types.ResponsesRequest;
 type OpenAiResponsesResponse = OpenAi.Types.ResponsesResponse;
@@ -89,15 +91,23 @@ export const openAiResponsesAdapterFactory: LLMProvider<
       throw new ApiError(401, "API key required for OpenAI");
     }
 
+    // A ChatGPT-subscription (Codex) credential routes to the ChatGPT Codex
+    // Responses backend (chatgpt.com), never to api.openai.com. The Codex
+    // backend is itself a Responses API, so the request is forwarded with the
+    // OAuth identity headers + mandatory transforms and its event stream is
+    // returned unchanged. This is the endpoint the OpenAI Codex CLI targets.
+    const codexCredential = decodeOpenAiCodexCredential(apiKey);
+    if (codexCredential) {
+      return createOpenAiCodexResponsesClient({
+        credential: codexCredential,
+        options,
+      });
+    }
+
     const resolvedBaseUrl = options.baseUrl || config.llm.openai.baseUrl;
 
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "openai",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("openai", options.agent, options.source)
       : undefined;
 
     return new OpenAIProvider({
@@ -352,6 +362,12 @@ class OpenAiResponsesResponseAdapter
     return {
       inputTokens: this.response.usage?.input_tokens ?? 0,
       outputTokens: this.response.usage?.output_tokens ?? 0,
+      reasoningTokens:
+        (
+          this.response.usage?.output_tokens_details as
+            | { reasoning_tokens?: number }
+            | undefined
+        )?.reasoning_tokens ?? 0,
     };
   }
 
@@ -408,6 +424,10 @@ class OpenAiResponsesStreamAdapter
   readonly provider = "openai" as const;
   readonly state = createStreamAccumulatorState();
   private completedResponse: OpenAiResponsesResponse | null = null;
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal, so toProviderResponse persists the refusal — not the captured
+  // upstream completion or the blocked tool calls.
+  private replacedText: string | null = null;
   private toolCallsByItemId = new Map<
     string,
     { id: string; name: string; arguments: string }
@@ -425,6 +445,12 @@ class OpenAiResponsesStreamAdapter
         this.state.usage = {
           inputTokens: chunk.response.usage.input_tokens ?? 0,
           outputTokens: chunk.response.usage.output_tokens ?? 0,
+          reasoningTokens:
+            (
+              chunk.response.usage.output_tokens_details as
+                | { reasoning_tokens?: number }
+                | undefined
+            )?.reasoning_tokens ?? 0,
         };
       }
     }
@@ -606,6 +632,7 @@ class OpenAiResponsesStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    this.replacedText = text;
     return [this.formatTextDeltaSSE(text)];
   }
 
@@ -614,13 +641,14 @@ class OpenAiResponsesStreamAdapter
   }
 
   toProviderResponse(): OpenAiResponsesResponse {
-    if (this.completedResponse) {
+    if (this.replacedText === null && this.completedResponse) {
       return this.completedResponse;
     }
 
     const outputItems: OpenAiResponsesResponse["output"] = [];
 
-    if (this.state.text) {
+    const messageText = this.replacedText ?? this.state.text;
+    if (messageText) {
       outputItems.push({
         id: `msg_${Date.now()}`,
         type: "message",
@@ -629,23 +657,25 @@ class OpenAiResponsesStreamAdapter
         content: [
           {
             type: "output_text",
-            text: this.state.text,
+            text: messageText,
             annotations: [],
           },
         ],
       } as OpenAiResponsesResponse["output"][number]);
     }
 
-    outputItems.push(
-      ...this.state.toolCalls.map((toolCall) => ({
-        id: toolCall.id,
-        call_id: toolCall.id,
-        type: "function_call" as const,
-        name: toolCall.name,
-        arguments: toolCall.arguments,
-        status: "completed" as const,
-      })),
-    );
+    if (this.replacedText === null) {
+      outputItems.push(
+        ...this.state.toolCalls.map((toolCall) => ({
+          id: toolCall.id,
+          call_id: toolCall.id,
+          type: "function_call" as const,
+          name: toolCall.name,
+          arguments: toolCall.arguments,
+          status: "completed" as const,
+        })),
+      );
+    }
 
     return {
       id: this.state.responseId || `resp_${Date.now()}`,
@@ -733,7 +763,11 @@ function createEmptyToolCompressionStats(): ToolCompressionStats {
 }
 
 function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
-  if (item.type === "message") {
+  // "easy input message" items carry role/content and omit `type` (it defaults
+  // to "message"); the AI SDK emits this shape. Without handling it here,
+  // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
+  // evaluation (llm-proxy-handler) silently sees an empty conversation.
+  if ((item.type === "message" || item.type === undefined) && "role" in item) {
     return [
       {
         role: normalizeResponseMessageRole(item.role),

@@ -1,6 +1,20 @@
 import { describe, expect, test } from "vitest";
-import { allAvailableActions, permissionDescriptions } from "./access-control";
-import { internalResources, type Resource } from "./permission.types";
+import {
+  allAvailableActions,
+  buildForbiddenErrorMessage,
+  editorPermissions,
+  memberPermissions,
+  permissionDescriptions,
+  predefinedPermissionsMap,
+  requiredEndpointPermissionsMap,
+} from "./access-control";
+import {
+  type Action,
+  internalResources,
+  type Resource,
+} from "./permission.types";
+import { ADMIN_ROLE_NAME } from "./roles";
+import { RouteId } from "./routes";
 
 describe("access-control", () => {
   test("every resource:action combination has a permissionDescription", () => {
@@ -34,5 +48,181 @@ describe("access-control", () => {
     );
 
     expect(stale).toEqual([]);
+  });
+
+  describe("auditLog resource", () => {
+    test("admin role has auditLog:read", () => {
+      expect(predefinedPermissionsMap[ADMIN_ROLE_NAME].auditLog).toContain(
+        "read",
+      );
+    });
+
+    test("editor role does not have auditLog:read", () => {
+      expect(editorPermissions.auditLog).not.toContain("read");
+    });
+
+    test("member role does not have auditLog:read", () => {
+      expect(memberPermissions.auditLog).not.toContain("read");
+    });
+
+    test("permissionDescriptions has auditLog:read entry", () => {
+      expect(permissionDescriptions["auditLog:read"]).toBeDefined();
+      expect(permissionDescriptions["auditLog:read"].length).toBeGreaterThan(0);
+    });
+
+    test("auditLog only exposes the read action", () => {
+      expect(allAvailableActions.auditLog).toEqual(["read"]);
+    });
+  });
+
+  describe("LLM-spending skill routes", () => {
+    // suggestSkillDescription resolves and spends the source agent's configured
+    // LLM key, so it must be gated like chatting with the agent — not by the
+    // weaker skill:create + agent:read the convert flow uses. Without chat:read,
+    // a caller who can only view+convert a shared agent could burn its key.
+    test("suggestSkillDescription requires chat:read", () => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.SuggestSkillDescription];
+      expect(required?.chat).toContain("read");
+      expect(required?.skill).toContain("create");
+      expect(required?.agent).toContain("read");
+    });
+  });
+
+  describe("complete-onboarding route", () => {
+    // Completing onboarding flips the org-wide onboardingComplete flag, so it
+    // must require admin-level organizationSettings:update, not merely
+    // authentication — otherwise any member could flip it.
+    test("CompleteOnboarding requires organizationSettings:update", () => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.CompleteOnboarding];
+      expect(required?.organizationSettings).toContain("update");
+    });
+
+    test("the member role cannot complete onboarding", () => {
+      expect(memberPermissions.organizationSettings).not.toContain("update");
+    });
+
+    test("GetOrganization stays authenticated-only", () => {
+      expect(requiredEndpointPermissionsMap[RouteId.GetOrganization]).toEqual(
+        {},
+      );
+    });
+  });
+
+  describe("sandbox artifact route", () => {
+    // the download_file tool (sandbox:execute) hands out this artifact URL, so
+    // the fetch route must require the same permission — otherwise a role that
+    // produced an artifact gets a 403 on a URL it just earned.
+    test("getSkillSandboxArtifact requires sandbox:execute", () => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.GetSkillSandboxArtifact];
+      expect(required?.sandbox).toContain("execute");
+    });
+  });
+
+  describe("project file routes", () => {
+    // Project file surfaces combine project-level access with the files gate;
+    // the sandbox permission is reserved for actual sandbox execution
+    // (run_command/upload_file/download_file).
+    test("GetProjectFiles requires project:read + file:manage, not sandbox:execute", () => {
+      const required = requiredEndpointPermissionsMap[RouteId.GetProjectFiles];
+      expect(required?.project).toContain("read");
+      expect(required?.file).toContain("manage");
+      expect(required?.sandbox).toBeUndefined();
+    });
+
+    test("UploadProjectFiles requires project:read + file:manage, not sandbox:execute", () => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.UploadProjectFiles];
+      expect(required?.project).toContain("read");
+      expect(required?.file).toContain("manage");
+      expect(required?.sandbox).toBeUndefined();
+    });
+
+    test("all predefined roles have file:manage", () => {
+      for (const permissions of Object.values(predefinedPermissionsMap)) {
+        expect(permissions.file).toContain("manage");
+      }
+    });
+  });
+
+  describe("MCP server re-authentication route", () => {
+    // Returns true when `rolePermissions` covers every resource:action pair the
+    // route's RBAC middleware gate demands. Mirrors what hasPermission() does
+    // for the requiredEndpointPermissionsMap entry before the handler runs.
+    const roleSatisfiesRoute = (
+      rolePermissions: Partial<Record<Resource, Action[]>>,
+      routeId: RouteId,
+    ): boolean => {
+      const required = requiredEndpointPermissionsMap[routeId] ?? {};
+      return Object.entries(required).every(([resource, actions]) =>
+        (actions as Action[]).every((action) =>
+          rolePermissions[resource as Resource]?.includes(action),
+        ),
+      );
+    };
+
+    // Re-authentication re-supplies credentials for a connection the caller can
+    // already install — it must not demand a stricter permission than install.
+    // The handler's own gate (mcp-server.ts) only requires mcpServerInstallation
+    // :create and then does scope-aware authorization; if the middleware gate
+    // asks for :update instead, members who installed a connection hit a bare
+    // 403 the moment their OAuth token expires and they try to re-authenticate.
+    test("requires the same install permission as InstallMcpServer", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.ReauthenticateMcpServer],
+      ).toEqual(requiredEndpointPermissionsMap[RouteId.InstallMcpServer]);
+    });
+
+    test("is satisfiable by the member role (members can install)", () => {
+      // Members can install (and therefore own) connections...
+      expect(memberPermissions.mcpServerInstallation).toContain("create");
+      // ...so the middleware gate must let them reach the re-auth handler.
+      expect(
+        roleSatisfiesRoute(memberPermissions, RouteId.ReauthenticateMcpServer),
+      ).toBe(true);
+    });
+  });
+});
+
+describe("buildForbiddenErrorMessage", () => {
+  test("names the blocked action and the missing permission with its description", () => {
+    expect(
+      buildForbiddenErrorMessage({
+        routeId: RouteId.UploadProjectFiles,
+        missingPermissions: { file: ["manage"] },
+      }),
+    ).toBe(
+      "You don't have permission to upload project files. Missing permission: file:manage (List, read, write, and delete files in chats and projects).",
+    );
+  });
+
+  test("keeps acronyms readable when humanizing the route id", () => {
+    expect(buildForbiddenErrorMessage({ routeId: "getMcpServerLogs" })).toBe(
+      "You don't have permission to get MCP server logs.",
+    );
+  });
+
+  test("lists multiple missing permissions in stable order", () => {
+    const message = buildForbiddenErrorMessage({
+      missingPermissions: { project: ["read"], file: ["manage"] },
+    });
+    expect(message).toContain("Missing permissions:");
+    expect(message).toContain(
+      "file:manage (List, read, write, and delete files in chats and projects)",
+    );
+    expect(message).toContain(
+      "project:read (View projects and your own chats inside them)",
+    );
+    expect(message.indexOf("file:manage")).toBeLessThan(
+      message.indexOf("project:read"),
+    );
+  });
+
+  test("degrades to a generic sentence without route or permissions", () => {
+    expect(buildForbiddenErrorMessage({})).toBe(
+      "You don't have permission to perform this action.",
+    );
   });
 });

@@ -38,17 +38,21 @@ import type {
   DiscoveredChannel,
   IncomingChatMessage,
   MsTeamsDbConfig,
+  SkippedAttachment,
+  ThreadFileOutcome,
   ThreadHistoryParams,
   UpdateApprovalRequestOptions,
 } from "@/types";
 import { detectImageType } from "@/utils/detect-image-type";
 import { stripHtmlTags } from "@/utils/strip-html";
+import { isUuid } from "@/utils/uuid";
+import { isMuteReaction } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_TEAM_CACHE,
   CHATOPS_THREAD_HISTORY,
 } from "./constants";
-import { errorMessage } from "./utils";
+import { errorMessage, formatApprovalToolArgs } from "./utils";
 
 /**
  * MS Teams provider using Bot Framework SDK.
@@ -100,8 +104,16 @@ class MSTeamsProvider implements ChatOpsProvider {
       ? new PasswordServiceClientCredentialFactory(appId, appSecret, tenantId)
       : new PasswordServiceClientCredentialFactory(appId, appSecret);
 
+    // A tenant ID means this is a single-tenant Azure Bot. The adapter must be
+    // told so (MicrosoftAppType=SingleTenant) — otherwise it defaults to
+    // MultiTenant and validates tokens against the wrong (common) authority,
+    // rejecting every inbound activity with "Unauthorized. No valid identity."
     const auth = new ConfigurationBotFrameworkAuthentication(
-      { MicrosoftAppId: appId, MicrosoftAppTenantId: tenantId || undefined },
+      {
+        MicrosoftAppId: appId,
+        MicrosoftAppType: tenantId ? "SingleTenant" : "MultiTenant",
+        MicrosoftAppTenantId: tenantId || undefined,
+      },
       credentialsFactory,
     );
 
@@ -212,7 +224,25 @@ class MSTeamsProvider implements ChatOpsProvider {
       "[MSTeamsProvider] Parsing activity",
     );
 
-    if (activity.type !== ActivityTypes.Message || !activity.text) {
+    if (activity.type !== ActivityTypes.Message) {
+      return null;
+    }
+
+    // A file-only message (empty text but with a real file attachment) is still
+    // meaningful, so accept it; only drop messages that carry neither text nor
+    // a downloadable file. Adaptive Cards / hero cards are not files (and are
+    // filtered out before download), so a card-only message stays dropped.
+    // Addressing/mention gating is enforced by the webhook route, not here, so
+    // this does not widen who the bot responds to.
+    const hasFileAttachment = Boolean(
+      activity.attachments?.some(
+        (a) =>
+          a.contentUrl &&
+          a.contentType &&
+          !a.contentType.startsWith("application/vnd.microsoft.card."),
+      ),
+    );
+    if (!activity.text && !hasFileAttachment) {
       return null;
     }
 
@@ -231,30 +261,16 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     const cleanedText = cleanBotMention(
-      activity.text,
+      activity.text ?? "",
       activity.recipient?.name,
     );
-    if (!cleanedText) {
+    if (!cleanedText && !hasFileAttachment) {
       return null;
     }
 
-    // In team channels, only respond when the bot is @mentioned.
-    // Normalizes IDs before comparing (strips "28:" prefix, case-insensitive)
-    // since Teams may format recipient.id and mentioned.id differently.
-    if (activity.conversation?.conversationType === "channel") {
-      const botId = activity.recipient?.id;
-      const isBotMentioned =
-        botId &&
-        activity.entities?.some(
-          (e) =>
-            e.type === "mention" &&
-            e.mentioned?.id != null &&
-            normalizeTeamsId(e.mentioned.id) === normalizeTeamsId(botId),
-        );
-      if (!isBotMentioned) {
-        return null;
-      }
-    }
+    // Note: in team channels the bot stays quiet until @mentioned, then keeps
+    // replying to the thread. That gating is enforced by the webhook route via
+    // wasBotMentioned() + channel-activation, not here, so parsing stays pure.
 
     const conversationId = activity.conversation?.id;
     const isThreadReply =
@@ -265,11 +281,23 @@ class MSTeamsProvider implements ChatOpsProvider {
     const teamData = activity.channelData?.team;
     const workspaceId = teamData?.aadGroupId || teamData?.id || null;
 
-    // Download file attachments (skip Adaptive Cards and other non-file attachments)
-    const attachments = await this.downloadTeamsAttachments(
-      activity.attachments,
+    // Download file attachments (skip Adaptive Cards and other non-file
+    // attachments). Current-message drops are intentionally not surfaced for
+    // Teams (unlike Slack) — only the delivered attachments are used.
+    const fileOutcomes = await this.downloadTeamsFiles(
+      filterTeamsFileAttachments(activity.attachments),
       activity.serviceUrl,
     );
+    const attachments = fileOutcomes.flatMap((o) =>
+      o.status === "delivered" ? [o.attachment] : [],
+    );
+
+    // A file-only message (empty text) is kept only when a file actually
+    // survived download — oversized, expired, or failed downloads must not
+    // leave the bot answering an empty turn.
+    if (!cleanedText && attachments.length === 0) {
+      return null;
+    }
 
     return {
       messageId: activity.id || `teams-${Date.now()}`,
@@ -279,7 +307,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       senderId: activity.from?.aadObjectId || activity.from?.id || "unknown",
       senderName: activity.from?.name || "Unknown User",
       text: cleanedText,
-      rawText: activity.text,
+      rawText: activity.text ?? "",
       timestamp: activity.timestamp ? new Date(activity.timestamp) : new Date(),
       isThreadReply,
       metadata: {
@@ -292,9 +320,90 @@ class MSTeamsProvider implements ChatOpsProvider {
           >[0],
         ),
         authHeader: headers.authorization || headers.Authorization,
+        // Lets the manager frame group conversations for the agent ("personal",
+        // "groupChat", or "channel") and tell it whether it was addressed.
+        conversationType: activity.conversation?.conversationType,
+        botMentioned: this.wasBotMentioned(activity),
+        botName: activity.recipient?.name,
+        // Names of OTHER people @mentioned in the message — a message
+        // @mentioning someone else is most likely addressed to them.
+        mentionedOthers: extractMentionedOthers(activity),
       },
       ...(attachments.length > 0 && { attachments }),
     };
+  }
+
+  /**
+   * Whether this activity @mentions the bot.
+   *
+   * Normalizes IDs before comparing (strips the "28:" prefix, case-insensitive)
+   * since Teams may format recipient.id and the mention's id differently. The
+   * webhook route uses this to gate team-channel replies (see channel-activation).
+   */
+  wasBotMentioned(activity: {
+    recipient?: { id?: string } | null;
+    entities?: Array<{
+      type?: string;
+      mentioned?: { id?: string } | null;
+    } | null> | null;
+  }): boolean {
+    const botId = activity.recipient?.id;
+    if (!botId) {
+      return false;
+    }
+    return Boolean(
+      activity.entities?.some(
+        (e) =>
+          e?.type === "mention" &&
+          e.mentioned?.id != null &&
+          normalizeTeamsId(e.mentioned.id) === normalizeTeamsId(botId),
+      ),
+    );
+  }
+
+  /**
+   * If this is a "mute the thread" reaction on one of the bot's channel
+   * messages, return the channel + thread to mute; otherwise null.
+   *
+   * Teams only delivers messageReaction events for the bot's OWN messages, so
+   * no sender check is needed. The thread is taken from `conversation.id`'s
+   * `;messageid=<root>` — NOT `replyToId`, which on a reaction points at the
+   * reacted (bot reply) message rather than the thread root the activation was
+   * keyed on. If the root can't be resolved we return null and the caller
+   * no-ops loudly (no false "muted") rather than guessing a key — guessing the
+   * channelId fallback could clear a different thread's activation.
+   */
+  parseMuteReaction(activity: {
+    type?: string;
+    conversation?: { id?: string; conversationType?: string };
+    channelData?: { channel?: { id?: string } };
+    reactionsAdded?: Array<{ type?: string } | null> | null;
+  }): { channelId: string; threadId: string } | null {
+    if (activity.type !== "messageReaction") return null;
+    const hasMuteReaction = Boolean(
+      activity.reactionsAdded?.some((r) => r?.type && isMuteReaction(r.type)),
+    );
+    if (!hasMuteReaction) return null;
+
+    // Sticky auto-reply (and thus muting) only applies in team channels.
+    if (activity.conversation?.conversationType !== "channel") return null;
+
+    const conversationId = activity.conversation?.id;
+    // Match how the gate derived the activation key's channelId
+    // (parseWebhookNotification): prefer channelData.channel.id, else the
+    // thread-suffix-stripped conversation id. Uses `||` (not `??`) to match the
+    // gate exactly, so an empty channel.id falls through to the conversation id.
+    const channelId =
+      activity.channelData?.channel?.id || stripThreadSuffix(conversationId);
+    // Assumes the activation key's threadId equals the conversation's
+    // `;messageid=<root>`. Teams channel threads are flat (every reply's
+    // replyToId is the root), so the gate's extractThreadId (replyToId-first)
+    // and this resolve to the same root. If a payload ever breaks that, the
+    // mute no-ops loudly (returns null → no false "muted") rather than guessing.
+    const threadId = extractThreadIdFromConversationId(conversationId);
+    if (!channelId || !threadId) return null;
+
+    return { channelId, threadId };
   }
 
   async sendReply(options: ChatReplyOptions): Promise<string> {
@@ -303,8 +412,16 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
 
     let replyText = options.text;
+    // An even-more-subtle hint (e.g. the one-time mute tip) on its own italic
+    // line ABOVE the footer, so the agent footer stays the last line. Italics
+    // keep it visually quieter than the footer.
+    if (options.hint) {
+      replyText += `\n\n---\n\n_${options.hint}_`;
+    }
     if (options.footer) {
-      replyText += `\n\n---\n\n${options.footer}`;
+      replyText += options.hint
+        ? `\n\n${options.footer}`
+        : `\n\n---\n\n${options.footer}`;
     }
 
     // If a placeholder "Thinking..." message was sent (Teams channels),
@@ -380,7 +497,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       // - Group chats: no workspaceId, or workspaceId starts with "19:" (thread ID format)
       // - Team channels: workspaceId is a UUID (the team's aadGroupId), channelId contains @thread.tacv2
       let workspaceId = params.workspaceId;
-      const isValidTeamId = workspaceId && UUID_REGEX.test(workspaceId);
+      const isValidTeamId = workspaceId && isUuid(workspaceId);
 
       // If workspaceId isn't a valid UUID but channel looks like a team channel,
       // try to look up the actual team ID
@@ -401,7 +518,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         }
       }
 
-      const isTeamIdValid = workspaceId && UUID_REGEX.test(workspaceId);
+      const isTeamIdValid = workspaceId && isUuid(workspaceId);
       const isTeamChannel = isTeamIdValid && looksLikeTeamChannel;
       const isGroupChat = !isTeamChannel;
 
@@ -459,6 +576,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       },
     });
 
+    const argsText = formatApprovalToolArgs(options.toolArgs);
     const approvalCard = {
       type: "AdaptiveCard",
       $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
@@ -469,6 +587,17 @@ class MSTeamsProvider implements ChatOpsProvider {
           text: `\`${options.toolName}\``,
           wrap: true,
         },
+        ...(argsText
+          ? [
+              {
+                type: "TextBlock",
+                text: argsText,
+                wrap: true,
+                fontType: "Monospace",
+                spacing: "Small",
+              },
+            ]
+          : []),
         {
           type: "ActionSet",
           spacing: "Small",
@@ -1163,70 +1292,72 @@ class MSTeamsProvider implements ChatOpsProvider {
 
   async downloadFiles(
     files: ChatThreadMessageFile[],
-  ): Promise<
-    Array<{ contentType: string; contentBase64: string; name?: string }>
-  > {
-    // Convert ChatThreadMessageFile[] to the format downloadTeamsAttachments expects
-    const teamsAttachments = files.map((f) => ({
-      contentType: f.mimetype,
-      contentUrl: f.url,
-      name: f.name,
-    }));
+  ): Promise<ThreadFileOutcome[]> {
     // No serviceUrl for history messages — Azure Blob URLs are pre-authenticated
-    return this.downloadTeamsAttachments(teamsAttachments);
+    return this.downloadTeamsFiles(
+      files.map((f) => ({
+        contentType: f.mimetype,
+        contentUrl: f.url,
+        name: f.name,
+        size: f.size,
+      })),
+    );
   }
 
   // ===========================================================================
   // Private Methods
 
   /**
-   * Download file attachments from a Teams activity and convert to A2AAttachment format.
-   * Skips Adaptive Cards and other non-file content types.
+   * Download Teams file attachments and convert to A2AAttachment format.
+   *
+   * Returns exactly one outcome per input file, positionally aligned with
+   * `files` — the delivered attachment or the reason it was dropped — so
+   * callers can attribute every skip to the message the file came from.
    *
    * Authentication: Files uploaded directly in Teams chat use pre-authenticated Azure
    * Blob Storage URLs. Files shared from SharePoint/OneDrive may require a Bearer token.
    * When the contentUrl hostname matches the Bot Framework serviceUrl, we authenticate
    * using client credentials (appId/appSecret) to obtain a Bot Connector token.
    */
-  private async downloadTeamsAttachments(
-    attachments?: Array<{
-      contentType?: string;
-      contentUrl?: string;
-      content?: string;
-      name?: string;
-    }>,
+  private async downloadTeamsFiles(
+    files: TeamsFileAttachment[],
     serviceUrl?: string,
-  ): Promise<
-    Array<{ contentType: string; contentBase64: string; name?: string }>
-  > {
-    if (!attachments || attachments.length === 0) return [];
+  ): Promise<ThreadFileOutcome[]> {
+    if (files.length === 0) return [];
 
-    // Filter to only file/image attachments (skip Adaptive Cards, hero cards, etc.)
-    const fileAttachments = attachments.filter(
-      (a) =>
-        a.contentUrl &&
-        a.contentType &&
-        !a.contentType.startsWith("application/vnd.microsoft.card."),
-    );
-
-    if (fileAttachments.length === 0) return [];
-
-    const toProcess = fileAttachments.slice(
-      0,
-      CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE,
-    );
-    const results: Array<{
-      contentType: string;
-      contentBase64: string;
-      name?: string;
-    }> = [];
+    const outcomes: ThreadFileOutcome[] = [];
+    const skip = (skipped: SkippedAttachment): void => {
+      outcomes.push({ status: "skipped", skipped });
+    };
     let totalSize = 0;
+    let deliveredCount = 0;
+    // Once the combined budget is spent, every remaining file is recorded as
+    // over-budget rather than silently dropped (the old code `break`-ed here).
+    let budgetExhausted = false;
 
     // Lazily obtain a Bot Connector token when needed for authenticated downloads
     let botToken: string | null = null;
 
-    for (const attachment of toProcess) {
-      if (!attachment.contentUrl || !attachment.contentType) continue;
+    for (const [index, attachment] of files.entries()) {
+      // Anything past the per-message cap is dropped from processing; record
+      // it rather than letting it vanish silently.
+      if (index >= CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE) {
+        skip({
+          name: attachment.name,
+          sizeBytes: attachment.size,
+          reason: "too_many",
+        });
+        continue;
+      }
+
+      if (budgetExhausted) {
+        skip({
+          name: attachment.name,
+          sizeBytes: attachment.size,
+          reason: "total_limit_reached",
+        });
+        continue;
+      }
 
       // SSRF protection: only allow downloads from known Microsoft domains
       if (!isAllowedTeamsFileHost(attachment.contentUrl, serviceUrl)) {
@@ -1237,6 +1368,11 @@ class MSTeamsProvider implements ChatOpsProvider {
           },
           "[MSTeamsProvider] Skipping attachment from unexpected domain",
         );
+        skip({
+          name: attachment.name,
+          sizeBytes: attachment.size,
+          reason: "download_failed",
+        });
         continue;
       }
 
@@ -1266,6 +1402,11 @@ class MSTeamsProvider implements ChatOpsProvider {
             },
             "[MSTeamsProvider] Failed to download attachment",
           );
+          skip({
+            name: attachment.name,
+            sizeBytes: attachment.size,
+            reason: "download_failed",
+          });
           continue;
         }
 
@@ -1282,6 +1423,11 @@ class MSTeamsProvider implements ChatOpsProvider {
             { name: attachment.name, contentLength },
             "[MSTeamsProvider] Skipping oversized attachment (Content-Length)",
           );
+          skip({
+            name: attachment.name,
+            sizeBytes: attachment.size || contentLength,
+            reason: "too_large",
+          });
           continue;
         }
 
@@ -1297,6 +1443,11 @@ class MSTeamsProvider implements ChatOpsProvider {
             },
             "[MSTeamsProvider] Skipping attachment exceeding size limit",
           );
+          skip({
+            name: attachment.name,
+            sizeBytes: buffer.length,
+            reason: "too_large",
+          });
           continue;
         }
 
@@ -1314,10 +1465,17 @@ class MSTeamsProvider implements ChatOpsProvider {
             },
             "[MSTeamsProvider] Total attachments size limit reached",
           );
-          break;
+          skip({
+            name: attachment.name,
+            sizeBytes: buffer.length,
+            reason: "total_limit_reached",
+          });
+          budgetExhausted = true;
+          continue;
         }
 
         totalSize += buffer.length;
+        deliveredCount++;
         // Resolve content type: prefer HTTP header when specific, fall back to
         // attachment metadata, and detect from magic bytes as last resort when
         // both are generic (e.g. "application/octet-stream" or "image/*").
@@ -1327,13 +1485,16 @@ class MSTeamsProvider implements ChatOpsProvider {
           !ct || ct === "application/octet-stream" || ct.includes("*");
         const resolvedContentType = !isGenericContentType(httpContentType)
           ? httpContentType
-          : !isGenericContentType(attachment.contentType ?? "")
-            ? (attachment.contentType as string)
+          : !isGenericContentType(attachment.contentType)
+            ? attachment.contentType
             : detectImageType(buffer);
-        results.push({
-          contentType: resolvedContentType,
-          contentBase64: buffer.toString("base64"),
-          name: attachment.name,
+        outcomes.push({
+          status: "delivered",
+          attachment: {
+            contentType: resolvedContentType,
+            contentBase64: buffer.toString("base64"),
+            name: attachment.name,
+          },
         });
 
         logger.debug(
@@ -1349,21 +1510,26 @@ class MSTeamsProvider implements ChatOpsProvider {
           { name: attachment.name, error: errorMessage(error) },
           "[MSTeamsProvider] Error downloading attachment",
         );
+        skip({
+          name: attachment.name,
+          sizeBytes: attachment.size,
+          reason: "download_failed",
+        });
       }
     }
 
-    if (results.length > 0) {
+    if (deliveredCount > 0) {
       logger.info(
         {
-          fileCount: results.length,
+          fileCount: deliveredCount,
           totalSize,
-          originalCount: attachments.length,
+          originalCount: files.length,
         },
         "[MSTeamsProvider] Downloaded attachments from Teams message",
       );
     }
 
-    return results;
+    return outcomes;
   }
 
   /**
@@ -1525,48 +1691,59 @@ class MSTeamsProvider implements ChatOpsProvider {
   ): ChatThreadMessage[] {
     const botAppId = this.config.appId;
 
-    return messages
-      .filter((msg) => msg.id && msg.id !== excludeMessageId)
-      .map((msg) => {
-        const isUserMessage = Boolean(msg.from?.user);
+    return (
+      messages
+        .filter((msg) => msg.id && msg.id !== excludeMessageId)
+        .map((msg) => {
+          const isUserMessage = Boolean(msg.from?.user);
 
-        // Extract file attachment metadata from Graph API ChatMessage.attachments
-        const files: ChatThreadMessageFile[] = (msg.attachments ?? [])
-          .filter(
-            (a) =>
-              a.contentUrl &&
-              a.contentType &&
-              !a.contentType.startsWith("application/vnd.microsoft.card."),
-          )
-          .map((a) => ({
-            url: a.contentUrl as string,
-            mimetype: a.contentType as string,
-            name: a.name ?? undefined,
-          }));
+          // Extract file attachment metadata from Graph API ChatMessage.attachments
+          const files: ChatThreadMessageFile[] = (msg.attachments ?? [])
+            .filter(
+              (a) =>
+                a.contentUrl &&
+                a.contentType &&
+                !a.contentType.startsWith("application/vnd.microsoft.card."),
+            )
+            .map((a) => ({
+              url: a.contentUrl as string,
+              mimetype: a.contentType as string,
+              name: a.name ?? undefined,
+            }));
 
-        return {
-          messageId: msg.id as string,
-          senderId: isUserMessage
-            ? msg.from?.user?.id || "unknown"
-            : msg.from?.application?.id || "unknown",
-          senderName: isUserMessage
-            ? msg.from?.user?.displayName || "Unknown"
-            : msg.from?.application?.displayName || "App",
-          text: extractMessageText(
-            msg.body?.content ?? undefined,
-            msg.attachments ?? undefined,
-          ),
-          timestamp: msg.createdDateTime
-            ? new Date(msg.createdDateTime)
-            : new Date(),
-          isFromBot:
-            msg.from?.user?.id === botAppId ||
-            msg.from?.application?.id === botAppId,
-          ...(files.length > 0 && { files }),
-        };
-      })
-      .filter((msg) => msg.text.trim().length > 0)
-      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+          return {
+            messageId: msg.id as string,
+            senderId: isUserMessage
+              ? msg.from?.user?.id || "unknown"
+              : msg.from?.application?.id || "unknown",
+            senderName: isUserMessage
+              ? msg.from?.user?.displayName || "Unknown"
+              : msg.from?.application?.displayName || "App",
+            text: extractMessageText(
+              msg.body?.content ?? undefined,
+              msg.attachments ?? undefined,
+            ),
+            timestamp: msg.createdDateTime
+              ? new Date(msg.createdDateTime)
+              : new Date(),
+            isFromBot:
+              msg.from?.user?.id === botAppId ||
+              msg.from?.application?.id === botAppId,
+            ...(files.length > 0 && { files }),
+          };
+        })
+        // Keep text-less USER messages that carry files: a screenshot posted
+        // alone is a turn the model must know about — its file is either
+        // delivered or surfaced as skipped by the manager. Bot file-only
+        // messages stay filtered: the manager never downloads bot files, so
+        // retaining them would render a turn with no file and no skip note.
+        .filter(
+          (msg) =>
+            msg.text.trim().length > 0 ||
+            (!msg.isFromBot && (msg.files?.length ?? 0) > 0),
+        )
+        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+    );
   }
 }
 
@@ -1575,6 +1752,35 @@ export default MSTeamsProvider;
 // =============================================================================
 // Internal Helpers
 // =============================================================================
+
+/** A Teams attachment that points at a downloadable file (not a card). */
+interface TeamsFileAttachment {
+  contentType: string;
+  contentUrl: string;
+  name?: string;
+  size?: number;
+}
+
+/**
+ * Keep only file/image attachments (skip Adaptive Cards, hero cards, and
+ * entries without a download URL).
+ */
+function filterTeamsFileAttachments(
+  attachments?: Array<{
+    contentType?: string;
+    contentUrl?: string;
+    content?: string;
+    name?: string;
+  }>,
+): TeamsFileAttachment[] {
+  return (attachments ?? []).flatMap((a) =>
+    a.contentUrl &&
+    a.contentType &&
+    !a.contentType.startsWith("application/vnd.microsoft.card.")
+      ? [{ contentType: a.contentType, contentUrl: a.contentUrl, name: a.name }]
+      : [],
+  );
+}
 
 function cleanBotMention(text: string, botName?: string): string {
   let cleaned = text.replace(/<at>.*?<\/at>/gi, "").trim();
@@ -1610,6 +1816,10 @@ function needsBotAuth(contentUrl: string, serviceUrl: string): boolean {
 /**
  * Extract thread message ID from Teams activity.
  * Teams format: "channelId;messageid=messageId" for thread replies.
+ *
+ * Prefers replyToId, which on a normal message points at the thread root. For
+ * REACTION activities replyToId instead points at the reacted message, so the
+ * reaction path uses extractThreadIdFromConversationId directly instead.
  */
 function extractThreadId(activity: {
   conversation?: { id?: string };
@@ -1618,14 +1828,19 @@ function extractThreadId(activity: {
   if (activity.replyToId) {
     return activity.replyToId;
   }
+  return extractThreadIdFromConversationId(activity.conversation?.id);
+}
 
-  const conversationId = activity.conversation?.id;
-  if (conversationId?.includes(";messageid=")) {
-    const match = conversationId.match(/;messageid=(\d+)/);
-    return match?.[1];
-  }
+/** The `;messageid=<root>` thread id encoded in a Teams conversation id, if any. */
+function extractThreadIdFromConversationId(
+  conversationId?: string,
+): string | undefined {
+  return conversationId?.match(/;messageid=(\d+)/)?.[1];
+}
 
-  return undefined;
+/** A Teams conversation id with any `;messageid=...` thread suffix removed. */
+function stripThreadSuffix(conversationId?: string): string | undefined {
+  return conversationId?.split(";messageid=")[0] || undefined;
 }
 
 /**
@@ -1697,11 +1912,30 @@ function extractAdaptiveCardText(element: unknown): string {
   return parts.join("\n");
 }
 
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 function normalizeTeamsId(id: string): string {
   return id.replace(/^28:/, "").toLowerCase();
+}
+
+/** Display names of @mentioned participants other than the bot itself. */
+function extractMentionedOthers(activity: {
+  recipient?: { id?: string };
+  entities?: Array<{
+    type?: string;
+    mentioned?: { id?: string; name?: string };
+  }>;
+}): string[] {
+  const botId = activity.recipient?.id;
+  const names = (activity.entities ?? [])
+    .filter(
+      (e) =>
+        e?.type === "mention" &&
+        e.mentioned?.id != null &&
+        (botId == null ||
+          normalizeTeamsId(e.mentioned.id) !== normalizeTeamsId(botId)),
+    )
+    .map((e) => e.mentioned?.name)
+    .filter((name): name is string => Boolean(name));
+  return [...new Set(names)];
 }
 
 /**

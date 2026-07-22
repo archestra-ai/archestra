@@ -1,4 +1,4 @@
-import type { AnyRoleName } from "@shared";
+import type { AnyRoleName } from "@archestra/shared";
 import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
@@ -197,6 +197,8 @@ class MemberModel {
         id: schema.usersTable.id,
         name: schema.usersTable.name,
         email: schema.usersTable.email,
+        role: schema.membersTable.role,
+        systemRole: schema.usersTable.role,
       })
       .from(schema.membersTable)
       .innerJoin(
@@ -213,16 +215,19 @@ class MemberModel {
   }
 
   /**
-   * List org members eligible to be impersonated by an admin: excludes a
-   * given user (typically the caller) and excludes anyone whose system-level
-   * `user.role` is "admin" (better-auth's adminRoles guard would reject
-   * those at impersonation time anyway).
+   * Members of the organization whose user id is in `userIds`, same shape as
+   * findAllByOrganization. Lets a caller resolve a known subset (e.g. a member's
+   * teammates) without scanning the full roster.
    */
-  static async findImpersonationCandidates(params: {
+  static async findByUserIdsInOrganization(params: {
     organizationId: string;
-    excludeUserId: string;
+    userIds: string[];
   }) {
-    const rows = await db
+    const { organizationId, userIds } = params;
+    if (userIds.length === 0) {
+      return [];
+    }
+    return db
       .select({
         id: schema.usersTable.id,
         name: schema.usersTable.name,
@@ -235,14 +240,13 @@ class MemberModel {
         schema.usersTable,
         eq(schema.membersTable.userId, schema.usersTable.id),
       )
-      .where(eq(schema.membersTable.organizationId, params.organizationId))
-      .orderBy(schema.usersTable.name);
-
-    return rows
-      .filter(
-        (row) => row.id !== params.excludeUserId && row.systemRole !== "admin",
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, organizationId),
+          inArray(schema.usersTable.id, userIds),
+        ),
       )
-      .map(({ systemRole: _systemRole, ...rest }) => rest);
+      .orderBy(schema.usersTable.name);
   }
 
   static async findUserIdsInOrganization(params: {
@@ -491,6 +495,59 @@ class MemberModel {
   /**
    * Check if any member references the given agent as their default
    */
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.id, id),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      userId: row.userId,
+      role: row.role,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  static async findByUserIdForAudit(
+    userId: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      userId: row.userId,
+      role: row.role,
+      defaultAgentId: row.defaultAgentId ?? null,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
   static async isAgentDefault(agentId: string): Promise<boolean> {
     const [result] = await db
       .select({ count: count() })

@@ -2,7 +2,33 @@ import { describe, expect, test } from "vitest";
 import {
   getProvidersWithOptionalApiKey,
   isProviderApiKeyOptional,
+  isSelfHostedProvider,
+  requiresOpenAiResponsesApi,
 } from "./model-constants";
+
+describe("requiresOpenAiResponsesApi", () => {
+  test("matches pro reasoning models, including dated snapshots", () => {
+    expect(requiresOpenAiResponsesApi("gpt-5.5-pro")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-5.5-pro-2026-01-01")).toBe(true);
+    expect(requiresOpenAiResponsesApi("o3-pro")).toBe(true);
+  });
+
+  test("matches the gpt-5.6 family, whose function tools require the Responses API", () => {
+    expect(requiresOpenAiResponsesApi("gpt-5.6-sol")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-5.6-terra")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-5.6-luna")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-5.6")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-5.6-sol-2026-07-09")).toBe(true);
+    expect(requiresOpenAiResponsesApi("openai/gpt-5.6-sol")).toBe(true);
+  });
+
+  test("does not match chat-completions models", () => {
+    expect(requiresOpenAiResponsesApi("gpt-5.5")).toBe(false);
+    expect(requiresOpenAiResponsesApi("gpt-4o")).toBe(false);
+    expect(requiresOpenAiResponsesApi("babbage-002")).toBe(false);
+    expect(requiresOpenAiResponsesApi("gpt-5.61")).toBe(false);
+  });
+});
 
 describe("provider API key optional helpers", () => {
   test("treats self-hosted providers as optional", () => {
@@ -26,10 +52,38 @@ describe("provider API key optional helpers", () => {
     ).toBe(true);
   });
 
+  test("treats Anthropic as optional only when Workload Identity Federation is enabled", () => {
+    expect(isProviderApiKeyOptional({ provider: "anthropic" })).toBe(false);
+    expect(
+      isProviderApiKeyOptional({
+        provider: "anthropic",
+        anthropicWifEnabled: true,
+      }),
+    ).toBe(true);
+  });
+
   test("lists providers with optional API keys", () => {
     expect(getProvidersWithOptionalApiKey()).toEqual(["ollama", "vllm"]);
     expect(
       getProvidersWithOptionalApiKey({ azureEntraIdEnabled: true }),
     ).toEqual(["ollama", "vllm", "azure"]);
+    expect(
+      getProvidersWithOptionalApiKey({ anthropicWifEnabled: true }),
+    ).toEqual(["ollama", "vllm", "anthropic"]);
+  });
+});
+
+describe("isSelfHostedProvider", () => {
+  test("matches only the self-hosted providers", () => {
+    expect(isSelfHostedProvider("ollama")).toBe(true);
+    expect(isSelfHostedProvider("vllm")).toBe(true);
+  });
+
+  test("excludes cloud keyless providers (no per-provider denylist needed)", () => {
+    // These are optional-key via runtime flags but are NOT self-hosted, so the
+    // Docker-localhost hint must not apply to them.
+    expect(isSelfHostedProvider("azure")).toBe(false);
+    expect(isSelfHostedProvider("anthropic")).toBe(false);
+    expect(isSelfHostedProvider("openai")).toBe(false);
   });
 });

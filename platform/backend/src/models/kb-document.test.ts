@@ -1,5 +1,8 @@
+import { sql } from "drizzle-orm";
+import db from "@/database";
 import { describe, expect, test } from "@/test";
 import type { InsertKbDocument } from "@/types";
+import KbChunkModel from "./kb-chunk";
 import KbDocumentModel from "./kb-document";
 
 function createDocumentData(
@@ -282,6 +285,49 @@ describe("KbDocumentModel", () => {
     });
   });
 
+  describe("findByConnectorSourcePairs", () => {
+    test("returns documents matching connector and source id pairs", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb1 = await makeKnowledgeBase(org.id);
+      const kb2 = await makeKnowledgeBase(org.id);
+      const connector1 = await makeKnowledgeBaseConnector(kb1.id, org.id);
+      const connector2 = await makeKnowledgeBaseConnector(kb2.id, org.id);
+
+      await KbDocumentModel.create(
+        createDocumentData(connector1.id, org.id, {
+          sourceId: "shared-source",
+          title: "First connector document",
+        }),
+      );
+      await KbDocumentModel.create(
+        createDocumentData(connector2.id, org.id, {
+          sourceId: "shared-source",
+          title: "Second connector document",
+        }),
+      );
+      await KbDocumentModel.create(
+        createDocumentData(connector2.id, org.id, {
+          sourceId: "other-source",
+          title: "Other document",
+        }),
+      );
+
+      const found = await KbDocumentModel.findByConnectorSourcePairs([
+        { connectorId: connector1.id, sourceId: "shared-source" },
+        { connectorId: connector2.id, sourceId: "other-source" },
+      ]);
+
+      expect(found.map((doc) => doc.title).sort()).toEqual([
+        "First connector document",
+        "Other document",
+      ]);
+    });
+  });
+
   describe("update", () => {
     test("updates a document title", async ({
       makeOrganization,
@@ -418,52 +464,6 @@ describe("KbDocumentModel", () => {
     });
   });
 
-  describe("countByKnowledgeBase", () => {
-    test("returns the count of documents in a knowledge base", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-      await KbDocumentModel.create(createDocumentData(connector.id, org.id));
-      await KbDocumentModel.create(createDocumentData(connector.id, org.id));
-
-      const count = await KbDocumentModel.countByKnowledgeBase(kb.id);
-      expect(count).toBe(2);
-    });
-
-    test("returns 0 when no documents exist", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-
-      const count = await KbDocumentModel.countByKnowledgeBase(kb.id);
-      expect(count).toBe(0);
-    });
-
-    test("does not count documents from other knowledge bases", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const org = await makeOrganization();
-      const kb1 = await makeKnowledgeBase(org.id);
-      const kb2 = await makeKnowledgeBase(org.id);
-      const connector1 = await makeKnowledgeBaseConnector(kb1.id, org.id);
-      const connector2 = await makeKnowledgeBaseConnector(kb2.id, org.id);
-      await KbDocumentModel.create(createDocumentData(connector1.id, org.id));
-      await KbDocumentModel.create(createDocumentData(connector1.id, org.id));
-      await KbDocumentModel.create(createDocumentData(connector2.id, org.id));
-
-      const count = await KbDocumentModel.countByKnowledgeBase(kb1.id);
-      expect(count).toBe(2);
-    });
-  });
-
   describe("updateAclByConnector", () => {
     test("updates only documents whose ACL differs from the target ACL", async ({
       makeOrganization,
@@ -495,10 +495,11 @@ describe("KbDocumentModel", () => {
         }),
       );
 
-      const updatedCount = await KbDocumentModel.updateAclByConnector(
-        targetConnector.id,
-        ["team:alpha"],
-      );
+      const updatedCount = await KbDocumentModel.updateAclByConnector({
+        connectorId: targetConnector.id,
+        acl: ["team:alpha"],
+        aclConfigEpoch: targetConnector.aclConfigEpoch,
+      });
 
       expect(updatedCount).toBe(1);
       expect((await KbDocumentModel.findById(unchangedDoc.id))?.acl).toEqual([
@@ -510,6 +511,208 @@ describe("KbDocumentModel", () => {
       expect((await KbDocumentModel.findById(otherDoc.id))?.acl).toEqual([
         "org:*",
       ]);
+    });
+  });
+
+  describe("recoverStalledEmbeddings", () => {
+    test("resets stalled pending/processing docs to pending and returns their ids", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const pending = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          embeddingStatus: "pending",
+        }),
+      );
+      const processing = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          embeddingStatus: "processing",
+        }),
+      );
+
+      // Age both rows so they are unambiguously stale. A just-created row can
+      // share the sweep query's transaction timestamp, so `updated_at < now()`
+      // would drop it — the source of prior CI flakiness with `olderThanSeconds: 0`.
+      await db.execute(
+        sql`UPDATE kb_documents SET updated_at = now() - interval '1 hour' WHERE connector_id = ${connector.id}`,
+      );
+
+      const ids = await KbDocumentModel.recoverStalledEmbeddings({
+        olderThanSeconds: 0,
+        limit: 10,
+      });
+
+      expect(ids.sort()).toEqual([pending.id, processing.id].sort());
+      // The stuck 'processing' row is reset to 'pending' so the embedder re-runs it.
+      expect(
+        (await KbDocumentModel.findById(processing.id))?.embeddingStatus,
+      ).toBe("pending");
+    });
+
+    test("ignores documents touched within the window", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          embeddingStatus: "pending",
+        }),
+      );
+
+      // Freshly created → newer than a 1-hour window → not swept.
+      const ids = await KbDocumentModel.recoverStalledEmbeddings({
+        olderThanSeconds: 3600,
+        limit: 10,
+      });
+
+      expect(ids).toHaveLength(0);
+    });
+
+    test("does not touch completed or failed documents", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          embeddingStatus: "completed",
+        }),
+      );
+      await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, { embeddingStatus: "failed" }),
+      );
+
+      const ids = await KbDocumentModel.recoverStalledEmbeddings({
+        olderThanSeconds: 0,
+        limit: 10,
+      });
+
+      expect(ids).toHaveLength(0);
+    });
+
+    test("respects the limit", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      for (let i = 0; i < 3; i++) {
+        await KbDocumentModel.create(
+          createDocumentData(connector.id, org.id, {
+            embeddingStatus: "pending",
+          }),
+        );
+      }
+      // Age all three so they are unambiguously stale (see the note above).
+      await db.execute(
+        sql`UPDATE kb_documents SET updated_at = now() - interval '1 hour' WHERE connector_id = ${connector.id}`,
+      );
+
+      const ids = await KbDocumentModel.recoverStalledEmbeddings({
+        olderThanSeconds: 0,
+        limit: 2,
+      });
+
+      expect(ids).toHaveLength(2);
+    });
+  });
+
+  describe("applyContainerAssignment", () => {
+    /** Seed a document with one chunk, both fail-closed. */
+    async function seedDocWithChunk(params: {
+      connectorId: string;
+      organizationId: string;
+    }) {
+      const doc = await KbDocumentModel.create(
+        createDocumentData(params.connectorId, params.organizationId, {
+          acl: [],
+        }),
+      );
+      await KbChunkModel.insertMany([
+        { documentId: doc.id, content: "chunk", chunkIndex: 0, acl: [] },
+      ]);
+      return doc;
+    }
+
+    const chunkAcls = async (documentId: string) =>
+      (
+        await db.execute<{ acl: string[] }>(
+          sql`SELECT acl FROM kb_chunks WHERE document_id = ${documentId}`,
+        )
+      ).rows.map((row) => row.acl);
+
+    test("moves the document row and its chunks together, reporting both", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const doc = await seedDocWithChunk({
+        connectorId: connector.id,
+        organizationId: org.id,
+      });
+
+      const result = await KbDocumentModel.applyContainerAssignment({
+        documentId: doc.id,
+        connectorId: connector.id,
+        acl: ["container:x"],
+        containerKey: "repo:o/r",
+        aclConfigEpoch: connector.aclConfigEpoch,
+      });
+
+      expect(result).toEqual({ documentUpdated: true, chunksRewritten: 1 });
+      const stored = await KbDocumentModel.findById(doc.id);
+      expect(stored?.acl).toEqual(["container:x"]);
+      expect(stored?.containerKey).toBe("repo:o/r");
+      expect(await chunkAcls(doc.id)).toEqual([["container:x"]]);
+    });
+
+    test("a stale epoch fences out the document AND its chunks — never one without the other", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      // The invariant this method exists for. As two separately-fenced
+      // statements, a visibility switch landing between them fenced out only the
+      // second: the chunks (which the search filter actually reads) kept a
+      // container token the document row never got. One statement, one fence
+      // evaluation, so the pair cannot come apart.
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const doc = await seedDocWithChunk({
+        connectorId: connector.id,
+        organizationId: org.id,
+      });
+
+      const result = await KbDocumentModel.applyContainerAssignment({
+        documentId: doc.id,
+        connectorId: connector.id,
+        acl: ["container:x"],
+        containerKey: "repo:o/r",
+        aclConfigEpoch: connector.aclConfigEpoch + 1,
+      });
+
+      expect(result).toEqual({ documentUpdated: false, chunksRewritten: 0 });
+      const stored = await KbDocumentModel.findById(doc.id);
+      expect(stored?.acl).toEqual([]);
+      expect(stored?.containerKey).toBeNull();
+      expect(await chunkAcls(doc.id)).toEqual([[]]);
     });
   });
 });

@@ -1,4 +1,4 @@
-import { AUTO_PROVISIONED_INVITATION_STATUS, MEMBER_ROLE_NAME } from "@shared";
+import { AUTO_PROVISIONED_INVITATION_STATUS } from "@archestra/shared";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -8,7 +8,7 @@ import {
   OrganizationModel,
   UserModel,
 } from "@/models";
-import type { ChatOpsProviderType } from "@/types";
+import type { ChatOpsProviderType, User } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 
 const INVITATION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -16,19 +16,20 @@ const INVITATION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 /**
  * Auto-provision an Archestra user + member from a Slack/Teams interaction.
  *
- * Creates a `user` row and a `member` row (role: member, no team).
+ * Creates a `user` row and a `member` row (org default role, no team).
  * Does NOT create an `account` row — the user has no login credentials yet.
  * Also creates an `invitation` record that powers the signup-completion link.
  *
  * Handles the race condition where two messages arrive simultaneously for the
  * same unregistered user: catches the unique constraint violation on user.email
- * and falls back to a findByEmail lookup.
+ * and falls back to a findByEmail lookup, returning `invitationId: null` for
+ * that already-existing user so callers suppress the welcome message.
  */
 export async function autoProvisionUser(params: {
   email: string;
   name: string;
   provider: ChatOpsProviderType;
-}): Promise<{ userId: string; invitationId: string }> {
+}): Promise<{ userId: string; invitationId: string | null }> {
   const { email, name, provider } = params;
   const normalizedEmail = email.toLowerCase();
 
@@ -36,6 +37,9 @@ export async function autoProvisionUser(params: {
   if (!org) {
     throw new Error("No organization found for auto-provisioning");
   }
+
+  // Org-configured default role for new users (falls back to "member").
+  const defaultRole = await OrganizationModel.getDefaultMemberRole(org.id);
 
   try {
     // Create user record (no account — no password/login yet)
@@ -50,7 +54,7 @@ export async function autoProvisionUser(params: {
     });
 
     // Create member record linking user to organization
-    await MemberModel.create(userId, org.id, MEMBER_ROLE_NAME);
+    await MemberModel.create(userId, org.id, defaultRole);
 
     // Create personal default chat agent for the new member
     try {
@@ -84,7 +88,7 @@ export async function autoProvisionUser(params: {
       id: invitationId,
       organizationId: org.id,
       email: normalizedEmail,
-      role: MEMBER_ROLE_NAME,
+      role: defaultRole,
       status: `${AUTO_PROVISIONED_INVITATION_STATUS}:${provider}`,
       expiresAt: new Date(Date.now() + INVITATION_EXPIRY_MS),
       inviterId: userId, // Self-referencing — auto-provisioned
@@ -105,11 +109,44 @@ export async function autoProvisionUser(params: {
       );
       const existingUser = await UserModel.findByEmail(normalizedEmail);
       if (existingUser) {
-        return { userId: existingUser.id, invitationId: "" };
+        return { userId: existingUser.id, invitationId: null };
       }
     }
     throw error;
   }
+}
+
+/**
+ * Resolve a chat sender to an Archestra user, auto-provisioning on first sight.
+ *
+ * Returns the existing user with `invitationId: null` when already registered, or
+ * the freshly provisioned user with the invitation id (callers gate the welcome on
+ * `invitationId !== null`). Returns `null` when provisioning succeeded but the user
+ * could not be re-resolved afterwards. `resolveDisplayName` is only invoked when a
+ * new user is actually provisioned.
+ */
+export async function ensureProvisionedUser(params: {
+  email: string;
+  resolveDisplayName: () => Promise<string>;
+  provider: ChatOpsProviderType;
+}): Promise<{ user: User; invitationId: string | null } | null> {
+  const { email, resolveDisplayName, provider } = params;
+  const normalizedEmail = email.toLowerCase();
+
+  const existing = await UserModel.findByEmail(normalizedEmail);
+  if (existing) {
+    return { user: existing, invitationId: null };
+  }
+
+  const name = await resolveDisplayName();
+  const { invitationId } = await autoProvisionUser({ email, name, provider });
+
+  const user = await UserModel.findByEmail(normalizedEmail);
+  if (!user) {
+    return null;
+  }
+
+  return { user, invitationId };
 }
 
 /**
@@ -132,16 +169,17 @@ interface WelcomeMessage {
 /**
  * Build the welcome message sent to auto-provisioned users via DM.
  */
-export function buildWelcomeMessage(params: {
+export async function buildWelcomeMessage(params: {
   invitationId: string;
   email: string;
   name: string;
-}): WelcomeMessage {
+}): Promise<WelcomeMessage> {
   const { invitationId, email, name } = params;
   const baseUrl = config.frontendBaseUrl;
+  const appName = await OrganizationModel.getAppName();
 
   return {
-    text: `Hey there 👋 We created an Archestra user for you (${email}). Finish signing up to access Archestra web app.`,
+    text: `Hey there 👋 We created a ${appName} user for you (${email}). Finish signing up to access the ${appName} web app.`,
     actionUrl: `${baseUrl}/auth/sign-up-with-invitation?invitationId=${invitationId}&email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`,
     actionLabel: "Finish Signup",
   };

@@ -1,0 +1,93 @@
+{
+  "name": "evalstate__mcp-miro",
+  "display_name": "mcp-miro",
+  "description": "MCP server from evalstate/mcp-miro",
+  "author": {
+    "name": "evalstate"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js", "--token", "${user_config.miro_oauth_key}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "miro_oauth_key": {
+      "type": "string",
+      "title": "MIRO OAuth Key",
+      "description": "Your OAuth key for the MIRO Whiteboard Application.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# mcp-miro MCP Server\n[![smithery badge](https://smithery.ai/badge/@llmindset/mcp-miro)](https://smithery.ai/server/@llmindset/mcp-miro)\n\nA Model Context Protocol server to connect to the MIRO Whiteboard Application.\n\n- Allows Board manipulation, sticky creation, bulk operations and more.\n- Pass your OAuth key as an Environment Variable, or using the \"--token\" argument.\n- Taking a photo of stickies and asking Claude to create MIRO equivalent works _really_ well.\n\n<a href=\"https://glama.ai/mcp/servers/gr5t7vthv3\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/gr5t7vthv3/badge\" alt=\"mcp-miro MCP server\" /></a>\n\n## Installation\n\n### Installing via Smithery\n\nTo install MIRO Whiteboard Connector for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@llmindset/mcp-miro):\n\n```bash\nnpx -y @smithery/cli install @llmindset/mcp-miro --client claude\n```\n\n### Using mcp-get\n\nYou can install this package using mcp-get:\n\n```bash\nnpx @michaellatman/mcp-get@latest install @llmindset/mcp-miro\n```\n\n_Note - if you are using an old version of Windows PowerShell, you may need to run_ `Set-ExecutionPolicy Bypass -Scope Process` _before this command._\n\n## Features\n\n![MIRO/Claude Desktop Screenshot](./2024-12-02-screenshot_1.png)\n\n### Resources\n- Get Board Contents \n\n### Tools\n- Create Sticky, Shape\n- Read Board, Frame, Contents\n- Bulk Create\n\n### Prompts\n- Instruct on Board Coordinates etc.\n\n## Development\n\nInstall dependencies:\n```bash\nnpm install\n```\n\nBuild the server:\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n```bash\nnpm run watch\n```\n\n## Installation\n\nTo use with Claude Desktop, add the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-miro\": {\n      \"command\": \"/path/to/node-or-npx\",\n      \"arguments\": [\n        \"/path/to/mcp-miro/build/index.js\",\n        \"--token\",\"MIRO-OAUTH-KEY\"\n      ]\n    }\n  }\n}\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nnpm run inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n\nIn Dev environment recommend adding https://github.com/miroapp/api-clients/blob/041de24ebf7955432b447d887ede066ad4c7e2c7/packages/generator/spec.json for reference.\n",
+  "category": "AI Tools",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-miro-with-token": {
+        "command": "node",
+        "args": ["/path/to/mcp-miro/build/index.js", "--token", "MIRO-OAUTH-KEY"],
+        "env": {}
+      },
+      "mcp-miro-with-env": {
+        "command": "node",
+        "args": ["/path/to/mcp-miro/build/index.js"],
+        "env": {
+          "MIRO_OAUTH_KEY": "YOUR_MIRO_OAUTH_KEY"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "evalstate",
+    "repo": "mcp-miro",
+    "url": "https://github.com/evalstate/mcp-miro",
+    "name": "mcp-miro",
+    "path": null,
+    "stars": 76,
+    "contributors": 3,
+    "issues": 7,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a8be11ed8794f420375093931224a598e91a39d3"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:46.603Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 7
+    },
+    {
+      "name": "yargs",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@llmindset/mcp-miro\",\n  \"version\": \"0.1.1\",\n  \"description\": \"A Model Context Protocol server to connect to the MIRO Whiteboard Application\",\n  \"type\": \"module\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },  \n  \"bin\": {\n    \"mcp-miro\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/evalstate/mcp-miro\"\n  },\n  \"bugs\":{\n    \"url\": \"https://github.com/evalstate/mcp-miro/issues\"\n  },  \n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"node-fetch\": \"^3.3.2\",\n    \"yargs\": \"^17.7.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"@types/yargs\": \"^17.0.33\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

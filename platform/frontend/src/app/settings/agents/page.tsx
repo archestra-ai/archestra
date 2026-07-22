@@ -1,15 +1,11 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AgentSelector } from "@/components/agent-selector";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
-import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
-import {
-  LlmProviderApiKeyOptionLabel,
-  LlmProviderApiKeySelectItems,
-} from "@/components/llm-provider-options";
-import { ProfileFilterOption } from "@/components/log-filter-option";
+import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -17,7 +13,6 @@ import {
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -26,10 +21,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useOrgScopedAgents } from "@/lib/agent.query";
+import {
+  APPS_HACKATHON_DATE_RANGE_LABEL,
+  APPS_HACKATHON_REGISTER_URL,
+  APPS_HACKATHON_SETTING_ANCHOR,
+  useAppsHackathonOffered,
+} from "@/lib/app-session-recording/apps-hackathon";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   useOrganization,
   useUpdateAgentSettings,
@@ -42,55 +42,64 @@ import {
   resolveInitialState,
 } from "./agent-settings-utils";
 
-type GlobalToolPolicy = NonNullable<
-  NonNullable<
-    archestraApiTypes.UpdateSecuritySettingsData["body"]
-  >["globalToolPolicy"]
->;
-
 type FileUploadsEnabled = "enabled" | "disabled";
 
-type AgentSelectItem = {
-  value: string;
-  label: string;
-  content?: React.ReactNode;
-  selectedContent?: React.ReactNode;
-};
-
 export default function AgentSettingsPage() {
-  const { getToolName } = useArchestraMcpIdentity();
   const appName = useAppName();
   const { data: organization } = useOrganization();
-  const { data: apiKeys } = useAvailableLlmProviderApiKeys();
+  const {
+    data: apiKeys,
+    isLoadingError: isApiKeysLoadError,
+    refetch: refetchApiKeys,
+  } = useAvailableLlmProviderApiKeys({ toastOnError: false });
   const { data: orgAgents } = useOrgScopedAgents();
 
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
+  const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
-  const [toolPolicy, setToolPolicy] = useState<GlobalToolPolicy>("permissive");
   const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
+  const [hackathonRecorder, setHackathonRecorder] =
+    useState<FileUploadsEnabled>("enabled");
   const initializedRef = useRef(false);
   const savedStateRef = useRef<AgentSettingsState>({
     selectedApiKeyId: "",
     defaultModel: "",
     defaultAgentId: "",
   });
-  const savedSecurityStateRef = useRef({
-    toolPolicy: "permissive" as GlobalToolPolicy,
-    fileUploads: "enabled" as FileUploadsEnabled,
-  });
+  const savedFileUploadsRef = useRef<FileUploadsEnabled>("enabled");
+  const savedHackathonRecorderRef = useRef<FileUploadsEnabled>("enabled");
+  // Only offered while this deployment carries the hackathon and it is still
+  // running; an enterprise deployment never does, so there is nothing here to
+  // switch on. Past the closing date the whole section goes rather than
+  // lingering as a switch that no longer changes anything.
+  const hackathonOffered = useAppsHackathonOffered();
 
-  const { data: allModels, isPending: modelsLoading } = useLlmModels({
+  const {
+    data: allModels,
+    isPending: modelsLoading,
+    isLoadingError: isModelsLoadError,
+    isPlaceholderData,
+    refetch: refetchModels,
+  } = useLlmModels({
     apiKeyId: selectedApiKeyId || undefined,
   });
 
+  // `useLlmModels` uses `keepPreviousData`, so after a key switch `data` still
+  // holds the previous key's models (isPlaceholderData). Treat that as loading
+  // for the new key so the admin can't save a model from the old provider
+  // against the new provider's key.
+  const modelsPending = modelsLoading || isPlaceholderData;
+
+  const isLoadError = isApiKeysLoadError || isModelsLoadError;
+
   const updateAgentMutation = useUpdateAgentSettings(
-    "Agent settings updated",
-    "Failed to update agent settings",
+    "Chat settings updated",
+    "Failed to update chat settings",
   );
   const updateSecurityMutation = useUpdateSecuritySettings(
-    "Agent settings updated",
-    "Failed to update agent settings",
+    "Chat settings updated",
+    "Failed to update chat settings",
   );
 
   useEffect(() => {
@@ -101,16 +110,17 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(state.selectedApiKeyId);
     setDefaultModel(state.defaultModel);
     setDefaultAgentId(state.defaultAgentId);
-    setToolPolicy(organization.globalToolPolicy ?? "permissive");
-    setFileUploads(
-      (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
-    );
+    const savedFileUploads: FileUploadsEnabled =
+      (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled";
+    setFileUploads(savedFileUploads);
+    const savedHackathonRecorder: FileUploadsEnabled =
+      (organization.appsHackathonRecorderEnabled ?? true)
+        ? "enabled"
+        : "disabled";
+    setHackathonRecorder(savedHackathonRecorder);
     savedStateRef.current = state;
-    savedSecurityStateRef.current = {
-      toolPolicy: organization.globalToolPolicy ?? "permissive",
-      fileUploads:
-        (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
-    };
+    savedFileUploadsRef.current = savedFileUploads;
+    savedHackathonRecorderRef.current = savedHackathonRecorder;
     initializedRef.current = true;
   }, [organization, apiKeys]);
 
@@ -124,8 +134,8 @@ export default function AgentSettingsPage() {
 
   const changes = detectChanges(localState, savedStateRef.current);
   const securityHasChanges =
-    toolPolicy !== savedSecurityStateRef.current.toolPolicy ||
-    fileUploads !== savedSecurityStateRef.current.fileUploads;
+    fileUploads !== savedFileUploadsRef.current ||
+    hackathonRecorder !== savedHackathonRecorderRef.current;
 
   const handleSave = async () => {
     if (!apiKeys) return;
@@ -138,10 +148,17 @@ export default function AgentSettingsPage() {
 
     if (securityHasChanges) {
       await updateSecurityMutation.mutateAsync({
-        globalToolPolicy: toolPolicy,
         allowChatFileUploads: fileUploads === "enabled",
+        // Only sent when the section was actually shown. Otherwise every
+        // unrelated save here would carry a value for a setting this admin was
+        // never offered — and on a deployment without the hackathon that value
+        // is a default, not a decision.
+        ...(hackathonOffered
+          ? { appsHackathonRecorderEnabled: hackathonRecorder === "enabled" }
+          : {}),
       });
-      savedSecurityStateRef.current = { toolPolicy, fileUploads };
+      savedFileUploadsRef.current = fileUploads;
+      savedHackathonRecorderRef.current = hackathonRecorder;
     }
 
     initializedRef.current = false;
@@ -152,59 +169,27 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(saved.selectedApiKeyId);
     setDefaultModel(saved.defaultModel);
     setDefaultAgentId(saved.defaultAgentId);
-    setToolPolicy(savedSecurityStateRef.current.toolPolicy);
-    setFileUploads(savedSecurityStateRef.current.fileUploads);
+    setFileUploads(savedFileUploadsRef.current);
+    setHackathonRecorder(savedHackathonRecorderRef.current);
   };
 
   const modelItems = useMemo(() => {
-    if (!allModels) return [];
+    if (!allModels || isPlaceholderData) return [];
     return allModels.map((model) => ({
       value: model.dbId,
       model: model.displayName ?? model.id,
       modelId: model.id,
       provider: model.provider,
       isFree: model.isFree,
-      isFastest: model.isFastest,
       isBest: model.isBest,
     }));
-  }, [allModels]);
+  }, [allModels, isPlaceholderData]);
 
   const selectedApiKey = useMemo(
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
     [availableKeys, selectedApiKeyId],
   );
   const canFilterFreeModels = selectedApiKey?.provider === "openrouter";
-
-  const agentItems = useMemo(() => {
-    const items: AgentSelectItem[] = [
-      { value: "__personal__", label: "User's personal agent" },
-    ];
-    for (const agent of orgAgents ?? []) {
-      items.push({
-        value: agent.id,
-        label: agent.name,
-        content: (
-          <ProfileFilterOption
-            profile={{
-              name: agent.name,
-              icon: agent.icon ?? null,
-              agentType: "agent",
-            }}
-          />
-        ),
-        selectedContent: (
-          <ProfileFilterOption
-            profile={{
-              name: agent.name,
-              icon: agent.icon ?? null,
-              agentType: "agent",
-            }}
-          />
-        ),
-      });
-    }
-    return items;
-  }, [orgAgents]);
 
   const handleAgentChange = useCallback((value: string) => {
     setDefaultAgentId(value === "__personal__" ? "" : value);
@@ -215,164 +200,130 @@ export default function AgentSettingsPage() {
     setDefaultModel("");
   }, []);
 
-  const isRestrictive = toolPolicy === "restrictive";
   const isSaving =
     updateAgentMutation.isPending || updateSecurityMutation.isPending;
 
   return (
     <SettingsSectionStack>
       <SettingsBlock
-        title="Default model for agents and new chats"
-        description="Select the LLM provider API key and model that will be used by default when creating new agents and starting new chat conversations."
+        title="Default Model for Agents and New Chats"
+        description={
+          <>
+            Select the LLM provider API key and model that will be used by
+            default when creating new agents and starting new chat
+            conversations.
+            <span className="mt-2 block">
+              It's also the fallback for {appName}'s{" "}
+              <Link
+                href="/agents?scope=built_in"
+                className="text-primary hover:underline"
+              >
+                built-in agents
+              </Link>{" "}
+              — like chat title generation and context compaction — when they
+              don't have their own model.
+            </span>
+          </>
+        }
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
-            {({ hasPermission }) => (
-              <div className="flex flex-col gap-2 w-80">
-                <Select
-                  value={selectedApiKeyId}
-                  onValueChange={(value) => {
-                    setSelectedApiKeyId(value);
-                    setDefaultModel("");
-                  }}
-                  disabled={isSaving || !hasPermission}
-                >
-                  <SelectTrigger className="w-80">
-                    <SelectValue placeholder="Select API key...">
-                      {selectedApiKey ? (
-                        <LlmProviderApiKeyOptionLabel
-                          icon={PROVIDER_CONFIG[selectedApiKey.provider].icon}
-                          providerName={
-                            PROVIDER_CONFIG[selectedApiKey.provider].name
-                          }
-                          keyName={selectedApiKey.name}
-                          secondaryLabel={`${selectedApiKey.provider} - ${selectedApiKey.scope}`}
-                        />
-                      ) : (
-                        "Select API key..."
-                      )}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <LlmProviderApiKeySelectItems
-                      options={availableKeys.map((key) => ({
-                        value: key.id,
-                        icon: PROVIDER_CONFIG[key.provider].icon,
-                        providerName: PROVIDER_CONFIG[key.provider].name,
-                        keyName: key.name,
-                        secondaryLabel: `${key.provider} - ${key.scope}`,
-                      }))}
-                    />
-                  </SelectContent>
-                </Select>
-                <LlmModelSearchableSelect
-                  value={defaultModel}
-                  onValueChange={setDefaultModel}
-                  options={modelItems}
-                  freeFilterable={canFilterFreeModels}
-                  placeholder={
-                    !selectedApiKeyId
-                      ? "Select API key first..."
-                      : modelsLoading
-                        ? "Loading models..."
-                        : "Select model..."
-                  }
+            {({ hasPermission }) =>
+              isLoadError ? (
+                <QueryLoadError
+                  title="Couldn't load your LLM providers"
                   className="w-80"
-                  disabled={
-                    isSaving ||
-                    !hasPermission ||
-                    modelsLoading ||
-                    !selectedApiKeyId
-                  }
+                  onRetry={() => {
+                    refetchApiKeys();
+                    refetchModels();
+                  }}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="self-end"
-                  onClick={handleResetDefaultModel}
-                  disabled={
-                    isSaving ||
-                    !hasPermission ||
-                    (!selectedApiKeyId && !defaultModel)
-                  }
-                >
-                  Reset
-                </Button>
-              </div>
-            )}
+              ) : (
+                <div className="flex flex-col gap-2 w-80">
+                  <LlmProviderApiKeyDropdown
+                    availableKeys={availableKeys}
+                    selectedApiKeyId={selectedApiKeyId || null}
+                    disabled={isSaving || !hasPermission}
+                    open={apiKeySelectorOpen}
+                    onOpenChange={setApiKeySelectorOpen}
+                    onSelectKey={(value) => {
+                      setSelectedApiKeyId(value);
+                      setDefaultModel("");
+                      setApiKeySelectorOpen(false);
+                    }}
+                    triggerVariant="select"
+                    triggerClassName="w-80"
+                    popoverClassName="w-80"
+                    emptyTriggerLabel="Select provider key..."
+                  />
+                  <LlmModelSearchableSelect
+                    value={defaultModel}
+                    onValueChange={setDefaultModel}
+                    options={modelItems}
+                    freeFilterable={canFilterFreeModels}
+                    placeholder={
+                      !selectedApiKeyId
+                        ? "Select provider key first..."
+                        : modelsPending
+                          ? "Loading models..."
+                          : "Select model..."
+                    }
+                    className="w-80"
+                    disabled={
+                      isSaving ||
+                      !hasPermission ||
+                      modelsPending ||
+                      !selectedApiKeyId
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-end"
+                    onClick={handleResetDefaultModel}
+                    disabled={
+                      isSaving ||
+                      !hasPermission ||
+                      (!selectedApiKeyId && !defaultModel)
+                    }
+                  >
+                    Reset
+                  </Button>
+                </div>
+              )
+            }
           </WithPermissions>
         }
       />
       <SettingsBlock
-        title="Default agent"
-        description={`The default agent is preselected for all new chat conversations. To enable agent routing, assign ${getToolName("swap_agent")} to the default agent so it can swap to other agents, and ${getToolName("swap_to_default_agent")} to other agents so they can swap back automatically.`}
+        title="Default Agent"
+        description="The default agent is preselected for all new chat conversations."
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
-              <SearchableSelect
+              <AgentSelector
+                mode="single"
                 value={defaultAgentId || "__personal__"}
                 onValueChange={handleAgentChange}
+                agents={orgAgents ?? []}
                 placeholder="Select agent..."
                 searchPlaceholder="Search agents..."
-                items={agentItems}
                 className="w-80"
                 disabled={isSaving || !hasPermission}
                 hint="Only org-wide agents are shown"
+                personalDefaultOption={{
+                  value: "__personal__",
+                  label: "User's personal agent",
+                }}
               />
             )}
           </WithPermissions>
-        }
-      />
-      <SettingsBlock
-        title="Agentic Security Engine"
-        description="Configure the default security policy for tool execution and result treatment."
-        control={
-          <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <Select
-                value={toolPolicy}
-                onValueChange={(value: GlobalToolPolicy) =>
-                  setToolPolicy(value)
-                }
-                disabled={isSaving || !hasPermission}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="permissive">Disabled</SelectItem>
-                  <SelectItem value="restrictive">Enabled</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          </WithPermissions>
-        }
-        notice={
-          isRestrictive ? (
-            <span className="text-green-600 dark:text-green-400">
-              Policies apply to agents' tools.{" "}
-              <Link
-                href="/mcp/tool-guardrails"
-                className="text-primary hover:underline"
-              >
-                Configure policies
-              </Link>
-            </span>
-          ) : (
-            <span className="text-red-600 dark:text-red-400">
-              Agents can perform any action. Tool calls are allowed and results
-              are safe.
-            </span>
-          )
         }
       />
       <SettingsBlock
@@ -409,6 +360,51 @@ export default function AgentSettingsPage() {
           </span>
         }
       />
+      {hackathonOffered && (
+        <SettingsBlock
+          id={APPS_HACKATHON_SETTING_ANCHOR}
+          title="Apps Hackathon Recorder"
+          description={
+            <>
+              Show the session recorder control panel in chat composer to
+              participate in Archestra Apps Hackathon{" "}
+              {APPS_HACKATHON_DATE_RANGE_LABEL}.{" "}
+              <a
+                href={APPS_HACKATHON_REGISTER_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="font-medium text-primary underline underline-offset-2"
+              >
+                Learn more.
+              </a>
+            </>
+          }
+          control={
+            <WithPermissions
+              permissions={{ agentSettings: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <Select
+                  value={hackathonRecorder}
+                  onValueChange={(value: FileUploadsEnabled) =>
+                    setHackathonRecorder(value)
+                  }
+                  disabled={isSaving || !hasPermission}
+                >
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="enabled">Enabled</SelectItem>
+                    <SelectItem value="disabled">Disabled</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </WithPermissions>
+          }
+        />
+      )}
       <SettingsSaveBar
         hasChanges={changes.hasChanges || securityHasChanges}
         disabledSave={selectedApiKeyId !== "" && defaultModel === ""}

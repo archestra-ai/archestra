@@ -5,7 +5,11 @@ import type { A2AAttachment } from "@/agents/a2a-executor";
  * ChatOps provider types enum
  * Used for PG ENUM in database schema
  */
-export const ChatOpsProviderTypeSchema = z.enum(["ms-teams", "slack"]);
+export const ChatOpsProviderTypeSchema = z.enum([
+  "ms-teams",
+  "slack",
+  "telegram",
+]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
 
 export const ChatOpsConnectionModeSchema = z.enum(["webhook", "socket"]);
@@ -33,6 +37,8 @@ export const ChatOpsDmInfoSchema = z
     botUserId: z.string().optional(),
     teamId: z.string().optional(),
     appId: z.string().optional(),
+    /** Telegram bot username, used to build t.me deep links */
+    botUsername: z.string().optional(),
   })
   .optional();
 
@@ -49,6 +55,44 @@ export const ChatOpsProviderInfoSchema = z.object({
 export const ChatOpsStatusResponseSchema = z.object({
   providers: z.array(ChatOpsProviderInfoSchema),
 });
+
+/**
+ * Why an attached file was not included in the message sent to the model.
+ * - `too_large`: exceeded the per-file size limit (and, for images, could not
+ *   be shrunk under the model's inline-image limit).
+ * - `download_failed`: the provider download failed (auth, network, or a
+ *   non-file response such as an HTML login page).
+ * - `total_limit_reached`: the combined attachment budget was already spent.
+ * - `too_many`: more files than the per-message cap were attached.
+ */
+export type SkippedAttachmentReason =
+  | "too_large"
+  | "download_failed"
+  | "total_limit_reached"
+  | "too_many";
+
+/**
+ * A file that was attached to a message but not delivered to the model. Carried
+ * so the chatops layer can tell the model, in-context, that a file was dropped
+ * and why — otherwise the model has no idea the file existed and denies it.
+ */
+export interface SkippedAttachment {
+  /** Filename from the provider, when known. */
+  name?: string;
+  /** Size in bytes from provider metadata, when known. */
+  sizeBytes?: number;
+  reason: SkippedAttachmentReason;
+}
+
+/**
+ * Per-input-file result of downloading thread-history files. The returned
+ * array is positionally aligned with the input: `outcomes[i]` describes
+ * `files[i]`, so callers can attribute every skip back to the history turn
+ * the file came from.
+ */
+export type ThreadFileOutcome =
+  | { status: "delivered"; attachment: A2AAttachment }
+  | { status: "skipped"; skipped: SkippedAttachment };
 
 /**
  * Represents an incoming chat message from a chatops provider
@@ -80,6 +124,8 @@ export interface IncomingChatMessage {
   metadata?: Record<string, unknown>;
   /** Attachments from the message (images, files, etc.) */
   attachments?: A2AAttachment[];
+  /** Files that were attached but could not be delivered to the model. */
+  skippedAttachments?: SkippedAttachment[];
 }
 
 /**
@@ -94,6 +140,11 @@ export interface ChatReplyOptions {
   replyInThread?: boolean;
   /** Optional: Footer text to append (e.g. agent name) */
   footer?: string;
+  /**
+   * Optional: an even-more-subtle hint rendered on its own line below the
+   * footer (e.g. the one-time "you can mute me" tip on a thread's first reply).
+   */
+  hint?: string;
   /** Provider-specific conversation reference for reply routing */
   conversationReference?: unknown;
 }
@@ -103,7 +154,16 @@ export interface AddApprovalRequestFormOptions {
   threadId?: string;
   approvalId: string;
   taskId: string;
+  /**
+   * The tool the user is approving. For a `run_tool` dispatch this is the
+   * underlying target tool, not the `run_tool` wrapper.
+   */
   toolName: string;
+  /**
+   * The arguments the tool will be invoked with, rendered as a code block in
+   * the approval prompt. Undefined/empty when there is nothing to show.
+   */
+  toolArgs?: Record<string, unknown>;
   originalMessage: IncomingChatMessage;
 }
 
@@ -227,6 +287,21 @@ export interface ChatOpsProvider {
   readonly displayName: string;
 
   /**
+   * The provider's platform API cannot return chat history (Telegram), so the
+   * conversation is kept server-side instead: each thread runs against a
+   * persistent A2A context that accumulates messages across turns.
+   */
+  readonly usesServerSideSessions?: boolean;
+
+  /**
+   * How often to re-send the typing indicator while an agent run is in
+   * flight. For platforms whose indicator expires on its own (Telegram's
+   * lasts ~5s), a heartbeat keeps it visible during long runs. Leave unset
+   * for platforms whose status persists until explicitly cleared.
+   */
+  readonly typingRefreshIntervalMs?: number;
+
+  /**
    * Check if the provider is properly configured
    */
   isConfigured(): boolean;
@@ -348,11 +423,31 @@ export interface ChatOpsProvider {
   ): Promise<void>;
 
   /**
+   * Clear a transient "thinking" indicator without posting a message.
+   * Needed when the agent deliberately stays silent: providers like Slack
+   * only auto-clear the status once a message is posted to the thread.
+   */
+  clearTypingStatus?(channelId: string, threadTs: string): Promise<void>;
+
+  /**
    * Get thread/conversation history for context
    * @param params - Parameters including channel, thread ID, and limit
    * @returns Array of previous messages, oldest first
    */
   getThreadHistory(params: ThreadHistoryParams): Promise<ChatThreadMessage[]>;
+
+  /**
+   * Get a permalink to a specific message in the provider's web UI.
+   * Used to surface a clickable thread URL in the LLM context so tools
+   * can reference the originating conversation.
+   * @param params.channelId - The channel ID containing the message
+   * @param params.messageId - The message ID (Slack ts) to link to
+   * @returns Permalink URL, or null if unavailable
+   */
+  getMessagePermalink?(params: {
+    channelId: string;
+    messageId: string;
+  }): Promise<string | null>;
 
   /**
    * Get user's email address from their provider-specific ID
@@ -361,6 +456,13 @@ export interface ChatOpsProvider {
    * @returns The user's email address, or null if not available
    */
   getUserEmail(userId: string): Promise<string | null>;
+
+  /**
+   * Provider-specific guidance shown when the sender's identity cannot be
+   * resolved. Providers with no email concept (e.g. Telegram, where users must
+   * link their account first) override the generic manager message.
+   */
+  identityVerificationFailureText?(): string;
 
   /**
    * Get user's display name from their provider-specific ID.
@@ -392,6 +494,12 @@ export interface ChatOpsProvider {
     userId: string;
     userName: string;
     responseUrl: string;
+    /**
+     * Whether the selection happened in a DM. Providers whose channel IDs
+     * don't encode this (e.g. Telegram's numeric chat IDs) set it explicitly;
+     * when absent the manager falls back to Slack's "D"-prefix convention.
+     */
+    isDm?: boolean;
   } | null;
 
   /**
@@ -441,9 +549,11 @@ export interface ChatOpsProvider {
    * Download files from thread history messages.
    * Reuses the provider's existing download logic (auth headers, SSRF protection, etc.).
    * @param files - File metadata from thread history messages
-   * @returns Downloaded attachments in A2A format (base64-encoded)
+   * @returns One outcome per input file, positionally aligned with `files`:
+   * either the downloaded attachment (base64-encoded A2A format) or the
+   * skip record explaining why it was not delivered
    */
-  downloadFiles(files: ChatThreadMessageFile[]): Promise<A2AAttachment[]>;
+  downloadFiles(files: ChatThreadMessageFile[]): Promise<ThreadFileOutcome[]>;
 
   /**
    * Discover all channels in a workspace/team.
@@ -517,4 +627,24 @@ export interface SlackDbConfig {
   appId: string;
   connectionMode?: ChatOpsConnectionMode;
   appLevelToken?: string;
+}
+
+/** Telegram config stored as a DB secret */
+export interface TelegramDbConfig {
+  enabled: boolean;
+  /** Bot token from @BotFather */
+  botToken: string;
+}
+
+/** ngrok tunnel config stored as a DB secret */
+export interface NgrokDbConfig {
+  authToken: string;
+  /** Optional reserved domain for a stable public URL across restarts. */
+  domain: string;
+  /**
+   * False when the user explicitly stopped the tunnel — credentials are kept
+   * for reconnecting, but the tunnel must not come back up on restart.
+   * Missing (older rows) means enabled.
+   */
+  enabled?: boolean;
 }

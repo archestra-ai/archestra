@@ -1,5 +1,6 @@
 "use client";
 
+import type { Permissions } from "@archestra/shared";
 import { X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -29,13 +30,16 @@ import { useTeams } from "@/lib/teams/team.query";
 
 type ScopeValue = "personal" | "team" | "org" | "built_in";
 type OwnerValue = "mine" | "others";
+type StatusValue = "active" | "deleted";
 
 export function AgentScopeFilter({
   showBuiltIn = false,
   ownerLabelPlural = "agents",
+  adminPermission,
 }: {
   showBuiltIn?: boolean;
   ownerLabelPlural?: string;
+  adminPermission: Permissions;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -59,7 +63,7 @@ export function AgentScopeFilter({
   );
 
   const { data: labelKeys } = useLabelKeys();
-  const { data: isAdmin } = useHasPermissions({ member: ["read"] });
+  const { data: isAdmin } = useHasPermissions(adminPermission);
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
@@ -172,7 +176,7 @@ export function AgentScopeFilter({
   return (
     <div className="flex items-center gap-2">
       <Select value={scope ?? "all"} onValueChange={handleScopeChange}>
-        <SelectTrigger className="w-[180px]">
+        <SelectTrigger aria-label="Filter by type" className="w-[180px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="start">
@@ -192,7 +196,7 @@ export function AgentScopeFilter({
       </Select>
       {showOwnerSelect && (
         <Select value={ownerFilter} onValueChange={handleOwnerChange}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger aria-label="Filter by owner" className="w-[180px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper" side="bottom" align="start">
@@ -238,7 +242,52 @@ export function AgentScopeFilter({
   );
 }
 
-export function ActiveFilterBadges() {
+export function AgentDeletedStatusFilter({
+  deletePermission,
+}: {
+  deletePermission: Permissions;
+}) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { data: canDelete } = useHasPermissions(deletePermission);
+
+  const status = (searchParams.get("status") as StatusValue | null) ?? "active";
+
+  const handleStatusChange = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === "deleted") {
+        params.set("status", "deleted");
+      } else {
+        params.delete("status");
+      }
+      params.set("page", "1");
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  if (!canDelete) return null;
+
+  return (
+    <Select value={status} onValueChange={handleStatusChange}>
+      <SelectTrigger aria-label="Filter by status" className="w-[150px]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper" side="bottom" align="start">
+        <SelectItem value="active">Active</SelectItem>
+        <SelectItem value="deleted">Deleted</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+export function ActiveFilterBadges({
+  adminPermission,
+}: {
+  adminPermission: Permissions;
+}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -251,7 +300,7 @@ export function ActiveFilterBadges() {
   const currentUserId = session?.user?.id;
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
-  const { data: isAdmin } = useHasPermissions({ member: ["read"] });
+  const { data: isAdmin } = useHasPermissions(adminPermission);
 
   // Users badge only shows when the author filter names specific other users,
   // not when it's just the implicit "mine" selection.
@@ -366,6 +415,7 @@ export function ActiveFilterBadges() {
                 type="button"
                 onClick={() => handleRemoveTeam(team.id)}
                 className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                aria-label="Remove team from filter"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -395,6 +445,7 @@ export function ActiveFilterBadges() {
                 type="button"
                 onClick={() => handleRemoveUser(user.id)}
                 className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                aria-label="Remove user from filter"
               >
                 <X className="h-3 w-3" />
               </button>

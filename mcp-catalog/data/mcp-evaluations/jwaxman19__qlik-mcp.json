@@ -1,0 +1,173 @@
+{
+  "name": "jwaxman19__qlik-mcp",
+  "display_name": "qlik-mcp",
+  "description": "An MCP server to run qlik",
+  "author": {
+    "name": "jwaxman19"
+  },
+  "server": {
+    "command": "deno",
+    "args": ["run", "--allow-all", "${__dirname}/src/index.ts"],
+    "env": {
+      "QLIK_API_KEY": "${user_config.qlik_api_key}",
+      "QLIK_BASE_URL": "${user_config.qlik_base_url}",
+      "QLIK_APP_ID": "${user_config.qlik_app_id}",
+      "MAX_ROWS_PER_REQUEST": "${user_config.max_rows_per_request}",
+      "MAX_TOTAL_ROWS": "${user_config.max_total_rows}",
+      "REQUEST_DELAY_MS": "${user_config.request_delay_ms}",
+      "MAX_RETRIES": "${user_config.max_retries}",
+      "RETRY_DELAY_MS": "${user_config.retry_delay_ms}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "qlik_api_key": {
+      "type": "string",
+      "title": "Qlik Cloud API Key",
+      "description": "Your Qlik Cloud API key with appropriate access.",
+      "sensitive": true,
+      "required": true
+    },
+    "qlik_base_url": {
+      "type": "string",
+      "title": "Qlik Cloud Tenant URL",
+      "description": "The base URL of your Qlik Cloud tenant (e.g., https://yourtenant.qlikcloud.com).",
+      "sensitive": false,
+      "required": true
+    },
+    "qlik_app_id": {
+      "type": "string",
+      "title": "Default Qlik Application ID",
+      "description": "The ID of a default Qlik application to interact with. Can be overridden by tool inputs.",
+      "sensitive": false,
+      "required": false
+    },
+    "max_rows_per_request": {
+      "type": "number",
+      "title": "Max Rows Per Request",
+      "description": "Maximum number of rows to retrieve per API request when getting chart data.",
+      "default": 1000,
+      "sensitive": false,
+      "required": false
+    },
+    "max_total_rows": {
+      "type": "number",
+      "title": "Max Total Rows",
+      "description": "Maximum total rows to retrieve across all requests when getting chart data.",
+      "default": 10000,
+      "sensitive": false,
+      "required": false
+    },
+    "request_delay_ms": {
+      "type": "number",
+      "title": "Request Delay (ms)",
+      "description": "Delay in milliseconds between consecutive API requests to prevent rate limiting.",
+      "default": 100,
+      "sensitive": false,
+      "required": false
+    },
+    "max_retries": {
+      "type": "number",
+      "title": "Max Retries",
+      "description": "Maximum number of retries for failed API requests due to transient errors.",
+      "default": 3,
+      "sensitive": false,
+      "required": false
+    },
+    "retry_delay_ms": {
+      "type": "number",
+      "title": "Retry Delay (ms)",
+      "description": "Delay in milliseconds before retrying a failed API request.",
+      "default": 1000,
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/jwaxman19-qlik-mcp-badge.png)](https://mseep.ai/app/jwaxman19-qlik-mcp)\n\n# Qlik MCP Server\n\nMCP Server for the Qlik Cloud API, enabling Claude to interact with Qlik applications and extract data from visualizations.\n\n## Tools\n\n### qlik_get_apps\nList all Qlik applications available in the workspace\n- Optional inputs:\n  - `limit` (number, default: 100): Maximum number of apps to return\n  - `offset` (string): Pagination offset for next page\n- Returns: List of applications with their IDs and information\n\n### qlik_get_app_sheets\nGet all sheets in a Qlik application\n- Optional inputs:\n  - `app_id` (string): The ID of the Qlik application (defaults to QLIK_APP_ID env variable)\n- Returns: List of sheets with their IDs, titles, and metadata\n\n### qlik_get_sheet_charts\nGet all charts in a specific sheet\n- Required inputs:\n  - `sheet_id` (string): The ID of the sheet to get charts from\n- Optional inputs:\n  - `app_id` (string): The ID of the Qlik application (defaults to QLIK_APP_ID env variable)\n- Returns: List of charts with their IDs, types, and positions\n\n### qlik_get_chart_data\nGet data from a specific chart\n- Required inputs:\n  - `sheet_id` (string): The ID of the sheet containing the chart\n  - `chart_id` (string): The ID of the chart to get data from\n- Optional inputs:\n  - `app_id` (string): The ID of the Qlik application (defaults to QLIK_APP_ID env variable)\n  - `max_rows` (number, default: 10000): Maximum total rows to retrieve\n  - `page_size` (number, default: 1000): Number of rows per request\n  - `include_metadata` (boolean, default: true): Include chart metadata in response\n- Returns: Chart data with headers, rows, and optional metadata\n\n## Setup\n\n### Create a Qlik Cloud API Key:\n1. Log in to your Qlik Cloud tenant\n2. Navigate to Settings > API keys\n3. Create a new API key with appropriate access\n4. Save the API key securely\n\n### Configure Environment:\nCreate a `.env` file with your Qlik Cloud credentials (see `.env.example` for a template):\n```env\nQLIK_API_KEY=your_api_key_here\nQLIK_BASE_URL=your_tenant_url\nQLIK_APP_ID=your_default_app_id\nMAX_ROWS_PER_REQUEST=1000\nMAX_TOTAL_ROWS=10000\nREQUEST_DELAY_MS=100\nMAX_RETRIES=3\nRETRY_DELAY_MS=1000\n```\n\n## Usage with Docker\n\nYou can also run this MCP server using Docker:\n\n```bash\n# Build the Docker image\ndocker build -t qlik-mcp .\n\n# Run the container\n# Make sure to create a .env file first (copy from .env.example)\ndocker run --env-file .env qlik-mcp\n```\n\n## Usage with Claude Desktop\n\nAdd the following to your `claude_desktop_config.json`:\n\n### Using Deno (Recommended)\n```json\n{\n  \"mcpServers\": {\n    \"qlik\": {\n      \"command\": \"/path/to/deno\",\n      \"args\": [\"run\", \"--allow-all\", \"--env-file=.env\", \"src/index.ts\"],\n      \"cwd\": \"/path/to/qlik-mcp\"\n    }\n  }\n}\n```\n\n### Using Node.js\n```json\n{\n  \"mcpServers\": {\n    \"qlik\": {\n      \"command\": \"npx\",\n      \"args\": [\"tsx\", \"src/index.ts\"],\n      \"env\": {\n        \"QLIK_API_KEY\": \"your_api_key_here\",\n        \"QLIK_BASE_URL\": \"your_tenant_url\",\n        \"QLIK_APP_ID\": \"your_default_app_id\"\n      },\n      \"cwd\": \"/path/to/qlik-mcp\"\n    }\n  }\n}\n```\n\n## Usage with Cursor\n\n1. Open Cursor settings\n2. Navigate to the Claude configuration section\n3. Add a new MCP configuration:\n\n```json\n{\n  \"name\": \"Qlik Cloud\",\n  \"command\": \"/path/to/deno\",\n  \"args\": [\"run\", \"--allow-all\", \"--env-file=.env\", \"src/index.ts\"],\n  \"cwd\": \"/path/to/qlik-mcp\"\n}\n```\n\nReplace `/path/to/deno` with your Deno installation path (usually `~/.deno/bin/deno` on Unix systems) and `/path/to/qlik-mcp` with the absolute path to your cloned repository.\n\n## Troubleshooting\n\nIf you encounter errors, verify that:\n- Your API key has the necessary permissions\n- The tenant URL is correct and accessible\n- The app ID exists and is accessible\n- Environment variables are properly set\n- Rate limiting settings are appropriate for your tenant\n\nCommon issues:\n- `401 Unauthorized`: Check your API key\n- `403 Forbidden`: Verify API key permissions\n- `429 Too Many Requests`: Adjust rate limiting settings\n- `404 Not Found`: Verify app and sheet IDs\n\n## Development\n\n### Prerequisites\n- [Deno](https://deno.land/#installation)\n- [Node.js](https://nodejs.org/) (optional, for IDE support)\n\n### Local Setup\n```bash\n# Clone repository\ngit clone https://github.com/jwaxman19/qlik-mcp.git\ncd qlik-mcp\n\n# Install dependencies (for IDE support)\nnpm install\n\n# Run server\ndeno task dev\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n\n### 📊 <a name=\"data-platforms\"></a>Data Platforms\n\nData Platforms for data integration, transformation and pipeline orchestration. \n\n- [JordiNei/mcp-databricks-server](https://github.com/JordiNeil/mcp-databricks-server) - Connect to Databricks API, allowing LLMs to run SQL queries, list jobs, and get job status.\n- [jwaxman19/qlik-mcp](https://github.com/jwaxman19/qlik-mcp) 📇 ☁️ - MCP Server for Qlik Cloud API that enables querying applications, sheets, and extracting data from visualizations with comprehensive authentication and rate limiting support.\n- [keboola/keboola-mcp-server](https://github.com/keboola/keboola-mcp-server) - interact with Keboola Connection Data Platform. This server provides tools for listing and accessing data from Keboola Storage API. ",
+  "category": "Data",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "qlik-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "--env-file", ".env", "qlik-mcp"],
+        "env": {},
+        "docker_image": ".env"
+      },
+      "qlik-mcp-deno": {
+        "command": "deno",
+        "args": ["run", "--allow-all", "--env-file=.env", "src/index.ts"],
+        "env": {}
+      },
+      "qlik-mcp-node": {
+        "command": "npx",
+        "args": ["tsx", "src/index.ts"],
+        "env": {
+          "QLIK_API_KEY": "your_api_key_here",
+          "QLIK_BASE_URL": "your_tenant_url",
+          "QLIK_APP_ID": "your_default_app_id"
+        }
+      },
+      "qlik-mcp-deno-dev-task": {
+        "command": "deno",
+        "args": ["task", "dev"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jwaxman19",
+    "repo": "qlik-mcp",
+    "url": "https://github.com/jwaxman19/qlik-mcp",
+    "name": "jwaxman19__qlik-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e187b52c5b221cddbe177d99a2664d76e2b4db41"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:33.450Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@qlik/api",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"qlik-mcp\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Qlik MCP Server\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"tsx src/index.ts\",\n    \"dev\": \"tsc -w\",\n    \"test\": \"tsc && node dist/test.js\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"latest\",\n    \"@qlik/api\": \"latest\",\n    \"dotenv\": \"latest\",\n    \"zod\": \"latest\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.0\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"latest\"\n  }\n}\n"
+}

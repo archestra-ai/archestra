@@ -1,4 +1,4 @@
-import { DocsPage, getDocsUrl } from "@shared";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 
 export const DEFAULT_TABLE_LIMIT = 10;
@@ -48,9 +48,5 @@ export const LOCAL_MCP_DISABLED_MESSAGE = (
 export const LOGS_LAYOUT_CONFIG = {
   title: "Logs",
   description:
-    "Monitor LLM proxy requests and MCP tool call activity across your agents.",
-  tabs: [
-    { label: "LLM Proxy", href: "/llm/logs" },
-    { label: "MCP Gateway", href: "/mcp/logs" },
-  ],
+    "Monitor LLM proxy requests, MCP tool calls, and administrative activity across your organization.",
 };

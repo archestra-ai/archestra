@@ -1,20 +1,16 @@
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useSettingsTabs } from "./settings-tabs";
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    getSession: vi.fn(),
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 let mockPermissions: Permissions = {};
 
-vi.mock("@shared", async () => {
-  const actual = await vi.importActual("@shared");
+vi.mock("@archestra/shared", async () => {
+  const actual = await vi.importActual("@archestra/shared");
   return {
     ...actual,
     archestraApiSdk: {
@@ -34,16 +30,6 @@ vi.mock("@/lib/secrets.query", () => ({
   })),
 }));
 
-let mockEnterpriseFeatures = false;
-
-vi.mock("@/lib/config/config", () => ({
-  default: {
-    get enterpriseFeatures() {
-      return { core: mockEnterpriseFeatures };
-    },
-  },
-}));
-
 const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -57,7 +43,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockPermissions = {};
   mockSecretsType = "DB";
-  mockEnterpriseFeatures = false;
 
   vi.mocked(authClient.getSession).mockResolvedValue({
     data: {
@@ -72,15 +57,13 @@ function getTabLabels(tabs: Array<{ label: string }>) {
 }
 
 describe("useSettingsTabs", () => {
-  it("always shows Your Account tab", async () => {
+  it("shows no tabs without permissions", async () => {
     const { result } = renderHook(() => useSettingsTabs(), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => {
-      const labels = getTabLabels(result.current);
-      expect(labels).toContain("Your Account");
-      expect(labels).not.toContain("API Keys");
+      expect(getTabLabels(result.current)).toEqual([]);
     });
   });
 
@@ -90,7 +73,7 @@ describe("useSettingsTabs", () => {
       team: ["read"],
       ac: ["read"],
       organizationSettings: ["read"],
-      apiKey: ["read"],
+      serviceAccount: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
     };
@@ -101,8 +84,9 @@ describe("useSettingsTabs", () => {
 
     await waitFor(() => {
       const labels = getTabLabels(result.current);
-      expect(labels).toContain("API Keys");
-      expect(labels).toContain("Agents");
+      expect(labels).toContain("Service Accounts");
+      expect(labels).toContain("Chat");
+      expect(labels).toContain("Security");
       expect(labels).toContain("LLM");
       expect(labels).toContain("Users");
       expect(labels).toContain("Teams");
@@ -123,6 +107,21 @@ describe("useSettingsTabs", () => {
     await waitFor(() => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("LLM");
+    });
+  });
+
+  it("shows Service Accounts tab when user has serviceAccount:read permission", async () => {
+    mockPermissions = {
+      serviceAccount: ["read"],
+    };
+
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      const labels = getTabLabels(result.current);
+      expect(labels).toContain("Service Accounts");
     });
   });
 
@@ -207,8 +206,7 @@ describe("useSettingsTabs", () => {
     });
   });
 
-  it("shows Identity Providers tab only when enterprise features enabled and user has permission", async () => {
-    mockEnterpriseFeatures = true;
+  it("shows Identity Providers tab when user has identityProvider:read permission", async () => {
     mockPermissions = {
       identityProvider: ["read"],
     };
@@ -223,11 +221,8 @@ describe("useSettingsTabs", () => {
     });
   });
 
-  it("hides Identity Providers tab when enterprise features disabled", async () => {
-    mockEnterpriseFeatures = false;
-    mockPermissions = {
-      identityProvider: ["read"],
-    };
+  it("hides Identity Providers tab when user lacks identityProvider:read permission", async () => {
+    mockPermissions = {};
 
     const { result } = renderHook(() => useSettingsTabs(), {
       wrapper: createWrapper(),
@@ -239,17 +234,43 @@ describe("useSettingsTabs", () => {
     });
   });
 
+  it("shows GitHub tab when user has githubAppConfig:read permission", async () => {
+    mockPermissions = { githubAppConfig: ["read"] };
+
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      const labels = getTabLabels(result.current);
+      expect(labels).toContain("GitHub");
+    });
+  });
+
+  it("hides GitHub tab when user lacks githubAppConfig:read permission", async () => {
+    mockPermissions = {};
+
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      const labels = getTabLabels(result.current);
+      expect(labels).not.toContain("GitHub");
+    });
+  });
+
   it("maintains correct tab order", async () => {
-    mockEnterpriseFeatures = true;
     mockSecretsType = "Vault";
     mockPermissions = {
       member: ["read"],
       team: ["read"],
       ac: ["read"],
+      githubAppConfig: ["read"],
       identityProvider: ["read"],
       secret: ["read"],
       organizationSettings: ["read"],
-      apiKey: ["read"],
+      serviceAccount: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
     };
@@ -261,17 +282,17 @@ describe("useSettingsTabs", () => {
     await waitFor(() => {
       const labels = getTabLabels(result.current);
       expect(labels).toEqual([
-        "Your Account",
-        "API Keys",
-        "Agents",
+        "Organization",
+        "Service Accounts",
+        "Chat",
         "LLM",
-        "Connect page",
+        "Security",
         "Users",
         "Teams",
         "Roles",
+        "GitHub",
         "Identity Providers",
         "Secrets",
-        "Organization",
       ]);
     });
   });

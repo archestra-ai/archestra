@@ -1,11 +1,17 @@
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LimitsPage, { getLimitModels } from "./page";
 
 const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
+const mockUseLimit = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
-const mockUseHasPermissions = vi.fn(() => ({ data: true, isPending: false }));
+
+// The ?edit= dialog deep-link syncs open state to the URL through
+// useDialogUrlParam, which reads next/navigation hooks. Bare vi.mock resolves
+// to the root-level __mocks__/next/navigation.ts (all hooks are vi.fn()s,
+// configured in beforeEach).
+vi.mock("next/navigation");
 
 vi.mock("next/link", () => ({
   default: ({
@@ -29,21 +35,25 @@ vi.mock("@/app/llm/(costs)/layout", () => ({
 
 vi.mock("@/lib/limits.query", () => ({
   useLimits: (...args: unknown[]) => mockUseLimits(...args),
+  useLimit: (...args: unknown[]) => mockUseLimit(...args),
   useCreateLimit: () => ({ mutateAsync: vi.fn() }),
   useUpdateLimit: () => ({ mutateAsync: vi.fn() }),
   useDeleteLimit: () => ({ mutateAsync: vi.fn() }),
 }));
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: () => ({ data: [] }),
+// A configured default user limit drives the settings notice; the page reads the
+// unified list from this hook.
+vi.mock("@/lib/default-user-limit.query", () => ({
+  useDefaultUserLimits: () => ({ data: [{ id: "dul-1" }] }),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({
-    data: { id: "org-1", defaultUserLimitValue: 100 },
-  }),
-  useOrganizationMembers: () => ({ data: [] }),
+vi.mock("@/lib/environment.query", () => ({
+  useEnvironments: () => ({ data: { environments: [] } }),
 }));
+
+vi.mock("@/lib/teams/team.query");
+
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/virtual-api-keys.query", () => ({
   useAllVirtualApiKeys: (...args: unknown[]) =>
@@ -89,10 +99,18 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => mockUseHasPermissions(),
-  useMissingPermissions: () => [],
-}));
+vi.mock("@/lib/auth/auth.query");
+
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+import {
+  useOrganization,
+  useOrganizationMembers,
+} from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 vi.mock("@/components/loading", () => ({
   LoadingSpinner: () => <div>Loading</div>,
@@ -148,9 +166,16 @@ vi.mock("@/components/ui/select", () => ({
   SelectContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  SelectGroup: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   SelectItem: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  SelectLabel: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SelectSeparator: () => <hr />,
 }));
 
 vi.mock("@/components/ui/searchable-select", () => ({
@@ -303,11 +328,38 @@ vi.mock("@/components/searchable-multi-select", () => ({
 describe("LimitsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseHasPermissions.mockReturnValue({ data: true, isPending: false });
+    vi.mocked(usePathname).mockReturnValue("/llm/limits");
+    vi.mocked(useRouter).mockReturnValue({
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+    );
+    mockUseLimit.mockReturnValue({ data: undefined });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useMissingPermissions).mockReturnValue(
+      [] as unknown as ReturnType<typeof useMissingPermissions>,
+    );
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { id: "org-1", defaultUserLimitValue: 100 },
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useOrganizationMembers).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useOrganizationMembers>);
     mockUseLimits.mockReturnValue({ data: [], isPending: false });
     mockUseAllVirtualApiKeys.mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("shows a settings notice when a default user limit is configured", () => {
@@ -327,7 +379,10 @@ describe("LimitsPage", () => {
   });
 
   it("hides the default user limit settings notice without settings permission", () => {
-    mockUseHasPermissions.mockReturnValue({ data: false, isPending: false });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
 
     render(<LimitsPage />);
 
@@ -366,6 +421,66 @@ describe("LimitsPage", () => {
     render(<LimitsPage />);
     const modelsBadge = screen.getByTestId("limits-table-models-badge");
     expect(modelsBadge).toHaveTextContent("All models");
+  });
+
+  it("shows the next reset date for rolling monthly limits", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-1",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "1m",
+          lastCleanup: "2026-01-15T12:00:00.000Z",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const row = screen.getByTestId("data-table-row-limit-1");
+    expect(row).toHaveTextContent("Rolling month");
+    expect(row).toHaveTextContent("Resets Feb 15");
+  });
+
+  it("shows the next reset date for calendar monthly limits", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-15T12:00:00.000Z"));
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-1",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "calendar_month",
+          lastCleanup: "2026-01-02T12:00:00.000Z",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const row = screen.getByTestId("data-table-row-limit-1");
+    expect(row).toHaveTextContent("Calendar month");
+    expect(row).toHaveTextContent("Resets Feb 1");
   });
 
   it("shows multiple model badges for limits with multiple models", () => {

@@ -1,0 +1,164 @@
+{
+  "name": "kukapay__modbus-mcp",
+  "display_name": "modbus-mcp",
+  "description": "An MCP server that standardizes and contextualizes industrial Modbus data.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "modbus-mcp"],
+    "env": {
+      "MODBUS_TYPE": "${user_config.modbus_type}",
+      "MODBUS_HOST": "${user_config.modbus_host}",
+      "MODBUS_PORT": "${user_config.modbus_port}",
+      "MODBUS_DEFAULT_SLAVE_ID": "${user_config.modbus_default_slave_id}",
+      "MODBUS_SERIAL_PORT": "${user_config.modbus_serial_port}",
+      "MODBUS_BAUDRATE": "${user_config.modbus_baudrate}",
+      "MODBUS_PARITY": "${user_config.modbus_parity}",
+      "MODBUS_STOPBITS": "${user_config.modbus_stopbits}",
+      "MODBUS_BYTESIZE": "${user_config.modbus_bytesize}",
+      "MODBUS_TIMEOUT": "${user_config.modbus_timeout}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "modbus_type": {
+      "type": "string",
+      "title": "Modbus Connection Type",
+      "description": "Connection type: tcp, udp, or serial",
+      "required": true,
+      "default": "tcp"
+    },
+    "modbus_host": {
+      "type": "string",
+      "title": "Modbus Host",
+      "description": "Host address for TCP/UDP (required if connection type is TCP/UDP)",
+      "required": false,
+      "default": "127.0.0.1"
+    },
+    "modbus_port": {
+      "type": "number",
+      "title": "Modbus Port",
+      "description": "Port for TCP/UDP (required if connection type is TCP/UDP)",
+      "required": false,
+      "default": 502
+    },
+    "modbus_default_slave_id": {
+      "type": "number",
+      "title": "Modbus Default Slave ID",
+      "description": "Slave ID (required if connection type is TCP/UDP)",
+      "required": false,
+      "default": 1
+    },
+    "modbus_serial_port": {
+      "type": "string",
+      "title": "Modbus Serial Port",
+      "description": "Serial port (e.g., /dev/ttyUSB0, COM1) (required if connection type is serial)",
+      "required": false,
+      "default": "/dev/ttyUSB0"
+    },
+    "modbus_baudrate": {
+      "type": "number",
+      "title": "Modbus Baud Rate",
+      "description": "Serial baud rate (required if connection type is serial)",
+      "required": false,
+      "default": 9600
+    },
+    "modbus_parity": {
+      "type": "string",
+      "title": "Modbus Parity",
+      "description": "Serial parity: N (none), E (even), O (odd) (required if connection type is serial)",
+      "required": false,
+      "default": "N"
+    },
+    "modbus_stopbits": {
+      "type": "number",
+      "title": "Modbus Stop Bits",
+      "description": "Serial stop bits (required if connection type is serial)",
+      "required": false,
+      "default": 1
+    },
+    "modbus_bytesize": {
+      "type": "number",
+      "title": "Modbus Byte Size",
+      "description": "Serial byte size (required if connection type is serial)",
+      "required": false,
+      "default": 8
+    },
+    "modbus_timeout": {
+      "type": "number",
+      "title": "Modbus Timeout",
+      "description": "Serial timeout in seconds (required if connection type is serial)",
+      "required": false,
+      "default": 1
+    }
+  },
+  "readme": "# Modbus MCP Server\n\nAn MCP server that standardizes and contextualizes Modbus data, enabling seamless integration of AI agents with industrial IoT systems.\n\n![GitHub License](https://img.shields.io/github/license/kukapay/crypto-trending-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Modbus Tools**:\n  - Read/write holding registers (`read_register`, `write_register`).\n  - Read/write coils (`read_coils`, `write_coil`).\n  - Read input registers (`read_input_registers`).\n  - Read multiple holding registers (`read_multiple_holding_registers`).\n- **Prompt**: Analyze Modbus register values with a customizable prompt (`analyze_register`).\n- **Flexible Connections**: Supports Modbus over TCP, UDP, or serial, configured via environment variables.\n\n## Requirements\n\n- **Python**: 3.10\n- **uv** for dependency and virtual environment management.\n\n## Installation\n\n1. **Install `uv`**:\n   ```bash\n   curl -LsSf https://astral.sh/uv/install.sh | sh\n   ```\n\n2. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/modbus-mcp.git\n   cd modbus-mcp\n   ```\n\n3. **Install Dependencies**:\n   ```bash\n   uv sync\n   ```\n\n## Configuration\n\nThe server connects to a Modbus device using parameters specified via environment variables. Set these variables in a `.env` file or your shell environment.\n\n### Environment Variables\n\n| Variable                   | Description                                      | Default              | Required |\n|-------------------------   |--------------------------------------------------|----------------------|----------|\n| `MODBUS_TYPE`              | Connection type: `tcp`, `udp`, or `serial`       | `tcp`                | Yes      |\n| `MODBUS_HOST`              | Host address for TCP/UDP                        | `127.0.0.1`          | For TCP/UDP |\n| `MODBUS_PORT`              | Port for TCP/UDP                                | `502`                | For TCP/UDP |\n| `MODBUS_DEFAULT_SLAVE_ID`  | Slave ID                                        | `1`                  | For TCP/UDP |\n| `MODBUS_SERIAL_PORT`       | Serial port (e.g., `/dev/ttyUSB0`, `COM1`)      | `/dev/ttyUSB0`       | For serial |\n| `MODBUS_BAUDRATE`          | Serial baud rate                                | `9600`               | For serial |\n| `MODBUS_PARITY`            | Serial parity: `N` (none), `E` (even), `O` (odd) | `N`                 | For serial |\n| `MODBUS_STOPBITS`          | Serial stop bits                                | `1`                  | For serial |\n| `MODBUS_BYTESIZE`          | Serial byte size                                | `8`                  | For serial |\n| `MODBUS_TIMEOUT`           | Serial timeout (seconds)                        | `1`                  | For serial |\n\n### Example `.env` File\n\nFor TCP:\n```\nMODBUS_TYPE=tcp\nMODBUS_HOST=192.168.1.100\nMODBUS_PORT=502\nMODBUS_SLAVE_ID=1\n```\n\nFor Serial:\n```\nMODBUS_TYPE=serial\nMODBUS_SERIAL_PORT=/dev/ttyUSB0\nMODBUS_BAUDRATE=9600\nMODBUS_PARITY=N\nMODBUS_STOPBITS=1\nMODBUS_BYTESIZE=8\nMODBUS_TIMEOUT=1\n```\n\n## Usage\n\n### Installing for Claude Desktop\n\nThe configuration file:\n\n```json\n{\n   \"mcpServers\": {\n       \"Modbus MCP Server\": {\n           \"command\": \"uv\",\n           \"args\": [ \"--directory\", \"/path/to/modbus-mcp\", \"run\", \"modbus-mcp\" ],\n           \"env\": { \"MODBUS_TYPE\": \"tcp\", \"MODBUS_HOST\": \"127.0.0.1\", \"MODBUS_PORT\": 502 },\n       }\n   }\n}\n```\n\n### Using Tools\n\n**Note**: Natural language support depends on the client’s ability to parse and map prompts to tools. The MCP Inspector requires structured JSON, but the examples below show how conversational inputs translate.\n\n1. **Read a Holding Register**:\n   - **Prompt**:\n     ```\n     Please read the value of Modbus holding register 0.\n     ```\n   - **MCP Inspector JSON**:\n     ```json\n     {\n       \"tool\": \"read_register\",\n       \"parameters\": {\"address\": 0, \"slave_id\": 1}\n     }\n     ```\n   - **Expected Output**: `Value: <register_value>`\n\n2. **Write to a Holding Register**:\n   - **Prompt**:\n     ```\n     Set Modbus holding register 10 to the value 100.\n     ```\n   - **MCP Inspector JSON**:\n     ```json\n     {\n       \"tool\": \"write_register\",\n       \"parameters\": {\"address\": 10, \"value\": 100, \"slave_id\": 1}\n     }\n     ```\n   - **Expected Output**: `Successfully wrote 100 to register 10`\n\n3. **Read Coils**:\n   - **Prompt**:\n     ```\n     Check the status of the first 5 Modbus coils starting at address 0.\n     ```\n   - **MCP Inspector JSON**:\n     ```json\n     {\n       \"tool\": \"read_coils\",\n       \"parameters\": {\"address\": 0, \"count\": 5, \"slave_id\": 1}\n     }\n     ```\n   - **Expected Output**: `Coils 0 to 4: [False, False, False, False, False]`\n\n4. **Write to a Coil**:\n   - **Prompt**:\n     ```\n     Turn on Modbus coil 5.\n     ```\n   - **MCP Inspector JSON**:\n     ```json\n     {\n       \"tool\": \"write_coil\",\n       \"parameters\": {\"address\": 5, \"value\": true, \"slave_id\": 1}\n     }\n     ```\n   - **Expected Output**: `Successfully wrote True to coil 5`\n\n5. **Read Input Registers**:\n   - **Prompt**:\n     ```\n     Read the values of 3 Modbus input registers starting from address 2.\n     ```\n   - **MCP Inspector JSON**:\n     ```json\n     {\n       \"tool\": \"read_input_registers\",\n       \"parameters\": {\"address\": 2, \"count\": 3, \"slave_id\": 1}\n     }\n     ```\n   - **Expected Output**: `Input Registers 2 to 4: [<value1>, <value2>, <value3>]`\n\n6. **Read Multiple Holding Registers**:\n   - **Prompt**:\n     ```\n     Get the values of Modbus holding registers 0 through 2.\n     ```\n   - **MCP Inspector JSON**:\n     ```json\n     {\n       \"tool\": \"read_multiple_holding_registers\",\n       \"parameters\": {\"address\": 0, \"count\": 3, \"slave_id\": 1}\n     }\n     ```\n   - **Expected Output**: `Holding Registers 0 to 2: [<value1>, <value2>, <value3>]`\n\n\n## License\n\nThis project is licensed under the MIT License. See [LICENSE](LICENSE) for details.\n",
+  "category": "AI Tools",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "modbus-mcp-tcp-configured": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/modbus-mcp", "run", "modbus-mcp"],
+        "env": {
+          "MODBUS_TYPE": "tcp",
+          "MODBUS_HOST": "127.0.0.1",
+          "MODBUS_PORT": "502"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "modbus-mcp",
+    "url": "https://github.com/kukapay/modbus-mcp",
+    "name": "kukapay__modbus-mcp",
+    "path": null,
+    "stars": 17,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "0ac2c79be9de37fa59b887c9d164305219773f76"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:06.209Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pymodbus",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"modbus-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that standardizes and contextualizes Modbus data, enabling seamless integration of AI agents with industrial IoT systems.e\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.6.0\",\n    \"pymodbus>=3.9.2\",\n    \"python-dotenv>=1.1.0\",\n]\n\n[project.scripts]\nmodbus-mcp = \"modbus_mcp.cli:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n"
+}

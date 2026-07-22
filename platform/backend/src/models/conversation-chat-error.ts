@@ -2,7 +2,7 @@ import {
   ChatErrorCode,
   type ChatErrorResponse,
   ChatErrorResponseSchema,
-} from "@shared";
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -38,6 +38,14 @@ class ConversationChatErrorModel {
       ...chatError,
       error: normalizeChatErrorResponse(chatError.error),
     }));
+  }
+
+  static async deleteByConversation(conversationId: string): Promise<void> {
+    await db
+      .delete(schema.conversationChatErrorsTable)
+      .where(
+        eq(schema.conversationChatErrorsTable.conversationId, conversationId),
+      );
   }
 }
 

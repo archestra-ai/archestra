@@ -1,18 +1,21 @@
 import {
+  type AgentType,
   createPaginatedResponseSchema,
+  getResourceForAgentType,
   isModelSelectionComplete,
-  LABELS_ENTRY_DELIMITER,
-  LABELS_VALUE_DELIMITER,
   PaginationQuerySchema,
+  parseLabelsParam,
   RouteId,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
   requireAgentModifyPermission,
+  userHasPermission,
 } from "@/auth";
+import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
@@ -25,12 +28,18 @@ import {
 import { initializeObservabilityMetrics } from "@/observability";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
+import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
   AgentExportPayloadSchema,
   type AgentScope,
   AgentScopeFilterSchema,
+  AgentSubagentExclusionsSchema,
+  AgentToolExclusionsSchema,
   ApiError,
   BuiltInAgentConfigSchema,
+  CloneAgentBodySchema,
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
@@ -114,6 +123,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Hide personal agents owned by other users. Admin-only; no-op for non-admins.",
               ),
+            status: z
+              .enum(["active", "deleted"])
+              .optional()
+              .describe(
+                "Filter by lifecycle status. Deleted rows require delete permission.",
+              ),
           })
           .merge(PaginationQuerySchema)
           .merge(
@@ -124,6 +139,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "subagentsCount",
               "knowledgeSourcesCount",
               "team",
+              "lastUsedAt",
             ] as const),
           ),
         response: constructResponseSchema(
@@ -143,6 +159,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeAuthorIds,
           labels,
           excludeOtherPersonalAgents,
+          status,
           limit,
           offset,
           sortBy,
@@ -163,14 +180,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      // Check read permission for the requested agent type(s)
-      if (effectiveTypes) {
-        for (const type of effectiveTypes) {
-          checker.require(type, "read");
-        }
-      } else if (!checker.hasAnyReadPermission()) {
-        throw new ApiError(403, "Forbidden");
-      }
+      const permittedTypes = getPermittedAgentTypesForList({
+        checker,
+        effectiveTypes,
+        status,
+      });
 
       // Check admin for the specific type(s) being queried, or any type if unfiltered
       const isAdmin = effectiveTypes
@@ -186,8 +200,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           {
             name,
             // agentTypes takes precedence over agentType
-            agentType: agentTypes ? undefined : agentType,
-            agentTypes,
+            agentType: agentTypes || permittedTypes ? undefined : agentType,
+            agentTypes: permittedTypes ?? agentTypes,
             scope,
             teamIds,
             // authorIds and excludeAuthorIds are admin-only
@@ -197,6 +211,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ? excludeOtherPersonalAgents
               : undefined,
             labels: parseLabelsParam(labels),
+            status,
           },
           user.id,
           isAdmin,
@@ -246,6 +261,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).",
             ),
+          status: z
+            .enum(["active", "deleted"])
+            .optional()
+            .describe(
+              "Filter by lifecycle status. Deleted rows require delete permission.",
+            ),
         }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
@@ -258,6 +279,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeBuiltIn,
           scope,
           excludeOtherPersonalAgents,
+          status,
         },
         user,
         organizationId,
@@ -274,14 +296,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      // Check read permission for the requested agent type(s)
-      if (effectiveTypes) {
-        for (const type of effectiveTypes) {
-          checker.require(type, "read");
-        }
-      } else if (!checker.hasAnyReadPermission()) {
-        throw new ApiError(403, "Forbidden");
-      }
+      const permittedTypes = getPermittedAgentTypesForList({
+        checker,
+        effectiveTypes,
+        status,
+      });
 
       // Check admin for the specific type(s) being queried, or any type if unfiltered
       const isAdmin = effectiveTypes
@@ -293,14 +312,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(
         await AgentModel.findAll(user.id, isAdmin, {
           // agentTypes takes precedence over agentType
-          agentType: agentTypes ? undefined : agentType,
-          agentTypes,
+          agentType: agentTypes || permittedTypes ? undefined : agentType,
+          agentTypes: permittedTypes ?? agentTypes,
           excludeBuiltIn,
           scope:
             scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
           excludeOtherPersonalAgents: isAdmin
             ? excludeOtherPersonalAgents
             : undefined,
+          status,
         }),
       );
     },
@@ -337,7 +357,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       return reply.send(
-        await AgentModel.getLLMProxyOrCreateDefault(request.organizationId),
+        await AgentModel.ensurePersonalLlmProxy({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+        }),
       );
     },
   );
@@ -491,6 +514,23 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // Always assert on create: a null/omitted environment still lands on the
+      // org default, which may itself be restricted (mirrors the MCP-catalog path).
+      await assertEnvironmentAssignable({
+        userId: user.id,
+        organizationId,
+        environmentId: body.environmentId ?? null,
+        agentType,
+      });
+
+      // A team-scoped agent with no teams is accessible to nobody (not even its
+      // author), so reject it. Applies to admins too — they can otherwise reach
+      // this via the API/UI (issue #6624).
+      assertTeamScopeHasTeams({
+        scope: body.scope ?? "personal",
+        teamCount: body.teams.length,
+      });
+
       // Omit teams if scope is not 'team' — scope takes precedence
       const createData = {
         ...body,
@@ -564,15 +604,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CloneAgent,
-        description: "Clone an agent and all its associations",
+        description:
+          "Clone an agent and all its associations. Optionally override the clone's visibility (scope/teams); by default the source's visibility is copied.",
         tags: ["Agents"],
         params: z.object({
           id: UuidIdSchema,
         }),
+        // Nullish so pre-existing clients that POST without a payload keep
+        // working (an empty body arrives as null)
+        body: CloneAgentBodySchema.nullish(),
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ params: { id }, user, organizationId }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       // Fetch agent first to determine its type for permission checks
       const sourceAgent = await AgentModel.findById(id, user.id, true);
       if (!sourceAgent) {
@@ -618,6 +662,45 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         userId: user.id,
       });
+
+      // The clone is a new agent, so an explicitly requested visibility is
+      // validated like agent creation (mirrors POST /api/agents).
+      const targetScope = body?.scope ?? sourceAgent.scope;
+      const requestedTeams = body?.teams ?? [];
+
+      // A team-scoped clone must land on ≥1 team (issue #6624). Effective teams
+      // default to the source's when the caller omits them, matching
+      // AgentModel.cloneAgent. Applies to admins too.
+      assertTeamScopeHasTeams({
+        scope: targetScope,
+        teamCount: (body?.teams ?? sourceAgent.teams).length,
+      });
+
+      if (!checker.isAdmin(sourceAgent.agentType)) {
+        if (targetScope === "org") {
+          throw new ApiError(403, "Only admins can create org-scoped agents");
+        }
+        if (targetScope === "team" || requestedTeams.length > 0) {
+          if (!checker.isTeamAdmin(sourceAgent.agentType)) {
+            throw new ApiError(
+              403,
+              "You need team-admin permission to create team-scoped agents",
+            );
+          }
+
+          // team-admin can only assign teams they are a member of
+          const userTeamIdSet = new Set(userTeamIds);
+          const invalidTeams = requestedTeams.filter(
+            (teamId) => !userTeamIdSet.has(teamId),
+          );
+          if (invalidTeams.length > 0) {
+            throw new ApiError(
+              403,
+              "You can only assign teams you are a member of",
+            );
+          }
+        }
+      }
 
       // Validate knowledgeBaseIds if provided
       if ((sourceAgent.knowledgeBaseIds?.length ?? 0) > 0) {
@@ -667,6 +750,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const clonedAgent = await AgentModel.cloneAgent({
         sourceId: sourceAgent.id,
         userId: user.id,
+        scope: body?.scope,
+        teams: body?.teams,
       });
 
       return reply.send(clonedAgent);
@@ -739,6 +824,238 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(await serializeAgentForExport(agent));
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/tool-exclusions",
+    {
+      schema: {
+        operationId: RouteId.GetAgentToolExclusions,
+        description:
+          "Get the agent's Auto-tool-mode exclusions: MCP catalogs and individual tools removed from its tool surface while 'access all tools' is on",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(AgentToolExclusionsSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch agent first to determine its type, then enforce type-specific RBAC
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Defense-in-depth: never allow cross-organization access, even for
+      // admins. AgentModel.findById is not org-scoped.
+      if (agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Check read permission (return 404 to avoid leaking existence)
+      try {
+        checker.require(agent.agentType, "read");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Non-admin: enforce scope/team-based visibility like GetAgent does
+      if (!checker.isAdmin(agent.agentType)) {
+        const filteredAgent = await AgentModel.findById(id, user.id, false);
+        if (!filteredAgent) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+
+      return reply.send(await agentToolExclusionsService.getExclusions(id));
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/tool-exclusions",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentToolExclusions,
+        description:
+          "Replace the agent's Auto-tool-mode exclusions (full replace of the excluded tool set)",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: AgentToolExclusionsSchema,
+        response: constructResponseSchema(AgentToolExclusionsSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      // Fetch agent to determine its type for permission check
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Defense-in-depth: never allow cross-organization access, even for
+      // admins. AgentModel.findById is not org-scoped.
+      if (agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Editing exclusions requires the same permission as agent update
+      // (return 404 to avoid leaking existence)
+      try {
+        checker.require(agent.agentType, "update");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Enforce scope-based modify permissions like UpdateAgent does
+      const userTeamIds = !checker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+      requireAgentModifyPermission({
+        checker,
+        agentType: agent.agentType,
+        agentScope: agent.scope,
+        agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      return reply.send(
+        await agentToolExclusionsService.replaceExclusions({
+          agentId: id,
+          organizationId,
+          excludedToolIds: body.excludedToolIds,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/subagent-exclusions",
+    {
+      schema: {
+        operationId: RouteId.GetAgentSubagentExclusions,
+        description:
+          "Get the agent's Auto-subagent-mode exclusions: delegation target agents removed from its Auto delegation surface while 'access all subagents' is on",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(AgentSubagentExclusionsSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch agent first to determine its type, then enforce type-specific RBAC
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Defense-in-depth: never allow cross-organization access, even for
+      // admins. AgentModel.findById is not org-scoped.
+      if (agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Check read permission (return 404 to avoid leaking existence)
+      try {
+        checker.require(agent.agentType, "read");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Non-admin: enforce scope/team-based visibility like GetAgent does
+      if (!checker.isAdmin(agent.agentType)) {
+        const filteredAgent = await AgentModel.findById(id, user.id, false);
+        if (!filteredAgent) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+
+      return reply.send(await agentSubagentExclusionsService.getExclusions(id));
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/subagent-exclusions",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentSubagentExclusions,
+        description:
+          "Replace the agent's Auto-subagent-mode exclusions (full replace of the excluded delegation-target set)",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: AgentSubagentExclusionsSchema,
+        response: constructResponseSchema(AgentSubagentExclusionsSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      // Fetch agent to determine its type for permission check
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Defense-in-depth: never allow cross-organization access, even for
+      // admins. AgentModel.findById is not org-scoped.
+      if (agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Editing exclusions requires the same permission as agent update
+      // (return 404 to avoid leaking existence)
+      try {
+        checker.require(agent.agentType, "update");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Enforce scope-based modify permissions like UpdateAgent does
+      const userTeamIds = !checker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+      requireAgentModifyPermission({
+        checker,
+        agentType: agent.agentType,
+        agentScope: agent.scope,
+        agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      return reply.send(
+        await agentSubagentExclusionsService.replaceExclusions({
+          agentId: id,
+          organizationId,
+          excludedSubagentIds: body.excludedSubagentIds,
+        }),
+      );
     },
   );
 
@@ -839,6 +1156,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.scope === "personal" && existingAgent.scope !== "personal") {
         throw new ApiError(400, "Shared agents cannot be made personal");
       }
+
+      // A team-scoped agent must keep ≥1 team (issue #6624). Evaluate the merged
+      // result — the team-admin path above may have rewritten body.teams — so
+      // this catches switching to team scope with none, or clearing the teams of
+      // an already team-scoped agent. Applies to admins too.
+      assertTeamScopeHasTeams({
+        scope: body.scope ?? existingAgent.scope,
+        teamCount: (body.teams ?? existingAgent.teams).length,
+      });
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -944,6 +1270,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      if (body.environmentId !== undefined) {
+        await assertEnvironmentAssignable({
+          userId: user.id,
+          organizationId,
+          environmentId: body.environmentId,
+          agentType: existingAgent.agentType,
+        });
+      }
+
       const agent = await AgentModel.update(id, updateData);
 
       if (!agent) {
@@ -1034,6 +1369,70 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/agents/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreAgent,
+        description: "Restore a soft-deleted agent",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const agent = await AgentModel.findDeletedByIdForOrganization(
+        id,
+        organizationId,
+      );
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      try {
+        checker.require(agent.agentType, "delete");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const userTeamIds = !checker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+      requireAgentModifyPermission({
+        checker,
+        agentType: agent.agentType,
+        agentScope: agent.scope,
+        agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      const conflictMessage = await AgentModel.getRestoreConflictMessage(agent);
+      if (conflictMessage) {
+        throw new ApiError(409, conflictMessage);
+      }
+
+      const success = await AgentModel.restore(id);
+      if (!success) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const restored = await AgentModel.findById(id, user.id, true);
+      if (!restored) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      return reply.send(restored);
+    },
+  );
+
   fastify.get(
     "/api/agents/labels/keys",
     {
@@ -1050,7 +1449,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!hasRead) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(403, AGENT_READ_FORBIDDEN_MESSAGE);
       }
       return reply.send(await AgentLabelModel.getAllKeys());
     },
@@ -1075,7 +1474,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!hasRead) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(403, AGENT_READ_FORBIDDEN_MESSAGE);
       }
       return reply.send(
         key
@@ -1225,23 +1624,74 @@ async function validateConnectorAccess(params: {
   }
 }
 
-function parseLabelsParam(
-  labels: string | undefined,
-): Record<string, string[]> | undefined {
-  if (!labels) return undefined;
-  const result: Record<string, string[]> = {};
-  for (const entry of labels.split(LABELS_ENTRY_DELIMITER)) {
-    const colonIdx = entry.indexOf(":");
-    if (colonIdx === -1) continue;
-    const key = entry.slice(0, colonIdx).trim();
-    const values = entry
-      .slice(colonIdx + 1)
-      .split(LABELS_VALUE_DELIMITER)
-      .map((v) => v.trim())
-      .filter(Boolean);
-    if (key && values.length > 0) {
-      result[key] = values;
+function getPermittedAgentTypesForList(params: {
+  checker: AgentTypePermissionChecker;
+  effectiveTypes: AgentType[] | undefined;
+  status: "active" | "deleted" | undefined;
+}): AgentType[] | undefined {
+  const action = params.status === "deleted" ? "delete" : "read";
+
+  if (params.effectiveTypes) {
+    for (const type of params.effectiveTypes) {
+      params.checker.require(type, action);
     }
+    return undefined;
   }
-  return Object.keys(result).length > 0 ? result : undefined;
+
+  const permittedTypes = params.checker.getAgentTypesWithPermission(action);
+  if (permittedTypes.length === 0) {
+    throw new ApiError(403, AGENT_READ_FORBIDDEN_MESSAGE);
+  }
+
+  return permittedTypes;
 }
+
+/**
+ * Binding an agent to a restricted environment routes its code sandbox to that
+ * environment's isolated runtime, so it is gated by the resource-specific
+ * deploy-to-restricted permission for the agent's type — agent, llmProxy, or
+ * mcpGateway. Throws 403/404 if the caller may not assign the environment.
+ */
+async function assertEnvironmentAssignable(params: {
+  userId: string;
+  organizationId: string;
+  environmentId: string | null;
+  agentType: AgentType;
+}): Promise<void> {
+  const { userId, organizationId, environmentId, agentType } = params;
+  const hasResourceDeploy = await userHasPermission(
+    userId,
+    organizationId,
+    getResourceForAgentType(agentType),
+    "deploy-to-restricted",
+  );
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    canDeployToRestricted: hasResourceDeploy,
+  });
+}
+
+/**
+ * A team-scoped agent with zero teams matches no team membership, so it is
+ * inaccessible to everyone including its author (issue #6624). Reject it at the
+ * write paths. Callers pass the resolved effective scope and team count.
+ */
+function assertTeamScopeHasTeams(params: {
+  scope: string;
+  teamCount: number;
+}): void {
+  if (params.scope === "team" && params.teamCount === 0) {
+    throw new ApiError(
+      400,
+      "A team-scoped agent must be assigned at least one team",
+    );
+  }
+}
+
+/**
+ * 403 copy for endpoints that only need read access to at least one agent
+ * type; the caller has none.
+ */
+const AGENT_READ_FORBIDDEN_MESSAGE =
+  "You don't have permission to view agents. This requires read access to at least one agent type (agents, MCP gateways, or LLM proxies).";

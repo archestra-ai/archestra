@@ -1,0 +1,91 @@
+{
+  "name": "modelcontextprotocol__servers-archived__src__postgres",
+  "display_name": "postgres",
+  "description": "Reference MCP servers that are no longer maintained",
+  "author": {
+    "name": "modelcontextprotocol"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# PostgreSQL\n\nA Model Context Protocol server that provides read-only access to PostgreSQL databases. This server enables LLMs to inspect database schemas and execute read-only queries.\n\n## Components\n\n### Tools\n\n- **query**\n  - Execute read-only SQL queries against the connected database\n  - Input: `sql` (string): The SQL query to execute\n  - All queries are executed within a READ ONLY transaction\n\n### Resources\n\nThe server provides schema information for each table in the database:\n\n- **Table Schemas** (`postgres://<host>/<table>/schema`)\n  - JSON schema information for each table\n  - Includes column names and data types\n  - Automatically discovered from database metadata\n\n## Configuration\n\n### Usage with Claude Desktop\n\nTo use this server with the Claude Desktop app, add the following configuration to the \"mcpServers\" section of your `claude_desktop_config.json`:\n\n### Docker\n\n* when running docker on macos, use host.docker.internal if the server is running on the host network (eg localhost)\n* username/password can be added to the postgresql url with `postgresql://user:password@host:port/db-name`\n\n```json\n{\n  \"mcpServers\": {\n    \"postgres\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \n        \"-i\", \n        \"--rm\", \n        \"mcp/postgres\", \n        \"postgresql://host.docker.internal:5432/mydb\"]\n    }\n  }\n}\n```\n\n### NPX\n\n```json\n{\n  \"mcpServers\": {\n    \"postgres\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-postgres\",\n        \"postgresql://localhost/mydb\"\n      ]\n    }\n  }\n}\n```\n\nReplace `/mydb` with your database name.\n\n### Usage with VS Code\n\nFor quick installation, use one of the one-click install buttons below...\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=postgres&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22pg_url%22%2C%22description%22%3A%22PostgreSQL%20URL%20(e.g.%20postgresql%3A%2F%2Fuser%3Apass%40localhost%3A5432%2Fmydb)%22%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-postgres%22%2C%22%24%7Binput%3Apg_url%7D%22%5D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=postgres&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22pg_url%22%2C%22description%22%3A%22PostgreSQL%20URL%20(e.g.%20postgresql%3A%2F%2Fuser%3Apass%40localhost%3A5432%2Fmydb)%22%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-postgres%22%2C%22%24%7Binput%3Apg_url%7D%22%5D%7D&quality=insiders)\n\n[![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Docker-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=postgres&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22pg_url%22%2C%22description%22%3A%22PostgreSQL%20URL%20(e.g.%20postgresql%3A%2F%2Fuser%3Apass%40host.docker.internal%3A5432%2Fmydb)%22%7D%5D&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22mcp%2Fpostgres%22%2C%22%24%7Binput%3Apg_url%7D%22%5D%7D) [![Install with Docker in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Docker-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=postgres&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22pg_url%22%2C%22description%22%3A%22PostgreSQL%20URL%20(e.g.%20postgresql%3A%2F%2Fuser%3Apass%40host.docker.internal%3A5432%2Fmydb)%22%7D%5D&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22mcp%2Fpostgres%22%2C%22%24%7Binput%3Apg_url%7D%22%5D%7D&quality=insiders)\n\nFor manual installation, add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n> Note that the `mcp` key is not needed in the `.vscode/mcp.json` file.\n\n### Docker\n\n**Note**: When using Docker and connecting to a PostgreSQL server on your host machine, use `host.docker.internal` instead of `localhost` in the connection URL.\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"pg_url\",\n        \"description\": \"PostgreSQL URL (e.g. postgresql://user:pass@host.docker.internal:5432/mydb)\"\n      }\n    ],\n    \"servers\": {\n      \"postgres\": {\n        \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"-i\",\n          \"--rm\",\n          \"mcp/postgres\",\n          \"${input:pg_url}\"\n        ]\n      }\n    }\n  }\n}\n```\n\n### NPX\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"pg_url\",\n        \"description\": \"PostgreSQL URL (e.g. postgresql://user:pass@localhost:5432/mydb)\"\n      }\n    ],\n    \"servers\": {\n      \"postgres\": {\n        \"command\": \"npx\",\n        \"args\": [\n          \"-y\",\n          \"@modelcontextprotocol/server-postgres\",\n          \"${input:pg_url}\"\n        ]\n      }\n    }\n  }\n}\n```\n\n## Building\n\nDocker:\n\n```sh\ndocker build -t mcp/postgres -f src/postgres/Dockerfile . \n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "AI Tools",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-postgres-docker-claude-desktop": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "mcp/postgres", "postgresql://host.docker.internal:5432/mydb"],
+        "env": {},
+        "docker_image": "mcp/postgres"
+      },
+      "modelcontextprotocol-server-postgres-claude-desktop": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"],
+        "env": {}
+      },
+      "mcp-postgres-docker-vscode": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "mcp/postgres", "${input:pg_url}"],
+        "env": {},
+        "docker_image": "mcp/postgres"
+      },
+      "modelcontextprotocol-server-postgres-vscode": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-postgres", "${input:pg_url}"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "modelcontextprotocol",
+    "repo": "servers-archived",
+    "url": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/postgres",
+    "name": "servers-archived",
+    "path": "src/postgres",
+    "stars": 123,
+    "contributors": 595,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "9be4674d1ddf8c469e6461a27a337eeb65f76c2e"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:34:24.203Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "pg",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@modelcontextprotocol/server-postgres\",\n  \"version\": \"0.6.2\",\n  \"description\": \"MCP server for interacting with PostgreSQL databases\",\n  \"license\": \"MIT\",\n  \"author\": \"Anthropic, PBC (https://anthropic.com)\",\n  \"homepage\": \"https://modelcontextprotocol.io\",\n  \"bugs\": \"https://github.com/modelcontextprotocol/servers/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-postgres\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.1\",\n    \"pg\": \"^8.13.0\"\n  },\n  \"devDependencies\": {\n    \"@types/pg\": \"^8.11.10\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}"
+}

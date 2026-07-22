@@ -1,4 +1,4 @@
-import { MEMBER_ROLE_NAME } from "@shared";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import TeamModel from "./team";
 
@@ -782,7 +782,7 @@ describe("TeamModel", () => {
   });
 
   describe("checkTeamAccess", () => {
-    test("should allow access for team admin regardless of membership", async ({
+    test("should allow access for organization-level team manager regardless of membership", async ({
       makeUser,
       makeOrganization,
       makeTeam,
@@ -791,15 +791,15 @@ describe("TeamModel", () => {
       const org = await makeOrganization();
       const team = await makeTeam(org.id, user.id);
 
-      // Admin user who is NOT a member of the team
+      // Organization-level team manager who is NOT a member of the team
       const adminUser = await makeUser({ email: "admin@test.com" });
 
-      // Should not throw - admin has full access
+      // Should not throw - organization-level team manager has full access
       await expect(
         TeamModel.checkTeamAccess({
           userId: adminUser.id,
           teamId: team.id,
-          isTeamAdmin: true,
+          canManageAllTeams: true,
         }),
       ).resolves.toBeUndefined();
     });
@@ -822,7 +822,7 @@ describe("TeamModel", () => {
         TeamModel.checkTeamAccess({
           userId: memberUser.id,
           teamId: team.id,
-          isTeamAdmin: false,
+          canManageAllTeams: false,
         }),
       ).resolves.toBeUndefined();
     });
@@ -844,7 +844,7 @@ describe("TeamModel", () => {
         TeamModel.checkTeamAccess({
           userId: outsiderUser.id,
           teamId: team.id,
-          isTeamAdmin: false,
+          canManageAllTeams: false,
         }),
       ).rejects.toThrow("Not authorized to access this team");
     });
@@ -864,7 +864,7 @@ describe("TeamModel", () => {
         await TeamModel.checkTeamAccess({
           userId: outsiderUser.id,
           teamId: team.id,
-          isTeamAdmin: false,
+          canManageAllTeams: false,
         });
         // Should not reach here
         expect.fail("Expected checkTeamAccess to throw an error");
@@ -1389,6 +1389,36 @@ describe("TeamModel", () => {
       expect(result.data).toHaveLength(1);
       expect(result.data[0].name).toBe("User1 Team");
       expect(result.total).toBe(1);
+    });
+
+    test("reports the caller's own role per team via myRole", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const adminTeam = await makeTeam(org.id, user.id, { name: "Admin Team" });
+      const memberTeam = await makeTeam(org.id, user.id, {
+        name: "Member Team",
+      });
+      await makeTeamMember(adminTeam.id, user.id, { role: ADMIN_ROLE_NAME });
+      await makeTeamMember(memberTeam.id, user.id, { role: MEMBER_ROLE_NAME });
+
+      const result = await TeamModel.getUserTeamsPaginated({
+        userId: user.id,
+        limit: 10,
+        offset: 0,
+      });
+
+      const byName = Object.fromEntries(
+        result.data.map((t) => [t.name, t.myRole]),
+      );
+      expect(byName).toEqual({
+        "Admin Team": ADMIN_ROLE_NAME,
+        "Member Team": MEMBER_ROLE_NAME,
+      });
     });
 
     test("supports pagination", async ({

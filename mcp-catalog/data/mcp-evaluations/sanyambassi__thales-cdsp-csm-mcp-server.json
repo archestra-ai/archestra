@@ -1,0 +1,155 @@
+{
+  "name": "sanyambassi__thales-cdsp-csm-mcp-server",
+  "display_name": "thales-cdsp-csm-mcp-server",
+  "description": "A Model Context Protocol (MCP) server for managing secrets in Thales CDSP Secrets Manager, powered by Akeyless, Vault. This server provides tools for creating, managing, and deleting static secrets, DFC keys, and other resources through the MCP protocol.",
+  "author": {
+    "name": "sanyambassi"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py", "--transport", "stdio"],
+    "env": {
+      "AKEYLESS_ACCESS_ID": "${user_config.akeyless_access_id}",
+      "AKEYLESS_ACCESS_KEY": "${user_config.akeyless_access_key}",
+      "AKEYLESS_API_URL": "${user_config.akeyless_api_url}",
+      "LOG_LEVEL": "${user_config.log_level}"
+    },
+    "type": "local"
+  },
+  "readme": "# Thales CSM MCP Server\n\nSimple MCP server for Thales CipherTrust Secrets Management, powered by Akeyless.\n\n## 🎬 **Demo Videos**\n\n> **📹 Part I: Usage & Functionality** - [Watch on YouTube](https://youtu.be/zgpvsL_GY64)\n> \n> *This video demonstrates:*\n> - Setting up Cursor AI integration\n> - Creating and managing secrets and DFC Keys through AI chat\n> - Security compliance workflows\n> - Example prompts and functionality\n\n> **📹 Part II: Deployment & Installation** - [Watch on YouTube](https://youtu.be/XLTQ31hGzeU)\n> \n> *This video covers:*\n> - Step-by-step installation process\n> - Configuration and setup\n> - Deployment options\n\n## 🎯 **Key Features**\n\n### **Intelligent App Development & Security Migration**\nThe server includes a powerful prompt that automatically determines whether you want to:\n- **Create a NEW app** with built-in CipherTrust integration\n- **Secure an EXISTING app** by migrating hardcoded secrets to CipherTrust\n\n**For New Apps:**\n- Generates complete Python implementations with CipherTrust integration\n- Uses the `get_api_reference` tool for native API integration\n- Provides production-ready code with proper error handling\n\n**For Existing Apps:**\n- Scans codebase for hardcoded secrets using intelligent detection\n- Categorizes secrets by type (key-value pairs vs standalone)\n- Uses `manage_secrets` MCP tool to create CipherTrust secrets\n- Generates migration reports and updated code\n- Provides testing and validation instructions\n\n**Secret Type Classification:**\n- **Key-Value Pairs/JSON format**: AWS credentials, database configs, OAuth tokens\n- **Standalone Secrets (Text format)**: Single passwords, individual tokens, certificates\n\n## 📋 **Prerequisites**\n\nBefore you begin, ensure you have the following installed on your system:\n\n- **Python 3.8+**: Required for running the MCP server\n- **uv**: Modern Python package manager (recommended) or pip\n- **git**: For cloning the repository\n- **dotenv**: Environment variable management\n- **fastmcp**: MCP server framework\n- **Thales CipherTrust Manager access**\n- **Valid Akeyless credentials**\n\n### **Installing Prerequisites**\n\n#### **Python**\n```bash\n# Check if Python is installed\npython --version\n# or\npython3 --version\n\n# Install Python (Ubuntu/Debian)\nsudo apt update && sudo apt install python3 python3-pip\n\n# Install Python (macOS)\nbrew install python\n\n# Install Python (Windows)\n# Download from https://python.org\n```\n\n#### **uv (Recommended)**\n```bash\n# Install uv\npip install uv\n\n# Verify installation\nuv --version\n```\n\n#### **git**\n```bash\n# Check if git is installed\ngit --version\n\n# Install git (Ubuntu/Debian)\nsudo apt update && sudo apt install git\n\n# Install git (macOS)\nbrew install git\n\n# Install git (Windows)\n# Download from https://git-scm.com\n```\n\n#### **dotenv**\n```bash\n# Check if python-dotenv is installed\npython -c \"import dotenv; print('dotenv available')\"\n\n# Install python-dotenv\npip install python-dotenv\n\n# Verify installation\npython -c \"import dotenv; print(f'dotenv version: {dotenv.__version__}')\"\n```\n\n#### **fastmcp**\n```bash\n# Check if fastmcp is installed\npython -c \"import fastmcp; print('fastmcp available')\"\n\n# Install fastmcp\npip install fastmcp\n\n# Verify installation\npython -c \"import fastmcp; print(f'fastmcp version: {fastmcp.__version__}')\"\n```\n\n## 🚀 **What this MCP server features**\n\n- **Secrets Management**: Create, read, update, delete secrets\n- **DFC Key Management**: DFC encryption keys (AES, RSA)\n- **Account Management**: Get Akeyless account details\n- **Analytics**: Fetch analytics data\n- **Authentication Methods**: Manage Authentication Methods\n- **App Development & Security**: Intelligent app creation and secret migration\n- **Roles**: Manage Roles\n- **Targets**: Manage Targets\n- **Security**: Guidelines and best practices\n- **MCP Protocol**: Model Context Protocol compliance\n\n## ⚡ **Quick Start**\n\n### **1. Install**\n\n#### **Option A: Using pip (Traditional)**\n```bash\ngit clone https://github.com/sanyambassi/thales-cdsp-csm-mcp-server\ncd thales-cdsp-csm-mcp-server\npip install -r requirements.txt\n```\n\n#### **Option B: Using uv (Recommended)**\n```bash\n# Install uv if you don't have it\npip install uv\n\n# Clone and setup\ngit clone https://github.com/sanyambassi/thales-cdsp-csm-mcp-server\ncd thales-cdsp-csm-mcp-server\n\n# Install dependencies (creates .venv automatically)\nuv sync\n```\n\n### **2. Configure**\nCreate `.env` file:\n```env\nAKEYLESS_ACCESS_ID=your_access_id\nAKEYLESS_ACCESS_KEY=your_access_key\nAKEYLESS_API_URL=https://your-ciphertrust-manager/akeyless-api/v2\nLOG_LEVEL=INFO\nAKEYLESS_VERIFY_SSL=false\n```\n\n### **3. Run**\n\n#### **Using pip (Traditional)**\n```bash\n# stdio mode\npython main.py\n\n# HTTP mode \npython main.py --transport streamable-http --host localhost --port 8000\n```\n\n#### **Using uv (Recommended)**\n```bash\n# stdio mode\nuv run python main.py\n\n# HTTP mode \nuv run python main.py --transport streamable-http --host localhost --port 8000\n```\n\n## 🛠️ **Available Tools**\n\n| Tool | Description |\n|------|-------------|\n| `manage_secrets` | Create static secrets, get static secret values, update, delete secrets (static, dynamic, rotated) with type filtering and dynamic secret creation |\n| `manage_dfc_keys` | Manage encryption keys |\n| `manage_auth_methods` | Authentication and access control |\n| `manage_rotation` | Secret rotation policies |\n| `manage_customer_fragments` | Enhanced security features |\n| `security_guidelines` | Security best practices |\n| `manage_roles` | List and get role information |\n| `manage_targets` | List, get, and create targets |\n| `manage_analytics` | Get analytics and monitoring data |\n| `manage_account` | Get account settings and licensing |\n| `get_api_reference` | Get API reference for native Akeyless integrations (generic workflows + S3 example) |\n\n## 🔍 **Test It**\n\n```bash\n# Run tests\npython tests/run_tests.py\npython.exe tests\\test_mcp_protocol.py\n\n# Test health endpoint (HTTP mode)\ncurl http://localhost:8000/health\n```\n\n## 📚 **Documentation**\n\n- **[TRANSPORT_MODES.md](docs/TRANSPORT_MODES.md)** - How to run\n- **[TOOLS.md](docs/TOOLS.md)** - What tools do\n- **[TESTING.md](docs/TESTING.md)** - Complete testing guide\n- **[AI Assistant Configs](config)** - MCP json examples for AI Assistants\n\n## 🎯 **Use Cases**\n\n- **AI Assistants**: Claude Desktop, Cursor AI\n- **Web Applications**: REST API integration\n- **Automation**: CI/CD, scripts, tools\n- **Enterprise**: Secrets management, compliance\n\n## 🤖 **AI Assistant Integration**\n\n### **Claude Desktop**\n```json\n{\n  \"mcpServers\": {\n    \"thales-csm\": {\n      \"command\": \"python\",\n      \"args\": [\"main.py\", \"--transport\", \"stdio\"],\n      \"env\": {\n        \"AKEYLESS_ACCESS_ID\": \"your_access_id_here\",\n        \"AKEYLESS_ACCESS_KEY\": \"your_access_key_here\",\n        \"AKEYLESS_API_URL\": \"https://your-ciphertrust-manager/akeyless-api/v2\",\n        \"LOG_LEVEL\": \"INFO\"\n      }\n    }\n  }\n}\n```\n\n### **Cursor AI**\n```json\n{\n  \"mcpServers\": {\n    \"thales-csm\": {\n      \"command\": \"python\",\n      \"args\": [\"main.py\", \"--transport\", \"stdio\"],\n      \"env\": {\n        \"AKEYLESS_ACCESS_ID\": \"your_access_id_here\",\n        \"AKEYLESS_ACCESS_KEY\": \"your_access_key_here\",\n        \"AKEYLESS_API_URL\": \"https://your-ciphertrust-manager/akeyless-api/v2\",\n        \"LOG_LEVEL\": \"INFO\"\n      }\n    }\n  }\n}\n```\n\n### **Configuration Parameters**\n- **`env`**: Environment variables for Akeyless authentication and logging\n- **`command`**: Python executable to run the server\n- **`args`**: Command line arguments for the server\n\n### **⚠️ Important Notes**\n- **Full Path Required**: `args` must include the full absolute path to `main.py`\n- **Windows Paths**: Use double backslashes `\\\\` in Windows paths (e.g., `C:\\\\thales-cdsp-csm-mcp-server\\\\main.py`)\n- **Unix Paths**: Use forward slashes `/` in Unix/Linux paths (e.g., `/home/user/thales-cdsp-csm-mcp-server/main.py`)\n\n### **Configuration Templates**\n- **[config/mcp-config-uv.json](config/mcp-config-uv.json)** - UV package manager setup\n- **[config/mcp-config.json](config/mcp-config.json)** - Basic configuration template\n\n## 🤝 **Support**\n\n- **Issues**: [GitHub Issues](https://github.com/sanyambassi/thales-cdsp-csm-mcp-server/issues)\n- **Documentation**: Check the docs folder above\n\n## 📄 **License**\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Security",
+  "quality_score": 54,
+  "programming_language": "Python",
+  "framework": null,
+  "github_info": {
+    "owner": "sanyambassi",
+    "repo": "thales-cdsp-csm-mcp-server",
+    "url": "https://github.com/sanyambassi/thales-cdsp-csm-mcp-server",
+    "name": "sanyambassi__thales-cdsp-csm-mcp-server",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "936c1085edc179165edafcf758f95c2401c5a4df"
+  },
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "importance": 10,
+      "name": "fastmcp"
+    },
+    {
+      "importance": 8,
+      "name": "httpx"
+    },
+    {
+      "importance": 8,
+      "name": "pydantic"
+    },
+    {
+      "importance": 6,
+      "name": "python-dotenv"
+    },
+    {
+      "importance": 4,
+      "name": "union"
+    },
+    {
+      "importance": 3,
+      "name": "rich"
+    }
+  ],
+  "user_config": {
+    "akeyless_access_id": {
+      "type": "string",
+      "title": "Akeyless Access ID",
+      "description": "Your Akeyless Access ID for authentication.",
+      "required": true,
+      "sensitive": true
+    },
+    "akeyless_access_key": {
+      "type": "string",
+      "title": "Akeyless Access Key",
+      "description": "Your Akeyless Access Key for authentication.",
+      "required": true,
+      "sensitive": true
+    },
+    "akeyless_api_url": {
+      "type": "string",
+      "title": "Akeyless API URL",
+      "description": "The URL for your CipherTrust Manager Akeyless API (e.g., https://your-ciphertrust-manager/akeyless-api/v2).",
+      "required": true
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "The logging level for the server (e.g., INFO, DEBUG, WARNING).",
+      "required": false,
+      "default": "INFO"
+    }
+  },
+  "archestra_config": {
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "client_config_permutations": {
+      "thales-cdsp-csm-mcp-server-stdio": {
+        "command": "python",
+        "args": ["main.py"],
+        "env": {
+          "AKEYLESS_ACCESS_ID": "your_access_id",
+          "AKEYLESS_ACCESS_KEY": "your_access_key",
+          "AKEYLESS_API_URL": "https://your-ciphertrust-manager/akeyless-api/v2",
+          "LOG_LEVEL": "INFO"
+        }
+      },
+      "thales-cdsp-csm-mcp-server-http": {
+        "command": "python",
+        "args": ["main.py", "--transport", "streamable-http", "--host", "localhost", "--port", "8000"],
+        "env": {
+          "AKEYLESS_ACCESS_ID": "your_access_id",
+          "AKEYLESS_ACCESS_KEY": "your_access_key",
+          "AKEYLESS_API_URL": "https://your-ciphertrust-manager/akeyless-api/v2",
+          "LOG_LEVEL": "INFO"
+        }
+      },
+      "thales-cdsp-csm-mcp-server-uv-stdio": {
+        "command": "uv",
+        "args": ["run", "python", "main.py"],
+        "env": {
+          "AKEYLESS_ACCESS_ID": "your_access_id",
+          "AKEYLESS_ACCESS_KEY": "your_access_key",
+          "AKEYLESS_API_URL": "https://your-ciphertrust-manager/akeyless-api/v2",
+          "LOG_LEVEL": "INFO"
+        }
+      },
+      "thales-cdsp-csm-mcp-server-uv-http": {
+        "command": "uv",
+        "args": ["run", "python", "main.py", "--transport", "streamable-http", "--host", "localhost", "--port", "8000"],
+        "env": {
+          "AKEYLESS_ACCESS_ID": "your_access_id",
+          "AKEYLESS_ACCESS_KEY": "your_access_key",
+          "AKEYLESS_API_URL": "https://your-ciphertrust-manager/akeyless-api/v2",
+          "LOG_LEVEL": "INFO"
+        }
+      }
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-pro",
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"thales-cdsp-csm-mcp-server\"\nversion = \"1.0.0\"\ndescription = \"Thales CDSP CSM (CipherTrust Secrets Management) Secrets Management, powered by Akeyless, MCP Server\"\nauthors = [\n    {name = \"Sanyam Bassi\", email = \"sanyam.bassi@thalesgroup.com\"}\n]\nreadme = \"README.md\"\nlicense = {text = \"MIT\"}\nrequires-python = \">=3.10\"\ndependencies = [\n    \"fastmcp>=2.0.0\",\n    \"httpx>=0.25.0\",\n    \"pydantic>=2.0.0\",\n    \"python-dotenv>=1.0.0\",\n    \"union>=0.1.190\",\n    \"rich>=13.0.0\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"requests>=2.25.0\",\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n]\n\n[project.scripts]\nthales-cdsp-csm-mcp-server = \"src.thales_cdsp_csm_mcp_server.server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\n    \"requests>=2.25.0\",\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n]\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\ntestpaths = [\"tests\"]\npython_files = [\"test_*.py\"]\npython_classes = [\"Test*\"]\npython_functions = [\"test_*\"]\naddopts = \"-v --tb=short\"\n\n \n\n=== requirements.txt ===\nfastmcp>=2.0.0\nhttpx>=0.25.0\npydantic>=2.0.0\npython-dotenv>=1.0.0\nunion>=0.1.190\nrich>=13.0.0 ",
+  "last_scraped_at": "2025-09-09T13:06:54.549Z"
+}

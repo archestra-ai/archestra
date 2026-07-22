@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { betterAuth, hasPermission } from "@/auth";
 import db, { schema } from "@/database";
 import OrganizationRoleModel from "@/models/organization-role";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -7,28 +8,17 @@ import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-const {
-  createOrgRoleMock,
-  updateOrgRoleMock,
-  deleteOrgRoleMock,
-  hasPermissionMock,
-} = vi.hoisted(() => ({
-  createOrgRoleMock: vi.fn(),
-  updateOrgRoleMock: vi.fn(),
-  deleteOrgRoleMock: vi.fn(),
-  hasPermissionMock: vi.fn(),
-}));
+const { createOrgRoleMock, updateOrgRoleMock, deleteOrgRoleMock } = vi.hoisted(
+  () => ({
+    createOrgRoleMock: vi.fn(),
+    updateOrgRoleMock: vi.fn(),
+    deleteOrgRoleMock: vi.fn(),
+  }),
+);
 
-vi.mock("@/auth", () => ({
-  betterAuth: {
-    api: {
-      createOrgRole: createOrgRoleMock,
-      updateOrgRole: updateOrgRoleMock,
-      deleteOrgRole: deleteOrgRoleMock,
-    },
-  },
-  hasPermission: hasPermissionMock,
-}));
+vi.mock("@/auth");
+
+const hasPermissionMock = vi.mocked(hasPermission);
 
 describe("custom role routes", () => {
   let app: FastifyInstanceWithZod;
@@ -38,6 +28,16 @@ describe("custom role routes", () => {
 
   beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
     vi.clearAllMocks();
+
+    // These better-auth org-role API methods are not part of the canonical
+    // @/auth mock surface, so wire them onto betterAuth.api here. The casts
+    // are needed because the mocks don't carry better-auth's strict endpoint
+    // types; the routes only ever call them as plain functions.
+    const api = betterAuth.api as unknown as Record<string, unknown>;
+    api.createOrgRole = createOrgRoleMock;
+    api.updateOrgRole = updateOrgRoleMock;
+    api.deleteOrgRole = deleteOrgRoleMock;
+
     user = await makeAdmin();
     authenticatedUser = user;
     const organization = await makeOrganization();
@@ -61,7 +61,7 @@ describe("custom role routes", () => {
     });
 
     // Default: hasPermission grants admin access
-    hasPermissionMock.mockResolvedValue({ success: true });
+    hasPermissionMock.mockResolvedValue({ success: true, error: null });
 
     const { default: organizationRoleRoutes } = await import(
       "./organization-role"
@@ -223,7 +223,7 @@ describe("custom role routes", () => {
       permission: { ac: ["read", "update"] },
     });
 
-    deleteOrgRoleMock.mockResolvedValue({ success: true });
+    deleteOrgRoleMock.mockResolvedValue({ success: true, error: null });
 
     const deleteResponse = await app.inject({
       method: "DELETE",
@@ -700,7 +700,7 @@ describe("custom role routes", () => {
       permission: { agent: ["read"] },
     });
 
-    deleteOrgRoleMock.mockResolvedValue({ success: true });
+    deleteOrgRoleMock.mockResolvedValue({ success: true, error: null });
 
     const deleteResponse = await app.inject({
       method: "DELETE",

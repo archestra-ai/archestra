@@ -1,0 +1,76 @@
+{
+  "name": "gitkraken__gk-cli",
+  "display_name": "gk-cli",
+  "description": "GitKraken CLI Releases and Documentation",
+  "author": {
+    "name": "gitkraken"
+  },
+  "server": {
+    "command": "gk",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# 🚀 GitKraken CLI\n\n`gk` is GitKraken on the command line. The core functionality is focused on \"Work Items\" which can be thought of as the feature or issue you are trying to tackle. This allows you to work with multiple repos at once and get the same UX as if you were in a monorepo. We also provide robust AI-powered commit messages and Pull Request generation. It also provides an MCP server that streamlines working with git and your Issue and git hosting providers.\n\nGitKraken CLI is available on macOS, Windows, and Unix systems.\n\n![](./images/cli-header-wide.png)\n\n## Table of Contents\n\n- [MCP Server](#mcp-server)\n- [Documentation](#documentation)\n- [Workflows](#workflows)\n- [`git` Command Passthrough](#git-command-passthrough)\n- [Installation](#installation)\n- [Troubleshooting](#troubleshooting)\n- [Support](#support)\n\n## MCP Server\n\nThe GitKraken MCP server is a local MCP server that is powerful and easy to use. It wraps git, GitHub, Jira MCP actions as well as provides tools to LLMs that work with GitKraken APIs and functionality. You can find specific installation instructions based on your chosen AI application in the [Help Center](https://help.gitkraken.com/cli/gk-cli-mcp/).\n\nIf you want to read more about the MCP server, you can check out the [introduction blog post](https://www.gitkraken.com/blog/introducing-gitkraken-mcp)\n\n## Documentation\n\n`gk help` is going to be your best source for exploring the CLI. But also see the [workflows](#workflows) below.\n\n```bash\nWelcome to GitKraken CLI, a premium CLI experience for managing multiple repositories with familiar GIT CLI commands\n\nUsage:\n  gk [flags]\n  gk [command]\n\nAUTHENTICATING\n  auth         Authenticate with the GitKraken platform\n  provider     Add or remove provider tokens\n\nCORE COMMANDS\n  graph        Display commit graph in current repository\n  issue        Manage your issues\n  organization Manage your Gitkraken organizations\n  work         Interact with your work.\n  workspace    Interact with your workspaces. Alias: 'ws'\n\nAdditional Commands:\n  help         Help about any command\n  setup        Display information about your current system configuration\n  version      Print the version number of GK CLI\n\nFlags:\n  -h, --help   help for gk\n\nUse \"gk [command] --help\" for more information about a command.\n```\n\n## Workflows\n\nStart with a single repo. You can add more later.\n\nIn general, your process will look like this:\n\n```bash\n\n# Authenticate\ngk auth login\n\n# Navigate to a git repo directory on your filesystem\ncd ./path/to/repo\n\n# Then create a Work Item and the current directory\n# will be automatically added to the Work Item\ngk work create \"My new work item\"\n\n# Edit files...\n# ...\n\n# Commit your changes using AI\ngk work commit --ai\n\n# Push your changes\ngk work push\n\n# Create a Pull Request\ngk work pr create --ai\n\n```\n\nOnce you have familiarized yourself with using a single repo, try out creating work items and generating commits and PRs for multiple repos at a time by just adding multiple repos to a new Work Item.\n\n```bash\n# Add a repo to the current work item\ngk work add ./path/to/repo # path could be as simple as \".\" if you are in the directory already\n```\n\n## `git` Command Passthrough\n\nYou can also use `gk` to pass through any `git` command. eg:\n\n```bash\ngk status\ngk remote -v\n# etc\n```\n\n## Installation\n\n### macOS\n\n`gk` is available from [Homebrew](https://formulae.brew.sh/cask/gitkraken-cli) with the following command:\n\nHomebrew:\n\n```bash\nbrew install gitkraken-cli\n```\n\nOr download it from the [releases page](https://github.com/gitkraken/gk-cli/releases) and add it to your binaries folder:\n\n```bash\nmv ~/Downloads/gk /usr/local/bin/gk\n```\n\n---\n\n### Unix / Ubuntu\n\n[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/gitkraken-cli)\n\n`gk` is available as a downloadable binary from the [releases page](https://github.com/gitkraken/gk-cli/releases). Once you have it, add it to your binaries folder:\n\n```bash\nmv ~/Downloads/gk /usr/local/bin/gk\n```\n\nOr create a new directory, move the binary and add it to $PATH:\n\n```bash\nmkdir \"$HOME/cli\"\nmv ~/Downloads/gk \"$HOME/cli\"\nexport PATH=\"$HOME/gk:$PATH\"\n```\n\nYou can also [download][releases page] your corresponding package (`.deb`, `.rpm`) and install it with:\n\n```bash\nsudo apt install ./gk.deb\n```\n\nor\n\n```bash\nsudo rpm -i ./gk.rpm\n```\n\n---\n\n### Windows\n\n`gk` is available from [Winget][winget] with the following command:\n\n```bash\nwinget install gitkraken.cli\n```\n\n## ⚙️ Configuration\n\n### Nerd Fonts\n\nThe GitKraken CLI supports Nerd Fonts to display icons for some commands. To ensure correct icon rendering, please obtain and install a Nerd Font available at https://www.nerdfonts.com/. After installation, set the selected Nerd Font as the default font for your terminal.\n\n## Troubleshooting\n\n### `gk login` freezes after authenticating in browser\n\nThis problem is due to the browser. Currently we know that Safari and Brave do not allow to respond to localhost through port 1314. To fix this, change your default browser or copy the URL before the redirect and open it in another browser.\n\n### gk from Oh-My-Zsh\n\nOh-My-Zsh has `gitk` aliased as `gk` and that can create some problems. To fix this, type in your terminal:\n\n```\nunalias gk\n```\n\n### Manual macOS Installation\n\nIf you install the CLI manually from the releases page on macOS, you will likely run into a security error that looks like this:\n\n![](./images/not-opened.png)\n\nTo fix this, go to Settings > Security & Privacy > General and click \"Allow Anyway\".\n\n![](./images/allow-anyway.png)\n\nTry running `gk setup` again and then click \"Open Anyway\" to continue.\n\n![](./images/open-anyway.png)\n",
+  "category": "Development",
+  "quality_score": 81,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gitkraken",
+    "repo": "gk-cli",
+    "url": "https://github.com/gitkraken/gk-cli",
+    "name": "gitkraken__gk-cli",
+    "path": null,
+    "stars": 273,
+    "contributors": 6,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "5e5eeebf9533db5e2c6c0e849f171d5f3488dfeb"
+  },
+  "programming_language": "Unknown",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.335Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "github-api-client",
+      "importance": 8
+    },
+    {
+      "name": "jira-api-client",
+      "importance": 8
+    },
+    {
+      "name": "gitkraken-api-client",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": null
+}

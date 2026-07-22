@@ -10,19 +10,32 @@
 
 1. **Use pnpm** for package management
 2. **Use Tilt for development** - `tilt up` to start the full environment
-3. **Use shadcn/ui components** - Add with `npx shadcn@latest add <component>`
-4. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
-5. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
-6. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseFeatures.core` checks instead to avoid bundling enterprise code into free builds
-7. **No Auto Commits** - Never commit or push changes without explicit user approval. Always ask before running git commit or git push
+4. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the `archestra-docs-writer` skill for all docs writing and editing.
+5. **Add Tests for Behavior** - When a change alters observable behavior, add or update tests that pin that behavior (unit, integration, or e2e under `platform/e2e-tests/tests`). Favor behavior-focused tests over implementation-detail ones — skip tests that only assert wiring, prop plumbing, or incidental markup. Tests exercise real code; mock only true process boundaries (network, clock, subprocesses, externally-owned storage). Skipping tests is a judgment call to state explicitly, not a silent default
+6. **Enterprise Licensing** — The repo is dual-licensed: AGPL-3.0 by default (`../LICENSE_AGPL`), Enterprise License (`../LICENSE_ENTERPRISE`) for marked code. See the license router at `../LICENSE.md` for the resolution rules. Pricing and scope: docs/pages/platform-pricing-model.md. When you add or modify code of enterprise features, tag it as Enterprise using mechanism described in LICENSE.md.
+7. **Commit Freely, Push With Approval** - Committing locally as you land reviewable slices is fine. Never push, open, or update a PR without explicit user approval, and never amend commits
 8. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
 9. **NEVER MENTION REAL CUSTOMER NAMES OR IDENTIFIERS ANYWHERE IN CODE, COMMENTS, TESTS, DOCS, COMMITS, OR PR TEXT!!!!!!!!!!**
-10. **Never copy anything from Sentry into code, comments, tests, docs, commits, or PR text — and do not mention Sentry itself.** Sentry is for diagnosing the problem; describe the bug in neutral terms and cite no IDs, environments, URLs, user info, or stack snippets from there.
+10.  **Never copy anything from Sentry into code, comments, tests, docs, commits, or PR text — and do not mention Sentry itself.** Sentry is for diagnosing the problem; describe the bug in neutral terms and cite no IDs, environments, URLs, user info, or stack snippets from there.
+11. If you think there is an important bit of information worth remembering between sessions, suggest adding it to CLAUDE.md instead of memorizing it yourself. CLAUDE.md is the single source of truth for all important information about the platform, its architecture, and its development practices.
 
 ## Docs
 
 Docs are stored at ./docs
-Check ./docs/docs_writer_prompt.md before changing docs files.
+Use the `archestra-docs-writer` skill before changing any docs files.
+
+## Project Skills
+
+Load these project skills when the task matches their domain:
+
+- `archestra-dev-frontend` - use for frontend Next.js/React work, UI components, forms, TanStack Query hooks, generated API clients, white-label copy, and docs links.
+- `archestra-dev-migrations` - use for Drizzle schema changes, generated migrations, data migrations, custom migrations, `drizzle-kit check` failures, or migration conflict resolution via its `resolve-conflicts.md` subpage.
+- `archestra-dev-backend-tests` - use for backend unit tests (`backend/src/**/*.test.ts`): module mocking rules, global stubs, DB fixtures, vitest projects/isolation, test performance.
+- `archestra-dev-e2e` - use for Playwright e2e tests, API/UI fixtures, WireMock setup, local/CI e2e behavior, and locator guidance.
+- `archestra-dev-observability` - use for tracing, metrics, OpenTelemetry, Tempo, Grafana, Prometheus, LLM/MCP spans, or observability label changes.
+- `archestra-dev-rust-napi` - use for Rust core code, NAPI bindings, generated TypeScript bindings, Rust telemetry, and Rust checks.
+- `archestra-dev-override-sweep` - use for sweeping pnpm `overrides` and `minimumReleaseAge` exclusions in `pnpm-workspace.yaml` — unwinding matured CVE pins and removing overrides the dependency graph has made redundant.
+- `archestra-docs-writer` - use for writing or editing docs pages under `../docs/pages`: new feature docs, page rewrites, tone/copy fixes, and screenshots.
 
 ## Key URLs
 
@@ -30,8 +43,8 @@ Check ./docs/docs_writer_prompt.md before changing docs files.
 - **Backend**: <http://localhost:9000/> (Fastify API server)
 - **Chat**: <http://localhost:3000/chat> (n8n expert chat with MCP tools, conversations in main sidebar)
 - **Tools**: <http://localhost:3000/tools> (Unified tools management with server-side pagination)
-- **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
-- **Appearance Settings**: <http://localhost:3000/settings/appearance> (Admin-only: customize theme, logo, fonts)
+- **Settings**: <http://localhost:3000/settings> (lands on the first permitted tab; tabs: Organization, Service Accounts, Chat, LLM, MCP, Security, Knowledge, Environments, Users, Teams, Roles, GitHub, Identity Providers, Secrets)
+- **Your Account**: <http://localhost:3000/account> (personal profile, API keys, gateway token, sessions; opened by clicking your name in the sidebar)
 - **MCP Registry**: <http://localhost:3000/mcp/registry> (Install and manage MCP servers)
 - **MCP Installation Requests**: <http://localhost:3000/mcp/registry/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/llm/logs> (View LLM proxy request logs)
@@ -77,22 +90,6 @@ pnpm db:studio       # Open Drizzle Studio
 pnpm db:generate     # Generate new migrations (CI checks for uncommitted migrations)
 drizzle-kit check    # Check consistency of generated SQL migrations history
 
-# Manual Migrations with Data Migration Logic
-# When creating migrations that include data migration (INSERT/UPDATE statements),
-# you must use the Drizzle-generated migration file name to ensure proper tracking:
-# 1. First, update the Drizzle schema files with your schema changes
-# 2. Run `pnpm db:generate` - this creates a migration with a random name (e.g., 0119_military_alice.sql)
-# 3. Add your data migration SQL to the generated file (INSERT, UPDATE statements, etc.)
-# 4. Run `drizzle-kit check` to verify consistency
-# IMPORTANT: Never create manually-named migration files - Drizzle tracks migrations
-# via the meta/_journal.json file which references the generated file names.
-
-# Custom Data-Only Migrations (no schema changes)
-# For pure data migrations (UPDATE, INSERT) with no schema changes, use:
-#   cd backend && npx drizzle-kit generate --custom --name=<descriptive-name>
-# This creates an empty SQL file tracked by Drizzle's journal. Add your SQL, then run:
-#   npx drizzle-kit check
-
 # Database Connection
 # PostgreSQL is running in Kubernetes (managed by Tilt)
 # Connect to database:
@@ -104,34 +101,6 @@ kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_passw
 tilt logs pnpm-dev-backend           # Get backend logs
 tilt logs pnpm-dev-frontend          # Get frontend logs
 tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an update for the specified resource
-
-# E2E setup
-Runs wiremock and seeds test data to database. Note that in development e2e use your development database. This means some of your local data may cause e2e to fail locally.
-tilt trigger e2e-test-dependencies   # Start e2e WireMock
-
-Check wiremock health at:
-http://localhost:9092/__admin/health
-
-ARCHESTRA_OPENAI_BASE_URL=http://localhost:9092/v1
-ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9092
-ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092
-
-ARCHESTRA_OPENAI_BASE_URL=http://localhost:9091/v1
-ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9091
-ARCHESTRA_GEMINI_BASE_URL=http://localhost:9091
-
-# E2E Testing
-pnpm test:e2e                        # Run Playwright tests
-# Local: docker-compose setup (Tiltfile.test)
-# CI: kind cluster + helm deployment
-#   - kind config: .github/kind.yaml
-#   - helm values: .github/values-ci.yaml
-#   - NodePort services: frontend:3000, backend:9000, metrics:9050
-#   - CI checks in e2e job: drizzle-kit check, codegen, db migrations
-
-# Observability
-tilt trigger observability           # Start full observability stack (Tempo, OTEL Collector, Prometheus, Grafana)
-docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Start via docker-compose
 ```
 
 ## Environment Variables
@@ -178,20 +147,13 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - **Route Permissions**: Configure in `shared/access-control.ts`
 - **Request Context**: `request.user` and `request.organizationId`
 - **Schema Files**: Auth schemas in separate files: `account`, `api-key`, `invitation`, `member`, `session`, `two-factor`, `verification`
-
-## Observability
-
-**Tracing**: Follows [OTEL GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/). LLM spans use `gen_ai.agent.id`, `gen_ai.agent.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.operation.name`, and `archestra.label.<key>` for dynamic labels. MCP spans use `gen_ai.tool.name`, `mcp.server.name`. Session tracking via `gen_ai.conversation.id` (from `X-Archestra-Session-Id` header). Span names: `chat {model}`, `generate_content {model}`, `execute_tool {tool_name}`. Agent label keys fetched from database on startup and included as resource attributes. Traces stored in Grafana Tempo. User identity tracked via `archestra.user.id`, `archestra.user.email`, `archestra.user.name` (when available). LLM spans include `archestra.cost` (USD) and `gen_ai.usage.total_tokens`.
-
-**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_id` (internal), `agent_name`, `agent_type`, `external_agent_id` (from header), and dynamic agent labels as dimensions. MCP metrics include `agent_id`, `agent_name`, `agent_type`. Agent execution metrics use `external_agent_id` for the client-provided ID. Metrics are reinitialized on startup with current label keys from database.
-
-**Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Tempo, Prometheus, and Grafana with pre-configured datasources.
+- **Dev auto-login (skip the login screen)**: For local development, set `ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL` in your `.env` (e.g. `admin@example.com`, the seeded admin) to have the app auto-mint a real session for that user on load instead of showing the sign-in form. Ignored in production (`NODE_ENV=production`/`prod`); RBAC is unchanged (ordinary session for that user). Backed by the `dev-auto-login` Better Auth plugin (`backend/src/auth/dev-auto-login.ts`) exposing `POST /api/auth/dev-auto-login`, gated behind the `devAutoLoginEnabled` public-config flag.
 
 ## Dependency Security
 
-**Install Script Protection**: The platform disables automatic execution of install scripts via `ignore-scripts=true` in `.npmrc` to prevent supply chain attacks. Install scripts (`preinstall`, `postinstall`, `install`) can execute arbitrary code, steal secrets, and compromise the system.
+**Install Script Protection**: The platform disables automatic execution of install scripts via `ignoreScripts: true` in `pnpm-workspace.yaml` to prevent supply chain attacks. Install scripts (`preinstall`, `postinstall`, `install`) can execute arbitrary code, steal secrets, and compromise the system.
 
-**Minimum Release Age**: Packages must be published for at least 7 days before installation (`minimum-release-age=10080` minutes in `.npmrc`). This allows time for community detection and removal of malicious releases, which are typically caught within hours.
+**Minimum Release Age**: Packages must be published for at least 7 days before installation (`minimumReleaseAge: 10080` minutes in `pnpm-workspace.yaml`). This allows time for community detection and removal of malicious releases, which are typically caught within hours.
 
 **Working with Disabled Scripts**: Most packages work without install scripts. When needed, manually rebuild specific packages:
 
@@ -303,33 +265,21 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **Frontend**:
 
-- Use TanStack Query for data fetching (prefer `useQuery` over `useSuspenseQuery` with explicit loading states)
-- Use shadcn/ui components only
-- **Use components from `frontend/src/components/ui` over plain HTML elements**: Never use raw `<button>`, `<input>`, `<select>`, etc. when a component exists in `frontend/src/components/ui` (Button over button, Input over input, etc.)
-- **Do not hardcode `Archestra` in frontend UI copy**: Use `const appName = useAppName();` and interpolate the app name so white-labeled deployments render correctly
-- **Handle toasts in .query.ts files, not in components**: Toast notifications for mutations (success/error) should be defined in the mutation's `onSuccess`/`onError` callbacks within `.query.ts` files, not in components
-- **Never throw on HTTP errors**: In query/mutation functions, never throw errors on HTTP failures. Use `handleApiError(error)` for user notification and return appropriate default values (`null`, `[]`, `{}`). Components should not have try/catch for API calls - all error handling belongs in `.query.ts` files.
-- Small focused components with extracted business logic
-- Flat file structure, avoid barrel files
-- Only export what's needed externally
-- **API Client Guidelines**: Frontend `.query.ts` files should NEVER use `fetch()` directly - always run `pnpm codegen:api-client` first to ensure SDK is up-to-date, then use the generated SDK methods instead of manual API calls for type safety and consistency
-- **Prefer TanStack Query over prop drilling**: When a component needs data that's available via a TanStack Query hook, use the hook directly in that component rather than fetching in a parent and passing via props. TanStack Query's built-in caching ensures no duplicate requests. Only pass minimal identifiers (like `catalogId`) needed for the component to fetch/filter its own data.
-- **Use react-hook-form for forms**: Prefer `useForm` over multiple `useState` hooks for form state management. Pass form objects to child components via `form: UseFormReturn<FormValues>` prop rather than individual state setters. Parent components handle mutations and submission, form components focus on rendering.
-- **Reuse API types from @shared**: Use types from `archestraApiTypes` (e.g., `archestraApiTypes.CreateXxxData["body"]`, `archestraApiTypes.GetXxxResponses["200"]`) instead of defining duplicate types. Import from `@shared`.
-- **Documentation URLs**: Always use `getDocsUrl(DocsPage.PageName, "optional-anchor")` from `@shared` to construct docs links. Never hardcode docs URLs.
+- For frontend work, load the `archestra-dev-frontend` skill before editing React/Next.js UI, forms, query hooks, generated API client usage, copy, or docs links.
 
 **Backend**:
 
+- Refer to backend/architecture.md for backend architecture guidelines.
 - Use Drizzle ORM for database operations through MODELS ONLY!
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
-- Colocate test files with source (`.test.ts`)
-- Flat file structure, avoid barrel files
-- **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ee.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
+- **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
+- **Audit logging**: When you add or change a state-mutating route, ensure it produces a correct audit record — registered with the right action, non-secret, and a non-empty before/after diff — and assert on that record in the route's existing integration test.
 - **MCP Tool Impact (IMPORTANT)**: When updating an API endpoint's request/response schema, also check if there is an associated Archestra MCP tool in `backend/src/archestra-mcp-server/` that exposes the same functionality. If so, update the MCP tool's `inputSchema` and handler to match the new API schema. Ask the user if you're unsure whether an MCP tool is affected.
 - Only export public APIs
+- **knip --production (IMPORTANT)**: Backend `check:ci` runs `pnpm knip` = `knip:dev && knip:production`. The `--production` pass ignores `*.test.ts` and cross-workspace consumers (e.g. the `standalone-scripts/` index generator), so an export used only by tests or those scripts fails CI even though plain `knip` passes. Before pushing backend export changes, run `cd backend && pnpm knip` (the full dev+production combo). Tag intentionally-public exports consumed only outside knip's view with a JSDoc `/** @public — reason */` tag (see `config.ts`, `middleware.ts`).
 - **Module Code Order (CRITICAL)**: Always place exports at TOP of file, internal helpers at BOTTOM. Use section comments (`// ===`) to separate. Function declarations are hoisted, so helpers can be called before defined.
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
-- **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing
+- **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing. For module mocking and global stubs, load the `archestra-dev-backend-tests` skill: mock-free files run in a shared-worker fast path, `@/auth`/`@/logging` mocks go through their `__mocks__` dirs (bare `vi.mock("@/auth")`), `@/config` through `configModuleMock(overrides)`, and `vi.stubGlobal` must be (re-)applied in `beforeEach` because stubs auto-revert after every test
 - **API Response Standardization**: Use `constructResponseSchema` helper for all routes to ensure consistent error responses (400, 401, 403, 404, 500)
 - **Error Handling**: Always use `throw new ApiError(statusCode, message)` for error responses - never use manual `reply.status().send({ error: ... })`. The centralized Fastify error handler formats all errors consistently as `{ error: { message, type } }` and logs appropriately.
 - **Protected Routes & Authentication**: Routes under `/api/` are protected by the auth middleware which guarantees `request.user` and `request.organizationId` exist. Never add redundant null checks like `if (!request.organizationId) throw new ApiError(401, "Unauthorized")` - just use `request.organizationId` directly. The middleware handles authentication; routes handle authorization and business logic.
@@ -432,6 +382,12 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Automatically converts JSON tool results to TOON format before sending to LLM
 - Particularly useful for agents dealing with structured data from database or API tools
 
+**LLM Cost Billing Mode**:
+
+- Every interaction records a `billing_mode` (`metered` | `subscription`, default `metered`) alongside `cost`. `cost` stays the list-price estimate; **billed spend** = `cost` for metered rows, `0` for subscription rows. Never re-interpret `cost` as billed spend — derive billed spend with a `billing_mode = 'metered'` filter (statistics/session aggregations already do this).
+- Resolved at proxy write time by `resolveInteractionBillingMode` (`routes/proxy/utils/billing-mode.ts`) purely from the credential format via the provider adapter's `isSubscriptionCredential`: Anthropic OAuth access tokens (Claude Pro/Max, what Claude Code forwards) are `sk-ant-oat…` while metered API keys are `sk-ant-api…`. Applies uniformly to passthrough, virtual-key, and DB-managed keys — there is deliberately NO per-key billing configuration or UI. Gated by `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT` (default true). Bearer transport alone is NOT a signal (Workload Identity etc. stay metered).
+- Read sites split billed vs subscription: `statistics.getCostSavingsStatistics` (`totalSubscriptionCost` + per-bucket `subscriptionCost`), `interaction.getSessions` (`totalBilledCost`/`totalSubscriptionCost`). Frontend uses the `<BilledCost>` component. Metric `llm_cost_total` carries a `billing_mode` label. **Not yet billing-aware (documented follow-up): cost-based usage limits in `models/limit.ts`.**
+
 **Chat Feature**:
 
 - Agent-based conversations: Each conversation is tied to a specific agent
@@ -452,14 +408,23 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   - **Trusted (policy bypass)**: Archestra tools bypass tool invocation policies and trusted data policies — they are always allowed to execute without policy evaluation
   - **RBAC (user permissions) still enforced**: Every tool is mapped to a `{ resource, action }` permission in `TOOL_PERMISSIONS` (`archestra-mcp-server/rbac.ts`). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. `executeArchestraTool` performs a centralized RBAC check before executing any tool. When adding new tools, add the corresponding entry to `TOOL_PERMISSIONS` (the `Record<ArchestraToolShortName, ...>` type will cause a compile error if a tool is missing).
 
+**Skill Sandbox Runtime** (gated behind the sandbox feature flag):
+
+- DB-backed, Dagger-materialized execution sandbox for Agent Skills. Code lives in `backend/src/skills-sandbox/` (see its README for replay semantics and limits)
+- MCP tools exposed by `archestra-mcp-server/sandbox.ts` (`archestra-mcp-server/rbac.ts`): the execution tools (`run_command`, `upload_file`, `download_file`) are gated by `sandbox:execute`, the file tools (`search_files`, `read_file`, `save_file`, `edit_file`, `delete_file`) by `file:manage`. The execution tools accept a `target?: { fresh: true } | { id }` — omitted resolves a lazy per-conversation default sandbox:
+  - `run_command` — materializes the sandbox in a fresh Dagger container, replays the persisted ordered replay log, executes a command, appends it to the log. Python runs in a uv project at `/home/sandbox` (`python3` is the project venv; install packages with `uv add --project /home/sandbox <pkg>`)
+  - `upload_file` — writes an input file (chat attachment, base64, or text) into the sandbox as an ordered replay event so it materializes on later runs
+  - `download_file` — exports a file from a materialized sandbox into `skill_sandbox_files` (kind `artifact`) and returns a metadata reference (no download link; the file is reached via the chat Files panel, which fetches bytes from the `/api/skill-sandbox/artifacts/:id` route directly)
+- Chat attachments are auto-staged into the conversation's **default** sandbox under `/home/sandbox/attachments/` (idempotent, tracked via `skill_sandbox_files.source_attachment_id`), so the model uses user-attached files without knowing attachment ids. Over-limit attachments are skipped with a model-visible notice. `upload_file` stays the path for inline content, explicit paths, non-default sandboxes, and non-UI gateway clients
+- `load_skill` (and slash-command activation) mounts the skill's pinned version into the conversation's default sandbox when the sandbox is usable, so its scripts are runnable under `/skills/<name>`. This happens for both `load_skill` modes (name only, and name + path), so a file read also mounts the skill. `run_command`/`download_file` re-check that every mounted skill is still readable by the caller before building a container (fail-closed)
+- Source of truth is Postgres (`skill_sandboxes`, `skill_sandbox_skill_mounts`, `skill_sandbox_commands`, `skill_sandbox_files`, `skill_sandbox_replay_events`); skill bytes are versioned immutably in `skill_versions` + `skill_version_files` and mounts pin a `skill_version_id`. Dagger owns ephemeral filesystem state with no retention guarantee. Ordering across commands/uploads/mounts is the `skill_sandbox_replay_events` log, sequenced via `skill_sandboxes.next_replay_sequence`
+- Activation prompt (`skills/skill-activation.ts`) tells the model to inspect files with `load_skill` (passing a path) and use the sandbox tools to execute scripts. Each mounted skill root (`/skills/<name>`) is appended to `PYTHONPATH` (in `archestra-rs/sandbox-core/src/backends/dagger.rs`), so the model imports a skill's modules directly without `sys.path` edits. `run_command`'s cwd defaults to `/home/sandbox`, **not** the skill root, so a bundled script that reads its own files by relative path must be run with `cwd: /skills/<name>`
+
 **Testing**:
 
-- **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
+- **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing. Load the `archestra-dev-backend-tests` skill for mocking/stub/isolation rules — files without `vi.mock` run in a faster shared-worker vitest project, so prefer boundary mocks over module mocks
 - **Test What Matters**: Prefer behavior-focused tests over implementation-detail tests. Do not add tests that only assert class names, prop plumbing, or incidental markup unless that detail is itself the contract.
-- **E2E Tests**: Playwright with test fixtures pattern - import from `./fixtures` in API/UI test directories
-- **E2E Test Fixtures**:
-  - API fixtures: `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, `deleteTrustedDataPolicy`
-  - UI fixtures: `goToPage`, `makeRandomString`
+- **E2E Tests**: Load the `archestra-dev-e2e` skill for Playwright tests, fixtures, WireMock setup, local/CI behavior, and locator guidance.
 - **Backend Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`, `seedAndAssignArchestraTools`
 
 **Backend Test Fixtures Usage**:
@@ -474,50 +439,5 @@ test("example test", async ({ makeUser, makeOrganization, makeTeam }) => {
   // test logic...
 });
 ```
-
-**E2E Test Fixtures Usage**:
-
-```typescript
-import { test } from "./fixtures";
-
-test("API example", async ({ request, createAgent, deleteAgent }) => {
-  const response = await createAgent(request, "Test Agent");
-  const agent = await response.json();
-  // test logic...
-  await deleteAgent(request, agent.id);
-});
-```
-
-**Playwright Locator Best Practices**:
-
-Prefer Playwright's recommended locators over raw `locator()` calls. In priority order:
-
-1. `page.getByRole()` - Accessible elements by ARIA role (buttons, links, headings, etc.)
-2. `page.getByText()` - Find by text content
-3. `page.getByLabel()` - Form controls by label
-4. `page.getByPlaceholder()` - Input elements by placeholder
-5. `page.getByTestId()` - Custom test IDs (use `E2eTestId` constants from `@shared`)
-
-Avoid:
-
-- Raw CSS selectors: `page.locator('.my-class')` or `page.locator('#my-id')`
-- XPath selectors
-- Arbitrary timeouts - use Playwright's auto-waiting instead
-
-Example:
-
-```typescript
-// Good
-await page.getByRole("button", { name: /Submit/i }).click();
-await page.getByLabel(/Email/i).fill("test@example.com");
-await page.getByTestId(E2eTestId.CreateAgentButton).click();
-
-// Avoid
-await page.locator(".submit-btn").click();
-await page.locator("#email-input").fill("test@example.com");
-await page.waitForTimeout(1000); // Use auto-waiting instead
-```
-
-Reference: https://playwright.dev/docs/locators#quick-guide
 
 - never amend commits

@@ -1,9 +1,9 @@
-import type { IdpRoleMappingConfig } from "@shared";
+import type { IdpRoleMappingConfig } from "@archestra/shared";
 import {
   IDENTITY_TRUSTED_PROVIDER_IDS,
   MEMBER_ROLE_NAME,
   OAUTH_TOKEN_TYPE,
-} from "@shared";
+} from "@archestra/shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";
@@ -15,41 +15,10 @@ import IdentityProviderModel, {
   type IdpGetRoleData,
 } from "./identity-provider.ee";
 
-// Mock the logger to avoid console output during tests
-vi.mock("@/logging", () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
-// Mock cacheManager for SSO groups caching tests (preserves LRUCacheManager, CacheKey exports)
-const mockCacheStore = new Map<string, unknown>();
-vi.mock("@/cache-manager", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/cache-manager")>();
-  return {
-    ...actual,
-    cacheManager: {
-      get: vi.fn(async (key: string) => mockCacheStore.get(key)),
-      set: vi.fn(async (key: string, value: unknown, _ttl?: number) => {
-        mockCacheStore.set(key, value);
-        return value;
-      }),
-      delete: vi.fn(async (key: string) => {
-        const existed = mockCacheStore.has(key);
-        mockCacheStore.delete(key);
-        return existed;
-      }),
-      getAndDelete: vi.fn(async (key: string) => {
-        const value = mockCacheStore.get(key);
-        mockCacheStore.delete(key);
-        return value;
-      }),
-    },
-  };
-});
+// The canonical Map-backed fake from src/__mocks__/cache-manager.ts backs the
+// SSO groups caching tests (preserves LRUCacheManager, CacheKey exports); the
+// store resets before every test.
+vi.mock("@/cache-manager");
 
 const mockProvider = {
   id: "test-provider-id",
@@ -848,6 +817,40 @@ describe("IdentityProviderModel", () => {
 
       await makeIdentityProvider(org.id, { providerId: "Okta" });
 
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
+    });
+
+    test("caches the trusted provider list until an identity provider write clears it", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      // Prime the cache before any custom provider exists.
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
+
+      // A row inserted behind the model's back stays invisible while the
+      // cached list is live...
+      const provider = await makeIdentityProvider(org.id, {
+        providerId: "cached-oidc",
+        oidcConfig: { clientId: "client-id" },
+      });
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
+
+      // ...a model write clears the cache, so the next read sees it...
+      await IdentityProviderModel.update(provider.id, {}, org.id);
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS, "cached-oidc"]);
+
+      // ...and delete clears it again.
+      await IdentityProviderModel.delete(provider.id, org.id);
       await expect(
         IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
       ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);

@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_ADMIN_EMAIL } from "@shared";
+import { DEFAULT_ADMIN_EMAIL } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import {
@@ -22,7 +22,7 @@ import {
   useHasPermissions,
   useSession,
 } from "@/lib/auth/auth.query";
-import { useDisableBasicAuth, useFeature } from "@/lib/config/config.query";
+import { useDisableBasicAuth } from "@/lib/config/config.query";
 import { cn } from "@/lib/utils";
 
 export function SidebarWarningsAccordion() {
@@ -30,20 +30,12 @@ export function SidebarWarningsAccordion() {
   const userEmail = session?.user?.email;
   const { data: defaultCredentialsEnabled, isLoading: isLoadingCreds } =
     useDefaultCredentialsEnabled();
-  const globalToolPolicy = useFeature("globalToolPolicy");
   const disableBasicAuth = useDisableBasicAuth();
   const { data: canUpdateOrg } = useHasPermissions({
     organization: ["update"],
   });
-  const { data: canUpdateAgentSettings } = useHasPermissions({
-    agentSettings: ["update"],
-  });
   const { state: sidebarState } = useSidebar();
 
-  const isPermissive = globalToolPolicy === "permissive";
-
-  const showSecurityEngineWarning =
-    !!session && canUpdateAgentSettings === true && isPermissive;
   const showDefaultCredsWarning =
     canUpdateOrg === true &&
     disableBasicAuth === false &&
@@ -55,11 +47,7 @@ export function SidebarWarningsAccordion() {
   const warnings = [
     showDefaultCredsWarning && {
       label: "Change default credentials",
-      href: "/settings/account?highlight=change-password",
-    },
-    showSecurityEngineWarning && {
-      label: "Enable security engine",
-      href: "/mcp/tool-guardrails",
+      href: "/account?highlight=change-password",
     },
   ].filter((w): w is { label: string; href: string } => Boolean(w));
 

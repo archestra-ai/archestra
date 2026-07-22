@@ -1,16 +1,26 @@
 export { anthropicAdapterFactory } from "./anthropic";
+export { archestraAdapterFactory } from "./archestra";
 export { azureAdapterFactory } from "./azure";
 export { azureResponsesAdapterFactory } from "./azure-responses";
 export { bedrockAdapterFactory } from "./bedrock";
+export { bedrockInvokeAdapterFactory } from "./bedrock-invoke";
 export { cerebrasAdapterFactory } from "./cerebras";
 export { cohereAdapterFactory } from "./cohere";
 export { deepseekAdapterFactory } from "./deepseek";
 export { geminiAdapterFactory } from "./gemini";
+export { geminiEmbeddingsAdapterFactory } from "./gemini-embeddings";
+export { githubCopilotAdapterFactory } from "./github-copilot";
 export { groqAdapterFactory } from "./groq";
+export { kimiAdapterFactory } from "./kimi";
+export { microsoft365CopilotAdapterFactory } from "./microsoft-365-copilot";
 export { minimaxAdapterFactory } from "./minimax";
 export { mistralAdapterFactory } from "./mistral";
 export { ollamaAdapterFactory } from "./ollama";
-export { openaiAdapterFactory } from "./openai";
+export {
+  makeOpenAiCompatibleEmbeddingsAdapterFactory,
+  openAiEmbeddingsAdapterFactory,
+  openaiAdapterFactory,
+} from "./openai";
 export { openAiResponsesAdapterFactory } from "./openai-responses";
 export { openrouterAdapterFactory } from "./openrouter";
 export { perplexityAdapterFactory } from "./perplexity";

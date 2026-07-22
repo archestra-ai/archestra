@@ -1,4 +1,4 @@
-import { archestraApiSdk, type ErrorExtended } from "@shared";
+import { archestraApiSdk, type ErrorExtended } from "@archestra/shared";
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import {
@@ -50,6 +50,7 @@ export default async function ToolGuardrailsPage() {
           sortBy: DEFAULT_SORT_BY,
           sortDirection: DEFAULT_SORT_DIRECTION,
           excludeArchestraTools: true,
+          includeKnowledgeSourcesTool: true,
         },
       }),
       archestraApiSdk.getInternalMcpCatalog({ headers }),

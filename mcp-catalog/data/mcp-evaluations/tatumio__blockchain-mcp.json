@@ -1,0 +1,90 @@
+{
+  "name": "tatumio__blockchain-mcp",
+  "display_name": "blockchain-mcp",
+  "description": "MCP server from tatumio/blockchain-mcp",
+  "author": {
+    "name": "tatumio"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@tatumio/blockchain-mcp"],
+    "env": {
+      "TATUM_API_KEY": "${user_config.tatum_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "tatum_api_key": {
+      "type": "string",
+      "title": "Tatum API Key",
+      "description": "Your API key from Tatum Dashboard.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Blockchain MCP powered by Tatum\n\n[![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-blue)](https://modelcontextprotocol.io)\n[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)\n[![NPM Version](https://img.shields.io/npm/v/%40tatumio%2Fblockchain-mcp)](https://www.npmjs.com/package/@tatumio/blockchain-mcp)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\nA Model Context Protocol (MCP) server that provides access to the Tatum Blockchain Data API and RPC Gateway, enabling any LLM to read and write blockchain data across **130+ networks**. Visit [official MCP webpage](https://tatum.io/mcp) for more details and to get your Tatum API key. \n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=tatumio&config=eyJjb21tYW5kIjoibnB4IEB0YXR1bWlvL2Jsb2NrY2hhaW4tbWNwIiwiZW52Ijp7IlRBVFVNX0FQSV9LRVkiOiJZT1VSX0FQSV9LRVkifX0%3D)\n\n## 🚀 Features\n\n- **130+ Blockchain Networks**: Bitcoin, Ethereum, Solana, Polygon, Arbitrum, Base, Avalanche, and many more.\n- 🔗 **Blockchain Data API**: Blocks, transactions, balances, network info, and more. \n- 🌐 **RPC Gateway**: Direct access to blockchain RPC endpoints. \n\n## 📦 Installation\n\n### Global Installation (Recommended)\n\n```bash\nnpm install -g @tatumio/blockchain-mcp\n```\n\n### Local Installation\n\n```bash\nnpm install @tatumio/blockchain-mcp\n```\n\n## 🔑 Getting Started\n\n### 1. Get Your API Key\n\nGet your free API key from [Tatum Dashboard](https://dashboard.tatum.io).\n\n### 2. MCP Client Integration\n\nAdd this server to your MCP client configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"tatumio\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@tatumio/blockchain-mcp\"\n      ],\n      \"env\": {\n        \"TATUM_API_KEY\": \"YOUR_API_KEY\"\n      }\n    }\n  }\n}\n```\n\n## 🛠️ Available Tools\n\n### Blockchain Data (10 tools)\n\n- **get_metadata** - Fetch NFT/multitoken metadata by address and IDs\n- **get_wallet_balance_by_time** - Get wallet balance at specific time\n- **get_wallet_portfolio** - Get comprehensive wallet portfolio\n- **get_owners** - Get owners of NFT/token\n- **check_owner** - Check if address owns specific token\n- **get_transaction_history** - Get transaction history for address\n- **get_block_by_time** - Get block information by timestamp\n- **get_tokens** - Get tokens for specific wallet\n- **check_malicous_address** - Check if address is malicious\n- **get_exchange_rate** - Get real-time exchange rates\n\n### RPC Gateways (4 tools)\n\n- **gateway_get_supported_chains** - Get all supported blockchain networks\n- **gateway_get_supported_methods** - Get supported RPC methods for chain\n- **gateway_execute_rpc** - Execute RPC calls on any supported chain\n\n## 🌐 Supported Networks\n\n### EVM-Compatible (69 networks)\n\n- **Ethereum**: Mainnet, Sepolia, Holesky\n- **Layer 2**: Polygon, Arbitrum, Optimism, Base\n- **Sidechains**: BSC, Avalanche, Fantom\n- **Enterprise**: Celo, Palm, Gnosis\n- **Gaming**: Ronin, Chiliz\n\n### Non-EVM (61 networks)\n\n- **Bitcoin**: Mainnet, Testnet, Signet\n- **Alternative Coins**: Litecoin, Dogecoin, Bitcoin Cash\n- **Smart Contract Platforms**: Solana, Cardano, Tezos\n- **Enterprise**: Stellar, Ripple, EOS\n\n## 📖 Documentation\n\n- [Tatum API Documentation](https://docs.tatum.io)\n- [Model Context Protocol](https://modelcontextprotocol.io)\n- [Blockchain Networks](https://docs.tatum.io/docs/supported-blockchains)\n- [API Reference](https://docs.tatum.io/reference)\n\n\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n## 🏢 About Tatum\n\nTatum is a blockchain development platform that provides APIs, SDKs, and tools for building blockchain applications. Learn more at [tatum.io](https://tatum.io).\n\n---\n\n**Made with ❤️ by the Tatum team**\n",
+  "category": "Development",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "tatumio-blockchain-mcp-configured": {
+        "command": "npx",
+        "args": ["@tatumio/blockchain-mcp"],
+        "env": {
+          "TATUM_API_KEY": "YOUR_API_KEY"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tatumio",
+    "repo": "blockchain-mcp",
+    "url": "https://github.com/tatumio/blockchain-mcp",
+    "name": "blockchain-mcp",
+    "path": null,
+    "stars": 7,
+    "contributors": 4,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "9fa178bbaee1d7930c64a14dbd3d6a24944835a4"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:16.611Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@tatumio/blockchain-mcp\",\n  \"version\": \"1.0.4\",\n  \"description\": \"Model Context Protocol server providing access to Tatum's comprehensive blockchain API across 130+ networks with 13 tools\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"blockchain-mcp\": \"dist/cli.js\",\n    \"blockchain-mcp-server\": \"dist/cli.js\"\n  },\n  \"files\": [\n    \"dist/**/*\",\n    \"features/**/*\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"npm run clean && tsc\",\n    \"prepublishOnly\": \"npm run build\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"ts-node src/index.ts\",\n    \"watch\": \"tsc --watch\",\n    \"clean\": \"rm -rf dist\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"blockchain\",\n    \"tatum\",\n    \"api\",\n    \"typescript\",\n    \"ethereum\",\n    \"bitcoin\",\n    \"polygon\",\n    \"arbitrum\",\n    \"base\",\n    \"avalanche\",\n    \"web3\",\n    \"defi\",\n    \"nft\",\n    \"rpc\",\n    \"gateway\"\n  ],\n  \"author\": \"Tatum <support@tatum.io>\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/tatumio/blockchain-mcp.git\"\n  },\n  \"homepage\": \"https://docs.tatum.io\",\n  \"bugs\": {\n    \"url\": \"https://github.com/tatumio/blockchain-mcp/issues\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.5.0\",\n    \"axios\": \"^1.6.0\",\n    \"dotenv\": \"^16.3.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.10.2\",\n    \"ts-node\": \"^10.9.0\",\n    \"typescript\": \"^5.0.0\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}"
+}

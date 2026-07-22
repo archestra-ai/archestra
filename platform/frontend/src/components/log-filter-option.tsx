@@ -1,7 +1,12 @@
 "use client";
 
-import type { archestraApiTypes, InteractionSource } from "@shared";
+import type {
+  archestraApiTypes,
+  InteractionSource,
+  SupportedProvider,
+} from "@archestra/shared";
 import { AgentIcon } from "@/components/agent-icon";
+import { ProviderIcon } from "@/components/provider-icon";
 import { SourceLabel } from "@/components/source-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -30,6 +35,22 @@ export function SourceFilterOption({ source }: { source: InteractionSource }) {
   return (
     <span className="flex items-center min-w-0">
       <SourceLabel source={source} className="flex items-center min-w-0" />
+    </span>
+  );
+}
+
+export function ClientFilterOption({
+  label,
+  provider,
+}: {
+  label: string;
+  provider: SupportedProvider;
+}) {
+  // Each client maps to its vendor logo (Claude → Anthropic, Codex → OpenAI).
+  return (
+    <span className="flex items-center gap-2 min-w-0">
+      <ProviderIcon provider={provider} size={16} />
+      <span className="truncate">{label}</span>
     </span>
   );
 }

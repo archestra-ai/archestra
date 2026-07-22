@@ -11,37 +11,23 @@ const { mockFetch } = vi.hoisted(() => ({
   mockFetch: vi.fn(),
 }));
 
-// Mock global fetch
+// Mock global fetch. The config's `unstubGlobals` removes stubs after every
+// test, so re-apply before each one; the top-level stub covers import time.
 vi.stubGlobal("fetch", mockFetch);
+beforeEach(() => {
+  vi.stubGlobal("fetch", mockFetch);
+});
 
 // Import after mock is defined
-import { modelsDevClient } from "./models-dev-client";
+import {
+  ModelsDevClient,
+  modelsDevClient,
+  sanitizeOutputLimit,
+} from "./models-dev-client";
 
-// Mock the cache manager to avoid "CacheManager: Not started" errors
-vi.mock("@/cache-manager", () => {
-  class MockLRUCacheManager {
-    get() {
-      return undefined;
-    }
-    set() {}
-    delete() {
-      return true;
-    }
-    has() {
-      return false;
-    }
-    clear() {}
-  }
-
-  return {
-    CacheKey: { ModelsDevSync: "models-dev-sync" },
-    cacheManager: {
-      get: vi.fn().mockResolvedValue(undefined),
-      set: vi.fn().mockResolvedValue(undefined),
-    },
-    LRUCacheManager: MockLRUCacheManager,
-  };
-});
+// The canonical Map-backed fake from src/__mocks__/cache-manager.ts avoids
+// "CacheManager: Not started" errors; the store resets before every test.
+vi.mock("@/cache-manager");
 
 /**
  * Helper to create a mock models.dev model object
@@ -103,6 +89,9 @@ function createMockApiResponse(
 describe("ModelsDevClient", () => {
   beforeEach(() => {
     mockFetch.mockReset();
+    // The singleton caches fetched responses in memory; clear between tests
+    // so each case controls its own fetch behavior.
+    modelsDevClient.clearFetchCache();
   });
 
   afterEach(async () => {
@@ -146,6 +135,135 @@ describe("ModelsDevClient", () => {
       const result = await modelsDevClient.fetchModelsFromApi();
 
       expect(result).toEqual({});
+    });
+  });
+
+  describe("fetch caching", () => {
+    function mockSuccessfulFetchOnce(response: ModelsDevApiResponse) {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(response),
+      });
+    }
+
+    test("second call within TTL reuses the cached response", async () => {
+      const mockResponse = createMockApiResponse({
+        openai: createMockProvider("openai", {
+          "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
+        }),
+      });
+      mockSuccessfulFetchOnce(mockResponse);
+
+      const first = await modelsDevClient.fetchModelsFromApi();
+      const second = await modelsDevClient.fetchModelsFromApi();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(second).toBe(first);
+      expect(second.openai.models["gpt-4o"].name).toBe("GPT-4o");
+    });
+
+    test("refetches after the cache TTL expires", async () => {
+      const mockResponse = createMockApiResponse({
+        openai: createMockProvider("openai", {
+          "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
+        }),
+      });
+      mockSuccessfulFetchOnce(mockResponse);
+      await modelsDevClient.fetchModelsFromApi();
+
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.advanceTimersByTime(6 * 60 * 1000);
+        mockSuccessfulFetchOnce(mockResponse);
+        await modelsDevClient.fetchModelsFromApi();
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test("concurrent calls share a single in-flight fetch", async () => {
+      const mockResponse = createMockApiResponse({
+        openai: createMockProvider("openai", {
+          "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
+        }),
+      });
+      let resolveFetch!: (value: unknown) => void;
+      mockFetch.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFetch = resolve;
+          }),
+      );
+
+      const firstCall = modelsDevClient.fetchModelsFromApi();
+      const secondCall = modelsDevClient.fetchModelsFromApi();
+      resolveFetch({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+      const [first, second] = await Promise.all([firstCall, secondCall]);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(second).toEqual(first);
+      expect(first.openai.models["gpt-4o"].name).toBe("GPT-4o");
+    });
+
+    test("does not cache the empty error result", async () => {
+      mockFetch.mockRejectedValueOnce(new Error("Network Error"));
+
+      const failed = await modelsDevClient.fetchModelsFromApi();
+      expect(failed).toEqual({});
+
+      const mockResponse = createMockApiResponse({
+        openai: createMockProvider("openai", {
+          "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
+        }),
+      });
+      mockSuccessfulFetchOnce(mockResponse);
+
+      const recovered = await modelsDevClient.fetchModelsFromApi();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(recovered.openai).toBeDefined();
+    });
+
+    test("does not cache the raw fallback when schema validation fails", async () => {
+      // A provider value that is not an object fails schema validation; the
+      // raw fallback is returned but not cached, so a retry refetches instead
+      // of reusing a potentially malformed payload for the whole TTL.
+      const invalidPayload = { openai: "not-a-provider-object" };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(invalidPayload),
+      });
+
+      const first = await modelsDevClient.fetchModelsFromApi();
+      const second = await modelsDevClient.fetchModelsFromApi();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(first).toEqual(invalidPayload);
+      expect(second).toEqual(invalidPayload);
+    });
+  });
+
+  describe("fetch timeout", () => {
+    test("aborts a hanging fetch and returns an empty result", async () => {
+      const client = new ModelsDevClient({ fetchTimeoutMs: 10 });
+      mockFetch.mockImplementationOnce(
+        (_url: string, options: { signal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener("abort", () =>
+              reject(options.signal.reason),
+            );
+          }),
+      );
+
+      const result = await client.fetchModelsFromApi();
+
+      expect(result).toEqual({});
+      const fetchOptions = mockFetch.mock.calls[0][1];
+      expect(fetchOptions.signal).toBeInstanceOf(AbortSignal);
     });
   });
 
@@ -210,6 +328,7 @@ describe("ModelsDevClient", () => {
       expect(result?.modelId).toBe("gpt-4o");
       expect(result?.description).toBe("GPT-4o");
       expect(result?.contextLength).toBe(128000);
+      expect(result?.outputLength).toBe(16384);
       expect(result?.inputModalities).toEqual(["text", "image", "pdf"]);
       expect(result?.outputModalities).toEqual(["text"]);
       expect(result?.supportsToolCalling).toBe(true);
@@ -271,6 +390,35 @@ describe("ModelsDevClient", () => {
       const result = modelsDevClient.convertToModel("openai", model);
 
       expect(result?.contextLength).toBeNull();
+      expect(result?.outputLength).toBeNull();
+    });
+
+    test("drops an invalid output limit to null", () => {
+      const model = createMockModel({
+        id: "test-model",
+        limit: { context: 128000, output: 0 },
+      });
+
+      const result = modelsDevClient.convertToModel("openai", model);
+
+      expect(result?.outputLength).toBeNull();
+    });
+  });
+
+  describe("sanitizeOutputLimit", () => {
+    test("keeps positive integers", () => {
+      expect(sanitizeOutputLimit(16384)).toBe(16384);
+      expect(sanitizeOutputLimit(1)).toBe(1);
+    });
+
+    test("drops zero, negative, non-integer, null and undefined", () => {
+      expect(sanitizeOutputLimit(0)).toBeNull();
+      expect(sanitizeOutputLimit(-100)).toBeNull();
+      expect(sanitizeOutputLimit(1.5)).toBeNull();
+      expect(sanitizeOutputLimit(Number.NaN)).toBeNull();
+      expect(sanitizeOutputLimit(Number.POSITIVE_INFINITY)).toBeNull();
+      expect(sanitizeOutputLimit(null)).toBeNull();
+      expect(sanitizeOutputLimit(undefined)).toBeNull();
     });
   });
 

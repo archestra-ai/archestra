@@ -1,3 +1,4 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   type ArchestraMcpIdentityOptions,
@@ -7,7 +8,9 @@ import {
   getArchestraToolFullName,
   getArchestraToolPrefix,
   getArchestraToolShortName,
-} from "@shared";
+  isLikelyArchestraToolName,
+  POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES,
+} from "@archestra/shared";
 import config from "@/config";
 import type { Organization } from "@/types";
 
@@ -36,11 +39,15 @@ class ArchestraMcpBranding {
     return getArchestraToolPrefix(this.identity);
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   get iconLogo(): string | null {
     return config.enterpriseFeatures.fullWhiteLabeling
       ? this.state.iconLogo
       : null;
   }
+  // SPDX-SnippetEnd
 
   get allowedServerNames(): string[] {
     return Array.from(
@@ -73,6 +80,35 @@ class ArchestraMcpBranding {
 
   isToolName(toolName: string): boolean {
     return this.getToolShortName(toolName) !== null;
+  }
+
+  /**
+   * Looser recognizer for the LLM-proxy auto-discovery filter ONLY: matches
+   * gateway tool names that MCP clients have decorated with their own labels
+   * (e.g. `archestra_staging__my_mcp_gateway_1234567__run_tool`), which the
+   * strict {@link isToolName} misses. Never use for dispatch, RBAC, or policy
+   * decisions — those must stay strict.
+   */
+  isLikelyToolName(toolName: string): boolean {
+    return isLikelyArchestraToolName(toolName, {
+      ...this.identity,
+      includeDefaultPrefix: true,
+    });
+  }
+
+  /**
+   * True when the tool is a built-in that bypasses tool invocation and
+   * trusted data policies. Most built-ins do; the ones in
+   * {@link POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES} (e.g.
+   * `query_knowledge_sources`, whose results can carry prompt injection from
+   * knowledge-base content) are evaluated like external tools instead.
+   */
+  isPolicyBypassedToolName(toolName: string): boolean {
+    const shortName = this.getToolShortName(toolName);
+    return (
+      shortName !== null &&
+      !POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES.has(shortName)
+    );
   }
 
   private state: ArchestraBrandingState = {

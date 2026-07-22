@@ -1,0 +1,86 @@
+{
+  "name": "cantian-ai__bazi-mcp",
+  "display_name": "Bazi Fortune Telling",
+  "description": "MCP server for Bazi (八字) information",
+  "author": {
+    "name": "cantian-ai"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["bazi-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Bazi MCP (八字 MCP) by Cantian AI\n\n[![smithery badge](https://smithery.ai/badge/@cantian-ai/bazi-mcp)](https://smithery.ai/server/@cantian-ai/bazi-mcp)\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/453ac410-d93a-45fb-8563-7d3cccfbe956)\n\nUnlock precise Bazi insights with the **Bazi MCP**, the first AI-powered Bazi calculator. Built to address inaccuracies in existing AI fortune-telling tools like GPT and DeepSeek, our MCP delivers reliable Bazi data for personality analysis, destiny forecasting, and more.\n\n### Why Bazi MCP?\n\n- **Accurate Bazi Calculations**: Provide insightful Bazi information.\n- **AI Agent Integration**: Empowers AI agents with precise Bazi data.\n- **Community-Driven**: Join enthusiasts to advance Chinese metaphysics.\n\nOriginating from the popular [_Chinese Bazi Fortune Teller_](https://chatgpt.com/g/g-67c3f7b74d148191a2167f44fd13412d-chinese-bazi-fortune-teller-can-tian-ba-zi-suan-ming-jing-zhun-pai-pan-jie-du) GPTs in the GPT Store, this project is now integrated with **Cantian AI** ([cantian.ai](https://cantian.ai)). We invite Bazi practitioners and AI enthusiasts to collaborate, share insights, and contribute to our open-source community.\n\n### Get Involved\n\n- **Contact**: [support@cantian.ai](mailto:support@cantian.ai)\n\n## 中文\n\n**八字 MCP**是参天 AI 推出的首个面向玄学领域的 MCP，针对 GPT 和 DeepSeek 等算命工具常出现的排盘错误，提供精准的八字数据，助力性格分析、命运预测等应用。\n\n### 八字 MCP 亮点\n\n- **精准排盘**：提供全面的八字排盘信息。\n- **AI 赋能**：为 AI 智能体提供可靠八字服务。\n- **社区共建**：欢迎命理爱好者参与交流与开发。\n\n项目源于 GPT Store 热门应用[_Chinese Bazi Fortune Teller_](https://chatgpt.com/g/g-67c3f7b74d148191a2167f44fd13412d-chinese-bazi-fortune-teller-can-tian-ba-zi-suan-ming-jing-zhun-pai-pan-jie-du)，现已融入**参天 AI**平台 ([cantian.ai](https://cantian.ai))。我们诚邀命理研究者与 AI 开发者加入，共同推动中国传统文化的传承与创新。\n\n### 联系我们\n\n- **邮箱**：[support@cantian.ai](mailto:support@cantian.ai)\n- **微信**：\n\n  <img src=\"https://github.com/user-attachments/assets/7790b64e-e03f-47e2-b824-38459549a6d8\" alt=\"WeChat QR Code\" width=\"200\"/>\n\n## 前置需求 ｜ Prerequisite\n\nNode.js 22 版本或以上。\n\nNode.js 22 or above.\n\n## 开始使用 ｜ Start\n\n配置 AI 应用（例如 Claude Descktop）。\n\nConfigure AI application (e.g. Claude Desktop).\n\n```json\n{\n  \"mcpServers\": {\n    \"Bazi\": {\n      \"command\": \"npx\",\n      \"args\": [\"bazi-mcp\"]\n    }\n  }\n}\n```\n\n### Installing via Smithery\n\nTo install bazi-mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@cantian-ai/bazi-mcp):\n\n```bash\nnpx -y @smithery/cli install @cantian-ai/bazi-mcp --client claude\n```\n\n## 工具列表 | Tools\n\n### getBaziDetail\n\n> 根据给定的公历或农历时间计算八字信息。\n> Calculate the Bazi results based on the solar/lunar datetime.\n\n#### 参数 | Arguments\n\n- solarDatetime: `String`\n\n  > ISO 格式的阳历时间。例如：`2000-05-15T12:00:00+08:00`。  \n  > Solar datetime in ISO format. Example: `2000-05-15T12:00:00+08:00`.\n\n- lunarDatetime: `String`\n\n  > 农历时间。例如：`2000-05-15 12:00:00`。  \n  > Lunar datetime. Example: `2000-05-15 12:00:00`.\n\n- gender: `Number`\n\n  > 性别。可选。0 - 女，1-男。默认 1。  \n  > Gender. Optional. 0 for female, 1 for male. 1 by default.\n\n- eightCharProviderSect： `Number`\n\n  > 早晚子时配置。可选。1 - 表示 23:00-23:59 日干支为明天，2 - 表示 23:00-23:59 日干支为当天。默认 2。\n  > Configuration for eight char provider. Optional. 1 for meaning the day stem of 23:00-23:59 is for tomorrow, 2 for meaning the day stem of 23:00-23:59 is for today. 2 by default.\n\n#### 结果示例 ｜ Result example\n\n```json\n{\n  \"性别\": \"男\",\n  \"阳历\": \"1998年7月31日 14:10:00\",\n  \"农历\": \"农历戊寅年六月初九辛未时\",\n  \"八字\": \"戊寅 己未 己卯 辛未\",\n  \"生肖\": \"虎\",\n  \"日主\": \"己\",\n  \"年柱\": {\n    \"天干\": {\n      \"天干\": \"戊\",\n      \"五行\": \"土\",\n      \"阴阳\": \"阳\",\n      \"十神\": \"劫财\"\n    },\n    \"地支\": {\n      \"地支\": \"寅\",\n      \"五行\": \"木\",\n      \"阴阳\": \"阳\",\n      \"藏干\": {\n        \"主气\": {\n          \"天干\": \"甲\",\n          \"十神\": \"正官\"\n        },\n        \"中气\": {\n          \"天干\": \"丙\",\n          \"十神\": \"正印\"\n        },\n        \"余气\": {\n          \"天干\": \"戊\",\n          \"十神\": \"劫财\"\n        }\n      }\n    },\n    \"纳音\": \"城头土\",\n    \"旬\": \"甲戌\",\n    \"空亡\": \"申酉\",\n    \"星运\": \"死\",\n    \"自坐\": \"长生\"\n  },\n  \"月柱\": {\n    \"天干\": {\n      \"天干\": \"己\",\n      \"五行\": \"土\",\n      \"阴阳\": \"阴\",\n      \"十神\": \"比肩\"\n    },\n    \"地支\": {\n      \"地支\": \"未\",\n      \"五行\": \"土\",\n      \"阴阳\": \"阴\",\n      \"藏干\": {\n        \"主气\": {\n          \"天干\": \"己\",\n          \"十神\": \"比肩\"\n        },\n        \"中气\": {\n          \"天干\": \"丁\",\n          \"十神\": \"偏印\"\n        },\n        \"余气\": {\n          \"天干\": \"乙\",\n          \"十神\": \"七杀\"\n        }\n      }\n    },\n    \"纳音\": \"天上火\",\n    \"旬\": \"甲寅\",\n    \"空亡\": \"子丑\",\n    \"星运\": \"冠带\",\n    \"自坐\": \"冠带\"\n  },\n  \"日柱\": {\n    \"天干\": {\n      \"天干\": \"己\",\n      \"五行\": \"土\",\n      \"阴阳\": \"阴\"\n    },\n    \"地支\": {\n      \"地支\": \"卯\",\n      \"五行\": \"木\",\n      \"阴阳\": \"阴\",\n      \"藏干\": {\n        \"主气\": {\n          \"天干\": \"乙\",\n          \"十神\": \"七杀\"\n        }\n      }\n    },\n    \"纳音\": \"城头土\",\n    \"旬\": \"甲戌\",\n    \"空亡\": \"申酉\",\n    \"星运\": \"病\",\n    \"自坐\": \"病\"\n  },\n  \"时柱\": {\n    \"天干\": {\n      \"天干\": \"辛\",\n      \"五行\": \"金\",\n      \"阴阳\": \"阴\",\n      \"十神\": \"食神\"\n    },\n    \"地支\": {\n      \"地支\": \"未\",\n      \"五行\": \"土\",\n      \"阴阳\": \"阴\",\n      \"藏干\": {\n        \"主气\": {\n          \"天干\": \"己\",\n          \"十神\": \"比肩\"\n        },\n        \"中气\": {\n          \"天干\": \"丁\",\n          \"十神\": \"偏印\"\n        },\n        \"余气\": {\n          \"天干\": \"乙\",\n          \"十神\": \"七杀\"\n        }\n      }\n    },\n    \"纳音\": \"路旁土\",\n    \"旬\": \"甲子\",\n    \"空亡\": \"戌亥\",\n    \"星运\": \"冠带\",\n    \"自坐\": \"衰\"\n  },\n  \"胎元\": \"庚戌\",\n  \"胎息\": \"甲戌\",\n  \"命宫\": \"乙卯\",\n  \"身宫\": \"乙卯\",\n  \"神煞\": {\n    \"年柱\": [\"国印\", \"亡神\"],\n    \"月柱\": [\"天德合\", \"月德合\", \"天乙贵人\", \"太极贵人\", \"福星贵人\", \"金舆\", \"血刃\", \"华盖\", \"天喜\", \"元辰\"],\n    \"日柱\": [\"天德合\", \"月德合\", \"桃花\", \"九丑\", \"童子煞\"],\n    \"时柱\": [\"天乙贵人\", \"太极贵人\", \"福星贵人\", \"金舆\", \"血刃\", \"华盖\", \"天喜\", \"元辰\", \"童子煞\"]\n  },\n  \"大运\": {\n    \"起运年龄\": 4,\n    \"起运日期\": \"2001-1-26\",\n    \"大运\": [\n      {\n        \"干支\": \"庚申\",\n        \"开始年份\": 2001,\n        \"结束\": 2010,\n        \"天干十神\": \"伤官\",\n        \"地支十神\": [\"伤官\", \"正财\", \"劫财\"],\n        \"地支藏干\": [\"庚\", \"壬\", \"戊\"],\n        \"开始年龄\": 4,\n        \"结束年龄\": 13\n      },\n      {\n        \"干支\": \"辛酉\",\n        \"开始年份\": 2011,\n        \"结束\": 2020,\n        \"天干十神\": \"食神\",\n        \"地支十神\": [\"食神\"],\n        \"地支藏干\": [\"辛\"],\n        \"开始年龄\": 14,\n        \"结束年龄\": 23\n      },\n      {\n        \"干支\": \"壬戌\",\n        \"开始年份\": 2021,\n        \"结束\": 2030,\n        \"天干十神\": \"正财\",\n        \"地支十神\": [\"劫财\", \"食神\", \"偏印\"],\n        \"地支藏干\": [\"戊\", \"辛\", \"丁\"],\n        \"开始年龄\": 24,\n        \"结束年龄\": 33\n      },\n      {\n        \"干支\": \"癸亥\",\n        \"开始年份\": 2031,\n        \"结束\": 2040,\n        \"天干十神\": \"偏财\",\n        \"地支十神\": [\"正财\", \"正官\"],\n        \"地支藏干\": [\"壬\", \"甲\"],\n        \"开始年龄\": 34,\n        \"结束年龄\": 43\n      },\n      {\n        \"干支\": \"甲子\",\n        \"开始年份\": 2041,\n        \"结束\": 2050,\n        \"天干十神\": \"正官\",\n        \"地支十神\": [\"偏财\"],\n        \"地支藏干\": [\"癸\"],\n        \"开始年龄\": 44,\n        \"结束年龄\": 53\n      },\n      {\n        \"干支\": \"乙丑\",\n        \"开始年份\": 2051,\n        \"结束\": 2060,\n        \"天干十神\": \"七杀\",\n        \"地支十神\": [\"比肩\", \"偏财\", \"食神\"],\n        \"地支藏干\": [\"己\", \"癸\", \"辛\"],\n        \"开始年龄\": 54,\n        \"结束年龄\": 63\n      },\n      {\n        \"干支\": \"丙寅\",\n        \"开始年份\": 2061,\n        \"结束\": 2070,\n        \"天干十神\": \"正印\",\n        \"地支十神\": [\"正官\", \"正印\", \"劫财\"],\n        \"地支藏干\": [\"甲\", \"丙\", \"戊\"],\n        \"开始年龄\": 64,\n        \"结束年龄\": 73\n      },\n      {\n        \"干支\": \"丁卯\",\n        \"开始年份\": 2071,\n        \"结束\": 2080,\n        \"天干十神\": \"偏印\",\n        \"地支十神\": [\"七杀\"],\n        \"地支藏干\": [\"乙\"],\n        \"开始年龄\": 74,\n        \"结束年龄\": 83\n      },\n      {\n        \"干支\": \"戊辰\",\n        \"开始年份\": 2081,\n        \"结束\": 2090,\n        \"天干十神\": \"劫财\",\n        \"地支十神\": [\"劫财\", \"七杀\", \"偏财\"],\n        \"地支藏干\": [\"戊\", \"乙\", \"癸\"],\n        \"开始年龄\": 84,\n        \"结束年龄\": 93\n      },\n      {\n        \"干支\": \"己巳\",\n        \"开始年份\": 2091,\n        \"结束\": 2100,\n        \"天干十神\": \"比肩\",\n        \"地支十神\": [\"正印\", \"伤官\", \"劫财\"],\n        \"地支藏干\": [\"丙\", \"庚\", \"戊\"],\n        \"开始年龄\": 94,\n        \"结束年龄\": 103\n      }\n    ]\n  },\n  \"刑冲合会\": {\n    \"年\": {\n      \"天干\": {},\n      \"地支\": {}\n    },\n    \"月\": {\n      \"天干\": {},\n      \"地支\": {\n        \"半合\": [\n          {\n            \"柱\": \"日\",\n            \"知识点\": \"未卯半合木\",\n            \"元素\": \"木\"\n          }\n        ]\n      }\n    },\n    \"日\": {\n      \"天干\": {},\n      \"地支\": {\n        \"半合\": [\n          {\n            \"柱\": \"月\",\n            \"知识点\": \"卯未半合木\",\n            \"元素\": \"木\"\n          },\n          {\n            \"柱\": \"时\",\n            \"知识点\": \"卯未半合木\",\n            \"元素\": \"木\"\n          }\n        ]\n      }\n    },\n    \"时\": {\n      \"天干\": {},\n      \"地支\": {\n        \"半合\": [\n          {\n            \"柱\": \"日\",\n            \"知识点\": \"未卯半合木\",\n            \"元素\": \"木\"\n          }\n        ]\n      }\n    }\n  }\n}\n```\n\n### getSolarTimes\n\n> 根据给定的八字返回可能的公历时间列表。\n> Return a list of possible solar calendar datetime based on the given Bazi.\n\n#### 参数 | Arguments\n\n- bazi: `String`\n\n  > 八字，各柱用空格隔开。\n  > Bazi, with each pillar separated by a space.\n\n#### 结果示例 ｜ Result example\n\n```json\n[\"1758-07-29 14:00:00\", \"1818-07-15 14:00:00\", \"1998-07-31 14:00:00\"]\n```\n\n### getChineseCalendar\n\n> 获取指定公历时间（默认今天）的黄历信息。\n> Get chinese calendar information for the specified solar calendar date (default is today).\n\n#### 参数 | Arguments\n\n- solarDatetime\n\n  > ISO 格式的阳历时间。例如：`2000-05-15T12:00:00+08:00`。  \n  > Solar datetime in ISO format. Example: `2000-05-15T12:00:00+08:00`.\n\n#### 结果示例 ｜ Result example\n\n```json\n{\n  \"公历\": \"2025年5月7日 星期三\",\n  \"农历\": \"农历乙巳年四月初十\",\n  \"干支\": \"乙巳 辛巳 丙子\",\n  \"生肖\": \"蛇\",\n  \"纳音\": \"涧下水\",\n  \"节气\": \"立夏\",\n  \"二十八宿\": \"箕水豹吉\",\n  \"彭祖百忌\": \"丙不修灶必见灾殃 子不问卜自惹祸殃\",\n  \"喜神方位\": \"西南\",\n  \"阳贵神方位\": \"西\",\n  \"阴贵神方位\": \"西北\",\n  \"福神方位\": \"东\",\n  \"财神方位\": \"西南\",\n  \"冲煞\": \"冲马(午)煞南\",\n  \"宜\": \"嫁娶,祭祀,祈福,求嗣,开光,出行,拆卸,动土,上梁,出火,进人口,入宅,移徙,安床,栽种,纳畜,牧养,竖柱,安门,修造,解除,会亲友\",\n  \"忌\": \"\"\n}\n```\n\n### ~~buildBaziFromLunarDatetime~~ (deprecated)\n\n> 根据`农历`时间计算八字结果。  \n> Calculate the BaZi results based on the lunar datetime.\n\n#### 参数 ｜ Arguments\n\n- lunarDatetime: `String`\n\n  > 农历时间。例如：`2000-05-15 12:00:00`。  \n  > Lunar datetime. Example: `2000-05-15 12:00:00`.\n\n- gender: `Number`\n\n  > 性别。可选。0 - 女，1-男。默认 1。  \n  > Gender. Optional. 0 for female, 1 for male. 1 by default.\n\n- eightCharProviderSect： `Number`\n\n  > 早晚子时配置。可选。1 - 表示 23:00-23:59 日干支为明天，2 - 表示 23:00-23:59 日干支为当天。默认 2。\n  > Configuration for eight char provider. Optional. 1 for meaning the day stem of 23:00-23:59 is for tomorrow, 2 for meaning the day stem of 23:00-23:59 is for today. 2 by default.\n\n### ~~buildBaziFromSolarDatetime~~ (deprecated)\n\n> 根据`阳历`时间计算八字结果。  \n> Calculate the BaZi results based on the solar datetime.\n\n#### 参数 ｜ Arguments\n\n- solarDatetime: `String`\n\n  > ISO 格式的阳历时间。例如：`2000-05-15T12:00:00+08:00`。  \n  > Solar datetime in ISO format. Example: `2000-05-15T12:00:00+08:00`.\n\n- gender: `Number`\n\n  > 性别。可选。0 - 女，1-男。  \n  > Gender. Optional. 0 for female, 1 for male.\n\n- eightCharProviderSect： `Number`\n\n  > 早晚子时配置。可选。1 - 表示 23:00-23:59 日干支为明天，2 - 表示 23:00-23:59 日干支为当天。默认 2。\n  > Configuration for eight char provider. Optional. 1 for meaning the day stem of 23:00-23:59 is for tomorrow, 2 for meaning the day stem of 23:00-23:59 is for today. 2 by default.\n\n**Keywords**: Bazi MCP, Bazi AI Agent, Fengshui AI Agent, Bazi Calculator MCP, Bazi Calculator AI, Cantian AI\n",
+  "category": "Art & Culture",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "cantian-ai-bazi-mcp": {
+        "command": "npx",
+        "args": ["bazi-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "cantian-ai",
+    "repo": "bazi-mcp",
+    "url": "https://github.com/cantian-ai/bazi-mcp",
+    "name": "cantian-ai__bazi-mcp",
+    "path": null,
+    "stars": 159,
+    "contributors": 5,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "28159d98bb78d037560dc9c8dc4ec18b03ddd438"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:11.297Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "tyme4ts",
+      "importance": 9
+    },
+    {
+      "name": "date-fns",
+      "importance": 8
+    },
+    {
+      "name": "date-fns-tz",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"bazi-mcp\",\n  \"version\": \"0.0.25\",\n  \"type\": \"module\",\n  \"module\": \"./src/smithery.ts\",\n  \"devDependencies\": {\n    \"@tsconfig/node22\": \"^22.0.1\",\n    \"@types/node\": \"^22.14.1\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/cantian-ai/bazi-mcp.git\"\n  },\n  \"keywords\": [\n    \"bazi\",\n    \"八字\",\n    \"mcp\",\n    \"算命\",\n    \"命理\"\n  ],\n  \"license\": \"ISC\",\n  \"exports\": {\n    \".\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"tsc\": \"rm -rf dist && tsc\",\n    \"prepublishOnly\": \"npm run tsc && chmod +x dist/stdio.js\",\n    \"smithery-dev\": \"npx @smithery/cli dev\"\n  },\n  \"bin\": {\n    \"bazi-mcp\": \"./dist/stdio.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.2\",\n    \"cantian-tymext\": \"^0.0.21\",\n    \"date-fns\": \"^3.6.0\",\n    \"date-fns-tz\": \"^3.2.0\",\n    \"tsx\": \"^4.20.5\",\n    \"tyme4ts\": \"^1.3.4\",\n    \"zod\": \"^3.24.3\"\n  }\n}\n"
+}

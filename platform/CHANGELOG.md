@@ -1,5 +1,1769 @@
 # Changelog
 
+## [1.3.15](https://github.com/archestra-ai/archestra/compare/platform-v1.3.14...platform-v1.3.15) (2026-07-22)
+
+
+### Features
+
+* apps-gallery submission — final-cut duration, submitter identit… ([#6765](https://github.com/archestra-ai/archestra/issues/6765)) ([59a4534](https://github.com/archestra-ai/archestra/commit/59a4534b83abeda372077832668a8e816d7d3fec))
+
+
+### Bug Fixes
+
+* **frontend:** guard crypto.randomUUID for insecure contexts ([#6788](https://github.com/archestra-ai/archestra/issues/6788)) ([2dbc423](https://github.com/archestra-ai/archestra/commit/2dbc4235825c3569b7b841ee4d39e337039398dd))
+
+## [1.3.14](https://github.com/archestra-ai/archestra/compare/platform-v1.3.13...platform-v1.3.14) (2026-07-22)
+
+
+### Features
+
+* add Archestra as an LLM provider ([#6780](https://github.com/archestra-ai/archestra/issues/6780)) ([c3314c5](https://github.com/archestra-ai/archestra/commit/c3314c5e263cbba11dd2e31fe502ff70dd004748))
+* add Moonshot (Kimi) LLM provider ([#6778](https://github.com/archestra-ai/archestra/issues/6778)) ([d78925b](https://github.com/archestra-ai/archestra/commit/d78925b2cff20207f94fd01a903feae2df984bdb))
+* **llm-proxy:** support Bedrock InvokeModel API for Anthropic models ([#6745](https://github.com/archestra-ai/archestra/issues/6745)) ([355b192](https://github.com/archestra-ai/archestra/commit/355b1929e9ecc7dc195b4d7088d1353361bb53ba))
+* **skills:** allow 0, 1, or many environments per skill ([#6777](https://github.com/archestra-ai/archestra/issues/6777)) ([3d39307](https://github.com/archestra-ai/archestra/commit/3d393078e2e598e0774c3da8ffddb51bee1890be))
+* **slack:** per-channel option to answer all messages ([#6783](https://github.com/archestra-ai/archestra/issues/6783)) ([796b62b](https://github.com/archestra-ai/archestra/commit/796b62bdff7a4a03f7eea4c99c8a6c67a4a8219b))
+
+
+### Bug Fixes
+
+* **chat:** at-most-once dispatch for approved MCP tool calls ([#6772](https://github.com/archestra-ai/archestra/issues/6772)) ([cf6dc1c](https://github.com/archestra-ai/archestra/commit/cf6dc1c87645a81b3cb3027f3c7e4cb607cc5267))
+* **chat:** keep markdown tables readable in themed message bubbles ([#6774](https://github.com/archestra-ai/archestra/issues/6774)) ([fceb8d9](https://github.com/archestra-ai/archestra/commit/fceb8d9e0833f0bf8f16d4c7a07a0261d10f15cc))
+* **frontend:** accessibility improvements across the app (WCAG 2.1/2.2 AA) ([#6747](https://github.com/archestra-ai/archestra/issues/6747)) ([dc83cfa](https://github.com/archestra-ai/archestra/commit/dc83cfac2c5db082bcdb978554d0323e0c98e7cf))
+* **hackathon:** gracefully degrade audio codecs ([#6768](https://github.com/archestra-ai/archestra/issues/6768)) ([927d8fe](https://github.com/archestra-ai/archestra/commit/927d8fe9048d0a6501fd899884adbff8ca0daeea))
+* **mcp-catalog:** save remote catalog edits directly instead of showing the restart confirm bar ([#6773](https://github.com/archestra-ai/archestra/issues/6773)) ([8b32c49](https://github.com/archestra-ai/archestra/commit/8b32c4911556eaae20aa296b7759ccb04415ae14))
+* **mcp-registry:** stop re-prompting stored credentials on execution-only reinstalls ([#6776](https://github.com/archestra-ai/archestra/issues/6776)) ([ea58b92](https://github.com/archestra-ai/archestra/commit/ea58b92b99bbce0a88a79a9de4d33dafbfd91dbd))
+* **mcp-server:** honor target userId for personal installs ([#6771](https://github.com/archestra-ai/archestra/issues/6771)) ([00153ef](https://github.com/archestra-ai/archestra/commit/00153efe2df819a4fba89c7a4b2740573be78f72))
+* **onboarding:** make first-login survey scroll so Send stays reachable ([#6779](https://github.com/archestra-ai/archestra/issues/6779)) ([9975e99](https://github.com/archestra-ai/archestra/commit/9975e992eeddfb95fd53912da714b007c600f6e9))
+* **orchestrator:** deploy default-environment MCP servers into the org's default environment namespace ([#6756](https://github.com/archestra-ai/archestra/issues/6756)) ([fde3109](https://github.com/archestra-ai/archestra/commit/fde3109b8ecf5d6f51c8160c8e42a33e30f6b3bd))
+* **sidebar:** gate the apps query behind app:read ([#6769](https://github.com/archestra-ai/archestra/issues/6769)) ([2d8c4fe](https://github.com/archestra-ai/archestra/commit/2d8c4fe06aee1b22314ad815f424881cfb3cd4c1))
+
+## [1.3.13](https://github.com/archestra-ai/archestra/compare/platform-v1.3.12...platform-v1.3.13) (2026-07-22)
+
+
+### Features
+
+* add project admin permissions ([#6742](https://github.com/archestra-ai/archestra/issues/6742)) ([f52765b](https://github.com/archestra-ai/archestra/commit/f52765bca8af93141a8fce8a37b9eef645808cfc))
+* **audit:** org-audit rows for mutating Archestra MCP tools ([#6751](https://github.com/archestra-ai/archestra/issues/6751)) ([0899cc1](https://github.com/archestra-ai/archestra/commit/0899cc19190d66815b42d5d3c8a342e85c41b62c))
+* **connection:** add a Disconnect panel to the connect flow ([#6720](https://github.com/archestra-ai/archestra/issues/6720)) ([397eb3f](https://github.com/archestra-ai/archestra/commit/397eb3f029e885880894262e6f08caf97f6be37e))
+* **frontend:** group built-in Archestra MCP tools by domain in the tool picker ([#6738](https://github.com/archestra-ai/archestra/issues/6738)) ([785ada1](https://github.com/archestra-ai/archestra/commit/785ada110a30a9e900d33da925de24265d4bfd09))
+* **hackathon:** capture and replay app audio in session recordings ([#6761](https://github.com/archestra-ai/archestra/issues/6761)) ([4eeac8d](https://github.com/archestra-ai/archestra/commit/4eeac8d07b2d27f995e49d7cb506ad160e1695e4))
+* **kb:** native Bedrock embeddings, provider gating, and diagnosable KB failures ([#6671](https://github.com/archestra-ai/archestra/issues/6671)) ([b059b1e](https://github.com/archestra-ai/archestra/commit/b059b1e88c98a7fab4fad1af161db692745bc6f2))
+* per-skill usage analytics on the Skills page ([#6740](https://github.com/archestra-ai/archestra/issues/6740)) ([ddca27b](https://github.com/archestra-ai/archestra/commit/ddca27b3ad431fa57e4adc4febb7a61180f91d0e))
+* telegram conversation memory, group bindings, GA ([#6749](https://github.com/archestra-ai/archestra/issues/6749)) ([917bb7e](https://github.com/archestra-ai/archestra/commit/917bb7eccf7146960cd3e7af1016dde30ac645cb))
+* **ui:** cards/table view toggle for Projects, Apps, and MCP Registry ([#6753](https://github.com/archestra-ai/archestra/issues/6753)) ([82531f0](https://github.com/archestra-ai/archestra/commit/82531f09da6cb564e26b865555510e1afaf26b82))
+
+
+### Bug Fixes
+
+* bump fast-uri override to 3.1.4 (CVE-2026-16221, CVE-2026-13676) ([#6760](https://github.com/archestra-ai/archestra/issues/6760)) ([a9af6d2](https://github.com/archestra-ai/archestra/commit/a9af6d2348da210331b70523ee8c3ceb3bd56cb8))
+* GPT-5.6 support across OpenAI API and ChatGPT-subscription chat ([#6750](https://github.com/archestra-ai/archestra/issues/6750)) ([2fac946](https://github.com/archestra-ai/archestra/commit/2fac94656393802613b7a70ac27f2c28613ddc20))
+* **hackathon:** share app sessions bugs ([#6748](https://github.com/archestra-ai/archestra/issues/6748)) ([0c45968](https://github.com/archestra-ai/archestra/commit/0c45968827bb5a8b1d0648197387c7951c6b92b0))
+* **hackathon:** stop the app-session player blacking out transparent … ([#6759](https://github.com/archestra-ai/archestra/issues/6759)) ([ffa29f4](https://github.com/archestra-ai/archestra/commit/ffa29f43df287aa28181015737cfa57eb64f56a5))
+* highlight links in skill sync panel, rename Chat button ([#6734](https://github.com/archestra-ai/archestra/issues/6734)) ([7555826](https://github.com/archestra-ai/archestra/commit/75558260f948cb652d5ed4107b66750418f0134f))
+* **knowledge:** show connection result on the test button, align footer layout ([#6763](https://github.com/archestra-ai/archestra/issues/6763)) ([55ca578](https://github.com/archestra-ai/archestra/commit/55ca578c5d62f3af3c023c8955ee7f703d138091))
+* **llm-proxy:** make reject-mode 400 self-diagnosing for misconfigured base URLs ([#6755](https://github.com/archestra-ai/archestra/issues/6755)) ([553557d](https://github.com/archestra-ai/archestra/commit/553557d94bbe4572d0c52363e2fa703c4ae10788))
+* **projects:** hide Schedules section for roles without scheduledTask:read ([#6762](https://github.com/archestra-ai/archestra/issues/6762)) ([9f6cc9b](https://github.com/archestra-ai/archestra/commit/9f6cc9ba67803df33fb9d5cebf8ca4a9873590de))
+
+
+### Miscellaneous Chores
+
+* **chat:** show chat support links in the mobile header bar ([#6743](https://github.com/archestra-ai/archestra/issues/6743)) ([6b55505](https://github.com/archestra-ai/archestra/commit/6b55505e92b3fc1b3464819ee5b9fea17ea5dbc7))
+
+## [1.3.12](https://github.com/archestra-ai/archestra/compare/platform-v1.3.11...platform-v1.3.12) (2026-07-21)
+
+
+### Bug Fixes
+
+* **chat:** show reasoning/thinking blocks for OpenAI-compatible models ([#6729](https://github.com/archestra-ai/archestra/issues/6729)) ([d67a4d0](https://github.com/archestra-ai/archestra/commit/d67a4d062121bd29d1ff4a7de4fd9bbbb0ca0918))
+* **orchestrator:** resource-govern MCP server pods and reap Failed/Evicted pods ([#6591](https://github.com/archestra-ai/archestra/issues/6591)) ([dca1965](https://github.com/archestra-ai/archestra/commit/dca1965b6bfe30e29590ac29bc2349bd46633ac5))
+
+
+### Performance Improvements
+
+* **db:** stop creating payload trgm GIN indexes on interactions ([#6731](https://github.com/archestra-ai/archestra/issues/6731)) ([759f420](https://github.com/archestra-ai/archestra/commit/759f420f720c7f91acda67a2a73efaf8bea0d2c8))
+* **llm-proxy:** resolve lean GatewayAgent on the hot path + pool saturation metrics ([#6733](https://github.com/archestra-ai/archestra/issues/6733)) ([6f76027](https://github.com/archestra-ai/archestra/commit/6f76027d7e0fb5bff5a024fb6a8954fc7a485bbe))
+
+## [1.3.11](https://github.com/archestra-ai/archestra/compare/platform-v1.3.10...platform-v1.3.11) (2026-07-21)
+
+
+### Features
+
+* add org setting to disable the online MCP catalog ([#6666](https://github.com/archestra-ai/archestra/issues/6666)) ([ff562a2](https://github.com/archestra-ai/archestra/commit/ff562a24ce733d805b94ab9024d3eca24401e695))
+* add org setting to disable the online skill catalog ([#6700](https://github.com/archestra-ai/archestra/issues/6700)) ([a5e6548](https://github.com/archestra-ai/archestra/commit/a5e65480e4599be6f103227fc074c13b7748e55b))
+* **agents:** Auto/Custom subagent delegation (drop required explicit assignment) ([#6482](https://github.com/archestra-ai/archestra/issues/6482)) ([7366fc9](https://github.com/archestra-ai/archestra/commit/7366fc906c52adc81c2a18da79015ee4e454a1ab))
+* **agents:** show the "Accessible to" column to non-admins instead of the scope badge ([#6629](https://github.com/archestra-ai/archestra/issues/6629)) ([c679f7b](https://github.com/archestra-ai/archestra/commit/c679f7ba3bf905f35745bcf23716e2b67eb9e888))
+* **analytics:** report instance entity counts with heartbeat ([#6634](https://github.com/archestra-ai/archestra/issues/6634)) ([7e8a4d1](https://github.com/archestra-ai/archestra/commit/7e8a4d10e98954047b902c1187d82bc70ca50c9b))
+* **apps:** add enable/disable lifecycle to MCP Apps ([#6697](https://github.com/archestra-ai/archestra/issues/6697)) ([9747eff](https://github.com/archestra-ai/archestra/commit/9747eff2cf8b80040c0f61f7e3636ce49ea6924d))
+* **chat:** GA message queueing; keep the composer usable during context compaction ([#6686](https://github.com/archestra-ai/archestra/issues/6686)) ([951eede](https://github.com/archestra-ai/archestra/commit/951eede91aaef93fe4b72f3919dafad82b371847))
+* **chat:** group sidebar recents into per-day date sections ([#6626](https://github.com/archestra-ai/archestra/issues/6626)) ([63c2455](https://github.com/archestra-ai/archestra/commit/63c24553e3a41973a2723272e7a7ef3a1a2a5a73))
+* **connect:** add client app, user, and session attribution for codex ([#6622](https://github.com/archestra-ai/archestra/issues/6622)) ([02ae7da](https://github.com/archestra-ai/archestra/commit/02ae7da9d0079a3083af21e9f5e9901090a17dd3))
+* **frontend:** make detail dialogs deep-linkable with shareable URLs ([#6656](https://github.com/archestra-ai/archestra/issues/6656)) ([62c7181](https://github.com/archestra-ai/archestra/commit/62c71812d3cc3317b8710647b6447f7ef109e871))
+* **frontend:** warn before scoping a personal agent up shares its personal credentials ([#6661](https://github.com/archestra-ai/archestra/issues/6661)) ([445ccc1](https://github.com/archestra-ai/archestra/commit/445ccc1e11770ef857ac3af37c5ffa6300917cc2))
+* **hooks:** hooks in the create form, inline Monaco editor, MCP management tools, docs (Beta) ([#6691](https://github.com/archestra-ai/archestra/issues/6691)) ([df0116e](https://github.com/archestra-ai/archestra/commit/df0116e446b4e3283dfc9404ad5508f467e9d272))
+* **llm-cost:** subscription-aware cost accounting (metered vs subscription billed spend) ([#6501](https://github.com/archestra-ai/archestra/issues/6501)) ([858646a](https://github.com/archestra-ai/archestra/commit/858646ae113f41a36bbf70252bec7fd50c465243))
+* **llm-providers:** codex subscription in chat ([#6618](https://github.com/archestra-ai/archestra/issues/6618)) ([17b3b1f](https://github.com/archestra-ai/archestra/commit/17b3b1f02cc9fdd347cb63505b9243a0a0f2de28))
+* **mcp-apps:** let apps read the embedding chat's files via assignable built-in file tools ([#6531](https://github.com/archestra-ai/archestra/issues/6531)) ([f36b23c](https://github.com/archestra-ai/archestra/commit/f36b23c2d8dc1acb4d0d4942ec46d218371f9825))
+* **mcp:** allow renaming MCP servers without orphaning their deployments ([#6650](https://github.com/archestra-ai/archestra/issues/6650)) ([1208e87](https://github.com/archestra-ai/archestra/commit/1208e8799bb1fc80795b42cabfde571c3bdf7b6c))
+* **mcp:** confirm before pinning a personal MCP connection for a shared agent ([#6611](https://github.com/archestra-ai/archestra/issues/6611)) ([ecd4c9a](https://github.com/archestra-ai/archestra/commit/ecd4c9a76ab0b5093292970405fd5d87dcd261e6))
+* **mcp:** confirm personal connection pin for personal agents too ([#6687](https://github.com/archestra-ai/archestra/issues/6687)) ([03bda89](https://github.com/archestra-ai/archestra/commit/03bda89ad14418f73ae39ad3f6c36d8b0df81ebb))
+* **mcp:** list auto-mode agents in the MCP server "Used by N agents" tooltip ([#6715](https://github.com/archestra-ai/archestra/issues/6715)) ([860e25b](https://github.com/archestra-ai/archestra/commit/860e25b8b78d6a5249ccdb2af0a90954e8791f24))
+* **platform:** optionally expose the MS Teams webhook on a dedicated public port ([#6590](https://github.com/archestra-ai/archestra/issues/6590)) ([7aa4c7f](https://github.com/archestra-ai/archestra/commit/7aa4c7f668068d29c8ddf8b248626a4a04e3b5b1))
+* polish apps hackathon recorder feature ([#6703](https://github.com/archestra-ai/archestra/issues/6703)) ([0fcfa9b](https://github.com/archestra-ai/archestra/commit/0fcfa9b92ea3328b44ef4115d60929c6ce5fc03d))
+* pre-populate demo apps for orgs without apps ([#6685](https://github.com/archestra-ai/archestra/issues/6685)) ([d99f91b](https://github.com/archestra-ai/archestra/commit/d99f91b6648a92b372ca60804e722c62213a0bf0))
+* **rbac:** split environment:deploy-to-restricted into per-resource permissions ([#6724](https://github.com/archestra-ai/archestra/issues/6724)) ([e041687](https://github.com/archestra-ai/archestra/commit/e041687b9d83382575954bf1758fcff35078c4bc))
+* restructure settings navigation ([#6709](https://github.com/archestra-ai/archestra/issues/6709)) ([00175ef](https://github.com/archestra-ai/archestra/commit/00175eff638ed10f5321907c0b3e3e1fd1112c57))
+* share app sessions ([#6670](https://github.com/archestra-ai/archestra/issues/6670)) ([ff5a924](https://github.com/archestra-ai/archestra/commit/ff5a924daa1807b7e118db67d2fc330d814fda6b))
+* **skills:** environment-scoped skills + run-in-subagent via `agent` frontmatter ([#6690](https://github.com/archestra-ai/archestra/issues/6690)) ([09ad7a6](https://github.com/archestra-ai/archestra/commit/09ad7a62616ab0d2558610d95f7a221d481e326f))
+* **skills:** recurring GitHub sync, stored PATs, usage metrics ([#6713](https://github.com/archestra-ai/archestra/issues/6713)) ([de5e63f](https://github.com/archestra-ai/archestra/commit/de5e63fb40b949b657870f07fbd83d3f81bb0b49))
+* team labels + external group sync in built-in team MCP tools ([#6711](https://github.com/archestra-ai/archestra/issues/6711)) ([98f18be](https://github.com/archestra-ai/archestra/commit/98f18be201042e9f04f65b2f3ef4c234bbe2bb4e))
+
+
+### Bug Fixes
+
+* Action Buttons in sub-menu for Tables are displaying behind the title row in-chat view and also in full screen mode ([#6701](https://github.com/archestra-ai/archestra/issues/6701)) ([6e541b3](https://github.com/archestra-ai/archestra/commit/6e541b31be379c4905acacf9e3a6647484562b65))
+* **agents:** require at least one team for team-scoped agents ([#6660](https://github.com/archestra-ai/archestra/issues/6660)) ([1158c63](https://github.com/archestra-ai/archestra/commit/1158c635ab5e284be0f3661afac70b6667b76474))
+* **apps:** let app admins see other users' personal apps in the list ([#6620](https://github.com/archestra-ai/archestra/issues/6620)) ([b047d2e](https://github.com/archestra-ai/archestra/commit/b047d2e23b13bf09cf0c43dab64032163dcabf01))
+* **apps:** let edit_app read its document from a file, and stop unavailable-tool loops ([#6659](https://github.com/archestra-ai/archestra/issues/6659)) ([9ac1289](https://github.com/archestra-ai/archestra/commit/9ac1289194249dc6682b36c4788fe91b89bfcc76))
+* **apps:** make app settings save resilient; drop unreachable registry settings dialog ([#6664](https://github.com/archestra-ai/archestra/issues/6664)) ([df93665](https://github.com/archestra-ai/archestra/commit/df936659a65ccdaa5a30b32e5e60bf14bec8d5c0))
+* archestra chat opened app awareness ([#6644](https://github.com/archestra-ai/archestra/issues/6644)) ([565b8d1](https://github.com/archestra-ai/archestra/commit/565b8d10ed8e08de0f60d4dabbb52c90fdc390a0))
+* **audit:** show agent model-change diff and stop phantom audit records ([#6696](https://github.com/archestra-ai/archestra/issues/6696)) ([db358be](https://github.com/archestra-ai/archestra/commit/db358be761ebfd28dc717ec8f71b8926f69ac260))
+* **audit:** sweep audit-log gaps — register/denylist routes, fix child-DELETE labels, capture no-diff fields ([#6707](https://github.com/archestra-ai/archestra/issues/6707)) ([6133c1a](https://github.com/archestra-ai/archestra/commit/6133c1a4e2f3b727833dfa4fc245ec52c623d909))
+* **backend:** degrade gracefully when a stored secret cannot be decrypted ([#6704](https://github.com/archestra-ai/archestra/issues/6704)) ([8b0edf0](https://github.com/archestra-ai/archestra/commit/8b0edf0647d68df7d5726daf427dcba84c8985ad))
+* chat not aware of files already attached to the project ([#6705](https://github.com/archestra-ai/archestra/issues/6705)) ([c957880](https://github.com/archestra-ai/archestra/commit/c9578801e7a7d0c5bfbb5592be1f5a6442131985))
+* **chat:** mount model selector dialog content only while open ([#6680](https://github.com/archestra-ai/archestra/issues/6680)) ([4a1e136](https://github.com/archestra-ai/archestra/commit/4a1e136f58bf190d1b90893816aa8a240d684103))
+* **chat:** stalled-response warning no longer fires during long tool executions ([#6714](https://github.com/archestra-ai/archestra/issues/6714)) ([e0f7e56](https://github.com/archestra-ai/archestra/commit/e0f7e56d21544734a50757a1394ff90e5745f418))
+* **ci:** unbreak merge queue (rmcp 2.2 Content rename + skills-import checkbox role) ([#6719](https://github.com/archestra-ai/archestra/issues/6719)) ([b3496ea](https://github.com/archestra-ai/archestra/commit/b3496eac072308ab10a9ccb53082725d3f05050b))
+* **ci:** unbreak merge-queue jobs broken on main ([#6710](https://github.com/archestra-ai/archestra/issues/6710)) ([20885ff](https://github.com/archestra-ai/archestra/commit/20885ffc8f145f271975b94b0400396599b66bef))
+* **connection:** remove escape sequences from connection scripts ([#6653](https://github.com/archestra-ai/archestra/issues/6653)) ([2d12955](https://github.com/archestra-ai/archestra/commit/2d1295566fc13df4e97826040c11c805a051a213))
+* **connection:** remove shell escape sequences echos from connection scripts ([#6652](https://github.com/archestra-ai/archestra/issues/6652)) ([a3341f2](https://github.com/archestra-ai/archestra/commit/a3341f223f09bcedf5f6f913c48fb55310e8934d))
+* **deps:** bump mcp SDK to 1.28.1 to clear 3 HIGH CVEs ([#6655](https://github.com/archestra-ai/archestra/issues/6655)) ([9e210a0](https://github.com/archestra-ai/archestra/commit/9e210a0ae4bacc7aefdb0dc2a6eca5e2f19fe972))
+* **deps:** override @babel/core to &gt;=7.29.6 to clear CVE-2026-49356 ([#6694](https://github.com/archestra-ai/archestra/issues/6694)) ([550c0b6](https://github.com/archestra-ai/archestra/commit/550c0b6dc1ed753f4f80886996ce6e08d372e724))
+* **deps:** patch tar, brace-expansion, axios, and js-yaml CVEs in scanned images ([#6726](https://github.com/archestra-ai/archestra/issues/6726)) ([e80fd9e](https://github.com/archestra-ai/archestra/commit/e80fd9e78bf7ca294651fc4807d3eec9d219ec58))
+* **deps:** patch websocket-driver and @opentelemetry/core CVEs ([#6627](https://github.com/archestra-ai/archestra/issues/6627)) ([361f3a7](https://github.com/archestra-ai/archestra/commit/361f3a7a7d177ca16bf445768edca16962222e13))
+* dismiss revoke confirmation after revoking a marketplace share link ([#6673](https://github.com/archestra-ai/archestra/issues/6673)) ([c13dfb8](https://github.com/archestra-ai/archestra/commit/c13dfb8486f65aaca433e9e96faa2fab01cdff87))
+* drop header sidebar triggers, restore centered logo ([#6698](https://github.com/archestra-ai/archestra/issues/6698)) ([4266c9f](https://github.com/archestra-ai/archestra/commit/4266c9fe8a2aefab372957716c70a4ce09594ab1))
+* **errors:** make Forbidden errors say what was blocked and why ([#6708](https://github.com/archestra-ai/archestra/issues/6708)) ([93b78e5](https://github.com/archestra-ai/archestra/commit/93b78e5ae5cfdca0050d0e608770246403f3b592))
+* **frontend:** clamp DataTable page index when row count shrinks ([#6674](https://github.com/archestra-ai/archestra/issues/6674)) ([d6d6522](https://github.com/archestra-ai/archestra/commit/d6d6522ff22b5e6454a176fd7e9b8745f74a3391))
+* **frontend:** make copy buttons work on insecure (plain-HTTP) origins ([#6689](https://github.com/archestra-ai/archestra/issues/6689)) ([74c126c](https://github.com/archestra-ai/archestra/commit/74c126c2bf5691b65a31933db46cfbbc0e0d1f30))
+* **hackathon:** session recording video render ([#6695](https://github.com/archestra-ai/archestra/issues/6695)) ([6f0c3c8](https://github.com/archestra-ai/archestra/commit/6f0c3c8dd50514d7af1c46c88a8c998980758efd))
+* handle upstream LLM overloads ([#6678](https://github.com/archestra-ai/archestra/issues/6678)) ([c8bb7bd](https://github.com/archestra-ai/archestra/commit/c8bb7bd34b1f5f2d7810039105f4a3832a1160f3))
+* **llm-keys:** never serve a ChatGPT-subscription credential to anyone but its owner ([#6635](https://github.com/archestra-ai/archestra/issues/6635)) ([5e6e517](https://github.com/archestra-ai/archestra/commit/5e6e5173500fe79ae5200a0a08f07bf361d1930b))
+* **llm-providers:** classify key-validation failures instead of blaming the key ([#6632](https://github.com/archestra-ai/archestra/issues/6632)) ([39735b7](https://github.com/archestra-ai/archestra/commit/39735b74ecec7a3024ddc2e1ce4216314f7fbf24))
+* **llm-providers:** normalize assistant toolUse tool names for bedrock in (app) chat ([#6646](https://github.com/archestra-ai/archestra/issues/6646)) ([112ec63](https://github.com/archestra-ai/archestra/commit/112ec633a1e9b649183c4676859398af3b678ad2))
+* make Apps panel reachable on mobile chat ([#6676](https://github.com/archestra-ai/archestra/issues/6676)) ([ac84887](https://github.com/archestra-ai/archestra/commit/ac84887aa91c89b46cfd7148c655c7887244b794))
+* make sidebar collapse toggle more visible ([#6677](https://github.com/archestra-ai/archestra/issues/6677)) ([cb5c5ad](https://github.com/archestra-ai/archestra/commit/cb5c5adc1c7e93a03b5108401b9edb7ff07bce2b))
+* mcp gateway only registers for current Claude Code working direc… ([#6702](https://github.com/archestra-ai/archestra/issues/6702)) ([e2414bf](https://github.com/archestra-ai/archestra/commit/e2414bfd335d31aefa6f442911dd221d28932482))
+* **mcp-logs:** attribute app-owned tool calls to their app instead of "Deleted MCP Gateway" ([#6688](https://github.com/archestra-ai/archestra/issues/6688)) ([ea97110](https://github.com/archestra-ai/archestra/commit/ea9711050e1cd29e39f28c206945b40730578d9c))
+* **mcp:** keep edits and surface errors when cloning a catalog item ([#6725](https://github.com/archestra-ai/archestra/issues/6725)) ([07c2737](https://github.com/archestra-ai/archestra/commit/07c2737259ceed2f3423f3aacf6632e50c0d4033))
+* mobile vertical scroll and mobile chat UI issues ([#6683](https://github.com/archestra-ai/archestra/issues/6683)) ([6ae8c12](https://github.com/archestra-ai/archestra/commit/6ae8c12f41542f125f329cfc1db18f7bec52fa39))
+* move theme mode toggle into sidebar user menu ([#6679](https://github.com/archestra-ai/archestra/issues/6679)) ([df5a167](https://github.com/archestra-ai/archestra/commit/df5a16737c395595fca93ada573308d58b724517))
+* session view splits user display names containing commas into multiple user chips ([#6706](https://github.com/archestra-ai/archestra/issues/6706)) ([6514685](https://github.com/archestra-ai/archestra/commit/6514685960ca890f89e8f563ac5f2ac102c81f4a))
+* **sign-in:** link password reset hint to the docs page ([#6625](https://github.com/archestra-ai/archestra/issues/6625)) ([81812e9](https://github.com/archestra-ai/archestra/commit/81812e9a3a73cb245057bd78956937203131a9b1))
+* **sign-in:** show password reset hint only after failed attempts ([#6672](https://github.com/archestra-ai/archestra/issues/6672)) ([cef59e7](https://github.com/archestra-ai/archestra/commit/cef59e78113807e967c3a712d709dd94226d7936))
+* specify migration job resource requests and limits ([#6699](https://github.com/archestra-ai/archestra/issues/6699)) ([0f66fd4](https://github.com/archestra-ai/archestra/commit/0f66fd48f7baf0bf7aa26681f22db60cb336784e))
+* surface API key creation validation errors ([#6675](https://github.com/archestra-ai/archestra/issues/6675)) ([6ae3dfb](https://github.com/archestra-ai/archestra/commit/6ae3dfbaad4d1ffac3c32a3eb1e9a0508963d462))
+
+
+### Documentation
+
+* **claude:** add audit-logging awareness rule to platform CLAUDE.md ([#6728](https://github.com/archestra-ai/archestra/issues/6728)) ([1609850](https://github.com/archestra-ai/archestra/commit/1609850092a0739952108cbe895cdff22c252d70))
+
+
+### Dependencies
+
+* bump @hey-api/openapi-ts from 0.94.1 to 0.97.3 in /platform ([#6150](https://github.com/archestra-ai/archestra/issues/6150)) ([8298fa5](https://github.com/archestra-ai/archestra/commit/8298fa586fa54d820451e058640602f068f83a9c))
+* bump posthog-js to 1.399.2, posthog-node to 5.41.0 ([#6712](https://github.com/archestra-ai/archestra/issues/6712)) ([bc7563b](https://github.com/archestra-ai/archestra/commit/bc7563be451e47eca3e30f8dacc0f0bb0f646cdc))
+
+
+### Code Refactoring
+
+* **apps:** delete dead backend symbols and unpin prose from apps tests ([#6663](https://github.com/archestra-ai/archestra/issues/6663)) ([28a4b8c](https://github.com/archestra-ai/archestra/commit/28a4b8cc4bd0ea3e084ac39e55e868fb7c971103))
+* **chat:** remove deprecated swap_agent / swap_to_default_agent artifacts ([#6692](https://github.com/archestra-ai/archestra/issues/6692)) ([5a06e10](https://github.com/archestra-ai/archestra/commit/5a06e10e67f4d03dc455c1a517deb732e0ce6b30))
+* **frontend:** simplify shared-credential confirm dialog copy ([#6654](https://github.com/archestra-ai/archestra/issues/6654)) ([eb54f70](https://github.com/archestra-ai/archestra/commit/eb54f70825dbe2a9433d28c3a2c3543fc753a310))
+* **llm-cost:** infer billing mode from credential format, drop per-key config + UI ([#6723](https://github.com/archestra-ai/archestra/issues/6723)) ([3662be5](https://github.com/archestra-ai/archestra/commit/3662be5ab99e0084b9e7b596615142a6eab0d062))
+* **skills-sandbox:** drop dead dagger-runtime config + fix stale RBAC/gating docs ([#6665](https://github.com/archestra-ai/archestra/issues/6665)) ([1b33bf5](https://github.com/archestra-ai/archestra/commit/1b33bf55f31d9a568d4db68096c68352a07143a5))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump body-parser from 2.2.2 to 2.3.0 in /platform/mcp_server_docker_image ([#6727](https://github.com/archestra-ai/archestra/issues/6727)) ([b9e3bf7](https://github.com/archestra-ai/archestra/commit/b9e3bf76c44fd59166afdf793dc5baaa653de97b))
+* recommend rust, playwright & tailwind vscode extensions ([#6623](https://github.com/archestra-ai/archestra/issues/6623)) ([8a61bc2](https://github.com/archestra-ai/archestra/commit/8a61bc2f17cee7cf75ca1f362e77e044e91d7286))
+
+## [1.3.10](https://github.com/archestra-ai/archestra/compare/platform-v1.3.9...platform-v1.3.10) (2026-07-15)
+
+
+### Features
+
+* **agents/tokens:** clearer connect-dialog token flow, A2A examples, team dialog & /agents cleanups ([#6602](https://github.com/archestra-ai/archestra/issues/6602)) ([b443909](https://github.com/archestra-ai/archestra/commit/b4439094173accc79fbc2c3937d34c939e13348b))
+* **agents:** choose the clone's visibility when cloning an agent / MCP gateway / LLM proxy ([#6607](https://github.com/archestra-ai/archestra/issues/6607)) ([b5f9890](https://github.com/archestra-ai/archestra/commit/b5f989042d42819cb5255477dff320052384cdb7))
+* **apps:** seed new MCP Apps with the organization's white-label logo ([#6588](https://github.com/archestra-ai/archestra/issues/6588)) ([bde62a9](https://github.com/archestra-ai/archestra/commit/bde62a99999480b719f40573f689eab51449b9eb))
+* **apps:** single-tool app titles, draft app chats, split apps sections ([#6594](https://github.com/archestra-ai/archestra/issues/6594)) ([edd1d39](https://github.com/archestra-ai/archestra/commit/edd1d39885a88475903e937e1200c31c4011f842))
+* **kb:** auto sync permissions ([#6420](https://github.com/archestra-ai/archestra/issues/6420)) ([26aefd0](https://github.com/archestra-ai/archestra/commit/26aefd06f899f8d1a48afdb50ecc42baf752161a))
+* **knowledge:** merge Knowledge and Connectors into one tabbed page ([#6587](https://github.com/archestra-ai/archestra/issues/6587)) ([5f4871c](https://github.com/archestra-ai/archestra/commit/5f4871c4a404bdbcb122dd2483af1e3ee8e381af))
+* **mcp-gateway:** show last used time in the gateways table ([#6431](https://github.com/archestra-ai/archestra/issues/6431)) ([c14c448](https://github.com/archestra-ai/archestra/commit/c14c448cdaea7b1c3af0461796cfda7468f75ff8))
+* **mcp-registry:** surface which agents use an MCP server ([#6609](https://github.com/archestra-ai/archestra/issues/6609)) ([c974a53](https://github.com/archestra-ai/archestra/commit/c974a539c2d876b38030d78cddfd34e104438e54))
+
+
+### Bug Fixes
+
+* **apps:** pin MCP-server apps per tool; keep pin state consistent without a refresh ([#6598](https://github.com/archestra-ai/archestra/issues/6598)) ([6b612c2](https://github.com/archestra-ai/archestra/commit/6b612c2f06f8c3edb72612987b9291cbd7f6a169))
+* **apps:** show an exit-fullscreen button for panel-hosted apps ([#6601](https://github.com/archestra-ai/archestra/issues/6601)) ([9ad930c](https://github.com/archestra-ai/archestra/commit/9ad930c71465c4e46bcf85b6c1458db1fd90c433))
+* **archestra-mcp:** attribute created agents/gateways/proxies to the calling user ([#6606](https://github.com/archestra-ai/archestra/issues/6606)) ([df28dd5](https://github.com/archestra-ai/archestra/commit/df28dd5ebf388f6197892353a15dd118c9e1db8f))
+* **backend:** stop the dev-watch server from orphaning itself across rebuilds ([#6605](https://github.com/archestra-ai/archestra/issues/6605)) ([3c88525](https://github.com/archestra-ai/archestra/commit/3c885251c61457f48e50597bb408c15e5b06c058))
+* **chat:** declutter queued messages UI ([#6585](https://github.com/archestra-ai/archestra/issues/6585)) ([1e94abd](https://github.com/archestra-ai/archestra/commit/1e94abd230e533bffd3aae021f385f7ad33bcc40))
+* **chat:** steer unavailable-tool errors through search_tools/run_tool in dispatch mode ([#6550](https://github.com/archestra-ai/archestra/issues/6550)) ([79bf69d](https://github.com/archestra-ai/archestra/commit/79bf69ddd1877d4c2ce68bb340f5ad0dad4cdfb8))
+* **connection:** accept the browser origin as a setup-script endpoint ([#6567](https://github.com/archestra-ai/archestra/issues/6567)) ([573ab90](https://github.com/archestra-ai/archestra/commit/573ab90031f3ff0c34beb96b3578c31d7ea02597))
+* **frontend:** stop DataTable columns from hiding behind horizontal scroll ([#6566](https://github.com/archestra-ai/archestra/issues/6566)) ([d894fdd](https://github.com/archestra-ai/archestra/commit/d894fdd11c8dccfc4112441a330734548a39049b))
+* **knowledge-base:** connectors not syncing ([#6600](https://github.com/archestra-ai/archestra/issues/6600)) ([a9faeae](https://github.com/archestra-ai/archestra/commit/a9faeae17c32eb04cee1c984c7eb32524052a21c))
+
+
+### Miscellaneous Chores
+
+* **knowledge-base:** Cleanup auto-sync permissions connector creden… ([#6596](https://github.com/archestra-ai/archestra/issues/6596)) ([0b5205a](https://github.com/archestra-ai/archestra/commit/0b5205ac0f300494140aa112cdced2c185d8e375))
+
+## [1.3.9](https://github.com/archestra-ai/archestra/compare/platform-v1.3.8...platform-v1.3.9) (2026-07-14)
+
+
+### Features
+
+* **a2a:** SSE streaming + external-IdP/OAuth auth, and a unified Credentials page ([#6544](https://github.com/archestra-ai/archestra/issues/6544)) ([8149511](https://github.com/archestra-ai/archestra/commit/814951117739e44863facf48d56b0c723ddd6730))
+* **credentials:** Client Credentials rename, Virtual Keys landing, and OAuth clients polish ([#6571](https://github.com/archestra-ai/archestra/issues/6571)) ([208cc56](https://github.com/archestra-ai/archestra/commit/208cc56534b8e4057a9d94e10e1cd5c62ebf0e42))
+* **guardrails:** deep-link to tool policy editor on blocked external tool calls ([#6528](https://github.com/archestra-ai/archestra/issues/6528)) ([b3cf6d1](https://github.com/archestra-ai/archestra/commit/b3cf6d1d4b7b6fe51336c69bfa7156aec3c2d902))
+* **observability:** emit llm_request_duration_seconds for Bedrock ([#6514](https://github.com/archestra-ai/archestra/issues/6514)) ([5304a65](https://github.com/archestra-ai/archestra/commit/5304a652aa0032a78ca42b4ef74bffc2f43ec4c9))
+
+
+### Bug Fixes
+
+* **a2a:** default a missing attachment content type in buildUserContent ([#6559](https://github.com/archestra-ai/archestra/issues/6559)) ([f05cd3e](https://github.com/archestra-ai/archestra/commit/f05cd3ed471d649c84171d13b64b40cbc5a11052))
+* **agents:** assign discovered tools without a caller-resolvable install ([#6533](https://github.com/archestra-ai/archestra/issues/6533)) ([aae1547](https://github.com/archestra-ai/archestra/commit/aae1547615a85b6eb94808a9dd84e7b1abe284fd))
+* **apps:** correct panel and sandbox state ([#6485](https://github.com/archestra-ai/archestra/issues/6485)) ([0f3450b](https://github.com/archestra-ai/archestra/commit/0f3450b2dfefec0cd358df5e7e105022109c6e95))
+* **apps:** default edit_app baseVersion to the current head ([#6522](https://github.com/archestra-ai/archestra/issues/6522)) ([a210849](https://github.com/archestra-ai/archestra/commit/a210849a5975cd12893467a49c3b1997e6331bd8))
+* **apps:** don't register an MCP App when its UI resource can't be read ([#6503](https://github.com/archestra-ai/archestra/issues/6503)) ([d03107c](https://github.com/archestra-ai/archestra/commit/d03107c491e0a599ed942efcd4c43fbb93e04b07))
+* **apps:** forward preview cancellation ([#6499](https://github.com/archestra-ai/archestra/issues/6499)) ([b1b201f](https://github.com/archestra-ai/archestra/commit/b1b201f1f772781fde438cdcf5f0ce7bf296e48a))
+* **apps:** handle terminal UI states ([#6498](https://github.com/archestra-ai/archestra/issues/6498)) ([983ea45](https://github.com/archestra-ai/archestra/commit/983ea4542c323e7ca415f385729a647ef14af520))
+* **apps:** repair app run-links and escape app names against markdown injection ([#6486](https://github.com/archestra-ai/archestra/issues/6486)) ([4c2dcf3](https://github.com/archestra-ai/archestra/commit/4c2dcf36d566bbb9454df9772c74d132733f6f56))
+* **apps:** tighten fallback resource scanning ([#6500](https://github.com/archestra-ai/archestra/issues/6500)) ([db38704](https://github.com/archestra-ai/archestra/commit/db38704a60b631b61e73416164c3a998e4d00788))
+* **chat:** make seeded owned-app chats work on Bedrock ([#6518](https://github.com/archestra-ai/archestra/issues/6518)) ([68dd447](https://github.com/archestra-ai/archestra/commit/68dd4471fb1c980461fc79f56afb1d98236b5176))
+* **chatops:** cancel in-flight runs when a thread is muted ([#6529](https://github.com/archestra-ai/archestra/issues/6529)) ([3ef6c10](https://github.com/archestra-ai/archestra/commit/3ef6c10041acc288873117e389ab5a5c340f026e))
+* **chatops:** Telegram group behavior — privacy-mode truth in docs, full participation when privacy is off ([#6562](https://github.com/archestra-ai/archestra/issues/6562)) ([0f525ac](https://github.com/archestra-ai/archestra/commit/0f525acac98fcd3ddec4a3f4b5140da82abe9a72))
+* **chat:** stop rapid submits from racing the direct-send path and losing messages ([#6534](https://github.com/archestra-ai/archestra/issues/6534)) ([782e177](https://github.com/archestra-ai/archestra/commit/782e1772f2eaafcfa2d167ae9f8b7a54556557f1))
+* **chat:** suppress empty "Thinking…" reasoning accordions ([#6517](https://github.com/archestra-ai/archestra/issues/6517)) ([99de8d3](https://github.com/archestra-ai/archestra/commit/99de8d37ed98dee02fb4594ee3f4fc0c573b52c1))
+* cut three production error-tracking signals (loopback crash, title-gen race, upstream connection noise) ([#6515](https://github.com/archestra-ai/archestra/issues/6515)) ([3be0fcc](https://github.com/archestra-ai/archestra/commit/3be0fcc1b9235a5f29dd08eb831b2d6aa1d015a4))
+* **docker:** upgrade curl to 8.20.0-r0 in platform + mcp base images ([#6565](https://github.com/archestra-ai/archestra/issues/6565)) ([bf86b86](https://github.com/archestra-ai/archestra/commit/bf86b86f09c41d207ae6bcf6d5a31d52071daf8e))
+* **k8s:** full-replace managed custom policies so stale selectors self-heal ([#6546](https://github.com/archestra-ai/archestra/issues/6546)) ([662ab7e](https://github.com/archestra-ai/archestra/commit/662ab7e8a81b282c6347b596628dc3f27aed3570))
+* **k8s:** key MCP per-pod egress policy selector on stable labels ([#6542](https://github.com/archestra-ai/archestra/issues/6542)) ([8928d48](https://github.com/archestra-ai/archestra/commit/8928d4885c478990e725d630ab506af2845b623b))
+* **k8s:** reconcile MCP egress policies on runtime start ([#6535](https://github.com/archestra-ai/archestra/issues/6535)) ([d144d66](https://github.com/archestra-ai/archestra/commit/d144d665894ffa7294e78275d4e6cccc0fc2460a))
+* **llm providers:** microsoft 365 copilot provider ux polishing ([#6513](https://github.com/archestra-ai/archestra/issues/6513)) ([e1300da](https://github.com/archestra-ai/archestra/commit/e1300da6acc734c403154de8c58eff2a958c927f))
+* LLM proxy + frontend request-error resilience ([#6506](https://github.com/archestra-ai/archestra/issues/6506)) ([d866ed5](https://github.com/archestra-ai/archestra/commit/d866ed5be6f9985e99f100783d14eb164e43d06d))
+* **llm-proxy:** give Bedrock non-OK errors a diagnosable message ([#6541](https://github.com/archestra-ai/archestra/issues/6541)) ([084f537](https://github.com/archestra-ai/archestra/commit/084f53749ee32ead4743c0af8b4f311a26281978))
+* **llm-proxy:** proactively stream long Anthropic requests instead of capping them ([#6543](https://github.com/archestra-ai/archestra/issues/6543)) ([2339cfe](https://github.com/archestra-ai/archestra/commit/2339cfea29623e59cda3351a29f0a73e301eea14))
+* **llm-proxy:** strip sampling params the Anthropic model rejects and retry ([#6549](https://github.com/archestra-ai/archestra/issues/6549)) ([1795f22](https://github.com/archestra-ai/archestra/commit/1795f224a8db35b875aa6bc8df90275e8a70a3a9))
+* **mcp-base:** bump click to fix CVE-2026-7246 ([#6548](https://github.com/archestra-ai/archestra/issues/6548)) ([4eef2e4](https://github.com/archestra-ai/archestra/commit/4eef2e45601d2a45f64a988d822873f535366fd9))
+* **mcp-catalog:** don't fail catalog listing when one secret can't resolve ([#6545](https://github.com/archestra-ai/archestra/issues/6545)) ([6655183](https://github.com/archestra-ai/archestra/commit/665518356a1200c4a044f848514f9116f9b730dc))
+* **mcp-gateway:** stop the chat client's GET SSE reconnect storm ([#6564](https://github.com/archestra-ai/archestra/issues/6564)) ([683a4d0](https://github.com/archestra-ai/archestra/commit/683a4d0b277fbe3ca67814efcb2a3b97a9dee1a1))
+* **mcp-registry:** render ForbiddenPage for users without registry read access ([#6555](https://github.com/archestra-ai/archestra/issues/6555)) ([c84ccbc](https://github.com/archestra-ai/archestra/commit/c84ccbc35b781ab6f8a57de85286f9ad790a177e))
+* **mcp:** app-managed egress policy for MCP pods ([#6488](https://github.com/archestra-ai/archestra/issues/6488)) ([2071a41](https://github.com/archestra-ai/archestra/commit/2071a4131be8ef716877138b4ea5b8d559ecf30d))
+* **skills:** slugify SKILL.md names so shared skills install as working slash commands ([#6538](https://github.com/archestra-ai/archestra/issues/6538)) ([9ea78d0](https://github.com/archestra-ai/archestra/commit/9ea78d036a9c5a45edd3033f18722093280d90d8))
+
+
+### Performance Improvements
+
+* **chat:** repair trailing-garbage tool JSON deterministically before model re-ask ([#6547](https://github.com/archestra-ai/archestra/issues/6547)) ([84e6ef5](https://github.com/archestra-ai/archestra/commit/84e6ef58aee97823665658e7e1f1c58080dacd5c))
+
+
+### Code Refactoring
+
+* **observability:** share one error-tracking noise policy across both sinks ([#6563](https://github.com/archestra-ai/archestra/issues/6563)) ([443ffcb](https://github.com/archestra-ai/archestra/commit/443ffcb45f2536480a5d6d80ccc1142a0cf75d4b))
+
+
+### Miscellaneous Chores
+
+* **observability:** reduce non-actionable error-tracking noise ([#6554](https://github.com/archestra-ai/archestra/issues/6554)) ([4469fe0](https://github.com/archestra-ai/archestra/commit/4469fe02b7eb3f4c9c71308e66b0a71e1df02849))
+* **observability:** stop capturing upstream 502/504 failures in the exception sink ([#6560](https://github.com/archestra-ai/archestra/issues/6560)) ([16a09f8](https://github.com/archestra-ai/archestra/commit/16a09f81f0bd50cc7d36d53107d38b35cbf004c9))
+
+## [1.3.8](https://github.com/archestra-ai/archestra/compare/platform-v1.3.7...platform-v1.3.8) (2026-07-10)
+
+
+### Features
+
+* **chatops:** Telegram messaging channel (beta-gated) ([#6494](https://github.com/archestra-ai/archestra/issues/6494)) ([c7852d3](https://github.com/archestra-ai/archestra/commit/c7852d3d5eb88cf7b22dafc025610bec3f82b253))
+* **chat:** thumbs up/down feedback on assistant messages ([#6491](https://github.com/archestra-ai/archestra/issues/6491)) ([a9da766](https://github.com/archestra-ai/archestra/commit/a9da7667ddeaa60f9826c29abffd8eba22620952))
+* **frontend:** WCAG 2.2 A/AA accessibility pass + icon-button lint guard ([#6495](https://github.com/archestra-ai/archestra/issues/6495)) ([6779273](https://github.com/archestra-ai/archestra/commit/677927391d396497a4f6fb9f01ba33d3535914fe))
+* **llm:** add Microsoft Copilot as an LLM provider ([#6434](https://github.com/archestra-ai/archestra/issues/6434)) ([32a0720](https://github.com/archestra-ai/archestra/commit/32a07205617baf7040b4497af801199883532aa6))
+
+
+### Bug Fixes
+
+* **frontend:** show built-in environment egress as unrestricted, not restricted ([#6493](https://github.com/archestra-ai/archestra/issues/6493)) ([f736655](https://github.com/archestra-ai/archestra/commit/f736655650d7077e0e00c2725019d5456ea3af17))
+* smooth new-chat to conversation transition ([#6490](https://github.com/archestra-ai/archestra/issues/6490)) ([67e89b6](https://github.com/archestra-ai/archestra/commit/67e89b6df9fddcbc742bf9ebd4d9d9d82e6ad033))
+
+## [1.3.7](https://github.com/archestra-ai/archestra/compare/platform-v1.3.6...platform-v1.3.7) (2026-07-10)
+
+
+### Features
+
+* **connection:** include shared skills as a marketplace in the Claude Desktop profile ([#6476](https://github.com/archestra-ai/archestra/issues/6476)) ([b4d0cb3](https://github.com/archestra-ai/archestra/commit/b4d0cb3242d7d030d6cfaf1afcc004992aafd0eb))
+* **platform:** default tool assignments to resolve-at-call-time and rename "All" mode to "Auto" ([#6466](https://github.com/archestra-ai/archestra/issues/6466)) ([b511ab8](https://github.com/archestra-ai/archestra/commit/b511ab85d38cbdc27d2592c474c29eb8c6590dd9))
+* **skills:** add edit_skill tool for targeted edits to large skills ([#6478](https://github.com/archestra-ai/archestra/issues/6478)) ([878945c](https://github.com/archestra-ai/archestra/commit/878945c026ba8052b00a40ba2e659cf8b6d4ba6e))
+
+
+### Bug Fixes
+
+* **apps:** correct search and screenshot validation ([#6484](https://github.com/archestra-ai/archestra/issues/6484)) ([d712497](https://github.com/archestra-ai/archestra/commit/d7124972a3846f491d51204c5db9610a1b3132a3))
+* **apps:** degrade gracefully when a third-party MCP UI resource can't be read ([#6487](https://github.com/archestra-ai/archestra/issues/6487)) ([4ab69d3](https://github.com/archestra-ai/archestra/commit/4ab69d311ac43dff228c5386ba85a6cd29cae2ef))
+* **apps:** MCP Apps follow-ups — publish cache refresh, chrome-less standalone mode, pinned-app icons ([#6432](https://github.com/archestra-ai/archestra/issues/6432)) ([39e6e54](https://github.com/archestra-ai/archestra/commit/39e6e543ad9717637b3b28492d0f5ed4a62da2d0))
+* **backend:** return correct statuses for message-edit and secrets failures, cut expected error noise ([#6467](https://github.com/archestra-ai/archestra/issues/6467)) ([67f99ef](https://github.com/archestra-ai/archestra/commit/67f99efa2e79485634951651c80209ea0484818e))
+* **mcp:** make the registry install deep link survive a lost dialog ([#6483](https://github.com/archestra-ai/archestra/issues/6483)) ([fdd5a21](https://github.com/archestra-ai/archestra/commit/fdd5a21905a34739104793882c3fc8ea09f1fd52))
+
+
+### Documentation
+
+* add redirects registry, rename migration-kit page ([#6475](https://github.com/archestra-ai/archestra/issues/6475)) ([70a5d60](https://github.com/archestra-ai/archestra/commit/70a5d6017f1626a7abec7728ca3a0778c7d88057))
+
+## [1.3.6](https://github.com/archestra-ai/archestra/compare/platform-v1.3.5...platform-v1.3.6) (2026-07-09)
+
+
+### Features
+
+* **mcp:** per-team access levels on catalog items ([#6439](https://github.com/archestra-ai/archestra/issues/6439)) ([b5c0b05](https://github.com/archestra-ai/archestra/commit/b5c0b05882e9972722fa6187500b7973cf274f12))
+
+
+### Bug Fixes
+
+* **auth:** stop refresh-token replays from wiping a user's whole OAuth token family ([#6438](https://github.com/archestra-ai/archestra/issues/6438)) ([ab09fde](https://github.com/archestra-ai/archestra/commit/ab09fde989a786b1c19ce5e13e8b8964fc421c06))
+* **chat:** show a declined tool with an orange dot, not a stuck blue one ([#6453](https://github.com/archestra-ai/archestra/issues/6453)) ([095492c](https://github.com/archestra-ai/archestra/commit/095492c1d0b8a0fe3ee8124067d466fe3430c99e))
+
+
+### Miscellaneous Chores
+
+* **backend:** drop inert sourceMap and removeComments from tsconfig ([#6455](https://github.com/archestra-ai/archestra/issues/6455)) ([8971a58](https://github.com/archestra-ai/archestra/commit/8971a58273720c5cef5f372ba036a6936791fe46))
+* **deps:** upgrade TypeScript 7 preview to the 7.0 RC ([#6452](https://github.com/archestra-ai/archestra/issues/6452)) ([b1f55c2](https://github.com/archestra-ai/archestra/commit/b1f55c2bbfa9cd3b8c16bf5fcf7c4fc8167b164f))
+* **frontend:** default local dev to the turbopack bundler ([#6456](https://github.com/archestra-ai/archestra/issues/6456)) ([2a4b091](https://github.com/archestra-ai/archestra/commit/2a4b0913741357ba23928c8f6b2fb1c2dd74a914))
+
+## [1.3.5](https://github.com/archestra-ai/archestra/compare/platform-v1.3.4...platform-v1.3.5) (2026-07-09)
+
+
+### Bug Fixes
+
+* **backend:** debounce token lastUsedAt writes and index conversations.project_id ([#6451](https://github.com/archestra-ai/archestra/issues/6451)) ([d0ac388](https://github.com/archestra-ai/archestra/commit/d0ac3888f2918cd90c16847ce3c78584d2d984cc))
+* **backend:** group transient DB connectivity errors and harden query retry ([#6447](https://github.com/archestra-ai/archestra/issues/6447)) ([3b70f45](https://github.com/archestra-ai/archestra/commit/3b70f455086d230494a78efa524116b0fd0e80f3))
+* **helm:** harden the chart against rollout-induced database outages ([#6449](https://github.com/archestra-ai/archestra/issues/6449)) ([9d1d915](https://github.com/archestra-ai/archestra/commit/9d1d915672f2993975253ef2f31da7c4544d9a97))
+
+
+### Performance Improvements
+
+* **backend:** reduce per-request DB load on gateway, auth, and chat replay hot paths ([#6450](https://github.com/archestra-ai/archestra/issues/6450)) ([39a3d0f](https://github.com/archestra-ai/archestra/commit/39a3d0fed90252f56fed02a4d7119454f1dd6a8e))
+
+
+### Miscellaneous Chores
+
+* **dev:** default Tilt local dev to Turbopack for the Next dev server ([#6446](https://github.com/archestra-ai/archestra/issues/6446)) ([fa1eaae](https://github.com/archestra-ai/archestra/commit/fa1eaaef9fc83eaecaa3aea100029cc95342c8d0))
+
+## [1.3.4](https://github.com/archestra-ai/archestra/compare/platform-v1.3.3...platform-v1.3.4) (2026-07-08)
+
+
+### Features
+
+* **agents:** conservative app-tool exposure, run_tool arg repair, authoring ergonomics ([#6384](https://github.com/archestra-ai/archestra/issues/6384)) ([77df3ec](https://github.com/archestra-ai/archestra/commit/77df3ecc70f855d2c93deb1c2525cfe2e97cbb27))
+* **chat:** message queue + shift+enter newline while a response is in-flight ([#6417](https://github.com/archestra-ai/archestra/issues/6417)) ([3c738ce](https://github.com/archestra-ai/archestra/commit/3c738cebd713bae4039295218b4d3aea611d3074))
+* **mcp:** Refresh Tools on the edit wizard's Tools & Guardrails step ([#6441](https://github.com/archestra-ai/archestra/issues/6441)) ([8228b0a](https://github.com/archestra-ai/archestra/commit/8228b0a0babd320d4e560b994b5b2c8721bbaecb))
+
+
+### Bug Fixes
+
+* **a2a:** stop unbounded agent-to-agent delegation recursion ([#6427](https://github.com/archestra-ai/archestra/issues/6427)) ([866cedf](https://github.com/archestra-ai/archestra/commit/866cedf8bb8795ff886704ee9085a803d40df339))
+* **analytics:** make instance_heartbeat a stateless hourly ping ([#6440](https://github.com/archestra-ai/archestra/issues/6440)) ([073989e](https://github.com/archestra-ai/archestra/commit/073989ef6ea9b2cb8c397dd30bd539dc14fed72a))
+* **apps:** keep opening an external UI app from flipping the chat into sensitive context ([#6437](https://github.com/archestra-ai/archestra/issues/6437)) ([2c37c7c](https://github.com/archestra-ai/archestra/commit/2c37c7cb476a0a4b73a8d3a2c05d69d39acfa076))
+* **chat:** don't silently drop tools when declining a pre-conversation tool prompt ([#6425](https://github.com/archestra-ai/archestra/issues/6425)) ([c261b1e](https://github.com/archestra-ai/archestra/commit/c261b1ed19e187a0ea36e308cbbbbf6c1541f988))
+* **chat:** run a tool the user approved instead of dropping it ([#6435](https://github.com/archestra-ai/archestra/issues/6435)) ([17ca07a](https://github.com/archestra-ai/archestra/commit/17ca07a0cd8b4feef0f97dffb8e2134aca3d5ec0))
+* **chat:** sanitize foreign tool-call ids for Anthropic and Bedrock ([#6423](https://github.com/archestra-ai/archestra/issues/6423)) ([787d015](https://github.com/archestra-ai/archestra/commit/787d01544d6a1b5acb96cabde6f37f06053eaf45))
+* **connect:** github providers selection and anthropic api key notes and notices ([#6429](https://github.com/archestra-ai/archestra/issues/6429)) ([34dfb75](https://github.com/archestra-ai/archestra/commit/34dfb75ce865160eb08c6224b8dcc8917ff467ae))
+* **deps:** bump better-auth to 1.6.13 for GHSA-86j7-9j95-vpqj ([#6426](https://github.com/archestra-ai/archestra/issues/6426)) ([27683b0](https://github.com/archestra-ai/archestra/commit/27683b00da814ecb7e3c00bbfe471913a3b9f0ae))
+* **docker:** patch CVE-2026-23949 by upgrading vendored jaraco.context to 6.1.0 ([#6421](https://github.com/archestra-ai/archestra/issues/6421)) ([8693f5d](https://github.com/archestra-ai/archestra/commit/8693f5d4fecdf49d09c9f561b7bf25abac2e2c35))
+* **e2e:** deflake team sync spec with a test id on the external group mapping row ([#6445](https://github.com/archestra-ai/archestra/issues/6445)) ([b70a707](https://github.com/archestra-ai/archestra/commit/b70a7073fac6fb978011ccdfe56290480ae5bb69))
+* **gemini:** only list Vertex AI models the project can actually invoke ([#6424](https://github.com/archestra-ai/archestra/issues/6424)) ([0a5bb5d](https://github.com/archestra-ai/archestra/commit/0a5bb5d468afa7b6833f06f79c3468d5c260858b))
+* **llm:** classify transient upstream provider errors and cut expected error-report noise ([#6418](https://github.com/archestra-ai/archestra/issues/6418)) ([9a3ce42](https://github.com/archestra-ai/archestra/commit/9a3ce421a5b500ec08ff518dc90ceeed80f5f42c))
+* **mcp:** keep unconnected per-user MCP servers discoverable so the auth prompt can fire ([#6436](https://github.com/archestra-ai/archestra/issues/6436)) ([c440ecb](https://github.com/archestra-ai/archestra/commit/c440ecbbf2b4cec9558b5dfb8b85afde62605579))
+* **proxy:** recognize client-decorated Archestra gateway tools in auto-discovery ([#6433](https://github.com/archestra-ai/archestra/issues/6433)) ([ae5ce2d](https://github.com/archestra-ai/archestra/commit/ae5ce2df13e27006b42c5e9b421cb243f4752185))
+
+
+### Documentation
+
+* fix audited platform docs mismatches ([#6422](https://github.com/archestra-ai/archestra/issues/6422)) ([a3cdbdf](https://github.com/archestra-ai/archestra/commit/a3cdbdf74bccab74010825569d4960bdcc4e5bdb))
+* update connection docs ([#6415](https://github.com/archestra-ai/archestra/issues/6415)) ([564d0b5](https://github.com/archestra-ai/archestra/commit/564d0b5d3235716bd2b0fa8a5b6f3535bf2d5983))
+
+## [1.3.3](https://github.com/archestra-ai/archestra/compare/platform-v1.3.2...platform-v1.3.3) (2026-07-07)
+
+
+### Features
+
+* **mcp:** promote MCP Registry out of beta; Connect beta badge in sidebar ([#6413](https://github.com/archestra-ai/archestra/issues/6413)) ([cf3cee5](https://github.com/archestra-ai/archestra/commit/cf3cee548d97c19bdff1aa94f02575b2db2d77b9))
+
+
+### Bug Fixes
+
+* **organization:** scope org members endpoint to the caller's visible users ([#6376](https://github.com/archestra-ai/archestra/issues/6376)) ([e54477d](https://github.com/archestra-ai/archestra/commit/e54477d45788ca3650d9cdc56db09d7160441b6c))
+
+## [1.3.2](https://github.com/archestra-ai/archestra/compare/platform-v1.3.1...platform-v1.3.2) (2026-07-07)
+
+
+### Features
+
+* **dagger:** apply egress NetworkPolicy by default across engines ([#6411](https://github.com/archestra-ai/archestra/issues/6411)) ([e0472e4](https://github.com/archestra-ai/archestra/commit/e0472e401f6b7e60ddda70739cb4c15c0db289ea))
+* **mcp:** tool freshness (reload/refresh/auto-refresh), 64-char tool names + raw_name, remove-tool ([#6371](https://github.com/archestra-ai/archestra/issues/6371)) ([1f6d8ee](https://github.com/archestra-ai/archestra/commit/1f6d8ee4b9100dc44c2d3db1ae76cb8ec96d4fc9))
+
+## [1.3.1](https://github.com/archestra-ai/archestra/compare/platform-v1.3.0...platform-v1.3.1) (2026-07-06)
+
+
+### Features
+
+* probe anthropic api keys on the connection page ([#6404](https://github.com/archestra-ai/archestra/issues/6404)) ([55e3159](https://github.com/archestra-ai/archestra/commit/55e3159fd739fae41f52ebfb6f731579e90bcd51))
+
+
+### Bug Fixes
+
+* **mcp-runtime:** self-heal multitenant Deployments with a drifted pod selector ([#6405](https://github.com/archestra-ai/archestra/issues/6405)) ([5f38901](https://github.com/archestra-ai/archestra/commit/5f389019337de21d417188e440f579256fd64d4f))
+* **platform:** default archestra tools for pre-existing agents (skill-tool exemption + sandbox backfill) ([#6400](https://github.com/archestra-ai/archestra/issues/6400)) ([a1f0109](https://github.com/archestra-ai/archestra/commit/a1f01093e31f58511433954475b4439b3f0d1782))
+
+## [1.3.0](https://github.com/archestra-ai/archestra/compare/platform-v1.2.82...platform-v1.3.0) (2026-07-06)
+
+
+### Features
+
+* **agents:** LLM-summarization compaction for the A2A agentic loop ([#6262](https://github.com/archestra-ai/archestra/issues/6262)) ([0a8ad4c](https://github.com/archestra-ai/archestra/commit/0a8ad4c3a966b32db55a6a2f2930c2bf9589c05c))
+* **analytics:** restore product events dropped with the desktop app ([#6251](https://github.com/archestra-ai/archestra/issues/6251)) ([6c95e9c](https://github.com/archestra-ai/archestra/commit/6c95e9cf17bd4a7d986f1fb21ef99ea9dbddea0f))
+* **apps:** MCP Apps bundle — open flow, pinning, filters, icons, chat fixes ([#6302](https://github.com/archestra-ai/archestra/issues/6302)) ([9615a97](https://github.com/archestra-ai/archestra/commit/9615a9792cd96a3d5af81d9e955474a0131fadde))
+* **apps:** move app HTML lint to Rust and harden the save-gate scan ([#6359](https://github.com/archestra-ai/archestra/issues/6359)) ([c2ff9f2](https://github.com/archestra-ai/archestra/commit/c2ff9f25610fafa5573154b488587bef2945ff8a))
+* **archestra-mcp:** retire the artifact_write tool ([#6203](https://github.com/archestra-ai/archestra/issues/6203)) ([650305e](https://github.com/archestra-ai/archestra/commit/650305e7718d80c5f43005e0e31235ecbf16de7c))
+* **frontend:** keep agent id in URL while edit/view dialogs are open ([#6192](https://github.com/archestra-ai/archestra/issues/6192)) ([fd1206f](https://github.com/archestra-ai/archestra/commit/fd1206fb0a7893a470027296e77cc734041dfd28))
+* **helm:** enable code runtime and managed Dagger Engine by default ([#6393](https://github.com/archestra-ai/archestra/issues/6393)) ([cb8d505](https://github.com/archestra-ai/archestra/commit/cb8d505e0d42de9b0ec29efbe4f565211d0163c2))
+* instance-wide top banner via ARCHESTRA_SITE_NOTIFICATION_MESSAGE ([#6308](https://github.com/archestra-ai/archestra/issues/6308)) ([a148903](https://github.com/archestra-ai/archestra/commit/a1489038d04793b99e5dbb97ef8852409415dc03))
+* make Apps, Projects, Skills, Environments & the code runtime available by default ([#6248](https://github.com/archestra-ai/archestra/issues/6248)) ([b59ee2e](https://github.com/archestra-ai/archestra/commit/b59ee2e9fc5204f6b2c9a1fbef158fb74f6fc275))
+* **models:** capability-aware Ollama sync + 1024/384 KB embeddings ([#6352](https://github.com/archestra-ai/archestra/issues/6352)) ([7beb1c8](https://github.com/archestra-ai/archestra/commit/7beb1c86216b66f65f570cb2c2afc4cc08344394))
+* **onboarding:** red-dot nudges, first-login survey, feedback popup ([#6336](https://github.com/archestra-ai/archestra/issues/6336)) ([3da9f03](https://github.com/archestra-ai/archestra/commit/3da9f03d5d2ec06e34935e33ca1df6393634a3b3))
+* **platform:** backfill default archestra tool assignments to existing agents ([#6351](https://github.com/archestra-ai/archestra/issues/6351)) ([f468405](https://github.com/archestra-ai/archestra/commit/f46840530b6e7dd31652c51416f423efb1d43983))
+* **platform:** make MCP gateway tool-call timeout configurable ([#6381](https://github.com/archestra-ai/archestra/issues/6381)) ([8f81ddc](https://github.com/archestra-ai/archestra/commit/8f81ddc026dacd9df2579073a9884eccb9d4bcd8))
+* **platform:** unified tool access with per-agent exclusions for All mode ([#6318](https://github.com/archestra-ai/archestra/issues/6318)) ([d02279d](https://github.com/archestra-ai/archestra/commit/d02279d8268dedaf0aaba1dbf6c85e85cd49fbb6))
+* **rbac:** introduce file:manage permission for persistent file surfaces ([#6313](https://github.com/archestra-ai/archestra/issues/6313)) ([70d18f6](https://github.com/archestra-ai/archestra/commit/70d18f6b0d1f6436815ccd145be07be46860e59a))
+
+
+### Bug Fixes
+
+* add default model selection for built-in agents to onboarding ([#6304](https://github.com/archestra-ai/archestra/issues/6304)) ([69e94d0](https://github.com/archestra-ai/archestra/commit/69e94d00daf359a724a92b187a72286c0025d816))
+* **apps:** clickable connect affordance for auth-required tool errors ([#6335](https://github.com/archestra-ai/archestra/issues/6335)) ([fcc0aba](https://github.com/archestra-ai/archestra/commit/fcc0abadbcf36876956caf17b43166cc6e17c35e))
+* **apps:** enforce tool-invocation policy on the server-scoped MCP app proxy ([#6319](https://github.com/archestra-ai/archestra/issues/6319)) ([59d65fd](https://github.com/archestra-ai/archestra/commit/59d65fd5a1e521c1a493a5df1bc865715cb7943b))
+* **apps:** gate resources/read on the server-scoped MCP App proxy to ui:// resources ([#6328](https://github.com/archestra-ai/archestra/issues/6328)) ([5458a89](https://github.com/archestra-ai/archestra/commit/5458a8949f47849296ca04cee23b9af05d1ce808))
+* **apps:** guide the build-app agent's completion message and dead-end tool errors ([#6283](https://github.com/archestra-ai/archestra/issues/6283)) ([d21e459](https://github.com/archestra-ai/archestra/commit/d21e459cc6c9b4987d31156dff5fdb6443220c75))
+* **apps:** make the `hidden` attribute reliably hide in sandboxed apps ([#6271](https://github.com/archestra-ai/archestra/issues/6271)) ([737ce89](https://github.com/archestra-ai/archestra/commit/737ce8986124ca7f112d64da3459203801e8d2e7))
+* arm64 native-binary packaging and primary provider-key conflicts ([#6322](https://github.com/archestra-ai/archestra/issues/6322)) ([5057646](https://github.com/archestra-ai/archestra/commit/50576461695c792c352a9f39f638a7b8186084bc))
+* **auth:** gate CompleteOnboarding behind org-admin ([#6366](https://github.com/archestra-ai/archestra/issues/6366)) ([583d14d](https://github.com/archestra-ai/archestra/commit/583d14d00eaa247342d92204520123de356bbe20))
+* **chat:** app tool calls render as pills in one row with consistent gaps ([#6303](https://github.com/archestra-ai/archestra/issues/6303)) ([bf68544](https://github.com/archestra-ai/archestra/commit/bf685443e1c70422bf5f38667b0deb1b6c32a41e))
+* **chat:** dispatch dynamically-reached app launch tools without poisoning the trust context ([#6324](https://github.com/archestra-ai/archestra/issues/6324)) ([f526fda](https://github.com/archestra-ai/archestra/commit/f526fda5cf25d9e21ee680fd89a34e5698f1b80a))
+* **chat:** drop non-chat Bedrock models from the chat model picker ([#6363](https://github.com/archestra-ai/archestra/issues/6363)) ([8c77c80](https://github.com/archestra-ai/archestra/commit/8c77c8036b34889c980bc5adeb460862b2544606))
+* **chatops:** actionable LLM API-key error, agent-based resolution for non-/chat runs, consistent footer ([#6219](https://github.com/archestra-ai/archestra/issues/6219)) ([0d205e1](https://github.com/archestra-ai/archestra/commit/0d205e100d9505935bb68659e43a2c09cd4f4a65))
+* **connection:** shell-quote server name in generated setup commands ([#6360](https://github.com/archestra-ai/archestra/issues/6360)) ([a515cc4](https://github.com/archestra-ai/archestra/commit/a515cc490336d5aa335b291263009e28eb85d46f))
+* **embeddings:** resolve provider base URL from configured host + stop auditing test-embedding ([#6347](https://github.com/archestra-ai/archestra/issues/6347)) ([81ca841](https://github.com/archestra-ai/archestra/commit/81ca841fdf50ee65bf3b253d008ee0f1532f9e1c))
+* **environments:** gate "Manage environments" link on environment:admin ([#6370](https://github.com/archestra-ai/archestra/issues/6370)) ([e082cb9](https://github.com/archestra-ai/archestra/commit/e082cb94712c36b8a0765b57726b11966fd16429))
+* **frontend:** Apps sidebar badge says Beta instead of New ([#6341](https://github.com/archestra-ai/archestra/issues/6341)) ([1cfbd6e](https://github.com/archestra-ai/archestra/commit/1cfbd6e99cc83fce6802bf2498867ce20cfabe16))
+* **frontend:** bound MCP registry Logs/YAML viewer height so only the log pane scrolls ([#6331](https://github.com/archestra-ai/archestra/issues/6331)) ([d5cf7ea](https://github.com/archestra-ai/archestra/commit/d5cf7eaa0074fbf04049a9dc86e4e88918a8e37a))
+* **frontend:** skip mcp_server and projects list fetches for roles without the permission ([#6323](https://github.com/archestra-ai/archestra/issues/6323)) ([300d491](https://github.com/archestra-ai/archestra/commit/300d49111a420a21b0448ae64fb8626ca8d49ac9))
+* **kb:** connectors bugs 1 ([#6377](https://github.com/archestra-ai/archestra/issues/6377)) ([c4ba678](https://github.com/archestra-ai/archestra/commit/c4ba67890610f2cea6533481acbfc15193a28b06))
+* mask api key input field on add model api key form dialogue ([#6298](https://github.com/archestra-ai/archestra/issues/6298)) ([990452a](https://github.com/archestra-ai/archestra/commit/990452a83774bca5d9c8d301cd0fc169d52b8d6d))
+* **mcp-gateway:** keep dynamically-reached UI tools out of the internal chat tool list ([#6382](https://github.com/archestra-ai/archestra/issues/6382)) ([ee519fb](https://github.com/archestra-ai/archestra/commit/ee519fbb44f26769f9ac980c33918e718fb87421))
+* **mcp-runtime:** catalog-stable pod selector for multitenant MCP servers ([#6340](https://github.com/archestra-ai/archestra/issues/6340)) ([7302ed7](https://github.com/archestra-ai/archestra/commit/7302ed7617644f7227c5813b3b805148f26993f6))
+* **mcp-runtime:** reconcile existing Service selector to current mcp-server-id ([#6332](https://github.com/archestra-ai/archestra/issues/6332)) ([ef80fc6](https://github.com/archestra-ai/archestra/commit/ef80fc66e75753a0a5dfcdbd1ae7359641022c74))
+* **onboarding:** allow saving an image-only onboarding wizard page ([#6355](https://github.com/archestra-ai/archestra/issues/6355)) ([45e4a01](https://github.com/archestra-ai/archestra/commit/45e4a013b6f1ec8f5c6f890b277935f4edd8ad92))
+* **onboarding:** don't save a stale model when switching provider key ([#6362](https://github.com/archestra-ai/archestra/issues/6362)) ([017cf52](https://github.com/archestra-ai/archestra/commit/017cf52ecfc423d1756978474ad70a47a91ff59a))
+* **onboarding:** forward the survey to the website at most once per org ([#6361](https://github.com/archestra-ai/archestra/issues/6361)) ([24532a2](https://github.com/archestra-ai/archestra/commit/24532a290f24e8e2c82d7b75270594cc8735ed15))
+* **platform:** close tool-exclusion enforcement gaps in All mode ([#6344](https://github.com/archestra-ai/archestra/issues/6344)) ([2d782e2](https://github.com/archestra-ai/archestra/commit/2d782e269225ed56509d3152f22bcb3218b55f99))
+* **policy:** make "Edit policy" work for All-mode policy-denied tools ([#6350](https://github.com/archestra-ai/archestra/issues/6350)) ([d308ed0](https://github.com/archestra-ai/archestra/commit/d308ed00930374ec4a1d5c4fb73e1d74670dc188))
+* **providers:** clear credential fields when the provider changes ([#6364](https://github.com/archestra-ai/archestra/issues/6364)) ([8af06a0](https://github.com/archestra-ai/archestra/commit/8af06a072fd97d5e8823c1a1825a797b9beab8ad))
+* **providers:** edit-key dialog validation + unsaved-changes parity ([#6365](https://github.com/archestra-ai/archestra/issues/6365)) ([57652b0](https://github.com/archestra-ai/archestra/commit/57652b0a1117687362e4ea353a1a7f1ff2af4b30))
+* replace security engine toggle with default tool policies settings ([#6317](https://github.com/archestra-ai/archestra/issues/6317)) ([d874cbb](https://github.com/archestra-ai/archestra/commit/d874cbbbfc1449062b2eeac64f9fc619a58f7b06))
+* restore error-status fidelity for upstream provider and client errors ([#6329](https://github.com/archestra-ai/archestra/issues/6329)) ([cc6648f](https://github.com/archestra-ai/archestra/commit/cc6648fcb82c75df9706fa620ddb20b95b158d05))
+* stale model key error persists bug ([#6342](https://github.com/archestra-ai/archestra/issues/6342)) ([84ba298](https://github.com/archestra-ai/archestra/commit/84ba298798bc6ef9610f8e541aa36442b3b25b32))
+* **task-queue:** make the worker cap reachable and stop losing periodic tasks ([#6309](https://github.com/archestra-ai/archestra/issues/6309)) ([aeb6933](https://github.com/archestra-ai/archestra/commit/aeb6933a542e20ec8a22701c3177b165595a85c9))
+* think blocks leak to a2a chats ([#6391](https://github.com/archestra-ai/archestra/issues/6391)) ([7da0515](https://github.com/archestra-ai/archestra/commit/7da0515474c7f359fada31265c0421432012241c))
+
+
+### Performance Improvements
+
+* **archestra-rs:** faster NAPI builds — fast dev profile + drop thin-LTO ([#6320](https://github.com/archestra-ai/archestra/issues/6320)) ([b2a7824](https://github.com/archestra-ai/archestra/commit/b2a7824cea6535dac38121314598866628d0179d))
+* **auth:** stop minting an unused JWT on every authenticated request ([#6316](https://github.com/archestra-ai/archestra/issues/6316)) ([3eec3f6](https://github.com/archestra-ai/archestra/commit/3eec3f6b021ff55a2603bd63bea60ca835cacac7))
+* **backend:** reduce per-call work on four hot paths ([#6310](https://github.com/archestra-ai/archestra/issues/6310)) ([450deed](https://github.com/archestra-ai/archestra/commit/450deedf7472d8fbf6ad73b0eecefa0afacc4234))
+* **models-dev:** single-flight TTL cache and fetch timeout ([#6288](https://github.com/archestra-ai/archestra/issues/6288)) ([651a8fd](https://github.com/archestra-ai/archestra/commit/651a8fdec820109cf1533e1fa915dae639d3d0be))
+* **websocket:** share one deployment-status poller across subscribers ([#6299](https://github.com/archestra-ai/archestra/issues/6299)) ([7675dc9](https://github.com/archestra-ai/archestra/commit/7675dc9059d57cb9f1d1e1af44d8af90a3922c8f))
+
+
+### Documentation
+
+* retire writer prompt for a skill, add Code Sandbox + Skills pages, de-fluff ([#6337](https://github.com/archestra-ai/archestra/issues/6337)) ([0ab6f24](https://github.com/archestra-ai/archestra/commit/0ab6f2482be20e12916991af219a2b80a7b1144e))
+
+
+### CI/CD
+
+* release 1.3.0 ([#6396](https://github.com/archestra-ai/archestra/issues/6396)) ([e3862bf](https://github.com/archestra-ai/archestra/commit/e3862bfa62f2238b7d8fb13eca236a89296f2086))
+
+
+### Code Refactoring
+
+* **apps:** reuse the MCP gateway pill selector for App-settings tools ([#6268](https://github.com/archestra-ai/archestra/issues/6268)) ([6db220a](https://github.com/archestra-ai/archestra/commit/6db220af8169e3355ecdd498eeb57b91e018ae52))
+* **apps:** unify the agent-facing app-authoring MCP tools ([#6285](https://github.com/archestra-ai/archestra/issues/6285)) ([4907b2b](https://github.com/archestra-ai/archestra/commit/4907b2bd8b81ece29f846476ac84b01b9a8d79c3))
+* **connection:** drop dead duplicate edge-recalc layout effect ([#6356](https://github.com/archestra-ai/archestra/issues/6356)) ([a6cd035](https://github.com/archestra-ai/archestra/commit/a6cd035295a724ee21f9f61e9d3af7793ece67d9))
+* rename archestra-bench workspace dir to ai-labs ([#6325](https://github.com/archestra-ai/archestra/issues/6325)) ([3c6c469](https://github.com/archestra-ai/archestra/commit/3c6c469daac263bb70d47073e1ab1c7518d0521f))
+
+
+### Miscellaneous Chores
+
+* **backend:** dead code removal and small correctness fixes ([#6311](https://github.com/archestra-ai/archestra/issues/6311)) ([f4c3a24](https://github.com/archestra-ai/archestra/commit/f4c3a2447a597aabb0e6d6f97b94a2e143acc6bc))
+* release 1.3.0 ([#6394](https://github.com/archestra-ai/archestra/issues/6394)) ([832eb94](https://github.com/archestra-ai/archestra/commit/832eb940fd19c41b75009e343400a13b5f2d03bc))
+* **skills:** add backend + llm-providers skills, fix stale claims in existing skills ([#6383](https://github.com/archestra-ai/archestra/issues/6383)) ([f61b415](https://github.com/archestra-ai/archestra/commit/f61b41577cf387bc44f4e1e78274f88ae1043b78))
+
+## [1.2.82](https://github.com/archestra-ai/archestra/compare/platform-v1.2.81...platform-v1.2.82) (2026-07-03)
+
+
+### Features
+
+* **auth:** developer-only auto-authenticate env var ([#6250](https://github.com/archestra-ai/archestra/issues/6250)) ([f81100f](https://github.com/archestra-ai/archestra/commit/f81100f45080b4cc2d769838fcb2182bcf21e2a9))
+* **files:** show upload spinner while dropped files upload ([#6252](https://github.com/archestra-ai/archestra/issues/6252)) ([bc3a59c](https://github.com/archestra-ai/archestra/commit/bc3a59c3518bef1b9ad0199e2598d52fbf473d3d))
+* **mcp-gateway:** name every searchable MCP server in the search_tools description ([#6267](https://github.com/archestra-ai/archestra/issues/6267)) ([13b124c](https://github.com/archestra-ai/archestra/commit/13b124c27eb6c7400a874e3d6e761ccd7ec01974))
+* **mcp-inspector:** static-height tools sidebar with search ([#6274](https://github.com/archestra-ai/archestra/issues/6274)) ([4f0ae92](https://github.com/archestra-ai/archestra/commit/4f0ae92b01b2d5a880bb9738ee9178c0f1086a71))
+* **oauth-clients:** team-based visibility scoping for MCP gateway & LLM proxy OAuth clients ([#6239](https://github.com/archestra-ai/archestra/issues/6239)) ([6034165](https://github.com/archestra-ai/archestra/commit/6034165e3c2f80d7216d750a4698fe62a893738d))
+
+
+### Bug Fixes
+
+* **a2a:** strip inline &lt;thinking&gt; blocks from A2A output ([#6263](https://github.com/archestra-ai/archestra/issues/6263)) ([efe45d8](https://github.com/archestra-ai/archestra/commit/efe45d80c7e1aba6c9a5e7fa9b9607d16f7c79d4))
+* add user password reset workaround (admin cli utility) ([#6246](https://github.com/archestra-ai/archestra/issues/6246)) ([c32dddf](https://github.com/archestra-ai/archestra/commit/c32dddf8996b04af6caa03540268bb6cee69db4e))
+* always seed the app-opened chat greeting and simplify its copy ([#6279](https://github.com/archestra-ai/archestra/issues/6279)) ([cbdc976](https://github.com/archestra-ai/archestra/commit/cbdc976b779092a689658e2407d3bb0cd733cb45))
+* **apps:** guard app data-store writes on the last-seen revision by default ([#6254](https://github.com/archestra-ai/archestra/issues/6254)) ([c35464c](https://github.com/archestra-ai/archestra/commit/c35464c312cd17986108a660f2ca824de0797488))
+* **apps:** keep tool-call details (and show an empty state) when an app renders blank ([#6260](https://github.com/archestra-ai/archestra/issues/6260)) ([618f903](https://github.com/archestra-ai/archestra/commit/618f9038a557b1224517be6a431080aadf2b7cbc))
+* **apps:** make owned Apps assignable to chat agents and profiles in Custom-tools mode ([#6244](https://github.com/archestra-ai/archestra/issues/6244)) ([29afcdd](https://github.com/archestra-ai/archestra/commit/29afcdd323dca585bfb69052df3306717f431725))
+* **apps:** pass through browser permissions ([#6211](https://github.com/archestra-ai/archestra/issues/6211)) ([2b11fc9](https://github.com/archestra-ai/archestra/commit/2b11fc972cfdd254aaa10753b686ee9b45ffcf03))
+* **auth:** configurable cookie prefix so parallel local stacks don't clobber sessions ([#6270](https://github.com/archestra-ai/archestra/issues/6270)) ([77df5ae](https://github.com/archestra-ai/archestra/commit/77df5aedead04bed7eb45ce174b578ef97e411df))
+* build missing NAPI addons in dev-stack up ([#6264](https://github.com/archestra-ai/archestra/issues/6264)) ([2946a4e](https://github.com/archestra-ai/archestra/commit/2946a4e344545fd09835b50ba5e7a75d2f36806f))
+* **cache:** LRU has() no longer promotes recency; drop dead wrap option ([#6228](https://github.com/archestra-ai/archestra/issues/6228)) ([f85b832](https://github.com/archestra-ai/archestra/commit/f85b8328b64e965e63af81abab7f27d047ffb606))
+* chat header selector border and stuck tab highlight ([#6282](https://github.com/archestra-ai/archestra/issues/6282)) ([c01b7e7](https://github.com/archestra-ai/archestra/commit/c01b7e7caa8ce2786f0dd573bc06fa7b5cbab3cc))
+* **chat/proxy:** give untyped MCP tool schema nodes an explicit type for Gemini/Vertex ([#6220](https://github.com/archestra-ai/archestra/issues/6220)) ([09f55aa](https://github.com/archestra-ai/archestra/commit/09f55aaec131ef206d8abc6f55abd8789e460b5b))
+* **chat:** prepend a leading user turn for Gemini so owned-app chats don't 400 ([#6258](https://github.com/archestra-ai/archestra/issues/6258)) ([78ad0ef](https://github.com/archestra-ai/archestra/commit/78ad0efd5543e9fde884008636cee01904488986))
+* clear raced timeout timers once the winning promise settles ([#6226](https://github.com/archestra-ai/archestra/issues/6226)) ([fb769a8](https://github.com/archestra-ai/archestra/commit/fb769a88caafe9257633994dc55faca3d10195dd))
+* clearly communicate mcp servers and tools to be installed on the… ([#6253](https://github.com/archestra-ai/archestra/issues/6253)) ([2768297](https://github.com/archestra-ai/archestra/commit/276829754f45ab064f5239c0d0de0d602069dcf2))
+* clearly communicate policy violation errors from security engine ([#6261](https://github.com/archestra-ai/archestra/issues/6261)) ([3c8f32b](https://github.com/archestra-ai/archestra/commit/3c8f32bac2e3bc4746e1913844289dd487a122d5))
+* **frontend:** clarify the virtual key owner picker and fix its width ([#6269](https://github.com/archestra-ai/archestra/issues/6269)) ([9b85644](https://github.com/archestra-ai/archestra/commit/9b856447dcc8bf53314ca2f7a2534800d1cf00ef))
+* **frontend:** remove unreachable "Enable and create a new skill" button ([#6265](https://github.com/archestra-ai/archestra/issues/6265)) ([9f5549f](https://github.com/archestra-ai/archestra/commit/9f5549f51dd9e944e84163789f6fc3cd8bc98dc5))
+* **frontend:** return to the originating page after OAuth completes ([#6259](https://github.com/archestra-ai/archestra/issues/6259)) ([81b6468](https://github.com/archestra-ai/archestra/commit/81b6468d78573a0fe3bf0c1b3f19ea9d0d8f1cdd))
+* **llm:** surface streaming LLM failures in session history + recover from OpenRouter-style context-length errors ([#6223](https://github.com/archestra-ai/archestra/issues/6223)) ([bfe1de2](https://github.com/archestra-ai/archestra/commit/bfe1de28f65d35bf43dcfb282371f69e860b0a93))
+* **mcp:** close the client when tool discovery fails in connectAndGetTools ([#6229](https://github.com/archestra-ai/archestra/issues/6229)) ([ce4a6a4](https://github.com/archestra-ai/archestra/commit/ce4a6a4433824b5830e28a4963eff56265278174))
+* **mcp:** make multi-install external apps interactive in chat ([#6249](https://github.com/archestra-ai/archestra/issues/6249)) ([a443293](https://github.com/archestra-ai/archestra/commit/a443293002453d86f0f1043d214e9f75e7e58449))
+* **oauth:** surface initiate errors to users and logs ([#6266](https://github.com/archestra-ai/archestra/issues/6266)) ([0de7b86](https://github.com/archestra-ai/archestra/commit/0de7b86a94313278de745cfddb2e037624aef52e))
+* **skills:** stop build-app skill from creating duplicate app entities ([#6257](https://github.com/archestra-ai/archestra/issues/6257)) ([3fab68e](https://github.com/archestra-ai/archestra/commit/3fab68e1fd1e1e8307aff232c8a8002dbb32bf4e))
+
+
+### Performance Improvements
+
+* **db:** stop fetching rows that are only counted or discarded ([#6227](https://github.com/archestra-ai/archestra/issues/6227)) ([0232c14](https://github.com/archestra-ai/archestra/commit/0232c140b8894b59b83031790e26a189cf92aba9))
+* run independent queries concurrently on hot paths ([#6225](https://github.com/archestra-ai/archestra/issues/6225)) ([0a45629](https://github.com/archestra-ai/archestra/commit/0a456290981f3cfea3db49aada03e0026921e6a8))
+* **task-queue:** fold attempt decrement into releaseToQueue bulk update ([#6224](https://github.com/archestra-ai/archestra/issues/6224)) ([b6303da](https://github.com/archestra-ai/archestra/commit/b6303da6d3a645ef7ece89bb05f7691c58a1dff5))
+
+## [1.2.81](https://github.com/archestra-ai/archestra/compare/platform-v1.2.80...platform-v1.2.81) (2026-07-02)
+
+
+### Features
+
+* **apps:** publish_app accepts team names, not just uuids ([#6218](https://github.com/archestra-ai/archestra/issues/6218)) ([e3f8b5b](https://github.com/archestra-ai/archestra/commit/e3f8b5b19f8979f0677551adec46fa4cac9b471f))
+* **apps:** unwrap MCP tool results in the apps SDK tools.call ([#6197](https://github.com/archestra-ai/archestra/issues/6197)) ([c131f3c](https://github.com/archestra-ai/archestra/commit/c131f3c84d1f63a8dee6a13558e318db88523f28))
+* **chat:** !-prefixed messages run directly in the sandbox ([#6208](https://github.com/archestra-ai/archestra/issues/6208)) ([e9f72d3](https://github.com/archestra-ai/archestra/commit/e9f72d3580ef2f3b3a7954fe5a5cbda87f65d203))
+* **chat:** Chat buttons on MCP registry beta + skills, shareable skill-editor URLs ([#6148](https://github.com/archestra-ai/archestra/issues/6148)) ([2eeab3c](https://github.com/archestra-ai/archestra/commit/2eeab3c36c11377c87ed540bce24ae2dd1fec242))
+* **mcp-registry:** hide MCP Apps demo servers behind a catalog type filter ([#6193](https://github.com/archestra-ai/archestra/issues/6193)) ([c595567](https://github.com/archestra-ai/archestra/commit/c5955672ef42cbc6f29a2a08671a981251c1e0c5))
+* **skills:** explain GitHub import is a one-time snapshot ([#6194](https://github.com/archestra-ai/archestra/issues/6194)) ([7879305](https://github.com/archestra-ai/archestra/commit/787930520677c491e3637e829f3f3ae40ad3a35f))
+
+
+### Bug Fixes
+
+* add custom headers to claude code for bedrock connect script ([#6215](https://github.com/archestra-ai/archestra/issues/6215)) ([c453299](https://github.com/archestra-ai/archestra/commit/c453299b4e7afcd9c016d3b9821e6a292b3a7853))
+* **analytics:** keep dev/CI errors out of PostHog and harden LLM proxy error paths ([#6195](https://github.com/archestra-ai/archestra/issues/6195)) ([0e8fe36](https://github.com/archestra-ai/archestra/commit/0e8fe36419669068a87371c80cc280aecbbf405a))
+* **apps:** mcp rendering in sidebar, rendering of multiple instances in chat ([#6198](https://github.com/archestra-ai/archestra/issues/6198)) ([ea6b949](https://github.com/archestra-ai/archestra/commit/ea6b9499509d17e2c5f4cc13568d06e7b59fefc3))
+* **bench:** INV-1008 objective mismatch + per-rollout projects with project-scoped artifact resolution ([#6206](https://github.com/archestra-ai/archestra/issues/6206)) ([45ec170](https://github.com/archestra-ai/archestra/commit/45ec17010a48d2ab4609c19fed8ed0bcd1de506b))
+* **bench:** stop flagging tool-call repair LLM calls as effective-prompt anomalies ([#6201](https://github.com/archestra-ai/archestra/issues/6201)) ([f0bb2fc](https://github.com/archestra-ai/archestra/commit/f0bb2fc9de65a571e77fa07c09b67c8ee920a7ab))
+* **chat:** cap agent output tokens at the model's real ceiling + informative scaffold_app duplicate error ([#6214](https://github.com/archestra-ai/archestra/issues/6214)) ([3d26a82](https://github.com/archestra-ai/archestra/commit/3d26a82904a8c5a257d999ab4e280d3fd0fd00cc))
+* **chat:** collapse prompt input toolbar when controls don't fit ([#6210](https://github.com/archestra-ai/archestra/issues/6210)) ([db3ea05](https://github.com/archestra-ai/archestra/commit/db3ea05031731644e4fea1bfda5a4ad2ceef8b3e))
+* **chat:** don't paint load_skill file reads as skill pills ([#6209](https://github.com/archestra-ai/archestra/issues/6209)) ([b39b770](https://github.com/archestra-ai/archestra/commit/b39b770007596267d34093c5f58947456f8461e8))
+* **chat:** keep Files/Browser/Apps tabs always visible in a top bar ([#6190](https://github.com/archestra-ai/archestra/issues/6190)) ([d3ba58f](https://github.com/archestra-ai/archestra/commit/d3ba58f8f34b294a1c8521ba73833b04ac665341)), closes [#5976](https://github.com/archestra-ai/archestra/issues/5976)
+* **chat:** show underlying MCP server icon on run_tool circles ([#6205](https://github.com/archestra-ai/archestra/issues/6205)) ([c89d2bf](https://github.com/archestra-ai/archestra/commit/c89d2bfb0713e3e3beba4c2788ae1696a83810eb))
+* connect page - mcp static token - copy unmasked value ([#6216](https://github.com/archestra-ai/archestra/issues/6216)) ([2ee1037](https://github.com/archestra-ai/archestra/commit/2ee1037c42cc4ad546b9131734434b6757e5eba2))
+* **cost-limits:** attribute cost-limit blocks to Archestra and name the rule ([#6012](https://github.com/archestra-ai/archestra/issues/6012)) ([07d3ddd](https://github.com/archestra-ai/archestra/commit/07d3ddd5ee0c646a1ae214064c3092fe973beaa7))
+* **llm-logs:** skip whitespace-only text parts to avoid blank assistant bubbles ([#6213](https://github.com/archestra-ai/archestra/issues/6213)) ([ee7e3bf](https://github.com/archestra-ai/archestra/commit/ee7e3bf1d57ecfaa011835db997d264bec741224))
+* **llm:** highlight only one row in API key selector when keys share a name ([#6207](https://github.com/archestra-ai/archestra/issues/6207)) ([9b12fd9](https://github.com/archestra-ai/archestra/commit/9b12fd99bb353ab6ed25d07121f7ae306ba9ba0b))
+* **mcp:** render interactive MCP Apps in All-tools gateway mode ([#6120](https://github.com/archestra-ai/archestra/issues/6120)) ([63b7bf2](https://github.com/archestra-ai/archestra/commit/63b7bf28af16ef5be55643b3c16382faa32c5672))
+
+
+### Performance Improvements
+
+* **costs:** index-only cost statistics scans and no duplicate initial fetch ([#6199](https://github.com/archestra-ai/archestra/issues/6199)) ([ea4be05](https://github.com/archestra-ai/archestra/commit/ea4be0527dc10fedced739c49b05fee254d4c9cc))
+
+## [1.2.80](https://github.com/archestra-ai/archestra/compare/platform-v1.2.79...platform-v1.2.80) (2026-07-02)
+
+
+### Features
+
+* **apps:** validate_app SDK-call lint + authoring description/skill refinement ([#6135](https://github.com/archestra-ai/archestra/issues/6135)) ([d119088](https://github.com/archestra-ai/archestra/commit/d119088305661778a555e7df3304b7c8c18e4429))
+* **frontend:** keep password managers off app-secret fields via SecretInput/SecretTextarea ([#6178](https://github.com/archestra-ai/archestra/issues/6178)) ([9d6afaf](https://github.com/archestra-ai/archestra/commit/9d6afaf070cfe567233bc2e502df63363162bab7))
+* **llm:** Anthropic Workload Identity Federation (keyless auth) ([#6147](https://github.com/archestra-ai/archestra/issues/6147)) ([7e89ff4](https://github.com/archestra-ai/archestra/commit/7e89ff4f0a9f3452a46d037ac0d0c7d289223b6f))
+* show OAuth refresh error details in the MCP connections dialog ([#6170](https://github.com/archestra-ai/archestra/issues/6170)) ([5da79c7](https://github.com/archestra-ai/archestra/commit/5da79c7c444f7d853a60dceb27c8ca8e734925ce))
+* treat `query_knowledge_sources` results as sensitive by default ([#4404](https://github.com/archestra-ai/archestra/issues/4404)) ([bfe4dc8](https://github.com/archestra-ai/archestra/commit/bfe4dc888c9d2b5ffaf876b79896572a256b3558))
+
+
+### Bug Fixes
+
+* **apps:** multiple UX improvements and bugfixes ([#6163](https://github.com/archestra-ai/archestra/issues/6163)) ([310d76b](https://github.com/archestra-ai/archestra/commit/310d76b852094d916035328de45bd66422d60ab2))
+* **auth:** evaluate RBAC from the database, not the session cookie cache ([#6181](https://github.com/archestra-ai/archestra/issues/6181)) ([b79be91](https://github.com/archestra-ai/archestra/commit/b79be9162583674ab6069de349cd930394d41513))
+* **backend-tests:** close the shared-worker cross-file leak vectors behind shard flakiness ([#6185](https://github.com/archestra-ai/archestra/issues/6185)) ([7b826f6](https://github.com/archestra-ai/archestra/commit/7b826f605ca987278564edaf6d9e684132d7a259))
+* **backend:** capture pristine test config at setup-module scope ([#6156](https://github.com/archestra-ai/archestra/issues/6156)) ([e49e53a](https://github.com/archestra-ai/archestra/commit/e49e53a3d943b0b4e8f18eb35adc099aa6e5ad7f))
+* **backend:** deterministic message/interaction ordering without a table migration ([#6172](https://github.com/archestra-ai/archestra/issues/6172)) ([31ee5ae](https://github.com/archestra-ai/archestra/commit/31ee5aec1ce53c239e90869f353e284dced1af90))
+* **backend:** pin tool-gating flags in tool-archestra-assignment tests ([#6162](https://github.com/archestra-ai/archestra/issues/6162)) ([1763d64](https://github.com/archestra-ai/archestra/commit/1763d648db2dcb2c4eefae37e2d6dce28f33ad2c))
+* **backend:** reduce agent friction in app-authoring MCP tools ([#6171](https://github.com/archestra-ai/archestra/issues/6171)) ([707a4e8](https://github.com/archestra-ai/archestra/commit/707a4e840b1cb42ce59099f5efe5675c55b34763))
+* **docker:** install workspace deps' runtime deps in the production image ([#6152](https://github.com/archestra-ai/archestra/issues/6152)) ([b5d4800](https://github.com/archestra-ai/archestra/commit/b5d4800b696e8c05ac60f59feb68c1370885067d))
+* **frontend:** warn before discarding unsaved changes in form dialogs ([#6125](https://github.com/archestra-ai/archestra/issues/6125)) ([96fb45a](https://github.com/archestra-ai/archestra/commit/96fb45ab7465ecb0af59ccd0373a9775f69836b3))
+* **hotifx:** revert failing interactions table migration ([#6165](https://github.com/archestra-ai/archestra/issues/6165)) ([0773240](https://github.com/archestra-ai/archestra/commit/0773240758a392152e5bccb538ccfb6762026b52))
+* **mcp:** render MCP App UI resources reached via all-tools dynamic access ([#6164](https://github.com/archestra-ai/archestra/issues/6164)) ([5b3ce22](https://github.com/archestra-ai/archestra/commit/5b3ce22e3b94d65d304c326ae2f2a45b26083770))
+
+
+### Performance Improvements
+
+* **backend:** vitest isolate:false split + sharded CI + boundary-mocked test suite ([#6145](https://github.com/archestra-ai/archestra/issues/6145)) ([00ed826](https://github.com/archestra-ai/archestra/commit/00ed826362e332720c71b956dc9f3ec3d9697940))
+
+
+### Code Refactoring
+
+* **frontend:** dedupe test mocks into Jest-style __mocks__ canonical mocks ([#6154](https://github.com/archestra-ai/archestra/issues/6154)) ([6f0e225](https://github.com/archestra-ai/archestra/commit/6f0e225dc957c599ba5da09a0a447f127a2b339f))
+
+## [1.2.79](https://github.com/archestra-ai/archestra/compare/platform-v1.2.78...platform-v1.2.79) (2026-07-01)
+
+
+### Features
+
+* **llm-proxy:** embeddings support for non-OpenAI providers in model router ([#6139](https://github.com/archestra-ai/archestra/issues/6139)) ([3abd7e4](https://github.com/archestra-ai/archestra/commit/3abd7e4d9c4cf38abbc49584e14dd361d87055b0))
+
+## [1.2.78](https://github.com/archestra-ai/archestra/compare/platform-v1.2.77...platform-v1.2.78) (2026-07-01)
+
+
+### Features
+
+* **knowledge-base:** per-connector toggle for crawling private networks ([#6129](https://github.com/archestra-ai/archestra/issues/6129)) ([8c9a8e0](https://github.com/archestra-ai/archestra/commit/8c9a8e0f51c269282c1bddfa8e07281dfdc5dd5f))
+
+
+### Bug Fixes
+
+* only allow search session logs by session id ([#6131](https://github.com/archestra-ai/archestra/issues/6131)) ([773ff38](https://github.com/archestra-ai/archestra/commit/773ff38156a42f658ab1e3700269e037d991a4da))
+
+
+### Performance Improvements
+
+* **tokenizers:** cache tokenizer instances instead of allocating per call ([#6130](https://github.com/archestra-ai/archestra/issues/6130)) ([b66ba2f](https://github.com/archestra-ai/archestra/commit/b66ba2f14e387ff21cc9ca6679b9aa8828508ecf))
+* **tokenizers:** memoize per-message token counts ([#6137](https://github.com/archestra-ai/archestra/issues/6137)) ([320dd1b](https://github.com/archestra-ai/archestra/commit/320dd1b72b317dcdcdfc97b2364f3ed612ddece4))
+
+## [1.2.77](https://github.com/archestra-ai/archestra/compare/platform-v1.2.76...platform-v1.2.77) (2026-07-01)
+
+
+### Features
+
+* add team management MCP tools ([#6116](https://github.com/archestra-ai/archestra/issues/6116)) ([fb4fb54](https://github.com/archestra-ai/archestra/commit/fb4fb5480953725736c7a6dfe0dd0fbf36cc84e3))
+* **bench:** MCP App authoring tasks + per-env backend_env flag ([#5855](https://github.com/archestra-ai/archestra/issues/5855)) ([6083097](https://github.com/archestra-ai/archestra/commit/60830979bdc1b5afa43a49d25490a8901e28039f))
+* **chat:** clearer Files panel section copy and header ([#6068](https://github.com/archestra-ai/archestra/issues/6068)) ([2603ff0](https://github.com/archestra-ai/archestra/commit/2603ff0a66afc0a091d4c8fb78f666a048aa7f83))
+* **chatops:** hint at thread mute on the bot's first reply ([#6054](https://github.com/archestra-ai/archestra/issues/6054)) ([abb9600](https://github.com/archestra-ai/archestra/commit/abb9600b754835a8b2db4abe57d4a90109da1a31))
+* **chat:** show which credential scope (personal/team/org) expired on the re-auth card ([#6104](https://github.com/archestra-ai/archestra/issues/6104)) ([31cbcb4](https://github.com/archestra-ai/archestra/commit/31cbcb427af369c0c063fba11ff9c6ceb90b6efd))
+* **chat:** sidebar active + new-messages indicators ([#6041](https://github.com/archestra-ai/archestra/issues/6041)) ([2fe939d](https://github.com/archestra-ai/archestra/commit/2fe939d22615942fb96d6e10edac7e7a030880bb))
+* **chat:** surface a delegated subagent's tool calls in the conversation ([#5996](https://github.com/archestra-ai/archestra/issues/5996)) ([1d08b39](https://github.com/archestra-ai/archestra/commit/1d08b390021a0d179e1d963c7da11b3b042fd434))
+* **mcp-gateway:** default personal "My Gateway" to All-tools mode ([#6098](https://github.com/archestra-ai/archestra/issues/6098)) ([b0cd834](https://github.com/archestra-ai/archestra/commit/b0cd8343a3aff083b40a7a388de9d367b3d162e2))
+* **mcp-registry:** show catalog setup instructions on the server form ([#6072](https://github.com/archestra-ai/archestra/issues/6072)) ([b701005](https://github.com/archestra-ai/archestra/commit/b701005d07c253e9bc9034cbd06c44e1da5145d0))
+* move Connect to AI tab, rename Chats to AI ([#6055](https://github.com/archestra-ai/archestra/issues/6055)) ([1f85329](https://github.com/archestra-ai/archestra/commit/1f8532900e198609b53276aa1edf0af9d71d971f))
+* **openrouter:** enable response-healing on non-streaming paths ([#6058](https://github.com/archestra-ai/archestra/issues/6058)) ([9e01d20](https://github.com/archestra-ai/archestra/commit/9e01d205326fa32321c8f091c9b767e0b719e293))
+* **projects:** schedule row opens edit; recent run moves to overflow menu ([#6059](https://github.com/archestra-ai/archestra/issues/6059)) ([bd4beb5](https://github.com/archestra-ai/archestra/commit/bd4beb50a751217ec21c251446c1c035a84a876e))
+
+
+### Bug Fixes
+
+* **apps:** adds greeting when users open an app for the first time ([#6073](https://github.com/archestra-ai/archestra/issues/6073)) ([ccb6c5f](https://github.com/archestra-ai/archestra/commit/ccb6c5f17697589153ba96a02f04fed19c557c59))
+* **apps:** build app skill discovery ([#6062](https://github.com/archestra-ai/archestra/issues/6062)) ([54dced3](https://github.com/archestra-ai/archestra/commit/54dced3a957f6e6d4369cb7a19c8586b5af822b5))
+* **apps:** display mcp server apps in app catalog ([#6070](https://github.com/archestra-ai/archestra/issues/6070)) ([c633a5c](https://github.com/archestra-ai/archestra/commit/c633a5c739bf82023fb8eb3ca1c9020818b01943))
+* **apps:** reduce app-authoring loop friction ([#6117](https://github.com/archestra-ai/archestra/issues/6117)) ([c924f95](https://github.com/archestra-ai/archestra/commit/c924f95861dadec977051c3b580a628ab0375cca))
+* **apps:** reject self-overlapping old_str in edit_app instead of editing the first match ([#6085](https://github.com/archestra-ai/archestra/issues/6085)) ([ceebb31](https://github.com/archestra-ai/archestra/commit/ceebb31bfc9e32e9fd966e54738ecb995945b3fd))
+* **apps:** scope pills apps page ([#6077](https://github.com/archestra-ai/archestra/issues/6077)) ([02289ba](https://github.com/archestra-ai/archestra/commit/02289ba7b055f94580ff3b4ec31a6fa459d5895d))
+* **bedrock:** accept Claude cachePoint and reasoningContent blocks from @ai-sdk/amazon-bedrock ([#6112](https://github.com/archestra-ai/archestra/issues/6112)) ([2860de6](https://github.com/archestra-ai/archestra/commit/2860de67a6ad9093921d0db960fd3a50a9d8d714))
+* **chat:** detect context-window overflow structurally; drop proxy prose sniffs ([#3219](https://github.com/archestra-ai/archestra/issues/3219)) ([#6052](https://github.com/archestra-ai/archestra/issues/6052)) ([8a610d0](https://github.com/archestra-ai/archestra/commit/8a610d0da3f8527c2b875d175ca665632f8f9e3b))
+* **chat:** don't auto-select unconnected per-user model over keyed model ([#6071](https://github.com/archestra-ai/archestra/issues/6071)) ([2706897](https://github.com/archestra-ai/archestra/commit/2706897765a501b0c587b286917eecaec7d11115))
+* **chat:** don't claim copy success when the clipboard write fails ([#6099](https://github.com/archestra-ai/archestra/issues/6099)) ([8e97313](https://github.com/archestra-ai/archestra/commit/8e97313bb7e2a7b9d392a845d1583cfeccf818d4))
+* **chat:** generate titles for skill-initiated conversations ([#6057](https://github.com/archestra-ai/archestra/issues/6057)) ([e4e5ee7](https://github.com/archestra-ai/archestra/commit/e4e5ee7bc0f660865b26d6bb1eeb18e48cdd2834))
+* **chat:** guard model fetcher against a missing 'created' timestamp ([#6097](https://github.com/archestra-ai/archestra/issues/6097)) ([88385e7](https://github.com/archestra-ai/archestra/commit/88385e7ef7f6b22e4007abf47861207030b71c19))
+* **chatops:** don't send a broken welcome DM to an existing user on the auto-provision race ([#6095](https://github.com/archestra-ai/archestra/issues/6095)) ([c166c83](https://github.com/archestra-ai/archestra/commit/c166c8399931942b639462dfde05e693f2e48c5f))
+* **chatops:** show underlying tool + args in run_tool approval prompts ([#6030](https://github.com/archestra-ai/archestra/issues/6030)) ([488ae28](https://github.com/archestra-ai/archestra/commit/488ae280793bd8585844216e40e111874b1a9cb2))
+* **chat:** refresh project chat list after deleting or forking a project chat ([#6094](https://github.com/archestra-ai/archestra/issues/6094)) ([82c6bc9](https://github.com/archestra-ai/archestra/commit/82c6bc9f456e56f642913c4f20761e4f766643d2))
+* **chat:** show a working retry for retryable errors mid-flight ([#6101](https://github.com/archestra-ai/archestra/issues/6101)) ([9480ba2](https://github.com/archestra-ai/archestra/commit/9480ba2d30501c810a8e8e72b2c08fdcd49e55a0))
+* **chat:** stop invalid mermaid diagrams from leaking an error graphic across pages ([#6090](https://github.com/archestra-ai/archestra/issues/6090)) ([3a14b38](https://github.com/archestra-ai/archestra/commit/3a14b385d4afa4459bef13b82dfdd16f12cf4dd9))
+* **chat:** stop the flicker when starting a chat from a project ([#6124](https://github.com/archestra-ai/archestra/issues/6124)) ([a4b587b](https://github.com/archestra-ai/archestra/commit/a4b587b0fe51aeb7bd5d4bb01dbfd48739bfca70))
+* **chat:** suppress whitespace-only assistant text bubbles ([#6056](https://github.com/archestra-ai/archestra/issues/6056)) ([f807a1d](https://github.com/archestra-ai/archestra/commit/f807a1df9db44f41af4fba31c5e3d3f093cf4dc6))
+* claude code connect script mcp auth ([#6069](https://github.com/archestra-ai/archestra/issues/6069)) ([f879bd4](https://github.com/archestra-ai/archestra/commit/f879bd49418d811d0c0dff185f949e77bc24f742))
+* **connection:** install shared skills with a valid Claude Code command ([#6076](https://github.com/archestra-ai/archestra/issues/6076)) ([5088589](https://github.com/archestra-ai/archestra/commit/5088589c2a1651cc536d74e83c43906bcc5ecb7d))
+* **db:** flip cosmic-night default org theme to caffeine ([#6075](https://github.com/archestra-ai/archestra/issues/6075)) ([24196ac](https://github.com/archestra-ai/archestra/commit/24196ac68f7427a672afd3e64ed1cacd6126ad36))
+* detect and attribute requests from claude client apps ([#6067](https://github.com/archestra-ai/archestra/issues/6067)) ([c57fe38](https://github.com/archestra-ai/archestra/commit/c57fe38eb9746d64483c1938b8e27670b7ed61b5))
+* **dev:** make worktree bootstrap async and stop duplicating the pnpm store ([#6113](https://github.com/archestra-ai/archestra/issues/6113)) ([c4fc395](https://github.com/archestra-ai/archestra/commit/c4fc3950776da63bb9b1d3e0564718e4c21a8723))
+* **e2e:** enforce discovered tool policies in setup ([#6092](https://github.com/archestra-ai/archestra/issues/6092)) ([c02289e](https://github.com/archestra-ai/archestra/commit/c02289e29d0d6f300668ecdc3412f4769bb78906))
+* **email:** retry incoming email on transient agent-run failure ([#6103](https://github.com/archestra-ai/archestra/issues/6103)) ([632876a](https://github.com/archestra-ai/archestra/commit/632876ad48113997634283d717cb8112020fce8b))
+* faulty type cast in llm logs search query ([#6048](https://github.com/archestra-ai/archestra/issues/6048)) ([be86234](https://github.com/archestra-ai/archestra/commit/be86234e4462c3d48080f27a1a9395cf742d4d3d))
+* **hotfix:** skip failing db migration ([#6128](https://github.com/archestra-ai/archestra/issues/6128)) ([d36768f](https://github.com/archestra-ai/archestra/commit/d36768f204d6209e00a82f37b301feffd0077132))
+* llm discovered tools default policy ([#6063](https://github.com/archestra-ai/archestra/issues/6063)) ([7c93294](https://github.com/archestra-ai/archestra/commit/7c93294f3f980fce948e8393d5a3eacaa65066eb))
+* **mcp-oauth:** always request offline_access for upstream auth-code flow ([#6066](https://github.com/archestra-ai/archestra/issues/6066)) ([eb808a4](https://github.com/archestra-ai/archestra/commit/eb808a40451d82a61e2f4ac92fcffaee450d9704))
+* **mcp-oauth:** editable Additional scopes field (unbreak Google offline_access) ([#6121](https://github.com/archestra-ai/archestra/issues/6121)) ([a483f90](https://github.com/archestra-ai/archestra/commit/a483f9067e96b8415cc1c40d54f3eec1055a1444))
+* **mcp:** hide registry card Chat button when no installation exists ([#6050](https://github.com/archestra-ai/archestra/issues/6050)) ([bbd545f](https://github.com/archestra-ai/archestra/commit/bbd545f97e226c2e51d2a6076cae215c05da776d))
+* **mcp:** prefer a healthy connection when two MCP servers share a name ([#6111](https://github.com/archestra-ai/archestra/issues/6111)) ([5b72cbd](https://github.com/archestra-ai/archestra/commit/5b72cbd6e5df88f7f4256bba0f58a0bcb4ecc46a))
+* **mcp:** stop offering a dead-end install link when the caller can't access the catalog ([#6110](https://github.com/archestra-ai/archestra/issues/6110)) ([76380a5](https://github.com/archestra-ai/archestra/commit/76380a5dde4036f9c290064e5ec0f23e2ec16e85))
+* **sandbox:** clarify file tool descriptions, search_files list-all, download_file overwrite ([#6047](https://github.com/archestra-ai/archestra/issues/6047)) ([41d348f](https://github.com/archestra-ai/archestra/commit/41d348f306f95dfafd869dec983b442aa9fa7ed3))
+* **sandbox:** reject empty/"." skill names that collapse the shared /skills root ([#6118](https://github.com/archestra-ai/archestra/issues/6118)) ([3997288](https://github.com/archestra-ai/archestra/commit/3997288bd4e62deb634fa4bbcf39296f0132c3ee))
+* **skills:** accept a leading UTF-8 BOM in SKILL.md frontmatter ([#6109](https://github.com/archestra-ai/archestra/issues/6109)) ([5a118ac](https://github.com/archestra-ai/archestra/commit/5a118acdfece9bf38154083f27dbd9b08d52a6bb))
+* **skills:** check reset visibility before revealing skill type ([#6105](https://github.com/archestra-ai/archestra/issues/6105)) ([cca8b09](https://github.com/archestra-ai/archestra/commit/cca8b093713fc07bf9235a0c04008c8619174144))
+* **skills:** keep marketplace name frozen when rotating a share link ([#6106](https://github.com/archestra-ai/archestra/issues/6106)) ([e3075ca](https://github.com/archestra-ai/archestra/commit/e3075cafff701a0e9da7c990383152888b0a46d4))
+* **skills:** match `..` path segments not substrings in marketplace layout ([#6108](https://github.com/archestra-ai/archestra/issues/6108)) ([8128b5c](https://github.com/archestra-ai/archestra/commit/8128b5c46fd45d11c0a1d0671e7911c3225977ce))
+* surface running state ([#6126](https://github.com/archestra-ai/archestra/issues/6126)) ([622094b](https://github.com/archestra-ai/archestra/commit/622094bae9d2d4b6b8c4897568c76cbc079d2834))
+
+
+### Code Refactoring
+
+* **apps:** collapse repeated app-load + authorize preambles into shared helpers ([#6084](https://github.com/archestra-ai/archestra/issues/6084)) ([80f624f](https://github.com/archestra-ai/archestra/commit/80f624f06a9cf5ba4ee12a1ffd840f531c1e996f))
+* **skills:** dedupe isSkillRuntimeTool into @archestra/shared ([#6078](https://github.com/archestra-ai/archestra/issues/6078)) ([204e153](https://github.com/archestra-ai/archestra/commit/204e153279154daf94dfda4f0b1ef86681124fb4))
+* **skills:** extract shared internal-agent read-authorization ([#6080](https://github.com/archestra-ai/archestra/issues/6080)) ([d7c26d1](https://github.com/archestra-ai/archestra/commit/d7c26d137b5b575633c94c18980ca824c9ce65b1))
+* **skills:** extract shared skill-modify authorization ([#6082](https://github.com/archestra-ai/archestra/issues/6082)) ([c6a7c5c](https://github.com/archestra-ai/archestra/commit/c6a7c5c3b6cf6608c338f83bf52b4282567e8234))
+* **skills:** remove superseded SkillModel.findByName ([#6086](https://github.com/archestra-ai/archestra/issues/6086)) ([d7c7403](https://github.com/archestra-ai/archestra/commit/d7c7403c4d14ff762ad6424d2b53b4db54c9abbb))
+* **skills:** reuse shared formatBytes in skill editor dialog ([#6087](https://github.com/archestra-ai/archestra/issues/6087)) ([f9d7fbe](https://github.com/archestra-ai/archestra/commit/f9d7fbeff004e6b45e4caebfed3f87f0b6462a11))
+* **teams:** share team authorization logic between REST routes and MCP tools ([#6119](https://github.com/archestra-ai/archestra/issues/6119)) ([57989b8](https://github.com/archestra-ai/archestra/commit/57989b8ab7ffc817263326a83191a3b54d3491b1))
+
+
+### Miscellaneous Chores
+
+* **analytics:** capture backend errors + preceding logs in PostHog ([#6122](https://github.com/archestra-ai/archestra/issues/6122)) ([a7324e8](https://github.com/archestra-ai/archestra/commit/a7324e8145f69a22f2ee07d0c56eabaa4fe26409))
+* **dev:** bootstrap deps for worktrees ([#6096](https://github.com/archestra-ai/archestra/issues/6096)) ([3469fce](https://github.com/archestra-ai/archestra/commit/3469fce8c368633361c81b6f0bc3091d2c348e38))
+* **frontend:** rename 'Allow in safe context' policy label to 'Block in sensitive context' ([#6049](https://github.com/archestra-ai/archestra/issues/6049)) ([73d81c7](https://github.com/archestra-ai/archestra/commit/73d81c70f777327cb5d3cb9333b727f62100855d))
+* **sandbox-core:** remove a stale duplicate doc comment and redundant `let _` ([#6107](https://github.com/archestra-ai/archestra/issues/6107)) ([c77435e](https://github.com/archestra-ai/archestra/commit/c77435ec13c86c25167a4235a69d63fb92771a9c))
+
+## [1.2.76](https://github.com/archestra-ai/archestra/compare/platform-v1.2.75...platform-v1.2.76) (2026-06-30)
+
+
+### Features
+
+* **apps:** consolidate apps editing in chat right panel ([#6019](https://github.com/archestra-ai/archestra/issues/6019)) ([b16eda8](https://github.com/archestra-ai/archestra/commit/b16eda8e04834d13c949e6c8f4d1f9276288e2f1))
+* **frontend:** offline connectivity status bar ([#6039](https://github.com/archestra-ai/archestra/issues/6039)) ([2d86322](https://github.com/archestra-ai/archestra/commit/2d86322462a4797873da7182667b7502ba8fb9f3))
+* **mcp:** trusted image registries for local MCP installs ([#6016](https://github.com/archestra-ai/archestra/issues/6016)) ([b993c8e](https://github.com/archestra-ai/archestra/commit/b993c8ed940e4d6ef428e84a8fd3b77b828e163e))
+
+
+### Bug Fixes
+
+* allow discovered tools invocation by default ([#6027](https://github.com/archestra-ai/archestra/issues/6027)) ([f40f524](https://github.com/archestra-ai/archestra/commit/f40f5242786d4a059a2258853338b0ce74609727))
+* **apps:** build_app skill discovery ([#6033](https://github.com/archestra-ai/archestra/issues/6033)) ([b31f458](https://github.com/archestra-ai/archestra/commit/b31f458d62b3746d59782f4f1ee0a2d82d4a2b05))
+* **apps:** revert csp fix attempt ([#6034](https://github.com/archestra-ai/archestra/issues/6034)) ([e2d3ab9](https://github.com/archestra-ai/archestra/commit/e2d3ab9ec9a188183b5cbc7df6989513c7192133))
+* **chat:** cancel in-flight tool calls on Stop, and fix reload-mid-tool crash ([#6025](https://github.com/archestra-ai/archestra/issues/6025)) ([4f25c7e](https://github.com/archestra-ai/archestra/commit/4f25c7e8d37d82e9b7170cc5b58c7bf19673024b))
+* **chat:** detect context-overflow 400s across provider message wordings ([#3219](https://github.com/archestra-ai/archestra/issues/3219)) ([#6044](https://github.com/archestra-ai/archestra/issues/6044)) ([fd2f913](https://github.com/archestra-ai/archestra/commit/fd2f913b5fac7bc737b8caa45d725f1897e084b1))
+* **chat:** model selector no longer stuck on "Loading models…" for disabled queries ([#6046](https://github.com/archestra-ai/archestra/issues/6046)) ([582c063](https://github.com/archestra-ai/archestra/commit/582c063559bb59a6f2c23ab4916db0d6276ed2f9))
+* **chat:** repair malformed tool-call argument JSON via model re-ask ([#6024](https://github.com/archestra-ai/archestra/issues/6024)) ([bb33785](https://github.com/archestra-ai/archestra/commit/bb3378595cff6327bc795f8409d9922dbca52452))
+* **interactions:** stop failed-interaction responses from 500-ing the LLM logs ([#5997](https://github.com/archestra-ai/archestra/issues/5997)) ([a11fffd](https://github.com/archestra-ai/archestra/commit/a11fffdc0ea8eaff84e0dfe8b5b9bc858ee34152))
+* llm logs search hangs ([#6040](https://github.com/archestra-ai/archestra/issues/6040)) ([114a84f](https://github.com/archestra-ai/archestra/commit/114a84fe760917b5410f7adf185985d701e44b5f))
+* **mcp-registry:** stop 'Open in new tab' button label from overflowing ([#6009](https://github.com/archestra-ai/archestra/issues/6009)) ([a2cf263](https://github.com/archestra-ai/archestra/commit/a2cf2632bb52af2ec090fb4683c56fc470a8552a))
+* **mcp:** dedupe pod counter by deploymentName so multitenant cards show 1 pod ([#6043](https://github.com/archestra-ai/archestra/issues/6043)) ([3d45a5a](https://github.com/archestra-ai/archestra/commit/3d45a5a0b1d2b641b449466b9f7d2c8003097bfd))
+* **ollama:** hint host.docker.internal when localhost connection fails ([#6015](https://github.com/archestra-ai/archestra/issues/6015)) ([9420e22](https://github.com/archestra-ai/archestra/commit/9420e225ed4b46406ec939b183aaf1dec06699f5))
+
+## [1.2.75](https://github.com/archestra-ai/archestra/compare/platform-v1.2.74...platform-v1.2.75) (2026-06-29)
+
+
+### Features
+
+* add "Test your setup" step to "Connect" page ([#5931](https://github.com/archestra-ai/archestra/issues/5931)) ([0e42a9b](https://github.com/archestra-ai/archestra/commit/0e42a9b4fa0ea9722ab3cf9ae510cbc7a327905b))
+* add passthrough virtual keys for Claude to the connect page ([#5926](https://github.com/archestra-ai/archestra/issues/5926)) ([3d481ce](https://github.com/archestra-ai/archestra/commit/3d481ce8ee77508c0e1352557f4bc75587a17772))
+* authenticate llm proxy users ([#5915](https://github.com/archestra-ai/archestra/issues/5915)) ([4523ae8](https://github.com/archestra-ai/archestra/commit/4523ae86ca9693336b21a0a9a2c4c3ce5ac55f6e))
+* **chatops:** sandbox-aware attachments + broader text types on the A2A path ([#6023](https://github.com/archestra-ai/archestra/issues/6023)) ([0fbc665](https://github.com/archestra-ai/archestra/commit/0fbc665c32d3107ba8582323776d26d6d83a757c))
+* **chatops:** thread mute (keyword + emoji), frictionless agent onboarding, and white-label/history fixes ([#6001](https://github.com/archestra-ai/archestra/issues/6001)) ([f4796ab](https://github.com/archestra-ai/archestra/commit/f4796ab1fb892cc8668de682e2deab725fc8252f))
+* **chat:** sandbox-aware attachment policy and broader text types ([#6006](https://github.com/archestra-ai/archestra/issues/6006)) ([c22b8bb](https://github.com/archestra-ai/archestra/commit/c22b8bb10af68d5ba239e9555af107a9bf63f189))
+* **chat:** shared SkillPill + consistent 16px rhythm across the message stream ([#5930](https://github.com/archestra-ai/archestra/issues/5930)) ([0dbc09e](https://github.com/archestra-ai/archestra/commit/0dbc09e7e7aa7581c18892cc976dfd292baf3ced))
+* **files:** edit .txt/.md files in place from the Files panel ([#5964](https://github.com/archestra-ai/archestra/issues/5964)) ([1f6af97](https://github.com/archestra-ai/archestra/commit/1f6af971c2305613be195bd851a621d709ed89af))
+* **files:** label file scope and rework Files panel chrome ([#5965](https://github.com/archestra-ai/archestra/issues/5965)) ([e03c98e](https://github.com/archestra-ai/archestra/commit/e03c98e172c106af7ff63a3fdf0ef91ef5f580b8))
+* **files:** S3-compatible storage for My Files ([#5840](https://github.com/archestra-ai/archestra/issues/5840)) ([83d79c4](https://github.com/archestra-ai/archestra/commit/83d79c48c684261b4f4266e535653569c4e28c2c))
+* generate claude desktop connection configuration file ([#5937](https://github.com/archestra-ai/archestra/issues/5937)) ([475fd5d](https://github.com/archestra-ai/archestra/commit/475fd5d4833110ad371af23c4cbd8240d86e6faf))
+* pretty-format logs in docker quickstart ([#6021](https://github.com/archestra-ai/archestra/issues/6021)) ([955cbf8](https://github.com/archestra-ai/archestra/commit/955cbf8134381b6895fd5ad76c6dcad91ce47134))
+* **projects:** create a project from a chat ([#5909](https://github.com/archestra-ai/archestra/issues/5909)) ([ed97412](https://github.com/archestra-ai/archestra/commit/ed97412b14bd430e34717514f13f6008cd0251e6))
+* **projects:** drag-and-drop file upload into the Files panel ([#5963](https://github.com/archestra-ai/archestra/issues/5963)) ([f34dc47](https://github.com/archestra-ai/archestra/commit/f34dc474913a85700bebd29f5065800bb79accb3))
+* **projects:** project name+emoji in chat title; "Run manually" for schedules ([#5972](https://github.com/archestra-ai/archestra/issues/5972)) ([253da0f](https://github.com/archestra-ai/archestra/commit/253da0f797d536d6b7cbab78bcbed5a09f6fd98e))
+* **projects:** scope pill on project cards + admin 'All' shows only accessible items ([#5960](https://github.com/archestra-ai/archestra/issues/5960)) ([300e3f3](https://github.com/archestra-ai/archestra/commit/300e3f3b1c3fa4b3cad77d7c4b9138987719ac79))
+* redesign llm logs ([#5918](https://github.com/archestra-ai/archestra/issues/5918)) ([fef80cc](https://github.com/archestra-ai/archestra/commit/fef80ccd644d2858ecd3bd0c8a6c065b49ed9825))
+
+
+### Bug Fixes
+
+* **agents:** gate owner filter on resource admin, not member:read ([#5913](https://github.com/archestra-ai/archestra/issues/5913)) ([0912fa9](https://github.com/archestra-ai/archestra/commit/0912fa9a1f26d3e67314600b806a3dcdb95044b3))
+* apply user role permissions to test claude connection button ([#5943](https://github.com/archestra-ai/archestra/issues/5943)) ([b687c60](https://github.com/archestra-ai/archestra/commit/b687c60acd19a63f33c83464cf18984dbd0f92d8))
+* **chat:** fail loud when MCP tool fetch fails instead of streaming empty tools ([#5920](https://github.com/archestra-ai/archestra/issues/5920)) ([ca46efa](https://github.com/archestra-ai/archestra/commit/ca46efae1511d506f90091d328a1ac1dcbb38693))
+* **chatops:** deliver non-image file attachments to the agent ([#5992](https://github.com/archestra-ai/archestra/issues/5992)) ([591fd26](https://github.com/archestra-ai/archestra/commit/591fd26ccf834405be58e8a21da201c54e3dd183))
+* **chatops:** guard Slack sends against msg_too_large ([#6000](https://github.com/archestra-ai/archestra/issues/6000)) ([a4872f4](https://github.com/archestra-ai/archestra/commit/a4872f44dfffc2bc8725c28f0671332e31bfeff8))
+* **chat:** refresh the project Files panel when a project chat creates files ([#6018](https://github.com/archestra-ai/archestra/issues/6018)) ([1e6f447](https://github.com/archestra-ai/archestra/commit/1e6f4471f43adaee44b07331bc5f797aaac05504))
+* **chat:** reject over-limit attachments before the provider call ([#5989](https://github.com/archestra-ai/archestra/issues/5989)) ([774d343](https://github.com/archestra-ai/archestra/commit/774d343e6e9e3496901c6475073722cbbe191034))
+* fixed the uneven padding in agent badge ([#5906](https://github.com/archestra-ai/archestra/issues/5906)) ([6146e8a](https://github.com/archestra-ai/archestra/commit/6146e8a41007f1ea61e91506a70be3bf851d5ffe))
+* **guardrails:** restore sanitize_with_dual_llm to policy-config auto-config ([#5986](https://github.com/archestra-ai/archestra/issues/5986)) ([2e058db](https://github.com/archestra-ai/archestra/commit/2e058db116c8c73db473327c0a8ebd6cdd9db8aa))
+* **llm-logs:** stop showing negative cost and &gt;100% savings ([#5999](https://github.com/archestra-ai/archestra/issues/5999)) ([ca9ac25](https://github.com/archestra-ai/archestra/commit/ca9ac25a33d57c6290fa19c8789c6abfd0928c20))
+* **llm-proxy:** estimate input tokens when a provider reports zero ([#5914](https://github.com/archestra-ai/archestra/issues/5914)) ([cb409f3](https://github.com/archestra-ai/archestra/commit/cb409f31bd6e8a40772c1b382e08ec38f1c4ebfc))
+* **llm:** filter unusable Gemini models and badge old generations ([#5990](https://github.com/archestra-ai/archestra/issues/5990)) ([905e4c2](https://github.com/archestra-ai/archestra/commit/905e4c2e1b27d7cf132f826ac677cb06c90df279))
+* mcp gw oauth in claude code ([#5988](https://github.com/archestra-ai/archestra/issues/5988)) ([f0bba26](https://github.com/archestra-ai/archestra/commit/f0bba26dd7aa4cde88f6e5c460ce6ef529c048a2))
+* **mcp-server:** merge & validate userConfig against effective state on reinstall ([#4984](https://github.com/archestra-ai/archestra/issues/4984)) ([4ea7562](https://github.com/archestra-ai/archestra/commit/4ea75620766e3b1b893d1de0a942844c41fafcdd))
+* **mcp-server:** persist & validate prompted env values on local-server reinstall ([#4914](https://github.com/archestra-ai/archestra/issues/4914)) ([398d0fc](https://github.com/archestra-ai/archestra/commit/398d0fcd800189f148712ae195e1be9efab8f13b))
+* **mcp:** disable browser password autofill in install dialogs and OIDC secret fields ([#5982](https://github.com/archestra-ai/archestra/issues/5982)) ([8298c20](https://github.com/archestra-ai/archestra/commit/8298c20a017048d2138456284ac4fa261d4d2b62))
+* **mcp:** preserve tools & guardrails on connection loss; derive tool availability ([#5916](https://github.com/archestra-ai/archestra/issues/5916)) ([9e43974](https://github.com/archestra-ai/archestra/commit/9e4397498ce06f0b70a5b6430041bcb03eacd382))
+* **mcp:** surface real reason when interactive shell can't start (distroless images) ([#5975](https://github.com/archestra-ai/archestra/issues/5975)) ([3617ed4](https://github.com/archestra-ai/archestra/commit/3617ed46b8f8248ea49148cd10b346fe364eec9c))
+* **projects:** carry attachments into a chat started from a project ([#5959](https://github.com/archestra-ai/archestra/issues/5959)) ([383f5e3](https://github.com/archestra-ai/archestra/commit/383f5e37987275ce9f4e511c210f16eb07bb98a6))
+* **query:** fail loud on fetch errors + load-error retry UI (fixes offline "Add an LLM Provider Key") ([#5977](https://github.com/archestra-ai/archestra/issues/5977)) ([eb44d9e](https://github.com/archestra-ai/archestra/commit/eb44d9ec37db8c23cee07e0e671f85069a76275a))
+* **query:** retry state on detail pages + 404 parity for child-run lists ([#6005](https://github.com/archestra-ai/archestra/issues/6005)) ([7574dc1](https://github.com/archestra-ai/archestra/commit/7574dc1ee8d82ec3bcffffec78abb4666d38d44e))
+* remove redundant allowed llm proxies from virtual keys ([#5942](https://github.com/archestra-ai/archestra/issues/5942)) ([4b103d9](https://github.com/archestra-ai/archestra/commit/4b103d90be38556f0d77e652b3fb3c649cefd625))
+* remove test-your-setup step from connection page ([#5973](https://github.com/archestra-ai/archestra/issues/5973)) ([428db7c](https://github.com/archestra-ai/archestra/commit/428db7cdc62126d298f9649eb45c0b9818ba2a6a))
+* session log page pagination ([#5979](https://github.com/archestra-ai/archestra/issues/5979)) ([2f8fdfd](https://github.com/archestra-ai/archestra/commit/2f8fdfddf704300c739a7cdd68c4ee94db2292d3))
+* stop advertising the sandbox when it is unavailable for an agent ([#6003](https://github.com/archestra-ai/archestra/issues/6003)) ([c7f95db](https://github.com/archestra-ai/archestra/commit/c7f95db5b56248090a3eeb764149f957aa8936ca))
+* stop dropping text before "&gt;" in messages ([#5785](https://github.com/archestra-ai/archestra/issues/5785)) ([77710a0](https://github.com/archestra-ai/archestra/commit/77710a02289eb2283471c346b8686a9b80aad24c))
+* **teams:** reject oversized team names (max 256 chars) ([#6004](https://github.com/archestra-ai/archestra/issues/6004)) ([03c7be6](https://github.com/archestra-ai/archestra/commit/03c7be6ed2a7bcc7f240462a91a45ed44d51d4cd))
+* **tools:** stop dual-prefix duplication of Archestra built-in tools ([#5974](https://github.com/archestra-ai/archestra/issues/5974)) ([217002b](https://github.com/archestra-ai/archestra/commit/217002bd286ee34e16c73872c5f8b815cd24dfe5))
+
+
+### Performance Improvements
+
+* **database:** clear health check timeout after successful database probe ([#5742](https://github.com/archestra-ai/archestra/issues/5742)) ([6787707](https://github.com/archestra-ai/archestra/commit/6787707780b7e0f8cc5d04db8a37fe296cd85d12))
+* reduce per-request database work on hot paths ([#6002](https://github.com/archestra-ai/archestra/issues/6002)) ([1be18e0](https://github.com/archestra-ai/archestra/commit/1be18e04d525a7c47ba26c981bfd18ef6d534d61))
+
+
+### Code Refactoring
+
+* **apps:** rename AppTeamModel to AppAccessModel ([#5970](https://github.com/archestra-ai/archestra/issues/5970)) ([289d9f0](https://github.com/archestra-ai/archestra/commit/289d9f05f93f065d91e548755257d78d9557ebcf))
+* **files:** rename save_result MCP tool to save_file + clarify file-tool descriptions ([#5927](https://github.com/archestra-ai/archestra/issues/5927)) ([4eebc62](https://github.com/archestra-ai/archestra/commit/4eebc62c858cfa032e80e21c01f44885f6c1a963))
+
+
+### Miscellaneous Chores
+
+* **projects:** simplify project files panel header ([#5929](https://github.com/archestra-ai/archestra/issues/5929)) ([a797e43](https://github.com/archestra-ai/archestra/commit/a797e4314a018a8c8626cb06bf07396dcce48183))
+* upgrade pnpm to 11.9.0 ([#5991](https://github.com/archestra-ai/archestra/issues/5991)) ([ddd9491](https://github.com/archestra-ai/archestra/commit/ddd9491bc2c09b0135569ed054239f091e2cca63))
+
+## [1.2.74](https://github.com/archestra-ai/archestra/compare/platform-v1.2.73...platform-v1.2.74) (2026-06-26)
+
+
+### Features
+
+* add Claude Desktop integration ([#5871](https://github.com/archestra-ai/archestra/issues/5871)) ([945c5d3](https://github.com/archestra-ai/archestra/commit/945c5d3cb6ff85513554ceabb00bb00c37c39ee9))
+* **agents:** default system prompt for prompt-less agents ([#5882](https://github.com/archestra-ai/archestra/issues/5882)) ([5e7c872](https://github.com/archestra-ai/archestra/commit/5e7c87269ffbfe24bed9bd68ea95b22f9c2cc443))
+* **apps:** add set_app_tools + fix headless authoring guidance ([#5857](https://github.com/archestra-ai/archestra/issues/5857)) ([1bddb82](https://github.com/archestra-ai/archestra/commit/1bddb82c96d84ae16791dd399daae7ed63204734))
+* **apps:** apps catalog, add tabs and basic filtering ([#5876](https://github.com/archestra-ai/archestra/issues/5876)) ([3630b7b](https://github.com/archestra-ai/archestra/commit/3630b7b30c237e824ddefab364bdc4b08014a3c0))
+* **apps:** back platform Apps with a serverType:"app" catalog as the single source of truth ([#5834](https://github.com/archestra-ai/archestra/issues/5834)) ([5f71d41](https://github.com/archestra-ai/archestra/commit/5f71d41ace1a65f357e124be479ce2f85000846a))
+* **apps:** edit apps model context from the chat ([#5873](https://github.com/archestra-ai/archestra/issues/5873)) ([7807a0c](https://github.com/archestra-ai/archestra/commit/7807a0c851aad12c9d1a32a78e6403a6911bea09))
+* **apps:** friendly "Open &lt;app&gt;" title for app launch tools in the gateway ([#5872](https://github.com/archestra-ai/archestra/issues/5872)) ([019c791](https://github.com/archestra-ai/archestra/commit/019c7914664f28b651fd6cfa47f024754a91a02c))
+* **apps:** integrate apps to mcp catalog ([#5888](https://github.com/archestra-ai/archestra/issues/5888)) ([797fb8b](https://github.com/archestra-ai/archestra/commit/797fb8becf897ec3034fb27f6b2900ab9df378f7))
+* **apps:** link apps page with MCP registry ([#5896](https://github.com/archestra-ai/archestra/issues/5896)) ([095664a](https://github.com/archestra-ai/archestra/commit/095664a30d9b61cb63955b3a99ee729d8990c485))
+* **apps:** list external apps once per catalog item with run-time install selection ([#5870](https://github.com/archestra-ai/archestra/issues/5870)) ([3ae4c2c](https://github.com/archestra-ai/archestra/commit/3ae4c2c1b4571fe241edd6671c4799955e157446))
+* **apps:** make App backings assignable in the gateway capabilities picker ([#5868](https://github.com/archestra-ai/archestra/issues/5868)) ([674192f](https://github.com/archestra-ai/archestra/commit/674192f029af7f7759c79769fdc163dae5985128))
+* **apps:** rework app details page ([#5865](https://github.com/archestra-ai/archestra/issues/5865)) ([0e9eef2](https://github.com/archestra-ai/archestra/commit/0e9eef21934f15562a0f518db13222bd6d71a9b6))
+* **apps:** steer app authoring away from browser storage ([#5851](https://github.com/archestra-ai/archestra/issues/5851)) ([f160c2d](https://github.com/archestra-ai/archestra/commit/f160c2d6a9d545d7cfa8b2fb83151a646b3fb5b4))
+* **bench:** fail fast on a broken sandbox + local Dagger resolution ladder ([#5845](https://github.com/archestra-ai/archestra/issues/5845)) ([b4a61e8](https://github.com/archestra-ai/archestra/commit/b4a61e8e489500453eff0971756e177d01618550))
+* **chat-files:** polish Files panel — pinned Instructions row, full-sidebar detail, delete + multi-select ([#5893](https://github.com/archestra-ai/archestra/issues/5893)) ([7b3d207](https://github.com/archestra-ai/archestra/commit/7b3d20714a2f3652329a07691100d7e2860ab5f0))
+* **chat:** flip resolved MCP install-auth card to a connected state ([#5861](https://github.com/archestra-ai/archestra/issues/5861)) ([9077d75](https://github.com/archestra-ai/archestra/commit/9077d751b9dc8f0b51e67d70cfa2894317ebb2e1))
+* encode persisted interaction requests in a prefix-delta chain ([#5736](https://github.com/archestra-ai/archestra/issues/5736)) ([a227a19](https://github.com/archestra-ai/archestra/commit/a227a19b2564bae5810dcc7d4202dc80941437f7))
+* **files:** unify the project Files panel with chat's select/delete ([#5908](https://github.com/archestra-ai/archestra/issues/5908)) ([3bf0c98](https://github.com/archestra-ai/archestra/commit/3bf0c98fffece192ffceef1e284afebc47f48f25))
+* **frontend:** remove the first-interaction onboarding dialog ([#5886](https://github.com/archestra-ai/archestra/issues/5886)) ([70340df](https://github.com/archestra-ai/archestra/commit/70340dfe3272a743019997a5bafc4970104cc7d5))
+* **licensing:** free enterprise tier for deployments under 30 users ([#5885](https://github.com/archestra-ai/archestra/issues/5885)) ([b614eaa](https://github.com/archestra-ai/archestra/commit/b614eaa6a0ed6eb55d7520c625a425a2f8f5f352))
+* **mcp-registry:** add sort + filters to the registry list ([#5847](https://github.com/archestra-ai/archestra/issues/5847)) ([7f606eb](https://github.com/archestra-ai/archestra/commit/7f606eb26233ee6d140a9f10a19550531b35a1b1))
+* **mcp-registry:** separate service accounts on the Credentials page ([#5889](https://github.com/archestra-ai/archestra/issues/5889)) ([820867b](https://github.com/archestra-ai/archestra/commit/820867b1aeb29861bcf672b9e90d20f3c93a95a4))
+* **mcp:** distinguish terminal vs transient OAuth refresh failures ([#5891](https://github.com/archestra-ai/archestra/issues/5891)) ([227a9a6](https://github.com/archestra-ai/archestra/commit/227a9a62865d5b6334e9f7670fc581de008d6811))
+* **projects:** per-project instructions.md injected into chat system prompts ([#5820](https://github.com/archestra-ai/archestra/issues/5820)) ([d226c61](https://github.com/archestra-ai/archestra/commit/d226c61de1e38b7c3268cc46ca54efe4033c1969))
+* **projects:** search + personal/shared filter + admin oversight of others' projects ([#5837](https://github.com/archestra-ai/archestra/issues/5837)) ([31563c5](https://github.com/archestra-ai/archestra/commit/31563c56efd63196c49b870519a821fa613d83b9))
+
+
+### Bug Fixes
+
+* **apps:** dedupe, inline mode bugfixes ([#5895](https://github.com/archestra-ai/archestra/issues/5895)) ([4e22fbd](https://github.com/archestra-ai/archestra/commit/4e22fbd1ec644f9e9e92d6117c80bb8cfd281338))
+* **apps:** fullscreen mode ([#5826](https://github.com/archestra-ai/archestra/issues/5826)) ([a2bed50](https://github.com/archestra-ai/archestra/commit/a2bed508cc842b527eb321fca2133ec622f0606c))
+* **apps:** fullscreen to panel flow ([#5828](https://github.com/archestra-ai/archestra/issues/5828)) ([292e32d](https://github.com/archestra-ai/archestra/commit/292e32dc777685aa12a7b33b8246158dbf3a1406))
+* **apps:** give human readable names to external tools ([#5824](https://github.com/archestra-ai/archestra/issues/5824)) ([aee979f](https://github.com/archestra-ai/archestra/commit/aee979f95e3bcb2bc3d74c73005c473503aec961))
+* **apps:** reject app backing catalogs in edit_mcp_config ([#5867](https://github.com/archestra-ai/archestra/issues/5867)) ([bf51342](https://github.com/archestra-ai/archestra/commit/bf51342ffa525de54a6d2fc7590f9850a990c418))
+* **apps:** rendering tool ([#5897](https://github.com/archestra-ai/archestra/issues/5897)) ([b350a91](https://github.com/archestra-ai/archestra/commit/b350a9182b1f3acf9684c091db02bb3b61351b47))
+* **bench+chat:** gate Anthropic-only body fields, stage attachments in prompt, unify it-audit billing ([#5875](https://github.com/archestra-ai/archestra/issues/5875)) ([df7c4ac](https://github.com/archestra-ai/archestra/commit/df7c4acd823bf5a66cc0e571f37e2c574b7b087c))
+* **bench:** broaden SUBMIT_NUDGE gate beyond "stop"; quiet search-tools hint on successful searches ([#5901](https://github.com/archestra-ai/archestra/issues/5901)) ([71374da](https://github.com/archestra-ai/archestra/commit/71374dabaded714fd8f31f34f7102cdf9c25f211))
+* **chat:** inline text-document attachments for providers that reject them ([#5858](https://github.com/archestra-ai/archestra/issues/5858)) ([b2ab90c](https://github.com/archestra-ai/archestra/commit/b2ab90c66fff50d42eac7f2aec04e26e4cf682b5))
+* **chat:** PDF attachments, create-conversation latency, and the 409 next-send race ([#5900](https://github.com/archestra-ai/archestra/issues/5900)) ([ce4cd41](https://github.com/archestra-ai/archestra/commit/ce4cd41f66c0e3adc4d2e5ac588f6fba34ceb850))
+* **chat:** repair non-object tool-call input before provider replay ([#5856](https://github.com/archestra-ai/archestra/issues/5856)) ([f07b7e1](https://github.com/archestra-ai/archestra/commit/f07b7e146bdb55c69945e71f004309b57c6b445a))
+* make GitHub Copilot (per-user) provider usable org-wide ([#5821](https://github.com/archestra-ai/archestra/issues/5821)) ([0cc5572](https://github.com/archestra-ai/archestra/commit/0cc5572ad60aed6985d0fdbdd5c4ae7a4ff5ea95))
+* **mcp:** scope search_tools/run_tool discovery to the caller's own installs ([#5899](https://github.com/archestra-ai/archestra/issues/5899)) ([bce50d6](https://github.com/archestra-ai/archestra/commit/bce50d67984e7c41cdd458ed0ed2ce7f12e643e3))
+* **mcp:** show catalog name, not catalog UUID, in auth-required errors ([#5860](https://github.com/archestra-ai/archestra/issues/5860)) ([d15e11a](https://github.com/archestra-ai/archestra/commit/d15e11aba39753340ee16ce3505c71d27adc5edb))
+* **projects:** cascade-delete a project's scheduled tasks ([#5842](https://github.com/archestra-ai/archestra/issues/5842)) ([fa048f5](https://github.com/archestra-ai/archestra/commit/fa048f5ba324b9134c3d17079e300734452aaea5))
+* **projects:** let a project:admin manage any project they can see ([#5843](https://github.com/archestra-ai/archestra/issues/5843)) ([abea6e0](https://github.com/archestra-ai/archestra/commit/abea6e0166dd438fa2d1190ea9008519f66275f0))
+* **proxy:** emit token usage on OpenAI-compatible streaming + unify the copied adapters ([#5844](https://github.com/archestra-ai/archestra/issues/5844)) ([492e32b](https://github.com/archestra-ai/archestra/commit/492e32b2ace776c1d764f71cc1f49abe9385ceda))
+* **sandbox:** fail fast on overlong replay logs instead of opaque overlay crash ([#5878](https://github.com/archestra-ai/archestra/issues/5878)) ([13e6dd6](https://github.com/archestra-ai/archestra/commit/13e6dd6b988f50dcb49ab997eaf1bcabb296bb43))
+* **scheduled-tasks:** race-free run transcripts + project runs view ([#5862](https://github.com/archestra-ai/archestra/issues/5862)) ([61a2637](https://github.com/archestra-ai/archestra/commit/61a2637b6807ed6ca2f95382e45476310f29a9fd))
+
+
+### Code Refactoring
+
+* **frontend:** restructure studio sidebar navigation ([#5846](https://github.com/archestra-ai/archestra/issues/5846)) ([535562f](https://github.com/archestra-ai/archestra/commit/535562f367f33846c8909a5c4dbceea76262dc5d))
+
+
+### Miscellaneous Chores
+
+* delete platform/backend/src/services/environments/spec.md ([#5300](https://github.com/archestra-ai/archestra/issues/5300)) ([6d2d56f](https://github.com/archestra-ai/archestra/commit/6d2d56fd3c1b1ae9ed87bcf716541c0663231a27))
+* fix mxp server overview ([#5839](https://github.com/archestra-ai/archestra/issues/5839)) ([ac412c2](https://github.com/archestra-ai/archestra/commit/ac412c2d0f87a7bb160f0bd0350375a490744b38))
+
+## [1.2.73](https://github.com/archestra-ai/archestra/compare/platform-v1.2.72...platform-v1.2.73) (2026-06-23)
+
+
+### Features
+
+* **backend:** add ARCHESTRA_BETA master switch for preview feature flags ([#5805](https://github.com/archestra-ai/archestra/issues/5805)) ([77a66ff](https://github.com/archestra-ai/archestra/commit/77a66ff6eb1e7b3a86bff3b4c607bb7937e5ed8a))
+* **mcp-registry:** routed catalog detail & edit pages with tabbed la… ([#5776](https://github.com/archestra-ai/archestra/issues/5776)) ([cb0cb91](https://github.com/archestra-ai/archestra/commit/cb0cb91ace118829faab7077a8a44104aa3cac62))
+* pinned projects ([#5802](https://github.com/archestra-ai/archestra/issues/5802)) ([5eeddc1](https://github.com/archestra-ai/archestra/commit/5eeddc122e13e5be0ae7f8b4b34efcdffbdc2fdd))
+
+
+### Bug Fixes
+
+* **oauth:** return to originating chat after a remote MCP OAuth connect ([#5816](https://github.com/archestra-ai/archestra/issues/5816)) ([2c2e29e](https://github.com/archestra-ai/archestra/commit/2c2e29e06f513ee5cb5f69dca13bc970eba6952b))
+* **oauth:** use white-label app name in remote MCP consent client name ([#5810](https://github.com/archestra-ai/archestra/issues/5810)) ([b4f3cc4](https://github.com/archestra-ai/archestra/commit/b4f3cc4dc2528389436f704838d12c61cb73b90d))
+* **sandbox:** force-kill dagger session children on teardown + backend channel keepalive ([#5801](https://github.com/archestra-ai/archestra/issues/5801)) ([4a793ee](https://github.com/archestra-ai/archestra/commit/4a793ee707c3621d09a7d8207b3a369dfeb1b517))
+
+
+### Miscellaneous Chores
+
+* **projects:** cap project description, preserve project link on shared-chat fork, and remove file-tool download links ([#5796](https://github.com/archestra-ai/archestra/issues/5796)) ([41cc49f](https://github.com/archestra-ai/archestra/commit/41cc49f5b75e3a9101e3316d0ee9c43dd306a0fa))
+* solving licensing ambiguity, making Archestra.AI free for small teams ([#5811](https://github.com/archestra-ai/archestra/issues/5811)) ([bc15f47](https://github.com/archestra-ai/archestra/commit/bc15f47bc6f9f1baabdba9ab0ec843bfb9ce2a9a))
+
+## [1.2.72](https://github.com/archestra-ai/archestra/compare/platform-v1.2.71...platform-v1.2.72) (2026-06-23)
+
+
+### Features
+
+* **agents:** auto-assign sandbox/file tools + couple all-tools to progressive loading ([#5770](https://github.com/archestra-ai/archestra/issues/5770)) ([7e069ad](https://github.com/archestra-ai/archestra/commit/7e069ad46bc9631caf23503a17912337306c517d))
+* **apps:** bind apps to an environment and fence their tools to it ([#5793](https://github.com/archestra-ai/archestra/issues/5793)) ([105210c](https://github.com/archestra-ai/archestra/commit/105210c3fd2173f8c6f4fc9f889943da6904c89b))
+* **apps:** group the app Tools tab by MCP server ([#5798](https://github.com/archestra-ai/archestra/issues/5798)) ([7e63bb9](https://github.com/archestra-ai/archestra/commit/7e63bb9140b0a42a1be344e5dc5fd0140904c087))
+* **apps:** unified Apps page — list & run external MCP-App servers ([#5778](https://github.com/archestra-ai/archestra/issues/5778)) ([90d7608](https://github.com/archestra-ai/archestra/commit/90d7608136716cf6842cd4ca86609f994d9225d5))
+* **backend:** add nested-args example to run_tool prompt ([#5779](https://github.com/archestra-ai/archestra/issues/5779)) ([93cd4da](https://github.com/archestra-ai/archestra/commit/93cd4dafa9afcc734c6c7b46974f381428f14cb1))
+* **backend:** circuit breaker for repeated identical tool calls ([#5756](https://github.com/archestra-ai/archestra/issues/5756)) ([5dd87d3](https://github.com/archestra-ai/archestra/commit/5dd87d35c7c9916ad97e0b9c77ba9544c6b443d0))
+* **backend:** gate Projects file tools on the Projects flag ([#5764](https://github.com/archestra-ai/archestra/issues/5764)) ([75b9b16](https://github.com/archestra-ai/archestra/commit/75b9b166edf1c73325d970be0521646995e84019))
+* **backend:** surface run_command fallback and sharpen search_tools query guidance ([#5772](https://github.com/archestra-ai/archestra/issues/5772)) ([2d67225](https://github.com/archestra-ai/archestra/commit/2d672251276ec98c6dcd8439fa9686a3892e52e2))
+* **backend:** terminate runs stuck repeating identical tool calls ([#5786](https://github.com/archestra-ai/archestra/issues/5786)) ([ec02645](https://github.com/archestra-ai/archestra/commit/ec026455c46c55de22c6e8fb0935f65763ea3cdb))
+* **files:** scope no-project files to their conversation; remove global My Files ([#5782](https://github.com/archestra-ai/archestra/issues/5782)) ([e2f753a](https://github.com/archestra-ai/archestra/commit/e2f753a3ba098ef6e28240191f1f630d3e5c5fa2))
+* **mcp-gateway:** expand search_tools param signatures two levels deep ([#5750](https://github.com/archestra-ai/archestra/issues/5750)) ([86d061f](https://github.com/archestra-ai/archestra/commit/86d061f64e8b8046ca8d202f5d09d633d2b8c8ed))
+* per-environment cost limits + environment isolation for tools & knowledge ([#5714](https://github.com/archestra-ai/archestra/issues/5714)) ([00432c5](https://github.com/archestra-ai/archestra/commit/00432c53b2289397b0186c2596db4bc1aebc7596))
+* **projects:** require an LLM provider key + drop chat count on project cards ([#5763](https://github.com/archestra-ai/archestra/issues/5763)) ([453faef](https://github.com/archestra-ai/archestra/commit/453faef5f415926e1093ef09d618800da4c44043))
+* recover Bedrock pricing for Meta/Amazon/DeepSeek via amazon-bedrock registry entry ([#5781](https://github.com/archestra-ai/archestra/issues/5781)) ([67d1105](https://github.com/archestra-ai/archestra/commit/67d110559b2db2ba1635a887bd32ba6ac408885f))
+
+
+### Bug Fixes
+
+* **backend:** degrade transient verifyToken errors to 401, not 500 ([#5787](https://github.com/archestra-ai/archestra/issues/5787)) ([61142d0](https://github.com/archestra-ai/archestra/commit/61142d061398eae7492b414672f75e4e972470ec))
+* **backend:** guide run_tool arg errors with a worked example ([#5773](https://github.com/archestra-ai/archestra/issues/5773)) ([d7cbea8](https://github.com/archestra-ai/archestra/commit/d7cbea8537513fceb382ac370de6e1cec78497c1))
+* **backend:** keep built-in tools when a conversation enables zero tools ([#5766](https://github.com/archestra-ai/archestra/issues/5766)) ([3f83895](https://github.com/archestra-ai/archestra/commit/3f838950eca4b882d2bff31bae1487000563006f))
+* **backend:** tolerate non-standard finish_reason on interaction read-back ([#5780](https://github.com/archestra-ai/archestra/issues/5780)) ([14fac1b](https://github.com/archestra-ai/archestra/commit/14fac1be624c7b25a81d02f73fa7573f09240309))
+* **bench:** dedicated Postgres, per-lane projects, unmasked file conflicts ([#5749](https://github.com/archestra-ai/archestra/issues/5749)) ([d1b986e](https://github.com/archestra-ai/archestra/commit/d1b986e31bd86a74dd3303f81d37dbc5bfd7ff24))
+* **bench:** full trajectory rendering + transient-timeout retry; sandbox stderr on failure ([#5744](https://github.com/archestra-ai/archestra/issues/5744)) ([6fc9c57](https://github.com/archestra-ai/archestra/commit/6fc9c578fcf19a286fe1c0226ea10ddcab3a0a54))
+* **chat:** respect prompt draft and selected agent in chat flows ([#5765](https://github.com/archestra-ai/archestra/issues/5765)) ([ad21e94](https://github.com/archestra-ai/archestra/commit/ad21e942cba8a4e016052f50481447410f2b334f))
+* **cost-stats:** correct 90d bucketing, UTC alignment, and savings math ([#5757](https://github.com/archestra-ai/archestra/issues/5757)) ([9e8c8cb](https://github.com/archestra-ai/archestra/commit/9e8c8cb0c21339cca85b1ec9dcf474f287eb3845))
+* **e2e:** update merge-queue specs for renamed app/dialog labels ([#5789](https://github.com/archestra-ai/archestra/issues/5789)) ([34d2b4a](https://github.com/archestra-ai/archestra/commit/34d2b4ae33e6e30921222a97684e45b5ae91b510))
+* **mcp-apps:** harden shareable-app connector token binding and lifetime ([#5708](https://github.com/archestra-ai/archestra/issues/5708)) ([dbe265c](https://github.com/archestra-ai/archestra/commit/dbe265c3763e25e184d339d1275815d39cd70f1c))
+* **projects:** stop 404 storm and error toasts on project delete ([#5762](https://github.com/archestra-ai/archestra/issues/5762)) ([2a5ac37](https://github.com/archestra-ai/archestra/commit/2a5ac37f26adb3ba9eb0dd07e15d35776074e890))
+* **sandbox:** self-heal from dagger stale-attachables panic ([#5797](https://github.com/archestra-ai/archestra/issues/5797)) ([726dc74](https://github.com/archestra-ai/archestra/commit/726dc7423fca70161ebe079f0eba8dc67278ec33))
+
+
+### Performance Improvements
+
+* **mcp-gateway:** drop redundant heavy server lookups in tool execution ([#5746](https://github.com/archestra-ai/archestra/issues/5746)) ([0c7cf05](https://github.com/archestra-ai/archestra/commit/0c7cf05f06275c41bf53038e0eebb313c22589cd))
+
+
+### Dependencies
+
+* bump dompurify from 3.4.0 to 3.4.10 in /platform ([#5792](https://github.com/archestra-ai/archestra/issues/5792)) ([94c05f9](https://github.com/archestra-ai/archestra/commit/94c05f964826725fb87ea73eb4ef632c94146733))
+
+
+### Code Refactoring
+
+* **apps:** cleanup chat's right panel, extract chat header component ([#5784](https://github.com/archestra-ai/archestra/issues/5784)) ([0440b31](https://github.com/archestra-ai/archestra/commit/0440b31ce77f6c1a0c51bdc068c34d7461b7de9c))
+* **apps:** group app routes + tests into the app/ entity folder ([#5790](https://github.com/archestra-ai/archestra/issues/5790)) ([982934c](https://github.com/archestra-ai/archestra/commit/982934cd48dccf81459008f403ac096f40b9bf17))
+* configurable cache token pricing + improved default/Bedrock/Azure model pricing ([#5760](https://github.com/archestra-ai/archestra/issues/5760)) ([c5f06fc](https://github.com/archestra-ai/archestra/commit/c5f06fccbdf1bbaed844275d909bb7631835aa80))
+* **files:** list project files in the chat panel; drop touched-files tracking ([#5795](https://github.com/archestra-ai/archestra/issues/5795)) ([9e93037](https://github.com/archestra-ai/archestra/commit/9e930375737a190e2f10945b738dd3cefe49b434))
+
+## [1.2.71](https://github.com/archestra-ai/archestra/compare/platform-v1.2.70...platform-v1.2.71) (2026-06-21)
+
+
+### Features
+
+* **apps:** staged MCP App authoring flow (refine → scaffold → edit → validate → publish) ([#5718](https://github.com/archestra-ai/archestra/issues/5718)) ([50c668e](https://github.com/archestra-ai/archestra/commit/50c668ee99c7558fd968d0121898be81fdd270f7))
+* **frontend:** rename Triggers to Messaging Channels in sidebar ([#5729](https://github.com/archestra-ai/archestra/issues/5729)) ([26e156e](https://github.com/archestra-ai/archestra/commit/26e156e17b026aa743a5cf15b8a2c3ac8e556918))
+* **sandbox:** read_file MCP tool + SOTA-faithful file trio ([#5728](https://github.com/archestra-ai/archestra/issues/5728)) ([a743663](https://github.com/archestra-ai/archestra/commit/a7436639767e17cd32f71466627fb9cb4cfdd518))
+* **sidebar:** separate pinned and recents, polish and fixes ([#5738](https://github.com/archestra-ai/archestra/issues/5738)) ([05d5d1b](https://github.com/archestra-ai/archestra/commit/05d5d1b35dbbbea67ca7e43b6d9c29e578163716))
+
+
+### Bug Fixes
+
+* **chat:** stop header title render loop during typing animation ([#5730](https://github.com/archestra-ai/archestra/issues/5730)) ([316fa70](https://github.com/archestra-ai/archestra/commit/316fa7013f3ad92d33eab6da6a659b572941daf7))
+* **mcp:** let non-admin members re-authenticate their MCP connections ([#5740](https://github.com/archestra-ai/archestra/issues/5740)) ([d413b77](https://github.com/archestra-ai/archestra/commit/d413b77e512b324b27215c05ef623034da8f9ad4))
+* **sidebar:** play chats loaded animation only once ([#5739](https://github.com/archestra-ai/archestra/issues/5739)) ([9d3067c](https://github.com/archestra-ai/archestra/commit/9d3067ccabe69d6a912b1268919b1f5b84fe32f4))
+
+
+### Documentation
+
+* **platform:** relax test and commit rules in CLAUDE.md ([#5723](https://github.com/archestra-ai/archestra/issues/5723)) ([fd57036](https://github.com/archestra-ai/archestra/commit/fd57036919a6fb643d92013621692978424aad71))
+
+
+### Code Refactoring
+
+* **agents:** shared runAgentStream primitive for chat + A2A ([#5722](https://github.com/archestra-ai/archestra/issues/5722)) ([ef58dd7](https://github.com/archestra-ai/archestra/commit/ef58dd71eca134e797fcf4ff46d9a61107ae8ffd))
+
+
+### Miscellaneous Chores
+
+* backfill auto-generated projects for orphaned schedule triggers ([#5734](https://github.com/archestra-ai/archestra/issues/5734)) ([832132b](https://github.com/archestra-ai/archestra/commit/832132be09db0f91ad216d8820f33c1a08a5eb01))
+
+## [1.2.70](https://github.com/archestra-ai/archestra/compare/platform-v1.2.69...platform-v1.2.70) (2026-06-20)
+
+
+### Features
+
+* **files:** provider-agnostic filesystem backend + unified FileStore + slug folders ([#5680](https://github.com/archestra-ai/archestra/issues/5680)) ([63e3b73](https://github.com/archestra-ai/archestra/commit/63e3b730460e67bade3fe78c2d5236c817c3ccba))
+* **llm-proxy:** forward http(s) image URLs to Anthropic via url source ([#5720](https://github.com/archestra-ai/archestra/issues/5720)) ([6352feb](https://github.com/archestra-ai/archestra/commit/6352feb44fb14e765e0c26a148075a2b01cd7e42))
+* **llm:** add env var to manually configure LLM proxy upstream timeout ([#5665](https://github.com/archestra-ai/archestra/issues/5665)) ([c2e7d48](https://github.com/archestra-ai/archestra/commit/c2e7d482471ab5f8fb89c5dce30dff11154d6b02))
+* **llm:** additive proxy access grant on authorization_code LLM OAuth clients ([#5713](https://github.com/archestra-ai/archestra/issues/5713)) ([782dd3a](https://github.com/archestra-ai/archestra/commit/782dd3ae4fa64ba2e2f95d17b904283efc9e3474))
+* **mcp-apps:** shareable app connector as a native OAuth remote MCP server ([#5689](https://github.com/archestra-ai/archestra/issues/5689)) ([6698224](https://github.com/archestra-ai/archestra/commit/6698224a09acf1a2a199a73300eb30fe6e327180))
+* **mcp:** additive gateway access grant on authorization_code OAuth clients ([#5711](https://github.com/archestra-ai/archestra/issues/5711)) ([e2ffcdb](https://github.com/archestra-ai/archestra/commit/e2ffcdbb31b907f8f9915eeeadff33a28fe7838b))
+* **mcp:** advertise the oauth-client-credentials extension in gateway initialize ([#5698](https://github.com/archestra-ai/archestra/issues/5698)) ([7f7cc93](https://github.com/archestra-ai/archestra/commit/7f7cc936f680d60a73e0d0cd3f4867e094f8a92c))
+* **mcp:** improve run_tool/search_tools ergonomics in search_and_run_only ([#5691](https://github.com/archestra-ai/archestra/issues/5691)) ([c71fd7a](https://github.com/archestra-ai/archestra/commit/c71fd7af3f60f25c0513ce814ee2db39633d13fd))
+* **projects:** add edit_file and delete_file harness tools ([#5658](https://github.com/archestra-ai/archestra/issues/5658)) ([8a33e2d](https://github.com/archestra-ai/archestra/commit/8a33e2d456f2aeef59673b77ef485b974d33647b))
+* **projects:** project UX polish + scheduled tasks → projects ([#5660](https://github.com/archestra-ai/archestra/issues/5660)) ([ad97f87](https://github.com/archestra-ai/archestra/commit/ad97f87289be04cd5506ce9d5ddd4df94b862d13))
+* **projects:** show only files the agent touched in the chat Files panel ([#5657](https://github.com/archestra-ai/archestra/issues/5657)) ([a6654cf](https://github.com/archestra-ai/archestra/commit/a6654cfa258da19117ce83afc970d5394c7bc3db))
+
+
+### Bug Fixes
+
+* **docker:** drop corepack/pnpm from runtime image (undici CVE-2026-12151) ([#5710](https://github.com/archestra-ai/archestra/issues/5710)) ([7d44aaa](https://github.com/archestra-ai/archestra/commit/7d44aaad2ecdbdbe44beef98f1ecf0885596a3e6))
+* **helm:** migration job calls drizzle-kit directly, not pnpm ([#5717](https://github.com/archestra-ai/archestra/issues/5717)) ([eee1250](https://github.com/archestra-ai/archestra/commit/eee1250c60e25c70a7e7557e6c02ee1afd83a1df))
+* **llm-proxy:** forward multimodal content through model-router translators (Gemini, Anthropic, Cohere) ([#5709](https://github.com/archestra-ai/archestra/issues/5709)) ([7d8ff99](https://github.com/archestra-ai/archestra/commit/7d8ff990a0941fe1a08db2924bec8a66ae7e940b))
+* **mcp-apps:** render owned apps in strict-CSP foreign hosts via a self-contained resource ([#5692](https://github.com/archestra-ai/archestra/issues/5692)) ([77481ea](https://github.com/archestra-ai/archestra/commit/77481ea1f498c6fe6df09ba5889a811d2f231f23))
+* **platform:** bench-run-20260619 agent-loop friction fixes ([#5707](https://github.com/archestra-ai/archestra/issues/5707)) ([179bba3](https://github.com/archestra-ai/archestra/commit/179bba395097499c2bc46d984432d30d970f628a))
+* **platform:** bump containerd to 2.2.5 for CVE-2026-53488/53492/53489 ([#5719](https://github.com/archestra-ai/archestra/issues/5719)) ([dd3d6b0](https://github.com/archestra-ai/archestra/commit/dd3d6b067d1a90a4947f782c4da9e8bde90c1e46))
+* restrict Bedrock prompt cache TTL ([#5700](https://github.com/archestra-ai/archestra/issues/5700)) ([838088a](https://github.com/archestra-ai/archestra/commit/838088ad6021c0540690d34236bd10f1a405fe92))
+* **sandbox:** reap orphaned dagger session child; oneshot connect handshake ([#5642](https://github.com/archestra-ai/archestra/issues/5642)) ([d9d135d](https://github.com/archestra-ai/archestra/commit/d9d135de7cfb7088f3e3a4f7589b1f86284d6874))
+* **sandbox:** strip NUL bytes from run_command output before persistence ([#5697](https://github.com/archestra-ai/archestra/issues/5697)) ([050f17e](https://github.com/archestra-ai/archestra/commit/050f17e944de9b0019812bb9a31834e64370c1d8))
+
+
+### Dependencies
+
+* bump the rust-dependencies group across 1 directory with 3 updates ([#5674](https://github.com/archestra-ai/archestra/issues/5674)) ([c6f557a](https://github.com/archestra-ai/archestra/commit/c6f557ae4f33b769e9fe1a763058ad829afe0b9b))
+
+
+### Code Refactoring
+
+* **backend:** consolidate a2a + chatops agent plumbing ([#5705](https://github.com/archestra-ai/archestra/issues/5705)) ([d9395a5](https://github.com/archestra-ai/archestra/commit/d9395a527b38bb0e75880adaf712b33ee7a7f13f))
+* **backend:** consolidate chat context token estimation ([#5704](https://github.com/archestra-ai/archestra/issues/5704)) ([78779eb](https://github.com/archestra-ai/archestra/commit/78779eb327c75415874960715596605e20e7efdf))
+* **backend:** consolidate model-fetcher adapters ([#5701](https://github.com/archestra-ai/archestra/issues/5701)) ([27ffd1a](https://github.com/archestra-ai/archestra/commit/27ffd1a88b948d759ddf1310c626bc5490856590))
+* **chat:** unify chat/agent system-prompt construction ([#5693](https://github.com/archestra-ai/archestra/issues/5693)) ([1daa48d](https://github.com/archestra-ai/archestra/commit/1daa48d2e446fa49342016912021aadae8de0e7e))
+* **frontend:** consolidate chat query error handling ([#5702](https://github.com/archestra-ai/archestra/issues/5702)) ([dcb99f0](https://github.com/archestra-ai/archestra/commit/dcb99f0da8214c81c7e217a10841ba890f5fa7bf))
+* **frontend:** unify chat init/composer model state ([#5706](https://github.com/archestra-ai/archestra/issues/5706)) ([b058488](https://github.com/archestra-ai/archestra/commit/b0584888320254ded1010e49aaee089c9c440d9b))
+* **frontend:** unify editable message + auth tool cards ([#5703](https://github.com/archestra-ai/archestra/issues/5703)) ([0d7c431](https://github.com/archestra-ai/archestra/commit/0d7c431d92671c59bf68273e2bc28d8802fbb09f))
+* **prompts:** strip past-defect overfit, keep corrective text in unhappy path ([#5699](https://github.com/archestra-ai/archestra/issues/5699)) ([fec1675](https://github.com/archestra-ai/archestra/commit/fec167599b998e83bfbb6a7da8bf6cc9899a4c4d))
+
+
+### Miscellaneous Chores
+
+* **knowledge:** remove the Knowledge &gt; Files connector ([#5667](https://github.com/archestra-ai/archestra/issues/5667)) ([82df059](https://github.com/archestra-ai/archestra/commit/82df059f2424ddcd6c7c2822f123bde6e1e49eb6))
+
+## [1.2.69](https://github.com/archestra-ai/archestra/compare/platform-v1.2.68...platform-v1.2.69) (2026-06-19)
+
+
+### Features
+
+* agent all tool access ([#5521](https://github.com/archestra-ai/archestra/issues/5521)) ([8f650c1](https://github.com/archestra-ai/archestra/commit/8f650c127d676cf49273561c19822e7c7502ed4f))
+* **environments:** enforce environment egress policy on remote MCP servers (create/edit + runtime) ([#5682](https://github.com/archestra-ai/archestra/issues/5682)) ([3ed6757](https://github.com/archestra-ai/archestra/commit/3ed6757e4725547045f2fa5666e56400d9fb992f))
+* **llm:** authorization_code grant for manually registered LLM OAuth clients ([#5685](https://github.com/archestra-ai/archestra/issues/5685)) ([4012776](https://github.com/archestra-ai/archestra/commit/4012776274b7de7f80b33761dbaa254d7211d434))
+* **mcp:** authorization_code grant for manually registered OAuth clients (+ disable-DCR toggle) ([#5683](https://github.com/archestra-ai/archestra/issues/5683)) ([a427a82](https://github.com/archestra-ai/archestra/commit/a427a82ac112d8b6982ae1ae8452962aa4def554))
+* **tool-search:** report query terms that match no tool text ([#5664](https://github.com/archestra-ai/archestra/issues/5664)) ([c6c741b](https://github.com/archestra-ai/archestra/commit/c6c741b19b78bdd7b5f391788dc0ba55a8a58c10))
+
+
+### Bug Fixes
+
+* **chat,bench:** retry abortive tool calls, coerce sandbox target, repair harmony tool names ([#5668](https://github.com/archestra-ai/archestra/issues/5668)) ([ca77337](https://github.com/archestra-ai/archestra/commit/ca77337231b29d4ca04ffbebf34a4fdc3d7cdb00))
+* **mcp-apps:** serve sandbox iframe from the frontend origin (reachable on remote/tunnelled localhost) ([#5656](https://github.com/archestra-ai/archestra/issues/5656)) ([4d9be29](https://github.com/archestra-ai/archestra/commit/4d9be2948855a3635b4203de66a2f3fa2ee13f2e))
+
+
+### Miscellaneous Chores
+
+* bump next to 16.3.0-canary.56 ([#5659](https://github.com/archestra-ai/archestra/issues/5659)) ([be0e0ac](https://github.com/archestra-ai/archestra/commit/be0e0ac927d894664a812faee7f7bc12b6d6051c))
+* **e2e:** remove test-mcp-servers fixtures (moved to examples repo) ([#5684](https://github.com/archestra-ai/archestra/issues/5684)) ([5367821](https://github.com/archestra-ai/archestra/commit/53678214a531e8c88c7a03e212137128a960ccac))
+
+## [1.2.68](https://github.com/archestra-ai/archestra/compare/platform-v1.2.67...platform-v1.2.68) (2026-06-18)
+
+
+### Features
+
+* **archestra-bench:** pin temperature and MCP tool surface for reproducibility ([#5653](https://github.com/archestra-ai/archestra/issues/5653)) ([a4336d8](https://github.com/archestra-ai/archestra/commit/a4336d85ecf1237c161121591f75afe369d9cd1f))
+
+## [1.2.67](https://github.com/archestra-ai/archestra/compare/platform-v1.2.66...platform-v1.2.67) (2026-06-18)
+
+
+### Features
+
+* **apps:** expose owned MCP Apps to external MCP clients ([#5594](https://github.com/archestra-ai/archestra/issues/5594)) ([4df5e49](https://github.com/archestra-ai/archestra/commit/4df5e4928b03469e220f5963c1128e77951ea5cf))
+
+
+### Bug Fixes
+
+* **chat:** surface a retryable error on abortive turns ([#5592](https://github.com/archestra-ai/archestra/issues/5592)) ([afb9a3b](https://github.com/archestra-ai/archestra/commit/afb9a3b0d8fe885937291b172706c03a99d3ace6))
+* **knowledge:** pilot UX quick wins for Files, toasts, and embedding setup ([#5598](https://github.com/archestra-ai/archestra/issues/5598)) ([1a18b91](https://github.com/archestra-ai/archestra/commit/1a18b91630daa89f335676a20b59179c41039146))
+* **network-policy:** add githubusercontent.com domains to PACKAGE_MANAGER_DOMAINS ([#5636](https://github.com/archestra-ai/archestra/issues/5636)) ([aefaaf3](https://github.com/archestra-ai/archestra/commit/aefaaf31ce557f51cea32c28520af59ef7e35be2))
+* **sandbox-rs:** use blocking OTLP client so telemetry export survives ([#5650](https://github.com/archestra-ai/archestra/issues/5650)) ([012484f](https://github.com/archestra-ai/archestra/commit/012484fdb8e2d35023738f90c00638db324ff1cd))
+
+
+### Code Refactoring
+
+* **frontend:** share one EnvironmentSelector across MCP and agent forms ([#5641](https://github.com/archestra-ai/archestra/issues/5641)) ([ee1b01e](https://github.com/archestra-ai/archestra/commit/ee1b01e540a0ce5593457f0fa49192ce6094052b))
+
+
+### Miscellaneous Chores
+
+* **deps:** drop redundant lodash override ([#5647](https://github.com/archestra-ai/archestra/issues/5647)) ([9955c4d](https://github.com/archestra-ai/archestra/commit/9955c4dcb0d390d806e96bd2cdc6a3c2f5a33561))
+
+## [1.2.66](https://github.com/archestra-ai/archestra/compare/platform-v1.2.65...platform-v1.2.66) (2026-06-17)
+
+
+### Features
+
+* **chat,bench:** reference sandbox-only uploads instead of hard-erroring the LLM call ([#5623](https://github.com/archestra-ai/archestra/issues/5623)) ([2f64ed8](https://github.com/archestra-ai/archestra/commit/2f64ed8483f4f0a6ed557d5c2db5c92527f74249))
+* **connection:** Windows PowerShell scripts, OpenAI-router auth, member virtual keys ([#5610](https://github.com/archestra-ai/archestra/issues/5610)) ([a1c20a4](https://github.com/archestra-ai/archestra/commit/a1c20a49b251a80618ebf3450c7b19ba5e053b2c))
+* **environments:** make the environment editor reload-stable via URL params ([#5630](https://github.com/archestra-ai/archestra/issues/5630)) ([d6477fc](https://github.com/archestra-ai/archestra/commit/d6477fc21ffe83d28e1d13bc8b1bb38b316abb8d))
+* **k8s:** report NetworkPolicy enforcement honestly in the environment editor ([#5617](https://github.com/archestra-ai/archestra/issues/5617)) ([64dbbd1](https://github.com/archestra-ai/archestra/commit/64dbbd14fdc971732cb0831d5fb00c0ceb987b64))
+* **mcp:** OAuth client credentials (applications) for MCP gateways ([#5632](https://github.com/archestra-ai/archestra/issues/5632)) ([784354d](https://github.com/archestra-ai/archestra/commit/784354d86d14a7a256e2fc4422d510ba3a58bca6))
+
+
+### Bug Fixes
+
+* **archestra-mcp-server:** guide LLMs through tool-schema mismatches and surface output truncation ([#5635](https://github.com/archestra-ai/archestra/issues/5635)) ([4aff7c0](https://github.com/archestra-ai/archestra/commit/4aff7c0b1e62d4215156669872770c56c8ff876a))
+* **dagger:** merge-patch custom egress policies instead of PUT-replace ([#5634](https://github.com/archestra-ai/archestra/issues/5634)) ([783f6b3](https://github.com/archestra-ai/archestra/commit/783f6b3237120c9f5705fe0289e4453d4dad0b26))
+* **frontend:** correct network policy docs anchor to #network-egress-policies ([#5633](https://github.com/archestra-ai/archestra/issues/5633)) ([6efd421](https://github.com/archestra-ai/archestra/commit/6efd42121316ce7ccec515e37940d2e8ca1429e7))
+
+
+### Code Refactoring
+
+* **environments:** order network egress fields by mechanism ([#5631](https://github.com/archestra-ai/archestra/issues/5631)) ([e728611](https://github.com/archestra-ai/archestra/commit/e728611569011500eec6a74341e9b341f9e57982))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump hono from 4.12.23 to 4.12.25 in /platform/mcp_server_docker_image ([#5614](https://github.com/archestra-ai/archestra/issues/5614)) ([195bc1a](https://github.com/archestra-ai/archestra/commit/195bc1a0e0fec3288a47fe9f899203e128228c9c))
+* **deps:** drop redundant defu override ([#5638](https://github.com/archestra-ai/archestra/issues/5638)) ([7315f24](https://github.com/archestra-ai/archestra/commit/7315f24392847db4cf8176499640894c1ca3f913))
+* **deps:** drop redundant yaml override ([#5639](https://github.com/archestra-ai/archestra/issues/5639)) ([37d017f](https://github.com/archestra-ai/archestra/commit/37d017f180362834665836c631a61dcc360ab33a))
+* **skills:** add archestra-dev-override-sweep skill ([#5628](https://github.com/archestra-ai/archestra/issues/5628)) ([dc139f7](https://github.com/archestra-ai/archestra/commit/dc139f794b5cdc5781645d0726094bc1b341e971))
+
+## [1.2.65](https://github.com/archestra-ai/archestra/compare/platform-v1.2.64...platform-v1.2.65) (2026-06-17)
+
+
+### Features
+
+* Projects + My Files (persistent file system) on the skill sandbox ([#5599](https://github.com/archestra-ai/archestra/issues/5599)) ([97d1d19](https://github.com/archestra-ai/archestra/commit/97d1d193bf220e24b712ea7f514319f96ace2e75))
+
+
+### Bug Fixes
+
+* **sandbox:** regenerate sandbox_base lockfile to unblock staging deploy ([#5622](https://github.com/archestra-ai/archestra/issues/5622)) ([4ce54dd](https://github.com/archestra-ai/archestra/commit/4ce54ddc626fee1e9fe94bdc0906ba3ae3b7427f))
+* **sandbox:** regenerate stale sandbox-base lockfile (project-name drift) ([#5619](https://github.com/archestra-ai/archestra/issues/5619)) ([7b6047d](https://github.com/archestra-ai/archestra/commit/7b6047dc3c5e42e299f00dcb9ec7bbb9129cf04c))
+* **web-crawler:** reject cross-host and out-of-scope redirects ([#5605](https://github.com/archestra-ai/archestra/issues/5605)) ([8256748](https://github.com/archestra-ai/archestra/commit/82567483ef16446ee2387517d555b4023c17a3cd))
+
+## [1.2.64](https://github.com/archestra-ai/archestra/compare/platform-v1.2.63...platform-v1.2.64) (2026-06-16)
+
+
+### Features
+
+* **agents:** scope agent MCP servers to the selected environment ([#5603](https://github.com/archestra-ai/archestra/issues/5603)) ([4163ff4](https://github.com/archestra-ai/archestra/commit/4163ff48ab655c542f44979444f425bdbd7e6aa0))
+* **archestra-bench:** env-configured agentic benchmark harness ([#5447](https://github.com/archestra-ai/archestra/issues/5447)) ([cb735c2](https://github.com/archestra-ai/archestra/commit/cb735c2df75b0968340daf3729f220ebab22909f))
+* context window usage breakdown in chat ([#5260](https://github.com/archestra-ai/archestra/issues/5260)) ([74347c4](https://github.com/archestra-ai/archestra/commit/74347c4c84a61f2a24b6c5922d5577a33be1fe1b))
+* **frontend:** add Chats/Studio sidebar toggle ([#5601](https://github.com/archestra-ai/archestra/issues/5601)) ([f9b5bcc](https://github.com/archestra-ai/archestra/commit/f9b5bcce447a7fd6eaa70d1630cc694c013fd83c))
+* **sandbox:** bake-able sandbox base image with a prebuilt runtime branch ([#5524](https://github.com/archestra-ai/archestra/issues/5524)) ([2c19156](https://github.com/archestra-ai/archestra/commit/2c19156c06db4e65af41e84f11a2bb3054b603d1))
+
+
+### Bug Fixes
+
+* **skills:** soften compatibility badge to neutral styling ([#5600](https://github.com/archestra-ai/archestra/issues/5600)) ([c9ef6d5](https://github.com/archestra-ai/archestra/commit/c9ef6d53a1b8df4205660e5f53fd2b66896ee4ab))
+
+
+### Dependencies
+
+* clear all merge-queue HIGH CVEs (ws, form-data, hono, vite, protobufjs, shell-quote) ([#5608](https://github.com/archestra-ai/archestra/issues/5608)) ([dd0ca54](https://github.com/archestra-ai/archestra/commit/dd0ca543b23a185c934608cfad5a37dae3c9a1db))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump hono from 4.12.23 to 4.12.25 in /platform/e2e-tests/test-mcp-servers/mcp-server-id-jag ([#5611](https://github.com/archestra-ai/archestra/issues/5611)) ([1016b91](https://github.com/archestra-ai/archestra/commit/1016b91dca06e983fa2ed8a6ef6f700c702ee3d5))
+
+## [1.2.63](https://github.com/archestra-ai/archestra/compare/platform-v1.2.62...platform-v1.2.63) (2026-06-15)
+
+
+### Features
+
+* add MCP elicitation support ([#5494](https://github.com/archestra-ai/archestra/issues/5494)) ([2cc3221](https://github.com/archestra-ai/archestra/commit/2cc32212c17e1be2620d9426998cf4c67ddcd588))
+* **apps:** first-class user-authored MCP Apps ([#5437](https://github.com/archestra-ai/archestra/issues/5437)) ([e351ec0](https://github.com/archestra-ai/archestra/commit/e351ec009d98d9d952fbe54c0df5ae331ef66042))
+* **chatops:** enable MS Teams file/image upload in 1:1 chats ([#5548](https://github.com/archestra-ai/archestra/issues/5548)) ([e89bb51](https://github.com/archestra-ai/archestra/commit/e89bb51083b7dc1dc94a464624d0134c936c9d68))
+* **chatops:** Slack sticky-thread auto-reply ([#5490](https://github.com/archestra-ai/archestra/issues/5490)) ([679d1ef](https://github.com/archestra-ai/archestra/commit/679d1ef4efa5c7f67e2e2661916a482960473ce5))
+* connection beta page ([#5520](https://github.com/archestra-ai/archestra/issues/5520)) ([7f1e446](https://github.com/archestra-ai/archestra/commit/7f1e44623544a4194c6a4cccc00f67946edc0e39))
+* **connection:** one-command client setup ([#5496](https://github.com/archestra-ai/archestra/issues/5496)) ([32128ee](https://github.com/archestra-ai/archestra/commit/32128eef07316e3be3990cf0d45d5720831971d1))
+* **connection:** rebuild connect page as a minimal step-by-step wizard ([#5516](https://github.com/archestra-ai/archestra/issues/5516)) ([409c27f](https://github.com/archestra-ai/archestra/commit/409c27fdec4241d52dbd0d0f04af7e269768ab92))
+* **knowledge:** add Perforce (Helix Core) knowledge connector ([#5503](https://github.com/archestra-ai/archestra/issues/5503)) ([fd7eac2](https://github.com/archestra-ai/archestra/commit/fd7eac2f88d1e82318f2f16385ca7862d198033f))
+* **llm:** create virtual API keys on behalf of another user ([#5583](https://github.com/archestra-ai/archestra/issues/5583)) ([f3ba953](https://github.com/archestra-ai/archestra/commit/f3ba953dbc5f40a2e965f79c3e0dce55e927a5d7))
+* **llm:** GitHub Copilot LLM provider with per-user GitHub device-flow auth ([#5539](https://github.com/archestra-ai/archestra/issues/5539)) ([fe9640d](https://github.com/archestra-ai/archestra/commit/fe9640d7e550545c286720f20c6e97c2cfb17ee4))
+* **mcp:** relax search_tools/run_tool to user-accessible tools with first-use auto-assignment ([#5491](https://github.com/archestra-ai/archestra/issues/5491)) ([a958c83](https://github.com/archestra-ai/archestra/commit/a958c83cb074f76019a221430337b676687ad2e5))
+* ms teams in thread ([#5481](https://github.com/archestra-ai/archestra/issues/5481)) ([6636835](https://github.com/archestra-ai/archestra/commit/663683516103fb75b2477a0dafd858f2a7a102b1))
+* **sandbox:** per-environment Dagger sandbox egress, reusing MCP NetworkPolicy machinery ([#5493](https://github.com/archestra-ai/archestra/issues/5493)) ([6582b88](https://github.com/archestra-ai/archestra/commit/6582b8870fd2826ad9370587b7f502233e6dc578))
+* team labels + team metadata propagation into traces ([#5546](https://github.com/archestra-ai/archestra/issues/5546)) ([b8d32dc](https://github.com/archestra-ai/archestra/commit/b8d32dc6c47ccd187eb9c247a748acdf1e802ee1))
+
+
+### Bug Fixes
+
+* **bedrock:** allow file attachments in chat without a 400 ([#5531](https://github.com/archestra-ai/archestra/issues/5531)) ([e0a23ed](https://github.com/archestra-ai/archestra/commit/e0a23edeaa40b23f708e93f6c15d9c297328e7af))
+* browser network policy fallback ([#5486](https://github.com/archestra-ai/archestra/issues/5486)) ([7449d0e](https://github.com/archestra-ai/archestra/commit/7449d0e42eda85233ed1af41450f1af69f6c8430))
+* **chat:** cap title-gen output tokens to avoid Anthropic streaming-required error ([#5472](https://github.com/archestra-ai/archestra/issues/5472)) ([bbd04c9](https://github.com/archestra-ai/archestra/commit/bbd04c9feab6014e8069c6754e1e75bdd4c4831b))
+* **chat:** classify OpenRouter upstream idle timeout as retryable network error ([#5511](https://github.com/archestra-ai/archestra/issues/5511)) ([72e3896](https://github.com/archestra-ai/archestra/commit/72e3896ad3205d60a738904b5f1edb33e93816fe))
+* **chat:** redesign tool call panel ([#5485](https://github.com/archestra-ai/archestra/issues/5485)) ([9a5368f](https://github.com/archestra-ai/archestra/commit/9a5368f68bd1acfaeb340b5b20f58d9a7033d09c))
+* **chat:** retry empty gemini finishes, present exhausted empty turns as a neutral outcome ([#5487](https://github.com/archestra-ai/archestra/issues/5487)) ([2d304a6](https://github.com/archestra-ai/archestra/commit/2d304a693c889a0ba5260fc491dadd703320668e))
+* **chat:** stop active-run delete race from crashing the backend ([#5513](https://github.com/archestra-ai/archestra/issues/5513)) ([0e10ec8](https://github.com/archestra-ai/archestra/commit/0e10ec8d1331b272493e297cf6f60735ff10f423))
+* claude code ([#5501](https://github.com/archestra-ai/archestra/issues/5501)) ([c79bb61](https://github.com/archestra-ai/archestra/commit/c79bb6127ca1e437ed41468eeef14c084334dcc5))
+* **cost:** count team members per team ([#5557](https://github.com/archestra-ai/archestra/issues/5557)) ([38e8961](https://github.com/archestra-ai/archestra/commit/38e896167f1cb8079987ed1892c8cb74244a8f0e))
+* **deps:** bump esbuild to 0.28.1 (GHSA-gv7w-rqvm-qjhr) ([#5574](https://github.com/archestra-ai/archestra/issues/5574)) ([4327bf6](https://github.com/archestra-ai/archestra/commit/4327bf67a0f8bbcd8d13fa369bf1e0e69589cbf9))
+* **e2e:** unbreak merge-queue e2e failures ([#5480](https://github.com/archestra-ai/archestra/issues/5480)) ([b0e85f6](https://github.com/archestra-ai/archestra/commit/b0e85f627d8b2c15226295473a61e9a2c640f2b4))
+* EKS Auto Mode ApplicationNetworkPolicy blocks DNS, breaking domain egress rules ([#5538](https://github.com/archestra-ai/archestra/issues/5538)) ([1e5caea](https://github.com/archestra-ai/archestra/commit/1e5caea0ba621c0edd48cdb35b43ed577051ccdb))
+* **frontend:** add System theme mode, fix sidebar user-menu focus ring and alignment ([#5556](https://github.com/archestra-ai/archestra/issues/5556)) ([f0979d0](https://github.com/archestra-ai/archestra/commit/f0979d0a7c05643dd33140cc8d8898fafa2514ea))
+* **github-copilot:** non-streaming response schema + virtual-key mapping UI follow-ups ([#5584](https://github.com/archestra-ai/archestra/issues/5584)) ([ec3bf7a](https://github.com/archestra-ai/archestra/commit/ec3bf7ac039c2600dfd74400b03ad41adad20ebc))
+* **helm:** block Dagger sandbox egress to cloud-metadata endpoint ([#5488](https://github.com/archestra-ai/archestra/issues/5488)) ([a35acd4](https://github.com/archestra-ai/archestra/commit/a35acd4df621ea7a489e0b95766deb508d6c7168))
+* MCP OAuth and environment network policy handling ([#5492](https://github.com/archestra-ai/archestra/issues/5492)) ([c56c516](https://github.com/archestra-ai/archestra/commit/c56c5162e5babb1cda0a4b23e30b78fcbe7c8d99))
+* **mcp:** treat image pull errors as transient so MCP deployments self-recover ([#5510](https://github.com/archestra-ai/archestra/issues/5510)) ([badc235](https://github.com/archestra-ai/archestra/commit/badc235a78e3930ccf1e51f16ea5205ed00dd430))
+* **proxy:** avoid logging Anthropic secret headers ([#5489](https://github.com/archestra-ai/archestra/issues/5489)) ([8fce7e0](https://github.com/archestra-ai/archestra/commit/8fce7e02bc629a4b70425f220afa60eaa5ffed26))
+* **sandbox:** decode base64 skill files as root so binary skill mounts materialize ([#5515](https://github.com/archestra-ai/archestra/issues/5515)) ([8103e49](https://github.com/archestra-ai/archestra/commit/8103e49618e0cd1583788eb75df086be2040e2f2))
+* **skills:** white-label the built-in skill in list_skills/load_skill output ([#5547](https://github.com/archestra-ai/archestra/issues/5547)) ([c0241e7](https://github.com/archestra-ai/archestra/commit/c0241e77cfada72a02c8cd028f4b00d46e324a22))
+* support linked idp token exchange during mcp install ([#5426](https://github.com/archestra-ai/archestra/issues/5426)) ([a56d078](https://github.com/archestra-ai/archestra/commit/a56d0788c783be8b119ba2c5a5c1395cc76d5603))
+* **tools:** dedupe built-in Archestra tools by short name ([#5535](https://github.com/archestra-ai/archestra/issues/5535)) ([d5e3b1f](https://github.com/archestra-ai/archestra/commit/d5e3b1fa2eeb5de87d334cc1e3b2ea40de8d5d19))
+* **tools:** enforce uniqueness for built-in Archestra catalog tools ([#5499](https://github.com/archestra-ai/archestra/issues/5499)) ([f635e74](https://github.com/archestra-ai/archestra/commit/f635e744017de179dcd625c56173ab40d24dbde2))
+* **tools:** harden 0285 dedup against three-plus prefix siblings ([#5536](https://github.com/archestra-ai/archestra/issues/5536)) ([9dae7f5](https://github.com/archestra-ai/archestra/commit/9dae7f5cc072bfa3efe42c9b1fbd8f00b9d26d02))
+
+
+### Documentation
+
+* **sandbox-core:** correct tracing section ([#5554](https://github.com/archestra-ai/archestra/issues/5554)) ([33b5c53](https://github.com/archestra-ai/archestra/commit/33b5c5381699c24d6b2a9ba96cec988ae045c9e7))
+
+
+### Dependencies
+
+* **frontend:** upgrade next to 16.3.0-preview.3 ([#5514](https://github.com/archestra-ai/archestra/issues/5514)) ([6edccdd](https://github.com/archestra-ai/archestra/commit/6edccdd973902bad70d7799b19ced925f6d7c211))
+
+
+### Code Refactoring
+
+* **auth:** remove `@daveyplate/better-auth-ui`, hand-write remaining auth UI ([#5505](https://github.com/archestra-ai/archestra/issues/5505)) ([7b6e23f](https://github.com/archestra-ai/archestra/commit/7b6e23f0e0faaa67e134c363a58d7f48d7b6a626))
+* **chat:** collapse getChatMcpTools tool wrappers into chat-tool-builder ([#5528](https://github.com/archestra-ai/archestra/issues/5528)) ([895e4ee](https://github.com/archestra-ai/archestra/commit/895e4ee373c450734af7b1967d7d268a797ca44a))
+* **chat:** unify the chat stream route pipeline ([#5526](https://github.com/archestra-ai/archestra/issues/5526)) ([dee0d5e](https://github.com/archestra-ai/archestra/commit/dee0d5e8601f93e6f3eeb178a71764bea286a335))
+* **skills:** merge activate_skill + read_skill_file into load_skill ([#5484](https://github.com/archestra-ai/archestra/issues/5484)) ([5c83b54](https://github.com/archestra-ai/archestra/commit/5c83b544f22864e550d7cd9775929dba30463287))
+* **skills:** unify core skills backend (stage 1) ([#5525](https://github.com/archestra-ai/archestra/issues/5525)) ([13a7d74](https://github.com/archestra-ai/archestra/commit/13a7d74c951c19f7cd104b7241c2d487407c3bd8))
+* **skills:** unify github import pipeline (stage 2) ([#5527](https://github.com/archestra-ai/archestra/issues/5527)) ([45a495e](https://github.com/archestra-ai/archestra/commit/45a495e4ea160559d1f64ed284ce36f8251da387))
+* **skills:** unify model-facing skill text and shared authoring validators ([#5476](https://github.com/archestra-ai/archestra/issues/5476)) ([4845428](https://github.com/archestra-ai/archestra/commit/4845428ceb9e5124045cfe8a91e17ed75e36f5c6))
+* **skills:** unify share/marketplace + atomic link rotation (stage 3) ([#5529](https://github.com/archestra-ai/archestra/issues/5529)) ([168fccd](https://github.com/archestra-ai/archestra/commit/168fccdb0ac339d8f62d42deda52e096a22487b8))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump esbuild and tsx in /platform/e2e-tests/test-mcp-servers/mcp-server-entra-obo-debug ([#5545](https://github.com/archestra-ai/archestra/issues/5545)) ([db6d061](https://github.com/archestra-ai/archestra/commit/db6d0618c575f31e63f52c9c05a1519f64250844))
+* **deps:** bump esbuild and tsx in /platform/e2e-tests/test-mcp-servers/mcp-server-id-jag ([#5544](https://github.com/archestra-ai/archestra/issues/5544)) ([18cf7d3](https://github.com/archestra-ai/archestra/commit/18cf7d346e999203740ac41662a8beabafb53b97))
+* **deps:** bump esbuild and tsx in /platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak ([#5543](https://github.com/archestra-ai/archestra/issues/5543)) ([af50f92](https://github.com/archestra-ai/archestra/commit/af50f921f6384920f8e8c24ed96fb05d7808e0c3))
+* **sandbox:** drop stale references and pin MCP tool tests at the engine boundary ([#5518](https://github.com/archestra-ai/archestra/issues/5518)) ([54a221a](https://github.com/archestra-ai/archestra/commit/54a221aeca60e599771d81c8d6ce3baec706f60d))
+* **skills:** add arsenyinfo skills to catalog ([#5530](https://github.com/archestra-ai/archestra/issues/5530)) ([fa5982b](https://github.com/archestra-ai/archestra/commit/fa5982b572f042b6a01ece4c8c89707d832c2bca))
+
+## [1.2.62](https://github.com/archestra-ai/archestra/compare/platform-v1.2.61...platform-v1.2.62) (2026-06-10)
+
+
+### Features
+
+* add team roles and improve invitation signup ([#5425](https://github.com/archestra-ai/archestra/issues/5425)) ([bb820f2](https://github.com/archestra-ai/archestra/commit/bb820f225b3a0379bf315d249d535b42b508eec8))
+* **docker:** embed Dagger Engine in quickstart ([#5275](https://github.com/archestra-ai/archestra/issues/5275)) ([cf5f281](https://github.com/archestra-ai/archestra/commit/cf5f281b8df2bc766aa03702d80ea7b9fbd1e635))
+* **hooks:** agent lifecycle hooks ([#5424](https://github.com/archestra-ai/archestra/issues/5424)) ([f5a84a4](https://github.com/archestra-ai/archestra/commit/f5a84a42038f55fa040ca55016a2c4e7a797202a))
+* make ms teams answer to any message in the thread where it was mentioned and refactor ngrok integration ([#5470](https://github.com/archestra-ai/archestra/issues/5470)) ([e79107d](https://github.com/archestra-ai/archestra/commit/e79107df2899125040364c3ba6c6c1e85fb7a3d2))
+
+
+### Bug Fixes
+
+* **chat:** accept .json file attachments ([#5452](https://github.com/archestra-ai/archestra/issues/5452)) ([9f54328](https://github.com/archestra-ai/archestra/commit/9f543280b17f5b0fb316018e2cc997a2ca5f3a4f))
+* **chat:** first in-session edit regenerates pre-edit text; bubble width flickers at stream end ([#5475](https://github.com/archestra-ai/archestra/issues/5475)) ([314e9df](https://github.com/archestra-ai/archestra/commit/314e9df03be22d311c693f88bc4c8050aabcd03b))
+* **chat:** fix frontend crashing when editing second message in conversation ([#5457](https://github.com/archestra-ai/archestra/issues/5457)) ([1a8a8de](https://github.com/archestra-ai/archestra/commit/1a8a8de66261db7c48bc6b311dba30431b7137dd))
+* **chat:** re-land resume-on-409 with crash, error-flash, and text-blink fixes ([#5370](https://github.com/archestra-ai/archestra/issues/5370)) ([e68c48e](https://github.com/archestra-ai/archestra/commit/e68c48e7e477c9fdd980201e24a46b1b98fb4577))
+* **chat:** recover stringified unavailable-tool errors instead of failing the run ([#5453](https://github.com/archestra-ai/archestra/issues/5453)) ([1e7030b](https://github.com/archestra-ai/archestra/commit/1e7030bbe37045f966ce0a6416a244056fdd3dc4))
+* **cost:** bill 1-hour prompt-cache writes at 2x (TTL-aware cache cost) ([#5466](https://github.com/archestra-ai/archestra/issues/5466)) ([4da8d97](https://github.com/archestra-ai/archestra/commit/4da8d97a052bde38630f61b7ff5ff56a2c1a72a4))
+* **cost:** bill Bedrock 1-hour cache writes at 2x ([#5467](https://github.com/archestra-ai/archestra/issues/5467)) ([42466a9](https://github.com/archestra-ai/archestra/commit/42466a9ac3afd4848765e158c0fb89e227bde25a))
+* default theme to caffeine ([#5449](https://github.com/archestra-ai/archestra/issues/5449)) ([63c0240](https://github.com/archestra-ai/archestra/commit/63c0240dfba03068513b851419e1d80df709cb0a))
+* dialog layout in hooks ([#5458](https://github.com/archestra-ai/archestra/issues/5458)) ([1ce5d38](https://github.com/archestra-ai/archestra/commit/1ce5d38e0e23fbbf8f1fb84c44bec339ba30c29f))
+* display hooks consistently with the rest of UI ([#5459](https://github.com/archestra-ai/archestra/issues/5459)) ([310a32f](https://github.com/archestra-ai/archestra/commit/310a32fed1fec95bf6b8452170545759162c007c))
+* **docker:** bump node:24-alpine3.23 digest so cached apk upgrade re-runs (openssl CVEs) ([#5478](https://github.com/archestra-ai/archestra/issues/5478)) ([8783f47](https://github.com/archestra-ai/archestra/commit/8783f47df52b29aa3afe900806bac4302f9984b3))
+* **sandbox:** checkpoint the dagger replay chain to bound query depth ([#5456](https://github.com/archestra-ai/archestra/issues/5456)) ([6b3d84a](https://github.com/archestra-ai/archestra/commit/6b3d84a2ebb7f35264e5549eb5e7908abff9d30c))
+* **sandbox:** stop persisting synthetic execution keys as conversation ids ([#5454](https://github.com/archestra-ai/archestra/issues/5454)) ([1d66123](https://github.com/archestra-ai/archestra/commit/1d661232d1f85ef1d78de3bdfebddd47e6e6811b))
+* **skills:** reduce skill-sandbox friction for bundled tools ([#5468](https://github.com/archestra-ai/archestra/issues/5468)) ([2ddc7c1](https://github.com/archestra-ai/archestra/commit/2ddc7c1b1788f07534ccc2d4bf25ed1688ec8645))
+
+
+### Code Refactoring
+
+* **backend:** per-entity route folders, make virtual-api-key canonical ([#5451](https://github.com/archestra-ai/archestra/issues/5451)) ([6bc953d](https://github.com/archestra-ai/archestra/commit/6bc953d386e7bd5ce1b6051a004ffa1a861df00d))
+* **sandbox:** unify duplicated helpers, queue state, and validation vectors ([#5474](https://github.com/archestra-ai/archestra/issues/5474)) ([44d6ab4](https://github.com/archestra-ai/archestra/commit/44d6ab4092a1623ab4ef97142701cee766a3ca91))
+
+## [1.2.61](https://github.com/archestra-ai/archestra/compare/platform-v1.2.60...platform-v1.2.61) (2026-06-09)
+
+
+### Features
+
+* **chat:** show prompt-cache hit rate in the Context Usage tooltip ([#5440](https://github.com/archestra-ai/archestra/issues/5440)) ([c1989a2](https://github.com/archestra-ai/archestra/commit/c1989a257d27245badfcff209434b4210b69b98d))
+* **chat:** unified Files panel (artifact, generated files, attachments) ([#5417](https://github.com/archestra-ai/archestra/issues/5417)) ([ca6f659](https://github.com/archestra-ai/archestra/commit/ca6f6594c424738891be41cb68927a06ec0583c4))
+* **chat:** use 1h prompt-cache TTL on supported models ([#5432](https://github.com/archestra-ai/archestra/issues/5432)) ([6cb1c1b](https://github.com/archestra-ai/archestra/commit/6cb1c1be04ee4d0e558e3b48f77e62c22e71158b))
+* **llm:** capture and price prompt-cache tokens for accurate cost ([#5431](https://github.com/archestra-ai/archestra/issues/5431)) ([083e4ee](https://github.com/archestra-ai/archestra/commit/083e4eece678c44e5e513e979a3b4bb8a4902fcd))
+* **mcp-catalog:** block save when stored config values violate the environment rule ([#5414](https://github.com/archestra-ai/archestra/issues/5414)) ([0ffa02a](https://github.com/archestra-ai/archestra/commit/0ffa02adda7f744d226a4ab836205780f81c2ac4))
+* **observability:** prompt-cache token metrics and span attributes ([#5442](https://github.com/archestra-ai/archestra/issues/5442)) ([e6a1137](https://github.com/archestra-ai/archestra/commit/e6a1137c2e7eb8877e5c1c650918a48d01228baf))
+* **search-tools:** BM25F ranking, regex mode, richer output, per-conversation gate ([#5430](https://github.com/archestra-ai/archestra/issues/5430)) ([1a7665d](https://github.com/archestra-ai/archestra/commit/1a7665d584b2465974e211928b65b6c205b3fca3))
+* **search-tools:** compact per-tool params into a one-line signature ([#5443](https://github.com/archestra-ai/archestra/issues/5443)) ([85fd2af](https://github.com/archestra-ai/archestra/commit/85fd2aff60d035a9c65eed381fb7a4a86e5304ad))
+* **skills:** auto-enable skill tools on startup when skills flag is on ([#5434](https://github.com/archestra-ai/archestra/issues/5434)) ([7e503d7](https://github.com/archestra-ai/archestra/commit/7e503d7da86873a7c381b5991e6eea956f30f1bf))
+
+
+### Bug Fixes
+
+* clean up stale network policies ([#5439](https://github.com/archestra-ai/archestra/issues/5439)) ([6148e76](https://github.com/archestra-ai/archestra/commit/6148e761d8e714387aa2a21273ce4c83269cf022))
+* improve image pull secret selection ([#5421](https://github.com/archestra-ai/archestra/issues/5421)) ([9b8432a](https://github.com/archestra-ai/archestra/commit/9b8432a43c315209bd350e6cec21ab0839c42500))
+* **llm-proxy,harness:** cross-review cleanup of today's LLM/harness work ([#5420](https://github.com/archestra-ai/archestra/issues/5420)) ([3d42efe](https://github.com/archestra-ai/archestra/commit/3d42efe30cb9d063f08b7ce310f8971d8efd9e80))
+* **llm-proxy:** forward non-local virtual keys from in-app chat to the downstream provider ([#5408](https://github.com/archestra-ai/archestra/issues/5408)) ([a9e27fa](https://github.com/archestra-ai/archestra/commit/a9e27faf32f6072a3bc8ac4bc38e03452d199af4))
+* **llm-proxy:** sanitize non-string enums in Gemini tool schemas ([#5407](https://github.com/archestra-ai/archestra/issues/5407)) ([18510c4](https://github.com/archestra-ai/archestra/commit/18510c4854c1b5e662596f739ac123eeee86b1a7))
+* **migration-kit:** [#5357](https://github.com/archestra-ai/archestra/issues/5357) follow-up — harden scripts, flip install ref, telemetry mapping, docs ([#5435](https://github.com/archestra-ai/archestra/issues/5435)) ([f5b4df9](https://github.com/archestra-ai/archestra/commit/f5b4df90df3303286ea849d049afbe72174c4b08))
+* **proxy:** avoid Anthropic SDK stream helper crash on malformed tool deltas ([#5409](https://github.com/archestra-ai/archestra/issues/5409)) ([7c57e8e](https://github.com/archestra-ai/archestra/commit/7c57e8e00d2ea060adf515841942080fd7a77f7d))
+* regenerate button ([#5410](https://github.com/archestra-ai/archestra/issues/5410)) ([79cba95](https://github.com/archestra-ai/archestra/commit/79cba959e2bd691fd91cb234e19b547450933b88))
+* remove default password change popup ([#5441](https://github.com/archestra-ai/archestra/issues/5441)) ([5e17d16](https://github.com/archestra-ai/archestra/commit/5e17d1609538be2626bd951c3bab037869401db0))
+* remove overfit prompt/description patches; make skill-sandbox + tool handling generic ([#5418](https://github.com/archestra-ai/archestra/issues/5418)) ([4230d1e](https://github.com/archestra-ai/archestra/commit/4230d1e724229f3bf630d7a2c16a562c83955a9e))
+* replace Integrations settings tab with GitHub ([#5444](https://github.com/archestra-ai/archestra/issues/5444)) ([dcb93a0](https://github.com/archestra-ai/archestra/commit/dcb93a0474e39b6f303e88f3d0bb3231e2bd2e8f))
+* **teams:** scope team pickers and membership checks to the user's teams ([#5336](https://github.com/archestra-ai/archestra/issues/5336)) ([26cbee0](https://github.com/archestra-ai/archestra/commit/26cbee0766dffc7c3020d456c270c1eed72e64e1))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump ai 6.0.90 → 6.0.193, drop vendored Gemini patch ([#5413](https://github.com/archestra-ai/archestra/issues/5413)) ([bea1886](https://github.com/archestra-ai/archestra/commit/bea18860e36a15863d8bbddf9c8736d465b9c84b))
+* **dev-stack:** add status subcommand listing per-worktree frontends ([#5415](https://github.com/archestra-ai/archestra/issues/5415)) ([ba294cc](https://github.com/archestra-ai/archestra/commit/ba294cc0ec9a41be7fcb3eba8918344ddbfc0db7))
+
+## [1.2.60](https://github.com/archestra-ai/archestra/compare/platform-v1.2.59...platform-v1.2.60) (2026-06-08)
+
+
+### Features
+
+* add web crawler knowledge connector ([#5326](https://github.com/archestra-ai/archestra/issues/5326)) ([e02d65b](https://github.com/archestra-ai/archestra/commit/e02d65b7ad28f545ceb4684c078bc62f95ec3d2f))
+* **chat:** prompt-cache the stable prefix on Anthropic chat requests ([#5346](https://github.com/archestra-ai/archestra/issues/5346)) ([d713756](https://github.com/archestra-ai/archestra/commit/d71375619a804583e4187c2e56b2bb162d72bad4))
+* **dev-stack:** reuse persisted ports across restarts ([#5404](https://github.com/archestra-ai/archestra/issues/5404)) ([711430d](https://github.com/archestra-ai/archestra/commit/711430d42b87355f21e3abf1979a08e2ed1b2342))
+* **environments:** validation rule (allowlist regex) for MCP config values ([#5406](https://github.com/archestra-ai/archestra/issues/5406)) ([49b0485](https://github.com/archestra-ai/archestra/commit/49b0485f0acd17a317f7637e8a3756b1821b4bfe))
+* **llm-proxy:** authenticate virtual API keys on Anthropic & OpenAI GET /models routes ([#5400](https://github.com/archestra-ai/archestra/issues/5400)) ([edd4ac6](https://github.com/archestra-ai/archestra/commit/edd4ac6d23b12435255168121bd9b9f721fa3395))
+* **llm:** broaden best-model markers for the remaining providers ([#5347](https://github.com/archestra-ai/archestra/issues/5347)) ([9ed4267](https://github.com/archestra-ai/archestra/commit/9ed42679f2667bc938887db2d0f47549fac30238))
+* **skills:** keep skill tools top-level and list skills in the prompt ([#5403](https://github.com/archestra-ai/archestra/issues/5403)) ([1cee2bc](https://github.com/archestra-ai/archestra/commit/1cee2bc480336153edb64445455b13d4e8c153af))
+
+
+### Bug Fixes
+
+* **archestra-mcp:** enforce agent tool assignment when executing tools ([#5365](https://github.com/archestra-ai/archestra/issues/5365)) ([2bc1d9b](https://github.com/archestra-ai/archestra/commit/2bc1d9b9b4d10cd9a96ea3e223f444a82cd40fcb))
+* **chat:** reattach to the active run on duplicate-run 409 instead of dead-ending ([#5363](https://github.com/archestra-ai/archestra/issues/5363)) ([47f30e3](https://github.com/archestra-ai/archestra/commit/47f30e374caab2c77d08dbf0007487d1a78a5c66))
+* **chat:** stop spurious 'active response' blocks from orphaned chat runs ([#5352](https://github.com/archestra-ai/archestra/issues/5352)) ([b5ea6dd](https://github.com/archestra-ai/archestra/commit/b5ea6ddd8ad60a51e11c7cb0bc8b2f406812d5d6))
+* **chat:** tolerate trailing slash in provider model-fetcher base URLs ([#5402](https://github.com/archestra-ai/archestra/issues/5402)) ([34438cb](https://github.com/archestra-ai/archestra/commit/34438cb16d6f4646c23e467dfa56ab96bc9d2165))
+* **mcp:** steer agent recovery on tool/resource lookup misses ([#5405](https://github.com/archestra-ai/archestra/issues/5405)) ([a14e25f](https://github.com/archestra-ai/archestra/commit/a14e25f373b7301263b8b793bc9988b7a3530068))
+* render mcp apps tool in tool search tools run_tool ([#5366](https://github.com/archestra-ai/archestra/issues/5366)) ([ffc67ba](https://github.com/archestra-ai/archestra/commit/ffc67ba6aa49f39f307a9766fecf06a1b19ef2ed))
+* **run-tool:** recover from hallucinated tool names instead of a dead-end refusal ([#5395](https://github.com/archestra-ai/archestra/issues/5395)) ([eabb50e](https://github.com/archestra-ai/archestra/commit/eabb50e0451be53ce34fdeb1c8a6a38154b64729))
+* **sandbox:** close o11y, logging, and stale-permission gaps ([#5359](https://github.com/archestra-ai/archestra/issues/5359)) ([4bfffc6](https://github.com/archestra-ai/archestra/commit/4bfffc6a13c70d1b47d8f14078afdbffffdcde93))
+* **skill-marketplace:** install git in runtime image ([#5367](https://github.com/archestra-ai/archestra/issues/5367)) ([eb971a2](https://github.com/archestra-ai/archestra/commit/eb971a2b750233ce433ea0099213a24ece1e7a23))
+* **skills:** clean-or-null skill description generation ([#5371](https://github.com/archestra-ai/archestra/issues/5371)) ([3457c5c](https://github.com/archestra-ai/archestra/commit/3457c5c3599c97b4d2c6672491eb5f69ec4614df))
+* **skills:** resolve service-account permissions in skill scope checks ([#5332](https://github.com/archestra-ai/archestra/issues/5332)) ([ba630f2](https://github.com/archestra-ai/archestra/commit/ba630f2833c9cf748ac8c252b4df1f6ccd16dadd))
+* **test:** stabilize MSW integration tests (next-dev cold-compile timeout + blocked port) ([#5349](https://github.com/archestra-ai/archestra/issues/5349)) ([d9118c4](https://github.com/archestra-ai/archestra/commit/d9118c4046fc91ef4dbbb9e2e7fb509db3cad92c))
+* **tilt:** allow db-migrate to run in parallel ([#5398](https://github.com/archestra-ai/archestra/issues/5398)) ([eb4ed07](https://github.com/archestra-ai/archestra/commit/eb4ed079c41212778a27d8f8375159f90d317601))
+
+
+### Performance Improvements
+
+* **frontend:** auto-select Turbopack for dev on Linux, webpack on macOS arm64 ([#5377](https://github.com/archestra-ai/archestra/issues/5377)) ([056ab2b](https://github.com/archestra-ai/archestra/commit/056ab2bbaf1d1d3c3aeaf6ce771fa616025cbb05))
+
+
+### Code Refactoring
+
+* **run-tool:** reuse assigned-tool set across pre-check and policy gate ([#5397](https://github.com/archestra-ai/archestra/issues/5397)) ([d3b48e6](https://github.com/archestra-ai/archestra/commit/d3b48e64fcaa3fc1567d848ceee234e65591691c))
+
+
+### Miscellaneous Chores
+
+* **mcp-registry:** tidy inert preset leftovers ([#5353](https://github.com/archestra-ai/archestra/issues/5353)) ([8907314](https://github.com/archestra-ai/archestra/commit/8907314f6fd71a6c39590f4ccc499f39056bd597))
+* update pnpm to 11.5.2 ([#5394](https://github.com/archestra-ai/archestra/issues/5394)) ([3553613](https://github.com/archestra-ai/archestra/commit/3553613c0adb9b10602ef6762e2855565608c8b7))
+
+## [1.2.59](https://github.com/archestra-ai/archestra/compare/platform-v1.2.58...platform-v1.2.59) (2026-06-05)
+
+
+### Features
+
+* **llm:** broaden OpenAI best-model markers (gpt-5.x, gpt-4.1, gpt-4o) ([#5345](https://github.com/archestra-ai/archestra/issues/5345)) ([54be183](https://github.com/archestra-ai/archestra/commit/54be183a6d46052230db20294bf4d6a8486941ce))
+* **llm:** support OpenAI pro reasoning models via the Responses API ([#5335](https://github.com/archestra-ai/archestra/issues/5335)) ([bd8da77](https://github.com/archestra-ai/archestra/commit/bd8da775d4d1b8690fd6bc5632f2b3242484d3d3))
+* **sandbox:** redesign agent code-execution MCP tools ([#5253](https://github.com/archestra-ai/archestra/issues/5253)) ([1a5bf38](https://github.com/archestra-ai/archestra/commit/1a5bf3806c15d73df63f8c159beaff1675eb1a11))
+
+
+### Bug Fixes
+
+* Docker quickstart loopback bindings ([#5328](https://github.com/archestra-ai/archestra/issues/5328)) ([69db671](https://github.com/archestra-ai/archestra/commit/69db6714bb7d0bd9b98941987517ca535fe591ca))
+* improve mcp oauth resource handling ([#5343](https://github.com/archestra-ai/archestra/issues/5343)) ([7c1190b](https://github.com/archestra-ai/archestra/commit/7c1190bcb9a9b4fb13fcb6bbd675004bf2523c54))
+* **llm:** exclude hidden and non-chat models from default model resolution ([#5337](https://github.com/archestra-ai/archestra/issues/5337)) ([d76db02](https://github.com/archestra-ai/archestra/commit/d76db02a6862dd5b1c63b16ae9497b1c87a72666))
+* **llm:** exclude OpenAI completions-only models from the chat catalog ([#5340](https://github.com/archestra-ai/archestra/issues/5340)) ([6443008](https://github.com/archestra-ai/archestra/commit/64430080b52cf40c7367d2bcb0a11acaa374574f))
+
+
+### Dependencies
+
+* address Dependabot npm advisories and Rust OTEL bumps ([#5324](https://github.com/archestra-ai/archestra/issues/5324)) ([37cade3](https://github.com/archestra-ai/archestra/commit/37cade3522b3c537db99be3e33150a7dfb353423))
+* bump better-auth to 1.6.11 to fix CVE-2026-45337 ([#5333](https://github.com/archestra-ai/archestra/issues/5333)) ([67e801a](https://github.com/archestra-ai/archestra/commit/67e801a4da3eaa713501321de9a441cdeae445f0))
+
+
+### Code Refactoring
+
+* **mcp-registry:** remove catalog preset feature (2) ([#5303](https://github.com/archestra-ai/archestra/issues/5303)) ([427f333](https://github.com/archestra-ai/archestra/commit/427f333a7670cb4f9cdd92ecc88ccad23b5b5fdc))
+
+
+### Miscellaneous Chores
+
+* rename [@shared](https://github.com/shared) workspace package to @archestra/shared ([#5188](https://github.com/archestra-ai/archestra/issues/5188)) ([4c74e33](https://github.com/archestra-ai/archestra/commit/4c74e33e0b26f018df3721426f74afce2a6cb5c9))
+* share GitHub auth config fields ([#5342](https://github.com/archestra-ai/archestra/issues/5342)) ([cafafb8](https://github.com/archestra-ai/archestra/commit/cafafb8563b3c54ebb200c87c2b42c23b6379a79))
+
+## [1.2.58](https://github.com/archestra-ai/archestra/compare/platform-v1.2.57...platform-v1.2.58) (2026-06-05)
+
+
+### Bug Fixes
+
+* create migration hook database secret ([#5321](https://github.com/archestra-ai/archestra/issues/5321)) ([5810c1b](https://github.com/archestra-ai/archestra/commit/5810c1bacecce34077778b9259da1343fa925df0))
+* improve oauth debugging UX ([#5316](https://github.com/archestra-ai/archestra/issues/5316)) ([07eb69e](https://github.com/archestra-ai/archestra/commit/07eb69ec5c13cf3d172eb21475ca440c096642f2))
+* run Helm migrations before upgrades ([#5318](https://github.com/archestra-ai/archestra/issues/5318)) ([37f0797](https://github.com/archestra-ai/archestra/commit/37f07978c1db5b67e3b022d068a7f9fcf6e10199))
+
+## [1.2.57](https://github.com/archestra-ai/archestra/compare/platform-v1.2.56...platform-v1.2.57) (2026-06-04)
+
+
+### Features
+
+* **github:** GitHub App auth for skill imports and KB connectors ([#5293](https://github.com/archestra-ai/archestra/issues/5293)) ([06d8091](https://github.com/archestra-ai/archestra/commit/06d8091fa1c0345e07c68436c45b6162ef70b996))
+* **mcp-catalog:** let team-admins scope catalog items to their teams ([#5298](https://github.com/archestra-ai/archestra/issues/5298)) ([d3e3f8d](https://github.com/archestra-ai/archestra/commit/d3e3f8d21e1381be94c650899910ad553d1b2acb))
+
+
+### Code Refactoring
+
+* **mcp-registry:** remove catalog preset feature ([#5290](https://github.com/archestra-ai/archestra/issues/5290)) ([ae539b4](https://github.com/archestra-ai/archestra/commit/ae539b4a846a864294d082c44780f0db3ddee24e))
+
+
+### Miscellaneous Chores
+
+* bump default LLM models ([#5297](https://github.com/archestra-ai/archestra/issues/5297)) ([0fb1206](https://github.com/archestra-ai/archestra/commit/0fb1206d6b8f9d0e4acbfc3ef30af43135220aa9))
+
+## [1.2.56](https://github.com/archestra-ai/archestra/compare/platform-v1.2.55...platform-v1.2.56) (2026-06-04)
+
+
+### Features
+
+* add Copilot CLI connection client ([#5278](https://github.com/archestra-ai/archestra/issues/5278)) ([44c53ed](https://github.com/archestra-ai/archestra/commit/44c53ede494a49daa0b3f1434b6aa93fdd9bee98))
+* add MCP image refresh action ([#5276](https://github.com/archestra-ai/archestra/issues/5276)) ([1a7920c](https://github.com/archestra-ai/archestra/commit/1a7920cd7179dde0ec65b51d9ba14dcb7c4daba9))
+
+
+### Bug Fixes
+
+* artifact table overflow ([#5284](https://github.com/archestra-ai/archestra/issues/5284)) ([293588b](https://github.com/archestra-ai/archestra/commit/293588b2cb2ba3e25fd4ab221072d6f1de138c80))
+* **docker:** bump Go toolchain to 1.25.11 for CVE-2026-42504 ([#5294](https://github.com/archestra-ai/archestra/issues/5294)) ([68fcae3](https://github.com/archestra-ai/archestra/commit/68fcae3038e70a2c24896540fcba15ebe291237f))
+* empty MCP app panels in chat ([#5286](https://github.com/archestra-ai/archestra/issues/5286)) ([de1e940](https://github.com/archestra-ai/archestra/commit/de1e940e92ea8f5ba5f10d6aa4c49e1e124ba124))
+* **mcp-catalog:** carry over secrets when cloning a catalog item ([#5267](https://github.com/archestra-ai/archestra/issues/5267)) ([ae27f58](https://github.com/archestra-ai/archestra/commit/ae27f58e2efc35cb691437d62080b0ddf01098a2))
+
+
+### Code Refactoring
+
+* **mcp-registry:** drop preset-entry registry admin feature ([#5273](https://github.com/archestra-ai/archestra/issues/5273)) ([033978c](https://github.com/archestra-ai/archestra/commit/033978cddfcfe4ecef1a16339b64e6e5db14dfe6))
+
+
+### Miscellaneous Chores
+
+* productionize environments and network egress policies ([#5265](https://github.com/archestra-ai/archestra/issues/5265)) ([7b89a4a](https://github.com/archestra-ai/archestra/commit/7b89a4a5de293a900d3824308dcca9bad159734b))
+
+## [1.2.55](https://github.com/archestra-ai/archestra/compare/platform-v1.2.54...platform-v1.2.55) (2026-06-03)
+
+
+### Features
+
+* add environment network policies ([#5207](https://github.com/archestra-ai/archestra/issues/5207)) ([aac23b0](https://github.com/archestra-ai/archestra/commit/aac23b03e2f6a84eb4c5b6cd44bd3d234962659e))
+* add instance PostHog analytics events ([#5231](https://github.com/archestra-ai/archestra/issues/5231)) ([aee3be9](https://github.com/archestra-ai/archestra/commit/aee3be9024b13ac428c071aab5124a2de777482d))
+* environments ([#5134](https://github.com/archestra-ai/archestra/issues/5134)) ([937be7b](https://github.com/archestra-ai/archestra/commit/937be7bfc0470a5af1cfc5fac825b96d986c4a17))
+* **mcp-catalog:** clone catalog items, with tools + guardrails inheritance ([#5203](https://github.com/archestra-ai/archestra/issues/5203)) ([572f618](https://github.com/archestra-ai/archestra/commit/572f618f03f8f5e3fa274b05b022fd67f38ce1de))
+* **mcp-registry:** retire Presets field scope option and sidebar section ([#5245](https://github.com/archestra-ai/archestra/issues/5245)) ([7d9126c](https://github.com/archestra-ai/archestra/commit/7d9126cef07bfdb26cfba3e62b90f48196a63e55))
+* **mcp-registry:** shareable catalog edit deep-link + environment label ([#5237](https://github.com/archestra-ai/archestra/issues/5237)) ([9e88cec](https://github.com/archestra-ai/archestra/commit/9e88cecba09ae68837b64e65e7218293a08a6227))
+* **skills:** add generated skill index search ([#5242](https://github.com/archestra-ai/archestra/issues/5242)) ([b1208ae](https://github.com/archestra-ai/archestra/commit/b1208aea41d544b0ee2ae30b28d3ab66fad8dbb1))
+* **skills:** convert an agent into a skill ([#5205](https://github.com/archestra-ai/archestra/issues/5205)) ([5971f40](https://github.com/archestra-ai/archestra/commit/5971f40ff7af4d89fee7609bc704bb705ff72967))
+* **skills:** ship built-in Archestra skills with reset-to-default ([#5223](https://github.com/archestra-ai/archestra/issues/5223)) ([5a64ed2](https://github.com/archestra-ai/archestra/commit/5a64ed27c232de2377242c75734be17194ef690c))
+* **skills:** templated skills + AI-generated descriptions ([#5234](https://github.com/archestra-ai/archestra/issues/5234)) ([a0888e5](https://github.com/archestra-ai/archestra/commit/a0888e5516bc141a78ed3e97353f9f807c67f34e))
+* tie PostHog events to instance analytics ([#5244](https://github.com/archestra-ai/archestra/issues/5244)) ([3e59ace](https://github.com/archestra-ai/archestra/commit/3e59aced1c788218a58e120fc4c3ba67806b5ea2))
+
+
+### Bug Fixes
+
+* **chat:** auto-retry empty model responses, surface as structured error ([#5240](https://github.com/archestra-ai/archestra/issues/5240)) ([30c98ff](https://github.com/archestra-ai/archestra/commit/30c98ff13c345b5de77501dfa1b3606c5bc6b0b0))
+* **chat:** dedupe unavailable tool stream errors ([#5170](https://github.com/archestra-ai/archestra/issues/5170)) ([0609a85](https://github.com/archestra-ai/archestra/commit/0609a85acc2e4a0a3ca73813f3cf0f1fdc66c940))
+* **chat:** drop empty assistant messages after normalization ([#5219](https://github.com/archestra-ai/archestra/issues/5219)) ([2359a3c](https://github.com/archestra-ai/archestra/commit/2359a3cb8bb012e0785c2ad6a96c668298ba899f))
+* **chat:** drop empty assistant turns from persist, read, and model prep ([#5255](https://github.com/archestra-ai/archestra/issues/5255)) ([6460b31](https://github.com/archestra-ai/archestra/commit/6460b31d1dc3815943240d2805a1ff794287917c))
+* **chat:** share and browser pane ([#5228](https://github.com/archestra-ai/archestra/issues/5228)) ([7fdc5d9](https://github.com/archestra-ai/archestra/commit/7fdc5d9befc13d7a0b1cd6d47eaf749308d30e6a))
+* **chat:** stop reconnect render loop; fixme duplicate-assistant e2e ([#5261](https://github.com/archestra-ai/archestra/issues/5261)) ([9560992](https://github.com/archestra-ai/archestra/commit/95609927f499c7095df0b515d2ef3eae4b340830))
+* **dev:** use --webpack for int-tests frontend to avoid turbopack idle CPU ([#5241](https://github.com/archestra-ai/archestra/issues/5241)) ([ae35c37](https://github.com/archestra-ai/archestra/commit/ae35c37ab1acce4a8b2a92d9361682f5152867f1))
+* **docker:** cache cargo/turbo/next artifacts in builder pnpm build ([#5230](https://github.com/archestra-ai/archestra/issues/5230)) ([541a27c](https://github.com/archestra-ai/archestra/commit/541a27c0c8e75647c997bacefbbc916320dd5adb))
+* **frontend:** derive chat MCP App canvases from messages; independent sidebar scroll ([#5185](https://github.com/archestra-ai/archestra/issues/5185)) ([aeb55a8](https://github.com/archestra-ai/archestra/commit/aeb55a8908956ba8f77a546db79ab3b01e967482))
+* **k8s:** pre-load deployments before single-tenant env relocation ([#5236](https://github.com/archestra-ai/archestra/issues/5236)) ([cb8057d](https://github.com/archestra-ai/archestra/commit/cb8057d4ed7ccd4c819ae11421e2127b8271b745))
+* **k8s:** tear down old namespace explicitly on env relocation ([#5266](https://github.com/archestra-ai/archestra/issues/5266)) ([e3bbda6](https://github.com/archestra-ai/archestra/commit/e3bbda627fbf7ffd79065abd207e82558b6c69f2))
+* **mcp-gateway:** promote validateExternalIdpToken catch debug-&gt;warn ([#5193](https://github.com/archestra-ai/archestra/issues/5193)) ([b85d913](https://github.com/archestra-ai/archestra/commit/b85d913af5b1cc02ba7d6b2e1ab495cb8346d52c))
+* **mcp-gateway:** upstream Bearer forwarding ([#5215](https://github.com/archestra-ai/archestra/issues/5215)) ([d72da5e](https://github.com/archestra-ai/archestra/commit/d72da5e00e6e90d9b4f70bb6e09206a64cd27476))
+* reduce Next dev cold compile overhead ([#5180](https://github.com/archestra-ai/archestra/issues/5180)) ([f152a4c](https://github.com/archestra-ai/archestra/commit/f152a4c2b615e7d38d418426d321252bea2e351f))
+* **sandbox:** recover stale dagger sessions ([#5209](https://github.com/archestra-ai/archestra/issues/5209)) ([af9db49](https://github.com/archestra-ai/archestra/commit/af9db49444da46b6ff5200b98db34f05489877ec))
+* usage limits and cleanup windows ([#5238](https://github.com/archestra-ai/archestra/issues/5238)) ([49ce84f](https://github.com/archestra-ai/archestra/commit/49ce84f9ec562b9bfaf5b32b7fc21a52ed8cd205))
+
+
+### Performance Improvements
+
+* **backend-tests:** snapshot migrated PGlite schema instead of replaying per file ([#5259](https://github.com/archestra-ai/archestra/issues/5259)) ([08f6d5c](https://github.com/archestra-ai/archestra/commit/08f6d5c879efc823731b17b2d31e846a950e56c2))
+
+
+### Documentation
+
+* **environments:** update environments spec ([#5252](https://github.com/archestra-ai/archestra/issues/5252)) ([0019b49](https://github.com/archestra-ai/archestra/commit/0019b496e58d32a200a221f8f056260eb766b7fd))
+
+
+### Code Refactoring
+
+* clean up dead sandbox and compaction TS ([#5158](https://github.com/archestra-ai/archestra/issues/5158)) ([a132de6](https://github.com/archestra-ai/archestra/commit/a132de6c0b0e686d27e2740241bd92c91b60b21b))
+* genericize sandbox runtime wrapper (no behavior change) ([#5181](https://github.com/archestra-ai/archestra/issues/5181)) ([da9ba55](https://github.com/archestra-ai/archestra/commit/da9ba559b00dfec864f1067d5a8c0b92e47989d8))
+* introduce backend seam in sandbox-core ([#5186](https://github.com/archestra-ai/archestra/issues/5186)) ([f60c307](https://github.com/archestra-ai/archestra/commit/f60c30775d7adcd59fac0b298960632ad1fb9c6d))
+* **rbac:** collapse environment permissions to admin + deploy-to-restricted ([#5243](https://github.com/archestra-ai/archestra/issues/5243)) ([2e2164c](https://github.com/archestra-ai/archestra/commit/2e2164ca146ce566bf51224c71a7af1967760791))
+
+
+### Miscellaneous Chores
+
+* **deps:** move ai to pnpm catalog ([#5187](https://github.com/archestra-ai/archestra/issues/5187)) ([4094166](https://github.com/archestra-ai/archestra/commit/4094166249bdc026e0a16ed9eef12386b62d7655))
+* **deps:** move better-auth family to pnpm catalog ([#5137](https://github.com/archestra-ai/archestra/issues/5137)) ([ee1ac3e](https://github.com/archestra-ai/archestra/commit/ee1ac3e5b5a108fad1ced764621366d1f329f8f2))
+* extract project Claude skills ([#5190](https://github.com/archestra-ai/archestra/issues/5190)) ([b8a4b89](https://github.com/archestra-ai/archestra/commit/b8a4b89959ff9fe34ae4f2533eaded6bf2fb6176))
+* fix dagger local setup ([#5257](https://github.com/archestra-ai/archestra/issues/5257)) ([b8a9e0d](https://github.com/archestra-ai/archestra/commit/b8a9e0da63e99cd98e05b3b2d2987d55e978c244))
+* fix frontend fixture typecheck ([#5269](https://github.com/archestra-ai/archestra/issues/5269)) ([73dfadc](https://github.com/archestra-ai/archestra/commit/73dfadc9db7b0134da9ef5b7fe3ccc085f5ef228))
+* **gitignore:** ignore local *.kubeconfig files ([#5198](https://github.com/archestra-ai/archestra/issues/5198)) ([e274b7a](https://github.com/archestra-ai/archestra/commit/e274b7adb7878116de9cea5bc77a7d3e27d11549))
+* guide chat models for load tools when needed ([#5264](https://github.com/archestra-ai/archestra/issues/5264)) ([a9f37ab](https://github.com/archestra-ai/archestra/commit/a9f37abdb5e3b98c45d01f182ca0c166d6948b04))
+* remove label assignment and productionize load tools when needed ([#5246](https://github.com/archestra-ai/archestra/issues/5246)) ([bed7a64](https://github.com/archestra-ai/archestra/commit/bed7a64664438f08a9aa5132fdf85704ff098290))
+
+## [1.2.54](https://github.com/archestra-ai/archestra/compare/platform-v1.2.53...platform-v1.2.54) (2026-05-31)
+
+
+### Features
+
+* add embeddings proxy routing ([#5172](https://github.com/archestra-ai/archestra/issues/5172)) ([7f284c2](https://github.com/archestra-ai/archestra/commit/7f284c27c2beb0fc757a0086020b252e6ea0de2f))
+* add service account API authnz ([#5178](https://github.com/archestra-ai/archestra/issues/5178)) ([e599d9e](https://github.com/archestra-ai/archestra/commit/e599d9e3dd6ae28aacf1e8fea6b0ef07299e23e4))
+* add soft-delete foundations for agents ([#4671](https://github.com/archestra-ai/archestra/issues/4671)) ([a1648b8](https://github.com/archestra-ai/archestra/commit/a1648b89d847c970dbf86247b7f9051bce013f22))
+* **audit:** add audit_write_failures_total metric ([#5122](https://github.com/archestra-ai/archestra/issues/5122)) ([69a7853](https://github.com/archestra-ai/archestra/commit/69a7853664dd9a516a7f8c54e6740dbcc92b0073))
+* **audit:** record created skills in the skill.imported audit row ([#5123](https://github.com/archestra-ai/archestra/issues/5123)) ([e496b74](https://github.com/archestra-ai/archestra/commit/e496b745c474b6318178a6181c5da20242505c88))
+* **chats-ui:** instant renaming, old chat resurfacing on new message exchange ([#5142](https://github.com/archestra-ai/archestra/issues/5142)) ([bdc52a4](https://github.com/archestra-ai/archestra/commit/bdc52a454464e08eba1bc1ce70a4f65738267e3a))
+* **sandbox-rs:** export OTLP traces and logs from the native layer ([#5154](https://github.com/archestra-ai/archestra/issues/5154)) ([3527a67](https://github.com/archestra-ai/archestra/commit/3527a6716879139d8a084e98b0a127cdde9b35e1))
+* show documents on knowledge connector detail page ([#4062](https://github.com/archestra-ai/archestra/issues/4062)) ([c9f9012](https://github.com/archestra-ai/archestra/commit/c9f9012018cdb71564e471f56fdf196f3735f8d8))
+* skill sandbox runtime + MCP tools ([#5058](https://github.com/archestra-ai/archestra/issues/5058)) ([14afc9d](https://github.com/archestra-ai/archestra/commit/14afc9d0b74d465700ca0e78276ebb17d3441245))
+
+
+### Bug Fixes
+
+* **audit:** show only the occurred time in event detail ([#5121](https://github.com/archestra-ai/archestra/issues/5121)) ([44a3ae6](https://github.com/archestra-ai/archestra/commit/44a3ae68708c8993835c454f694ab76dc4037b37))
+* **chat:** drive context indicator from live estimate and per-step usage ([#5144](https://github.com/archestra-ai/archestra/issues/5144)) ([762dca8](https://github.com/archestra-ai/archestra/commit/762dca82f153952ac28090bfc574320e16d5c778))
+* **chat:** fix hex hash false positives in secret scan, enable by default ([#5133](https://github.com/archestra-ai/archestra/issues/5133)) ([0746374](https://github.com/archestra-ai/archestra/commit/0746374496f8054fe24e299b846fec5647e6881d))
+* **chat:** persist tool-approval outcomes across page reload ([#4827](https://github.com/archestra-ai/archestra/issues/4827)) ([040ca72](https://github.com/archestra-ai/archestra/commit/040ca72f44aba03f87abf7b4935f79d90e1e27cc)), closes [#4030](https://github.com/archestra-ai/archestra/issues/4030)
+* **chat:** update context indicator after compaction ([#5138](https://github.com/archestra-ai/archestra/issues/5138)) ([ccd7e0e](https://github.com/archestra-ai/archestra/commit/ccd7e0ec7a7d2a14cefb755ba6dd5c0e6d974956))
+* clean up provider models used by chat ([#5130](https://github.com/archestra-ai/archestra/issues/5130)) ([8e723fb](https://github.com/archestra-ai/archestra/commit/8e723fbfe6e18a5571e87caf490751734cf38ba2))
+* **compaction:** cap image token estimates, harden context trimming, fix heartbeat/UI leaks ([#5136](https://github.com/archestra-ai/archestra/issues/5136)) ([87bbadd](https://github.com/archestra-ai/archestra/commit/87bbadddf4c55c49d59e697fff6a93b9cd5328c9))
+* consolidate LLM provider key dropdowns ([#5156](https://github.com/archestra-ai/archestra/issues/5156)) ([6c92218](https://github.com/archestra-ai/archestra/commit/6c92218b5e67f403e039b4b677e709599e4c3fbb))
+* conversation attachment migration repair ([#5135](https://github.com/archestra-ai/archestra/issues/5135)) ([e0eaeb2](https://github.com/archestra-ai/archestra/commit/e0eaeb284344a38a785d12646eb3f4107779cc68))
+* knowledge file chat attachment UI ([#5111](https://github.com/archestra-ai/archestra/issues/5111)) ([0dfc946](https://github.com/archestra-ai/archestra/commit/0dfc9469c3be50bbb983585d0dff660f2c9a078a))
+* **llm:** handle stale models and unavailable tools ([#5102](https://github.com/archestra-ai/archestra/issues/5102)) ([e2d64b9](https://github.com/archestra-ai/archestra/commit/e2d64b962be4b0ba03f5b14c61a5310da0175a90))
+* maintenance mode startup and file previews ([#5108](https://github.com/archestra-ai/archestra/issues/5108)) ([57ad98d](https://github.com/archestra-ai/archestra/commit/57ad98dfeb063f0cfdbcc7e10378f592e7b9ef45))
+* remove fast model fallback ([#5146](https://github.com/archestra-ai/archestra/issues/5146)) ([404ed67](https://github.com/archestra-ai/archestra/commit/404ed6715461ab6b2bee190ee9a9c4bf20bbafe1))
+* retry database transactions ([#5109](https://github.com/archestra-ai/archestra/issues/5109)) ([0d61ef1](https://github.com/archestra-ai/archestra/commit/0d61ef17da8fbf1fddcd90d428f542b4f9e7b742))
+* **skills:** per-scope name uniqueness and assorted hardening ([#5127](https://github.com/archestra-ai/archestra/issues/5127)) ([38280c5](https://github.com/archestra-ai/archestra/commit/38280c5afffb64778e51b47da4977ffcbcaf0650))
+
+
+### Performance Improvements
+
+* address backend query performance issues ([#5171](https://github.com/archestra-ai/archestra/issues/5171)) ([1c62df3](https://github.com/archestra-ai/archestra/commit/1c62df35e7a5826fff88fe07d49a3211a4cf1cb9))
+* **chats-ui:** reduce keystroke render time to sub 16.6ms (60fps) ([#5153](https://github.com/archestra-ai/archestra/issues/5153)) ([7d82ac9](https://github.com/archestra-ai/archestra/commit/7d82ac93d9b010601b39f0bf74898859729f1a3e))
+
+
+### Code Refactoring
+
+* **archestra-rs:** align sandbox core with Rust/NAPI guidelines ([#5157](https://github.com/archestra-ai/archestra/issues/5157)) ([082fb60](https://github.com/archestra-ai/archestra/commit/082fb60621b29274eed9ab61ffb915bc8b683422))
+
+
+### Miscellaneous Chores
+
+* backend architecture poc ([#5047](https://github.com/archestra-ai/archestra/issues/5047)) ([96cbf8c](https://github.com/archestra-ai/archestra/commit/96cbf8cb0610796f189558eefb9c23a16ea7c46f))
+* bump Dagger to 0.21.0 ([#5160](https://github.com/archestra-ai/archestra/issues/5160)) ([56f4722](https://github.com/archestra-ai/archestra/commit/56f4722c999bd3ed137b6930db83952a00ef9e37))
+* **deps:** track @typescript/native-preview beta dist-tag ([#5139](https://github.com/archestra-ai/archestra/issues/5139)) ([256fbdc](https://github.com/archestra-ai/archestra/commit/256fbdc55fb78806dbd7702fe126cc9cba8bdf19))
+* **diag:** pin which external-IdP validation branch fails the flaky JWKS gateway e2e ([#5125](https://github.com/archestra-ai/archestra/issues/5125)) ([964ce07](https://github.com/archestra-ai/archestra/commit/964ce072e6ed68f0add32b9a20e778771a34c68f))
+* **e2e:** remove auth rate-limit diagnostics; honor x-retry-after in setup sign-in ([#5124](https://github.com/archestra-ai/archestra/issues/5124)) ([11a23d7](https://github.com/archestra-ai/archestra/commit/11a23d7085f8f0702313bb5c089b013cd9421d4c))
+* skill sandbox follow-ups ([#5126](https://github.com/archestra-ai/archestra/issues/5126)) ([0c63591](https://github.com/archestra-ai/archestra/commit/0c63591826ca54ff1e4f711586daed27e155af03))
+
+## [1.2.53](https://github.com/archestra-ai/archestra/compare/platform-v1.2.52...platform-v1.2.53) (2026-05-28)
+
+
+### Features
+
+* ability to specify cron-expression for a scheduled agent ([#5052](https://github.com/archestra-ai/archestra/issues/5052)) ([a2c2326](https://github.com/archestra-ai/archestra/commit/a2c2326ccee6ec83dd6083224d91f461f0580fa3))
+* add Knowledge Files ([#4408](https://github.com/archestra-ai/archestra/issues/4408)) ([46a9641](https://github.com/archestra-ai/archestra/commit/46a9641995adfef1b8a83a089037c20a836b9efd))
+* org-wide admin audit log ([#4667](https://github.com/archestra-ai/archestra/issues/4667)) ([ad15df8](https://github.com/archestra-ai/archestra/commit/ad15df831e46096ecde8c2012d4d07960d1f5ea3))
+* skill marketplace sharing via git-served manifests ([#5068](https://github.com/archestra-ai/archestra/issues/5068)) ([8496e88](https://github.com/archestra-ai/archestra/commit/8496e887a789a81c3f87060705a62f9f4da65a5c))
+
+
+### Bug Fixes
+
+* **backend:** swallow transient pg errors at process level ([#5079](https://github.com/archestra-ai/archestra/issues/5079)) ([19a7a2e](https://github.com/archestra-ai/archestra/commit/19a7a2e7f63a4109e64f0c7eeb00ba3b3608dbac))
+* **db:** make 0256 rename idempotent for concurrent migrator runs ([#5101](https://github.com/archestra-ai/archestra/issues/5101)) ([dc4d569](https://github.com/archestra-ai/archestra/commit/dc4d5696516784222592cbda3d6a5783724be925))
+* **e2e:** make static-credentials Admin revoke deterministic ([#5090](https://github.com/archestra-ai/archestra/issues/5090)) ([fb336f9](https://github.com/archestra-ai/archestra/commit/fb336f9b4245d20b1616028dfbc5209164757333))
+* **e2e:** wait for backend deletion before asserting revoke in static-credentials ([#5095](https://github.com/archestra-ai/archestra/issues/5095)) ([4f3298b](https://github.com/archestra-ai/archestra/commit/4f3298b3fec6f1ff446215673bcfcceb301491a5))
+* **helm:** gate worker startup on database migrations ([#4663](https://github.com/archestra-ai/archestra/issues/4663)) ([6d56855](https://github.com/archestra-ai/archestra/commit/6d5685540b294cb987961aa585a7258bd4bc6393))
+* **mcp-registry:** gate catalog "Use as Template" on mcpRegistry:create ([#5103](https://github.com/archestra-ai/archestra/issues/5103)) ([ea423e3](https://github.com/archestra-ai/archestra/commit/ea423e31398232e4b17f71c10070d4266445ba3e))
+
+
+### Documentation
+
+* **schemas:** codify conversation_ vs chat_ prefix guidance ([#5096](https://github.com/archestra-ai/archestra/issues/5096)) ([9c2cd3e](https://github.com/archestra-ai/archestra/commit/9c2cd3e0cf01deeb8194772baedb2daabb4dabac))
+
+
+### Dependencies
+
+* `starlette==1.0.0` BadHost CVE-2026-48710 ([#5094](https://github.com/archestra-ai/archestra/issues/5094)) ([f939684](https://github.com/archestra-ai/archestra/commit/f9396849d2e85639e4b1194d7a300f7786ea94ae))
+
+
+### Code Refactoring
+
+* **db:** rename chat_attachments → conversation_attachments ([#5093](https://github.com/archestra-ai/archestra/issues/5093)) ([a130efb](https://github.com/archestra-ai/archestra/commit/a130efb487a8aebbcb5381d0770345a96abc0ce7))
+
+
+### Miscellaneous Chores
+
+* **auth:** temporary startup log for rate-limit-disable flag ([#5098](https://github.com/archestra-ai/archestra/issues/5098)) ([5ae0ad6](https://github.com/archestra-ai/archestra/commit/5ae0ad6609f52a8d92ee5fd1c335cff2f1568e26))
+* **e2e:** remove chat.spec.ts WireMock warmup based on misdiagnosis ([#5070](https://github.com/archestra-ai/archestra/issues/5070)) ([8861007](https://github.com/archestra-ai/archestra/commit/88610074fa61eecd23722ff485a51e6d6fa32094))
+* remove `.nmprc` minimum release age exceptions ([#5097](https://github.com/archestra-ai/archestra/issues/5097)) ([901600e](https://github.com/archestra-ai/archestra/commit/901600e560e45b91fc3b409cd73679cc1b5e2e0e))
+* tidy up announcement bar design & make it dismissable ([#5056](https://github.com/archestra-ai/archestra/issues/5056)) ([c7a3db8](https://github.com/archestra-ai/archestra/commit/c7a3db8eaf0348f364efcd86f39f6df1c4b5eb7a))
+* upgrade pnpm to 11.4.0 ([#5100](https://github.com/archestra-ai/archestra/issues/5100)) ([21be0c0](https://github.com/archestra-ai/archestra/commit/21be0c07b43191fbbc74cefc48632ddc2d966da1))
+
+## [1.2.52](https://github.com/archestra-ai/archestra/compare/platform-v1.2.51...platform-v1.2.52) (2026-05-27)
+
+
+### Features
+
+* **chat:** persist attachments outside messages.content ([#5055](https://github.com/archestra-ai/archestra/issues/5055)) ([4aae0c5](https://github.com/archestra-ai/archestra/commit/4aae0c58f335371c29d8c896be313a19b3c67152))
+
+
+### Bug Fixes
+
+* **frontend:** raise Next dev proxy body limit to match backend ([#5078](https://github.com/archestra-ai/archestra/issues/5078)) ([142cf27](https://github.com/archestra-ai/archestra/commit/142cf2705450323a17bb3511f36c3fd09f2ff484))
+* **frontend:** raise proxy body limit headroom to 200MB ([#5080](https://github.com/archestra-ai/archestra/issues/5080)) ([0006b49](https://github.com/archestra-ai/archestra/commit/0006b49f9c27cbaacc81827f479d063aafca976a))
+* reject empty OpenRouter stop responses ([#5077](https://github.com/archestra-ai/archestra/issues/5077)) ([6ebf7eb](https://github.com/archestra-ai/archestra/commit/6ebf7eb9b4ae01f1bb71b444431160efc5e48dbc))
+* version footer layout ([#5073](https://github.com/archestra-ai/archestra/issues/5073)) ([b274cc3](https://github.com/archestra-ai/archestra/commit/b274cc315f9bf1b3294be505701b53891c809bbc))
+
+## [1.2.51](https://github.com/archestra-ai/archestra/compare/platform-v1.2.50...platform-v1.2.51) (2026-05-27)
+
+
+### Features
+
+* add configurable chat context compaction ([#4535](https://github.com/archestra-ai/archestra/issues/4535)) ([dabdb34](https://github.com/archestra-ai/archestra/commit/dabdb34d52a2ad86d75ac68e08b0fd150a65fd3a))
+* add resume/reconnect chat feature ([#4219](https://github.com/archestra-ai/archestra/issues/4219)) ([f14f3d3](https://github.com/archestra-ai/archestra/commit/f14f3d38468fa90b5687c4bf4e6d77bfb8dd7646)), closes [#3012](https://github.com/archestra-ai/archestra/issues/3012)
+* **catalog:** add Sensitive column to MCP Headers table ([#4840](https://github.com/archestra-ai/archestra/issues/4840)) ([11ac36b](https://github.com/archestra-ai/archestra/commit/11ac36b1d984623221b575668464fc5ee4b8593e))
+* **catalog:** share cascade-reinstall decision between frontend and backend ([#4841](https://github.com/archestra-ai/archestra/issues/4841)) ([ea8e400](https://github.com/archestra-ai/archestra/commit/ea8e40064a7a2b932b799fc14b5f70371397bfe2))
+* **chat:** allow bare skill slash commands ([#4940](https://github.com/archestra-ai/archestra/issues/4940)) ([05c130d](https://github.com/archestra-ai/archestra/commit/05c130d789a7dfbf79eae3098c443dfdee4cbfae))
+* **chatops:** add system prefix with provider and thread id ([#5053](https://github.com/archestra-ai/archestra/issues/5053)) ([44378b2](https://github.com/archestra-ai/archestra/commit/44378b2cdac91f98715aeb7e85972b6f5a76d8be))
+* **chatops:** enrich Slack LLM context with channel id, workspace id, and permalink ([#5059](https://github.com/archestra-ai/archestra/issues/5059)) ([ec6a413](https://github.com/archestra-ai/archestra/commit/ec6a413c0b73a07543c93a0a0b2f0814f78f5c74))
+* **code-runtime:** Dagger-backed run_python tool + local dev ([#5018](https://github.com/archestra-ai/archestra/issues/5018)) ([db27a93](https://github.com/archestra-ai/archestra/commit/db27a9327ad5f60e06ca87ddb4d3cc2719721eb7))
+* **code-runtime:** deploy managed Dagger runtime via kube-pod ([#5019](https://github.com/archestra-ai/archestra/issues/5019)) ([f6a2251](https://github.com/archestra-ai/archestra/commit/f6a2251c78a0c4b1b9bce66cc154f936709cd6b2))
+* default theme to light ([#4883](https://github.com/archestra-ai/archestra/issues/4883)) ([3eaf14e](https://github.com/archestra-ai/archestra/commit/3eaf14e8ecf023457a8ed9af37b45feb868257c6))
+* **dev-stack:** auto-copy .env from the main worktree ([#5027](https://github.com/archestra-ai/archestra/issues/5027)) ([cbccf5d](https://github.com/archestra-ai/archestra/commit/cbccf5dd82eba229820b53941e3512a6e9b1e35a))
+* **dev-stack:** hydrate parallel stack's DB from main ([#5044](https://github.com/archestra-ai/archestra/issues/5044)) ([84f27e2](https://github.com/archestra-ai/archestra/commit/84f27e2ea12843fde14f9c2086393ed7fcd3a7f6))
+* frontend pre-send sensitive data detection ([#5024](https://github.com/archestra-ai/archestra/issues/5024)) ([fd8e166](https://github.com/archestra-ai/archestra/commit/fd8e1660bc867eef4d516d058d7d00efcb83b35e))
+* improve knowledge connector options ([#5060](https://github.com/archestra-ai/archestra/issues/5060)) ([1beb4f3](https://github.com/archestra-ai/archestra/commit/1beb4f30ffa666a9e93ed72457e757878ab676bb))
+* length-aware entropy threshold and URL skip in sensitive data detector ([#5028](https://github.com/archestra-ai/archestra/issues/5028)) ([f4d6f47](https://github.com/archestra-ai/archestra/commit/f4d6f4735e251373cba602da890e646a24f6b825))
+* mcp apps sidebar ([#5037](https://github.com/archestra-ai/archestra/issues/5037)) ([d237afb](https://github.com/archestra-ai/archestra/commit/d237afb0cfcda2eb25f5c4e3b816cbbf22e38ec5))
+* **oauth:** scope reverse-proxy host trust to getPublicRequestOrigin ([#4965](https://github.com/archestra-ai/archestra/issues/4965)) ([c460cf4](https://github.com/archestra-ai/archestra/commit/c460cf4ea5c922eac9a7c0c7267c8f37dfc95934))
+* **openrouter:** first-class provider support ([#4862](https://github.com/archestra-ai/archestra/issues/4862)) ([c1ffcc9](https://github.com/archestra-ai/archestra/commit/c1ffcc9daa26af560bf039801920df1fa91e5b65))
+* site notifications and deployment maintenance mode ([#4690](https://github.com/archestra-ai/archestra/issues/4690)) ([a3593c4](https://github.com/archestra-ai/archestra/commit/a3593c4eb29684449aa82b5aed4d8b3ec3ee3247))
+* skills ([#4889](https://github.com/archestra-ai/archestra/issues/4889)) ([63854e4](https://github.com/archestra-ai/archestra/commit/63854e48ce5b2296532ee11089c97bb349db6836))
+* **skills:** attach skills to RBAC with per-skill scoping ([#4931](https://github.com/archestra-ai/archestra/issues/4931)) ([25887ab](https://github.com/archestra-ai/archestra/commit/25887ab28d7d08a4136178b12120d92c64b803bd))
+* **skills:** create_skill and update_skill MCP tools ([#4947](https://github.com/archestra-ai/archestra/issues/4947)) ([6fd3ece](https://github.com/archestra-ai/archestra/commit/6fd3ece9ce564b08ecb05e7b90ec693880ef2ef0))
+* **skills:** invoke skills as chat slash commands ([#4921](https://github.com/archestra-ai/archestra/issues/4921)) ([beccf65](https://github.com/archestra-ai/archestra/commit/beccf659f91ab47c5f687be9b87ad3b4a564f185))
+* **skills:** two-column editor with explicit folder + trash ([#5043](https://github.com/archestra-ai/archestra/issues/5043)) ([ea17e17](https://github.com/archestra-ai/archestra/commit/ea17e17d1a069fa4692cffb40c7701d6c9e03ed5))
+
+
+### Bug Fixes
+
+* address compaction PR review findings ([#4859](https://github.com/archestra-ai/archestra/issues/4859)) ([b5c3b70](https://github.com/archestra-ai/archestra/commit/b5c3b708197c697f101dd03b581477aae06fd641))
+* **catalog:** auto-seeded Authorization header defaults to sensitive ([#4864](https://github.com/archestra-ai/archestra/issues/4864)) ([c70ed45](https://github.com/archestra-ai/archestra/commit/c70ed45db3651e7331d82546dd8c4727c68bed87))
+* **catalog:** cascade on static header value changes ([#4873](https://github.com/archestra-ai/archestra/issues/4873)) ([6e2e96c](https://github.com/archestra-ai/archestra/commit/6e2e96c8616dcec4e97f600c50677eecfdd44af3))
+* **catalog:** default installation-scoped env vars and secret files to required ([#4884](https://github.com/archestra-ai/archestra/issues/4884)) ([4417062](https://github.com/archestra-ai/archestra/commit/44170620ad4f41b0da45d5ef1d4a4971f4a722ef))
+* **catalog:** keep user's Sensitive choice when switching header scope ([#4871](https://github.com/archestra-ai/archestra/issues/4871)) ([ce01ae5](https://github.com/archestra-ai/archestra/commit/ce01ae52bf604d26983507be48a919268922a858))
+* **catalog:** lock form fields while the cascade confirm bar is open ([#4874](https://github.com/archestra-ai/archestra/issues/4874)) ([99b7ecd](https://github.com/archestra-ai/archestra/commit/99b7ecd0cf9b38e34c3c9db7235b751fd20ea7b0))
+* **catalog:** route all close paths through the dirty guard ([#4880](https://github.com/archestra-ai/archestra/issues/4880)) ([0f77673](https://github.com/archestra-ai/archestra/commit/0f77673a0a0bbdd69c09a0b2c4cbb3e82ee97649))
+* **chat:** clean up tool calls and stop signal on abort ([#4923](https://github.com/archestra-ai/archestra/issues/4923)) ([e7726db](https://github.com/archestra-ai/archestra/commit/e7726db698abb70df5c5f3ec24d833358a0a8ad2))
+* **chat:** make model search match human-readable names ([#4916](https://github.com/archestra-ai/archestra/issues/4916)) ([2ae6d31](https://github.com/archestra-ai/archestra/commit/2ae6d3175eb0d83bc8c7ae7533d8bf9f325c7998))
+* chatops subagent artifact context ([#4693](https://github.com/archestra-ai/archestra/issues/4693)) ([400148f](https://github.com/archestra-ai/archestra/commit/400148f83a59c5c825364c67922246810a59db4c))
+* **chatops:** split Slack replies to stay under 50-block expansion cap ([#4980](https://github.com/archestra-ai/archestra/issues/4980)) ([0f09074](https://github.com/archestra-ai/archestra/commit/0f09074d8bd4e4c7a90901196a4b2f53a336a02b))
+* **chat:** owner-only authz on stop endpoint ([#5046](https://github.com/archestra-ai/archestra/issues/5046)) ([16a4130](https://github.com/archestra-ai/archestra/commit/16a4130625a8f38614ef5a19798a644a2dfa0b82))
+* **chat:** restore stop button and inert Enter during streaming ([#4930](https://github.com/archestra-ai/archestra/issues/4930)) ([69c5b82](https://github.com/archestra-ai/archestra/commit/69c5b82d473ce58cc8a9a943b6b25e3004bf088c))
+* **chat:** search palette showing "No recent chats" ([#4845](https://github.com/archestra-ai/archestra/issues/4845)) ([da74b89](https://github.com/archestra-ai/archestra/commit/da74b8918e8f60161a8fa3a6ea9727ef8ebfe017))
+* **chat:** skip dynamic-tool render when MCP App owns the toolCallId ([#5032](https://github.com/archestra-ai/archestra/issues/5032)) ([b081fac](https://github.com/archestra-ai/archestra/commit/b081face0dab883baad5f1a22d30c6fa012a8ddf))
+* default model fallback prefers "best" over alphabetically-first ([#4829](https://github.com/archestra-ai/archestra/issues/4829)) ([8207a6d](https://github.com/archestra-ai/archestra/commit/8207a6de1cf2bb7753b1729aa8f2383695a35a00))
+* **e2e:** anchor model-selector displayName fallback regex ([#4937](https://github.com/archestra-ai/archestra/issues/4937)) ([da88e34](https://github.com/archestra-ai/archestra/commit/da88e34271a46a38ce1da7cbe0607b35f7e50b08))
+* **e2e:** make quickstart spec robust in onboarding branch ([#5065](https://github.com/archestra-ai/archestra/issues/5065)) ([a9da546](https://github.com/archestra-ai/archestra/commit/a9da546819d7359ef80f877797bdd9c9e1fbcf81))
+* **e2e:** reduce recurring flakies in setup-teams, gateway, and quickstart ([#4959](https://github.com/archestra-ai/archestra/issues/4959)) ([0ced8c2](https://github.com/archestra-ai/archestra/commit/0ced8c2adf01687e2ab7efac5c2d5248abd684f7))
+* **e2e:** repair mcp-install bogus-image test against post-[#4402](https://github.com/archestra-ai/archestra/issues/4402)/[#4696](https://github.com/archestra-ai/archestra/issues/4696) UI ([#4706](https://github.com/archestra-ai/archestra/issues/4706)) ([c5ea425](https://github.com/archestra-ai/archestra/commit/c5ea4255331a295ca1b1b04a1c4a3397e39027d8))
+* **e2e:** resolve initial merge-queue failures (perplexity strict mode, gateway JWT race, static-creds card race) ([#4919](https://github.com/archestra-ai/archestra/issues/4919)) ([ac2f247](https://github.com/archestra-ai/archestra/commit/ac2f247e26b728adc8c7dff5376ec91374de258d))
+* **e2e:** scope sign-out test to a throwaway admin session ([#5067](https://github.com/archestra-ai/archestra/issues/5067)) ([a017ea1](https://github.com/archestra-ai/archestra/commit/a017ea1084bc02d5d7945a0f9d4b8b8bbbfb67ca))
+* **e2e:** wait for virtual-key row to disappear before deleting parent key ([#4844](https://github.com/archestra-ai/archestra/issues/4844)) ([7350ce4](https://github.com/archestra-ai/archestra/commit/7350ce4bc32f10ccce2e2a50eeeeeedffbaa8b9e))
+* **frontend:** disable browser/password-manager autofill on dialog forms ([#4918](https://github.com/archestra-ai/archestra/issues/4918)) ([5aaf8bb](https://github.com/archestra-ai/archestra/commit/5aaf8bbff85790335a2ac9cf980ec0566e70fdd9))
+* hoist zod so @hookform/resolvers/zod can resolve zod/v4/core ([#5025](https://github.com/archestra-ai/archestra/issues/5025)) ([2381b6b](https://github.com/archestra-ai/archestra/commit/2381b6b02897c5e74139d86b0c27bff708a3e706))
+* keep only latest real user message live during compaction ([#5062](https://github.com/archestra-ai/archestra/issues/5062)) ([42c1076](https://github.com/archestra-ai/archestra/commit/42c1076f8a6612ba5ced119f4ca545b445f10695))
+* make sidebar button visible and add search to minified view ([#5045](https://github.com/archestra-ai/archestra/issues/5045)) ([2be6eb5](https://github.com/archestra-ai/archestra/commit/2be6eb515ffa2a12ff8da5ed980dac72a9a09153))
+* **mcp-catalog:** count installs across presets in delete dialog ([#4891](https://github.com/archestra-ai/archestra/issues/4891)) ([f2323bd](https://github.com/archestra-ai/archestra/commit/f2323bd0d43108f96a439f19be7fa13d81e8e317))
+* **mcp-catalog:** credentials view shows wrong preset labels ([#4935](https://github.com/archestra-ai/archestra/issues/4935)) ([f997257](https://github.com/archestra-ai/archestra/commit/f997257dc275ac0b9cb6d2b119c0f1d9f77f63df))
+* **mcp-catalog:** truncate long values in env vars and headers tables ([#4879](https://github.com/archestra-ai/archestra/issues/4879)) ([be88a89](https://github.com/archestra-ai/archestra/commit/be88a89e87051923b256ebeb87d583e22ff47b16))
+* **mcp-registry:** forward existing scope into remote reinstall dialog ([#4966](https://github.com/archestra-ai/archestra/issues/4966)) ([e48425e](https://github.com/archestra-ai/archestra/commit/e48425ec3b4f02aecc87562a82ac03ccf1da8732))
+* **mcp-server:** persist new prompted values on remote-server reinstall ([#4913](https://github.com/archestra-ai/archestra/issues/4913)) ([45c06ee](https://github.com/archestra-ai/archestra/commit/45c06eeadaabc2e0beafe5ddb5f5dada305ef341))
+* **oauth:** read ARCHESTRA_API_BASE_URL for public-origin host allowlist ([#4974](https://github.com/archestra-ai/archestra/issues/4974)) ([8d64213](https://github.com/archestra-ai/archestra/commit/8d642136c76d1c3ceca989a70b055f738ff3c68a))
+* **permission-button:** keep icon-size square when tooltipped ([#4885](https://github.com/archestra-ai/archestra/issues/4885)) ([299d6aa](https://github.com/archestra-ai/archestra/commit/299d6aafa3f9d3a8b21f3725780dfa43dc1fbe54))
+* PermissionButton honors flex-1 className when wrapped in tooltip span ([#4834](https://github.com/archestra-ai/archestra/issues/4834)) ([60ca5c3](https://github.com/archestra-ai/archestra/commit/60ca5c3f50bb117d04077645fa7c3a2443f914e3))
+* refetch internal agents list on window focus ([#4975](https://github.com/archestra-ai/archestra/issues/4975)) ([3d4115f](https://github.com/archestra-ai/archestra/commit/3d4115f68c93aa7c86c99ca1be837a5f9d39a0c8))
+* **security:** bump samlify to &gt;=2.13.0 to clear CVE-2026-46490 ([#4960](https://github.com/archestra-ai/archestra/issues/4960)) ([ee666c4](https://github.com/archestra-ai/archestra/commit/ee666c41fbd9dd9f1cb9b3be2d03530b550af3fe))
+* **settings:** hide free model filter for non-openrouter ([#4933](https://github.com/archestra-ai/archestra/issues/4933)) ([8974caa](https://github.com/archestra-ai/archestra/commit/8974caac92336d201c7f18fa8cba8f652897cf1d))
+* **skills:** close RBAC gaps in skill scoping and creation ([#4982](https://github.com/archestra-ai/archestra/issues/4982)) ([62174fd](https://github.com/archestra-ai/archestra/commit/62174fd24fcb1ae9d3439b0de00b54e7c04a4f33))
+* support mt server reinstall ([#4865](https://github.com/archestra-ai/archestra/issues/4865)) ([3fd343c](https://github.com/archestra-ai/archestra/commit/3fd343cb065e8a02647b8cb250f26d26e4b56b62))
+
+
+### Documentation
+
+* **schemas:** codify plural snake_case SQL table naming policy ([#5066](https://github.com/archestra-ai/archestra/issues/5066)) ([6e9d5a4](https://github.com/archestra-ai/archestra/commit/6e9d5a4d16ec02d4807ee38c3d4e14e2967020ea))
+
+
+### Dependencies
+
+* bump turbo from 2.8.17 to 2.9.14 in /platform ([#4962](https://github.com/archestra-ai/archestra/issues/4962)) ([82c0993](https://github.com/archestra-ai/archestra/commit/82c09936ecf83d63f31594ede85380b56ce39adc))
+* bump uuid from 10.0.0 to 14.0.0 in /platform ([#4961](https://github.com/archestra-ai/archestra/issues/4961)) ([d39fce4](https://github.com/archestra-ai/archestra/commit/d39fce45d3407ad52d3cc84bde3a19a5f6cc7c2c))
+
+
+### Code Refactoring
+
+* **catalog:** consolidate cascade-reinstall confirm dialogs into inline bar ([#4838](https://github.com/archestra-ai/archestra/issues/4838)) ([bfe9ba8](https://github.com/archestra-ai/archestra/commit/bfe9ba830ceb8ade18689e85dec895d49d0ad37a))
+* move zod version pin into pnpm-workspace catalog ([#5026](https://github.com/archestra-ai/archestra/issues/5026)) ([14be9fe](https://github.com/archestra-ai/archestra/commit/14be9fe8b2e3a77f96c766792cfc932efd554d0d))
+
+
+### Miscellaneous Chores
+
+* **catalog:** clearer copy on the reinstall confirm bar ([#4868](https://github.com/archestra-ai/archestra/issues/4868)) ([f907c71](https://github.com/archestra-ai/archestra/commit/f907c712a68f85e5d5a5ee97c2269c1e78053286))
+* **catalog:** treat labels as metadata-only, same as description ([#4894](https://github.com/archestra-ai/archestra/issues/4894)) ([a30873c](https://github.com/archestra-ai/archestra/commit/a30873c6e3439d1cecd416c079f62af257907421))
+* **claude:** extract migration conflict recipe into a skill ([#4857](https://github.com/archestra-ai/archestra/issues/4857)) ([fe90516](https://github.com/archestra-ai/archestra/commit/fe905162812b717ae59a6952feda7ede91d0a08b))
+* clean Next dev cache on Tilt down ([#5014](https://github.com/archestra-ai/archestra/issues/5014)) ([edf326b](https://github.com/archestra-ai/archestra/commit/edf326b12fe43e535742101514282cbf499b123c))
+* **deps:** bump qs and express in /platform/e2e-tests/test-mcp-servers/mcp-server-id-jag ([#4994](https://github.com/archestra-ai/archestra/issues/4994)) ([9d91937](https://github.com/archestra-ai/archestra/commit/9d91937f62551a421eff505df7a85ce60fd59a78))
+* **deps:** bump qs and express in /platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak ([#5012](https://github.com/archestra-ai/archestra/issues/5012)) ([3558188](https://github.com/archestra-ai/archestra/commit/3558188eaaa1cbc6ea12d78801d2344920b94c9c))
+* **deps:** bump qs from 6.15.0 to 6.15.2 in /platform/mcp_server_docker_image ([#5048](https://github.com/archestra-ai/archestra/issues/5048)) ([1b403bd](https://github.com/archestra-ai/archestra/commit/1b403bd6c475d34a189ea268a8392d4c16702167))
+* **dev:** support parallel local dev instances ([#5020](https://github.com/archestra-ai/archestra/issues/5020)) ([f0abb74](https://github.com/archestra-ai/archestra/commit/f0abb744a44db49b058fcdc3771abc1173336540))
+* **e2e:** skip flaky bogus-image install test ([#4848](https://github.com/archestra-ai/archestra/issues/4848)) ([dcd211d](https://github.com/archestra-ai/archestra/commit/dcd211d55b1e9838801b3e66c3302412e132f41f))
+* oauth public url from frontend base ([#4920](https://github.com/archestra-ai/archestra/issues/4920)) ([45e6c27](https://github.com/archestra-ai/archestra/commit/45e6c278e02ef1feef30bdadac18904e42ddaca9))
+* remove tooltip arrows and add default offset ([#4925](https://github.com/archestra-ai/archestra/issues/4925)) ([08830fd](https://github.com/archestra-ai/archestra/commit/08830fda5053e9c47912299b993a613b834c2897))
+* **tilt:** second frontend dev server on :3010 for Playwright MSW tests ([#4957](https://github.com/archestra-ai/archestra/issues/4957)) ([3643b2b](https://github.com/archestra-ai/archestra/commit/3643b2b09dd373ed0872e845b30484382f13eb68))
+
 ## [1.2.50](https://github.com/archestra-ai/archestra/compare/platform-v1.2.48...platform-v1.2.50) (2026-05-19)
 
 

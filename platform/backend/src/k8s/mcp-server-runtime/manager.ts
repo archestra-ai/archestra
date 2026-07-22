@@ -1,17 +1,29 @@
 import type * as k8s from "@kubernetes/client-node";
+import config from "@/config";
+import { getK8sCapabilitiesFromApi } from "@/k8s/capabilities";
 import {
+  checkNamespaceDeployAccess,
   createK8sClients,
   loadKubeConfig,
+  namespaceAccessMessage,
   sanitizeLabelValue,
 } from "@/k8s/shared";
 import logger from "@/logging";
 import {
+  EnvironmentModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
+  OrganizationModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import type { McpServer } from "@/types";
+import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
+import type {
+  EffectiveNetworkPolicy,
+  K8sNetworkPolicyCapabilities,
+  McpServer,
+} from "@/types";
+import { ensureEgressBaselineNetworkPolicy } from "./egress-baseline";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
@@ -23,6 +35,18 @@ import type {
   McpServerContainerLogs,
 } from "./schemas";
 
+type CatalogItem = Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>;
+type EnvironmentRow = Awaited<ReturnType<typeof EnvironmentModel.findById>>;
+type OrganizationRow = Awaited<ReturnType<typeof OrganizationModel.getById>>;
+type NetworkPolicyResolutionCache = {
+  environmentsById: Map<string, EnvironmentRow>;
+  organizationsById: Map<string, OrganizationRow>;
+};
+type DockerRegistrySecretSummary = {
+  name: string;
+  registryServers: string[];
+};
+
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes.
  * @public — exported for testability
@@ -30,33 +54,74 @@ import type {
 export class McpServerRuntimeManager {
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
+  private k8sAuthApi?: k8s.AuthorizationV1Api;
+  private k8sNetworkingApi?: k8s.NetworkingV1Api;
+  private k8sCustomObjectsApi?: k8s.CustomObjectsApi;
   private k8sAttach?: k8s.Attach;
   private k8sLog?: k8s.Log;
   private k8sExec?: k8s.Exec;
   private namespace: string = "default";
   private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
+  // Per-namespace in-flight ensure of the egress default-deny baseline, so
+  // concurrent deploys share one call; cleared on start() to re-assert on re-init.
+  private egressBaselineByNamespace: Map<string, Promise<void>> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
+  // Periodic sweep of Failed/Evicted MCP pods (DiskPressure eviction cascades
+  // can leave hundreds of Failed pod corpses that nothing else cleans up).
+  private failedPodReapTimer?: NodeJS.Timeout;
+
+  /**
+   * Settles once the startup adopt pass has frozen every local install's
+   * `deployment_name` (rejected if the pass failed or the runtime never
+   * initialized). The rename cascade awaits this before its freeze-fallback:
+   * post-adopt, a still-NULL row provably has no live deployment, so
+   * freezing a recomputed name there cannot orphan anything. Single-shot —
+   * a failed adopt keeps renames blocked until the process restarts
+   * (churn-prevention outranks availability).
+   */
+  readonly deploymentNamesAdopted: Promise<void>;
+  private resolveDeploymentNamesAdopted!: () => void;
+  private rejectDeploymentNamesAdopted!: (error: Error) => void;
 
   // Callbacks for initialization events
   onRuntimeStartupSuccess: () => void = () => {};
   onRuntimeStartupError: (error: Error) => void = () => {};
 
   constructor() {
+    this.deploymentNamesAdopted = new Promise((resolve, reject) => {
+      this.resolveDeploymentNamesAdopted = resolve;
+      this.rejectDeploymentNamesAdopted = reject;
+    });
+    // A rename may never happen — don't let an un-awaited adopt failure
+    // surface as an unhandled rejection.
+    this.deploymentNamesAdopted.catch(() => {});
+
     try {
       const { kubeConfig, namespace } = loadKubeConfig();
       const clients = createK8sClients(kubeConfig, namespace);
 
       this.k8sApi = clients.coreApi;
       this.k8sAppsApi = clients.appsApi;
+      this.k8sAuthApi = clients.authApi;
+      this.k8sNetworkingApi = clients.networkingApi;
+      this.k8sCustomObjectsApi = clients.customObjectsApi;
       this.k8sAttach = clients.attach;
       this.k8sExec = clients.exec;
       this.k8sLog = clients.log;
       this.namespace = clients.namespace;
     } catch (error) {
       logger.error({ err: error }, "Failed to load Kubernetes config");
+      this.rejectDeploymentNamesAdopted(
+        new Error(
+          "Kubernetes runtime failed to initialize; deployment names were not adopted",
+        ),
+      );
       this.status = "error";
       this.k8sApi = undefined;
       this.k8sAppsApi = undefined;
+      this.k8sAuthApi = undefined;
+      this.k8sNetworkingApi = undefined;
+      this.k8sCustomObjectsApi = undefined;
       this.k8sAttach = undefined;
       this.k8sLog = undefined;
       this.namespace = "";
@@ -73,16 +138,39 @@ export class McpServerRuntimeManager {
     return this.status !== "error" && this.status !== "stopped";
   }
 
+  get platformNamespace(): string {
+    return this.namespace;
+  }
+
+  async validateNamespace(namespaceName: string): Promise<void> {
+    if (!this.k8sAuthApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+    const result = await checkNamespaceDeployAccess(
+      namespaceName,
+      this.k8sAuthApi,
+    );
+    if (!result.ok) {
+      throw new Error(namespaceAccessMessage(namespaceName, result.reason));
+    }
+  }
+
   /**
    * Initialize the runtime and start all installed MCP servers
    */
   async start(): Promise<void> {
-    if (!this.k8sApi || !this.k8sAppsApi) {
+    if (
+      !this.k8sApi ||
+      !this.k8sAppsApi ||
+      !this.k8sNetworkingApi ||
+      !this.k8sCustomObjectsApi
+    ) {
       throw new Error("Kubernetes API client not initialized");
     }
 
     try {
       this.status = "initializing";
+      this.egressBaselineByNamespace.clear();
       logger.info("Initializing Kubernetes MCP Server Runtime...");
 
       // Verify K8s connectivity
@@ -100,6 +188,7 @@ export class McpServerRuntimeManager {
 
       // Filter for local servers only (remote servers don't need deployments)
       const localServers: McpServer[] = [];
+      const localCatalogItems: CatalogItem[] = [];
       for (const server of installedServers) {
         if (server.catalogId) {
           const catalogItem = await InternalMcpCatalogModel.findById(
@@ -107,15 +196,41 @@ export class McpServerRuntimeManager {
           );
           if (catalogItem?.serverType === "local") {
             localServers.push(server);
+            localCatalogItems.push(catalogItem);
           }
         }
       }
 
       logger.info(`Found ${localServers.length} local MCP servers to start`);
 
+      // Freeze deployment identity BEFORE anything touches K8s: the
+      // startServer loop below redeploys every install, so a pre-upgrade row
+      // whose DB name diverged from its live deployment would otherwise
+      // deploy under a freshly recomputed name and orphan the live one.
+      // Errors are fatal by design — churn-prevention outranks runtime
+      // availability.
+      try {
+        await this.adoptDeploymentNames({ localServers, localCatalogItems });
+        this.resolveDeploymentNamesAdopted();
+      } catch (error) {
+        this.rejectDeploymentNamesAdopted(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        throw error;
+      }
+
+      const networkPolicyCapabilities = (
+        await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
+      ).networkPolicy;
+      const networkPolicyResolutionCache =
+        await this.buildNetworkPolicyResolutionCache(localCatalogItems);
+
       // Start all local servers in parallel
       const startPromises = localServers.map(async (mcpServer) => {
-        await this.startServer(mcpServer);
+        await this.startServer(mcpServer, undefined, undefined, {
+          networkPolicyCapabilities,
+          networkPolicyResolutionCache,
+        });
       });
 
       const results = await Promise.allSettled(startPromises);
@@ -139,6 +254,17 @@ export class McpServerRuntimeManager {
         logger.info(`${successes.length} MCP server(s) started successfully`);
       }
 
+      // Re-assert every server's egress policy so a restart reconciles floors for
+      // already-running servers, not only newly-created ones. Without this a
+      // server whose deploy path didn't (re)apply its floor stays under the
+      // namespace deny-all baseline — no egress — until a manual policy change.
+      await this.reconcileEgressPolicies({
+        localServers,
+        localCatalogItems,
+        capabilities: networkPolicyCapabilities,
+        cache: networkPolicyResolutionCache,
+      });
+
       logger.info("MCP Server Runtime initialization complete");
       this.onRuntimeStartupSuccess();
 
@@ -153,13 +279,222 @@ export class McpServerRuntimeManager {
       this.cleanupOrphanedDeployments(installedServers).catch((err) => {
         logger.warn({ err }, "Failed to cleanup orphaned MCP deployments");
       });
+
+      this.startFailedPodReaper();
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
       logger.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
       this.status = "error";
+      // Guarantee the adopt gate is always settled. A throw BEFORE the adopt
+      // block (verifyK8sConnection, node-selector/tolerations fetch, findAll,
+      // the per-server catalog lookup) would otherwise leave this promise
+      // pending forever, and the rename route awaits it with no timeout —
+      // hanging the request for the process lifetime. Safe to call
+      // unconditionally: a promise ignores repeated settles, so an
+      // already-resolved (adopt succeeded, a later await threw) or
+      // already-rejected (constructor / adopt-block) promise is unaffected.
+      this.rejectDeploymentNamesAdopted(
+        error instanceof Error ? error : new Error(errorMsg),
+      );
       this.onRuntimeStartupError(new Error(errorMsg));
       throw error;
     }
+  }
+
+  private ensureEgressBaseline(
+    namespace: string,
+    capabilities: K8sNetworkPolicyCapabilities,
+  ): Promise<void> {
+    let ensured = this.egressBaselineByNamespace.get(namespace);
+    if (!ensured) {
+      const networkingApi = this.k8sNetworkingApi;
+      const customObjectsApi = this.k8sCustomObjectsApi;
+      if (!networkingApi || !customObjectsApi) return Promise.resolve();
+      ensured = ensureEgressBaselineNetworkPolicy({
+        networkingApi,
+        customObjectsApi,
+        namespace,
+        capabilities,
+      }).then((succeeded) => {
+        // Don't cache a failed attempt as done — drop it so the next deploy in
+        // this namespace retries rather than leaving pods without the baseline.
+        if (!succeeded) this.egressBaselineByNamespace.delete(namespace);
+      });
+      this.egressBaselineByNamespace.set(namespace, ensured);
+    }
+    return ensured;
+  }
+
+  /**
+   * Re-assert every local MCP server's egress policy (baseline + per-pod floor /
+   * off / restricted), policy-only — no pod redeploy. Runs at the end of start()
+   * so a restart re-applies the per-pod policy to servers that were already
+   * running (or whose deploy path skipped it), instead of leaving them under the
+   * namespace deny-all baseline with no floor — no egress — until a manual policy
+   * change. Per-server failures are logged and skipped so one server can't abort
+   * the sweep.
+   */
+  private async reconcileEgressPolicies(params: {
+    localServers: McpServer[];
+    localCatalogItems: CatalogItem[];
+    capabilities: K8sNetworkPolicyCapabilities;
+    cache: NetworkPolicyResolutionCache;
+  }): Promise<void> {
+    const {
+      k8sApi,
+      k8sAppsApi,
+      k8sNetworkingApi,
+      k8sCustomObjectsApi,
+      k8sAttach,
+      k8sLog,
+      k8sExec,
+    } = this;
+    if (
+      !k8sApi ||
+      !k8sAppsApi ||
+      !k8sNetworkingApi ||
+      !k8sCustomObjectsApi ||
+      !k8sAttach ||
+      !k8sLog ||
+      !k8sExec
+    ) {
+      return;
+    }
+
+    logger.info(
+      `Reconciling egress policies for ${params.localServers.length} MCP server(s)`,
+    );
+
+    for (let i = 0; i < params.localServers.length; i++) {
+      const mcpServer = params.localServers[i];
+      const catalogItem = params.localCatalogItems[i];
+      try {
+        const namespace = await this.resolveNamespaceForCatalog(
+          catalogItem,
+          params.cache,
+        );
+        await this.ensureEgressBaseline(namespace, params.capabilities);
+        const k8sDeployment = new K8sDeployment({
+          mcpServer,
+          k8sApi,
+          k8sAppsApi,
+          k8sNetworkingApi,
+          k8sCustomObjectsApi,
+          k8sAttach,
+          k8sLog,
+          k8sExec,
+          namespace,
+          catalogItem,
+          effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
+            mcpServer,
+            catalogItem,
+            cache: params.cache,
+          }),
+          networkPolicyCapabilities: params.capabilities,
+        });
+        await k8sDeployment.applyK8sNetworkPolicy();
+      } catch (err) {
+        logger.warn(
+          { err, mcpServerId: mcpServer.id },
+          "Failed to reconcile egress policy for MCP server on startup",
+        );
+      }
+    }
+  }
+
+  private async resolveNamespaceForCatalog(
+    catalogItem:
+      | Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+      | null
+      | undefined,
+    cache?: NetworkPolicyResolutionCache,
+  ): Promise<string> {
+    if (!catalogItem) return this.namespace;
+    if (!catalogItem.environmentId) {
+      // Default-environment catalog (environment_id = NULL): its namespace
+      // lives on the organization row, not in `environments`.
+      const organization = catalogItem.organizationId
+        ? (cache?.organizationsById.get(catalogItem.organizationId) ??
+          (await OrganizationModel.getById(catalogItem.organizationId)))
+        : await OrganizationModel.getFirst();
+      return organization?.defaultEnvironmentNamespace ?? this.namespace;
+    }
+    const env =
+      cache?.environmentsById.get(catalogItem.environmentId) ??
+      (await EnvironmentModel.findById(catalogItem.environmentId));
+    return env?.namespace ?? this.namespace;
+  }
+
+  private async resolveNetworkPolicyForDeployment(params: {
+    mcpServer: McpServer;
+    catalogItem:
+      | Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+      | null
+      | undefined;
+    cache?: NetworkPolicyResolutionCache;
+  }): Promise<EffectiveNetworkPolicy> {
+    const environment =
+      params.catalogItem?.environmentId && params.cache
+        ? params.cache.environmentsById.get(params.catalogItem.environmentId)
+        : params.catalogItem?.environmentId
+          ? await EnvironmentModel.findById(params.catalogItem.environmentId)
+          : null;
+    const organizationId =
+      params.catalogItem?.organizationId ?? environment?.organizationId ?? null;
+
+    const organization = organizationId
+      ? params.cache
+        ? params.cache.organizationsById.get(organizationId)
+        : await OrganizationModel.getById(organizationId)
+      : await OrganizationModel.getFirst();
+
+    if (!organization) return { source: "built_in", policy: null };
+
+    return resolveEffectiveNetworkPolicy({
+      organizationId: organization.id,
+      environmentId: params.catalogItem?.environmentId,
+      environmentNetworkPolicy: environment?.networkPolicy,
+      defaultNetworkPolicy: organization?.defaultNetworkPolicy,
+    });
+  }
+
+  private async buildNetworkPolicyResolutionCache(
+    catalogItems: CatalogItem[],
+  ): Promise<NetworkPolicyResolutionCache> {
+    const environmentIds = uniqueStrings(
+      catalogItems
+        .map((catalogItem) => catalogItem?.environmentId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const environments = await Promise.all(
+      environmentIds.map((id) => EnvironmentModel.findById(id)),
+    );
+    const environmentsById = new Map<string, EnvironmentRow>();
+    for (const environment of environments) {
+      if (environment) environmentsById.set(environment.id, environment);
+    }
+
+    const organizationIds = uniqueStrings([
+      ...catalogItems
+        .map((catalogItem) => catalogItem?.organizationId)
+        .filter((id): id is string => Boolean(id)),
+      ...environments
+        .map((environment) => environment?.organizationId)
+        .filter((id): id is string => Boolean(id)),
+    ]);
+    const organizations = await Promise.all(
+      organizationIds.map((id) => OrganizationModel.getById(id)),
+    );
+    const organizationsById = new Map<string, OrganizationRow>();
+    for (const organization of organizations) {
+      if (!organization) continue;
+      organizationsById.set(organization.id, organization);
+    }
+
+    return {
+      environmentsById,
+      organizationsById,
+    };
   }
 
   /**
@@ -191,8 +526,17 @@ export class McpServerRuntimeManager {
     mcpServer: McpServer,
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
+    options?: {
+      networkPolicyCapabilities?: K8sNetworkPolicyCapabilities;
+      networkPolicyResolutionCache?: NetworkPolicyResolutionCache;
+    },
   ): Promise<void> {
-    if (!this.k8sApi || !this.k8sAppsApi) {
+    if (
+      !this.k8sApi ||
+      !this.k8sAppsApi ||
+      !this.k8sNetworkingApi ||
+      !this.k8sCustomObjectsApi
+    ) {
       throw new Error("Kubernetes API client not initialized");
     }
 
@@ -200,7 +544,7 @@ export class McpServerRuntimeManager {
     logger.info(`Starting MCP server deployment: id="${id}", name="${name}"`);
 
     try {
-      // Fetch catalog item (needed for conditional env var logic)
+      // Fetch catalog item (needed for conditional env var logic).
       let catalogItem = null;
       if (mcpServer.catalogId) {
         catalogItem = await InternalMcpCatalogModel.findById(
@@ -276,38 +620,6 @@ export class McpServerRuntimeManager {
         }
       }
 
-      // Plain (non-secret) preset env values live on the catalog row's
-      // `presetFieldValues` jsonb — they have no per-install persistence
-      // layer because they're authoritative on the catalog itself. The
-      // install route reads them at install time and merges into
-      // `environmentValues`, but on restart that map is undefined; without
-      // overlaying them here the deployment env builder would emit no value
-      // for these env vars (only the secret-typed ones survive via the
-      // install Secret bag). Result: every cascade reinstall (admin edit
-      // OR child preset PATCH) silently drops plain preset env values
-      // from the rebuilt pod spec.
-      //
-      // Re-overlaying from the catalog row on every restart also means
-      // edits to the preset (or admin edits to default-preset values on
-      // the parent) propagate naturally on the next restart — no manual
-      // reinstall needed.
-      if (
-        catalogItem?.localConfig?.environment &&
-        catalogItem.presetFieldValues
-      ) {
-        for (const envDef of catalogItem.localConfig.environment) {
-          if (envDef.promptOnPreset && envDef.type !== "secret") {
-            const presetValue = catalogItem.presetFieldValues[envDef.key];
-            if (presetValue != null) {
-              if (!effectiveEnvironmentValues) {
-                effectiveEnvironmentValues = {};
-              }
-              effectiveEnvironmentValues[envDef.key] = String(presetValue);
-            }
-          }
-        }
-      }
-
       // Overlay plain (non-secret) per-install env values from
       // `mcp_server.environmentValues`. The Secret bag above covers
       // secret-typed prompted values; this covers the plain-text
@@ -326,16 +638,40 @@ export class McpServerRuntimeManager {
         }
       }
 
+      const deploymentNamespace = await this.resolveNamespaceForCatalog(
+        catalogItem,
+        options?.networkPolicyResolutionCache,
+      );
+      const networkPolicyCapabilities =
+        options?.networkPolicyCapabilities ??
+        (await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi))
+          .networkPolicy;
+
+      // Ensure the namespace default-deny baseline before the pod exists, so an
+      // un-reconciled or apply-failed pod is denied by default rather than open.
+      await this.ensureEgressBaseline(
+        deploymentNamespace,
+        networkPolicyCapabilities,
+      );
+
       const k8sDeployment = new K8sDeployment({
         mcpServer,
         k8sApi: this.k8sApi,
         k8sAppsApi: this.k8sAppsApi,
+        k8sNetworkingApi: this.k8sNetworkingApi,
+        k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        namespace: deploymentNamespace,
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
+        effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
+          mcpServer,
+          catalogItem,
+          cache: options?.networkPolicyResolutionCache,
+        }),
+        networkPolicyCapabilities,
         k8sExec: this.k8sExec,
       });
 
@@ -425,6 +761,9 @@ export class McpServerRuntimeManager {
 
         // Delete docker-registry secrets (if any were created for imagePullSecrets)
         await k8sDeployment.deleteDockerRegistrySecrets();
+
+        // Delete K8s NetworkPolicy (if it exists)
+        await k8sDeployment.deleteK8sNetworkPolicy();
       } else {
         logger.info(
           { mcpServerId },
@@ -463,17 +802,26 @@ export class McpServerRuntimeManager {
    */
   async getOrLoadDeployment(
     mcpServerId: string,
+    opts?: { namespaceOverride?: string },
   ): Promise<K8sDeployment | undefined> {
-    // First check if already in memory
-    const existing = this.mcpServerIdToDeploymentMap.get(mcpServerId);
-    if (existing) {
-      return existing;
+    // An explicit namespace override (relocation teardown) bypasses the cache: a
+    // cached entry can hold a stale namespace, the one value we must not trust
+    // here. Build fresh, pinned to the given namespace; don't touch the cache.
+    const namespaceOverride = opts?.namespaceOverride;
+    if (!namespaceOverride) {
+      // First check if already in memory
+      const existing = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+      if (existing) {
+        return existing;
+      }
     }
 
     // Not in memory - try to load from database
     if (
       !this.k8sApi ||
       !this.k8sAppsApi ||
+      !this.k8sNetworkingApi ||
+      !this.k8sCustomObjectsApi ||
       !this.k8sAttach ||
       !this.k8sLog ||
       !this.k8sExec
@@ -514,12 +862,29 @@ export class McpServerRuntimeManager {
         mcpServer,
         k8sApi: this.k8sApi,
         k8sAppsApi: this.k8sAppsApi,
+        k8sNetworkingApi: this.k8sNetworkingApi,
+        k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        namespace:
+          namespaceOverride ??
+          (await this.resolveNamespaceForCatalog(catalogItem)),
         catalogItem,
+        effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
+          mcpServer,
+          catalogItem,
+        }),
+        networkPolicyCapabilities: (
+          await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
+        ).networkPolicy,
         k8sExec: this.k8sExec,
       });
+
+      // Teardown path (explicit namespace): skip endpoint resolution and the
+      // cache so a torn-down deployment never overwrites a live cache entry.
+      if (namespaceOverride) {
+        return k8sDeployment;
+      }
 
       // Resolve HTTP endpoint URL (for streamable-http servers started by another replica)
       await k8sDeployment.resolveHttpEndpoint();
@@ -537,6 +902,45 @@ export class McpServerRuntimeManager {
       );
       return undefined;
     }
+  }
+
+  /**
+   * Tear down a local catalog's per-install deployments in the namespace
+   * resolved from the SUPPLIED catalog snapshot, bypassing the in-memory cache.
+   *
+   * During an environment reassignment, call this with the pre-update catalog
+   * item (which still holds the old environment) BEFORE recreating the
+   * deployment in the new namespace. Deriving the namespace from the snapshot —
+   * not the live row or a cached deployment — is what makes the teardown correct
+   * on a cache-cold or cache-stale replica, which would otherwise re-resolve the
+   * new namespace and orphan the old-namespace pod.
+   * @public — invoked from the internal-mcp-catalog PUT route
+   */
+  async tearDownOldNamespaceDeployments(
+    catalogSnapshot:
+      | Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+      | null
+      | undefined,
+  ): Promise<void> {
+    if (!this.isEnabled || !catalogSnapshot) {
+      return;
+    }
+    const namespace = await this.resolveNamespaceForCatalog(catalogSnapshot);
+    const installs = await McpServerModel.findByCatalogId(catalogSnapshot.id);
+    await Promise.all(
+      installs.map(async (mcpServer) => {
+        const deployment = await this.getOrLoadDeployment(mcpServer.id, {
+          namespaceOverride: namespace,
+        });
+        if (!deployment) {
+          return;
+        }
+        await deployment.removeDeployment();
+        // Drop any cached entry so the recreate path rebuilds against the new
+        // namespace instead of returning this torn-down, old-namespace object.
+        this.mcpServerIdToDeploymentMap.delete(mcpServer.id);
+      }),
+    );
   }
 
   /**
@@ -625,6 +1029,7 @@ export class McpServerRuntimeManager {
       await k8sDeployment.deleteK8sService();
       await k8sDeployment.deleteK8sSecret();
       await k8sDeployment.deleteDockerRegistrySecrets();
+      await k8sDeployment.deleteK8sNetworkPolicy();
     }
 
     // Clear every sibling's in-memory entry — the K8s objects are gone.
@@ -775,8 +1180,8 @@ export class McpServerRuntimeManager {
       // Construct the kubectl command for the user to manually get the logs if they'd like.
       // Use the catalog-stable deployment name as a label so multi-tenant aliasing works
       // (per-row mcp-server-id label only matches the first caller's pod).
-      command: `kubectl logs -n ${this.namespace} deployment/${k8sDeployment.k8sDeploymentName} --tail=${lines}`,
-      namespace: this.namespace,
+      command: `kubectl logs -n ${k8sDeployment.k8sNamespace} deployment/${k8sDeployment.k8sDeploymentName} --tail=${lines}`,
+      namespace: k8sDeployment.k8sNamespace,
     };
   }
 
@@ -812,11 +1217,12 @@ export class McpServerRuntimeManager {
   ): Promise<string> {
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     const deploymentName = k8sDeployment?.k8sDeploymentName;
+    const ns = k8sDeployment?.k8sNamespace ?? this.namespace;
     if (deploymentName) {
-      return `kubectl logs -n ${this.namespace} deployment/${deploymentName} --tail=${lines} -f`;
+      return `kubectl logs -n ${ns} deployment/${deploymentName} --tail=${lines} -f`;
     }
     const sanitizedId = sanitizeLabelValue(mcpServerId);
-    return `kubectl logs -n ${this.namespace} -l mcp-server-id=${sanitizedId} --tail=${lines} -f`;
+    return `kubectl logs -n ${ns} -l mcp-server-id=${sanitizedId} --tail=${lines} -f`;
   }
 
   /**
@@ -825,11 +1231,12 @@ export class McpServerRuntimeManager {
   async getMcpServerDescribeCommand(mcpServerId: string): Promise<string> {
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     const deploymentName = k8sDeployment?.k8sDeploymentName;
+    const ns = k8sDeployment?.k8sNamespace ?? this.namespace;
     if (deploymentName) {
-      return `kubectl describe deployment -n ${this.namespace} ${deploymentName}`;
+      return `kubectl describe deployment -n ${ns} ${deploymentName}`;
     }
     const sanitizedId = sanitizeLabelValue(mcpServerId);
-    return `kubectl describe pods -n ${this.namespace} -l mcp-server-id=${sanitizedId}`;
+    return `kubectl describe pods -n ${ns} -l mcp-server-id=${sanitizedId}`;
   }
 
   /**
@@ -868,20 +1275,24 @@ export class McpServerRuntimeManager {
     stdin: import("node:stream").Readable,
     stdout: import("node:stream").Writable,
     stderr: import("node:stream").Writable,
+    onStatus?: (status: k8s.V1Status) => void,
   ) {
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     if (!k8sDeployment) {
       throw new Error("MCP server not found");
     }
-    return k8sDeployment.execIntoContainer(stdin, stdout, stderr);
+    return k8sDeployment.execIntoContainer(stdin, stdout, stderr, { onStatus });
   }
 
   /**
    * Get the kubectl exec command for an MCP server
    */
   getExecCommand(mcpServerId: string): string {
+    const ns =
+      this.mcpServerIdToDeploymentMap.get(mcpServerId)?.k8sNamespace ??
+      this.namespace;
     const sanitizedId = sanitizeLabelValue(mcpServerId);
-    return `kubectl exec -it -n ${this.namespace} $(kubectl get pods -n ${this.namespace} -l mcp-server-id=${sanitizedId} -o jsonpath='{.items[0].metadata.name}') -c mcp-server -- /bin/sh`;
+    return `kubectl exec -it -n ${ns} $(kubectl get pods -n ${ns} -l mcp-server-id=${sanitizedId} -o jsonpath='{.items[0].metadata.name}') -c mcp-server -- /bin/sh`;
   }
 
   /**
@@ -926,6 +1337,11 @@ export class McpServerRuntimeManager {
     logger.info("Shutting down MCP Server Runtime...");
     this.status = "stopped";
 
+    if (this.failedPodReapTimer) {
+      clearInterval(this.failedPodReapTimer);
+      this.failedPodReapTimer = undefined;
+    }
+
     // Stop all deployments
     const stopPromises = Array.from(this.mcpServerIdToDeploymentMap.keys()).map(
       async (serverId) => {
@@ -954,7 +1370,7 @@ export class McpServerRuntimeManager {
   async listDockerRegistrySecrets(options?: {
     isAdmin?: boolean;
     teamIds?: string[];
-  }): Promise<Array<{ name: string }>> {
+  }): Promise<DockerRegistrySecretSummary[]> {
     if (!this.k8sApi) {
       return [];
     }
@@ -983,7 +1399,10 @@ export class McpServerRuntimeManager {
       }
 
       return filtered
-        .map((s) => ({ name: s.metadata?.name ?? "" }))
+        .map((s) => ({
+          name: s.metadata?.name ?? "",
+          registryServers: getDockerConfigRegistryServers(s),
+        }))
         .filter((s) => s.name.length > 0);
     } catch (error) {
       logger.warn(
@@ -1065,9 +1484,127 @@ export class McpServerRuntimeManager {
   }
 
   /**
-   * Sweep deployments whose names no longer match the current name produced by
-   * K8sDeployment.constructDeploymentName for their owning server.
+   * One-shot startup pass that freezes each local install's K8s deployment
+   * name into the DB. The live cluster is the source of truth: a row whose
+   * DB name diverged from its running deployment (renamed via API before the
+   * upgrade, never reinstalled) adopts the deployment's ACTUAL name, so
+   * nothing churns — recomputing from the DB name is only safe for rows with
+   * no live deployment at all.
+   *
+   * Multitenant catalogs share one deployment per catalog (the
+   * `mcp-server-id` label carries the catalog id there — see
+   * `getPodSelectorServerId`), so their name freezes onto the catalog row.
+   *
+   * Idempotent (already-frozen rows are skipped). Errors propagate — the
+   * caller treats them as fatal to start().
    */
+  private async adoptDeploymentNames(params: {
+    localServers: McpServer[];
+    localCatalogItems: CatalogItem[];
+  }): Promise<void> {
+    const { localServers, localCatalogItems } = params;
+    if (!this.k8sAppsApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+
+    // List every namespace local catalogs deploy into (platform + per-environment),
+    // then group live deployments by their selector identity label (server id
+    // single-tenant, catalog id multitenant).
+    const namespaces = await this.namespacesForLocalCatalogs(localCatalogItems);
+    const deploymentsBySelectorId =
+      await this.listMcpDeploymentsGroupedBySelectorId(namespaces);
+
+    // Duplicate deployments for one id are the historical orphan bug itself.
+    // Prefer the one matching the legacy recompute (the row's current name
+    // still points at it); otherwise adopt the newest. Losers stay
+    // name-mismatched against the frozen name and the orphan sweep deletes
+    // them.
+    const pickLiveName = (
+      selectorId: string,
+      legacyRecompute: string,
+    ): string | null => {
+      const candidates = deploymentsBySelectorId.get(selectorId);
+      if (!candidates || candidates.length === 0) return null;
+      const legacyMatch = candidates.find(
+        (d) => d.metadata?.name === legacyRecompute,
+      );
+      if (legacyMatch) return legacyMatch.metadata?.name ?? null;
+      const newest = [...candidates].sort(
+        (a, b) =>
+          (b.metadata?.creationTimestamp?.getTime() ?? 0) -
+          (a.metadata?.creationTimestamp?.getTime() ?? 0),
+      )[0];
+      return newest.metadata?.name ?? null;
+    };
+
+    let adopted = 0;
+    let recomputed = 0;
+    const frozenByCatalogId = new Map<string, string>();
+
+    for (let i = 0; i < localServers.length; i++) {
+      const server = localServers[i];
+      const catalog = localCatalogItems[i];
+
+      if (catalog?.multitenant && server.catalogId) {
+        // Shared deployment — freeze on the catalog row, once per catalog.
+        if (catalog.deploymentName || frozenByCatalogId.has(catalog.id)) {
+          continue;
+        }
+        const legacyRecompute = K8sDeployment.constructDeploymentName(
+          server,
+          catalog,
+        );
+        const liveName = pickLiveName(catalog.id, legacyRecompute);
+        const frozen = liveName ?? legacyRecompute;
+        await InternalMcpCatalogModel.setDeploymentName({
+          id: catalog.id,
+          deploymentName: frozen,
+        });
+        frozenByCatalogId.set(catalog.id, frozen);
+        if (liveName) adopted++;
+        else recomputed++;
+        continue;
+      }
+
+      if (server.deploymentName) continue;
+      const legacyRecompute = K8sDeployment.constructDeploymentName(
+        server,
+        catalog,
+      );
+      const liveName = pickLiveName(server.id, legacyRecompute);
+      const frozen = liveName ?? legacyRecompute;
+      await McpServerModel.setDeploymentName({
+        id: server.id,
+        deploymentName: frozen,
+      });
+      // Mutate in place — the same row objects feed startServer, the egress
+      // reconcile, and the orphan sweep this startup.
+      server.deploymentName = frozen;
+      if (liveName) adopted++;
+      else recomputed++;
+    }
+
+    // start() fetches a separate catalog object per install, so every copy of
+    // a just-frozen multitenant catalog must be updated — not only the one
+    // that happened to trigger the freeze.
+    if (frozenByCatalogId.size > 0) {
+      for (const catalog of localCatalogItems) {
+        if (!catalog) continue;
+        const frozen = frozenByCatalogId.get(catalog.id);
+        if (frozen && !catalog.deploymentName) {
+          catalog.deploymentName = frozen;
+        }
+      }
+    }
+
+    if (adopted > 0 || recomputed > 0) {
+      logger.info(
+        { adopted, recomputed },
+        "Froze MCP deployment names (adopted from live cluster / recomputed for rows with no deployment)",
+      );
+    }
+  }
+
   private async cleanupOrphanedDeployments(
     installedServers: McpServer[],
   ): Promise<void> {
@@ -1093,61 +1630,215 @@ export class McpServerRuntimeManager {
     };
 
     try {
-      const deployments = await this.k8sAppsApi.listNamespacedDeployment({
-        namespace: this.namespace,
-        labelSelector: "app=mcp-server",
-      });
+      const namespaces = await this.namespacesForInstalledLocalServers(
+        installedServers,
+        getCatalog,
+      );
 
-      for (const deployment of deployments.items) {
-        const labels = deployment.metadata?.labels;
-        const deploymentName = deployment.metadata?.name;
-        if (!labels || !deploymentName) continue;
+      for (const deploymentNamespace of namespaces) {
+        const deployments = await this.k8sAppsApi.listNamespacedDeployment({
+          namespace: deploymentNamespace,
+          labelSelector: "app=mcp-server",
+        });
 
-        const serverId = labels["mcp-server-id"];
-        if (!serverId) continue;
+        for (const deployment of deployments.items) {
+          const labels = deployment.metadata?.labels;
+          const deploymentName = deployment.metadata?.name;
+          if (!labels || !deploymentName) continue;
 
-        const server = serverById.get(serverId);
-        if (!server) continue;
+          const serverId = labels["mcp-server-id"];
+          if (!serverId) continue;
 
-        const catalog = await getCatalog(server.catalogId);
-        const expectedName = K8sDeployment.constructDeploymentName(
-          server,
-          catalog,
-        );
+          const server = serverById.get(serverId);
+          if (!server) continue;
 
-        if (deploymentName === expectedName) continue;
+          const catalog = await getCatalog(server.catalogId);
 
-        logger.info(
-          { deploymentName, expectedName, serverId },
-          "Deleting orphaned MCP deployment with stale name",
-        );
+          // Relocation sweep: the deployment lives in a namespace the catalog
+          // no longer resolves to (e.g. an upgrade taught the resolver about
+          // the default environment's namespace, or a namespace change landed
+          // while the platform was down). The startup startServer pass has
+          // already (re)created the deployment in the resolved namespace, so
+          // this copy is a stale duplicate — tear it down fully (deployment,
+          // service, secrets, network policy) in its own namespace.
+          const expectedNamespace =
+            await this.resolveNamespaceForCatalog(catalog);
+          if (deploymentNamespace !== expectedNamespace) {
+            logger.info(
+              {
+                deploymentName,
+                serverId,
+                deploymentNamespace,
+                expectedNamespace,
+              },
+              "Removing MCP deployment left behind in a stale namespace",
+            );
+            try {
+              // Full teardown (deployment, service, secrets, network policy)
+              // of the row's constructed-name resources in the stale namespace.
+              const staleDeployment = await this.getOrLoadDeployment(
+                server.id,
+                { namespaceOverride: deploymentNamespace },
+              );
+              await staleDeployment?.removeDeployment();
+              // The live object can carry a diverged (legacy) name the
+              // constructed-name teardown above missed. In a non-resolved
+              // namespace ANY deployment labeled with this server id is stale
+              // by definition, so deleting by its live name is safe.
+              if (
+                deploymentName !==
+                K8sDeployment.constructDeploymentName(server, catalog)
+              ) {
+                await this.k8sAppsApi.deleteNamespacedDeployment({
+                  name: deploymentName,
+                  namespace: deploymentNamespace,
+                });
+                await this.k8sApi
+                  .deleteNamespacedService({
+                    name: `${deploymentName}-service`,
+                    namespace: deploymentNamespace,
+                  })
+                  .catch(() => {});
+              }
+            } catch (err) {
+              logger.warn(
+                { err, deploymentName, deploymentNamespace },
+                "Failed to remove MCP deployment from stale namespace",
+              );
+            }
+            continue;
+          }
 
-        try {
-          await this.k8sAppsApi.deleteNamespacedDeployment({
-            name: deploymentName,
-            namespace: this.namespace,
-          });
-        } catch (err) {
-          logger.warn(
-            { err, deploymentName },
-            "Failed to delete orphaned MCP deployment",
+          // Only ever compare against a FROZEN name. The adopt pass runs
+          // before this sweep and freezes every local single-tenant row, so
+          // NULL here means the expected name can't be proven — never delete
+          // on a recomputed guess.
+          if (!server.deploymentName) continue;
+
+          const expectedName = K8sDeployment.constructDeploymentName(
+            server,
+            catalog,
           );
-        }
 
-        try {
-          await this.k8sApi.deleteNamespacedService({
-            name: `${deploymentName}-service`,
-            namespace: this.namespace,
-          });
-        } catch (err) {
-          logger.debug(
-            { err, deploymentName },
-            "No orphaned service to delete (or already gone)",
+          if (deploymentName === expectedName) continue;
+
+          logger.info(
+            { deploymentName, expectedName, serverId, deploymentNamespace },
+            "Deleting orphaned MCP deployment with stale name",
           );
+
+          try {
+            await this.k8sAppsApi.deleteNamespacedDeployment({
+              name: deploymentName,
+              namespace: deploymentNamespace,
+            });
+          } catch (err) {
+            logger.warn(
+              { err, deploymentName, deploymentNamespace },
+              "Failed to delete orphaned MCP deployment",
+            );
+          }
+
+          try {
+            await this.k8sApi.deleteNamespacedService({
+              name: `${deploymentName}-service`,
+              namespace: deploymentNamespace,
+            });
+          } catch (err) {
+            logger.debug(
+              { err, deploymentName, deploymentNamespace },
+              "No orphaned service to delete (or already gone)",
+            );
+          }
         }
       }
     } catch (error) {
       logger.warn({ err: error }, "Failed to sweep orphaned MCP deployments");
+    }
+  }
+
+  /**
+   * Start the periodic sweep of Failed/Evicted MCP server pods.
+   *
+   * A node under DiskPressure evicts MCP pods and then rejects their
+   * replacements, leaving a `Failed` pod corpse behind on every attempt.
+   * Nothing in Kubernetes cleans these up for Deployment-owned pods, so a
+   * single transient DiskPressure event can accumulate hundreds of dead pods.
+   * This reaper deletes Failed pods carrying the `app=mcp-server` label in
+   * every namespace the platform deploys MCP servers into.
+   */
+  private startFailedPodReaper(): void {
+    if (this.failedPodReapTimer) {
+      clearInterval(this.failedPodReapTimer);
+      this.failedPodReapTimer = undefined;
+    }
+
+    const intervalSeconds = config.orchestrator.failedPodReapIntervalSeconds;
+    if (intervalSeconds <= 0) {
+      logger.info("Failed MCP pod reaper is disabled");
+      return;
+    }
+
+    const sweep = () => {
+      this.reapFailedMcpPods().catch((err) => {
+        logger.warn({ err }, "Failed to reap Failed/Evicted MCP pods");
+      });
+    };
+
+    // Sweep once at startup to clear any backlog, then periodically.
+    sweep();
+    this.failedPodReapTimer = setInterval(sweep, intervalSeconds * 1000);
+    // Don't keep the process alive just for the reaper
+    this.failedPodReapTimer.unref?.();
+  }
+
+  private async reapFailedMcpPods(): Promise<void> {
+    if (!this.k8sApi) return;
+
+    const namespaces = uniqueStrings([
+      this.namespace,
+      ...config.orchestrator.kubernetes.environmentNamespaces,
+    ]);
+
+    for (const namespace of namespaces) {
+      try {
+        const pods = await this.k8sApi.listNamespacedPod({
+          namespace,
+          labelSelector: "app=mcp-server",
+          fieldSelector: "status.phase=Failed",
+        });
+
+        let deletedCount = 0;
+        for (const pod of pods.items) {
+          const podName = pod.metadata?.name;
+          if (!podName) continue;
+
+          try {
+            await this.k8sApi.deleteNamespacedPod({
+              name: podName,
+              namespace,
+            });
+            deletedCount++;
+          } catch (err) {
+            logger.debug(
+              { err, podName, namespace },
+              "Failed to delete Failed MCP pod (may already be gone)",
+            );
+          }
+        }
+
+        if (deletedCount > 0) {
+          logger.info(
+            { namespace, deletedCount },
+            "Reaped Failed/Evicted MCP server pods",
+          );
+        }
+      } catch (err) {
+        logger.warn(
+          { err, namespace },
+          "Failed to list Failed MCP pods for reaping",
+        );
+      }
     }
   }
 
@@ -1173,6 +1864,88 @@ export class McpServerRuntimeManager {
 
     responseStream.write(message);
     responseStream.end();
+  }
+
+  private async namespacesForLocalCatalogs(
+    localCatalogItems: CatalogItem[],
+  ): Promise<string[]> {
+    const namespaces = new Set<string>([this.namespace]);
+    for (const catalog of localCatalogItems) {
+      if (!catalog) continue;
+      namespaces.add(await this.resolveNamespaceForCatalog(catalog));
+    }
+    return [...namespaces];
+  }
+
+  private async namespacesForInstalledLocalServers(
+    installedServers: McpServer[],
+    getCatalog: (
+      catalogId: string | null | undefined,
+    ) => Promise<CatalogItem | null>,
+  ): Promise<string[]> {
+    const namespaces = new Set<string>([this.namespace]);
+    for (const server of installedServers) {
+      const catalog = await getCatalog(server.catalogId);
+      if (catalog?.serverType !== "local") continue;
+      namespaces.add(await this.resolveNamespaceForCatalog(catalog));
+    }
+    return [...namespaces];
+  }
+
+  private async listMcpDeploymentsGroupedBySelectorId(
+    namespaces: string[],
+  ): Promise<Map<string, k8s.V1Deployment[]>> {
+    if (!this.k8sAppsApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+
+    const deploymentsBySelectorId = new Map<string, k8s.V1Deployment[]>();
+    for (const namespace of namespaces) {
+      const deployments = await this.k8sAppsApi.listNamespacedDeployment({
+        namespace,
+        labelSelector: "app=mcp-server",
+      });
+      for (const deployment of deployments.items) {
+        const selectorId = deployment.metadata?.labels?.["mcp-server-id"];
+        if (!selectorId || !deployment.metadata?.name) continue;
+        const group = deploymentsBySelectorId.get(selectorId) ?? [];
+        group.push(deployment);
+        deploymentsBySelectorId.set(selectorId, group);
+      }
+    }
+    return deploymentsBySelectorId;
+  }
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values));
+}
+
+function getDockerConfigRegistryServers(secret: k8s.V1Secret): string[] {
+  const encodedDockerConfig = secret.data?.[".dockerconfigjson"];
+  if (!encodedDockerConfig) {
+    return [];
+  }
+
+  try {
+    const dockerConfig = JSON.parse(
+      Buffer.from(encodedDockerConfig, "base64").toString("utf8"),
+    );
+    if (
+      !dockerConfig ||
+      typeof dockerConfig !== "object" ||
+      !("auths" in dockerConfig) ||
+      !dockerConfig.auths ||
+      typeof dockerConfig.auths !== "object" ||
+      Array.isArray(dockerConfig.auths)
+    ) {
+      return [];
+    }
+
+    return Object.keys(dockerConfig.auths).sort((a, b) => a.localeCompare(b));
+  } catch (error) {
+    logger.warn({ err: error }, "Failed to parse docker-registry secret data");
+    return [];
   }
 }
 

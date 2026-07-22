@@ -2,10 +2,24 @@ import { parseArchestraToolRefusal } from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
 
-type OpenAiResponsesInteractionRecord = Extract<
+type OpenAiResponsesArm = Extract<
   Interaction,
   { type: "azure:responses" | "openai:responses" }
 >;
+
+// Failed interactions persist `{ error }` in place of a provider response;
+// DynamicInteraction handles those before delegating here, so this mapper only
+// ever sees a real provider response. The request side of the API type also
+// carries a loose read-back arm (a drifted persisted row serializes raw
+// instead of 500-ing the list) — narrow to the canonical request shape here;
+// every access below is already defensive about the runtime payload.
+type OpenAiResponsesInteractionRecord = Omit<
+  OpenAiResponsesArm,
+  "request" | "response"
+> & {
+  request: Extract<OpenAiResponsesArm["request"], { model: string }>;
+  response: Exclude<OpenAiResponsesArm["response"], { error: string }>;
+};
 
 type OpenAiResponsesOutputItem =
   OpenAiResponsesInteractionRecord["response"]["output"][number];

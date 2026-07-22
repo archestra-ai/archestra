@@ -12,11 +12,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { trackEvent } from "@/lib/analytics";
 import { useHandleOAuthCallback } from "@/lib/auth/oauth.query";
 import {
   clearCallbackProcessing,
   clearInstallContext,
-  clearOAuthReauthChatResume,
+  clearOAuthPendingChatResume,
   clearOAuthReturnUrl,
   clearReauthContext,
   getOAuthEnvironmentValues,
@@ -30,6 +31,7 @@ import {
   isCallbackProcessed,
   markCallbackProcessing,
   setOAuthInstallationCompleteCatalogId,
+  setOAuthInstallChatResume,
   setOAuthReauthChatResume,
 } from "@/lib/auth/oauth-session";
 import {
@@ -40,6 +42,7 @@ import { replaceBrowserUrl } from "@/lib/utils/browser-redirect";
 import {
   getOAuthCallbackErrorState,
   type OAuthCallbackErrorState,
+  toInternalReturnPath,
 } from "./oauth-callback.utils";
 
 function OAuthCallbackContent() {
@@ -50,6 +53,7 @@ function OAuthCallbackContent() {
   const callbackMutation = useHandleOAuthCallback();
   const [callbackError, setCallbackError] =
     useState<OAuthCallbackErrorState | null>(null);
+  const [errorReturnPath, setErrorReturnPath] = useState<string | null>(null);
 
   useEffect(() => {
     const handleOAuthCallback = async () => {
@@ -66,6 +70,16 @@ function OAuthCallbackContent() {
       });
 
       if (initialError) {
+        if (error) {
+          // The provider bounced the user back without a code — the user
+          // denied access or the provider refused (e.g. "access_denied").
+          trackEvent("mcp_server_installation_cancelled", { reason: error });
+        }
+        // Remember where the flow started so the error card can send the
+        // user back there instead of always to the registry.
+        setErrorReturnPath(
+          toInternalReturnPath(getOAuthReturnUrl(), window.location.origin),
+        );
         setCallbackError(initialError);
         return;
       }
@@ -102,11 +116,23 @@ function OAuthCallbackContent() {
           clearReauthContext();
           clearOAuthReturnUrl();
 
-          // Redirect back to where the user was (e.g. chat page)
+          // Redirect back to where the user was. Chat conversations get a
+          // full-page replace so the queued resume message is picked up on
+          // mount; other pages get a client-side replace so the success
+          // toast survives the navigation.
           if (returnUrl) {
-            setOAuthReauthChatResume({ returnUrl, serverName: name });
-            replaceBrowserUrl(returnUrl);
-            return;
+            if (setOAuthReauthChatResume({ returnUrl, serverName: name })) {
+              replaceBrowserUrl(returnUrl);
+              return;
+            }
+            const returnPath = toInternalReturnPath(
+              returnUrl,
+              window.location.origin,
+            );
+            if (returnPath) {
+              router.replace(returnPath);
+              return;
+            }
           }
         } else {
           // New installation flow
@@ -131,25 +157,54 @@ function OAuthCallbackContent() {
           });
 
           const isFirstInstallation = getOAuthIsFirstInstallation();
+          const returnUrl = getOAuthReturnUrl();
 
           clearCallbackProcessing(code, state);
           clearInstallContext();
+          clearOAuthReturnUrl();
 
-          // Store flag to open assignments dialog after redirect (only for first installation)
-          if (isFirstInstallation) {
+          // If the install was started from inside a chat conversation, return
+          // the user there (and queue the conversation to continue). The
+          // full-page replace lets the chat pick up the queued message on
+          // mount.
+          if (
+            returnUrl &&
+            setOAuthInstallChatResume({ returnUrl, serverName: name })
+          ) {
+            replaceBrowserUrl(returnUrl);
+            return;
+          }
+
+          // Otherwise return to the page the install was started from,
+          // falling back to the registry. Only registry pages consume the
+          // assignments-dialog flag, so it is only set when landing there.
+          const returnPath = toInternalReturnPath(
+            returnUrl,
+            window.location.origin,
+          );
+          const destination = returnPath ?? "/mcp/registry";
+          if (isFirstInstallation && destination.startsWith("/mcp/registry")) {
             setOAuthInstallationCompleteCatalogId(catalogId);
           }
+
+          // The mutation's onSuccess handler will show the success toast
+          router.replace(destination);
+          return;
         }
 
-        // Redirect back to MCP catalog immediately
-        // The mutation's onSuccess handler will show the success toast
-        router.push("/mcp/registry");
+        // Re-authentication without a stored return URL: fall back to the registry
+        router.replace("/mcp/registry");
       } catch (error) {
         console.error("OAuth completion error:", error);
-        clearOAuthReauthChatResume();
-        // The mutation's onError handler will show the error toast
-        // Redirect back to catalog
-        router.push("/mcp/registry");
+        clearOAuthPendingChatResume();
+        const errorPath = toInternalReturnPath(
+          getOAuthReturnUrl(),
+          window.location.origin,
+        );
+        clearOAuthReturnUrl();
+        // The mutation's onError handler will show the error toast.
+        // Return to the page the flow started from (fallback: registry).
+        router.replace(errorPath ?? "/mcp/registry");
       }
     };
 
@@ -159,7 +214,7 @@ function OAuthCallbackContent() {
     callbackMutation.mutateAsync,
     installMutation.mutateAsync,
     reauthMutation.mutateAsync,
-    router.push,
+    router.replace,
   ]);
 
   if (callbackError) {
@@ -178,8 +233,13 @@ function OAuthCallbackContent() {
               <AlertTitle>{callbackError.title}</AlertTitle>
               <AlertDescription>{callbackError.description}</AlertDescription>
             </Alert>
-            <Button onClick={() => router.push("/mcp/registry")}>
-              Return to MCP Registry
+            <Button
+              onClick={() => {
+                clearOAuthReturnUrl();
+                router.push(errorReturnPath ?? "/mcp/registry");
+              }}
+            >
+              {errorReturnPath ? "Go Back" : "Return to MCP Registry"}
             </Button>
           </CardContent>
         </Card>
@@ -230,7 +290,7 @@ function LoadingFallback() {
 
 function OAuthCallbackLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-2xl items-center justify-center p-6">
+    <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-2xl items-center justify-center p-6">
       <div className="w-full">{children}</div>
     </div>
   );

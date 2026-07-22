@@ -8,7 +8,8 @@ import {
   MCP_DEFAULT_LOG_LINES,
   type McpDeploymentStatusEntry,
   type ServerWebSocketMessage,
-} from "@shared";
+} from "@archestra/shared";
+import type * as k8s from "@kubernetes/client-node";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
 import { betterAuth, hasPermission } from "@/auth";
@@ -39,8 +40,12 @@ interface McpExecSubscription {
 }
 
 interface McpDeploymentStatusSubscription {
-  interval: NodeJS.Timeout;
-  lastStatuses: Record<string, McpDeploymentStatusEntry>;
+  /** Projects the shared runtime summary onto this subscriber's accessible servers. */
+  buildStatuses: (
+    summary: typeof McpServerRuntimeManager.statusSummary,
+  ) => Record<string, McpDeploymentStatusEntry>;
+  /** Serialized last-sent statuses, for change detection. */
+  lastStatusesJson: string;
 }
 
 interface WebSocketClientContext {
@@ -66,6 +71,10 @@ class WebSocketService {
   private clientContexts: Map<WebSocket, WebSocketClientContext> = new Map();
   private browserStreamContext: BrowserStreamSocketClientContext | null = null;
   private deploymentMetricsInterval: NodeJS.Timeout | null = null;
+  // One poller shared by all deployment-status subscribers; runs while the
+  // subscription map is non-empty.
+  private mcpDeploymentStatusPollInterval: NodeJS.Timeout | null = null;
+  private mcpDeploymentStatusRefreshInFlight = false;
 
   /**
    * Proxy object for browser subscriptions - exposes Map-like interface for testing.
@@ -441,6 +450,21 @@ class WebSocketService {
     const stdout = new PassThrough();
     const stderr = new PassThrough();
 
+    // Why a session ended (e.g. `/bin/sh` missing on a distroless image) can
+    // arrive on two different K8s exec channels depending on the container
+    // runtime: the status channel (a V1Status) and/or the output stream (the
+    // OCI runtime's stderr). Capture both so the close event can tell the user
+    // the real reason instead of a bare "Session terminated".
+    let execStatus: k8s.V1Status | undefined;
+    let capturedOutput = "";
+    const captureExecOutput = (chunk: string) => {
+      if (capturedOutput.length >= EXEC_OUTPUT_CAPTURE_LIMIT) return;
+      capturedOutput += chunk.slice(
+        0,
+        EXEC_OUTPUT_CAPTURE_LIMIT - capturedOutput.length,
+      );
+    };
+
     try {
       const { k8sWs, podName } =
         await McpServerRuntimeManager.execIntoMcpServer(
@@ -448,6 +472,9 @@ class WebSocketService {
           stdin,
           stdout,
           stderr,
+          (status) => {
+            execStatus = status;
+          },
         );
 
       this.mcpExecSubscriptions.set(ws, {
@@ -466,30 +493,35 @@ class WebSocketService {
 
       // Bridge K8s stdout/stderr -> client
       stdout.on("data", (chunk: Buffer) => {
+        const data = chunk.toString();
+        captureExecOutput(data);
         if (ws.readyState === WS.OPEN) {
           this.sendToClient(ws, {
             type: "mcp_exec_output",
-            payload: { serverId, data: chunk.toString() },
+            payload: { serverId, data },
           });
         }
       });
 
       stderr.on("data", (chunk: Buffer) => {
+        const data = chunk.toString();
+        captureExecOutput(data);
         if (ws.readyState === WS.OPEN) {
           this.sendToClient(ws, {
             type: "mcp_exec_output",
-            payload: { serverId, data: chunk.toString() },
+            payload: { serverId, data },
           });
         }
       });
 
       // K8s WS close -> notify client
       k8sWs.on("close", () => {
-        logger.info({ serverId }, "K8s exec WebSocket closed");
+        const reason = describeExecFailure(execStatus, capturedOutput);
+        logger.info({ serverId, reason }, "K8s exec WebSocket closed");
         if (ws.readyState === WS.OPEN) {
           this.sendToClient(ws, {
             type: "mcp_exec_closed",
-            payload: { serverId },
+            payload: { serverId, reason },
           });
         }
         this.unsubscribeMcpExec(ws);
@@ -640,6 +672,7 @@ class WebSocketService {
             restartCount: deploymentStatus.restartCount,
             podAge: deploymentStatus.podAge,
             podName: deploymentStatus.podName,
+            deploymentName: deploymentStatus.deploymentName ?? undefined,
           };
         } else {
           result[serverId] = {
@@ -653,10 +686,16 @@ class WebSocketService {
       return result;
     };
 
-    // Refresh and build initial statuses from the runtime manager
-    await McpServerRuntimeManager.refreshAllStates();
-    const runtimeSummary = McpServerRuntimeManager.statusSummary;
-    const statuses = buildStatuses(runtimeSummary);
+    // Refresh (through the shared in-flight guard) and build initial statuses
+    await this.refreshMcpDeploymentStates();
+
+    // The awaits above (DB + refresh) may outlive the socket: revalidate
+    // before registering, or we would start polling for a dead client
+    if (ws.readyState !== WS.OPEN) {
+      return;
+    }
+
+    const statuses = buildStatuses(McpServerRuntimeManager.statusSummary);
 
     // Send initial statuses
     this.sendToClient(ws, {
@@ -664,56 +703,116 @@ class WebSocketService {
       payload: { statuses },
     });
 
-    // Store subscription with initial statuses for change detection
-    const lastStatuses = { ...statuses };
-
-    // Start polling interval (10s)
-    const interval = setInterval(async () => {
-      if (ws.readyState !== WS.OPEN) {
-        this.unsubscribeMcpDeploymentStatuses(ws);
-        return;
-      }
-
-      try {
-        // Refresh deployment states from K8s before reading cached summaries
-        await McpServerRuntimeManager.refreshAllStates();
-
-        const currentSummary = McpServerRuntimeManager.statusSummary;
-        const currentStatuses = buildStatuses(currentSummary);
-
-        // Only send if statuses changed
-        const sub = this.mcpDeploymentStatusSubscriptions.get(ws);
-        if (!sub) return;
-
-        const changed =
-          JSON.stringify(currentStatuses) !== JSON.stringify(sub.lastStatuses);
-
-        if (changed) {
-          sub.lastStatuses = { ...currentStatuses };
-          this.sendToClient(ws, {
-            type: "mcp_deployment_statuses",
-            payload: { statuses: currentStatuses },
-          });
-        }
-      } catch (error) {
-        logger.error({ error }, "Failed to poll MCP deployment statuses");
-      }
-    }, 10_000);
-
     this.mcpDeploymentStatusSubscriptions.set(ws, {
-      interval,
-      lastStatuses,
+      buildStatuses,
+      lastStatusesJson: JSON.stringify(statuses),
     });
+    this.startMcpDeploymentStatusPollingIfNeeded();
 
     logger.info("MCP deployment status client subscribed");
   }
 
   private unsubscribeMcpDeploymentStatuses(ws: WebSocket): void {
-    const subscription = this.mcpDeploymentStatusSubscriptions.get(ws);
-    if (subscription) {
-      clearInterval(subscription.interval);
-      this.mcpDeploymentStatusSubscriptions.delete(ws);
+    if (this.mcpDeploymentStatusSubscriptions.delete(ws)) {
       logger.info("MCP deployment status client unsubscribed");
+    }
+    if (
+      this.mcpDeploymentStatusSubscriptions.size === 0 &&
+      this.mcpDeploymentStatusPollInterval
+    ) {
+      clearInterval(this.mcpDeploymentStatusPollInterval);
+      this.mcpDeploymentStatusPollInterval = null;
+    }
+  }
+
+  private startMcpDeploymentStatusPollingIfNeeded(): void {
+    if (this.mcpDeploymentStatusPollInterval) {
+      return;
+    }
+    this.mcpDeploymentStatusPollInterval = setInterval(() => {
+      void this.pollMcpDeploymentStatuses();
+    }, 10_000);
+  }
+
+  /**
+   * One shared tick for all subscribers: a single runtime refresh, then each
+   * subscriber gets their own projection of the summary (subscribers may see
+   * different servers, so payloads are per-subscriber and never broadcast).
+   */
+  private async pollMcpDeploymentStatuses(): Promise<void> {
+    // A previous tick (or a subscribe-time refresh) is still running; skip.
+    if (this.mcpDeploymentStatusRefreshInFlight) {
+      return;
+    }
+
+    try {
+      await this.refreshMcpDeploymentStates();
+    } catch (error) {
+      logger.error({ error }, "Failed to poll MCP deployment statuses");
+      return;
+    }
+
+    const summary = McpServerRuntimeManager.statusSummary;
+    for (const [ws, sub] of this.mcpDeploymentStatusSubscriptions) {
+      // Isolate subscribers: one failing send must not stop the others
+      try {
+        if (ws.readyState !== WS.OPEN) {
+          this.unsubscribeMcpDeploymentStatuses(ws);
+          continue;
+        }
+
+        const statuses = sub.buildStatuses(summary);
+        const statusesJson = JSON.stringify(statuses);
+        if (statusesJson !== sub.lastStatusesJson) {
+          this.sendToClient(ws, {
+            type: "mcp_deployment_statuses",
+            payload: { statuses },
+          });
+          // Mark delivered only after a successful send, so a throwing send
+          // is retried on the next tick
+          sub.lastStatusesJson = statusesJson;
+        }
+      } catch (error) {
+        logger.error(
+          { error },
+          "Failed to send MCP deployment statuses to subscriber",
+        );
+      }
+    }
+  }
+
+  /**
+   * refreshAllStates mutates per-deployment state and is not concurrency-safe,
+   * so overlapping invocations are skipped; a skipping caller reads the summary
+   * left by the previous refresh. The awaited refresh is bounded: a K8s call
+   * that never settles must not hold the guard forever and freeze polling for
+   * every subscriber.
+   */
+  private async refreshMcpDeploymentStates(): Promise<void> {
+    if (this.mcpDeploymentStatusRefreshInFlight) {
+      return;
+    }
+    this.mcpDeploymentStatusRefreshInFlight = true;
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    try {
+      const result = await Promise.race([
+        McpServerRuntimeManager.refreshAllStates(),
+        new Promise<"timeout">((resolve) => {
+          timeoutTimer = setTimeout(
+            () => resolve("timeout"),
+            MCP_DEPLOYMENT_STATUS_REFRESH_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      if (result === "timeout") {
+        logger.warn(
+          { timeoutMs: MCP_DEPLOYMENT_STATUS_REFRESH_TIMEOUT_MS },
+          "MCP deployment state refresh timed out; releasing poll guard",
+        );
+      }
+    } finally {
+      clearTimeout(timeoutTimer);
+      this.mcpDeploymentStatusRefreshInFlight = false;
     }
   }
 
@@ -892,6 +991,25 @@ class WebSocketService {
       payload: { serverId, status, error },
     });
   }
+
+  broadcastConversationUpdated(
+    ownerUserId: string,
+    organizationId: string,
+    conversationId: string,
+  ): void {
+    if (!this.wss) return;
+    this.sendToClients(
+      { type: "conversation_updated", payload: { conversationId } },
+      (client) => {
+        const ctx = this.clientContexts.get(client);
+        // Scope to the owner's org too: a user with sockets in multiple orgs
+        // must not receive a conversation event for an org they aren't on.
+        return (
+          ctx?.userId === ownerUserId && ctx.organizationId === organizationId
+        );
+      },
+    );
+  }
 }
 
 const websocketService = new WebSocketService();
@@ -909,4 +1027,65 @@ export function broadcastMcpInstallationStatus(
   websocketService.broadcastMcpInstallationStatus(serverId, status, error);
 }
 
+/**
+ * Notify a conversation's owner that a message landed, so the sidebar
+ * new-messages indicator refreshes even when the owner's client missed the
+ * stream completion. Scoped to the owner's (user, org) — other users' and
+ * other-org connections are untouched.
+ */
+export function broadcastConversationUpdated(
+  ownerUserId: string,
+  organizationId: string,
+  conversationId: string,
+): void {
+  websocketService.broadcastConversationUpdated(
+    ownerUserId,
+    organizationId,
+    conversationId,
+  );
+}
+
 export default websocketService;
+
+// Upper bound on one shared deployment-status refresh: releases the poll
+// guard even if a K8s call never settles.
+const MCP_DEPLOYMENT_STATUS_REFRESH_TIMEOUT_MS = 60_000;
+
+// How much exec output we keep to diagnose why a session ended. The OCI
+// start-failure error is short and arrives first, so a small head is plenty.
+const EXEC_OUTPUT_CAPTURE_LIMIT = 4096;
+
+// Markers the container runtime emits when it can't start the exec'd binary
+// (i.e. the shell itself is missing). Deliberately specific — these are
+// runtime-generated and won't appear from a normal shell command's output, so
+// matching them won't misfire on e.g. `cat /missing` inside a working shell.
+const SHELL_START_FAILURE =
+  /OCI runtime exec failed|unable to start container process|exec:\s+".*?":.*?(?:no such file|not found)|executable file not found|exec format error/i;
+
+/**
+ * Translate a K8s exec session's end into a human-readable reason. Returns
+ * undefined for a clean exit so the UI keeps its generic "Session terminated".
+ *
+ * The cause can land on either of two exec channels depending on the runtime:
+ * the status channel (`status.message`) or the output stream (the OCI error
+ * written to stderr). The most important case — a distroless MCP image with no
+ * `/bin/sh` — shows up as a "no such file"/"failed to start container process"
+ * error, which we turn into an actionable hint regardless of which channel
+ * carried it.
+ */
+function describeExecFailure(
+  status: k8s.V1Status | undefined,
+  output: string,
+): string | undefined {
+  if (SHELL_START_FAILURE.test(`${status?.message ?? ""}\n${output}`)) {
+    return "No shell found in this container image — it looks like a distroless/minimal image without /bin/sh. Use the Logs or Inspector tabs, or attach a debug container to inspect it.";
+  }
+
+  if (status?.status === "Failure") {
+    return (
+      status.message || status.reason || "Session ended with a failure status."
+    );
+  }
+
+  return undefined;
+}

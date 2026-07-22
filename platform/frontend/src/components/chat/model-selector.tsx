@@ -3,11 +3,12 @@
 import {
   compareModelsForDisplay,
   E2eTestId,
+  isLegacyGeminiModel,
   isOpenRouterLatestAlias,
   type ModelInputModality,
   providerDisplayNames,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import {
   CheckIcon,
   CopyIcon,
@@ -17,12 +18,11 @@ import {
   Layers,
   Loader2,
   Mic,
-  RefreshCw,
   Settings2,
   Video,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -37,8 +37,10 @@ import {
 } from "@/components/ai-elements/model-selector";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import {
+  ConnectAccountBadge,
   FreeModelBadge,
   LatestModelBadge,
+  OldModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
 import { Button } from "@/components/ui/button";
@@ -51,11 +53,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
+import { copyToClipboard } from "@/lib/clipboard";
 import {
   type LlmModel,
   type ModelCapabilities,
   useLlmModelsByProvider,
-  useSyncLlmModels,
 } from "@/lib/llm-models.query";
 import { cn, formatContextLength } from "@/lib/utils";
 
@@ -100,6 +102,19 @@ interface ModelSelectorProps {
   apiKeyId?: string | null;
   /** Whether the model query should be enabled */
   enabled?: boolean;
+  /**
+   * Keep the current (unavailable) model instead of auto-selecting a fallback.
+   * Used when the agent pins a per-user-credential model (e.g. GitHub Copilot)
+   * the viewer hasn't connected: we surface a "connect" prompt on send rather
+   * than silently substituting a different provider's model.
+   */
+  suppressAutoSelect?: boolean;
+  /**
+   * Display name to show when `selectedModel` isn't in the viewer's available
+   * models (e.g. a per-user model they can't access). Without it the trigger
+   * would fall back to the raw model UUID.
+   */
+  fallbackModelName?: string;
 }
 
 /** Map our provider names to logo provider names
@@ -123,7 +138,11 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   zhipuai: "zhipuai",
   deepseek: "deepseek",
   minimax: "minimax",
+  kimi: "moonshotai",
   azure: "azure",
+  "github-copilot": "github-copilot",
+  "microsoft-365-copilot": "microsoft-365-copilot",
+  archestra: "archestra",
 };
 
 /**
@@ -312,7 +331,7 @@ function CopyModelIdButton({ modelId }: { modelId: string }) {
       e.stopPropagation();
       e.preventDefault();
       try {
-        await navigator.clipboard.writeText(modelId);
+        await copyToClipboard(modelId);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch {
@@ -402,14 +421,10 @@ function ModelFiltersBar({
   filters,
   onFiltersChange,
   availableModalities,
-  onRefresh,
-  isRefreshing,
 }: {
   filters: ModelFilters;
   onFiltersChange: (filters: ModelFilters) => void;
   availableModalities: Set<FilterableModality>;
-  onRefresh: () => void;
-  isRefreshing: boolean;
 }) {
   const toggleModality = useCallback(
     (modality: FilterableModality, pressed: boolean) => {
@@ -463,26 +478,6 @@ function ModelFiltersBar({
         </>
       )}
       {visibleModalityFilters.length === 0 && <div className="flex-1" />}
-      <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="rounded-sm p-1 opacity-70 ring-offset-background transition-opacity hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
-            >
-              <RefreshCw
-                className={cn("size-4", isRefreshing && "animate-spin")}
-              />
-              <span className="sr-only">Refresh models</span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            Refresh models from providers
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
       <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
         <XIcon className="size-4" />
         <span className="sr-only">Close</span>
@@ -540,7 +535,7 @@ function modelMatchesFilters(model: LlmModel, filters: ModelFilters): boolean {
  * - Search functionality to filter models
  * - Models filtered by configured API keys
  */
-export function ModelSelector({
+export const ModelSelector = memo(function ModelSelector({
   selectedModel,
   onModelChange,
   disabled = false,
@@ -549,25 +544,18 @@ export function ModelSelector({
   variant = "default",
   apiKeyId,
   enabled = true,
+  suppressAutoSelect = false,
+  fallbackModelName,
 }: ModelSelectorProps) {
-  const {
-    modelsByProvider,
-    isPending: isLoading,
-    isPlaceholderData,
-  } = useLlmModelsByProvider({
-    apiKeyId: apiKeyId ?? undefined,
-    enabled,
-  });
-  const syncMutation = useSyncLlmModels();
+  const { modelsByProvider, isLoading, isPlaceholderData } =
+    useLlmModelsByProvider({
+      apiKeyId: apiKeyId ?? undefined,
+      enabled,
+    });
   const [open, setOpen] = useState(false);
-  const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
-    // Reset filters when closing the dialog
-    if (!newOpen) {
-      setFilters(INITIAL_FILTERS);
-    }
     onOpenChangeProp?.(newOpen);
   };
 
@@ -575,60 +563,6 @@ export function ModelSelector({
   const availableProviders = useMemo(() => {
     return Object.keys(modelsByProvider) as SupportedProvider[];
   }, [modelsByProvider]);
-
-  // Calculate which modalities are available across all models
-  const availableModalities = useMemo(() => {
-    const modalities = new Set<FilterableModality>();
-    for (const provider of availableProviders) {
-      for (const model of modelsByProvider[provider] ?? []) {
-        const inputMods = model.capabilities?.inputModalities ?? [];
-        for (const mod of inputMods) {
-          if (mod !== "text") {
-            modalities.add(mod as FilterableModality);
-          }
-        }
-      }
-    }
-    return modalities;
-  }, [availableProviders, modelsByProvider]);
-
-  // Check if any filters are active
-  const hasActiveFilters = filters.modalities.size > 0 || filters.toolCalling;
-
-  // Filter models by provider based on active filters
-  const filteredModelsByProvider = useMemo(() => {
-    if (!hasActiveFilters) {
-      return modelsByProvider;
-    }
-
-    const filtered: Partial<Record<SupportedProvider, LlmModel[]>> = {};
-    for (const provider of availableProviders) {
-      const models = modelsByProvider[provider] ?? [];
-      const matchingModels = models.filter((model) =>
-        modelMatchesFilters(model, filters),
-      );
-      if (matchingModels.length > 0) {
-        filtered[provider] = matchingModels;
-      }
-    }
-    return filtered;
-  }, [modelsByProvider, availableProviders, filters, hasActiveFilters]);
-
-  // Get filtered providers (only those with matching models)
-  const filteredProviders = useMemo(() => {
-    return Object.keys(filteredModelsByProvider) as SupportedProvider[];
-  }, [filteredModelsByProvider]);
-
-  // Sort once per data change rather than on every render inside the JSX map.
-  const sortedModelsByProvider = useMemo(() => {
-    const sorted: Partial<Record<SupportedProvider, LlmModel[]>> = {};
-    for (const provider of filteredProviders) {
-      sorted[provider] = [...(filteredModelsByProvider[provider] ?? [])].sort(
-        compareLlmModels,
-      );
-    }
-    return sorted;
-  }, [filteredModelsByProvider, filteredProviders]);
 
   // Find the provider for a given model
   const getProviderForModel = (model: string): SupportedProvider | null => {
@@ -654,8 +588,10 @@ export function ModelSelector({
       );
       if (model) return model.displayName;
     }
-    return selectedModel; // Fall back to ID if not found
-  }, [selectedModel, availableProviders, modelsByProvider]);
+    // Not in the viewer's available models (e.g. a per-user model they can't
+    // access): prefer the server-resolved name over the raw model UUID.
+    return fallbackModelName ?? selectedModel;
+  }, [selectedModel, availableProviders, modelsByProvider, fallbackModelName]);
 
   const handleSelectModel = (modelValue: string) => {
     // Parse the provider:modelId format
@@ -694,11 +630,17 @@ export function ModelSelector({
   // the stale models would incorrectly trigger auto-select for the wrong provider.
   useEffect(() => {
     if (isPlaceholderData) return;
+    // The agent pins a per-user-credential model the viewer hasn't connected;
+    // keep it selected so the send surfaces a connect prompt instead of
+    // silently switching to another provider's model.
+    if (suppressAutoSelect) return;
     const modelToSelect = resolveAutoSelectedModel({
       selectedModel,
       availableModels: allAvailableModels.map((m) => ({
         id: m.dbId,
         isBest: m.isBest,
+        requiresUserConnection: m.requiresUserConnection,
+        isConnected: m.isConnected,
       })),
       isLoading,
     });
@@ -708,6 +650,7 @@ export function ModelSelector({
   }, [
     isLoading,
     isPlaceholderData,
+    suppressAutoSelect,
     allAvailableModels,
     selectedModel,
     onModelChange,
@@ -804,127 +747,232 @@ export function ModelSelector({
             </PromptInputButton>
           )}
         </ModelSelectorTrigger>
-        <ModelSelectorContent
-          title="Select Model"
-          onCloseAutoFocus={(e) => e.preventDefault()}
-          showCloseButton={false}
-        >
-          <ModelFiltersBar
-            filters={filters}
-            onFiltersChange={setFilters}
-            availableModalities={availableModalities}
-            onRefresh={() => syncMutation.mutate()}
-            isRefreshing={syncMutation.isPending}
-          />
-          <ModelSelectorInput placeholder="Search models..." autoFocus />
-          <ModelSelectorList>
-            <ModelSelectorEmpty>
-              {hasActiveFilters
-                ? "No models match the selected filters."
-                : "No models found."}
-            </ModelSelectorEmpty>
-
-            {/* Option to unselect model */}
-            {onClear && (
-              <ModelSelectorGroup heading="">
-                <ModelSelectorItem
-                  value="__none__"
-                  onSelect={() => {
-                    handleOpenChange(false);
-                    onClear();
-                  }}
-                >
-                  <ModelSelectorName>
-                    Best available model (resolved at runtime)
-                  </ModelSelectorName>
-                  {!selectedModel && <CheckIcon className="ml-auto size-4" />}
-                </ModelSelectorItem>
-              </ModelSelectorGroup>
-            )}
-
-            {/* Show current model if not in available list */}
-            {!isModelAvailable && selectedModel && (
-              <ModelSelectorGroup heading="Current (API key missing)">
-                <ModelSelectorItem
-                  disabled
-                  value={selectedModel}
-                  className="text-yellow-600"
-                >
-                  {selectedModelLogo && (
-                    <ModelSelectorLogo provider={selectedModelLogo} />
-                  )}
-                  <ModelSelectorName>{selectedModel}</ModelSelectorName>
-                  <CheckIcon className="ml-auto size-4" />
-                </ModelSelectorItem>
-              </ModelSelectorGroup>
-            )}
-
-            {filteredProviders.map((provider) => (
-              <ModelSelectorGroup
-                key={provider}
-                heading={providerDisplayNames[provider]}
-              >
-                {(sortedModelsByProvider[provider] ?? []).map((model) => {
-                  // Use provider:modelId format for unique keys/values
-                  // This prevents issues when different providers have models with the same ID
-                  const modelValue = createModelValue(provider, model.dbId);
-                  return (
-                    <ModelSelectorItem
-                      key={modelValue}
-                      value={modelValue}
-                      // value is provider:dbId (a UUID) for stable selection,
-                      // so search must match human-readable terms via keywords
-                      keywords={[
-                        model.displayName,
-                        model.id,
-                        providerDisplayNames[provider],
-                      ]}
-                      onSelect={() => handleSelectModel(modelValue)}
-                      className="group"
-                    >
-                      <ModelSelectorLogo
-                        provider={providerToLogoProvider[provider]}
-                      />
-                      <ModelSelectorName>
-                        {model.displayName}{" "}
-                        <span className="text-xs text-muted-foreground font-mono">
-                          ({model.id})
-                        </span>
-                        <CopyModelIdButton modelId={model.id} />
-                      </ModelSelectorName>
-                      {model.isFree && <FreeModelBadge />}
-                      {isOpenRouterLatestAlias(provider, model.id) && (
-                        <LatestModelBadge />
-                      )}
-                      <div className="ml-auto flex items-center gap-2">
-                        <ModelCapabilityBadges
-                          capabilities={model.capabilities}
-                        />
-                        <ContextLengthIndicator
-                          contextLength={model.capabilities?.contextLength}
-                        />
-                        <PricingIndicator
-                          pricePerMillionInput={
-                            model.capabilities?.pricePerMillionInput
-                          }
-                          pricePerMillionOutput={
-                            model.capabilities?.pricePerMillionOutput
-                          }
-                        />
-                        {selectedModel === model.dbId ? (
-                          <CheckIcon className="size-4" />
-                        ) : (
-                          <div className="size-4" />
-                        )}
-                      </div>
-                    </ModelSelectorItem>
-                  );
-                })}
-              </ModelSelectorGroup>
-            ))}
-          </ModelSelectorList>
-        </ModelSelectorContent>
+        {/* The option tree is expensive to build with many models, so it is
+            only mounted while the dialog is open — a closed selector must not
+            rebuild it on every toolbar rerender. Unmounting on close also
+            resets the capability filters. */}
+        {open && (
+          <ModelSelectorContent
+            title="Select Model"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+            showCloseButton={false}
+          >
+            <ModelSelectorDialogBody
+              modelsByProvider={modelsByProvider}
+              availableProviders={availableProviders}
+              selectedModel={selectedModel}
+              selectedModelLogo={selectedModelLogo}
+              isModelAvailable={isModelAvailable}
+              onClear={onClear}
+              onSelectModel={handleSelectModel}
+              onClose={() => handleOpenChange(false)}
+            />
+          </ModelSelectorContent>
+        )}
       </ModelSelectorRoot>
     </div>
+  );
+});
+
+/**
+ * Body of the model selector dialog: capability filter bar, search input, and
+ * the provider-grouped option tree. Mounted only while the dialog is open, so
+ * the (potentially large) option tree is never built for a closed selector.
+ * Filter state lives here and resets naturally when the dialog closes.
+ */
+function ModelSelectorDialogBody({
+  modelsByProvider,
+  availableProviders,
+  selectedModel,
+  selectedModelLogo,
+  isModelAvailable,
+  onClear,
+  onSelectModel,
+  onClose,
+}: {
+  modelsByProvider: Record<SupportedProvider, LlmModel[]>;
+  availableProviders: SupportedProvider[];
+  selectedModel: string;
+  selectedModelLogo: string | null;
+  isModelAvailable: boolean;
+  onClear?: () => void;
+  onSelectModel: (modelValue: string) => void;
+  onClose: () => void;
+}) {
+  const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
+
+  // Calculate which modalities are available across all models
+  const availableModalities = useMemo(() => {
+    const modalities = new Set<FilterableModality>();
+    for (const provider of availableProviders) {
+      for (const model of modelsByProvider[provider] ?? []) {
+        const inputMods = model.capabilities?.inputModalities ?? [];
+        for (const mod of inputMods) {
+          if (mod !== "text") {
+            modalities.add(mod as FilterableModality);
+          }
+        }
+      }
+    }
+    return modalities;
+  }, [availableProviders, modelsByProvider]);
+
+  // Check if any filters are active
+  const hasActiveFilters = filters.modalities.size > 0 || filters.toolCalling;
+
+  // Filter models by provider based on active filters
+  const filteredModelsByProvider = useMemo(() => {
+    if (!hasActiveFilters) {
+      return modelsByProvider;
+    }
+
+    const filtered: Partial<Record<SupportedProvider, LlmModel[]>> = {};
+    for (const provider of availableProviders) {
+      const models = modelsByProvider[provider] ?? [];
+      const matchingModels = models.filter((model) =>
+        modelMatchesFilters(model, filters),
+      );
+      if (matchingModels.length > 0) {
+        filtered[provider] = matchingModels;
+      }
+    }
+    return filtered;
+  }, [modelsByProvider, availableProviders, filters, hasActiveFilters]);
+
+  // Get filtered providers (only those with matching models)
+  const filteredProviders = useMemo(() => {
+    return Object.keys(filteredModelsByProvider) as SupportedProvider[];
+  }, [filteredModelsByProvider]);
+
+  // Sort once per data change rather than on every render inside the JSX map.
+  const sortedModelsByProvider = useMemo(() => {
+    const sorted: Partial<Record<SupportedProvider, LlmModel[]>> = {};
+    for (const provider of filteredProviders) {
+      sorted[provider] = [...(filteredModelsByProvider[provider] ?? [])].sort(
+        compareLlmModels,
+      );
+    }
+    return sorted;
+  }, [filteredModelsByProvider, filteredProviders]);
+
+  return (
+    <>
+      <ModelFiltersBar
+        filters={filters}
+        onFiltersChange={setFilters}
+        availableModalities={availableModalities}
+      />
+      <ModelSelectorInput placeholder="Search models..." autoFocus />
+      <ModelSelectorList>
+        <ModelSelectorEmpty>
+          {hasActiveFilters
+            ? "No models match the selected filters."
+            : "No models found."}
+        </ModelSelectorEmpty>
+
+        {/* Option to unselect model */}
+        {onClear && (
+          <ModelSelectorGroup heading="">
+            <ModelSelectorItem
+              value="__none__"
+              onSelect={() => {
+                onClose();
+                onClear();
+              }}
+            >
+              <ModelSelectorName>
+                Best available model (resolved at runtime)
+              </ModelSelectorName>
+              {!selectedModel && <CheckIcon className="ml-auto size-4" />}
+            </ModelSelectorItem>
+          </ModelSelectorGroup>
+        )}
+
+        {/* Show current model if not in available list */}
+        {!isModelAvailable && selectedModel && (
+          <ModelSelectorGroup heading="Current (API key missing)">
+            <ModelSelectorItem
+              disabled
+              value={selectedModel}
+              className="text-yellow-600"
+            >
+              {selectedModelLogo && (
+                <ModelSelectorLogo provider={selectedModelLogo} />
+              )}
+              <ModelSelectorName>{selectedModel}</ModelSelectorName>
+              <CheckIcon className="ml-auto size-4" />
+            </ModelSelectorItem>
+          </ModelSelectorGroup>
+        )}
+
+        {filteredProviders.map((provider) => (
+          <ModelSelectorGroup
+            key={provider}
+            heading={providerDisplayNames[provider]}
+          >
+            {(sortedModelsByProvider[provider] ?? []).map((model) => {
+              // Use provider:modelId format for unique keys/values
+              // This prevents issues when different providers have models with the same ID
+              const modelValue = createModelValue(provider, model.dbId);
+              return (
+                <ModelSelectorItem
+                  key={modelValue}
+                  value={modelValue}
+                  // value is provider:dbId (a UUID) for stable selection,
+                  // so search must match human-readable terms via keywords
+                  keywords={[
+                    model.displayName,
+                    model.id,
+                    providerDisplayNames[provider],
+                  ]}
+                  onSelect={() => onSelectModel(modelValue)}
+                  className="group"
+                >
+                  <ModelSelectorLogo
+                    provider={providerToLogoProvider[provider]}
+                  />
+                  <ModelSelectorName>
+                    {model.displayName}{" "}
+                    <span className="text-xs text-muted-foreground font-mono">
+                      ({model.id})
+                    </span>
+                    <CopyModelIdButton modelId={model.id} />
+                  </ModelSelectorName>
+                  {model.isFree && <FreeModelBadge />}
+                  {model.requiresUserConnection && !model.isConnected && (
+                    <ConnectAccountBadge />
+                  )}
+                  {isOpenRouterLatestAlias(provider, model.id) && (
+                    <LatestModelBadge />
+                  )}
+                  {provider === "gemini" && isLegacyGeminiModel(model.id) && (
+                    <OldModelBadge />
+                  )}
+                  <div className="ml-auto flex items-center gap-2">
+                    <ModelCapabilityBadges capabilities={model.capabilities} />
+                    <ContextLengthIndicator
+                      contextLength={model.capabilities?.contextLength}
+                    />
+                    <PricingIndicator
+                      pricePerMillionInput={
+                        model.capabilities?.pricePerMillionInput
+                      }
+                      pricePerMillionOutput={
+                        model.capabilities?.pricePerMillionOutput
+                      }
+                    />
+                    {selectedModel === model.dbId ? (
+                      <CheckIcon className="size-4" />
+                    ) : (
+                      <div className="size-4" />
+                    )}
+                  </div>
+                </ModelSelectorItem>
+              );
+            })}
+          </ModelSelectorGroup>
+        ))}
+      </ModelSelectorList>
+    </>
   );
 }

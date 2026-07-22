@@ -1,0 +1,202 @@
+{
+  "name": "tipdotmd__tip-md-x402-mcp-server",
+  "display_name": "tip-md-x402-mcp-server",
+  "description": "🏆 Hackathon: Transform any AI agent into a payment-enabled agent using x402 + CDP. MCP server for instant crypto tipping with automatic disbursement.",
+  "author": {
+    "name": "tipdotmd"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/mcp-server/src/index.js"],
+    "env": {
+      "MONGODB_URI": "${user_config.mongodb_uri}",
+      "CDP_API_KEY_ID": "${user_config.cdp_api_key_id}",
+      "CDP_API_KEY_SECRET": "${user_config.cdp_api_key_secret}",
+      "X402_WALLET_PRIVATE_KEY": "${user_config.x402_wallet_private_key}",
+      "PORT": "${user_config.port}",
+      "NODE_ENV": "${user_config.node_env}",
+      "LOG_LEVEL": "${user_config.log_level}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mongodb_uri": {
+      "type": "string",
+      "title": "MongoDB URI",
+      "description": "Connection string for the MongoDB database. Required for production.",
+      "sensitive": true,
+      "required": true
+    },
+    "cdp_api_key_id": {
+      "type": "string",
+      "title": "Coinbase Developer Platform API Key ID",
+      "description": "Your API Key ID for Coinbase Developer Platform (CDP) disbursement. Required for production.",
+      "sensitive": true,
+      "required": true
+    },
+    "cdp_api_key_secret": {
+      "type": "string",
+      "title": "Coinbase Developer Platform API Key Secret",
+      "description": "Your API Key Secret for Coinbase Developer Platform (CDP) disbursement. Required for production.",
+      "sensitive": true,
+      "required": true
+    },
+    "x402_wallet_private_key": {
+      "type": "string",
+      "title": "x402 Wallet Private Key",
+      "description": "Private key for the x402 payment collection wallet. Required for production.",
+      "sensitive": true,
+      "required": true
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port on which the MCP server will listen.",
+      "default": 3000,
+      "required": false,
+      "min": 1,
+      "max": 65535
+    },
+    "node_env": {
+      "type": "string",
+      "title": "Node Environment",
+      "description": "Sets the Node.js environment. Use 'production' for full integration or 'demo' for simulation mode.",
+      "default": "production",
+      "required": false
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "Sets the logging verbosity (e.g., 'info', 'debug', 'warn', 'error').",
+      "default": "info",
+      "required": false
+    }
+  },
+  "readme": "# [tip.md](https://tip.md) x402 + CDP MCP Server\n\n> **🏆 Hackathon Entry**: Transform any AI agent into a payment-enabled tipping agent using x402 payment collection with CDP automatic disbursement.\n\n## 🌟 About tip.md\n\n**tip.md** is a platform that allows developers to receive cryptocurrency tips directly to their wallets via a simple button embeddable in GitHub READMEs, websites, or any markdown content. It supports:\n\n- **Multiple Blockchains**: Ethereum, Base,Solana, and Bitcoin Lightning Network\n- **Direct-to-Wallet Payments**: Tips go straight to your wallet, no custody\n- **Simple Integration**: One button, works everywhere markdown is supported\n- **4% Platform Fee**: Transparent pricing, we only make money if you do\n- **Client-Side Security**: All transactions processed securely in the browser\n\nThis MCP server extends tip.md's functionality by enabling **any AI agent** to facilitate crypto tipping through the innovative x402 + CDP integration.\n\n## 🚀 Quick Demo (No Setup Required)\n\n**For Judges & Evaluators**: Experience the x402 + CDP tipping flow instantly:\n\n```bash\ngit clone https://github.com/xR0am/tip-md-x402-mcp-server.git\ncd tip-md-x402-mcp-server\nnpm install\nNODE_ENV=demo npm start\n```\n\n**⚠️ Important**: The server running alone shows logs, but to see the **demo payment functionality**, you need to connect it to an MCP client (see [Testing with MCP Clients](#testing-with-mcp-clients) below).\n\n## 🎯 What This Does\n\n**Core Innovation**: ANY AI agent + this MCP = instant payment-enabled agent\n\n- **x402 Payment Collection**: Users pay from dedicated wallets using the x402 payment protocol (Money IN)\n- **CDP Automatic Disbursement**: Backend automatically splits payments (96% recipient, 4% platform) via Coinbase Wallet API (Money OUT)\n- **MCP Tool Integration**: Works with Claude, ChatGPT, Cursor, or any MCP-compatible agent\n- **True Composability**: Transform existing AI workflows into payment-enabled experiences\n\n### 🔄 The Complete Flow\n\n1. **User: \"Check balance\"** → Agent: *\"47.50 USDC available for tipping\"*\n2. **User asks AI agent**: \"Tip @username 5 USDC\"\n3. **x402 Payment Collection**: Agent generates payment request, user pays from dedicated wallet\n4. **CDP Automatic Disbursement**: Backend splits payment and sends to recipient + platform\n5. **AI Confirms**: \"✅ Sent 5 USDC to @username\"\n\n## Architecture: True x402 → CDP Flow\n\n### User Payment Flow\n```\nUser → Dedicated Tipping Wallet → x402 Payment Collection → CDP Agent Wallet → CDP Disburses to Recipient (96%) + Platform (4%)\n```\n\n## 📋 Available MCP Tools\n\nThis MCP server exposes **7 tools** that any AI agent can use:\n\n### **💰 x402 + CDP Payment Tools (Hackathon Innovation)**\n- **`mcp_tip_md_tip_user_x402`**: Send USDC tips using x402 payment protocol with CDP automatic disbursement\n- **`mcp_tip_md_check_tipping_balance`**: Check/create your dedicated x402 tipping wallet balance and info\n\n### **🔧 Wallet Management Tools**  \n- **`mcp_tip_md_export_tipping_wallet`**: Export your tipping wallet private key (security sensitive)\n- **`mcp_tip_md_withdraw_tipping_funds`**: Withdraw USDC from your tipping wallet to any address\n\n### **🔍 User & Network Tools**\n- **`mcp_tip_md_get_user_wallet_types`**: Check recipient's supported cryptocurrencies and wallet types\n- **`mcp_tip_md_crypto_tipping`**: Manual crypto tipping information for agents with wallet to instruct (Ethereum, Base, Solana - no x402/CDP flow)\n\n### **🏥 System Tools**\n- **`mcp_tip_md_ping`**: Health check endpoint\n\n## 🧪 Testing with MCP Clients\n\nTo see the **actual demo payment functionality**, you need to connect the MCP server to a compatible client:\n\n### Cursor IDE Setup\n\n1. **Edit your MCP configuration** (`~/.cursor/mcp.json`):\n```json\n{\n  \"mcpServers\": {\n    \"tip-md-demo\": {\n      \"command\": \"node\",\n      \"args\": [\"dist/mcp-server/src/index.js\"],\n      \"cwd\": \"/path/to/tip-md-x402-mcp-server\",\n      \"env\": {\n        \"NODE_ENV\": \"demo\"\n      }\n    }\n  }\n}\n```\n\n2. **Restart Cursor** and look for the 🔨 tools icon\n\n3. **Test the demo**:\n   - Type: \"Tip user johndoe 5 USDC using base blockchain\"\n   - Watch the x402 + CDP simulation in action!\n\n### Claude Desktop Setup\n\n1. **Install Supergateway** (bridges our HTTP transport to stdio):\n```bash\nnpm install -g supergateway\n```\n\n2. **Configure Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):\n```json\n{\n  \"mcpServers\": {\n    \"tip-md-demo\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"supergateway\",\n        \"--httpStream\",\n        \"http://localhost:3000/mcp\",\n        \"--outputTransport\",\n        \"stdio\"\n      ]\n    }\n  }\n}\n```\n\n3. **Start the MCP server** in demo mode:\n```bash\nNODE_ENV=demo npm start\n```\n\n4. **Restart Claude Desktop** and test with: \"Show me available tip.md tools\"\n\n### Other MCP Clients\n\nFor clients supporting HTTP-stream transport:\n- **Endpoint**: `http://localhost:3000/mcp` (when running locally)\n- **Transport**: HTTP-stream\n- **Environment**: Set `NODE_ENV=demo` for simulation mode\n\n## 🛠️ Production Integration (Requires Setup)\n\nFor full integration with the tip.md platform:\n\n### Environment Variables\n\nCreate a `.env` file:\n\n```bash\n# Database Connection (Required for production)\nMONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database\n\n# Coinbase Developer Platform (Required for CDP disbursement)\nCDP_API_KEY_ID=your_cdp_api_key_id\nCDP_API_KEY_SECRET=your_cdp_api_key_secret\n\n# x402 Configuration (Required for payment collection)\nX402_WALLET_PRIVATE_KEY=your_x402_wallet_private_key\n\n# Optional Configuration\nPORT=3000\nNODE_ENV=production\nLOG_LEVEL=info\n```\n\n### Production Deployment\n\n```bash\nnpm install\nnpm run build\nnpm start\n```\n\n## 🏗️ Technical Architecture\n\n### x402 Payment Collection\n- **Dedicated Wallets**: Each user gets a unique payment wallet\n- **Protocol Compliance**: Full x402 specification implementation\n  \n### CDP Automatic Disbursement  \n- **Smart Splitting**: 96% to recipient, 4% to platform\n- **Instant Settlement**: Automated via Coinbase Developer Platform\n\n### MCP Integration\n- **Universal Compatibility**: Works with any MCP-compatible AI agent\n- **Structured Responses**: Rich JSON responses for seamless integration\n- **Error Handling**: Graceful fallbacks and detailed error messages\n\n## 🎖️ Hackathon Submission Details\n\n**Challenge**: Coinbase x402 + CDP Integration\n**Innovation**: Universal AI agent payment enablement\n**Demo Mode**: `NODE_ENV=demo npm start`\n**Repository**: https://github.com/xR0am/tip-md-x402-mcp-server\n\n### Key Differentiators\n\n1. **Universal Agent Integration**: Any MCP client becomes payment-enabled\n2. **Complete Payment Flow**: x402 collection + CDP disbursement in one solution\n3. **Zero-Setup Demo**: Judges can evaluate immediately\n4. **Production-Ready**: Already integrated with tip.md platform\n\n## 📚 Learn More\n\n- **tip.md Platform**: https://tip.md\n- **MCP Protocol**: https://modelcontextprotocol.io\n- **x402 Specification**: https://docs.coinbase.com/x402\n- **Coinbase CDP**: https://docs.cdp.coinbase.com\n\n## 🤝 Support\n\nFor questions about this hackathon entry:\n- **Issues**: Open a GitHub issue\n- **Email**: support@tip.md\n- **Demo Problems**: Ensure you're testing through an MCP client, not just the server logs\n\n---\n\n**Built for the Coinbase x402 + CDP Hackathon** 🏆\n",
+  "category": "AI Tools",
+  "quality_score": 32,
+  "archestra_config": {
+    "client_config_permutations": {
+      "tip-md-demo": {
+        "command": "node",
+        "args": ["dist/mcp-server/src/index.js"],
+        "env": {
+          "NODE_ENV": "demo"
+        }
+      },
+      "tip-md-x402-mcp-server-demo-npm": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {
+          "NODE_ENV": "demo"
+        }
+      },
+      "tip-md-x402-mcp-server-production": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {
+          "NODE_ENV": "production"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tipdotmd",
+    "repo": "tip-md-x402-mcp-server",
+    "url": "https://github.com/tipdotmd/tip-md-x402-mcp-server",
+    "name": "tipdotmd__tip-md-x402-mcp-server",
+    "path": null,
+    "stars": 7,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d7578ddf5582b370a7fedd1d1107f2cdb8dbc2e5"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:43.449Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@coinbase/cdp-sdk",
+      "importance": 9
+    },
+    {
+      "name": "@coinbase/coinbase-sdk",
+      "importance": 8
+    },
+    {
+      "name": "@coinbase/x402",
+      "importance": 9
+    },
+    {
+      "name": "@types/cors",
+      "importance": 1
+    },
+    {
+      "name": "@types/express",
+      "importance": 1
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "ethers",
+      "importance": 8
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "mcp-framework",
+      "importance": 10
+    },
+    {
+      "name": "mongodb",
+      "importance": 8
+    },
+    {
+      "name": "node-cache",
+      "importance": 6
+    },
+    {
+      "name": "pg",
+      "importance": 8
+    },
+    {
+      "name": "viem",
+      "importance": 8
+    },
+    {
+      "name": "x402-axios",
+      "importance": 7
+    },
+    {
+      "name": "x402-express",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-server\",\n  \"version\": \"0.0.1\",\n  \"description\": \"MCP Server for tip.md\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server\": \"./dist/mcp-server/src/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"clean\": \"rm -rf dist\",\n    \"rebuild\": \"npm run clean && npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"start\": \"node dist/mcp-server/src/index.js\",\n    \"start:prod\": \"NODE_ENV=production node dist/mcp-server/src/index.js\",\n    \"deploy\": \"npm run rebuild && npm run start:prod\",\n    \"postinstall\": \"npm run build\"\n  },\n  \"dependencies\": {\n    \"@coinbase/cdp-sdk\": \"^1.16.0\",\n    \"@coinbase/coinbase-sdk\": \"^0.25.0\",\n    \"@coinbase/x402\": \"^0.4.0\",\n    \"@types/cors\": \"^2.8.19\",\n    \"@types/express\": \"^5.0.3\",\n    \"cors\": \"^2.8.5\",\n    \"ethers\": \"^6.14.4\",\n    \"express\": \"^5.1.0\",\n    \"mcp-framework\": \"^0.2.15\",\n    \"mongodb\": \"^6.0.0\",\n    \"node-cache\": \"^5.1.2\",\n    \"pg\": \"^8.11.3\",\n    \"viem\": \"^2.31.3\",\n    \"x402-axios\": \"^0.4.0\",\n    \"x402-express\": \"^0.4.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.19.1\",\n    \"dotenv\": \"^16.5.0\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"engines\": {\n    \"node\": \">=18.19.0\"\n  }\n}\n"
+}

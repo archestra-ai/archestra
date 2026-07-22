@@ -59,8 +59,11 @@ export type CascadeOutcome =
    *  old config. Bar shows "Reinstall required" / "Save and mark for
    *  reinstall". */
   | "manual"
-  /** Backend immediately restarts pods. Bar shows "Servers will
-   *  reinstall" / "Save and reinstall". */
+  /** Backend cascades immediately in the background: local servers get
+   *  a pod restart; remote servers just get a tool re-sync (no pod, so
+   *  nothing goes offline). Bar shows "Restart N installs now?" /
+   *  "Save and restart" for local; remote saves without a bar — the
+   *  scenario carries that via `frontendBar`. */
   | "auto";
 
 /** What the shared `isMetadataOnlyEdit` predicate should return for
@@ -104,6 +107,12 @@ export interface CascadeScenario {
     actual: CascadeOutcome;
     issue: string;
   };
+  /** Intentional, permanent frontend divergence — NOT a bug marker.
+   *  The backend still enacts `expected`; the confirm bar behaves as
+   *  this value instead. Sole current use: remote catalogs on the auto
+   *  path save without a bar ("skip") because the background cascade
+   *  restarts nothing for them. */
+  frontendBar?: CascadeOutcome;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -182,6 +191,29 @@ export const setLabels =
     labels,
   });
 
+export const setScope =
+  (scope: CatalogShapeFixture["scope"]) =>
+  (base: CatalogShapeFixture): CatalogShapeFixture => ({
+    ...base,
+    scope,
+  });
+
+export const setTeams =
+  (teams: NonNullable<CatalogShapeFixture["teams"]>) =>
+  (base: CatalogShapeFixture): CatalogShapeFixture => ({
+    ...base,
+    teams,
+  });
+
+export const setTeamLevel =
+  (teamId: string, level: "use" | "write") =>
+  (base: CatalogShapeFixture): CatalogShapeFixture => ({
+    ...base,
+    teams: (base.teams ?? []).map((team) =>
+      team.id === teamId ? { ...team, level } : team,
+    ),
+  });
+
 type UserConfigField = {
   type?: string;
   title?: string;
@@ -245,6 +277,53 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
       "`description` is in METADATA_ONLY_CATALOG_FIELDS. No runtime field changed. Install keeps running on its current config.",
   },
   {
+    id: "labels-only-clean-local",
+    shape: "envprobeCleanLocal",
+    userAction: "Admin edits labels on a clean local catalog",
+    edit: setLabels([
+      { key: "team", value: "platform" },
+      { key: "env", value: "prod" },
+    ]),
+    expected: "skip",
+    sharedPredicate: "metadata-only-diff",
+    rationale:
+      "`labels` is in METADATA_ONLY_CATALOG_FIELDS. Labels live in a separate junction table (`mcp_catalog_labels`) and never get propagated to the pod spec, env vars, headers, image, command, or any other runtime concern. Pure organizational metadata — install keeps running on its current config.",
+  },
+  {
+    id: "team-level-only-change",
+    shape: "teamScopedLocal",
+    userAction: "Admin downgrades a team's access level from write to use",
+    edit: setTeamLevel("team-platform", "use"),
+    expected: "skip",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "A per-team access level governs who may discover, install, and modify the catalog item. It reaches no pod spec, env var, header, image, or command, so running installs are untouched. Not in METADATA_ONLY_CATALOG_FIELDS (hence a non-metadata diff), but excluded from the runtime projection — the forward-compatible gate skips it. Restarting pods when an admin adjusts sharing would be a severe over-reaction.",
+  },
+  {
+    id: "teams-only-change",
+    shape: "teamScopedLocal",
+    userAction: "Admin shares a team-scoped catalog with an additional team",
+    edit: setTeams([
+      { id: "team-platform", name: "platform", level: "write" },
+      { id: "team-data", name: "data", level: "use" },
+      { id: "team-ml", name: "ml", level: "use" },
+    ]),
+    expected: "skip",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "Team assignments live in the `mcp_catalog_team` junction table and never propagate to the pod spec. Adding an audience changes who can reach the item, not how any install runs.",
+  },
+  {
+    id: "scope-change-team-to-org",
+    shape: "teamScopedLocal",
+    userAction: "Admin widens a team-scoped catalog to the whole organization",
+    edit: setScope("org"),
+    expected: "skip",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "`scope` decides who the item is visible and installable to. It is excluded from the runtime projection, so widening the audience must not restart the pods of existing installs.",
+  },
+  {
     id: "desc-only-docker-only-streamable-http",
     shape: "hdrprobeDockerOnly",
     userAction:
@@ -272,7 +351,7 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
     id: "desc-only-bag-catalog-remote",
     shape: "test1RemoteOAuthBag",
     userAction:
-      "Admin edits description on a remote OAuth catalog with a populated client/preset secret bag",
+      "Admin edits description on a remote OAuth catalog with a populated client secret bag",
     edit: setDescription("rewritten description"),
     expected: "skip",
     sharedPredicate: "metadata-only-diff",
@@ -482,15 +561,26 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
   {
     id: "change-static-header-value",
     shape: "hdrprobeDockerOnly",
-    userAction:
-      "Admin edits a static header's value (no install prompt, no preset prompt)",
+    userAction: "Admin edits a static header's value (no install prompt)",
     edit: modifyUserConfigField("header_x_static_token", {
       default: "rotated-token-value",
     }),
     expected: "auto",
     sharedPredicate: "non-metadata-diff",
     rationale:
-      "For a static header-mapped userConfig entry (no install/preset prompt), the form writes the admin's value into `userConfig[field].default` — that IS the runtime header sent on the wire. Changing it means installs would keep sending the old value until pods restart. The auto path is correct (no re-prompt needed; admin already provided the value). Caught by `userConfigChangedBreakingly` on both sides. Distinct from prompted headers where `default` is just a placeholder.",
+      "For a static header-mapped userConfig entry (no install prompt), the form writes the admin's value into `userConfig[field].default` — that IS the runtime header sent on the wire. Changing it means installs would keep sending the old value until pods restart. The auto path is correct (no re-prompt needed; admin already provided the value). Caught by `userConfigChangedBreakingly` on both sides. Distinct from prompted headers where `default` is just a placeholder.",
+  },
+
+  {
+    id: "server-url-change-remote",
+    shape: "test1RemoteOAuthBag",
+    userAction: "Admin changes the server URL on a remote OAuth catalog",
+    edit: (base) => ({ ...base, serverUrl: "https://example.test/mcp/v2" }),
+    expected: "auto",
+    frontendBar: "skip",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "Auth is untouched, so existing installs stay valid — the backend applies the change and re-syncs tools in the background (auto). But a remote server has no pod: nothing restarts or goes offline, so the form saves without a confirm bar. A restart warning here would describe an event that never happens.",
   },
 
   // ── identity / nothing-changed sanity ─────────────────────────────

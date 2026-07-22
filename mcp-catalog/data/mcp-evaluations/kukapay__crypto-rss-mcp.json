@@ -1,0 +1,87 @@
+{
+  "name": "kukapay__crypto-rss-mcp",
+  "display_name": "crypto-rss-mcp",
+  "description": "An MCP server that aggregates real-time cryptocurrency news from multiple RSS feeds.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "crypto-rss-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Crypto RSS MCP\n\nAn MCP server that aggregates real-time cryptocurrency news from multiple RSS feeds, helping AI agents make informed decisions in a fast-paced market.\n\n<a href=\"https://glama.ai/mcp/servers/@kukapay/crypto-rss-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@kukapay/crypto-rss-mcp/badge\" alt=\"crypto-rss-mcp MCP server\" />\n</a>\n\n![GitHub License](https://img.shields.io/github/license/kukapay/crypto-trending-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n\n## Features\n\n- **Feed Retrieval**: Fetches latest entries from specified RSS feeds, formatting them as Markdown with plain-text summaries.\n- **Keyword Filtering**: Filters feeds by keyword in descriptions or categories.\n- **OPML Support**: Import feed list from a local OPML file provided by [Chainfeeds](https://raw.githubusercontent.com/chainfeeds/RSSAggregatorforWeb3/main/RAW.opml).\n- **LLM Integration**: Includes a prompt for analyzing feed content to summarize key points and identify cryptocurrency market trends.\n\n## Prerequisites\n\n- **Python**: Version 3.10.\n- **uv**: Package and dependency manager for Python projects.\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/crypto-rss-mcp.git\n   cd crypto-rss-mcp\n   ```\n\n2. **Install Dependencies**:\n   Add the required dependencies using `uv`:\n   ```bash\n   uv sync\n   ```\n\n## Usage\n\n### Running the Server\n\nStart the FastMCP server in development mode:\n```bash\nuv run mcp dev cli.py\n```\n\n### Installing to Claude Desktop\n\nInstall the server as a Claude Desktop application:\n```bash\nuv run mcp install cli.py --name \"Crypto RSS Reader\"\n```\n\nConfiguration file as a reference:\n\n```json\n{\n   \"mcpServers\": {\n       \"Crypto RSS Reader\": {\n           \"command\": \"uv\",\n           \"args\": [ \"--directory\", \"/path/to/crypto-rss-mcp\", \"run\", \"crypto-rss-mcp\" ] \n       }\n   }\n}\n```\n\n### Available Tools\n\n#### `get_crypto_rss_list`\n\nLists available RSS feeds from an OPML file, optionally filtered by keyword.\n\n**Parameters**:\n- `keyword` (str, optional): Filter feeds where the keyword appears in the description or category (case-insensitive).\n- `opml_file` (str, optional): Path to a local OPML file (defaults to `\"RAW.opml\"`).\n\n**Example**:\n> List available cryptocurrency RSS feeds\n\n**Output**:\n```\nAvailable Cryptocurrency RSS Feeds:\n\nCategory: 05. Research/VC\nURL: https://b10c.me/feed.xml\nDescription: 0xB10C's Blog: German Bitcoin freelance developer on 0xB10C's Blog\n\nCategory: 03. Media\nURL: https://bitcoinmagazine.com/feed\nDescription: Bitcoin Magazine\n...\n```\n\n#### `get_rss_feed`\n\nFetches and formats the latest 10 entries from a specified RSS feed as Markdown.\n\n**Parameters**:\n- `feed_url` (str): The URL of the RSS feed to fetch.\n\n**Example**:\n>  Read this RSS feed: https://blog.0xproject.com/feed\n\n**Output**:\n```\n# Feed: 0x Blog - Medium\n\n## Entry 1\n- **Title**: Introducing 0x Protocol v4\n- **Link**: [https://blog.0xproject.com/...](https://blog.0xproject.com/...)\n- **Published**: Mon, 28 Apr 2025 10:00:00 GMT\n- **Summary**: The 0x Protocol v4 brings improved efficiency...\n\n  ### Why This Matters\n  This update enhances...\n...\n```\n\n### Available Prompts\n\n#### `analyze_rss_feed`\n\nCreates a prompt for analyzing RSS feed content, summarizing key points and identifying cryptocurrency market trends.\n\n**Parameters**:\n- `url` (str): The RSS feed URL to analyze.\n\n**Example**:\n> Analyze the content of this RSS feed https://blog.0xproject.com/feed, summarize the key points, and identify any trends in the cryptocurrency market.\"\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "crypto-rss-mcp": {
+        "command": "uv",
+        "args": ["run", "mcp", "dev", "cli.py"],
+        "env": {}
+      },
+      "crypto-rss-mcp-configured": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/crypto-rss-mcp", "run", "crypto-rss-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-rss-mcp",
+    "url": "https://github.com/kukapay/crypto-rss-mcp",
+    "name": "crypto-rss-mcp",
+    "path": null,
+    "stars": 4,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.868Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "feedparser",
+      "importance": 7
+    },
+    {
+      "name": "html2text",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "opml",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": null
+}

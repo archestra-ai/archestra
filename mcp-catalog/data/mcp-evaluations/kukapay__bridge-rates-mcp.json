@@ -1,0 +1,74 @@
+{
+  "name": "kukapay__bridge-rates-mcp",
+  "display_name": "bridge-rates-mcp",
+  "description": "An MCP server that delivers real-time cross-chain bridge rates and optimal transfer routes to  onchain AI agents.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Bridge Rates MCP Server\n\nAn MCP server that delivers real-time cross-chain bridge rates and optimal transfer routes to support decision-making by onchain AI agents.\n\n[![Discord](https://img.shields.io/discord/1353556181251133481?cacheSeconds=3600)](https://discord.gg/aRnuu2eJ)\n![License](https://img.shields.io/badge/license-MIT-blue.svg)\n![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Get Bridge Rates**: Retrieve cross-chain bridge rates for token pairs, including USD values, gas costs, route providers and tags, presented in a Markdown table.\n- **List Supported Chains**: Fetch a sorted list of blockchain networks supported by LI.FI.\n- **List Supported Bridges**: Obtain a sorted list of bridges and exchanges available for cross-chain transfers.\n\n## Prerequisites\n\n- **Node.js**: Version 18 or higher.\n- **npm**: For dependency management.\n- **MCP Client**: An MCP-compatible client (e.g., Claude Desktop) to interact with the server.\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/bridge-rates-mcp.git\n   cd bridge-rates-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   npm install\n   ```\n\n3. **Integrate with an MCP Client**:\n   Configure your MCP client (e.g., Claude Desktop) to connect to the server. For Claude Desktop, edit the configuration file (e.g., `~/Library/Application Support/Claude/claude_desktop_config.json` on Mac or `%APPDATA%\\Claude\\claude_desktop_config.json` on Windows):\n   ```json\n   {\n     \"mcpServers\": {\n       \"bridge-rates\": {\n         \"command\": \"node\",\n         \"args\": [\"/absolute/path/to/bridge-rates-mcp/index.js\"]\n       }\n     }\n   }\n   ```\n   Restart Claude Desktop and verify the tools are available (look for the hammer icon).\n\n## Tools\n\n### 1. `getBridgeRates`\nFetches cross-chain bridge rates for a token pair between two chains, returning all available routes in a Markdown table.\n\n**Parameters**:\n- `fromChainId` (string, required): Source chain ID (e.g., \"1\" for Ethereum).\n- `toChainId` (string, required): Destination chain ID (e.g., \"10\" for Optimism).\n- `fromTokenAddress` (string, required): Source token contract address.\n- `toTokenAddress` (string, required): Destination token contract address.\n- `fromAmount` (string, optional): Amount to bridge in the smallest token unit (default: \"10000000\").\n\n**Example Prompt**:\n```\nWhat's the bridge rate from Arbitrum USDC to Optimism DAI?\n```\n\n**Example Output**:\n```\n| From Amount | From Amount USD | To Amount | To Amount USD | To Amount Min | Gas Cost USD | Providers | Tags                 |\n|-------------|-----------------|-----------|---------------|---------------|--------------|-----------|----------------------|\n| 10000000    | 10.00           | 9980000   | 9.98          | 9940000       | 0.2300       | hop       | RECOMMENDED,CHEAPEST |\n| 10000000    | 10.00           | 9975000   | 9.97          | 9935000       | 0.2500       | connext   | None                 |\n```\n\n### 2. `getSupportedChains`\nFetches a sorted list of chains supported by LI.FI for cross-chain bridging, presented in a Markdown table.\n\n**Parameters**: None.\n\n**Example Prompt**:\n```\nList all supported chains for bridging.\n```\n\n**Example Output**:\n```\n| Chain Type | ID | Key | Name          | Native Token |\n|------------|----|-----|---------------|--------------|\n| EVM        | 1  | eth | Ethereum      | ETH          |\n| EVM        | 10 | opt | Optimism      | ETH          |\n| EVM        | 137| pol | Polygon       | MATIC        |\n| SVM        | 101| sol | Solana        | SOL          |\n```\n\n### 3. `getSupportedBridges`\nFetches a sorted list of bridges and exchanges supported by LI.FI, presented in a Markdown table.\n\n**Parameters**: None.\n\n**Example Prompt**:\n```\nList all supported bridges for cross-chain bridging.\n```\n\n**Example Output**:\n```\n| Key           | Name                | Type     |\n|---------------|---------------------|----------|\n| across        | Across              | BRIDGE   |\n| connext       | Connext             | BRIDGE   |\n| hop           | Hop Protocol        | BRIDGE   |\n| sushiswap     | SushiSwap           | EXCHANGE |\n| uniswap       | Uniswap             | EXCHANGE |\n```\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Finance",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bridge-rates": {
+        "command": "node",
+        "args": ["/absolute/path/to/bridge-rates-mcp/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "bridge-rates-mcp",
+    "url": "https://github.com/kukapay/bridge-rates-mcp",
+    "name": "bridge-rates-mcp",
+    "path": null,
+    "stars": 4,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "8b75b09c48658baf30deae127e2bde4e07785c6b"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.172Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@lifi/sdk",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"bridge-rates-mcp\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@lifi/sdk\": \"^3.6.8\",\n    \"@modelcontextprotocol/sdk\": \"^1.10.2\"\n  }\n}\n"
+}

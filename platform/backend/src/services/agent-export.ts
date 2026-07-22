@@ -1,9 +1,10 @@
 import {
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { AgentModel } from "@/models";
 import type { Agent } from "@/types";
 import type { AgentExportPayload } from "@/types/agent-export";
 
@@ -48,8 +49,8 @@ export async function serializeAgentForExport(
       icon: agent.icon,
       scope: agent.scope,
       considerContextUntrusted: agent.considerContextUntrusted,
-      toolAssignmentMode: agent.toolAssignmentMode,
       toolExposureMode: agent.toolExposureMode,
+      accessAllTools: agent.accessAllTools,
       incomingEmailEnabled: agent.incomingEmailEnabled,
       incomingEmailSecurityMode: agent.incomingEmailSecurityMode,
       incomingEmailAllowedDomain: agent.incomingEmailAllowedDomain,
@@ -100,35 +101,37 @@ async function resolveToolReferences(
     ),
   ];
 
-  const catalogNameMap = new Map<string, string>();
-  if (catalogIds.length > 0) {
-    const catalogRows = await db
-      .select({
-        id: schema.internalMcpCatalogTable.id,
-        name: schema.internalMcpCatalogTable.name,
-      })
-      .from(schema.internalMcpCatalogTable)
-      .where(inArray(schema.internalMcpCatalogTable.id, catalogIds));
-
-    for (const row of catalogRows) {
-      catalogNameMap.set(row.id, row.name);
-    }
-  }
-
   // Batch-fetch credential resolution modes from agent_tools junction table
   const toolIds = nonDelegationTools.map((t) => t.id);
-  const junctionRows = await db
-    .select({
-      toolId: schema.agentToolsTable.toolId,
-      credentialResolutionMode: schema.agentToolsTable.credentialResolutionMode,
-    })
-    .from(schema.agentToolsTable)
-    .where(
-      and(
-        eq(schema.agentToolsTable.agentId, agent.id),
-        inArray(schema.agentToolsTable.toolId, toolIds),
+  const [catalogRows, junctionRows] = await Promise.all([
+    catalogIds.length > 0
+      ? db
+          .select({
+            id: schema.internalMcpCatalogTable.id,
+            name: schema.internalMcpCatalogTable.name,
+          })
+          .from(schema.internalMcpCatalogTable)
+          .where(inArray(schema.internalMcpCatalogTable.id, catalogIds))
+      : [],
+    db
+      .select({
+        toolId: schema.agentToolsTable.toolId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          inArray(schema.agentToolsTable.toolId, toolIds),
+        ),
       ),
-    );
+  ]);
+
+  const catalogNameMap = new Map<string, string>();
+  for (const row of catalogRows) {
+    catalogNameMap.set(row.id, row.name);
+  }
 
   const credentialModeMap = new Map<string, string>();
   for (const row of junctionRows) {
@@ -170,18 +173,10 @@ async function resolveDelegationReferences(
 
   if (targetAgentIds.length === 0) return [];
 
-  const agents = await db
-    .select({
-      id: schema.agentsTable.id,
-      name: schema.agentsTable.name,
-    })
-    .from(schema.agentsTable)
-    .where(
-      and(
-        inArray(schema.agentsTable.id, targetAgentIds),
-        eq(schema.agentsTable.organizationId, agent.organizationId),
-      ),
-    );
+  const agents = await AgentModel.findBasicByOrganizationIdAndIds({
+    organizationId: agent.organizationId,
+    agentIds: targetAgentIds,
+  });
 
   const nameMap = new Map(agents.map((a) => [a.id, a.name]));
 

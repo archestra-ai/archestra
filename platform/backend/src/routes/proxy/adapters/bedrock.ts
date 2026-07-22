@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  ArchestraInternalErrorCode,
+  BedrockErrorTypes,
+} from "@archestra/shared";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
-import { ArchestraInternalErrorCode, BedrockErrorTypes } from "@shared";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { encode as toonEncode } from "@toon-format/toon";
@@ -32,6 +35,10 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
+import {
+  type SamplingParam,
+  withSamplingParamFallback,
+} from "./sampling-param-fallback";
 
 // ToolCompressionStats imported from @/types
 
@@ -48,7 +55,14 @@ type BedrockCommandContext = {
     modelId: string;
     messages: BedrockMessages | undefined;
     system:
-      | Array<{ text?: string; guardContent?: unknown; cachePoint?: unknown }>
+      | Array<{
+          text?: string;
+          guardContent?: unknown;
+          cachePoint?: unknown;
+          // Passthrough for Bedrock-native system blocks we don't model
+          // explicitly (see SystemContentBlockSchema forward-compat fallback).
+          [key: string]: unknown;
+        }>
       | undefined;
     inferenceConfig: BedrockRequest["inferenceConfig"];
     toolConfig:
@@ -87,6 +101,9 @@ const eventStreamCodec = new EventStreamCodec(toUtf8, fromUtf8);
 const PADDING_ALPHABET =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const BEDROCK_MAX_TOOL_NAME_LENGTH = 64;
+// Bedrock constrains toolSpec names to ^[a-zA-Z0-9_-]{1,64}$. Anything outside
+// that set collapses to a single underscore.
+const BEDROCK_INVALID_TOOL_NAME_CHARS = /[^a-zA-Z0-9_-]+/g;
 const TOOL_NAME_HASH_LENGTH = 8;
 const TOOL_NAME_HASH_SEPARATOR = "_";
 const BEDROCK_DOCUMENT_NAME_FALLBACK = "Document";
@@ -149,12 +166,21 @@ type ToolNameMapping = {
 };
 
 /**
- * Nova models fail with "Model produced invalid sequence as part of ToolUse" when
- * tool names contain hyphens. Bedrock also rejects names longer than 64 chars.
- * Encode only the provider-facing names and keep mappings to restore originals.
+ * Bedrock rejects tool names that fall outside ^[a-zA-Z0-9_-]{1,64}$, and Nova
+ * models additionally fail with "Model produced invalid sequence as part of
+ * ToolUse" when tool names contain hyphens. Clients reach the proxy with names
+ * Bedrock will not accept (dots, spaces, non-ASCII), so sanitize the character
+ * set before the Nova and length rules.
+ *
+ * Encode only the provider-facing names and keep mappings to restore originals,
+ * so the client still sees the name it sent. Sanitizing can map two distinct
+ * originals onto one encoded name; `getUniqueProviderToolName` disambiguates.
  */
 function encodeToolName(name: string, options: { isNova: boolean }): string {
-  const normalizedName = options.isNova ? name.replaceAll("-", "_") : name;
+  const sanitizedName = name.replace(BEDROCK_INVALID_TOOL_NAME_CHARS, "_");
+  const normalizedName = options.isNova
+    ? sanitizedName.replaceAll("-", "_")
+    : sanitizedName;
   return truncateToolName(normalizedName, name);
 }
 
@@ -837,6 +863,26 @@ class BedrockRequestAdapter
 // RESPONSE ADAPTER
 // =============================================================================
 
+/**
+ * Cache-creation tokens written at the 1-hour TTL, from Bedrock's per-TTL
+ * `cacheDetails` breakdown (the remainder of cacheWriteInputTokens is 5m). Used
+ * to bill the 1h write portion at the higher rate.
+ */
+function bedrockCacheWrite1hTokens(
+  usage:
+    | {
+        cacheDetails?: ({ ttl?: string; inputTokens?: number } | null)[] | null;
+      }
+    | null
+    | undefined,
+): number {
+  return (usage?.cacheDetails ?? []).reduce(
+    (sum, detail) =>
+      detail?.ttl === "1h" ? sum + (detail.inputTokens ?? 0) : sum,
+    0,
+  );
+}
+
 class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
   readonly provider = "bedrock" as const;
   private response: BedrockResponse;
@@ -894,6 +940,9 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
     return {
       inputTokens: this.response.usage?.inputTokens ?? 0,
       outputTokens: this.response.usage?.outputTokens ?? 0,
+      cacheReadTokens: this.response.usage?.cacheReadInputTokens ?? 0,
+      cacheWriteTokens: this.response.usage?.cacheWriteInputTokens ?? 0,
+      cacheWrite1hTokens: bedrockCacheWrite1hTokens(this.response.usage),
     };
   }
 
@@ -941,6 +990,12 @@ class BedrockStreamAdapter
   readonly state: StreamAccumulatorState;
   private currentToolCallIndex = -1;
   private toolNameMapping: ToolNameMapping = createEmptyToolNameMapping();
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal. On a blocked tool-call turn the upstream messageStop was buffered
+  // with the (discarded) tool events, so formatEndSSE must synthesize a terminal
+  // messageStop (end_turn); toProviderResponse persists the refusal, not the
+  // blocked tool calls.
+  private replacedText: string | null = null;
 
   // Bedrock-specific extended state
   private bedrockState: {
@@ -1078,7 +1133,13 @@ class BedrockStreamAdapter
       // Don't set isFinal here - metadata chunk comes after messageStop
     } else if ("metadata" in chunk && chunk.metadata) {
       const metadata = chunk.metadata as {
-        usage?: { inputTokens?: number; outputTokens?: number };
+        usage?: {
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadInputTokens?: number;
+          cacheWriteInputTokens?: number;
+          cacheDetails?: ({ ttl?: string; inputTokens?: number } | null)[];
+        };
         metrics?: { latencyMs?: number };
         trace?: unknown;
       };
@@ -1086,6 +1147,9 @@ class BedrockStreamAdapter
         this.state.usage = {
           inputTokens: metadata.usage.inputTokens ?? 0,
           outputTokens: metadata.usage.outputTokens ?? 0,
+          cacheReadTokens: metadata.usage.cacheReadInputTokens ?? 0,
+          cacheWriteTokens: metadata.usage.cacheWriteInputTokens ?? 0,
+          cacheWrite1hTokens: bedrockCacheWrite1hTokens(metadata.usage),
         };
       }
       if (metadata.metrics?.latencyMs !== undefined) {
@@ -1266,6 +1330,7 @@ class BedrockStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): Uint8Array[] {
+    this.replacedText = text;
     // AWS Event Stream binary format
     return [
       encodeEventStreamMessage("contentBlockStart", {
@@ -1282,9 +1347,26 @@ class BedrockStreamAdapter
     ];
   }
 
-  formatEndSSE(): string {
-    // All events (messageStop, metadata) are passed through in processChunk
-    // Nothing additional needed here
+  formatEndSSE(): string | Uint8Array {
+    // On the normal path, messageStop and metadata are passed through in
+    // processChunk. On a refusal they were buffered with the blocked tool
+    // events and discarded, so synthesize the terminal here or the client
+    // never sees a stream end.
+    if (this.replacedText !== null) {
+      const messageStop = encodeEventStreamMessage("messageStop", {
+        stopReason: "end_turn",
+      });
+      const metadata = encodeEventStreamMessage("metadata", {
+        usage: {
+          inputTokens: this.state.usage?.inputTokens ?? 0,
+          outputTokens: this.state.usage?.outputTokens ?? 0,
+        },
+      });
+      const terminal = new Uint8Array(messageStop.length + metadata.length);
+      terminal.set(messageStop, 0);
+      terminal.set(metadata, messageStop.length);
+      return terminal;
+    }
     return "";
   }
 
@@ -1299,6 +1381,28 @@ class BedrockStreamAdapter
           };
         }
     > = [];
+
+    if (this.replacedText !== null) {
+      return {
+        $metadata: { requestId: this.state.responseId },
+        output: {
+          message: {
+            role: "assistant",
+            content: [{ text: this.replacedText }],
+          },
+        },
+        stopReason: "end_turn",
+        usage: {
+          inputTokens: this.state.usage?.inputTokens ?? 0,
+          outputTokens: this.state.usage?.outputTokens ?? 0,
+        },
+        metrics:
+          this.bedrockState.latencyMs !== null
+            ? { latencyMs: this.bedrockState.latencyMs }
+            : undefined,
+        trace: this.bedrockState.trace ?? undefined,
+      };
+    }
 
     // Add text block if we have text
     if (this.state.text) {
@@ -1525,7 +1629,7 @@ function buildBedrockCommandContext(
         isNova: shouldEncodeHyphens,
       }),
       system: request.system?.map((s) => {
-        if ("text" in s) return { text: s.text };
+        if ("text" in s && typeof s.text === "string") return { text: s.text };
         return s;
       }),
       inferenceConfig: request.inferenceConfig,
@@ -1573,6 +1677,41 @@ export function getCommandInput(request: BedrockRequest): BedrockCommandInput {
 }
 
 // =============================================================================
+// HELPER: Sampling-parameter fallback
+// =============================================================================
+
+// Maps the canonical sampling-param names to Bedrock's `inferenceConfig` keys
+// (Bedrock uses camelCase `topP`).
+const BEDROCK_INFERENCE_KEY: Record<SamplingParam, "temperature" | "topP"> = {
+  temperature: "temperature",
+  top_p: "topP",
+};
+
+/**
+ * Return a copy of the command input with the rejected sampling params removed
+ * from `inferenceConfig`, dropping `inferenceConfig` entirely once it's empty.
+ * Returns null when none were set. Passed to the shared
+ * {@link withSamplingParamFallback}.
+ */
+function stripBedrockSamplingParams(
+  commandInput: BedrockCommandInput,
+  rejected: SamplingParam[],
+): BedrockCommandInput | null {
+  const inferenceConfig = commandInput.inferenceConfig;
+  if (!inferenceConfig) return null;
+  const keys = rejected
+    .map((p) => BEDROCK_INFERENCE_KEY[p])
+    .filter((k) => inferenceConfig[k] !== undefined);
+  if (keys.length === 0) return null;
+  const next = { ...inferenceConfig };
+  for (const k of keys) delete next[k];
+  return {
+    ...commandInput,
+    inferenceConfig: Object.keys(next).length > 0 ? next : undefined,
+  };
+}
+
+// =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
 
@@ -1585,6 +1724,10 @@ export const bedrockAdapterFactory: LLMProvider<
 > = {
   provider: "bedrock",
   interactionType: "bedrock:converse",
+  // Bedrock's custom SigV4 client (BedrockClient) can't self-instrument the
+  // request-duration metric the way fetch/Gemini transports do, so the LLM
+  // proxy handler records `llm_request_duration_seconds` on its behalf.
+  recordRequestDurationInHandler: true,
 
   createRequestAdapter(
     request: BedrockRequest,
@@ -1676,11 +1819,14 @@ export const bedrockAdapterFactory: LLMProvider<
     const { commandInput, toolNameMapping } =
       buildBedrockCommandContext(request);
 
-    // Use fetch-based client.converse()
-    const response = await bedrockClient.converse(
-      request.modelId,
-      commandInput,
-    );
+    // Use fetch-based client.converse(), retrying without sampling params the
+    // model rejects (e.g. "`temperature` is deprecated for this model.").
+    const response = await withSamplingParamFallback({
+      input: commandInput,
+      strip: stripBedrockSamplingParams,
+      logContext: { provider: "bedrock", modelId: commandInput.modelId },
+      run: (input) => bedrockClient.converse(request.modelId, input),
+    });
 
     // Convert response to our internal format with decoded tool names
     const outputContent: Array<
@@ -1725,6 +1871,11 @@ export const bedrockAdapterFactory: LLMProvider<
       usage: {
         inputTokens: response.usage?.inputTokens ?? 0,
         outputTokens: response.usage?.outputTokens ?? 0,
+        // Preserve cache usage so getUsage() can report it on the non-streaming
+        // path; cacheDetails carries the per-TTL write split for 1h cost.
+        cacheReadInputTokens: response.usage?.cacheReadInputTokens,
+        cacheWriteInputTokens: response.usage?.cacheWriteInputTokens,
+        cacheDetails: response.usage?.cacheDetails,
       },
       metrics: response.metrics,
       additionalModelResponseFields: response.additionalModelResponseFields as
@@ -1741,8 +1892,15 @@ export const bedrockAdapterFactory: LLMProvider<
     const bedrockClient = client as BedrockClient;
     const { commandInput } = buildBedrockCommandContext(request);
 
-    // Use fetch-based client.converseStream() - returns events with __rawBytes already set
-    return bedrockClient.converseStream(request.modelId, commandInput);
+    // Use fetch-based client.converseStream() - returns events with __rawBytes
+    // already set. Retry without sampling params the model rejects (e.g.
+    // "`temperature` is deprecated for this model.").
+    return withSamplingParamFallback({
+      input: commandInput,
+      strip: stripBedrockSamplingParams,
+      logContext: { provider: "bedrock", modelId: commandInput.modelId },
+      run: (input) => bedrockClient.converseStream(request.modelId, input),
+    });
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

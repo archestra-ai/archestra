@@ -1,10 +1,12 @@
-import type * as k8s from "@kubernetes/client-node";
 import {
   type EnvironmentVariableSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
-} from "@shared";
+} from "@archestra/shared";
+import type * as k8s from "@kubernetes/client-node";
 import * as yaml from "js-yaml";
 import type { z } from "zod";
+import config from "@/config";
+import { getMcpImagePullPolicy } from "./image-pull-policy";
 
 // Helper to create placeholder strings without triggering noTemplateCurlyInString lint rule
 const placeholder = (type: string, key: string) => `\${${type}.${key}}`;
@@ -79,6 +81,7 @@ export function generateDeploymentYamlTemplate(
   context: DeploymentYamlContext,
 ): string {
   const {
+    dockerImage,
     environment = [],
     transportType = "stdio",
     httpPort = 8080,
@@ -118,12 +121,22 @@ export function generateDeploymentYamlTemplate(
   const containerSpec: Record<string, unknown> = {
     name: "mcp-server",
     image: placeholder("archestra", "docker_image"),
+    imagePullPolicy: getMcpImagePullPolicy(dockerImage),
     // command and args come from basic config
     ...(envSection.length > 0 ? { env: envSection } : {}),
+    // Ephemeral-storage governance keeps the scheduler disk-aware and
+    // prevents DiskPressure eviction cascades on over-packed nodes.
     resources: {
       requests: {
-        memory: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
-        cpu: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
+        memory: config.orchestrator.mcpServerResources.requests.memory,
+        cpu: config.orchestrator.mcpServerResources.requests.cpu,
+        "ephemeral-storage":
+          config.orchestrator.mcpServerResources.requests.ephemeralStorage,
+      },
+      limits: {
+        memory: config.orchestrator.mcpServerResources.limits.memory,
+        "ephemeral-storage":
+          config.orchestrator.mcpServerResources.limits.ephemeralStorage,
       },
     },
   };
@@ -395,7 +408,9 @@ export function resolvePlaceholders(
  *   - `app: "mcp-server"`
  *   - `mcp-server-id: <serverId>`
  *   - `mcp-server-name: <serverName>`
- * - `spec.selector.matchLabels` - Always set to system labels (required for pod selection)
+ * - `spec.selector.matchLabels` - Always set to the id-only selector labels
+ *   (`app` + `mcp-server-id`); selectors are immutable, so the mutable
+ *   `mcp-server-name` label must never be part of pod identity
  * - `spec.template.metadata.labels` - System labels merged in (required for selector matching)
  *
  * ## User-Customizable Fields
@@ -411,6 +426,7 @@ export function customYamlToDeployment(
     serverId: string;
     serverName: string;
     labels: Record<string, string>;
+    selectorLabels: Record<string, string>;
   },
 ): k8s.V1Deployment | null {
   try {
@@ -443,9 +459,10 @@ export function customYamlToDeployment(
       ...systemValues.labels,
     };
 
-    // Set selector matchLabels (always system-managed)
+    // Set selector matchLabels (always system-managed; id-only — the mutable
+    // mcp-server-name label must not be part of the immutable selector)
     parsed.spec.selector = {
-      matchLabels: systemValues.labels,
+      matchLabels: systemValues.selectorLabels,
     };
 
     // Merge template labels

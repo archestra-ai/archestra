@@ -1,0 +1,19 @@
+artifact_key = "artifact"
+
+[[stages]]
+text = """Can you estimate π numerically and put together an animated GIF that shows the estimate converging as the computation proceeds? I'd like 60 frames, one per step, 400 by 400 pixels, with the running π estimate shown on each frame. Install whatever packages you need. Save the GIF and tell me where it is."""
+
+[[stages]]
+text = """Now invert the colors of every frame of that GIF, put the inverted GIF into a single .zip archive, and export it with the download_file tool so I can retrieve it. Then call submit_result with the exported zip's filename, e.g. result = {"artifact": "pi.zip"}."""
+
+[result_schema]
+type = "object"
+required = ["artifact"]
+additionalProperties = false
+
+  [result_schema.properties.artifact]
+  type = "string"
+  minLength = 1
+
+[verifier]
+deps = ["pillow==11.3.0"]

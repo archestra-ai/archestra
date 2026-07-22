@@ -24,8 +24,83 @@ describe("parseSkillManifest", () => {
     expect(parsed.description).toBe("Extract text from PDF files.");
     expect(parsed.license).toBe("MIT");
     expect(parsed.compatibility).toBeNull();
+    expect(parsed.allowedTools).toBeNull();
+    expect(parsed.agentName).toBeNull();
     expect(parsed.content).toBe("# PDF Processing\nUse pdftotext.");
     expect(parsed.metadata).toEqual({});
+  });
+
+  test("parses the `agent` field into agentName", () => {
+    const raw = [
+      "---",
+      "name: deep-research",
+      "description: Multi-step research.",
+      "agent: Research Bot",
+      "---",
+      "",
+      "Research deeply.",
+    ].join("\n");
+
+    expect(parseSkillManifest(raw).agentName).toBe("Research Bot");
+  });
+
+  test("treats a blank `agent` field as absent", () => {
+    const raw = [
+      "---",
+      "name: deep-research",
+      "description: Multi-step research.",
+      'agent: "  "',
+      "---",
+      "",
+      "Research deeply.",
+    ].join("\n");
+
+    expect(parseSkillManifest(raw).agentName).toBeNull();
+  });
+
+  test("parses a manifest that starts with a UTF-8 BOM", () => {
+    const raw = `﻿${[
+      "---",
+      "name: bom-skill",
+      "description: Has a byte order mark.",
+      "---",
+      "",
+      "# Body",
+    ].join("\n")}`;
+
+    const parsed = parseSkillManifest(raw);
+
+    expect(parsed.name).toBe("bom-skill");
+    expect(parsed.description).toBe("Has a byte order mark.");
+    expect(parsed.content).toBe("# Body");
+  });
+
+  test("normalizes allowed-tools from a string or a YAML sequence", () => {
+    const fromString = parseSkillManifest(
+      [
+        "---",
+        "name: git-helper",
+        "description: Runs git.",
+        "allowed-tools: Bash(git:*)  Read",
+        "---",
+        "Body.",
+      ].join("\n"),
+    );
+    expect(fromString.allowedTools).toBe("Bash(git:*) Read");
+
+    const fromList = parseSkillManifest(
+      [
+        "---",
+        "name: git-helper",
+        "description: Runs git.",
+        "allowed-tools:",
+        "  - slack__send",
+        "  - jira__create",
+        "---",
+        "Body.",
+      ].join("\n"),
+    );
+    expect(fromList.allowedTools).toBe("slack__send jira__create");
   });
 
   test("coerces the metadata map to string values", () => {
@@ -56,6 +131,18 @@ describe("parseSkillManifest", () => {
     ].join("\n");
 
     expect(parseSkillManifest(raw).compatibility).toBe("requires python3");
+  });
+
+  test("reads the templated flag from frontmatter, defaulting to false", () => {
+    const base = ["name: greeter", "description: Greets the user."];
+    const make = (extra: string[]) =>
+      ["---", ...base, ...extra, "---", "Hello {{user.name}}."].join("\n");
+
+    expect(parseSkillManifest(make([])).templated).toBe(false);
+    expect(parseSkillManifest(make(["templated: true"])).templated).toBe(true);
+    expect(parseSkillManifest(make(["templated: false"])).templated).toBe(
+      false,
+    );
   });
 
   test("throws when frontmatter is missing", () => {

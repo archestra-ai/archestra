@@ -1,11 +1,11 @@
-import { expect, type Page } from "@playwright/test";
 import {
   E2eTestId,
   getAgentToolCatalogPillTestId,
   getAssignmentComboboxDisabledOptionTestId,
   getAssignmentComboboxOptionTestId,
   getAssignmentComboboxSearchInputTestId,
-} from "@shared";
+} from "@archestra/shared";
+import { expect, type Page } from "@playwright/test";
 import { goToPage } from "../fixtures";
 
 type AssignmentTarget = {
@@ -44,6 +44,47 @@ export async function saveOpenProfileDialog(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
+/**
+ * Choosing a personal-scope connection prompts a confirmation ("Use this
+ * connection for everyone?") because every caller of the tool would then connect
+ * as that one owner. Confirm it so the choice applies; non-personal connections
+ * don't prompt. Returns whether a confirmation was handled.
+ */
+async function confirmPersonalCredentialPinIfPrompted(
+  page: Page,
+): Promise<boolean> {
+  const confirmButton = page
+    .getByRole("button", { name: /^Use th(is|ese) connections?$/ })
+    .first();
+  if (await confirmButton.isVisible({ timeout: 1500 }).catch(() => false)) {
+    // Force past the actionability wait: the dialog's entrance animation keeps
+    // the button from being "stable" long enough for a normal click to land.
+    await confirmButton.click({ force: true });
+    await expect(confirmButton).toBeHidden({ timeout: 5000 });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Select a static credential in the open assignment dialog: click the option,
+ * confirm the personal-pin dialog if it appears, otherwise close the still-open
+ * dropdown. Applying the pin (confirm) leaves the edit dialog open for saving,
+ * so a trailing Escape only runs when no confirmation was shown.
+ */
+export async function selectCredentialOption(
+  page: Page,
+  credentialOption: ReturnType<Page["getByRole"]>,
+): Promise<void> {
+  // DOM-detach guard: the option list re-renders as the dropdown opens.
+  await credentialOption.click({ force: true });
+  const confirmed = await confirmPersonalCredentialPinIfPrompted(page);
+  if (!confirmed) {
+    await page.keyboard.press("Escape");
+  }
+  await page.waitForTimeout(200);
+}
+
 export async function assignCatalogCredentialToGateway(params: {
   page: Page;
   catalogItemName: string;
@@ -55,11 +96,11 @@ export async function assignCatalogCredentialToGateway(params: {
     catalogItemName: params.catalogItemName,
     gatewayName: params.gatewayName,
   });
-  await params.page
-    .getByRole("option", { name: params.credentialName })
-    .click();
-  await params.page.keyboard.press("Escape");
-  await params.page.waitForTimeout(200);
+  const credentialOption = params.page.getByRole("option", {
+    name: params.credentialName,
+  });
+  await expect(credentialOption).toBeVisible({ timeout: 10_000 });
+  await selectCredentialOption(params.page, credentialOption);
   await saveOpenProfileDialog(params.page);
 }
 
@@ -82,15 +123,13 @@ async function openCatalogToolAssignment({
   const dialog = page.getByRole("dialog", { name: dialogTitle });
   await expect(dialog).toBeVisible({ timeout: 15_000 });
 
-  const capabilitiesAnchor = dialog.getByTestId(
-    E2eTestId.AgentCapabilitiesSection,
-  );
-  await capabilitiesAnchor.scrollIntoViewIfNeeded();
+  const toolsSectionAnchor = dialog.getByTestId(E2eTestId.AgentToolsSection);
+  await toolsSectionAnchor.scrollIntoViewIfNeeded();
 
-  const capabilitiesHeading = dialog.getByRole("heading", {
-    name: "Capabilities",
+  const toolsSectionHeading = dialog.getByRole("heading", {
+    name: "Tools & Knowledge Sources",
   });
-  await expect(capabilitiesHeading).toBeVisible({ timeout: 10_000 });
+  await expect(toolsSectionHeading).toBeVisible({ timeout: 10_000 });
 
   const addButton = dialog.getByTestId(E2eTestId.AgentToolsAddButton);
   await expect(addButton).toBeVisible({ timeout: 10_000 });
@@ -169,11 +208,16 @@ async function openCatalogToolAssignment({
 
   if (catalogAssignmentState === "enabled") {
     await enabledCatalogItem.click();
-    await page.keyboard.press("Escape");
+    // Close the combobox only if it stayed open — pressing Escape
+    // unconditionally can close the outer Edit dialog when the combobox has
+    // already collapsed on click, which leaves the assignment in "missing".
+    if (await searchInput.isVisible().catch(() => false)) {
+      await page.keyboard.press("Escape");
+    }
   }
 
   try {
-    await expect(visibleTokenSelect).toBeVisible({ timeout: 5_000 });
+    await expect(visibleTokenSelect).toBeVisible({ timeout: 15_000 });
   } catch {
     await expect
       .poll(
@@ -189,7 +233,7 @@ async function openCatalogToolAssignment({
           }
           return "missing";
         },
-        { timeout: 10_000, intervals: [500, 1000, 2000] },
+        { timeout: 20_000, intervals: [500, 1000, 2000, 4000] },
       )
       .not.toBe("missing");
 
@@ -199,10 +243,13 @@ async function openCatalogToolAssignment({
       await pillButtonByRole.click({ force: true });
     }
 
-    await expect(visibleTokenSelect).toBeVisible({ timeout: 10_000 });
+    await expect(visibleTokenSelect).toBeVisible({ timeout: 15_000 });
   }
 
-  await visibleTokenSelect.click();
+  // Surrounding capability rows re-render briefly when the catalog selection
+  // commits — observed "element was detached / not stable" failures here.
+  // Force the click since visibility is already asserted above.
+  await visibleTokenSelect.click({ force: true });
 }
 
 function escapeRegExp(value: string): string {

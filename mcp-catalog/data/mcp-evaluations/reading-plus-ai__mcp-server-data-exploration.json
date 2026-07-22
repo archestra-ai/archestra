@@ -1,0 +1,95 @@
+{
+  "name": "reading-plus-ai__mcp-server-data-exploration",
+  "display_name": "mcp-server-data-exploration",
+  "description": "MCP server from reading-plus-ai/mcp-server-data-exploration",
+  "author": {
+    "name": "reading-plus-ai"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-ds"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Server for Data Exploration\n\nMCP Server is a versatile tool designed for interactive data exploration.\n\nYour personal Data Scientist assistant, turning complex datasets into clear, actionable insights.\n\n<a href=\"https://glama.ai/mcp/servers/hwm8j9c422\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/hwm8j9c422/badge\" alt=\"mcp-server-data-exploration MCP server\" /></a>\n\n## 🚀 Try it Out\n\n1. **Download Claude Desktop**\n   - Get it [here](https://claude.ai/download)\n\n2. **Install and Set Up**\n   - On macOS, run the following command in your terminal:\n   ```bash\n   python setup.py\n   ```\n\n3. **Load Templates and Tools**\n   - Once the server is running, wait for the prompt template and tools to load in Claude Desktop.\n\n4. **Start Exploring**\n   - Select the explore-data prompt template from MCP\n   - Begin your conversation by providing the required inputs:\n     - `csv_path`: Local path to the CSV file\n     - `topic`: The topic of exploration (e.g., \"Weather patterns in New York\" or \"Housing prices in California\")\n\n## Examples\n\nThese are examples of how you can use MCP Server to explore data without any human intervention.\n\n### Case 1: California Real Estate Listing Prices\n- Kaggle Dataset: [USA Real Estate Dataset](https://www.kaggle.com/datasets/ahmedshahriarsakib/usa-real-estate-dataset)\n- Size: 2,226,382 entries (178.9 MB)\n- Topic: Housing price trends in California\n\n[![Watch the video](https://img.youtube.com/vi/RQZbeuaH9Ys/hqdefault.jpg)](https://www.youtube.com/watch?v=RQZbeuaH9Ys)\n- [Data Exploration Summary](https://claude.site/artifacts/058a1593-7a14-40df-bf09-28b8c4531137)\n\n### Case 2: Weather in London\n- Kaggle Dataset: [2M+ Daily Weather History UK](https://www.kaggle.com/datasets/jakewright/2m-daily-weather-history-uk/data)\n- Size: 2,836,186 entries (169.3 MB)\n- Topic: Weather in London\n- Report: [View Report](https://claude.site/artifacts/601ea9c1-a00e-472e-9271-3efafb8edede)\n- Graphs:\n  - [London Temperature Trends](https://claude.site/artifacts/9a25bc1e-d0cf-498a-833c-5179547ee268)\n<img width=\"1622\" alt=\"Screenshot 2024-12-09 at 12 48 56 AM\" src=\"https://github.com/user-attachments/assets/9e70fe97-8af7-4221-b1e7-00197c88bb47\">\n\n  - [Temperature-Humidity Relationship by Season](https://claude.site/artifacts/32a3371c-698d-48e3-b94e-f7e88ce8093d)\n<img width=\"1623\" alt=\"Screenshot 2024-12-09 at 12 47 54 AM\" src=\"https://github.com/user-attachments/assets/f4ac60a8-30e3-4b10-b296-ba412c2922fa\">\n\n  - [Wind Direction Pattern by Season](https://claude.site/artifacts/32a3371c-698d-48e3-b94e-f7e88ce8093d)\n<img width=\"1622\" alt=\"Screenshot 2024-12-09 at 12 47 00 AM\" src=\"https://github.com/user-attachments/assets/2db01054-f948-4d2e-ba39-8de8fa59f83d\">\n\n## 📦 Components\n\n### Prompts\n- **explore-data**: Tailored for data exploration tasks\n\n### Tools\n1. **load-csv**\n   - Function: Loads a CSV file into a DataFrame\n   - Arguments:\n     - `csv_path` (string, required): Path to the CSV file\n     - `df_name` (string, optional): Name for the DataFrame. Defaults to df_1, df_2, etc., if not provided\n\n2. **run-script**\n   - Function: Executes a Python script\n   - Arguments:\n     - `script` (string, required): The script to execute\n\n## ⚙️ Modifying the Server\n\n### Claude Desktop Configurations\n- macOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n- Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n### Development (Unpublished Servers)\n```json\n\"mcpServers\": {\n  \"mcp-server-ds\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"--directory\",\n      \"/Users/username/src/mcp-server-ds\",\n      \"run\",\n      \"mcp-server-ds\"\n    ]\n  }\n}\n```\n\n### Published Servers\n```json\n\"mcpServers\": {\n  \"mcp-server-ds\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"mcp-server-ds\"\n    ]\n  }\n}\n```\n\n## 🛠️ Development\n\n### Building and Publishing\n1. **Sync Dependencies**\n   ```bash\n   uv sync\n   ```\n\n2. **Build Distributions**\n   ```bash\n   uv build\n   ```\n   Generates source and wheel distributions in the dist/ directory.\n\n3. **Publish to PyPI**\n   ```bash\n   uv publish\n   ```\n\n## 🤝 Contributing\n\nContributions are welcome! Whether you're fixing bugs, adding features, or improving documentation, your help makes this project better.\n\n### Reporting Issues\nIf you encounter bugs or have suggestions, open an issue in the issues section. Include:\n- Steps to reproduce (if applicable)\n- Expected vs. actual behavior\n- Screenshots or error logs (if relevant)\n\n## 📜 License\n\nThis project is licensed under the MIT License.\nSee the LICENSE file for details.\n\n## 💬 Get in Touch\n\nQuestions? Feedback? Open an issue or reach out to the maintainers. Let's make this project awesome together!\n\n## About\n\nThis is an open source project run by [ReadingPlus.AI LLC](https://readingplus.ai). and open to contributions from the entire community.\n",
+  "category": "Data Science",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-ds-dev": {
+        "command": "uv",
+        "args": ["--directory", "/Users/username/src/mcp-server-ds", "run", "mcp-server-ds"],
+        "env": {}
+      },
+      "mcp-server-ds-published": {
+        "command": "uvx",
+        "args": ["mcp-server-ds"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "reading-plus-ai",
+    "repo": "mcp-server-data-exploration",
+    "url": "https://github.com/reading-plus-ai/mcp-server-data-exploration",
+    "name": "reading-plus-ai__mcp-server-data-exploration",
+    "path": null,
+    "stars": 475,
+    "contributors": 2,
+    "issues": 7,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "0cd67660c2591f05fe8dfe5bf93c9d5b66c5b95d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:06.209Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "numpy",
+      "importance": 8
+    },
+    {
+      "name": "pandas",
+      "importance": 9
+    },
+    {
+      "name": "scikit-learn",
+      "importance": 8
+    },
+    {
+      "name": "scipy",
+      "importance": 7
+    },
+    {
+      "name": "statsmodels",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-ds\"\nversion = \"0.1.6\"\ndescription = \"A MCP server project\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n \"mcp>=1.0.0\",\n \"numpy>=2.1.3\",\n \"pandas>=2.2.3\",\n \"scikit-learn>=1.5.2\",\n \"scipy>=1.14.1\",\n \"statsmodels>=0.14.4\",\n]\n[[project.authors]]\nname = \"Xing Xing\"\nemail = \"xingxingumich@gmail.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-server-ds = \"mcp_server_ds:main\"\n\n\n=== setup.py ===\n#!/usr/bin/env python3\n\"\"\"Setup script for MCP server data science environment.\"\"\"\n\nimport json\nimport subprocess\nimport sys\nfrom pathlib import Path\nimport re\nimport time\ndef run_command(cmd, check=True):\n    \"\"\"Run a shell command and return output.\"\"\"\n    try:\n        result = subprocess.run(cmd, shell=True, check=check, capture_output=True, text=True)\n        return result.stdout.strip()\n    except subprocess.CalledProcessError as e:\n        print(f\"Error running command '{cmd}': {e}\")\n        return None\n\ndef ask_permission(question):\n    \"\"\"Ask user for permission.\"\"\"\n    while True:\n        response = input(f\"{question} (y/n): \").lower()\n        if response in ['y', 'yes']:\n            return True\n        if response in ['n', 'no']:\n            return False\n        print(\"Please answer 'y' or 'n'\")\n\ndef check_uv():\n    \"\"\"Check if uv is installed and install if needed.\"\"\"\n    if not run_command(\"which uv\", check=False):\n        if ask_permission(\"uv is not installed. Would you like to install it?\"):\n            print(\"Installing uv...\")\n            run_command(\"curl -LsSf https://astral.sh/uv/install.sh | sh\")\n            print(\"uv installed successfully\")\n        else:\n            sys.exit(\"uv is required to continue\")\n\ndef setup_venv():\n    \"\"\"Create virtual environment if it doesn't exist.\"\"\"\n    if not Path(\".venv\").exists():\n        if ask_permission(\"Virtual environment not found. Create one?\"):\n            print(\"Creating virtual environment...\")\n            run_command(\"uv venv\")\n            print(\"Virtual environment created successfully\")\n        else:\n            sys.exit(\"Virtual environment is required to continue\")\n\ndef sync_dependencies():\n    \"\"\"Sync project dependencies.\"\"\"\n    print(\"Syncing dependencies...\")\n    run_command(\"uv sync\")\n    print(\"Dependencies synced successfully\")\n\ndef check_claude_desktop():\n    \"\"\"Check if Claude desktop app is installed.\"\"\"\n    app_path = \"/Applications/Claude.app\"\n    if not Path(app_path).exists():\n        print(\"Claude desktop app not found.\")\n        print(\"Please download and install from: https://claude.ai/download\")\n        if not ask_permission(\"Continue after installing Claude?\"):\n            sys.exit(\"Claude desktop app is required to continue\")\n\ndef setup_claude_config():\n    \"\"\"Setup Claude desktop config file.\"\"\"\n    config_path = Path(\"~/Library/Application Support/Claude/claude_desktop_config.json\").expanduser()\n    config_dir = config_path.parent\n    \n    if not config_dir.exists():\n        config_dir.mkdir(parents=True)\n    \n    config = {\"mcpServers\": {}} if not config_path.exists() else json.loads(config_path.read_text())\n    return config_path, config\n\ndef build_package():\n    \"\"\"Build package and get wheel path.\"\"\"\n    print(\"Building package...\")\n    try:\n        # Use Popen for real-time and complete output capture\n        process = subprocess.Popen(\n            \"uv build\",\n            shell=True,\n            stdout=subprocess.PIPE,\n            stderr=subprocess.PIPE,\n            text=True,\n        )\n        stdout, stderr = process.communicate()  # Capture output\n        output = stdout + stderr  # Combine both streams\n        print(f\"Raw output: {output}\")  # Debug: check output\n    except Exception as e:\n        sys.exit(f\"Error running build: {str(e)}\")\n    \n    # Check if the command was successful\n    if process.returncode != 0:\n        sys.exit(f\"Build failed with error code {process.returncode}\")\n\n    # Extract wheel file path from the combined output\n    match = re.findall(r'dist/[^\\s]+\\.whl', output.strip())\n    whl_file = match[-1] if match else None\n    if not whl_file:\n        sys.exit(\"Failed to find wheel file in build output\")\n    \n    # Convert to absolute path\n    path = Path(whl_file).absolute()\n    return str(path)\n\ndef update_config(config_path, config, wheel_path):\n    \"\"\"Update Claude config with MCP server settings.\"\"\"\n    config.setdefault(\"mcpServers\", {})\n    config[\"mcpServers\"][\"mcp-server-ds\"] = {\n        \"command\": \"uvx\",\n        \"args\": [\"--from\", wheel_path, \"mcp-server-ds\"]\n    }\n    \n    config_path.write_text(json.dumps(config, indent=2))\n    print(f\"Updated config at {config_path}\")\n\ndef restart_claude():\n    \"\"\"Restart Claude desktop app if running.\"\"\"\n    if run_command(\"pgrep -x Claude\", check=False):\n        if ask_permission(\"Claude is running. Restart it?\"):\n            print(\"Restarting Claude...\")\n            run_command(\"pkill -x Claude\")\n            time.sleep(2)\n            run_command(\"open -a Claude\")\n            print(\"Claude restarted successfully\")\n    else:\n        print(\"Starting Claude...\")\n        run_command(\"open -a Claude\")\n\ndef main():\n    \"\"\"Main setup function.\"\"\"\n    print(\"Starting setup...\")\n    check_uv()\n    setup_venv()\n    sync_dependencies()\n    check_claude_desktop()\n    config_path, config = setup_claude_config()\n    wheel_path = build_package()\n    update_config(config_path, config, wheel_path)\n    restart_claude()\n    print(\"Setup completed successfully!\")\n\nif __name__ == \"__main__\":\n    main()\n"
+}

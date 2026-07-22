@@ -36,13 +36,14 @@ outputs:
   has_flaky_tests:
     description: "Whether flaky tests were detected"
     value: ${{ steps.check-flaky.outputs.has_flaky_tests }}
-  blob_report_path:
-    description: "Path to the blob report directory"
-    value: ${{ steps.paths.outputs.blob_report_path }}
 
 runs:
   using: composite
   steps:
+    # NOTE: setup-archestra-platform pre-pulls this same image in the background
+    # (deriving the tag from the same package.json field) so the pull overlaps
+    # environment setup; the docker run below then finds it cached or attaches
+    # to the in-flight pull.
     - name: Resolve Playwright version
       id: playwright
       shell: bash
@@ -57,16 +58,6 @@ runs:
           echo "EOF"
         } >> "$GITHUB_ENV"
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-    - name: Set output paths
-      id: paths
-      shell: bash
-      env:
-        WORKING_DIRECTORY: ${{ inputs.working_directory }}
-        E2E_TESTS_PATH: ${{ inputs.e2e_tests_path }}
-      run: |
-        echo "blob_report_path=${WORKING_DIRECTORY}/${E2E_TESTS_PATH}/blob-report/" >> $GITHUB_OUTPUT
-        echo "output_file=${WORKING_DIRECTORY}/playwright-output.txt" >> $GITHUB_OUTPUT
 
     - name: Run E2E tests
       id: e2e
@@ -114,7 +105,10 @@ runs:
           KUBE_ARGS+=("-e" "KUBECONFIG=/root/.kube/config")
         fi
 
-        docker run --rm \
+        # Bound the Playwright run itself so a hung test can't hold the runner
+        # until the job-level timeout. `timeout` exits 124 on expiry, which
+        # pipefail turns into a step failure handled by the caller.
+        timeout "${TIMEOUT_MINUTES}m" docker run --rm \
           --network host \
           --ipc=host \
           -v "$GITHUB_WORKSPACE:/work" \
@@ -124,7 +118,7 @@ runs:
           "${KUBE_ARGS[@]}" \
           "${ENV_ARGS[@]}" \
           "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-          /bin/bash -c "corepack enable && corepack prepare pnpm@10.24.0 --activate && pnpm test:e2e -- --project=${PROJECTS} ${SHARD} ${EXTRA_ARGS}" \
+          /bin/bash -c "corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm test:e2e -- --project=${PROJECTS} ${SHARD} ${EXTRA_ARGS}" \
           2>&1 | tee "${WORKING_DIRECTORY}/playwright-output.txt"
 
     - name: Check for flaky tests

@@ -1,13 +1,13 @@
 "use client";
 
-import type { PopoverContentProps } from "@radix-ui/react-popover";
 import {
   compareModelsForDisplay,
   isOpenRouterLatestAlias,
   OPENROUTER_AUTO_MODEL_ID,
   providerDisplayNames,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
+import type { PopoverContentProps } from "@radix-ui/react-popover";
 import { Layers, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -35,7 +35,11 @@ const PROVIDER_LOGO_NAME: Record<SupportedProvider, string> = {
   zhipuai: "zhipuai",
   deepseek: "deepseek",
   minimax: "minimax",
+  kimi: "moonshotai",
   azure: "azure",
+  "github-copilot": "github-copilot",
+  "microsoft-365-copilot": "microsoft-365-copilot",
+  archestra: "archestra",
 };
 
 export type LlmModelSelectOption = {
@@ -54,8 +58,6 @@ export type LlmModelSelectOption = {
   badge?: ReactNode;
   /** Provider charges nothing for this model — rendered with a green "Free" badge. */
   isFree?: boolean;
-  /** Provider's lowest-latency model — rendered with a "Fastest" badge. */
-  isFastest?: boolean;
   /** Provider's highest-quality ("recommended") model — sorted near the top. */
   isBest?: boolean;
 };
@@ -65,7 +67,7 @@ function modelIdOf(option: LlmModelSelectOption): string {
   return option.modelId ?? option.model;
 }
 
-/** Renders the Free / Latest / Fastest / custom badges shared across the option views. */
+/** Renders the Free / Latest / custom badges shared across the option views. */
 function ModelBadges({ option }: { option: LlmModelSelectOption }) {
   const id = modelIdOf(option);
   // the badge tells users an alias selection auto-updates to the newest model.
@@ -84,11 +86,6 @@ function ModelBadges({ option }: { option: LlmModelSelectOption }) {
       {isLatestAlias && (
         <Badge variant="outline" className="shrink-0 text-xs">
           Latest
-        </Badge>
-      )}
-      {option.isFastest && (
-        <Badge variant="outline" className="shrink-0 text-xs">
-          Fastest
         </Badge>
       )}
       {option.badge && (

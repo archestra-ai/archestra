@@ -1,0 +1,116 @@
+{
+  "name": "imprvhub__mcp-claude-spotify",
+  "display_name": "mcp-claude-spotify",
+  "description": "An integration that allows Claude Desktop to interact with Spotify using the Model Context Protocol (MCP).",
+  "author": {
+    "name": "imprvhub"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "SPOTIFY_CLIENT_ID": "${user_config.spotify_client_id}",
+      "SPOTIFY_CLIENT_SECRET": "${user_config.spotify_client_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "spotify_client_id": {
+      "type": "string",
+      "title": "Spotify Client ID",
+      "description": "Your Spotify API Client ID, obtained from the Spotify Developer Dashboard.",
+      "sensitive": true,
+      "required": true
+    },
+    "spotify_client_secret": {
+      "type": "string",
+      "title": "Spotify Client Secret",
+      "description": "Your Spotify API Client Secret, obtained from the Spotify Developer Dashboard.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "\n\n# MCP Claude Spotify\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/imprvhub/mcp-claude-spotify)](https://archestra.ai/mcp-catalog/imprvhub__mcp-claude-spotify)\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/99039f16-4abd-4af8-8873-ae2844e7dd65)\n[![smithery badge](https://smithery.ai/badge/@imprvhub/mcp-claude-spotify)](https://smithery.ai/server/@imprvhub/mcp-claude-spotify)\n\n<table style=\"border-collapse: collapse; width: 100%;\">\n<tr>\n<td style=\"padding: 15px; vertical-align: middle; border: none; text-align: center;\">\n  <a href=\"https://mseep.ai/app/imprvhub-mcp-claude-spotify\">\n    <img src=\"https://mseep.net/pr/imprvhub-mcp-claude-spotify-badge.png\" alt=\"MseeP.ai Security Assessment Badge\" />\n  </a>\n</td>  \n<td style=\"width: 50%; padding: 15px; vertical-align: middle; border: none;\">An integration that allows Claude Desktop to interact with Spotify using the Model Context Protocol (MCP).</td>\n<td style=\"width: 50%; padding: 0; vertical-align: middle; border: none;\"><a href=\"https://glama.ai/mcp/servers/@imprvhub/mcp-claude-spotify\"><img src=\"https://glama.ai/mcp/servers/@imprvhub/mcp-claude-spotify/badge\" alt=\"Claude Spotify MCP server\" style=\"max-width: 100%;\" /></a></td>\n</tr>\n</table>\n\n## Features\n\n- Spotify authentication\n- Search for tracks, albums, artists, and playlists\n- Playback control (play, pause, next, previous)\n- Create and manage playlists\n- Get personalized recommendations\n- Access user's top played tracks over different time periods\n\n## Demo\n\n<p>\n  <a href=\"https://www.youtube.com/watch?v=WNw5H9epZfc\">\n    <img src=\"public/assets/preview.png\" width=\"600\" alt=\"Claude Spotify Integration Demo\">\n  </a>\n</p>\n\n## Requirements\n\n- Node.js 16 or higher\n- Spotify account\n- Claude Desktop\n- Spotify API credentials (Client ID and Client Secret)\n\n## Installation\n\n### Installing via Smithery\n\nTo install MCP Claude Spotify for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@imprvhub/mcp-claude-spotify):\n\n```bash\nnpx -y @smithery/cli install @imprvhub/mcp-claude-spotify --client claude\n```\n\n### Installing Manually\n1. Clone or download this repository:\n```bash\ngit clone https://github.com/imprvhub/mcp-claude-spotify\ncd claude-spotify-mcp\n```\n\n2. Install dependencies:\n```bash\nnpm install\n```\n\n3. Build the project (if you want to modify the source code):\n```bash\nnpm run build\n```\n\nThe repository already includes pre-built files in the `build` directory, so you can skip step 3 if you don't plan to modify the source code.\n\n## Setting up Spotify Credentials\n\nTo use this MCP, you need to obtain Spotify API credentials:\n\n1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)\n2. Log in with your Spotify account\n3. Click \"Create App\"\n4. Fill in your app information:\n   - App name: \"MCP Claude Spotify\" (or whatever you prefer)\n   - App description: \"Spotify integration for Claude Desktop\"\n   - Website: You can leave this blank or put any URL\n   - Redirect URI: **Important** - Add `http://127.0.0.1:8888/callback`\n5. Accept the terms and conditions and click \"Create\"\n6. In your app dashboard, you'll see the \"Client ID\"\n7. Click \"Show Client Secret\" to reveal your \"Client Secret\"\n\nSave these credentials as you'll need them for configuration.\n\n## Running the MCP Server\n\nThere are two ways to run the MCP server:\n\n### Option 1: Running manually (recommended for first-time setup and troubleshooting)\n\n1. Open a terminal or command prompt\n2. Navigate to the project directory\n3. Run the server directly:\n\n```bash\nnode build/index.js\n```\n\nKeep this terminal window open while using Claude Desktop. The server will run until you close the terminal.\n\n### Option 2: Auto-starting with Claude Desktop (recommended for regular use)\n\nThe Claude Desktop can automatically start the MCP server when needed. To set this up:\n\n#### Configuration\n\nThe Claude Desktop configuration file is located at:\n\n- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\nEdit this file to add the Spotify MCP configuration. If the file doesn't exist, create it:\n\n```json\n{\n  \"mcpServers\": {\n    \"spotify\": {\n      \"command\": \"node\",\n      \"args\": [\"ABSOLUTE_PATH_TO_DIRECTORY/mcp-claude-spotify/build/index.js\"],\n      \"env\": {\n        \"SPOTIFY_CLIENT_ID\": \"your_client_id_here\",\n        \"SPOTIFY_CLIENT_SECRET\": \"your_client_secret_here\"\n      }\n    }\n  }\n}\n```\n\n**Important**: Replace:\n- `ABSOLUTE_PATH_TO_DIRECTORY` with the **complete absolute path** where you installed the MCP\n  - macOS/Linux example: `/Users/username/mcp-claude-spotify`\n  - Windows example: `C:\\\\Users\\\\username\\\\mcp-claude-spotify`\n- `your_client_id_here` with the Client ID you obtained from Spotify\n- `your_client_secret_here` with the Client Secret you obtained from Spotify\n\nIf you already have other MCPs configured, simply add the \"spotify\" section inside the \"mcpServers\" object.\n\n#### Setting up auto-start scripts (Optional)\n\nFor a more reliable experience, you can set up auto-start scripts:\n\n<details>\n<summary><b>Windows auto-start instructions</b></summary>\n\n1. Create a file named `start-spotify-mcp.bat` in the project directory with the following content:\n```\n@echo off\ncd %~dp0\nnode build/index.js\n```\n\n2. Create a shortcut to this BAT file\n3. Press `Win+R`, type `shell:startup` and press Enter\n4. Move the shortcut to this folder to have it start with Windows\n</details>\n\n<details>\n<summary><b>macOS auto-start instructions</b></summary>\n\n1. Create a file named `com.spotify.mcp.plist` in `~/Library/LaunchAgents/` with the following content:\n```xml\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n    <key>Label</key>\n    <string>com.spotify.mcp</string>\n    <key>ProgramArguments</key>\n    <array>\n        <string>/usr/local/bin/node</string>\n        <string>ABSOLUTE_PATH_TO_DIRECTORY/mcp-claude-spotify/build/index.js</string>\n    </array>\n    <key>RunAtLoad</key>\n    <true/>\n    <key>KeepAlive</key>\n    <true/>\n    <key>StandardErrorPath</key>\n    <string>/tmp/spotify-mcp.err</string>\n    <key>StandardOutPath</key>\n    <string>/tmp/spotify-mcp.out</string>\n    <key>EnvironmentVariables</key>\n    <dict>\n        <key>SPOTIFY_CLIENT_ID</key>\n        <string>your_client_id_here</string>\n        <key>SPOTIFY_CLIENT_SECRET</key>\n        <string>your_client_secret_here</string>\n    </dict>\n</dict>\n</plist>\n```\n\n2. Replace the path and credentials with your actual values\n3. Load the agent with: `launchctl load ~/Library/LaunchAgents/com.spotify.mcp.plist`\n</details>\n\n<details>\n<summary><b>Linux auto-start instructions</b></summary>\n\n1. Create a file named `spotify-mcp.service` in `~/.config/systemd/user/` (create the directory if it doesn't exist):\n```\n[Unit]\nDescription=Spotify MCP Server for Claude Desktop\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/usr/bin/node ABSOLUTE_PATH_TO_DIRECTORY/mcp-claude-spotify/build/index.js\nRestart=on-failure\nEnvironment=\"SPOTIFY_CLIENT_ID=your_client_id_here\"\nEnvironment=\"SPOTIFY_CLIENT_SECRET=your_client_secret_here\"\n\n[Install]\nWantedBy=default.target\n```\n\n2. Replace the path and credentials with your actual values\n3. Enable and start the service:\n```bash\nsystemctl --user enable spotify-mcp.service\nsystemctl --user start spotify-mcp.service\n```\n\n4. Check status with:\n```bash\nsystemctl --user status spotify-mcp.service\n```\n</details>\n\n## Usage\n\n1. Restart Claude Desktop after modifying the configuration\n2. In Claude, use the `auth-spotify` command to start the authentication process\n3. A browser window will open for you to authorize the application\n4. Log in with your Spotify account and authorize the application\n5. **Important**: After successful authentication, restart Claude Desktop to properly initialize the MCP's tool registry and WebSocket session token cache\n6. After restarting, all Spotify MCP tools will be properly registered and available for use\n\nThe MCP server runs as a child process managed by Claude Desktop. When Claude is running, it automatically starts and manages the Node.js server process based on the configuration in `claude_desktop_config.json`.\n\n## Available Tools\n\n### auth-spotify\nInitiates the Spotify authentication process.\n\n### search-spotify\nSearches for tracks, albums, artists, or playlists.\n\n**Parameters:**\n- `query`: Search text\n- `type`: Type of search (track, album, artist, playlist)\n- `limit`: Number of results (1-50)\n\n### play-track\nPlays a specific track.\n\n**Parameters:**\n- `trackId`: Spotify track ID\n- `deviceId`: (Optional) Spotify device ID to play on\n\n### get-current-playback\nGets information about the current playback.\n\n### pause-playback\nPauses the playback.\n\n### next-track\nSkips to the next track.\n\n### previous-track\nReturns to the previous track.\n\n### get-user-playlists\nGets the user's playlists.\n\n### create-playlist\nCreates a new playlist.\n\n**Parameters:**\n- `name`: Playlist name\n- `description`: (Optional) Description\n- `public`: (Optional) Whether it's public or private\n\n### add-tracks-to-playlist\nAdds tracks to a playlist.\n\n**Parameters:**\n- `playlistId`: Playlist ID\n- `trackIds`: Array of track IDs\n\n### get-recommendations\nGets recommendations based on seeds.\n\n**Parameters:**\n- `seedTracks`: (Optional) Array of track IDs\n- `seedArtists`: (Optional) Array of artist IDs\n- `seedGenres`: (Optional) Array of genres\n- `limit`: (Optional) Number of recommendations (1-100)\n\n### get-top-tracks\nGets the user's most played tracks over a specified time range.\n\n**Parameters:**\n- `limit`: (Optional) Number of tracks to return (1-50, default: 20)\n- `offset`: (Optional) Index of the first track to return (default: 0)\n- `time_range`: (Optional) Time frame for calculating affinity:\n  - `short_term`: Approximately last 4 weeks\n  - `medium_term`: Approximately last 6 months (default)\n  - `long_term`: Several years of data\n\n## Troubleshooting\n\n### \"Server disconnected\" error\nIf you see the error \"MCP Spotify: Server disconnected\" in Claude Desktop:\n\n1. **Verify the server is running**:\n   - Open a terminal and manually run `node build/index.js` from the project directory\n   - If the server starts successfully, use Claude while keeping this terminal open\n\n2. **Check your configuration**:\n   - Ensure the absolute path in `claude_desktop_config.json` is correct for your system\n   - Double-check that you've used double backslashes (`\\\\`) for Windows paths\n   - Verify you're using the complete path from the root of your filesystem\n\n3. **Try the auto-start option**:\n   - Set up the auto-start script for your operating system as described in the \"Setting up auto-start scripts\" section\n   - This ensures the server is always running when you need it\n\n### Browser doesn't open automatically\nIf the browser doesn't open automatically during authentication, manually visit:\n`http://127.0.0.1:8888/login`\n\n### Authentication error\nMake sure you've correctly configured the redirect URI in your Spotify Developer dashboard:\n`http://127.0.0.1:8888/callback`\n\n### Server startup error\nVerify that:\n- Environment variables are correctly configured in your `claude_desktop_config.json` or launch script\n- Node.js is installed and compatible (v16+)\n- Required ports (8888) are available and not blocked by firewall\n- You have permission to run the script in the specified location\n\n### Tools not appearing in Claude\nIf the Spotify tools don't appear in Claude after authentication:\n- Make sure you've restarted Claude Desktop after successful authentication\n- Check the Claude Desktop logs for any MCP communication errors\n- Ensure the MCP server process is running (run it manually to confirm)\n- Verify that the MCP server is correctly registered in the Claude Desktop MCP registry\n\n### Checking if the server is running\nTo check if the server is running:\n\n- **Windows**: Open Task Manager, go to the \"Details\" tab, and look for \"node.exe\"\n- **macOS/Linux**: Open Terminal and run `ps aux | grep node`\n\nIf you don't see the server running, start it manually or use the auto-start method.\n\n## Testing\n\nThis project includes automated tests to ensure code quality and functionality. The test suite uses Jest with TypeScript support and covers:\n\n- Zod schema validation - verifies all input schemas correctly validate data\n- Spotify API interactions - tests API request handling and error handling\n- MCP server functionality - ensures proper registration and execution of tools\n\n### Running Tests\n\nFirst, make sure all development dependencies are installed:\n\n```bash\nnpm install\n```\n\nTo run all tests:\n\n```bash\nnpm test\n```\n\nTo run a specific test file:\n\n```bash\nnpm test -- --testMatch=\"**/tests/schemas.test.ts\"\n```\n\nIf you encounter issues with ESM modules, make sure you're using Node.js v16 or higher and that the NODE_OPTIONS environment variable includes the `--experimental-vm-modules` flag as configured in the package.json.\n\n### Test Structure\n\n- `tests/schemas.test.ts`: Tests for input validation schemas\n- `tests/spotify-api.test.ts`: Tests for Spotify API interactions\n- `tests/server.test.ts`: Tests for MCP server functionality\n\n### Adding New Tests\n\nWhen adding new functionality, please include corresponding tests:\n\n1. For new schemas, add validation tests in `schemas.test.ts`\n2. For Spotify API functions, add tests in `spotify-api.test.ts` \n3. For MCP tools, add tests in `server.test.ts`\n\nAll tests should be written using Jest and the ESM module format with TypeScript.\n\n## Security Notes\n\n- Never share your Client ID and Client Secret\n- Access token is now stored in the user's home directory at `~/.spotify-mcp/tokens.json` to enable persistence between sessions and multiple instances\n- No user data is stored on disk\n\n### Revoking Application Access\n\nFor security reasons, you may want to revoke the application's access to your Spotify account when:\n- You no longer use this integration\n- You suspect unauthorized access\n- You're troubleshooting authentication issues\n\nTo revoke access:\n\n1. Go to your [Spotify Account page](https://www.spotify.com/account)\n2. Navigate to \"Apps\" in the menu\n3. Find \"MCP Claude Spotify\" (or the name you chose for your app)\n4. Click \"REMOVE ACCESS\"\n\nThis immediately invalidates all access and refresh tokens. The next time you use the `auth-spotify` command, you'll need to authorize the application again.\n\n## Contributing\n\nContributions are welcome! Here are some guidelines to follow:\n\n### Development Workflow\n\n1. Fork the repository\n2. Create a feature branch (`git checkout -b feature/amazing-feature`)\n3. Make your changes\n4. Run tests to ensure they pass (`npm test`)\n5. Commit your changes (`git commit -m 'Add some amazing feature'`)\n6. Push to the branch (`git push origin feature/amazing-feature`)\n7. Open a Pull Request\n\n### Code Style Guidelines\n\nThis project follows these coding standards:\n\n- Use TypeScript with strict type checking\n- Follow ESM module format\n- Use 2 spaces for indentation\n- Use camelCase for variables and functions\n- Use PascalCase for classes and interfaces\n- Document functions with JSDoc comments\n- Keep line length under 100 characters\n\n### Project Structure\n\nThe project follows this structure:\n\n```\nmcp-claude-spotify/\n├── src/               # Source code\n├── build/             # Compiled JavaScript\n├── tests/             # Test files\n├── public/            # Public assets\n└── ...\n```\n\n### Pull Request Process\n\n1. Ensure your code follows the style guidelines\n2. Update documentation if needed\n3. Add tests for new functionality\n4. Make sure all tests pass\n5. Your PR will be reviewed by maintainers\n\n## Related Links\n\n- [Model Context Protocol](https://modelcontextprotocol.io/)\n- [Spotify Web API Documentation](https://developer.spotify.com/documentation/web-api)\n- [Claude Desktop](https://claude.ai/download)\n- [MCP Series](https://github.com/mcp-series)\n\n## License\n\nThis project is licensed under the Mozilla Public License 2.0 - see the [LICENSE](https://github.com/imprvhub/mcp-claude-spotify/blob/main/LICENSE) file for details.\n",
+  "category": "Media",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "imprvhub-mcp-claude-spotify-manual": {
+        "command": "node",
+        "args": ["build/index.js"],
+        "env": {}
+      },
+      "imprvhub-mcp-claude-spotify-configured": {
+        "command": "node",
+        "args": ["ABSOLUTE_PATH_TO_DIRECTORY/mcp-claude-spotify/build/index.js"],
+        "env": {
+          "SPOTIFY_CLIENT_ID": "your_client_id_here",
+          "SPOTIFY_CLIENT_SECRET": "your_client_secret_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "imprvhub",
+    "repo": "mcp-claude-spotify",
+    "url": "https://github.com/imprvhub/mcp-claude-spotify",
+    "name": "mcp-claude-spotify",
+    "path": null,
+    "stars": 15,
+    "contributors": 3,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "87f84c909ef222d57225521cb38b62d8c83e662e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:54.375Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "open",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"mcp-claude-spotify\",\n    \"version\": \"0.1.1\",\n    \"description\": \"Model Context Protocol server for Spotify using Claude Desktop\",\n    \"main\": \"index.js\",\n    \"type\": \"module\",\n    \"scripts\": {\n        \"start\": \"node build/index.js\",\n        \"dev\": \"tsc --watch && node build/index.js\",\n        \"build\": \"tsc\",\n        \"lint\": \"eslint . --ext .ts\",\n        \"test\": \"NODE_OPTIONS=--experimental-vm-modules jest --testEnvironment=node\",\n        \"test:coverage\": \"NODE_OPTIONS=--experimental-vm-modules jest --testEnvironment=node --coverage\"\n    },\n    \"dependencies\": {\n        \"@modelcontextprotocol/sdk\": \"^1.10.1\",\n        \"axios\": \"^1.8.4\",\n        \"dotenv\": \"^16.5.0\",\n        \"express\": \"^4.21.2\",\n        \"open\": \"^9.1.0\",\n        \"zod\": \"^3.24.3\"\n    },\n    \"devDependencies\": {\n        \"@types/express\": \"^5.0.1\",\n        \"@types/jest\": \"^29.5.14\",\n        \"@types/node\": \"^22.14.1\",\n        \"jest\": \"^29.7.0\",\n        \"ts-jest\": \"^29.3.2\",\n        \"typescript\": \"^5.2.2\"\n    }\n}\n"
+}

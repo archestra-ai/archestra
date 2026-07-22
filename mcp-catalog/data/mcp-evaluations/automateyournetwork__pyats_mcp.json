@@ -1,0 +1,141 @@
+{
+  "name": "automateyournetwork__pyats_mcp",
+  "display_name": "pyATS_MCP",
+  "description": "An MCP Server for pyATS (experimental)",
+  "author": {
+    "name": "automateyournetwork"
+  },
+  "server": {
+    "command": "python3",
+    "args": ["-u", "${__dirname}/pyats_mcp_server.py"],
+    "env": {
+      "PYATS_TESTBED_PATH": "${user_config.pyats_testbed_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "pyats_testbed_path": {
+      "type": "file",
+      "title": "pyATS Testbed Path",
+      "description": "Absolute path to the pyATS testbed YAML file.",
+      "required": true
+    }
+  },
+  "readme": "# pyATS MCP Server\n\nThis project implements a Model Context Protocol (MCP) Server that wraps Cisco pyATS and Genie functionality. It enables structured, model-driven interaction with network devices over STDIO using the JSON-RPC 2.0 protocol.\n\n🚨 This server does not use HTTP or SSE. All communication is done via STDIN/STDOUT (standard input/output), making it ideal for secure, embedded, containerized, or LangGraph-based tool integrations.\n\n🔧 What It Does\n\nConnects to Cisco IOS/NX-OS devices defined in a pyATS testbed\n\nSupports safe execution of validated CLI commands (show, ping)\n\nAllows controlled configuration changes\n\nReturns structured (parsed) or raw output\n\nExposes a set of well-defined tools via tools/discover and tools/call\n\nOperates entirely via STDIO for minimal surface area and maximum portability\n\n🚀 Usage\n\n1. Set your testbed path\n\n```bash\n\nexport PYATS_TESTBED_PATH=/absolute/path/to/testbed.yaml\n\n```\n\n2. Run the server\n\nContinuous STDIO Mode (default)\n\n```bash\n\npython3 pyats_mcp_server.py\n\n```\n\nLaunches a long-running process that reads JSON-RPC requests from stdin and writes responses to stdout.\n\nOne-Shot Mode\n\n``` bash\n\necho '{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/discover\"}' | python3 pyats_mcp_server.py --oneshot\n\n```\nProcesses a single JSON-RPC request and exits.\n\n📦 Docker Support\n\nBuild the container\n\n```bash\n\ndocker build -t pyats-mcp-server .\n\n```\n\nRun the container (STDIO Mode)\n```bash\ndocker run -i --rm \\\n  -e PYATS_TESTBED_PATH=/app/testbed.yaml \\\n  -v /your/testbed/folder:/app \\\n  pyats-mcp-server\n```\n\n🧠 Available MCP Tools\n\nTool\tDescription\n\nrun_show_command\tExecutes show commands safely with optional parsing\n\nrun_ping_command\tExecutes ping tests and returns parsed or raw results\n\napply_configuration\tApplies safe configuration commands (multi-line supported)\n\nlearn_config\tFetches running config (show run brief)\n\nlearn_logging\tFetches system logs (show logging last 250)\n\nAll inputs are validated using Pydantic schemas for safety and consistency.\n\n🤖 LangGraph Integration\n\nAdd the MCP server as a tool node in your LangGraph pipeline like so:\n\n```python\n\n(\"pyats-mcp\", [\"python3\", \"pyats_mcp_server.py\", \"--oneshot\"], \"tools/discover\", \"tools/call\")\n\n```\n\nName: pyats-mcp\n\nCommand: python3 pyats_mcp_server.py --oneshot\n\nDiscover Method: tools/discover\n\nCall Method: tools/call\n\nSTDIO-based communication ensures tight integration with LangGraph’s tool invocation model without opening HTTP ports or exposing REST endpoints.\n\n📜 Example Requests\n\nDiscover Tools\n\n```json\n\n{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/discover\"\n}\n\n```\n\nRun Show Command\n\n``` json\n\n{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"run_show_command\",\n    \"arguments\": {\n      \"device_name\": \"router1\",\n      \"command\": \"show ip interface brief\"\n    }\n  }\n}\n``` \n🔒 Security Features\n\nInput validation using Pydantic\n\nBlocks unsafe commands like erase, reload, write\n\nPrevents pipe/redirect abuse (e.g., | include, >, copy, etc.)\n\nGracefully handles parsing fallbacks and errors\n\n📁 Project Structure\n\n```graphql\n\n.\n├── pyats_mcp_server.py     # MCP server with JSON-RPC and pyATS integration\n├── Dockerfile              # Docker container definition\n├── testbed.yaml            # pyATS testbed (user-provided)\n└── README.md               # This file\n\n```\n\n📥 MCP Server Config Example (pyATS MCP via Docker)\n\nTo run the pyATS MCP Server as a container with STDIO integration, configure your mcpServers like this:\n\n``` json\n{\n  \"mcpServers\": {\n    \"pyats\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"PYATS_TESTBED_PATH\",\n        \"-v\",\n        \"/absolute/path/to/testbed/folder:/app\",\n        \"pyats-mcp-server\"\n      ],\n      \"env\": {\n        \"PYATS_TESTBED_PATH\": \"/app/testbed.yaml\"\n      }\n    }\n  }\n}\n\n```\n\n```json\n{\n  \"servers\": { \n    \"pyats\": {\n      \"type\": \"stdio\",\n      \"command\": \"python3\",\n      \"args\": [\n        \"-u\",\n        \"/Users/johncapobianco/pyATS_MCP/pyats_mcp_server.py\"\n      ],\n      \"env\": {\n        \"PYATS_TESTBED_PATH\": \"/Users/johncapobianco/pyATS_MCP/testbed.yaml\"\n      }\n  }\n}\n```\n🧾 Explanation:\ncommand: Uses Docker to launch the containerized pyATS MCP server\n\nargs:\n\n-i: Keeps STDIN open for communication\n\n--rm: Automatically removes the container after execution\n\n-e: Injects the environment variable PYATS_TESTBED_PATH\n\n-v: Mounts your local testbed directory into the container\n\npyats-mcp-server: Name of the Docker image\n\nenv:\n\nSets the path to the testbed file inside the container (/app/testbed.yaml)\n\n\n✍️ Author\n\nJohn Capobianco\n\nProduct Marketing Evangelist, Selector AI\n\nAuthor, Automate Your Network\n\nLet me know if you’d like to add:\n\nA sample LangGraph graph config\n\nCompanion client script\n\nCI/CD integration (e.g., GitHub Actions)\n\nHappy to help!\n\n# The testbed.yaml file works with the Cisco DevNet Cisco Modeling Labs (CML) Sandbox! \n",
+  "category": "Development",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pyats-mcp-server-stdio": {
+        "command": "python3",
+        "args": ["pyats_mcp_server.py"],
+        "env": {
+          "PYATS_TESTBED_PATH": "/absolute/path/to/testbed.yaml"
+        }
+      },
+      "pyats-mcp-server-oneshot": {
+        "command": "python3",
+        "args": ["pyats_mcp_server.py", "--oneshot"],
+        "env": {
+          "PYATS_TESTBED_PATH": "/absolute/path/to/testbed.yaml"
+        }
+      },
+      "pyats-mcp-server-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "PYATS_TESTBED_PATH=/app/testbed.yaml",
+          "-v",
+          "/your/testbed/folder:/app",
+          "pyats-mcp-server"
+        ],
+        "env": {
+          "PYATS_TESTBED_PATH": "/app/testbed.yaml"
+        },
+        "docker_image": "pyats-mcp-server"
+      },
+      "pyats-mcp-server-docker-configured": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "PYATS_TESTBED_PATH",
+          "-v",
+          "/absolute/path/to/testbed/folder:/app",
+          "pyats-mcp-server"
+        ],
+        "env": {
+          "PYATS_TESTBED_PATH": "/app/testbed.yaml"
+        },
+        "docker_image": "pyats-mcp-server"
+      },
+      "pyats-mcp-server-python-configured": {
+        "command": "python3",
+        "args": ["-u", "/Users/johncapobianco/pyATS_MCP/pyats_mcp_server.py"],
+        "env": {
+          "PYATS_TESTBED_PATH": "/Users/johncapobianco/pyATS_MCP/testbed.yaml"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "automateyournetwork",
+    "repo": "pyATS_MCP",
+    "url": "https://github.com/automateyournetwork/pyATS_MCP",
+    "name": "automateyournetwork__pyats_mcp",
+    "path": null,
+    "stars": 42,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "9a00bb61926475a2f28140b6db7e905558fd8f9b"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:21.200Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "pyats",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\npyats[full]\nmcp\npydantic\npython-dotenv\n"
+}

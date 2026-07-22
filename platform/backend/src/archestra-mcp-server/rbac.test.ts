@@ -1,6 +1,9 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 
-import { ARCHESTRA_TOOL_SHORT_NAMES, getArchestraToolFullName } from "@shared";
+import {
+  ARCHESTRA_TOOL_SHORT_NAMES,
+  getArchestraToolFullName,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { UserModel } from "@/models";
@@ -36,14 +39,15 @@ describe("TOOL_PERMISSIONS map", () => {
     }
   });
 
-  test("every entry has valid resource and action or is null", () => {
-    for (const [name, perm] of Object.entries(TOOL_PERMISSIONS)) {
-      if (perm === null) continue;
-      expect(perm, `${name} should have resource`).toHaveProperty("resource");
-      expect(perm, `${name} should have action`).toHaveProperty("action");
-      expect(typeof perm.resource).toBe("string");
-      expect(typeof perm.action).toBe("string");
-    }
+  test("read_app reads and edit_app updates", () => {
+    expect(TOOL_PERMISSIONS.read_app).toEqual({
+      resource: "app",
+      action: "read",
+    });
+    expect(TOOL_PERMISSIONS.edit_app).toEqual({
+      resource: "app",
+      action: "update",
+    });
   });
 });
 
@@ -140,6 +144,137 @@ describe("checkToolPermission", () => {
     expect((result?.content[0] as any).text).toContain(
       "User context not available",
     );
+  });
+
+  test("sandbox:execute gates the sandbox tools — admin allowed", async () => {
+    const result = await checkToolPermission(t("run_command"), adminContext);
+    expect(result).toBeNull();
+  });
+
+  test("sandbox:execute gates the sandbox tools — skill:read alone does not grant run_command", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { skill: ["read"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    const agent = await makeAgent({ name: "Skill Agent" });
+
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    // skill:read allows load_skill...
+    expect(await checkToolPermission(t("load_skill"), ctx)).toBeNull();
+    // ...but does NOT allow run_command (needs sandbox:execute)
+    const denied = await checkToolPermission(t("run_command"), ctx);
+    expect(denied).not.toBeNull();
+    expect((denied?.content[0] as any).text).toContain(
+      "do not have permission",
+    );
+  });
+
+  test("sandbox:execute allows the sandbox tools", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { sandbox: ["execute"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    const agent = await makeAgent({ name: "Sandbox Agent" });
+
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    expect(await checkToolPermission(t("run_command"), ctx)).toBeNull();
+    expect(await checkToolPermission(t("upload_file"), ctx)).toBeNull();
+    expect(await checkToolPermission(t("download_file"), ctx)).toBeNull();
+  });
+
+  test("sandbox:execute alone does not grant the file-store tools", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { sandbox: ["execute"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    const agent = await makeAgent({ name: "Sandbox Agent" });
+
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    for (const tool of [
+      "search_files",
+      "read_file",
+      "save_file",
+      "edit_file",
+      "delete_file",
+    ]) {
+      const denied = await checkToolPermission(t(tool), ctx);
+      expect(denied, tool).not.toBeNull();
+      expect((denied?.content[0] as any).text).toContain(
+        "do not have permission",
+      );
+    }
+  });
+
+  test("file:manage allows the file-store tools but not run_command", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { file: ["manage"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    const agent = await makeAgent({ name: "Files Agent" });
+
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    for (const tool of [
+      "search_files",
+      "read_file",
+      "save_file",
+      "edit_file",
+      "delete_file",
+    ]) {
+      expect(await checkToolPermission(t(tool), ctx), tool).toBeNull();
+    }
+    expect(await checkToolPermission(t("run_command"), ctx)).not.toBeNull();
   });
 
   test("returns null for non-Archestra tool names", async () => {

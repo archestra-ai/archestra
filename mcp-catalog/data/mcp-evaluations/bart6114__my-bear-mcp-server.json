@@ -1,0 +1,99 @@
+{
+  "name": "bart6114__my-bear-mcp-server",
+  "display_name": "my-bear-mcp-server",
+  "description": "MCP server from bart6114/my-bear-mcp-server",
+  "author": {
+    "name": "bart6114"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "github:bart6114/my-bear-mcp-server", "--db-path", "${user_config.db_path}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "db_path": {
+      "type": "file",
+      "title": "Bear Database Path",
+      "description": "Path to your Bear SQLite database file. Only required if your database is in a non-standard location.",
+      "required": false
+    }
+  },
+  "readme": "# Bear MCP Server\n\nA Model Context Protocol (MCP) server that allows AI assistants like Claude to read notes from the [Bear](https://bear.app/) note-taking app. This implementation connects directly to the Bear SQLite database in a read-only mode, ensuring your notes remain safe and unmodified.\n\n[![Read-Only](https://img.shields.io/badge/Mode-Read%20Only-brightgreen.svg)](https://github.com/bart6114/my-bear-mcp-server)\n[![Bear App](https://img.shields.io/badge/For-Bear%20App-blue.svg)](https://bear.app)\n[![Works with Claude](https://img.shields.io/badge/Works%20with-Claude%20AI-blueviolet.svg)](https://claude.ai)\n[![TypeScript](https://img.shields.io/badge/Made%20with-TypeScript-007ACC.svg)](https://www.typescriptlang.org/)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\n## Quick Start\n\n### Option 1: Install from GitHub (Recommended)\n\n```bash\nnpx github:bart6114/my-bear-mcp-server\n```\n\nThat's it! The server will start running and connect to your Bear database.\n\n### Option 2: Clone and Run Locally\n\n```bash\n# Clone the repository\ngit clone https://github.com/bart6114/my-bear-mcp-server.git\ncd my-bear-mcp-server\n\n# Install dependencies\nnpm install\n\n# Build and run\nnpm run build\nnpm start\n```\n\n## Prerequisites\n\n- macOS with Bear app installed\n- Node.js 18 or higher\n\n## Configuration\n\n### For Claude Desktop App\n\nAdd this to your configuration file at `~/Library/Application Support/Claude/claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"bear\": {\n      \"command\": \"npx\",\n      \"args\": [\"github:bart6114/my-bear-mcp-server\"],\n      \"env\": {},\n      \"disabled\": false,\n      \"autoApprove\": []\n    }\n  }\n}\n```\n\n### For Claude VS Code Extension\n\nAdd this to your configuration file at `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"bear\": {\n      \"command\": \"npx\",\n      \"args\": [\"github:bart6114/my-bear-mcp-server\"],\n      \"env\": {},\n      \"disabled\": false,\n      \"autoApprove\": []\n    }\n  }\n}\n```\n\n## Available Tools\n\nThe Bear MCP server provides these read-only tools (all operations are non-destructive and cannot modify your Bear database):\n\n### open_note\n\nOpen a note by title or ID.\n\n### search_notes\n\nSearch for notes by term or tag.\n\n### get_tags\n\nGet all tags in Bear.\n\n### open_tag\n\nShow all notes with a specific tag.\n\n## Example Usage\n\nHere are examples of how to interact with the Bear MCP tools through AI assistants:\n\n### Searching for Notes\n\nAsk your AI assistant to search for notes containing specific terms:\n\n```\nCan you find all my notes about \"project management\"?\n```\n\n### Opening a Specific Note\n\nAsk your AI assistant to retrieve a specific note by title:\n\n```\nShow me my note titled \"Meeting Notes - March 2025\"\n```\n\n### Viewing Tags\n\nAsk your AI assistant to list all your Bear tags:\n\n```\nWhat tags do I have in my Bear notes?\n```\n\n### Finding Notes with a Specific Tag\n\nAsk your AI assistant to show notes with a particular tag:\n\n```\nShow me all notes with the #work tag\n```\n\n## Advanced Options\n\nIf your Bear database is in a non-standard location:\n\n```bash\nnpx github:bart6114/my-bear-mcp-server --db-path /path/to/your/database.sqlite\n```\n\n## Technical Details\n\n### Read-Only Implementation\n\nThis MCP server connects to your Bear SQLite database using a strict read-only connection. This is enforced at the database driver level:\n\n```typescript\n// From src/bear-db.ts\nthis.db = new Database(dbPath, { readonly: true });\n```\n\nThis ensures that:\n- No write operations can be performed on your database\n- Your notes and tags cannot be modified, deleted, or corrupted\n- The database connection will fail if write permissions are attempted\n\nAll operations performed by this server are SELECT queries that only retrieve data without modifying it.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "my-bear-mcp-server": {
+        "command": "npx",
+        "args": ["github:bart6114/my-bear-mcp-server"],
+        "env": {}
+      },
+      "my-bear-mcp-server-npm-start": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "my-bear-mcp-server-configured": {
+        "command": "npx",
+        "args": ["github:bart6114/my-bear-mcp-server", "--db-path", "/path/to/your/database.sqlite"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "bart6114",
+    "repo": "my-bear-mcp-server",
+    "url": "https://github.com/bart6114/my-bear-mcp-server",
+    "name": "my-bear-mcp-server",
+    "path": null,
+    "stars": 11,
+    "contributors": 1,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ce24aecd0c7e64d931d09592e7b299f5e4badc64"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:45.205Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "better-sqlite3",
+      "importance": 9
+    },
+    {
+      "name": "commander",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"bear-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"bear-mcp-server\": \"build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod +x build/index.js\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"NODE_OPTIONS=\\\"--loader ts-node/esm\\\" ts-node --project tsconfig.node.json src/index.ts\",\n    \"test\": \"node test/test-bear-api.js\"\n  },\n  \"keywords\": [\"bear\", \"mcp\", \"claude\", \"ai\", \"notes\", \"sqlite\"],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"description\": \"A Model Context Protocol (MCP) server for interacting with the Bear note-taking app\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/bart6114/my-bear-mcp-server.git\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"@types/node\": \"^22.13.10\",\n    \"axios\": \"^1.8.3\",\n    \"better-sqlite3\": \"^11.9.0\",\n    \"commander\": \"^13.1.0\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"devDependencies\": {\n    \"@types/better-sqlite3\": \"^7.6.12\"\n  }\n}\n"
+}

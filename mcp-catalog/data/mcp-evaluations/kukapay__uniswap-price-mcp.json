@@ -1,0 +1,102 @@
+{
+  "name": "kukapay__uniswap-price-mcp",
+  "display_name": "uniswap-price-mcp",
+  "description": "An MCP server that delivers real-time token prices from Uniswap V3 across multiple chains.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {
+      "INFURA_PROJECT_ID": "${user_config.infura_project_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "infura_project_id": {
+      "type": "string",
+      "title": "Infura Project ID",
+      "description": "Your Infura project ID with access to Ethereum, Polygon, Arbitrum, and Optimism.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Uniswap V3 Price MCP Server\n\nAn MCP server that delivers real-time token prices from Uniswap V3 across multiple chains — optimized for AI agents and DeFi automation.\n\n![License](https://img.shields.io/badge/license-MIT-blue.svg)\n![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n\n## Features\n- **Supported Chains**: Ethereum Mainnet (1), Polygon (137), Arbitrum (42161), Optimism (10).\n- **Token Price Fetching**: Queries Uniswap V3 pools for token prices against USDT, USDC, or WETH (in that order) with automatic decimal and symbol retrieval.\n- **USD Conversion**: Optional USD price conversion using CryptoCompare API for all quote tokens.\n\n## Prerequisites\n- **Node.js** (v18 or higher recommended) and **npm**.\n- **Infura Account**: Obtain an `INFURA_PROJECT_ID` with access to Ethereum, Polygon, Arbitrum, and Optimism (sign up at [Infura](https://infura.io/)).\n\n## Installation\n1. Clone the repository:\n   ```bash\n   git clone https://github.com/kukapay/uniswap-price-mcp.git\n   cd uniswap-price-mcp\n   ```\n\n2. Install dependencies:\n   ```bash\n   npm install\n   ```\n\n3. **Client Configuration**:\n\n    ```json\n    {\n      \"mcpServers\": {\n        \"Uniswap Price\": {\n          \"command\": \"node\",\n          \"args\": [\"path/to/uniswap-price-mcp/index.js\"],\n          \"env\": {\n            \"INFURA_PROJECT_ID\": \"your_infura_project_id\"\n          }\n        }\n      }\n    }\n    ```\n    Replace `your_infura_project_id` with your Infura project ID.\n    \n## Usage\n\nInteract with the server using MCP-compatible clients.\n\n### Tools\n\n#### getSupportedChains\n\n**Prompt**:\n```\nShow me a list of all blockchain networks supported by the server, formatted as a table.\n```\n**Result**:\n\n| Chain ID | Chain Name       |\n|----------|------------------|\n| 1        | Ethereum Mainnet |\n| 137      | Polygon          |\n| 42161    | Arbitrum         |\n| 10       | Optimism         |\n\n#### getTokenPrice\n\n**Prompt**:\n```\nWhat is the current price of DAI in USD on the Ethereum Mainnet?\n```\n\n**Result**:\n```\nPrice of token DAI on chain 1 in USD: 1.00\n```\n\n**Prompt**:\n```\nGet the USD price of Chainlink (LINK) on the Polygon network.\n```\n\n**Result**:\n```\nPrice of token LINK on chain 137 in USD: 18.50\n```\n\n## License\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Finance",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "Uniswap Price": {
+        "command": "node",
+        "args": ["path/to/uniswap-price-mcp/index.js"],
+        "env": {
+          "INFURA_PROJECT_ID": "your_infura_project_id"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "uniswap-price-mcp",
+    "url": "https://github.com/kukapay/uniswap-price-mcp",
+    "name": "uniswap-price-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "19af3d70528e94d269cdb22bc25831d8519658a3"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.055Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@thanpolas/univ3prices",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "ethers",
+      "importance": 9
+    },
+    {
+      "name": "https-proxy-agent",
+      "importance": 3
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"uniswap-price-mcp\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"@thanpolas/univ3prices\": \"^3.0.2\",\n    \"dotenv\": \"^16.5.0\",\n    \"ethers\": \"^6.14.3\",\n    \"https-proxy-agent\": \"^7.0.6\",\n    \"zod\": \"^3.25.51\"\n  }\n}\n"
+}

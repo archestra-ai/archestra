@@ -1,0 +1,113 @@
+{
+  "name": "kaliaboi__mcp-zotero",
+  "display_name": "mcp-zotero",
+  "description": "A connector for Claude Desktop to work with collection and sources on your Zotero Cloud.",
+  "author": {
+    "name": "kaliaboi"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-zotero"],
+    "env": {
+      "ZOTERO_API_KEY": "${user_config.zotero_api_key}",
+      "ZOTERO_USER_ID": "${user_config.zotero_user_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "zotero_api_key": {
+      "type": "string",
+      "title": "Zotero API Key",
+      "description": "Your Zotero API key, created at https://www.zotero.org/settings/keys",
+      "sensitive": true,
+      "required": true
+    },
+    "zotero_user_id": {
+      "type": "string",
+      "title": "Zotero User ID",
+      "description": "Your Zotero User ID, obtained by curling the Zotero API with your API key (see setup instructions)",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "readme": "# MCP Zotero\n\n![NPM Version](https://img.shields.io/npm/v/mcp-zotero) [![smithery badge](https://smithery.ai/badge/mcp-zotero)](https://smithery.ai/server/mcp-zotero)\n\nA Model Context Protocol server for Zotero integration that allows Claude to interact with your Zotero library.\n\n<a href=\"https://glama.ai/mcp/servers/mjvu0xzzzz\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/mjvu0xzzzz/badge\" alt=\"Zotero MCP server\" /></a>\n\n## Setup\n\n1. Get your Zotero credentials:\n\n   ```bash\n   # First, create an API key at https://www.zotero.org/settings/keys\n   # Then use it to get your user ID:\n   curl -H \"Zotero-API-Key: YOUR_API_KEY\" https://api.zotero.org/keys/current\n   ```\n\n   The response will look like:\n\n   ```json\n   {\n     \"userID\": 123456,\n     \"username\": \"your_username\",\n     \"access\": {\n       \"user\": {\n         \"library\": true,\n         \"files\": true,\n         \"notes\": true,\n         \"write\": true\n       }\n     }\n   }\n   ```\n\n   The `userID` value is what you need.\n\n2. Set environment variables:\n\n   ```bash\n   export ZOTERO_API_KEY=\"your-api-key\"\n   export ZOTERO_USER_ID=\"user-id-from-curl\"\n   ```\n\n3. Verify your credentials:\n\n   ```bash\n   # Test that your credentials work:\n   curl -H \"Zotero-API-Key: $ZOTERO_API_KEY\" \\\n        \"https://api.zotero.org/users/$ZOTERO_USER_ID/collections\"\n   ```\n\n   You should see your collections list in the response.\n\n4. Install and run:\n\n   ```bash\n   # Install globally (recommended)\n   npm install -g mcp-zotero\n   mcp-zotero\n\n   # Or run directly with npx\n   npx mcp-zotero\n   ```\n\n## Integration with Claude Desktop\n\nTo use this server with Claude Desktop, add the following to your Claude Desktop configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"zotero\": {\n      \"command\": \"mcp-zotero\",\n      \"env\": {\n        \"ZOTERO_API_KEY\": YOUR_API_KEY,\n        \"ZOTERO_USER_ID\": YOUR_USER_ID\n      }\n    }\n  }\n}\n```\n\n## Available Tools\n\n- `get_collections`: List all collections in your library\n- `get_collection_items`: Get items in a specific collection\n- `get_item_details`: Get detailed information about a paper\n- `search_library`: Search your entire library\n- `get_recent`: Get recently added papers\n\n## Troubleshooting\n\nIf you encounter any issues:\n\n1. Verify your environment variables are set:\n\n   ```bash\n   echo $ZOTERO_API_KEY\n   echo $ZOTERO_USER_ID\n   ```\n\n2. Check the installation:\n\n   ```bash\n   npm list -g mcp-zotero\n   ```\n\n3. Try reinstalling:\n   ```bash\n   npm uninstall -g mcp-zotero\n   npm install -g mcp-zotero\n   ```\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-zotero": {
+        "command": "mcp-zotero",
+        "args": [],
+        "env": {}
+      },
+      "mcp-zotero-npx": {
+        "command": "npx",
+        "args": ["-y", "mcp-zotero"],
+        "env": {}
+      },
+      "mcp-zotero-configured": {
+        "command": "mcp-zotero",
+        "args": [],
+        "env": {
+          "ZOTERO_API_KEY": "YOUR_API_KEY",
+          "ZOTERO_USER_ID": "YOUR_USER_ID"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kaliaboi",
+    "repo": "mcp-zotero",
+    "url": "https://github.com/kaliaboi/mcp-zotero",
+    "name": "mcp-zotero",
+    "path": null,
+    "stars": 127,
+    "contributors": 3,
+    "issues": 10,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d219288bd60d75d56aa5a29627920e69eb1c8793"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:19.974Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "zotero-api-client",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-zotero\",\n  \"type\": \"module\",\n  \"version\": \"1.0.6\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/kaliaboi/mcp-zotero\"\n  },\n  \"main\": \"index.js\",\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\",\n    \"build\": \"tsc && chmod +x build/server.js\",\n    \"postbuild\": \"echo '#!/usr/bin/env node' | cat - build/server.js > temp && mv temp build/server.js\",\n    \"start\": \"node build/server.js\"\n  },\n  \"bin\": {\n    \"mcp-zotero\": \"./build/server.js\"\n  },\n  \"files\": [\n    \"build\",\n    \"README.md\"\n  ],\n  \"keywords\": [\n    \"mcp\",\n    \"zotero\",\n    \"zotero-api\",\n    \"zotero-api-client\",\n    \"claude\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.4\",\n    \"dotenv\": \"^16.4.7\",\n    \"zod\": \"^3.24.1\",\n    \"zotero-api-client\": \"^0.46.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"latest\",\n    \"typescript\": \"latest\"\n  }\n}\n"
+}

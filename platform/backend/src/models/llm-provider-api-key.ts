@@ -2,17 +2,22 @@ import {
   getProvidersWithOptionalApiKey,
   isVaultReference,
   parseVaultReference,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
-} from "@shared";
-import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+} from "@archestra/shared";
+import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import logger from "@/logging";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
+import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import type {
   InsertLlmProviderApiKey,
   LlmProviderApiKey,
   LlmProviderApiKeyWithScopeInfo,
   ResourceVisibilityScope,
+  SecretStorageType,
   SecretValue,
   UpdateLlmProviderApiKey,
 } from "@/types";
@@ -23,16 +28,33 @@ import ConversationModel from "./conversation";
 class LlmProviderApiKeyModel {
   /**
    * Create a new LLM provider API key.
+   *
+   * "Primary" is exclusive per (organization, provider, scope[, user/team]) —
+   * enforced by partial unique indexes. Creating a new primary demotes the
+   * current one in the same transaction, so callers can mark a key primary
+   * without first hunting down and unsetting the old one.
    */
   static async create(
     data: InsertLlmProviderApiKey,
   ): Promise<LlmProviderApiKey> {
-    const [apiKey] = await db
-      .insert(schema.llmProviderApiKeysTable)
-      .values(data)
-      .returning();
+    return await db.transaction(async (tx) => {
+      if (data.isPrimary) {
+        await demoteCurrentPrimary(tx, {
+          organizationId: data.organizationId,
+          provider: data.provider,
+          scope: data.scope,
+          userId: data.userId ?? null,
+          teamId: data.teamId ?? null,
+        });
+      }
 
-    return apiKey;
+      const [apiKey] = await tx
+        .insert(schema.llmProviderApiKeysTable)
+        .values(data)
+        .returning();
+
+      return apiKey;
+    });
   }
 
   /**
@@ -157,7 +179,7 @@ class LlmProviderApiKeyModel {
 
     // Query with team, user, and secrets table joins.
     // NOTE: secretsTable.secret is encrypted at rest — decrypt via
-    // parseVaultReferenceFromSecret() before reading the value.
+    // decryptApiKeyValue() before reading the value.
     const apiKeys = await db
       .select({
         id: schema.llmProviderApiKeysTable.id,
@@ -197,27 +219,7 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    // Parse vault references from secrets and compute storage type
-    return apiKeys.map((key) => {
-      const vaultRef = parseVaultReferenceFromSecret(key.secret);
-      const secretStorageType = computeSecretStorageType(
-        key.secretId,
-        key.secretIsVault,
-        key.secretIsByosVault,
-      );
-      const {
-        secret: _secret,
-        secretIsVault: _isVault,
-        secretIsByosVault: _isByosVault,
-        ...rest
-      } = key;
-      return {
-        ...rest,
-        vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
-        vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
-        secretStorageType,
-      };
-    });
+    return apiKeys.map(toApiKeyWithScopeInfo);
   }
 
   /**
@@ -274,6 +276,7 @@ class LlmProviderApiKeyModel {
         schema.llmProviderApiKeysTable.provider,
         getProvidersWithOptionalApiKey({
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
         }),
       ),
     );
@@ -283,7 +286,7 @@ class LlmProviderApiKeyModel {
 
     // Query with team, user, and secrets table joins.
     // NOTE: secretsTable.secret is encrypted at rest — decrypt via
-    // parseVaultReferenceFromSecret() before reading the value.
+    // decryptApiKeyValue() before reading the value.
     const apiKeys = await db
       .select({
         id: schema.llmProviderApiKeysTable.id,
@@ -323,27 +326,7 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    // Parse vault references from secrets and compute storage type
-    return apiKeys.map((key) => {
-      const vaultRef = parseVaultReferenceFromSecret(key.secret);
-      const secretStorageType = computeSecretStorageType(
-        key.secretId,
-        key.secretIsVault,
-        key.secretIsByosVault,
-      );
-      const {
-        secret: _secret,
-        secretIsVault: _isVault,
-        secretIsByosVault: _isByosVault,
-        ...rest
-      } = key;
-      return {
-        ...rest,
-        vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
-        vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
-        secretStorageType,
-      };
-    });
+    return apiKeys.map(toApiKeyWithScopeInfo);
   }
 
   /**
@@ -372,6 +355,19 @@ class LlmProviderApiKeyModel {
     conversationId: string | null;
     agentLlmApiKeyId?: string | null;
   }): Promise<LlmProviderApiKey | null> {
+    // Per-user providers (e.g. GitHub Copilot) hold an individual's token, so
+    // resolution MUST use only the acting user's personal key — never an agent's
+    // attached key, a conversation key, or a team/org key, all of which would let
+    // one user ride on another's token. Returns null (→ "link your account"
+    // prompt) when the user has no personal key of their own.
+    if (providerRequiresPerUserCredential(provider)) {
+      return LlmProviderApiKeyModel.findPersonalKey({
+        organizationId,
+        userId,
+        provider,
+      });
+    }
+
     const conversation = conversationId
       ? await ConversationModel.findById({
           id: conversationId,
@@ -430,29 +426,17 @@ class LlmProviderApiKeyModel {
         schema.llmProviderApiKeysTable.provider,
         getProvidersWithOptionalApiKey({
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
         }),
       ),
     );
 
     // 3. Try personal key (prefer isPrimary, then oldest)
-    const [personalKey] = await db
-      .select()
-      .from(schema.llmProviderApiKeysTable)
-      .where(
-        and(
-          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
-          eq(schema.llmProviderApiKeysTable.provider, provider),
-          eq(schema.llmProviderApiKeysTable.scope, "personal"),
-          eq(schema.llmProviderApiKeysTable.userId, userId),
-          hasSecretOrOptional,
-        ),
-      )
-      .orderBy(
-        sql`${schema.llmProviderApiKeysTable.isPrimary} DESC`,
-        schema.llmProviderApiKeysTable.createdAt,
-      )
-      .limit(1);
-
+    const personalKey = await LlmProviderApiKeyModel.findPersonalKey({
+      organizationId,
+      userId,
+      provider,
+    });
     if (personalKey) {
       return personalKey;
     }
@@ -501,6 +485,101 @@ class LlmProviderApiKeyModel {
       .limit(1);
 
     return orgWideKey ?? null;
+  }
+
+  /**
+   * The acting user's own personal ChatGPT-subscription (Codex) key together
+   * with its decrypted credential (prefer isPrimary, then oldest). Codex
+   * credentials are per-user, so when resolution lands on someone else's
+   * subscription key (e.g. attached to a shared agent) the acting user's own
+   * subscription is substituted — this is that lookup. The marker lives inside
+   * the encrypted secret, so the user's personal `openai` keys are decrypted
+   * here (the value is only handed to the credential-resolution caller).
+   */
+  static async findPersonalCodexKey({
+    organizationId,
+    userId,
+  }: {
+    organizationId: string;
+    userId: string;
+  }): Promise<{ apiKey: LlmProviderApiKey; apiKeyValue: string } | null> {
+    const candidates = await db
+      .select({
+        apiKey: schema.llmProviderApiKeysTable,
+        secret: schema.secretsTable.secret,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .innerJoin(
+        schema.secretsTable,
+        eq(schema.llmProviderApiKeysTable.secretId, schema.secretsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.llmProviderApiKeysTable.provider, "openai"),
+          eq(schema.llmProviderApiKeysTable.scope, "personal"),
+          eq(schema.llmProviderApiKeysTable.userId, userId),
+        ),
+      )
+      .orderBy(
+        sql`${schema.llmProviderApiKeysTable.isPrimary} DESC`,
+        schema.llmProviderApiKeysTable.createdAt,
+      );
+
+    for (const candidate of candidates) {
+      const apiKeyValue = decryptApiKeyValue(candidate.secret);
+      if (apiKeyValue !== null && isOpenAiCodexCredential(apiKeyValue)) {
+        return { apiKey: candidate.apiKey, apiKeyValue };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * The acting user's own personal key for a provider (prefer isPrimary, then
+   * oldest). Self-contained so the per-user-credential guard can call it before
+   * the rest of getCurrentApiKey runs.
+   */
+  private static async findPersonalKey({
+    organizationId,
+    userId,
+    provider,
+  }: {
+    organizationId: string;
+    userId: string;
+    provider: SupportedProvider;
+  }): Promise<LlmProviderApiKey | null> {
+    const hasSecretOrOptional = or(
+      sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
+      inArray(
+        schema.llmProviderApiKeysTable.provider,
+        getProvidersWithOptionalApiKey({
+          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+        }),
+      ),
+    );
+
+    const [personalKey] = await db
+      .select()
+      .from(schema.llmProviderApiKeysTable)
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.llmProviderApiKeysTable.provider, provider),
+          eq(schema.llmProviderApiKeysTable.scope, "personal"),
+          eq(schema.llmProviderApiKeysTable.userId, userId),
+          hasSecretOrOptional,
+        ),
+      )
+      .orderBy(
+        sql`${schema.llmProviderApiKeysTable.isPrimary} DESC`,
+        schema.llmProviderApiKeysTable.createdAt,
+      )
+      .limit(1);
+
+    return personalKey ?? null;
   }
 
   /**
@@ -571,13 +650,34 @@ class LlmProviderApiKeyModel {
     id: string,
     data: UpdateLlmProviderApiKey,
   ): Promise<LlmProviderApiKey | null> {
-    const [updated] = await db
-      .update(schema.llmProviderApiKeysTable)
-      .set(data)
-      .where(eq(schema.llmProviderApiKeysTable.id, id))
-      .returning();
+    return await db.transaction(async (tx) => {
+      // Promoting a key to primary demotes the current primary in its
+      // (post-update) partition — see create() for the exclusivity rules.
+      if (data.isPrimary) {
+        const [existing] = await tx
+          .select()
+          .from(schema.llmProviderApiKeysTable)
+          .where(eq(schema.llmProviderApiKeysTable.id, id));
+        if (existing) {
+          await demoteCurrentPrimary(tx, {
+            organizationId: existing.organizationId,
+            provider: existing.provider as SupportedProvider,
+            scope: (data.scope ?? existing.scope) as ResourceVisibilityScope,
+            userId: data.userId !== undefined ? data.userId : existing.userId,
+            teamId: data.teamId !== undefined ? data.teamId : existing.teamId,
+            excludeId: id,
+          });
+        }
+      }
 
-    return updated ?? null;
+      const [updated] = await tx
+        .update(schema.llmProviderApiKeysTable)
+        .set(data)
+        .where(eq(schema.llmProviderApiKeysTable.id, id))
+        .returning();
+
+      return updated ?? null;
+    });
   }
 
   /**
@@ -708,6 +808,43 @@ class LlmProviderApiKeyModel {
    * Used to determine which providers are "configured" for model filtering,
    * independent of whether model sync has linked models to those keys.
    */
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.llmProviderApiKeysTable)
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.id, id),
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    // REDACTED: secretId and any resolved key material are never included.
+    // extraHeaders values may carry tokens, so capture header NAMES only.
+    return {
+      id: row.id,
+      name: row.name,
+      provider: row.provider,
+      organizationId: row.organizationId,
+      scope: row.scope,
+      teamId: row.teamId ?? null,
+      isPrimary: row.isPrimary,
+      baseUrl: row.baseUrl ?? null,
+      inferenceBaseUrl: row.inferenceBaseUrl ?? null,
+      extraHeaderNames: row.extraHeaders
+        ? Object.keys(row.extraHeaders).sort()
+        : [],
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
   static async getConfiguredProviders(): Promise<Set<string>> {
     const rows = await db
       .selectDistinct({ provider: schema.llmProviderApiKeysTable.provider })
@@ -717,18 +854,94 @@ class LlmProviderApiKeyModel {
 }
 
 /**
- * Helper to parse vault reference from a secret value.
- * For LLM provider API keys, the secret contains { apiKey: "path#key" } format.
+ * Maps a list-query row (key + joined secret columns) to the response shape,
+ * deriving the secret-value metadata (vault reference, ChatGPT-subscription
+ * marker) and dropping the secret columns.
+ *
+ * The secret is decrypted only when its value is actually inspected: BYOS-vault
+ * secrets carry the "path#key" reference to surface (the BYOS manager is the
+ * only writer of vault references, and it always sets `isByosVault`), and
+ * OpenAI secrets may carry the ChatGPT-subscription marker. Every other key
+ * skips the decrypt; the decrypted value never leaves this mapper either way.
  */
-function parseVaultReferenceFromSecret(
-  secret: SecretValue | null,
-): { vaultSecretPath: string; vaultSecretKey: string } | null {
+function toApiKeyWithScopeInfo<
+  T extends {
+    provider: string;
+    secretId: string | null;
+    secret: SecretValue | null;
+    secretIsVault: boolean | null;
+    secretIsByosVault: boolean | null;
+  },
+>(
+  key: T,
+): Omit<T, "secret" | "secretIsVault" | "secretIsByosVault"> & {
+  vaultSecretPath: string | null;
+  vaultSecretKey: string | null;
+  secretStorageType: SecretStorageType;
+  isChatgptSubscription: boolean;
+} {
+  const apiKeyValue =
+    key.provider === "openai" || key.secretIsByosVault
+      ? decryptApiKeyValue(key.secret)
+      : null;
+  const vaultRef = parseVaultReferenceFromApiKey(apiKeyValue);
+  const { secret: _secret, secretIsVault, secretIsByosVault, ...rest } = key;
+  return {
+    ...rest,
+    vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
+    vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
+    secretStorageType: computeSecretStorageType(
+      key.secretId,
+      secretIsVault,
+      secretIsByosVault,
+    ),
+    isChatgptSubscription:
+      key.provider === "openai" &&
+      isOpenAiCodexCredential(apiKeyValue ?? undefined),
+  };
+}
+
+/**
+ * Decrypts a stored secret and returns its `apiKey` string (LLM provider key
+ * secrets are `{ apiKey: "..." }`), or null when absent/non-string.
+ * {@link toApiKeyWithScopeInfo} calls this at most once per key and derives
+ * metadata from the returned value — the value itself is never included in a
+ * response.
+ *
+ * Callers only use the value for optional metadata (vault reference,
+ * ChatGPT-subscription marker), so an undecryptable secret — e.g. one
+ * encrypted under a previous ARCHESTRA_AUTH_SECRET — degrades to null instead
+ * of throwing; otherwise a single stale secret would break key listing for
+ * everyone.
+ */
+function decryptApiKeyValue(secret: SecretValue | null): string | null {
   if (!secret || typeof secret !== "object") return null;
-  const decrypted = isEncryptedSecret(secret)
-    ? decryptSecretValue(secret)
-    : secret;
+  let decrypted: SecretValue;
+  if (isEncryptedSecret(secret)) {
+    try {
+      decrypted = decryptSecretValue(secret);
+    } catch (error) {
+      logger.warn(
+        { error },
+        "Failed to decrypt LLM provider API key secret while deriving key metadata; treating the value as unreadable",
+      );
+      return null;
+    }
+  } else {
+    decrypted = secret;
+  }
   const apiKeyValue = (decrypted as Record<string, unknown>).apiKey;
-  if (typeof apiKeyValue === "string" && isVaultReference(apiKeyValue)) {
+  return typeof apiKeyValue === "string" ? apiKeyValue : null;
+}
+
+/**
+ * Helper to parse a vault reference from a decrypted apiKey value
+ * ("path#key" format).
+ */
+function parseVaultReferenceFromApiKey(
+  apiKeyValue: string | null,
+): { vaultSecretPath: string; vaultSecretKey: string } | null {
+  if (apiKeyValue && isVaultReference(apiKeyValue)) {
     const parsed = parseVaultReference(apiKeyValue);
     return {
       vaultSecretPath: parsed.path,
@@ -736,6 +949,49 @@ function parseVaultReferenceFromSecret(
     };
   }
   return null;
+}
+
+/**
+ * Unset is_primary on the current primary key of the given partition, matching
+ * the partial unique indexes (chat_api_keys_primary_{org,personal,team}_unique):
+ * org scope is exclusive per (organization, provider); personal and team scopes
+ * additionally key on the user / team.
+ */
+async function demoteCurrentPrimary(
+  tx: Transaction,
+  partition: {
+    organizationId: string;
+    provider: SupportedProvider;
+    scope: ResourceVisibilityScope;
+    userId: string | null;
+    teamId: string | null;
+    excludeId?: string;
+  },
+): Promise<void> {
+  const conditions = [
+    eq(schema.llmProviderApiKeysTable.organizationId, partition.organizationId),
+    eq(schema.llmProviderApiKeysTable.provider, partition.provider),
+    eq(schema.llmProviderApiKeysTable.scope, partition.scope),
+    eq(schema.llmProviderApiKeysTable.isPrimary, true),
+  ];
+  if (partition.scope === "personal" && partition.userId) {
+    conditions.push(
+      eq(schema.llmProviderApiKeysTable.userId, partition.userId),
+    );
+  }
+  if (partition.scope === "team" && partition.teamId) {
+    conditions.push(
+      eq(schema.llmProviderApiKeysTable.teamId, partition.teamId),
+    );
+  }
+  if (partition.excludeId) {
+    conditions.push(ne(schema.llmProviderApiKeysTable.id, partition.excludeId));
+  }
+
+  await tx
+    .update(schema.llmProviderApiKeysTable)
+    .set({ isPrimary: false })
+    .where(and(...conditions));
 }
 
 function canUseProviderApiKey(
@@ -747,6 +1003,7 @@ function canUseProviderApiKey(
 
   return getProvidersWithOptionalApiKey({
     azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+    anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
   }).includes(apiKey.provider);
 }
 

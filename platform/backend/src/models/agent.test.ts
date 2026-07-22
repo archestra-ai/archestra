@@ -1,18 +1,28 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
   PLAYWRIGHT_MCP_CATALOG_ID,
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_CREATE_AGENT_FULL_NAME,
+  TOOL_LIST_SKILLS_FULL_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
-} from "@shared";
+} from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
-import AgentLabelModel from "./agent-label";
+import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentToolModel from "./agent-tool";
-import McpCatalogLabelModel from "./mcp-catalog-label";
+import LlmProviderApiKeyModel from "./llm-provider-api-key";
+import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
+import ModelModel from "./model";
+import OrganizationModel from "./organization";
 import TeamModel from "./team";
+import ToolModel from "./tool";
 
 describe("AgentModel", () => {
   test("can create an agent", async () => {
@@ -20,6 +30,131 @@ describe("AgentModel", () => {
     await AgentModel.create({ name: "Test Agent 2", teams: [], scope: "org" });
 
     expect(await AgentModel.findAll()).toHaveLength(2);
+  });
+
+  describe("resolved LLM metadata", () => {
+    test("resolves provider + per-user flag from the agent's configured key", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const copilotKey = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        userId: user.id,
+        name: "GitHub Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+      });
+      const copilotModel = await ModelModel.create({
+        externalId: "github-copilot/gpt-4",
+        provider: "github-copilot",
+        modelId: "gpt-4",
+        inputModalities: null,
+        outputModalities: null,
+      });
+      const agent = await AgentModel.create({
+        name: "Copilot Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+        llmApiKeyId: copilotKey.id,
+        modelId: copilotModel.id,
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.resolvedLlmProvider).toBe("github-copilot");
+      expect(fetched?.llmProviderRequiresPerUserCredential).toBe(true);
+      // The model's human name, so a viewer without key access sees "gpt-4"
+      // rather than the model row's UUID.
+      expect(fetched?.resolvedLlmModelName).toBe("gpt-4");
+
+      // The same metadata must appear on list responses, not just findById.
+      const listed = (await AgentModel.findAll()).find(
+        (a) => a.id === agent.id,
+      );
+      expect(listed?.resolvedLlmProvider).toBe("github-copilot");
+      expect(listed?.llmProviderRequiresPerUserCredential).toBe(true);
+    });
+
+    test("falls back to the pinned model's provider with the flag false", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const anthropicModel = await ModelModel.create({
+        externalId: "anthropic/claude-3-5-sonnet",
+        provider: "anthropic",
+        modelId: "claude-3-5-sonnet",
+        inputModalities: null,
+        outputModalities: null,
+      });
+      const agent = await AgentModel.create({
+        name: "Anthropic Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+        modelId: anthropicModel.id,
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.resolvedLlmProvider).toBe("anthropic");
+      expect(fetched?.llmProviderRequiresPerUserCredential).toBe(false);
+    });
+
+    test("leaves provider null when no LLM is configured", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await AgentModel.create({
+        name: "No LLM Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.resolvedLlmProvider ?? null).toBeNull();
+      expect(fetched?.llmProviderRequiresPerUserCredential ?? false).toBe(
+        false,
+      );
+    });
+  });
+
+  describe("sandboxAvailable", () => {
+    test("is false on findById when the sandbox feature is disabled", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      // The sandbox feature is off in the test environment, so the per-agent
+      // availability check short-circuits to false for any user.
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const agent = await AgentModel.create({
+        name: "Sandbox Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+      });
+
+      const fetched = await AgentModel.findById(agent.id, user.id, true);
+      expect(fetched?.sandboxAvailable).toBe(false);
+    });
+
+    test("is left absent when no requesting user is given (fail-closed)", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await AgentModel.create({
+        name: "Userless Lookup Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.sandboxAvailable).toBeUndefined();
+    });
   });
 
   describe("findBasicByOrganizationIdAndIds", () => {
@@ -73,6 +208,13 @@ describe("AgentModel", () => {
         teams: [],
         scope: "org",
       });
+      // Back-to-back creates can land on the same createdAt millisecond,
+      // making "newest first" a coin flip. Backdate the older agent so the
+      // assertion pins ordering intent, not scheduler timing.
+      await db
+        .update(schema.agentsTable)
+        .set({ createdAt: new Date(Date.now() - 60_000) })
+        .where(eq(schema.agentsTable.id, olderAgent.id));
 
       const result = await AgentModel.findBasicByOrganizationIdAndIds({
         organizationId: organization.id,
@@ -209,6 +351,57 @@ describe("AgentModel", () => {
       expect(agents).toHaveLength(3);
     });
 
+    test("admin 'All' view (no scope) hides team-oversight agents", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const admin = await makeUser();
+      const other = await makeUser();
+      const org = await makeOrganization();
+
+      // A team the admin belongs to, and one they don't.
+      const myTeam = await makeTeam(org.id, admin.id, { name: "Mine" });
+      await TeamModel.addMember(myTeam.id, admin.id);
+      const foreignTeam = await makeTeam(org.id, other.id, { name: "Foreign" });
+
+      await AgentModel.create({ name: "Org Agent", teams: [], scope: "org" });
+      await AgentModel.create({
+        name: "Mine Team Agent",
+        teams: [myTeam.id],
+        scope: "team",
+      });
+      await AgentModel.create({
+        name: "Foreign Team Agent",
+        teams: [foreignTeam.id],
+        scope: "team",
+      });
+
+      // The unscoped "All" view shows an admin only the agents they can access:
+      // the team-shared agent for a team they aren't in is dropped (oversight).
+      const all = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        undefined,
+        { scope: undefined },
+        admin.id,
+        true,
+      );
+      expect(all.data.map((a) => a.name).sort()).toEqual([
+        "Mine Team Agent",
+        "Org Agent",
+      ]);
+
+      // Oversight stays reachable by explicitly picking that team under Team scope.
+      const teamView = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        undefined,
+        { scope: "team", teamIds: [foreignTeam.id] },
+        admin.id,
+        true,
+      );
+      expect(teamView.data.map((a) => a.name)).toEqual(["Foreign Team Agent"]);
+    });
+
     test("member only sees agents in their teams", async ({
       makeUser,
       makeAdmin,
@@ -336,6 +529,83 @@ describe("AgentModel", () => {
 
       const foundAgent = await AgentModel.findById(agent.id, user2.id, false);
       expect(foundAgent).toBeNull();
+    });
+
+    test("findLlmSelectionFieldsById returns selection fields for an admin", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      const fields = await AgentModel.findLlmSelectionFieldsById(
+        agent.id,
+        admin.id,
+        true,
+      );
+      expect(fields).not.toBeNull();
+      expect(fields).toEqual({ llmApiKeyId: null, modelId: null });
+    });
+
+    test("findLlmSelectionFieldsById returns selection fields for a user in an assigned team", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user.id);
+
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [team.id],
+        scope: "team",
+      });
+
+      const fields = await AgentModel.findLlmSelectionFieldsById(
+        agent.id,
+        user.id,
+        false,
+      );
+      expect(fields).not.toBeNull();
+      expect(fields).toHaveProperty("llmApiKeyId");
+      expect(fields).toHaveProperty("modelId");
+    });
+
+    test("findLlmSelectionFieldsById returns null for a user not in assigned teams", async ({
+      makeUser,
+      makeAdmin,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user1 = await makeUser();
+      const user2 = await makeUser();
+      const admin = await makeAdmin();
+      const org = await makeOrganization();
+
+      const team = await makeTeam(org.id, admin.id);
+      await TeamModel.addMember(team.id, user1.id);
+
+      const agent = await AgentModel.create({
+        name: "Test Agent",
+        teams: [team.id],
+        scope: "team",
+      });
+
+      // The access gate must hold for the narrow fetch exactly as for findById.
+      const fields = await AgentModel.findLlmSelectionFieldsById(
+        agent.id,
+        user2.id,
+        false,
+      );
+      expect(fields).toBeNull();
     });
 
     test("update syncs team assignments correctly", async ({
@@ -929,6 +1199,11 @@ describe("AgentModel", () => {
 
       const team1 = await makeTeam(org.id, admin.id, { name: "Team A" });
       const team2 = await makeTeam(org.id, admin.id, { name: "Team B" });
+      // This test exercises sorting/pagination, not oversight: the admin's
+      // unscoped "All" view only returns accessible agents, so join both teams
+      // to keep every team-scoped agent below in view.
+      await TeamModel.addMember(team1.id, admin.id);
+      await TeamModel.addMember(team2.id, admin.id);
 
       // Create 4 agents with varying tools and teams
       const agent1 = await AgentModel.create({
@@ -1013,6 +1288,97 @@ describe("AgentModel", () => {
         true,
       );
       expect(resultByTeam.data).toHaveLength(4);
+    });
+
+    test("populates lastUsedAt from the MCP tool-call log and sorts by it", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      const gatewayA = await AgentModel.create({
+        name: "Gateway A",
+        teams: [],
+        scope: "org",
+      });
+      const gatewayB = await AgentModel.create({
+        name: "Gateway B",
+        teams: [],
+        scope: "org",
+      });
+      await AgentModel.create({
+        name: "Gateway Never Used",
+        teams: [],
+        scope: "org",
+      });
+
+      const older = new Date("2026-07-01T10:00:00Z");
+      const newer = new Date("2026-07-05T10:00:00Z");
+      const newest = new Date("2026-07-06T10:00:00Z");
+
+      // Gateway A has two calls; lastUsedAt must be the most recent one, and
+      // any logged method (not just tools/call) counts as usage.
+      await McpToolCallModel.create({
+        agentId: gatewayA.id,
+        mcpServerName: "test-server",
+        method: "tools/call",
+        toolCall: null,
+        toolResult: null,
+        createdAt: older,
+      });
+      await McpToolCallModel.create({
+        agentId: gatewayA.id,
+        mcpServerName: "test-server",
+        method: "tools/list",
+        toolCall: null,
+        toolResult: null,
+        createdAt: newest,
+      });
+      await McpToolCallModel.create({
+        agentId: gatewayB.id,
+        mcpServerName: "test-server",
+        method: "tools/call",
+        toolCall: null,
+        toolResult: null,
+        createdAt: newer,
+      });
+
+      const result = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        undefined,
+        {},
+        admin.id,
+        true,
+      );
+      const byName = new Map(result.data.map((a) => [a.name, a]));
+      expect(byName.get("Gateway A")?.lastUsedAt).toEqual(newest);
+      expect(byName.get("Gateway B")?.lastUsedAt).toEqual(newer);
+      expect(byName.get("Gateway Never Used")?.lastUsedAt).toBeNull();
+
+      const sortedDesc = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "lastUsedAt", sortDirection: "desc" },
+        {},
+        admin.id,
+        true,
+      );
+      expect(sortedDesc.data.map((a) => a.name)).toEqual([
+        "Gateway A",
+        "Gateway B",
+        "Gateway Never Used",
+      ]);
+
+      const sortedAsc = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "lastUsedAt", sortDirection: "asc" },
+        {},
+        admin.id,
+        true,
+      );
+      expect(sortedAsc.data.map((a) => a.name)).toEqual([
+        "Gateway Never Used",
+        "Gateway B",
+        "Gateway A",
+      ]);
     });
 
     test("sortBy knowledgeSourcesCount orders by combined knowledge base and connector count", async ({
@@ -1682,7 +2048,7 @@ describe("AgentModel", () => {
   });
 
   describe("Default Archestra Tools Assignment", () => {
-    test("new agent does not have default tools auto-assigned (handled by frontend)", async ({
+    test("new agent has the default tools auto-assigned at creation", async ({
       seedAndAssignArchestraTools,
       makeAgent,
     }) => {
@@ -1690,18 +2056,36 @@ describe("AgentModel", () => {
       const existingAgent = await makeAgent();
       await seedAndAssignArchestraTools(existingAgent.id);
 
-      // Create a new agent - should NOT have default tools auto-assigned
-      // (default tools are now pre-selected in the frontend dialog and saved explicitly)
+      // Create a new agent — the creation-default set (shared composer) is
+      // assigned server-side, matching the frontend form's pre-selection.
       const agent = await AgentModel.create({
         name: "Agent with Default Tools",
         teams: [],
         scope: "org",
       });
 
-      // Verify the agent does not have auto-assigned Archestra tools
       const toolNames = agent.tools.map((t) => t.name);
-      expect(toolNames).not.toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
-      expect(toolNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+
+      // query_knowledge_sources is assigned too, but filtered from the
+      // returned tools because the agent has no knowledge base assigned.
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+      const kbTool = await ToolModel.findByName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      );
+      const assignedIds = await AgentToolModel.findToolIdsByAgent(agent.id);
+      expect(kbTool).not.toBeNull();
+      expect(assignedIds).toContain(kbTool?.id);
+    });
+
+    test("new agent gets no default tools when they are not seeded yet", async () => {
+      const agent = await AgentModel.create({
+        name: "Agent before seeding",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(await AgentToolModel.findToolIdsByAgent(agent.id)).toEqual([]);
     });
   });
 
@@ -2172,6 +2556,11 @@ describe("AgentModel", () => {
       expect(agent?.scope).toBe("personal");
       expect(agent?.agentType).toBe("agent");
       expect(agent?.authorId).toBe(user.id);
+      // The personal assistant must reach every tool the user can access, which
+      // only works through the search/run dispatch surface — so it is seeded
+      // with dynamic tool access and the coerced search_and_run_only mode.
+      expect(agent?.accessAllTools).toBe(true);
+      expect(agent?.toolExposureMode).toBe("search_and_run_only");
     });
 
     test("is idempotent - second call does not create duplicate", async ({
@@ -2244,6 +2633,34 @@ describe("AgentModel", () => {
       expect(currentDefault).toBe(otherAgent.id);
     });
 
+    test("assigns the default tools exactly once when the built-ins are seeded", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalChatAgent({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      const agentId = await MemberModel.getDefaultAgentId(user.id, org.id);
+      if (!agentId) throw new Error("expected default agent");
+
+      // Defaults come from AgentModel.create (the seeding path no longer
+      // assigns them itself) — present, and never duplicated.
+      const toolIds = await AgentToolModel.findToolIdsByAgent(agentId);
+      expect(new Set(toolIds).size).toBe(toolIds.length);
+
+      const todoTool = await ToolModel.findByName(TOOL_TODO_WRITE_FULL_NAME);
+      expect(todoTool).not.toBeNull();
+      expect(toolIds).toContain(todoTool?.id);
+    });
+
     test("creates separate agents per organization for multi-org users", async ({
       makeUser,
       makeOrganization,
@@ -2294,6 +2711,10 @@ describe("AgentModel", () => {
       expect(gateway.isPersonalGateway).toBe(true);
       expect(gateway.authorId).toBe(user.id);
       expect(gateway.organizationId).toBe(org.id);
+      // Personal gateways default to "All" mode, which coerces toolExposureMode
+      // to the search_tools/run_tool dispatch surface.
+      expect(gateway.accessAllTools).toBe(true);
+      expect(gateway.toolExposureMode).toBe("search_and_run_only");
     });
 
     test("is idempotent within the same (user, org) - second call returns the same row", async ({
@@ -2347,6 +2768,12 @@ describe("AgentModel", () => {
       expect(gatewayA?.isPersonalGateway).toBe(true);
       expect(gatewayB?.isPersonalGateway).toBe(true);
       expect(gatewayA?.id).not.toBe(gatewayB?.id);
+      // The bulk-backfill path must produce the same "All" mode defaults as
+      // ensurePersonalMcpGateway, even though it bypasses AgentModel.create.
+      expect(gatewayA?.accessAllTools).toBe(true);
+      expect(gatewayA?.toolExposureMode).toBe("search_and_run_only");
+      expect(gatewayB?.accessAllTools).toBe(true);
+      expect(gatewayB?.toolExposureMode).toBe("search_and_run_only");
 
       const secondCount = await AgentModel.bulkBackfillPersonalMcpGateways();
       expect(secondCount).toBe(0);
@@ -2361,6 +2788,104 @@ describe("AgentModel", () => {
       );
       expect(stillGatewayA?.id).toBe(gatewayA?.id);
       expect(stillGatewayB?.id).toBe(gatewayB?.id);
+    });
+  });
+
+  describe("ensurePersonalLlmProxy", () => {
+    test("creates a personal llm_proxy with the expected fields when none exists", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const proxy = await AgentModel.ensurePersonalLlmProxy({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      expect(proxy.name).toBe("My Proxy");
+      expect(proxy.agentType).toBe("llm_proxy");
+      expect(proxy.scope).toBe("personal");
+      expect(proxy.isPersonalProxy).toBe(true);
+      expect(proxy.authorId).toBe(user.id);
+      expect(proxy.organizationId).toBe(org.id);
+    });
+
+    test("is idempotent within the same (user, org) - second call returns the same row", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const first = await AgentModel.ensurePersonalLlmProxy({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      const second = await AgentModel.ensurePersonalLlmProxy({
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+      expect(first.id).toBe(second.id);
+
+      const allAgents = await AgentModel.findAll(user.id, true);
+      const personalProxies = allAgents.filter(
+        (a) =>
+          a.agentType === "llm_proxy" &&
+          a.isPersonalProxy === true &&
+          a.authorId === user.id,
+      );
+      expect(personalProxies).toHaveLength(1);
+    });
+  });
+
+  describe("bulkBackfillPersonalLlmProxies", () => {
+    test("creates rows for members who lack a personal proxy and is idempotent on a second call", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const userA = await makeUser();
+      const userB = await makeUser();
+      await makeMember(userA.id, org.id);
+      await makeMember(userB.id, org.id);
+
+      const firstCount = await AgentModel.bulkBackfillPersonalLlmProxies();
+      expect(firstCount).toBeGreaterThanOrEqual(2);
+
+      const proxyA = await AgentModel.getPersonalLlmProxy(userA.id, org.id);
+      const proxyB = await AgentModel.getPersonalLlmProxy(userB.id, org.id);
+      expect(proxyA?.isPersonalProxy).toBe(true);
+      expect(proxyB?.isPersonalProxy).toBe(true);
+      expect(proxyA?.id).not.toBe(proxyB?.id);
+
+      const secondCount = await AgentModel.bulkBackfillPersonalLlmProxies();
+      expect(secondCount).toBe(0);
+    });
+
+    test("deletePersonalLlmProxiesForUser soft-deletes the user's personal proxy", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await AgentModel.ensurePersonalLlmProxy({
+        userId: user.id,
+        organizationId: org.id,
+      });
+      await AgentModel.deletePersonalLlmProxiesForUser(user.id);
+
+      expect(await AgentModel.getPersonalLlmProxy(user.id, org.id)).toBeNull();
     });
   });
 
@@ -2603,6 +3128,142 @@ describe("AgentModel", () => {
 
       expect(agent.slug).toBe("test-gateway");
     });
+
+    test("frees slug for reuse after soft-delete (Bucket B)", async () => {
+      const original = await AgentModel.create({
+        name: "Reusable Gateway",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+      expect(original.slug).toBe("reusable-gateway");
+
+      await AgentModel.delete(original.id);
+
+      const reused = await AgentModel.create({
+        name: "Reusable Gateway",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+      expect(reused.slug).toBe("reusable-gateway");
+      expect(reused.id).not.toBe(original.id);
+    });
+  });
+
+  describe("soft-delete", () => {
+    test("delete sets deletedAt and removes the agent from findAll", async () => {
+      await AgentModel.create({ name: "Keeper", teams: [], scope: "org" });
+      const target = await AgentModel.create({
+        name: "To Delete",
+        teams: [],
+        scope: "org",
+      });
+
+      await AgentModel.delete(target.id);
+
+      const all = await AgentModel.findAll();
+      expect(all.map((a) => a.id)).not.toContain(target.id);
+
+      const [row] = await db
+        .select()
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, target.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("hardDelete physically removes the row", async () => {
+      const agent = await AgentModel.create({
+        name: "Purge Me",
+        teams: [],
+        scope: "org",
+      });
+
+      await AgentModel.hardDelete(agent.id);
+
+      const rows = await db
+        .select()
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, agent.id));
+      expect(rows).toHaveLength(0);
+    });
+
+    test("active lookup helpers exclude soft-deleted agents", async ({
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+      const active = await AgentModel.create({
+        name: "Active Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const deleted = await AgentModel.create({
+        name: "Deleted Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+
+      await AgentModel.delete(deleted.id);
+
+      await expect(
+        AgentModel.existsInOrganization({
+          id: deleted.id,
+          organizationId: organization.id,
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        AgentModel.findOrganizationId(deleted.id),
+      ).resolves.toBeNull();
+      await expect(
+        AgentModel.findIdentityProviderId(deleted.id),
+      ).resolves.toBeNull();
+      await expect(
+        AgentModel.findDelegationTarget(deleted.id),
+      ).resolves.toBeNull();
+      await expect(
+        AgentModel.findIdsByOrganizationId(organization.id),
+      ).resolves.toEqual([active.id]);
+    });
+
+    test("findAccessibleIdsForUser excludes soft-deleted agents", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const organization = await makeOrganization();
+      const team = await makeTeam(organization.id, user.id);
+
+      const visibleOrgAgent = await AgentModel.create({
+        name: "Visible Org Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const deletedOrgAgent = await AgentModel.create({
+        name: "Deleted Org Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const deletedTeamAgent = await AgentModel.create({
+        name: "Deleted Team Agent",
+        organizationId: organization.id,
+        teams: [team.id],
+        scope: "team",
+      });
+
+      await AgentModel.delete(deletedOrgAgent.id);
+      await AgentModel.delete(deletedTeamAgent.id);
+
+      const accessibleIds = await AgentModel.findAccessibleIdsForUser(user.id);
+
+      expect(accessibleIds).toContain(visibleOrgAgent.id);
+      expect(accessibleIds).not.toContain(deletedOrgAgent.id);
+      expect(accessibleIds).not.toContain(deletedTeamAgent.id);
+    });
   });
 
   describe("resolveIdFromIdOrSlug", () => {
@@ -2642,6 +3303,44 @@ describe("AgentModel", () => {
       const result =
         await AgentModel.resolveIdFromIdOrSlug("non-existent-slug");
       expect(result).toBeNull();
+    });
+
+    test("does not cache misses: a slug resolves as soon as its agent exists", async () => {
+      expect(await AgentModel.resolveIdFromIdOrSlug("late-agent")).toBeNull();
+
+      const agent = await AgentModel.create({
+        name: "Late Agent",
+        slug: "late-agent",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(await AgentModel.resolveIdFromIdOrSlug("late-agent")).toBe(
+        agent.id,
+      );
+    });
+
+    test("tolerates bounded staleness: a cached slug survives deletion until the TTL", async () => {
+      const agent = await AgentModel.create({
+        name: "Cached Then Deleted",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+      const slug = agent.slug as string;
+
+      expect(await AgentModel.resolveIdFromIdOrSlug(slug)).toBe(agent.id);
+
+      await AgentModel.delete(agent.id);
+
+      // Still served from the process-local cache — the documented tradeoff:
+      // downstream agent loads are what reject requests for deleted agents.
+      expect(await AgentModel.resolveIdFromIdOrSlug(slug)).toBe(agent.id);
+
+      // Once the cache is cleared (as the TTL would), the miss is visible.
+      AgentModel.clearResolveIdCache();
+      expect(await AgentModel.resolveIdFromIdOrSlug(slug)).toBeNull();
     });
   });
 
@@ -2688,200 +3387,331 @@ describe("AgentModel", () => {
     });
   });
 
-  describe("findByLabels", () => {
-    test("returns an empty array when no pairs are provided", async () => {
-      const result = await AgentModel.findByLabels([]);
-      expect(result).toEqual([]);
+  describe("findGatewayAgentById", () => {
+    test("returns the scalar gateway config and labels without full hydration", async () => {
+      const agent = await AgentModel.create({
+        name: "Gateway Hot Path",
+        agentType: "mcp_gateway",
+        scope: "org",
+        teams: [],
+        passthroughHeaders: ["x-correlation-id"],
+        labels: [{ key: "environment", value: "production" }],
+      });
+
+      const fetched = await AgentModel.findGatewayAgentById(agent.id);
+
+      expect(fetched?.id).toBe(agent.id);
+      expect(fetched?.name).toBe("Gateway Hot Path");
+      expect(fetched?.agentType).toBe("mcp_gateway");
+      expect(fetched?.passthroughHeaders).toEqual(["x-correlation-id"]);
+      expect(fetched?.labels).toEqual([
+        expect.objectContaining({ key: "environment", value: "production" }),
+      ]);
     });
 
-    test("returns agents matching a single (key, value) pair", async ({
-      makeAgent,
-    }) => {
-      const matching = await makeAgent({
-        name: "Matching",
-        labels: [{ key: "team", value: "alpha" }],
-      });
-      await makeAgent({
-        name: "Non-matching",
-        labels: [{ key: "team", value: "beta" }],
+    test("returns null for a soft-deleted agent", async () => {
+      const agent = await AgentModel.create({
+        name: "Soon Deleted Gateway",
+        agentType: "mcp_gateway",
+        scope: "org",
+        teams: [],
       });
 
-      const labels = await AgentLabelModel.getLabelsForAgent(matching.id);
-      const result = await AgentModel.findByLabels([
-        { keyId: labels[0].keyId, valueId: labels[0].valueId },
-      ]);
+      await AgentModel.delete(agent.id);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        id: matching.id,
-        name: matching.name,
-        agentType: matching.agentType,
-        toolAssignmentMode: matching.toolAssignmentMode,
-      });
-    });
-
-    test("returns agents matching any pair (OR) without duplicates", async ({
-      makeAgent,
-    }) => {
-      const matchesFirst = await makeAgent({
-        labels: [{ key: "team", value: "alpha" }],
-      });
-      const matchesSecond = await makeAgent({
-        labels: [{ key: "region", value: "emea" }],
-      });
-      const matchesBoth = await makeAgent({
-        labels: [
-          { key: "team", value: "alpha" },
-          { key: "region", value: "emea" },
-        ],
-      });
-      await makeAgent({
-        labels: [{ key: "team", value: "beta" }],
-      });
-
-      const labelsA = await AgentLabelModel.getLabelsForAgent(matchesFirst.id);
-      const labelsB = await AgentLabelModel.getLabelsForAgent(matchesSecond.id);
-
-      const result = await AgentModel.findByLabels([
-        { keyId: labelsA[0].keyId, valueId: labelsA[0].valueId },
-        { keyId: labelsB[0].keyId, valueId: labelsB[0].valueId },
-      ]);
-
-      expect(result).toHaveLength(3);
-      expect(new Set(result.map((a) => a.id))).toEqual(
-        new Set([matchesFirst.id, matchesSecond.id, matchesBoth.id]),
-      );
+      await expect(
+        AgentModel.findGatewayAgentById(agent.id),
+      ).resolves.toBeNull();
     });
   });
 
-  describe("toolAssignmentMode transitions", () => {
-    test("automatic to manual wipes all materialized tools", async ({
-      makeAgent,
-      makeInternalMcpCatalog,
-      makeTool,
-    }) => {
-      const catalog = await makeInternalMcpCatalog();
-      await makeTool({ catalogId: catalog.id });
-      await makeTool({ catalogId: catalog.id });
-      await McpCatalogLabelModel.syncCatalogLabels(catalog.id, [
-        { key: "team", value: "alpha" },
-      ]);
-
-      const gateway = await makeAgent({
-        agentType: "mcp_gateway",
-        toolAssignmentMode: "automatic",
-        labels: [{ key: "team", value: "alpha" }],
+  describe("accessAllTools / toolExposureMode normalization", () => {
+    test("create coerces toolExposureMode to search_and_run_only when accessAllTools is true", async () => {
+      const agent = await AgentModel.create({
+        name: "All Tools Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: true,
+        toolExposureMode: "full",
       });
 
-      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toHaveLength(
-        2,
+      expect(agent.accessAllTools).toBe(true);
+      expect(agent.toolExposureMode).toBe("search_and_run_only");
+    });
+
+    test("create leaves toolExposureMode untouched when accessAllTools is false", async () => {
+      const agent = await AgentModel.create({
+        name: "Custom Tools Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: false,
+        toolExposureMode: "full",
+      });
+
+      expect(agent.toolExposureMode).toBe("full");
+    });
+
+    test("update coerces toolExposureMode to search_and_run_only when accessAllTools is enabled", async () => {
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: false,
+        toolExposureMode: "full",
+      });
+
+      const updated = await AgentModel.update(agent.id, {
+        accessAllTools: true,
+      });
+
+      expect(updated?.toolExposureMode).toBe("search_and_run_only");
+    });
+
+    test("update keeps an all-tools agent on search_and_run_only even when full is requested", async () => {
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+        accessAllTools: true,
+      });
+
+      const updated = await AgentModel.update(agent.id, {
+        toolExposureMode: "full",
+      });
+
+      expect(updated?.toolExposureMode).toBe("search_and_run_only");
+    });
+  });
+
+  describe("All-tools exclusion pre-fill", () => {
+    /** Id of a seeded built-in tool, by its full (default-prefixed) name. */
+    async function builtInToolId(name: string): Promise<string> {
+      const tool = await ToolModel.findByName(name);
+      if (!tool) throw new Error(`Built-in tool not seeded: ${name}`);
+      return tool.id;
+    }
+
+    test("create with accessAllTools pre-fills exclusions for unassigned built-ins only", async ({
+      makeOrganization,
+    }) => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const org = await makeOrganization();
+      // Opt the org into skill tools so create auto-assigns them — assigned at
+      // creation, they must NOT be pre-excluded.
+      await OrganizationModel.patch(org.id, { skillToolsEnabled: true });
+
+      const agent = await AgentModel.create({
+        name: "All Tools Prefill Agent",
+        organizationId: org.id,
+        teams: [],
+        scope: "org",
+        accessAllTools: true,
+      });
+
+      expect(agent.accessAllTools).toBe(true);
+      expect(agent.toolExposureMode).toBe("search_and_run_only");
+
+      const excluded = new Set(
+        await AgentExcludedToolModel.findToolIdsByAgent(agent.id),
+      );
+      expect(excluded.size).toBeGreaterThan(0);
+      // Unassigned management built-in → excluded.
+      expect(
+        excluded.has(await builtInToolId(TOOL_CREATE_AGENT_FULL_NAME)),
+      ).toBe(true);
+      // Exempt dispatch surface → never excluded.
+      expect(
+        excluded.has(await builtInToolId(TOOL_SEARCH_TOOLS_FULL_NAME)),
+      ).toBe(false);
+      expect(excluded.has(await builtInToolId(TOOL_RUN_TOOL_FULL_NAME))).toBe(
+        false,
+      );
+      // Auto-assigned at creation (skill tools) → not excluded.
+      expect(
+        excluded.has(await builtInToolId(TOOL_LIST_SKILLS_FULL_NAME)),
+      ).toBe(false);
+    });
+
+    test("create in All mode does not pre-exclude the creation-default tools", async ({
+      makeOrganization,
+    }) => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const org = await makeOrganization();
+
+      const agent = await AgentModel.create({
+        name: "All Tools Defaults Agent",
+        organizationId: org.id,
+        teams: [],
+        scope: "org",
+        accessAllTools: true,
+      });
+
+      const excluded = new Set(
+        await AgentExcludedToolModel.findToolIdsByAgent(agent.id),
+      );
+      // The default tools are assigned during create, BEFORE the flip-last
+      // pre-fill runs — assigned tools are never pre-excluded.
+      for (const fullName of [
+        TOOL_TODO_WRITE_FULL_NAME,
+        TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      ]) {
+        expect(excluded.has(await builtInToolId(fullName))).toBe(false);
+      }
+    });
+
+    test("create with accessAllTools=false pre-fills nothing", async ({
+      makeAgent,
+    }) => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const agent = await makeAgent({ accessAllTools: false });
+      expect(await AgentExcludedToolModel.findToolIdsByAgent(agent.id)).toEqual(
+        [],
+      );
+    });
+
+    test("create with skipExclusionPrefill leaves the exclusion list empty but still enables All mode", async () => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const agent = await AgentModel.create(
+        {
+          name: "Skip Prefill Agent",
+          teams: [],
+          scope: "org",
+          accessAllTools: true,
+        },
+        undefined,
+        { skipExclusionPrefill: true },
       );
 
-      await AgentModel.update(gateway.id, { toolAssignmentMode: "manual" });
-
-      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([]);
+      expect(agent.accessAllTools).toBe(true);
+      expect(agent.toolExposureMode).toBe("search_and_run_only");
+      expect(await AgentExcludedToolModel.findToolIdsByAgent(agent.id)).toEqual(
+        [],
+      );
     });
 
-    test("manual to automatic wipes manual assignments and materializes from labels", async ({
+    test("update switching accessAllTools off→on runs the pre-fill", async ({
       makeAgent,
-      makeAgentTool,
-      makeInternalMcpCatalog,
-      makeTool,
     }) => {
-      const matchingCatalog = await makeInternalMcpCatalog();
-      const toolA1 = await makeTool({ catalogId: matchingCatalog.id });
-      const toolA2 = await makeTool({ catalogId: matchingCatalog.id });
-      await McpCatalogLabelModel.syncCatalogLabels(matchingCatalog.id, [
-        { key: "team", value: "alpha" },
-      ]);
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const agent = await makeAgent({ accessAllTools: false });
+      expect(await AgentExcludedToolModel.findToolIdsByAgent(agent.id)).toEqual(
+        [],
+      );
 
-      const otherCatalog = await makeInternalMcpCatalog();
-      const manualTool = await makeTool({ catalogId: otherCatalog.id });
+      await AgentModel.update(agent.id, { accessAllTools: true });
 
-      // Create the gateway in manual mode so create-time reconcile is a no-op,
-      // then manually assign a tool from a non-matching catalog.
-      const gateway = await makeAgent({
-        agentType: "mcp_gateway",
-        toolAssignmentMode: "manual",
-        labels: [{ key: "team", value: "alpha" }],
-      });
-      await makeAgentTool(gateway.id, manualTool.id);
-
-      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([
-        manualTool.id,
-      ]);
-
-      await AgentModel.update(gateway.id, { toolAssignmentMode: "automatic" });
-
-      const toolIds = await AgentToolModel.findToolIdsByAgent(gateway.id);
-      expect(new Set(toolIds)).toEqual(new Set([toolA1.id, toolA2.id]));
+      const excluded = new Set(
+        await AgentExcludedToolModel.findToolIdsByAgent(agent.id),
+      );
+      expect(
+        excluded.has(await builtInToolId(TOOL_CREATE_AGENT_FULL_NAME)),
+      ).toBe(true);
+      expect(
+        excluded.has(await builtInToolId(TOOL_SEARCH_TOOLS_FULL_NAME)),
+      ).toBe(false);
     });
 
-    test("label change while automatic reconciles to the new label set", async ({
+    test("on→on update re-runs no pre-fill and leaves manual exclusion rows untouched", async ({
       makeAgent,
-      makeInternalMcpCatalog,
-      makeTool,
     }) => {
-      const catalogA = await makeInternalMcpCatalog();
-      const toolA = await makeTool({ catalogId: catalogA.id });
-      await McpCatalogLabelModel.syncCatalogLabels(catalogA.id, [
-        { key: "team", value: "alpha" },
-      ]);
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const agent = await makeAgent({ accessAllTools: true });
 
-      const catalogB = await makeInternalMcpCatalog();
-      const toolB = await makeTool({ catalogId: catalogB.id });
-      await McpCatalogLabelModel.syncCatalogLabels(catalogB.id, [
-        { key: "team", value: "beta" },
-      ]);
+      // Manually un-exclude one pre-filled built-in; an on→on update must not
+      // disturb the curated exclusion rows.
+      const unExcludedId = await builtInToolId(TOOL_CREATE_AGENT_FULL_NAME);
+      const remaining = (
+        await AgentExcludedToolModel.findToolIdsByAgent(agent.id)
+      ).filter((id) => id !== unExcludedId);
+      await AgentExcludedToolModel.replaceForAgent(agent.id, remaining);
 
-      const gateway = await makeAgent({
-        agentType: "mcp_gateway",
-        toolAssignmentMode: "automatic",
-        labels: [{ key: "team", value: "alpha" }],
+      await AgentModel.update(agent.id, {
+        accessAllTools: true,
+        name: "Still All Tools",
       });
 
-      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([
-        toolA.id,
-      ]);
-
-      await AgentModel.update(gateway.id, {
-        labels: [{ key: "team", value: "beta" }],
-      });
-
-      expect(await AgentToolModel.findToolIdsByAgent(gateway.id)).toEqual([
-        toolB.id,
-      ]);
+      expect(await AgentExcludedToolModel.findToolIdsByAgent(agent.id)).toEqual(
+        [...remaining].sort(),
+      );
     });
 
-    test("label change while manual does not reconcile", async ({
+    test("switching off and back on re-excludes a manually un-excluded built-in", async ({
       makeAgent,
-      makeAgentTool,
-      makeInternalMcpCatalog,
-      makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
-      await makeTool({ catalogId: catalog.id });
-      await McpCatalogLabelModel.syncCatalogLabels(catalog.id, [
-        { key: "team", value: "beta" },
-      ]);
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const agent = await makeAgent({ accessAllTools: true });
 
-      const otherCatalog = await makeInternalMcpCatalog();
-      const manualTool = await makeTool({ catalogId: otherCatalog.id });
+      const unExcludedId = await builtInToolId(TOOL_CREATE_AGENT_FULL_NAME);
+      const remaining = (
+        await AgentExcludedToolModel.findToolIdsByAgent(agent.id)
+      ).filter((id) => id !== unExcludedId);
+      await AgentExcludedToolModel.replaceForAgent(agent.id, remaining);
 
-      const gateway = await makeAgent({
-        agentType: "mcp_gateway",
-        toolAssignmentMode: "manual",
-        labels: [{ key: "team", value: "alpha" }],
+      // Switching off never touches the (now inert) exclusion rows.
+      await AgentModel.update(agent.id, { accessAllTools: false });
+      expect(await AgentExcludedToolModel.findToolIdsByAgent(agent.id)).toEqual(
+        [...remaining].sort(),
+      );
+
+      // Switching back on re-runs the pre-fill: the un-excluded built-in is
+      // excluded again.
+      await AgentModel.update(agent.id, { accessAllTools: true });
+      const excluded = new Set(
+        await AgentExcludedToolModel.findToolIdsByAgent(agent.id),
+      );
+      expect(excluded.has(unExcludedId)).toBe(true);
+    });
+
+    test("bulkBackfillPersonalMcpGateways pre-fills the created gateways", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+
+      const created = await AgentModel.bulkBackfillPersonalMcpGateways();
+      expect(created).toBeGreaterThanOrEqual(1);
+
+      const gateway = await AgentModel.getPersonalMcpGateway(user.id, org.id);
+      expect(gateway).not.toBeNull();
+      if (!gateway) throw new Error("gateway should exist");
+      expect(gateway.accessAllTools).toBe(true);
+
+      const excluded = new Set(
+        await AgentExcludedToolModel.findToolIdsByAgent(gateway.id),
+      );
+      expect(
+        excluded.has(await builtInToolId(TOOL_CREATE_AGENT_FULL_NAME)),
+      ).toBe(true);
+      expect(
+        excluded.has(await builtInToolId(TOOL_SEARCH_TOOLS_FULL_NAME)),
+      ).toBe(false);
+    });
+
+    test("cloneAgent copies the source's exclusions verbatim instead of pre-filling", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const user = await makeUser();
+      const source = await makeAgent({ accessAllTools: true });
+
+      // Curate the source's exclusions down to a single row; the clone must
+      // mirror exactly that, not a fresh pre-fill.
+      const keptId = await builtInToolId(TOOL_CREATE_AGENT_FULL_NAME);
+      await AgentExcludedToolModel.replaceForAgent(source.id, [keptId]);
+
+      const clone = await AgentModel.cloneAgent({
+        sourceId: source.id,
+        userId: user.id,
       });
-      await makeAgentTool(gateway.id, manualTool.id);
 
-      // Switch labels so they would match the catalog if reconcile were to fire.
-      await AgentModel.update(gateway.id, {
-        labels: [{ key: "team", value: "beta" }],
-      });
-
-      const toolIds = await AgentToolModel.findToolIdsByAgent(gateway.id);
-      expect(toolIds).toEqual([manualTool.id]);
+      expect(await AgentExcludedToolModel.findToolIdsByAgent(clone.id)).toEqual(
+        [keptId],
+      );
     });
   });
 });

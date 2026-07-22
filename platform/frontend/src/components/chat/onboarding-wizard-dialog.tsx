@@ -10,6 +10,7 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { trackEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -117,7 +118,16 @@ function RuntimeDialog({
               Back
             </Button>
             {isLast ? (
-              <Button type="button" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                onClick={() => {
+                  trackEvent("onboarding_completed", {
+                    wizardLabel: wizard.label,
+                    pageCount,
+                  });
+                  onOpenChange(false);
+                }}
+              >
                 Done
               </Button>
             ) : (
@@ -272,6 +282,7 @@ function EditPageDialog({
                 setDraft((prev) => ({ ...prev, content: e.target.value }))
               }
               placeholder="Write page content as markdown. Headings, lists, links, and code blocks are supported."
+              aria-label="Page content"
               className="flex-1 border-0 rounded-none font-mono text-xs resize-none focus-visible:ring-0"
             />
           ) : (
@@ -337,6 +348,7 @@ function EditPageDialog({
           ref={fileInputRef}
           type="file"
           accept="image/png,image/gif"
+          aria-label="Upload image"
           className="hidden"
           onChange={handleFileSelect}
         />

@@ -15,10 +15,18 @@ class A2ATaskApprovalRequestModel {
     approvalRequests: A2AArchestraApprovalRequest[];
   }): Promise<A2ATaskApprovalRequest[]> {
     const { taskId, approvalRequests } = params;
-    const records = approvalRequests.map((req) => ({
-      ...req,
-      taskId,
-    }));
+    // `toolInput` is carried on the in-memory approval request for live approval
+    // prompts but is intentionally not persisted (no column), so drop it here.
+    const records = approvalRequests.map(
+      ({ approvalId, toolCallId, toolName, approved, resolved }) => ({
+        taskId,
+        approvalId,
+        toolCallId,
+        toolName,
+        approved,
+        resolved,
+      }),
+    );
     return await A2ATaskApprovalRequestModel.bulkCreateRaw(records);
   }
 

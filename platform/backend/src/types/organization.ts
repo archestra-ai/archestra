@@ -5,13 +5,19 @@ import {
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
   SupportedProvidersSchema,
-} from "@shared";
+} from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
+import { ToolInvocation, TrustedData } from "./autonomy-policies";
+import {
+  NetworkPolicyInputSchema,
+  NetworkPolicySchema,
+  TrustedImageRegistriesSchema,
+  ValidationRegexSchema,
+} from "./environment";
 import { LimitCleanupIntervalSchema } from "./limit";
-import { ValidationRegexSchema } from "./mcp-preset-entry";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
@@ -241,6 +247,15 @@ export const ConnectionBaseUrlSchema = z.object({
   visible: z.boolean().default(true),
 });
 
+/** provider → llm_provider_api_keys.id for auto-provisioned connection virtual keys. */
+export const ConnectionDefaultProviderKeysSchema = z.partialRecord(
+  SupportedProvidersSchema,
+  z.string().uuid(),
+);
+export type ConnectionDefaultProviderKeys = z.infer<
+  typeof ConnectionDefaultProviderKeysSchema
+>;
+
 export const OnboardingWizardPageSchema = z.object({
   image: Base64ImageSchema.optional(),
   content: z.string(),
@@ -278,7 +293,6 @@ export const OrganizationCompressionScopeSchema = z.enum([
   "team",
 ]);
 
-export const GlobalToolPolicySchema = z.enum(["permissive", "restrictive"]);
 export const OAuthAccessTokenLifetimeSecondsSchema = z
   .number()
   .int()
@@ -289,7 +303,12 @@ const extendedFields = {
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
   compressionScope: OrganizationCompressionScopeSchema,
-  globalToolPolicy: GlobalToolPolicySchema,
+  defaultDiscoveredToolInvocationPolicy:
+    ToolInvocation.ToolInvocationPolicyActionSchema,
+  defaultDiscoveredToolResultPolicy: TrustedData.TrustedDataPolicyActionSchema,
+  analyticsInstanceId: z.string().uuid(),
+  analyticsInstanceStartedAt: z.date().nullable(),
+  analyticsInstanceLastHeartbeatAt: z.date().nullable(),
   embeddingModel: z.string().nullable(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
   defaultLlmModel: z.string().nullable(),
@@ -297,6 +316,7 @@ const extendedFields = {
   defaultUserLimitValue: z.number().int().positive().nullable(),
   defaultUserLimitModel: z.array(z.string()).nullable(),
   defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.nullable(),
+  defaultMemberRole: z.string().nullable(),
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),
   iconLogo: z.string().nullable(),
@@ -313,20 +333,50 @@ const extendedFields = {
   showTwoFactor: z.boolean(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
-  presetEntityName: z.string().nullable(),
-  presetEntityNamePlural: z.string().nullable(),
-  presetEntityDefaultLabel: z.string().nullable(),
-  presetEntityDefaultValidationRegex: z.string().nullable(),
+  connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
+  defaultNetworkPolicy: NetworkPolicySchema.nullable(),
+  defaultEnvironmentTrustedImageRegistries:
+    TrustedImageRegistriesSchema.nullable(),
 };
 
-export const SelectOrganizationSchema = createSelectSchema(
+const InternalSelectOrganizationSchema = createSelectSchema(
   schema.organizationsTable,
   extendedFields,
 );
+export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
+  analyticsInstanceStartedAt: true,
+  analyticsInstanceLastHeartbeatAt: true,
+  // Deprecated "security engine on/off" toggle (see schema). The security engine
+  // is always enabled now; the inert column is retained in the DB for rollout
+  // safety but never exposed via the API.
+  globalToolPolicy: true,
+  // Deprecated leftover column from the reverted PR #6027 (see schema). Retained
+  // in the DB for backward-compatibility but never exposed via the API.
+  discoveredToolPolicy: true,
+  // Preset feature removed; columns retained in DB (non-destructive) but no
+  // longer exposed via the API.
+  presetEntityName: true,
+  presetEntityNamePlural: true,
+  presetEntityDefaultLabel: true,
+  presetEntityDefaultValidationRegex: true,
+});
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
-);
+).omit({
+  // Deprecated "security engine on/off" toggle (see schema). Inert column,
+  // retained for rollout safety but never accepted by the API.
+  globalToolPolicy: true,
+  // Deprecated leftover column from the reverted PR #6027 (see schema). Retained
+  // in the DB for backward-compatibility but never accepted by the API.
+  discoveredToolPolicy: true,
+  // Preset feature removed; columns retained in DB (non-destructive) but no
+  // longer accepted by the API, mirroring SelectOrganizationSchema.
+  presetEntityName: true,
+  presetEntityNamePlural: true,
+  presetEntityDefaultLabel: true,
+  presetEntityDefaultValidationRegex: true,
+});
 export const UpdateAppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema.optional(),
   customFont: OrganizationCustomFontSchema.optional(),
@@ -347,24 +397,33 @@ export const UpdateAppearanceSettingsSchema = z.object({
 });
 
 export const UpdateSecuritySettingsSchema = z.object({
-  globalToolPolicy: GlobalToolPolicySchema.optional(),
+  defaultDiscoveredToolInvocationPolicy:
+    ToolInvocation.ToolInvocationPolicyActionSchema.optional(),
+  defaultDiscoveredToolResultPolicy:
+    TrustedData.TrustedDataPolicyActionSchema.optional(),
   allowChatFileUploads: z.boolean().optional(),
+  appsHackathonRecorderEnabled: z.boolean().optional(),
+  /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
+  allowToolAutoAssignment: z.boolean().optional(),
 });
 
 export const UpdateLlmSettingsSchema = z.object({
   convertToolResultsToToon: z.boolean().optional(),
   compressionScope: OrganizationCompressionScopeSchema.optional(),
-  defaultUserLimitValue: z.number().int().positive().nullable().optional(),
-  defaultUserLimitModel: z.array(z.string()).nullable().optional(),
-  defaultUserLimitCleanupInterval:
-    LimitCleanupIntervalSchema.nullable().optional(),
+});
+
+export const UpdateMcpSettingsSchema = z.object({
+  onlineMcpCatalogEnabled: z.boolean().optional(),
+});
+
+export const UpdateSkillsSettingsSchema = z.object({
+  onlineSkillCatalogEnabled: z.boolean().optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({
   defaultModelId: z.string().uuid().nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
   defaultAgentId: z.string().uuid().nullable().optional(),
-  skillSlashCommandsEnabled: z.boolean().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({
@@ -378,10 +437,15 @@ export const UpdateAuthSettingsSchema = z.object({
   oauthAccessTokenLifetimeSeconds:
     OAuthAccessTokenLifetimeSecondsSchema.optional(),
   showTwoFactor: z.boolean().optional(),
+  // Role slug (predefined or custom) assigned to new self-signup / ChatOps
+  // members. `null` clears it back to the built-in "member" fallback.
+  defaultMemberRole: z.string().min(1).nullable().optional(),
 });
 
 export const UpdateConnectionSettingsSchema = z.object({
   connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
+  connectionDefaultProviderKeys:
+    ConnectionDefaultProviderKeysSchema.nullable().optional(),
   connectionDefaultLlmProxyId: z.string().uuid().nullable().optional(),
   connectionDefaultClientId: z.string().max(64).nullable().optional(),
   connectionShownClientIds: z
@@ -421,30 +485,26 @@ export const UpdateConnectionSettingsSchema = z.object({
     }),
 });
 
-export const UpdatePresetEntityNameSchema = z
-  .object({
-    presetEntityName: z.string().trim().min(1).max(50).nullable(),
-    presetEntityNamePlural: z.string().trim().min(1).max(50).nullable(),
-  })
-  .superRefine((value, ctx) => {
-    const singularSet = value.presetEntityName !== null;
-    const pluralSet = value.presetEntityNamePlural !== null;
-    if (singularSet !== pluralSet) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Both presetEntityName and presetEntityNamePlural must be set together (or both null to reset).",
-      });
-    }
-  });
-
-export const UpdatePresetEntityDefaultLabelSchema = z.object({
-  presetEntityDefaultLabel: z.string().trim().min(1).max(50).nullable(),
+/**
+ * Clean API shape for configuring the implicit "default" environment. The
+ * handler maps these to the org columns (`defaultEnvironmentName`,
+ * `defaultEnvironmentNamespace`, `defaultEnvironmentRestricted`,
+ * `defaultEnvironmentValidationRegex`). Omitting a field leaves it unchanged;
+ * an explicit null clears the nullable ones.
+ */
+export const UpdateDefaultEnvironmentSchema = z.object({
+  name: z.string().trim().min(1).max(50).nullable().optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  namespace: z.string().trim().max(253).nullable().optional(),
+  networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
+  restricted: z.boolean().optional(),
+  validationRegex: ValidationRegexSchema.nullable().optional(),
+  trustedImageRegistries: TrustedImageRegistriesSchema.nullable().optional(),
 });
 
-export const UpdatePresetEntityDefaultValidationRegexSchema = z.object({
-  presetEntityDefaultValidationRegex: ValidationRegexSchema.nullable(),
-});
+export type UpdateDefaultEnvironment = z.infer<
+  typeof UpdateDefaultEnvironmentSchema
+>;
 
 export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),
@@ -453,8 +513,14 @@ export const CompleteOnboardingSchema = z.object({
 export type OrganizationCompressionScope = z.infer<
   typeof OrganizationCompressionScopeSchema
 >;
-export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
+export type OrganizationAnalyticsState = Pick<
+  z.infer<typeof InternalSelectOrganizationSchema>,
+  | "id"
+  | "analyticsInstanceId"
+  | "analyticsInstanceStartedAt"
+  | "analyticsInstanceLastHeartbeatAt"
+>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
 export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;

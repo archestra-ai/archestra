@@ -1,6 +1,6 @@
 "use client";
 
-import type { IdentityProviderFormValues } from "@shared";
+import type { IdentityProviderFormValues } from "@archestra/shared";
 import type { UseFormReturn } from "react-hook-form";
 import {
   FormControl,

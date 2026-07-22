@@ -1,0 +1,78 @@
+{
+  "name": "fireproof-storage__mcp-database-server",
+  "display_name": "mcp-database-server",
+  "description": "Store and load JSON documents from LLM tool use",
+  "author": {
+    "name": "fireproof-storage"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Model Context Protocol and Fireproof Demo: JSON Document Server\n\nThis is a simple example of how to use a [Fireproof](https://fireproof.storage/) database in a [Model Context Protocol](https://github.com/modelcontextprotocol) server (used for plugging code and data into A.I. systems such as [Claude Desktop](https://claude.ai/download)).\n\nThis demo server implements a basic JSON document store with CRUD operations (Create, Read, Update, Delete) and the ability to query documents sorted by any field.\n\n# Installation\n\nInstall dependencies:\n\n```bash\nnpm install\nnpm build\n```\n\n## Running the Server\n\nTo use with Claude Desktop, add the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"fireproof\": {\n      \"command\": \"/path/to/fireproof-mcp/build/index.js\"\n    }\n  }\n}\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nnpm run inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n\n",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "fireproof-mcp-configured": {
+        "command": "node",
+        "args": ["/path/to/fireproof-mcp/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "fireproof-storage",
+    "repo": "mcp-database-server",
+    "url": "https://github.com/fireproof-storage/mcp-database-server",
+    "name": "fireproof-storage__mcp-database-server",
+    "path": null,
+    "stars": 24,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "605dbb7ab63ce607a79f861f48d1904672ce76da"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:28.376Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@fireproof/cloud",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "use-fireproof",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"todos\",\n  \"version\": \"0.1.0\",\n  \"description\": \"ToDo List using Fireproof\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"bin\": {\n    \"todos\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@fireproof/cloud\": \"^0.19.118\",\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"use-fireproof\": \"^0.19.118\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

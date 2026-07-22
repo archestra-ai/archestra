@@ -1,0 +1,130 @@
+{
+  "name": "tacticlaunch__mcp-linear",
+  "display_name": "mcp-linear",
+  "description": "MCP server that enables AI assistants to interact with Linear project management system through natural language, allowing users to retrieve, create, and update issues, projects, and teams.",
+  "author": {
+    "name": "tacticlaunch"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@tacticlaunch/mcp-linear"],
+    "env": {
+      "LINEAR_API_TOKEN": "${user_config.linear_api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "linear_api_token": {
+      "type": "string",
+      "title": "Linear API Token",
+      "description": "Your Linear API token for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "<p align=\"center\">\n  <img src=\"https://github.com/tacticlaunch/mcp-linear/blob/main/docs/linear-app-icon.png?raw=true\" alt=\"Linear App Icon\" width=\"250\" height=\"250\">\n</p>\n\n# MCP Linear\n\nA Model Context Protocol (MCP) server implementation for the Linear GraphQL API that enables AI assistants to interact with Linear project management systems.\n\n![MCP Linear](https://img.shields.io/badge/MCP-Linear-blue)\n[![npm version](https://img.shields.io/npm/v/@tacticlaunch/mcp-linear.svg)](https://www.npmjs.com/package/@tacticlaunch/mcp-linear)\n[![smithery badge](https://smithery.ai/badge/@tacticlaunch/mcp-linear)](https://smithery.ai/server/@tacticlaunch/mcp-linear)\n\n<a href=\"https://glama.ai/mcp/servers/@tacticlaunch/mcp-linear\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@tacticlaunch/mcp-linear/badge\" />\n</a>\n\n## Features\n\nMCP Linear bridges the gap between AI assistant and Linear (project management tool) by implementing the MCP protocol. This allows to:\n\n- Retrieve issues, projects, teams, and other data from Linear\n- Create and update issues\n- Change issue status\n- Assign issues to team members\n- Add comments\n- Create projects and teams\n\n## Example prompts\n\nOnce connected, you can use prompts like:\n\n- \"Show me all my Linear issues\"\n- \"Create a new issue titled 'Fix login bug' in the Frontend team\"\n- \"Change the status of issue FE-123 to 'In Progress'\"\n- \"Assign issue BE-456 to John Smith\"\n- \"Add a comment to issue UI-789: 'This needs to be fixed by Friday'\"\n\n## Installation\n\n### Getting Your Linear API Token\n\nTo use MCP Linear, you'll need a Linear API token. Here's how to get one:\n\n1. Log in to your Linear account at [linear.app](https://linear.app)\n2. Click on organization avatar (in the top-left corner)\n3. Select **Settings**\n4. Navigate to **Security & access** in the left sidebar\n5. Under **Personal API Keys** click **New API Key**\n6. Give your key a name (e.g., `MCP Linear Integration`)\n7. Copy the generated API token and store it securely - you won't be able to see it again!\n\n### Installing via [Smithery](https://smithery.ai/server/@tacticlaunch/mcp-linear) (Recommended)\n\n- To install MCP Linear for Cursor:\n\n```bash\nnpx -y @smithery/cli install @tacticlaunch/mcp-linear --client cursor\n```\n\n- To install MCP Linear for Claude Desktop:\n\n```bash\nnpx -y @smithery/cli install @tacticlaunch/mcp-linear --client claude\n```\n\n### Manual Configuration\n\nAdd the following to your MCP settings file:\n\n```json\n{\n  \"mcpServers\": {\n    \"linear\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@tacticlaunch/mcp-linear\"],\n      \"env\": {\n        \"LINEAR_API_TOKEN\": \"<YOUR_TOKEN>\"\n      }\n    }\n  }\n}\n```\n\n#### Client-Specific Configuration Locations\n\n- Cursor: `~/.cursor/mcp.json`\n- Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- Claude VSCode Extension: `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`\n- GoMCP: `~/.config/gomcp/config.yaml`\n\n### Manual run\n\nPrerequisites\n\n- Node.js (v18+)\n- NPM or Yarn\n- Linear API token\n\n```bash\n# Install globally\nnpm install -g @tacticlaunch/mcp-linear\n\n# Or clone and install locally\ngit clone https://github.com/tacticlaunch/mcp-linear.git\ncd mcp-linear\nnpm install\nnpm link  # Makes the package available globally\n```\n\n#### Running the Server\n\nRun the server with your Linear API token:\n\n```bash\nmcp-linear --token YOUR_LINEAR_API_TOKEN\n```\n\nOr set the token in your environment and run without arguments:\n\n```bash\nexport LINEAR_API_TOKEN=YOUR_LINEAR_API_TOKEN\nmcp-linear\n```\n\n## Available Tools\n\nSee [TOOLS.md](https://github.com/tacticlaunch/mcp-linear/blob/main/TOOLS.md) for a complete list of available tools and planned features.\n\n## Development\n\nSee [DEVELOPMENT.md](https://github.com/tacticlaunch/mcp-linear/blob/main/DEVELOPMENT.md) for more information on how to develop locally.\n\n## Links\n\n[tacticlaunch/cursor-memory-bank](https://github.com/tacticlaunch/cursor-memory-bank) - If you are a developer seeking to enhance your workflow with Cursor, consider giving it a try.\n\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "tacticlaunch-mcp-linear": {
+        "command": "npx",
+        "args": ["-y", "@tacticlaunch/mcp-linear"],
+        "env": {
+          "LINEAR_API_TOKEN": "<YOUR_TOKEN>"
+        }
+      },
+      "tacticlaunch-mcp-linear-token-arg": {
+        "command": "mcp-linear",
+        "args": ["--token", "YOUR_LINEAR_API_TOKEN"],
+        "env": {}
+      },
+      "tacticlaunch-mcp-linear-env-var": {
+        "command": "mcp-linear",
+        "args": [],
+        "env": {
+          "LINEAR_API_TOKEN": "YOUR_LINEAR_API_TOKEN"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tacticlaunch",
+    "repo": "mcp-linear",
+    "url": "https://github.com/tacticlaunch/mcp-linear",
+    "name": "mcp-linear",
+    "path": null,
+    "stars": 96,
+    "contributors": 4,
+    "issues": 4,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "202c166fc0fe387805bb12832a3199dc5a14038a"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:52.762Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@linear/sdk",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 6
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "graphql",
+      "importance": 8
+    },
+    {
+      "name": "graphql-request",
+      "importance": 8
+    },
+    {
+      "name": "helmet",
+      "importance": 7
+    },
+    {
+      "name": "yargs",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@tacticlaunch/mcp-linear\",\n  \"version\": \"1.0.10\",\n  \"description\": \"A Model Context Protocol (MCP) server implementation for the Linear GraphQL API that enables AI assistants to interact with Linear project management systems.\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-linear\": \"./dist/index.js\"\n  },\n  \"directories\": {\n    \"doc\": \"docs\"\n  },\n  \"scripts\": {\n    \"start\": \"node dist/index.js\",\n    \"inspect\": \"npx @modelcontextprotocol/inspector node dist/index.js\",\n    \"dev\": \"nodemon --exec node --loader ts-node/esm src/index.ts\",\n    \"build\": \"tsc\",\n    \"lint\": \"eslint . --ext .ts\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\"\",\n    \"test\": \"jest --passWithNoTests\",\n    \"test:watch\": \"jest --watch\",\n    \"prepare\": \"npm run build\",\n    \"postinstall\": \"node -e \\\"try { require('fs').chmodSync('./dist/index.js', '755') } catch (e) {}\\\"\"\n  },\n  \"smithery\": {\n    \"name\": \"linear\",\n    \"displayName\": \"Linear\",\n    \"description\": \"Interact with Linear project management through AI assistants\",\n    \"tools\": [\n      \"linear_getViewer\",\n      \"linear_getOrganization\",\n      \"linear_getUsers\",\n      \"linear_getLabels\",\n      \"linear_getTeams\",\n      \"linear_getProjects\",\n      \"linear_createProject\",\n      \"linear_getIssues\",\n      \"linear_getIssueById\",\n      \"linear_searchIssues\",\n      \"linear_createIssue\",\n      \"linear_updateIssue\",\n      \"linear_createComment\",\n      \"linear_addIssueLabel\",\n      \"linear_removeIssueLabel\"\n    ]\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"linear\",\n    \"cursor\",\n    \"claude\",\n    \"ai\",\n    \"model-context-protocol\",\n    \"project-management\",\n    \"smithery\"\n  ],\n  \"author\": \"Alexey Elizarov <alex.elizarov1@gmail.com>\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/tacticlaunch/mcp-linear\"\n  },\n  \"dependencies\": {\n    \"@linear/sdk\": \"^38.0.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.6.0\",\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/express\": \"^5.0.0\",\n    \"cors\": \"^2.8.5\",\n    \"dotenv\": \"^16.4.7\",\n    \"express\": \"^4.21.2\",\n    \"graphql\": \"^16.10.0\",\n    \"graphql-request\": \"^7.1.2\",\n    \"helmet\": \"^8.0.0\",\n    \"yargs\": \"^17.7.2\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/node\": \"^22.13.5\",\n    \"@types/yargs\": \"^17.0.33\",\n    \"eslint\": \"^9.21.0\",\n    \"eslint-config-prettier\": \"^10.0.2\",\n    \"jest\": \"^29.7.0\",\n    \"nodemon\": \"^3.1.9\",\n    \"prettier\": \"^3.5.2\",\n    \"ts-jest\": \"^29.2.6\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.7.3\"\n  },\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  }\n}\n"
+}

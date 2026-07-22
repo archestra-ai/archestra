@@ -1,0 +1,176 @@
+{
+  "name": "xexr__mcp-libsql",
+  "display_name": "mcp-libsql",
+  "description": "Secure MCP server for libSQL databases with comprehensive tools, connection pooling, and transaction support. Built with TypeScript for Claude Desktop, Claude Code, Cursor, and other MCP clients.",
+  "author": {
+    "name": "Xexr"
+  },
+  "server": {
+    "command": "node",
+    "args": [
+      "${__dirname}/dist/index.js",
+      "--url",
+      "${user_config.database_url}",
+      "--log-mode",
+      "${user_config.log_mode}"
+    ],
+    "env": {
+      "LIBSQL_AUTH_TOKEN": "${user_config.libsql_auth_token}",
+      "MCP_LIBSQL_DEV_MODE": "${user_config.dev_mode}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "database_url": {
+      "type": "string",
+      "title": "Database URL",
+      "description": "The URL for your libSQL database (e.g., file:///tmp/test.db, http://127.0.0.1:8080, libsql://your-db.turso.io)",
+      "required": true,
+      "default": "file:///tmp/test.db"
+    },
+    "libsql_auth_token": {
+      "type": "string",
+      "title": "libSQL Auth Token",
+      "description": "Authentication token for credentialed libSQL databases (e.g., Turso). Can also be set via LIBSQL_AUTH_TOKEN environment variable.",
+      "sensitive": true,
+      "required": false
+    },
+    "log_mode": {
+      "type": "string",
+      "title": "Logging Mode",
+      "description": "Set the logging output mode (console, file, both, none). Default is 'file' for local testing.",
+      "required": false,
+      "default": "file"
+    },
+    "dev_mode": {
+      "type": "boolean",
+      "title": "Development Mode",
+      "description": "Enable development mode with enhanced logging and hot reload.",
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "# MCP libSQL by xexr\n\nA Model Context Protocol (MCP) server for libSQL database operations, providing secure database access through Claude Desktop, Claude Code, Cursor, and other MCP-compatible clients.\n\nRuns on Node, written in TypeScript\n\n## 🔧 **Quick Start**\n\n1. **Install:**\n   ```bash\n   pnpm install -g @xexr/mcp-libsql\n   ```\n\n2. **Test locally:**\n   ```bash\n   mcp-libsql --url file:///tmp/test.db --log-mode console\n   ```\n\n3. **Configure Claude Desktop** with your Node.js path and database URL (see configuration examples below)\n\n## 🚀 **Status**\n\n✅ **Complete database management capabilities** - All 6 core tools implemented and tested  \n✅ **Comprehensive security validation** - 67 security tests covering all injection vectors  \n✅ **Extensive test coverage** - 244 total tests (177 unit + 67 security) with 100% pass rate  \n✅ **Production deployment verified** - Successfully working with MCP clients  \n✅ **Robust error handling** - Connection retry, graceful degradation, and audit logging  \n\n## 🛠️ **Features**\n\n### **Available Tools**\n- **read-query**: Execute SELECT queries with comprehensive security validation\n- **write-query**: INSERT/UPDATE/DELETE operations with transaction support\n- **create-table**: DDL operations for table creation with security measures\n- **alter-table**: Table structure modifications (ADD/RENAME/DROP operations)\n- **list-tables**: Database metadata browsing with filtering options\n- **describe-table**: Table schema inspection with multiple output formats\n\n### **Security & Reliability**\n- **Multi-layer SQL injection prevention** with comprehensive security validation\n- **Connection pooling** with health monitoring and automatic retry logic  \n- **Transaction support** with automatic rollback on errors\n- **Comprehensive audit logging** for security compliance\n\n> 🔐 **Security details:** See [docs/SECURITY.md](docs/SECURITY.md) for comprehensive security features and testing.\n\n### **Developer Experience**\n- **Beautiful table formatting** with proper alignment and NULL handling\n- **Performance metrics** displayed for all operations\n- **Clear error messages** with actionable context\n- **Parameterized query support** for safe data handling\n- **Development mode** with enhanced logging and hot reload\n\n## 📋 **Prerequisites**\n\n- **Node.js** 20+ \n- **pnpm** (or npm) package manager\n- **libSQL database** (file-based or remote)\n- **Claude Desktop** (for MCP integration)\n\n### **Platform Requirements**\n- **macOS**: Native Node.js installation\n- **Linux**: Native Node.js installation  \n- **Windows**: Native Node.js installation or WSL2 with Node.js installation\n\n## 🔧 **Installation**\n\n```bash\n# Use your package manager of choice, e.g. npm, pnpm, bun etc\n\n# Install globally\npnpm install -g @xexr/mcp-libsql\nmcp-libsql -v # check version\n\n# ...or build from the repository\ngit clone https://github.com/Xexr/mcp-libsql.git\ncd mcp-libsql\npnpm install # Install dependencies\npnpm build # Build the project\nnode dist/index.js -v  # check version\n```\n\n## 🚀 **Usage**\n\n### **Local Testing**\n\nGlobal installation assumed below, replace \"mcp-libsql\" with \"node dist/index.js\" if using local build\n\n```bash\n# Test with file database (default: file-only logging)\nmcp-libsql --url file:///tmp/test.db\n\n# Test with HTTP database\nmcp-libsql --url http://127.0.0.1:8080\n\n# Test with Turso database (environment variable, alternatively export the env var)\nLIBSQL_AUTH_TOKEN=\"your-token\" mcp-libsql --url \"libsql://your-db.turso.io\"\n\n# Test with Turso database (CLI parameter)\nmcp-libsql --url \"libsql://your-db.turso.io\" --auth-token \"your-token\"\n\n# Development mode with console logging\nmcp-libsql --dev --log-mode console --url file:///tmp/test.db\n\n# Test with different logging modes\nmcp-libsql --url --log-mode both file:///tmp/test.db\n```\n\n### **Claude Desktop Integration**\n\nConfigure the MCP server in Claude Desktop based on your operating system:\n\n#### **macOS Configuration**\n\n1. **Create configuration file** at `~/Library/Application Support/Claude/claude_desktop_config.json`:\n\n**Global install**\n```json\n\n{\n  \"mcpServers\": {\n    \"mcp-libsql\": {\n      \"command\": \"mcp-libsql\",\n      \"args\": [\n        \"--url\",\n        \"file:///Users/username/database.db\"\n      ]\n    }\n  }\n}\n```\n\n**Alternative configuration for local build installation:**\n```json\n{\n  \"mcpServers\": {\n    \"mcp-libsql\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/Users/username/projects/mcp-libsql/dist/index.js\",\n        \"--url\", \n        \"file:///Users/username/database.db\"\n      ],\n    }\n  }\n}\n```\n\n**Alternative configuration for global install using nvm lts for node**\n```json\n{\n  \"mcpServers\": {\n    \"mcp-libsql\": {\n      \"command\": \"zsh\",\n      \"args\": [\n        \"-c\",\n        \"source ~/.nvm/nvm.sh && nvm use --lts > /dev/null && mcp-libsql --url file:///Users/username/database.db\",\n      ],\n    }\n  }\n}\n```\n\n**Important**: The global installation method is recommended as it handles PATH automatically.\n\n#### **Linux Configuration**\n\n1. **Create configuration file** at `~/.config/Claude/claude_desktop_config.json`:\n\n**Global install**\n```json\n{\n  \"mcpServers\": {\n    \"mcp-libsql\": {\n      \"command\": \"mcp-libsql\",\n      \"args\": [\n        \"--url\",\n        \"file:///home/username/database.db\"\n      ]\n    }\n  }\n}\n```\n\n**Alternative configuration for local build installation:**\n```json\n{\n  \"mcpServers\": {\n    \"mcp-libsql\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/home/username/projects/mcp-libsql/dist/index.js\",\n        \"--url\",\n        \"file:///home/username/database.db\"\n      ],\n    }\n  }\n}\n```\n\n#### **Windows (WSL2) Configuration**\n\n1. **Create configuration file** at `%APPDATA%\\Claude\\claude_desktop_config.json`:\n\n**Global install**\n```json\n{\n  \"mcpServers\": {\n    \"mcp-libsql\": {\n      \"command\": \"wsl.exe\",\n      \"args\": [\n        \"-e\",\n        \"bash\",\n        \"-c\",\n        \"mcp-libsql --url file:///home/username/database.db\",\n      ]\n    }\n  }\n}\n```\n\n**Alternative configuration for local build installation:**\n```json\n{\n  \"mcpServers\": {\n    \"mcp-libsql\": {\n      \"command\": \"wsl.exe\",\n      \"args\": [\n        \"-e\",\n        \"bash\",\n        \"-c\",\n        \"/home/username/projects/mcp-libsql/dist/index.js --url file:///home/username/database.db\",\n      ]\n    }\n  }\n}\n```\n\n**Alternative configuration for global install using nvm for node**\n```json\n{\n  \"mcpServers\": {\n    \"mcp-libsql\": {\n      \"command\": \"wsl.exe\",\n      \"args\": [\n        \"-e\",\n        \"bash\",\n        \"-c\",\n        \"source ~/.nvm/nvm.sh && mcp-libsql --url file:///home/username/database.db\",\n      ]\n    }\n  }\n}\n```\n\n**Important**: Use `wsl.exe -e` (not just `wsl.exe`) to ensure proper command handling and avoid issues with server command reception on Windows.\n\n### **Database Authentication**\n\nFor Turso (and other credentialed) databases, you'll need an authentication token. There are two secure ways to provide it:\n\n_Global installation shown below, adjust accordingly for your setup_\n\n#### **Method 1: Environment Variable (Recommended)**\n\n**Configure Claude Desktop with environment variable** (macOS/Linux example):\n```bash\nexport LIBSQL_AUTH_TOKEN=\"your-turso-auth-token-here\"\n```\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-libsql\": {\n      \"command\": \"mcp-libsql\",\n      \"args\": [\n        \"--url\",\n        \"libsql://your-database.turso.io\"\n      ]\n    }\n  }\n}\n```\n\n#### **Method 2: CLI Parameter**\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-libsql\": {\n      \"command\": \"mcp-libsql\",\n      \"args\": [\n        \"--url\",\n        \"libsql://your-database.turso.io\",\n        \"--auth-token\",\n        \"your-turso-auth-token-here\"\n      ]\n    }\n  }\n}\n```\n\n#### **Getting Your Turso Auth Token**\n\n1. **Install Turso CLI:**\n   ```bash\n   curl -sSfL https://get.tur.so/install.sh | bash\n   ```\n\n2. **Login to Turso:**\n   ```bash\n   turso auth login\n   ```\n\n3. **Create an auth token:**\n   ```bash\n   turso auth token create --name \"mcp-libsql\"\n   ```\n\n4. **Get your database URL:**\n   ```bash\n   turso db show your-database-name --url\n   ```\n\n#### **Security Best Practices**\n\n- **Environment variables are safer** than CLI parameters (tokens won't appear in process lists)\n- **MCP config files may contain tokens** - ensure they're not committed to version control\n- **Consider using external secret management** for production environments\n- **Use scoped tokens** with minimal required permissions\n- **Rotate tokens regularly** for enhanced security\n- **Monitor token usage** through Turso dashboard\n\n#### **Example: Complete Turso Setup**\n\n1. **Create and configure database:**\n   ```bash\n   # Create database\n   turso db create my-app-db\n   \n   # Get database URL\n   turso db show my-app-db --url\n   # Output: libsql://my-app-db-username.turso.io\n   \n   # Create auth token\n   turso auth token create --name \"mcp-libsql-token\"\n   # Output: your-long-auth-token-string\n   ```\n\n2. **Configure Claude Desktop:**\n    ```bash\n    export LIBSQL_AUTH_TOKEN=\"your-turso-auth-token-here\"\n    ```\n\n    ```json\n    {\n      \"mcpServers\": {\n        \"mcp-libsql\": {\n          \"command\": \"mcp-libsql\",\n          \"args\": [\n            \"--url\",\n            \"libsql://my-app-db-username.turso.io\"\n          ]\n        }\n      }\n    }\n    ```\n\n3. **Test the connection:**\n   ```bash\n   # Test locally first\n   mcp-libsql --url \"libsql://my-app-db-username.turso.io\" --log-mode console\n   ```\n\n#### **Configuration Notes**\n\n- **File paths**: Use absolute paths to avoid path resolution issues\n- **Database URLs**: \n  - File databases: `file:///absolute/path/to/database.db`\n  - HTTP databases: `http://hostname:port`\n  - libSQL/Turso: `libsql://your-database.turso.io`\n- **Node.js path**: Use `which node` to find your Node.js installation path\n- **Working directory**: Set `cwd` to ensure relative paths work correctly\n- **Authentication**: For Turso databases, use environment variables for secure token handling\n- **Logging modes**: \n  - Default `file` mode prevents JSON parsing errors in MCP protocol\n  - Use `--log-mode console` for development debugging\n  - Use `--log-mode both` for comprehensive logging\n  - Use `--log-mode none` to disable all logging\n\n2. **Restart Claude Desktop** completely after updating the configuration\n\n3. **Test the integration** by asking Claude to run SQL queries:\n   ```\n   Can you run this SQL query: SELECT 1 as test\n   ```\n\n\n\n## 📋 **Available Tools**\n\n- **read-query** - Execute SELECT queries with security validation\n- **write-query** - INSERT/UPDATE/DELETE with transaction support  \n- **create-table** - CREATE TABLE with DDL security\n- **alter-table** - Modify table structure (ADD/RENAME/DROP)\n- **list-tables** - Browse database metadata and objects\n- **describe-table** - Inspect table schema and structure\n\n> 📖 **Detailed API documentation:** See [docs/API.md](docs/API.md) for complete input/output examples and parameters.\n\n## 🧪 **Testing**\n\n```bash\n# Run all tests\npnpm test\n\n# Run tests in watch mode\npnpm test:watch\n\n# Run tests with coverage\npnpm test:coverage\n\n# Run specific test file\npnpm test security-verification\n\n# Lint code\npnpm lint\n\n# Fix linting issues\npnpm lint:fix\n\n# Type check\npnpm typecheck\n```\n\n**Test Coverage**: 403 tests covering all functionality including edge cases, error scenarios, CLI arguments, authentication, and comprehensive security validation.\n\n## ⚠️ **Common Issues**\n\n### **1. Build Failures**\n```bash\n# Clean and rebuild\nrm -rf dist node_modules\npnpm install && pnpm build\n```\n\n### **2. Node.js Version Issues (macOS)**\n```\nSyntaxError: Unexpected token '??='\n```\n**Problem**: Claude Desktop may default to using an older Node.js version on your system which doesn't support the required feature set.\n\n**Solution**: Use global installation and nvm node selection method shown above.\n\n### **3. Server Won't Start**\n- For global installation: `pnpm install -g @xexr/mcp-libsql`\n- For local installation: Ensure `pnpm build` was run and `dist/index.js` exists\n- Test locally: `mcp-libsql --url file:///tmp/test.db`\n- Restart Claude Desktop after config changes\n\n### **4. Tools Not Available**\n- Verify database URL is accessible\n- Check Claude Desktop logs for connection errors\n- Test with simple file database: `file:///tmp/test.db`\n\n### **5. JSON Parsing Errors (Resolved)**\n```\nExpected ',' or ']' after array element in JSON\n```\n**Resolved**: This issue is caused by stdout console logging. The `--log-mode` option now defaults to `file` mode which prevents this issue. If you see these errors, ensure you're using the default `--log-mode file` or not specifying `--log-mode` at all. Note, the error is harmless, and the tool will still work with it if you wish to have console logging.\n\n### **6. Database Connection Issues**\n```bash\n# Test database connectivity\nsqlite3 /tmp/test.db \"SELECT 1\"\n\n# Fix permissions\nchmod 644 /path/to/database.db\n```\n\n> 🔧 **Full troubleshooting guide:** See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for detailed solutions to all issues.\n\n## 🏗️ **Architecture**\n\nBuilt with TypeScript and modern Node.js patterns:\n- **Connection pooling** with health monitoring and retry logic\n- **Tool-based architecture** with consistent validation and error handling\n- **Security-first design** with multi-layer input validation\n- **Comprehensive testing** with 244 tests covering all scenarios\n\n## 🤝 **Contributing**\n\n1. Follow TypeScript strict mode and existing code patterns\n2. Write tests for new features  \n3. Maintain security measures\n4. Update documentation\n\n**Development:** `pnpm dev` • **Build:** `pnpm build` • **Test:** `pnpm test`\n\n## 📄 **License**\n\nMIT License - see [LICENSE](LICENSE) file for details.\n\n## 🔗 **Links**\n\n- [Model Context Protocol](https://modelcontextprotocol.io/)\n- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)\n- [libSQL Documentation](https://docs.libsql.org/)\n- [Claude Desktop](https://claude.ai/desktop)",
+  "category": "Development",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "xexr-mcp-libsql-quickstart": {
+        "command": "mcp-libsql",
+        "args": ["--url", "file:///tmp/test.db", "--log-mode", "console"],
+        "env": {}
+      },
+      "xexr-mcp-libsql-macos-global": {
+        "command": "mcp-libsql",
+        "args": ["--url", "file:///Users/username/database.db"],
+        "env": {}
+      },
+      "xexr-mcp-libsql-macos-local-build": {
+        "command": "node",
+        "args": ["/Users/username/projects/mcp-libsql/dist/index.js", "--url", "file:///Users/username/database.db"],
+        "env": {}
+      },
+      "xexr-mcp-libsql-macos-nvm-global": {
+        "command": "zsh",
+        "args": [
+          "-c",
+          "source ~/.nvm/nvm.sh && nvm use --lts > /dev/null && mcp-libsql --url file:///Users/username/database.db"
+        ],
+        "env": {}
+      },
+      "xexr-mcp-libsql-linux-global": {
+        "command": "mcp-libsql",
+        "args": ["--url", "file:///home/username/database.db"],
+        "env": {}
+      },
+      "xexr-mcp-libsql-linux-local-build": {
+        "command": "node",
+        "args": ["/home/username/projects/mcp-libsql/dist/index.js", "--url", "file:///home/username/database.db"],
+        "env": {}
+      },
+      "xexr-mcp-libsql-wsl2-global": {
+        "command": "wsl.exe",
+        "args": ["-e", "bash", "-c", "mcp-libsql --url file:///home/username/database.db"],
+        "env": {}
+      },
+      "xexr-mcp-libsql-wsl2-local-build": {
+        "command": "wsl.exe",
+        "args": [
+          "-e",
+          "bash",
+          "-c",
+          "/home/username/projects/mcp-libsql/dist/index.js --url file:///home/username/database.db"
+        ],
+        "env": {}
+      },
+      "xexr-mcp-libsql-wsl2-nvm-global": {
+        "command": "wsl.exe",
+        "args": ["-e", "bash", "-c", "source ~/.nvm/nvm.sh && mcp-libsql --url file:///home/username/database.db"],
+        "env": {}
+      },
+      "xexr-mcp-libsql-turso-env-auth": {
+        "command": "mcp-libsql",
+        "args": ["--url", "libsql://your-database.turso.io"],
+        "env": {
+          "LIBSQL_AUTH_TOKEN": "your-turso-auth-token-here"
+        }
+      },
+      "xexr-mcp-libsql-turso-cli-auth": {
+        "command": "mcp-libsql",
+        "args": ["--url", "libsql://your-database.turso.io", "--auth-token", "your-turso-auth-token-here"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Xexr",
+    "repo": "mcp-libsql",
+    "url": "https://github.com/Xexr/mcp-libsql",
+    "name": "xexr__mcp-libsql",
+    "path": null,
+    "stars": 13,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "31bf1de15cd63eb1d8a27e80c764f2e33c12689c"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:32.742Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@libsql/client",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@xexr/mcp-libsql\",\n  \"version\": \"1.1.0\",\n  \"description\": \"MCP server for libSQL database operations\",\n  \"type\": \"module\",\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"mcp-libsql\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist/**/*\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"pnpm lint && tsc && chmod 755 dist/index.js\",\n    \"dev\": \"nodemon --exec \\\"tsx src/index.ts --dev\\\"\",\n    \"start\": \"node dist/index.js\",\n    \"test\": \"vitest run\",\n    \"test:watch\": \"vitest --watch\",\n    \"test:coverage\": \"vitest --coverage\",\n    \"typecheck\": \"tsc --noEmit\",\n    \"lint\": \"eslint src/**/*.ts\",\n    \"lint:fix\": \"eslint src/**/*.ts --fix\",\n    \"format\": \"prettier --write src/**/*.ts\",\n    \"format:check\": \"prettier --check src/**/*.ts\",\n    \"prepack\": \"pnpm build\",\n    \"prepublishOnly\": \"pnpm test && pnpm typecheck\",\n    \"release:patch\": \"npm version patch && git push --follow-tags\",\n    \"release:minor\": \"npm version minor && git push --follow-tags\",\n    \"release:major\": \"npm version major && git push --follow-tags\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"libsql\",\n    \"database\",\n    \"sql\",\n    \"ai\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"xexr\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/Xexr/mcp-libsql.git\"\n  },\n  \"homepage\": \"https://github.com/Xexr/mcp-libsql\",\n  \"bugs\": {\n    \"url\": \"https://github.com/Xexr/mcp-libsql/issues\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"dependencies\": {\n    \"@libsql/client\": \"^0.15.7\",\n    \"@modelcontextprotocol/sdk\": \"^1.12.0\",\n    \"zod\": \"^3.25.32\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.27.0\",\n    \"@types/node\": \"^22.15.23\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.33.0\",\n    \"@typescript-eslint/parser\": \"^8.33.0\",\n    \"@vitest/coverage-v8\": \"^3.1.4\",\n    \"eslint\": \"^9.27.0\",\n    \"nodemon\": \"^3.1.10\",\n    \"prettier\": \"^3.5.3\",\n    \"tsx\": \"^4.19.4\",\n    \"typescript\": \"^5.8.3\",\n    \"vitest\": \"^3.1.4\"\n  }\n}\n"
+}

@@ -1,4 +1,4 @@
-import type { AgentScope } from "@shared";
+import type { AgentScope } from "@archestra/shared";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +16,8 @@ const labels = {
   org: "Organization",
   builtIn: "Built-in",
 } as const;
-const commonClasses = "text-[11px] shrink-0";
+const commonClasses =
+  "text-[11px] leading-none shrink-0 py-0.5 pt-[3px] pb-[2px]";
 
 function AgentBadge({
   type,

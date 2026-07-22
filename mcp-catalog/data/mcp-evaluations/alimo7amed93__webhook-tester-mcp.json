@@ -1,0 +1,78 @@
+{
+  "name": "alimo7amed93__webhook-tester-mcp",
+  "display_name": "webhook-tester-mcp",
+  "description": "FastMCP server for managing and testing webhooks via webhook-test.com API",
+  "author": {
+    "name": "alimo7amed93"
+  },
+  "server": {
+    "command": "fastmcp",
+    "args": ["run", "${__dirname}/Webhook-test_mcp/server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# 🚀 Webhook Tester MCP Server\n\nA powerful and modular FastMCP server for interacting with webhook-test.com, designed to automate and manage Webhook tokens (URLs), inspect incoming requests, and perform analytics — all without writing custom API integrations.\n\nBuilt with the FastMCP framework to expose modular tools and resources, this project enables webhook observability and management.\n\n## 🛎️ Webhooks 101\n\nWebhooks let your app send and receive real-time updates between services. When sending, your app can POST data to a URL whenever something important happens — like a new user signup or a status change. When receiving, your app listens for incoming POST requests from other services and reacts to the events they send. This setup is way more efficient than constant polling and is perfect for triggering actions, syncing data, or keeping systems in sync.\n\n## 📦 Features & Use Cases\n\n✅ Create new webhooks\\\n✅ List all available webhooks\\\n✅ Fetch webhook's details\\\n✅ Fetch webhook payloads\\\n✅ Delete webhooks\n\n## ⚙️ Setup\n\n1. Clone the repo\n2. Install dependencies `pip install -r requirements.txt`\n3. Configure `.env`\n\n## 🔍 Testing Using Claude\n\n- Configure Claude Desktop to use the local server by editing your claude_desktop_config.json file:\n\n``` \n{\n    \"mcpServers\": {\n      \"webhook-tester-mcp\": {\n        \"command\": \"fastmcp\",\n        \"args\": [\"run\", \"{{fullPath}}\\\\Webhook-test_mcp\\\\server.py\"]\n      }\n    }\n  } \n```\n\n## 🧪 Demo testing the Server\n\n[![Watch the video](https://img.youtube.com/vi/nGRlQtRlDA4/hqdefault.jpg)](https://www.youtube.com/watch?v=nGRlQtRlDA4)\n\n## 📄 License\nThis project is licensed under the [MIT License](https://mit-license.org/).",
+  "category": "Development",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "webhook-tester-mcp": {
+        "command": "fastmcp",
+        "args": ["run", "{{fullPath}}\\Webhook-test_mcp\\server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "alimo7amed93",
+    "repo": "webhook-tester-mcp",
+    "url": "https://github.com/alimo7amed93/webhook-tester-mcp",
+    "name": "alimo7amed93__webhook-tester-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "0bc2af6fa5a7efe6a7c9819d1c85d39477a97554"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:34.651Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nfastmcp\nhttpx\npython-dotenv"
+}

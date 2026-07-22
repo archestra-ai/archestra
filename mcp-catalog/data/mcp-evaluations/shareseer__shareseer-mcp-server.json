@@ -1,0 +1,74 @@
+{
+  "name": "shareseer__shareseer-mcp-server",
+  "display_name": "shareseer-mcp-server",
+  "description": "ShareSeer MCP Server - Access SEC filings and insider transactions via Claude",
+  "author": {
+    "name": "shareseer"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {
+      "API_KEY": "${user_config.api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "Your API key for ShareSeer authentication (starts with `sk-shareseer-`).",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# ShareSeer MCP Server\n\nA Model Context Protocol (MCP) server that provides access to ShareSeer's comprehensive SEC filings, insider transactions, and financial data through Claude and other MCP-compatible AI assistants.\n\n## 🚀 Quick Start\n\n### Get Your API Key\n\n1. Sign up at [shareseer.com/signup](https://shareseer.com/signup) (free account)\n2. Go to your [profile page](https://shareseer.com/profile)\n3. Your API key will be displayed (starts with `sk-shareseer-`)\n\n### Claude Desktop Integration\n\n**Remote MCP Server (Recommended)**\n\nAdd to your Claude Desktop configuration:\n\n**Search & Tools →Add Integrations → Add Integration URL:**\n```\nhttps://shareseer.com/mcp?api_key=YOUR_API_KEY_HERE\n```\n\n\n## 📊 Available Tools\n\n### Company Information\n- **`get_company_filings`** - Get recent SEC filings for a specific company\n- **`get_insider_transactions`** - Get insider trading transactions for a company\n\n### Market-Wide Data\n- **`get_recent_filings`** - Get recent SEC filings across all companies\n- **`get_recent_insider_activity`** - Get recent insider trading activity\n\n### Largest Transactions\n- **`get_largest_daily_transactions`** - Get largest daily insider transactions\n- **`get_largest_weekly_transactions`** - Get largest weekly insider transactions\n\n## 💎 Subscription Tiers\n\n| Feature | Free | Premium ($14.99/mo) |\n|---------|------|---------------------|\n| **Rate Limits** | 10/hour, 50/day | 100/hour, 1K/day |\n| **Data History** | 6 months | 10 years |\n| **Company Data** | ✅ Basic info & filings | ✅ All features |\n| **Insider Transactions** | ✅ Limited (3 results) | ✅ Unlimited |\n| **Largest Transactions** | ✅ Current week only | ✅ Historical data |\n| **Pagination** | ❌ | ✅ |\n| **Support** | Community | Email |\n\n[**Sign Up Free**](https://shareseer.com/signup) | [**Upgrade to Premium**](https://shareseer.com/upgrade?source=mcp)\n\n## 🔧 Usage Examples\n\n\n### Get Recent Insider Transactions  \nAsk Claude: *\"Show me recent insider trading for Tesla\"*\n\n### Get Largest Daily Buyers\nAsk Claude: *\"Who made the biggest stock purchases today?\"*\n\n### Get Recent SEC Filings\nAsk Claude: *\"What are the most recent 10-K filings?\"*\n\n### Market Analysis\nAsk Claude: *\"Show me the largest insider selling activity this week\"*\nAsk Claude: *\"Show me the largest insider buying activity this week\"*\n\n## 🌐 Remote vs Local Setup\n\n**✅ Remote MCP (Recommended)**\n- No installation required\n- Always up-to-date\n- Hosted by ShareSeer\n- Just add the integration URL\n\n\n\n### Common Issues\n\n**Claude Desktop doesn't show ShareSeer tools:**\n- Verify your API key is correct and active\n- Make sure the integration URL includes your API key\n- Restart Claude Desktop after adding the integration\n- Check that your ShareSeer account is active\n\n**\"Rate limit exceeded\" error:**\n- Check your current subscription tier limits  \n- Wait for the rate limit window to reset\n- Consider upgrading to Premium for higher limits\n- Spread out your queries over time\n\n**\"Invalid API key\" error:**\n- Verify your API key starts with `sk-shareseer-`\n- Check that your ShareSeer account is active\n- Get a fresh API key from your profile page\n\n### Getting Help\n\n- **Free users**: [GitHub Issues](https://github.com/shareseer/mcp-server/issues)\n- **Premium users**: Email support@shareseer.com\n- **Documentation**: [ShareSeer Claude Integration](https://shareseer.com/claude-integration)\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## 🙏 Support\n\nLove the ShareSeer MCP server? Here's how you can help:\n\n- ⭐ **Star this repo** on GitHub\n- 🐛 **Report bugs** via GitHub Issues  \n- 💡 **Request features** via GitHub Discussions\n- 📢 **Share** with other developers and traders\n- 💎 **Upgrade to Premium** to support continued development\n\n---\n\n**Built with ❤️  by the ShareSeer team**\n\n[Website](https://shareseer.com) • [X](https://x.com/shareseer) • [Email](mailto:contact@shareseer.com)\n\n",
+  "category": "Finance",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "shareseer",
+    "repo": "shareseer-mcp-server",
+    "url": "https://github.com/shareseer/shareseer-mcp-server",
+    "name": "shareseer-mcp-server",
+    "path": null,
+    "stars": 4,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "971564a7b06e3419aa4309fdc062389302d1068a"
+  },
+  "programming_language": "Unknown",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:16.565Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

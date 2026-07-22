@@ -12,21 +12,14 @@ vi.mock("@/clients/llm-client", () => ({
   createDirectLLMModel: mockCreateDirectLLMModel,
 }));
 
-vi.mock("openai", () => {
-  class MockOpenAI {
-    apiKey: string;
-    baseURL?: string;
-    constructor(opts: { apiKey: string; baseURL?: string }) {
-      this.apiKey = opts.apiKey;
-      this.baseURL = opts.baseURL;
-    }
-  }
-  return { default: MockOpenAI };
-});
-
+import config from "@/config";
 import db, { schema } from "@/database";
 import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
-import { describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
+import {
+  EmbeddingConfigUnresolvableError,
+  RerankerConfigUnresolvableError,
+} from "./errors";
 import {
   getDefaultOrgEmbeddingConfig,
   resolveApiKeyFromChatApiKey,
@@ -43,6 +36,11 @@ async function createSecret(): Promise<string> {
 }
 
 describe("resolveEmbeddingConfig", () => {
+  const originalOllamaBaseUrl = config.llm.ollama.baseUrl;
+  afterEach(() => {
+    config.llm.ollama.baseUrl = originalOllamaBaseUrl;
+  });
+
   test("uses inferenceBaseUrl when resolving a chat API key", async ({
     makeOrganization,
   }) => {
@@ -67,6 +65,33 @@ describe("resolveEmbeddingConfig", () => {
 
     expect(result?.apiKey).toBe("azure-key");
     expect(result?.baseUrl).toBe("https://runtime.example.com/openai");
+  });
+
+  test("falls back to the configured provider base URL when the key has none", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    // A self-hosted Ollama key created with a blank Base URL stores NULL for
+    // both URL columns and needs no secret.
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Ollama Key",
+      provider: "ollama",
+      secretId: null,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+
+    // The deployment points Ollama at an in-cluster host, not localhost.
+    config.llm.ollama.baseUrl = "http://ollama:11434/v1";
+
+    const result = await resolveApiKeyFromChatApiKey(chatApiKey.id);
+
+    // Must use the configured host (same source chat/sync use), not the
+    // hardcoded localhost default that previously broke embeddings.
+    expect(result?.baseUrl).toBe("http://ollama:11434/v1");
   });
 
   test("returns config when org has embedding key and model configured", async ({
@@ -134,7 +159,7 @@ describe("resolveEmbeddingConfig", () => {
     expect(result).toBeNull();
   });
 
-  test("returns config with placeholder key when chat API key has no secretId", async ({
+  test("returns config with a null key when chat API key has no secretId", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -159,10 +184,13 @@ describe("resolveEmbeddingConfig", () => {
     expect(result).not.toBeNull();
     expect(result?.model).toBe("text-embedding-3-small");
     expect(result?.dimensions).toBe(1536);
-    expect(result?.apiKey).toBe("unused");
+    // Keyless configs resolve to a null key (a placeholder is synthesized at the
+    // client boundary for SDKs that require one); Bedrock IAM relies on this to
+    // pick IAM auth rather than a bearer placeholder.
+    expect(result?.apiKey).toBeNull();
   });
 
-  test("returns null when secret value cannot be resolved", async ({
+  test("throws when a configured secret cannot be resolved", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -185,9 +213,10 @@ describe("resolveEmbeddingConfig", () => {
 
     mockGetSecretValue.mockResolvedValueOnce(null);
 
-    const result = await resolveEmbeddingConfig(org.id);
-
-    expect(result).toBeNull();
+    // Configured but unresolvable is a diagnosable fault, not "not configured".
+    await expect(resolveEmbeddingConfig(org.id)).rejects.toBeInstanceOf(
+      EmbeddingConfigUnresolvableError,
+    );
   });
 
   test("returns null for non-existent organization", async () => {
@@ -270,7 +299,7 @@ describe("resolveRerankerConfig", () => {
     expect(result).toBeNull();
   });
 
-  test("returns null when secret resolution fails", async ({
+  test("throws when a configured secret cannot be resolved", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -293,9 +322,11 @@ describe("resolveRerankerConfig", () => {
 
     mockGetSecretValue.mockResolvedValueOnce(null);
 
-    const result = await resolveRerankerConfig(org.id);
-
-    expect(result).toBeNull();
+    // Configured but unresolvable: a typed fault (the query path catches it and
+    // degrades; save blocks on it).
+    await expect(resolveRerankerConfig(org.id)).rejects.toBeInstanceOf(
+      RerankerConfigUnresolvableError,
+    );
   });
 });
 

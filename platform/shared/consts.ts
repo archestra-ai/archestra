@@ -5,6 +5,17 @@ export const DEFAULT_APP_DESCRIPTION =
   "Enterprise MCP-native Secure AI Platform";
 
 /**
+ * True for the default brand or one of its own variants (e.g. "Archestra
+ * Staging", "Archestra Dev") — never true for a genuinely different
+ * white-labeled name. Used to gate Archestra-only visuals, like the mark the
+ * Claude Code startup guard draws, that must never appear under someone
+ * else's brand.
+ */
+export function isDefaultBrandedAppName(appName: string): boolean {
+  return appName.startsWith(DEFAULT_APP_NAME);
+}
+
+/**
  * Prefix used for newly generated platform-managed tokens (team tokens, user
  * tokens, virtual API keys, API keys). Keep this branding-neutral.
  */
@@ -23,6 +34,15 @@ export const ALL_ARCHESTRA_TOKEN_PREFIXES = [
   ...LEGACY_ARCHESTRA_TOKEN_PREFIXES,
 ] as const;
 
+/**
+ * Constraints enforced by the Better Auth api-key plugin on API key creation.
+ * Pinned explicitly in the backend plugin config and mirrored in the frontend
+ * create-API-key form validation so limits and error copy cannot drift.
+ */
+export const API_KEY_MIN_EXPIRATION_DAYS = 1;
+export const API_KEY_MAX_EXPIRATION_DAYS = 365;
+export const API_KEY_MAX_NAME_LENGTH = 32;
+
 export const DEFAULT_ADMIN_EMAIL = "admin@example.com";
 export const DEFAULT_ADMIN_PASSWORD = "password";
 
@@ -30,8 +50,57 @@ export const DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_EMAIL";
 export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
   "ARCHESTRA_AUTH_ADMIN_PASSWORD";
 
-export const EMAIL_PLACEHOLDER = "admin@example.com";
-export const PASSWORD_PLACEHOLDER = "password";
+/**
+ * Max length (characters) of a project's display name. Kept short so project
+ * lists, headers, and dialogs stay readable. Enforced by the projects API and
+ * the create/edit forms.
+ */
+export const PROJECT_NAME_MAX_LENGTH = 64;
+
+/**
+ * Max length (characters) of a project's description. Kept to roughly a
+ * sentence or two so it stays a short blurb in project cards/headers rather
+ * than a wall of text. Enforced by the projects API and the create/edit forms.
+ */
+export const PROJECT_DESCRIPTION_MAX_LENGTH = 200;
+
+/**
+ * Filename of a project's instructions file. Once saved it is an ordinary,
+ * available project file — listed, readable, and writable through the normal
+ * file surfaces like any other — with one special rule: it cannot be deleted
+ * (emptying it is how its guidance is removed). Its content is injected into the
+ * system prompt of every chat in the project, and it is surfaced as a pinned,
+ * editable entry in the project's Files panel.
+ */
+export const PROJECT_INSTRUCTIONS_FILENAME = "instructions.md";
+
+/**
+ * Max length (characters) the instructions editor / API accepts in one save. It
+ * is injected into every turn's system prompt, so the UI editing path is
+ * deliberately bounded. (Agent writes via the generic file tools are bounded
+ * instead by the sandbox artifact byte limit.)
+ */
+export const PROJECT_INSTRUCTIONS_MAX_LENGTH = 100_000;
+
+/**
+ * Max size (bytes) of a Markdown/plain-text file the in-place editor saves in one
+ * write. Editing happens in a textarea, so this caps it below the sandbox
+ * artifact limit; larger generated files can still be downloaded and read, just
+ * not hand-edited here. The backend write route is the authority; the editor
+ * mirrors it.
+ */
+export const EDITABLE_TEXT_FILE_MAX_BYTES = 1_000_000;
+
+/**
+ * Max size (bytes) of a single file uploaded by dragging it onto the project
+ * Files panel. Enforced both client-side (instant feedback before encoding) and
+ * server-side (the real gate). Kept comfortably under the API body limit: a
+ * 25 MB file is ~33 MB once base64-encoded, and uploads are one request per
+ * file, so a multi-file drop never aggregates into one oversized body.
+ */
+export const MAX_PROJECT_UPLOAD_BYTES = 25 * 1024 * 1024;
+/** {@link MAX_PROJECT_UPLOAD_BYTES} expressed in whole MB, for user-facing copy. */
+export const MAX_PROJECT_UPLOAD_MB = MAX_PROJECT_UPLOAD_BYTES / (1024 * 1024);
 
 export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
@@ -41,6 +110,7 @@ export const OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
 export const OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
 export const DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
 export const LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
+export const MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
 
 /**
  * Separator used to construct fully-qualified MCP tool names
@@ -48,14 +118,72 @@ export const LLM_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
  */
 export const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
 
+/**
+ * The one placeholder through which an MCP server's mutable display name can
+ * reach a custom K8s deployment spec (`deploymentSpecYaml`). A catalog rename
+ * flags installs of such catalogs `reinstallRequired` instead of being a pure
+ * DB cascade. Must match the `${archestra.*}` placeholder syntax in the
+ * backend's k8s-yaml-generator (pinned by a backend test).
+ */
+export const SERVER_NAME_PLACEHOLDER = "${archestra.server_name}";
+
 export const WEBSITE_URL = "https://archestra.ai";
 export const GITHUB_REPO_URL = "https://github.com/archestra-ai/archestra";
 export const GITHUB_REPO_NEW_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`;
 export const COMMUNITY_SLACK_URL = `${WEBSITE_URL}/join-slack`;
+/** Typeform behind the "Share feedback" pop-up. */
+export const FEEDBACK_TYPEFORM_URL = "https://form.typeform.com/to/qVvzSmEn";
 
 export const MCP_CATALOG_API_BASE_URL =
   process.env.ARCHESTRA_MCP_CATALOG_API_BASE_URL ||
   `${WEBSITE_URL}/mcp-catalog/api`;
+
+/**
+ * The env keys the Claude Code connect flow writes into the `env` block of
+ * `~/.claude/settings.json` to route Claude Code through the LLM proxy, per
+ * provider. The connect setup script sets them, and the disconnect surfaces
+ * (the /connection Disconnect panel and the startup guard's disconnect action)
+ * remove exactly these keys — one list so the two directions can't drift.
+ * `ANTHROPIC_CUSTOM_HEADERS` is handled separately: it is merged/stripped
+ * line-wise so user-owned header lines survive.
+ */
+export const CLAUDE_CODE_PROXY_ENV_KEYS = {
+  anthropic: ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"],
+  bedrock: [
+    "CLAUDE_CODE_USE_BEDROCK",
+    "AWS_REGION",
+    "ANTHROPIC_BEDROCK_BASE_URL",
+    // Virtual-key mode only: the proxy virtual key, sent as a Bedrock bearer
+    // token (the Anthropic path's ANTHROPIC_AUTH_TOKEN equivalent).
+    "AWS_BEARER_TOKEN_BEDROCK",
+  ],
+} as const;
+
+/** Claude Code custom-headers env key (line-wise merged/stripped, see above). */
+export const CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY = "ANTHROPIC_CUSTOM_HEADERS";
+
+/**
+ * Claude Code startup guard ("pre-loader") install locations. The connect
+ * setup script writes the guard to `~/<relpath>` and wraps `claude` in the
+ * user's shell profiles inside the marker block; the Disconnect panel tells
+ * users to remove exactly these.
+ */
+export const CLAUDE_CODE_GUARD_SCRIPT_RELPATH =
+  ".archestra/claude-startup-guard.sh";
+/** Windows (PowerShell) guard; forward slashes — PowerShell accepts them. */
+export const CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH =
+  ".archestra/claude-startup-guard.ps1";
+export const CLAUDE_CODE_GUARD_MARKER_START =
+  "# >>> archestra claude guard >>>";
+export const CLAUDE_CODE_GUARD_MARKER_END = "# <<< archestra claude guard <<<";
+/**
+ * Remotes the guard's own disconnect action already removed from Claude Code,
+ * one resource kind per line. The guard skips them on later launches (and
+ * removes itself entirely once nothing connected is left to check); connect
+ * clears the file so a fresh setup re-arms every check.
+ */
+export const CLAUDE_CODE_GUARD_SKIP_RELPATH =
+  ".archestra/claude-startup-guard.skip";
 
 /**
  * Header name for external agent ID.
@@ -71,11 +199,32 @@ export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
 export const USER_ID_HEADER = "X-Archestra-User-Id";
 
 /**
+ * Header name for a passthrough virtual key.
+ * Clients can pass this header to authenticate the acting Archestra user on an
+ * LLM proxy request whose provider credential is something the proxy forwards
+ * untouched (e.g. a Claude Code subscription token or a raw provider key in the
+ * Authorization header). The passthrough key carries no provider credential of
+ * its own — it only attributes the interaction to its owner and gates access to
+ * the proxy. Standard virtual keys still go in the Authorization header.
+ */
+export const VIRTUAL_KEY_HEADER = "X-Archestra-Virtual-Key";
+
+/**
  * Header name for session ID.
  * Clients can pass this header to group related LLM requests into a session.
  * This enables session-based grouping in the LLM proxy logs UI.
  */
 export const SESSION_ID_HEADER = "X-Archestra-Session-Id";
+
+/**
+ * Header set on the available-models response while a lazy provider model sync
+ * is in flight. Clients refetch until it clears so freshly synced models appear.
+ */
+export const LAZY_MODEL_SYNC_STATUS_HEADER = "x-archestra-lazy-model-sync";
+
+/** Sole value of {@link LAZY_MODEL_SYNC_STATUS_HEADER}: a sync is pending. */
+export type LazyModelSyncStatus = "pending";
+export const LAZY_MODEL_SYNC_STATUS_PENDING: LazyModelSyncStatus = "pending";
 
 /**
  * Header name for interaction source.
@@ -141,4 +290,25 @@ export function getArchestraTokenPrefix(value: string): string | null {
 
 export function hasArchestraTokenPrefix(value: string): boolean {
   return getArchestraTokenPrefix(value) !== null;
+}
+
+/**
+ * Whether a file may be edited in place through the generic text editor: only
+ * Markdown and plain-text files, by extension or MIME. Intentionally narrower
+ * than the Files preview's text rendering (which also shows JSON/CSV/logs) — the
+ * editor targets `.md`/`.txt` only. Single source of truth for both the backend
+ * write route's gate and the frontend's Edit affordance, so they cannot drift.
+ */
+export function isEditableTextFile(params: {
+  filename: string;
+  mimeType: string;
+}): boolean {
+  const name = params.filename.toLowerCase();
+  const mime = params.mimeType.toLowerCase();
+  return (
+    name.endsWith(".md") ||
+    name.endsWith(".txt") ||
+    mime === "text/markdown" ||
+    mime === "text/plain"
+  );
 }

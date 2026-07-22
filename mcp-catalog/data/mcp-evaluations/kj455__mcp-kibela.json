@@ -1,0 +1,122 @@
+{
+  "name": "kj455__mcp-kibela",
+  "display_name": "mcp-kibela",
+  "description": "MCP server implementation that enables AI assistants to search and reference Kibela content",
+  "author": {
+    "name": "kj455"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@kj455/mcp-kibela"],
+    "env": {
+      "KIBELA_TEAM": "${user_config.kibela_team}",
+      "KIBELA_TOKEN": "${user_config.kibela_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "kibela_team": {
+      "type": "string",
+      "title": "Kibela Team Name",
+      "description": "Your Kibela team name. You can find it from the URL of your Kibela team page, e.g., https://[team-name].kibe.la",
+      "required": true,
+      "sensitive": false
+    },
+    "kibela_token": {
+      "type": "string",
+      "title": "Kibela API Token",
+      "description": "Your Kibela API token (required). See prerequisites for how to get a token.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# mcp-kibela 🗒️\n\n[![smithery badge](https://smithery.ai/badge/@kj455/mcp-kibela)](https://smithery.ai/server/@kj455/mcp-kibela)\n[![npm version](https://badge.fury.io/js/@kj455%2Fmcp-kibela.svg)](https://www.npmjs.com/package/@kj455/mcp-kibela)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\nA Model Context Protocol (MCP) server implementation that enables AI assistants to search and reference Kibela content. This setup allows AI models like Claude to securely access information stored in Kibela.\n\n## Features 🚀\n\nThe mcp-kibela server provides the following features:\n\n- **Note Search**: Search Kibela notes by keywords\n- **My Notes**: Fetch your latest notes\n- **Note Content**: Get note content and comments by ID\n- **Note by Path**: Get note content by path\n- **Create Note**: Create a new note\n- **Update Note Content**: Update note content by note id\n\n---\n\n## Prerequisites 📋\n\nBefore you begin, ensure you have:\n\n- Node.js (v18 or higher)\n- MCP Client (Claude Desktop, Cursor, etc.)\n- Kibela Access Token ([How to get a token](https://support.kibe.la/hc/ja/articles/360036089931-API%E3%82%A2%E3%82%AF%E3%82%BB%E3%82%B9%E3%83%88%E3%83%BC%E3%82%AF%E3%83%B3%E3%81%AE%E5%8F%96%E5%BE%97%E6%96%B9%E6%B3%95%E3%82%92%E6%95%99%E3%81%88%E3%81%A6%E3%81%8F%E3%81%A0%E3%81%95%E3%81%84))\n- Git (if building from source)\n\n## Installation 🛠️\n\n### Usage with Cursor\n\n```json\n{\n  \"kibela\": {\n    \"command\": \"docker\",\n    \"args\": [\n      \"run\",\n      \"-i\",\n      \"--rm\",\n      \"-e\",\n      \"KIBELA_TEAM\",\n      \"-e\",\n      \"KIBELA_TOKEN\",\n      \"ghcr.io/kj455/mcp-kibela:latest\"\n    ],\n    \"env\": {\n      \"KIBELA_TEAM\": \"your-team-name from https://[team-name].kibe.la\",\n      \"KIBELA_TOKEN\": \"your-token\"\n    }\n  }\n}\n```\n\n### Usage with VSCode\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"kibela_team\",\n        \"description\": \"Kibela team name\",\n        \"password\": false\n      },\n      {\n        \"type\": \"promptString\",\n        \"id\": \"kibela_token\",\n        \"description\": \"Kibela token\",\n        \"password\": true\n      },\n    ],\n    \"servers\": {\n      \"kibela\": {\n        \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"-i\",\n          \"--rm\",\n          \"-e\",\n          \"KIBELA_TEAM\",\n          \"-e\",\n          \"KIBELA_TOKEN\",\n          \"ghcr.io/kj455/mcp-kibela:latest\"\n        ],\n        \"env\": {\n          \"KIBELA_TEAM\": \"${input:kibela_team}\",\n          \"KIBELA_TOKEN\": \"${input:kibela_token}\"\n        }\n      }\n    }\n  }\n}\n```\n\n\n### Usage with Claude Desktop\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-kibela\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"KIBELA_TEAM\",\n        \"-e\",\n        \"KIBELA_TOKEN\",\n        \"ghcr.io/kj455/mcp-kibela:latest\"\n      ],\n      \"env\": {\n        \"KIBELA_TEAM\": \"your-team-name from https://[team-name].kibe.la\",\n        \"KIBELA_TOKEN\": \"your-token\"\n      }\n    }\n  }\n}\n```\n\n### Using Smithery\n\n```bash\nnpx -y @smithery/cli install @kj455/mcp-kibela --client claude\n```\n\n## Environment Variables\n\nThe following environment variables are required:\n\n- `KIBELA_TEAM`: Your Kibela team name (required). You can find it from the URL of your Kibela team page. e.g. https://[team-name].kibe.la\n- `KIBELA_TOKEN`: Your Kibela API token (required)\n\n## Contributing\n\nAny contributions are welcome!\n\n## Development\n\n1. Use `npm run build:watch` to build the project in watch mode.\n\n```bash\nnpm run build:watch\n```\n\n2. Use `npx @modelcontextprotocol/inspector` to inspect the MCP server.\n\n```bash\nnpx @modelcontextprotocol/inspector node /path/to/mcp-kibela/dist/index.js\n```\n\n\n## License 📄\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kj455-mcp-kibela-docker-hardcoded-env": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "KIBELA_TEAM", "-e", "KIBELA_TOKEN", "ghcr.io/kj455/mcp-kibela:latest"],
+        "env": {
+          "KIBELA_TEAM": "your-team-name from https://[team-name].kibe.la",
+          "KIBELA_TOKEN": "your-token"
+        },
+        "docker_image": "ghcr.io/kj455/mcp-kibela:latest"
+      },
+      "kj455-mcp-kibela-docker-configured": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "KIBELA_TEAM", "-e", "KIBELA_TOKEN", "ghcr.io/kj455/mcp-kibela:latest"],
+        "env": {
+          "KIBELA_TEAM": "${input:kibela_team}",
+          "KIBELA_TOKEN": "${input:kibela_token}"
+        },
+        "docker_image": "ghcr.io/kj455/mcp-kibela:latest"
+      },
+      "kj455-mcp-kibela-node-stdio": {
+        "command": "node",
+        "args": ["/path/to/mcp-kibela/dist/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kj455",
+    "repo": "mcp-kibela",
+    "url": "https://github.com/kj455/mcp-kibela",
+    "name": "mcp-kibela",
+    "path": null,
+    "stars": 12,
+    "contributors": 2,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "af4683939450c7f50e1824d336b1953cb2b10cb1"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:48.878Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@graphql-typed-document-node/core",
+      "importance": 7
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "graphql",
+      "importance": 9
+    },
+    {
+      "name": "graphql-tag",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@kj455/mcp-kibela\",\n  \"version\": \"0.3.1\",\n  \"description\": \"MCP server implementation that integrates with Kibela API\",\n  \"type\": \"module\",\n  \"license\": \"MIT\",\n  \"main\": \"dist/index.js\",\n  \"module\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/kj455/mcp-kibela.git\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\"\n  ],\n  \"bin\": {\n    \"mcp-kibela\": \"./dist/index.js\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"scripts\": {\n    \"build\": \"tsup src/index.ts --dts --format esm\",\n    \"postbuild\": \"shx chmod +x dist/*.js\",\n    \"check\": \"tsc --noEmit\",\n    \"build:watch\": \"npm run build -- --watch\",\n    \"prepublishOnly\": \"npm run build\",\n    \"format\": \"prettier --write .\",\n    \"changeset\": \"changeset\",\n    \"version\": \"changeset version\",\n    \"release\": \"changeset publish\"\n  },\n  \"dependencies\": {\n    \"@graphql-typed-document-node/core\": \"^3.2.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.5.0\",\n    \"graphql\": \"^16.8.1\",\n    \"graphql-tag\": \"^2.12.6\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@changesets/cli\": \"^2.28.1\",\n    \"@types/node\": \"^22.13.5\",\n    \"dotenv\": \"^16.4.7\",\n    \"prettier\": \"^3.4.1\",\n    \"shx\": \"^0.3.4\",\n    \"tsup\": \"^8.3.5\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

@@ -1,0 +1,102 @@
+{
+  "name": "kimtth__mcp-aoai-web-browsing",
+  "display_name": "mcp-aoai-web-browsing",
+  "description": "A minimal Model Context Protocol 🖥️ server/client🧑‍💻with Azure OpenAI and 🌐 web browser control via Playwright.",
+  "author": {
+    "name": "kimtth"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "## MCP Server & Client implementation for using Azure OpenAI\n\n<!-- [![smithery badge](https://smithery.ai/badge/mcp-web-auto)](https://smithery.ai/server/mcp-web-auto) -->\n\n- A minimal server/client application implementation utilizing the Model Context Protocol (MCP) and Azure OpenAI.\n\n    1. The MCP server is built with `FastMCP`.  \n    2. `Playwright` is an an open source, end to end testing framework by Microsoft for testing your modern web applications. \n    3. The MCP response about tools will be converted to the OpenAI function calling format.  \n    4. The bridge that converts the MCP server response to the OpenAI function calling format customises the `MCP-LLM Bridge` implementation.\n    5. To ensure a stable connection, the server object is passed directly into the bridge. \n\n## Model Context Protocol (MCP)\n\n**Model Context Protocol (MCP)** MCP (Model Context Protocol) is an open protocol that enables secure, controlled interactions between AI applications and local or remote resources. \n\n### Official Repositories\n\n- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)  \n- [Create Python Server](https://github.com/modelcontextprotocol/create-python-server)  \n- [MCP Servers](https://github.com/modelcontextprotocol/servers)  \n\n### Community Resources\n\n- [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers)  \n- [MCP on Reddit](https://www.reddit.com/r/mcp/)  \n\n### Related Projects\n\n- [FastMCP](https://github.com/jlowin/fastmcp): The fast, Pythonic way to build MCP servers.\n- [Chat MCP](https://github.com/daodao97/chatmcp): MCP client\n- [MCP-LLM Bridge](https://github.com/bartolli/mcp-llm-bridge): MCP implementation that enables communication between MCP servers and OpenAI-compatible LLMs\n\n### MCP Playwright\n\n- [MCP Playwright server](https://github.com/executeautomation/mcp-playwright)  \n- [Microsoft Playwright for Python](https://github.com/microsoft/playwright-python)  \n\n### Configuration\n\nDuring the development phase in December 2024, the Python project should be initiated with 'uv'. Other dependency management libraries, such as 'pip' and 'poetry', are not yet fully supported by the MCP CLI.\n\n1. Rename `.env.template` to `.env`, then fill in the values in `.env` for Azure OpenAI:\n\n    ```bash\n    AZURE_OPEN_AI_ENDPOINT=\n    AZURE_OPEN_AI_API_KEY=\n    AZURE_OPEN_AI_DEPLOYMENT_MODEL=\n    AZURE_OPEN_AI_API_VERSION=\n    ```\n\n1. Install `uv` for python library management\n\n    ```bash\n    pip install uv\n    uv sync\n    ```\n\n1. Execute `python chatgui.py`\n\n    - The sample screen shows the client launching a browser to navigate to the URL.\n\n    <img alt=\"chatgui\" src=\"doc/chatgui_gpt_generate.png\" width=\"300\"/>\n\n### w.r.t. 'stdio'\n\n`stdio` is a **transport layer** (raw data flow), while **JSON-RPC** is an **application protocol** (structured communication). They are distinct but often used interchangeably, e.g., \"JSON-RPC over stdio\" in protocols.\n\n### Tool description\n\n```cmd\n@self.mcp.tool()\nasync def playwright_navigate(url: str, timeout=30000, wait_until=\"load\"):\n    \"\"\"Navigate to a URL.\"\"\" -> This comment provides a description, which may be used in a mechanism similar to function calling in LLMs.\n\n# Output\nTool(name='playwright_navigate', description='Navigate to a URL.', inputSchema={'properties': {'url': {'title': 'Url', 'type': 'string'}, 'timeout': {'default': 30000, 'title': 'timeout', 'type': 'string'}\n```\n\n### Tip: uv\n\n- [features](https://docs.astral.sh/uv/getting-started/features)\n\n```\nuv run: Run a script.\nuv venv: Create a new virtual environment. By default, '.venv'.\nuv add: Add a dependency to a script\nuv remove: Remove a dependency from a script\nuv sync: Sync (Install) the project's dependencies with the environment.\n```\n\n### Tip\n\n- taskkill command for python.exe\n\n```cmd\ntaskkill /IM python.exe /F\n```\n- Visual Code: Python Debugger: Debugging with launch.json will start the debugger using the configuration from .vscode/launch.json.\n\n<!-- ### Sample query\n\nNavigate to website http://eaapp.somee.com and click the login link. In the login page, enter the username and password as \"admin\" and \"password\" respectively and perform login. Then click the Employee List page and click \"Create New\" button and enter realistic employee details to create for Name, Salary, DurationWorked, Select dropdown for Grade as CLevel and Email. -->\n\n",
+  "category": "Browser Automation",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-web-auto": {
+        "command": "python",
+        "args": ["chatgui.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kimtth",
+    "repo": "mcp-aoai-web-browsing",
+    "url": "https://github.com/kimtth/mcp-aoai-web-browsing",
+    "name": "kimtth__mcp-aoai-web-browsing",
+    "path": null,
+    "stars": 30,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "9c0d0a511fefa924ba879fdeff73a8c375b4dcbc"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:14.473Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    },
+    {
+      "name": "pytest-playwright",
+      "importance": 9
+    },
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "loguru",
+      "importance": 4
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 3
+    },
+    {
+      "name": "typing-extensions",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-web-auto\"\nversion = \"0.1.0\"\ndescription = \"\"\nauthors = [\"kimtth <kimtth@email.com>\"]\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"aiohttp>=3.11.10\",\n    \"asyncio>=3.4.3\",\n    \"fastmcp>=0.4.1\",\n    \"loguru>=0.7.3\",\n    \"mcp>=1.1.1\",\n    \"openai>=1.57.1\",\n    \"pydantic>=2.10.3\",\n    \"pytest-playwright>=0.6.2\",\n    \"python-dotenv>=1.0.1\",\n    \"typing-extensions>=4.12.2\",\n]\n\n"
+}

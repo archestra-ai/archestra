@@ -1,12 +1,13 @@
+import { getEventListeners } from "node:events";
 import { PassThrough } from "node:stream";
+import type { LocalConfigSchema } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Exec, Log } from "@kubernetes/client-node";
-import type { LocalConfigSchema } from "@shared";
 import { vi } from "vitest";
 import type { z } from "zod";
 import config from "@/config";
 import { describe, expect, test } from "@/test";
-import type { McpServer } from "@/types";
+import type { EffectiveNetworkPolicy, McpServer } from "@/types";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
@@ -14,6 +15,7 @@ import K8sDeployment, {
   resetPlatformNodeSelectorCache,
   resetPlatformTolerationsCache,
 } from "./k8s-deployment";
+import { buildEgressBaselineNetworkPolicy } from "./network-policy";
 
 // Helper function to create a K8sDeployment instance with mocked dependencies
 function createK8sDeploymentInstance(
@@ -37,6 +39,7 @@ function createK8sDeploymentInstance(
   // Create mock K8s API objects
   const mockK8sApi = {} as k8s.CoreV1Api;
   const mockK8sAppsApi = {} as k8s.AppsV1Api;
+  const mockK8sNetworkingApi = {} as k8s.NetworkingV1Api;
   const mockK8sAttach = {} as Attach;
   const mockK8sLog = {} as Log;
 
@@ -54,6 +57,7 @@ function createK8sDeploymentInstance(
     mcpServer: mockMcpServer,
     k8sApi: mockK8sApi,
     k8sAppsApi: mockK8sAppsApi,
+    k8sNetworkingApi: mockK8sNetworkingApi,
     k8sAttach: mockK8sAttach,
     k8sLog: mockK8sLog,
     k8sExec: {} as Exec,
@@ -451,6 +455,74 @@ describe("K8sDeployment.constructDeploymentName", () => {
     expect(result1).toBe(result2);
     expect(result1).toBe("mcp-firecrawl-joey");
   });
+
+  // Frozen deployment identity: the stored name always wins over the
+  // name-derived recompute, so renames never re-derive the deployment.
+  test("returns the stored frozen deploymentName over the name recompute", () => {
+    const mockServer = {
+      name: "renamed display name",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      deploymentName: "mcp-original-1a2b3c4d",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    expect(K8sDeployment.constructDeploymentName(mockServer)).toBe(
+      "mcp-original-1a2b3c4d",
+    );
+  });
+
+  test("falls back to the legacy recompute when deploymentName is NULL", () => {
+    const mockServer = {
+      name: "Not Yet Frozen",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      deploymentName: null,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    expect(K8sDeployment.constructDeploymentName(mockServer)).toBe(
+      "mcp-not-yet-frozen",
+    );
+  });
+
+  test("multitenant reads the frozen name from the CATALOG row, ignoring the install's", () => {
+    const mockServer = {
+      name: "install name",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      catalogId: "aaaabbbb-e89b-12d3-a456-426614174000",
+      deploymentName: "mcp-install-frozen",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+    const mockCatalog = {
+      multitenant: true,
+      name: "renamed catalog",
+      deploymentName: "mcp-mt-aaaabbbb-original",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    expect(K8sDeployment.constructDeploymentName(mockServer, mockCatalog)).toBe(
+      "mcp-mt-aaaabbbb-original",
+    );
+  });
+
+  test("multitenant falls back to the legacy mt recompute when the catalog is not frozen", () => {
+    const mockServer = {
+      name: "install name",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      catalogId: "aaaabbbb-e89b-12d3-a456-426614174000",
+      deploymentName: null,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+    const mockCatalog = {
+      multitenant: true,
+      name: "Shared Catalog",
+      deploymentName: null,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    expect(K8sDeployment.constructDeploymentName(mockServer, mockCatalog)).toBe(
+      "mcp-mt-aaaabbbb-shared-catalog",
+    );
+  });
 });
 
 describe("K8sDeployment.generateDeploymentSpec", () => {
@@ -513,12 +585,13 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       "mcp-server-name": "test-server",
     });
 
-    // Verify deployment spec
+    // Verify deployment spec. The selector must NOT carry the mutable
+    // mcp-server-name label: selectors are immutable, so pod identity keys
+    // on `app` + the stable id only (renames stay pure DB operations).
     expect(deploymentSpec.spec?.replicas).toBe(1);
     expect(deploymentSpec.spec?.selector.matchLabels).toEqual({
       app: "mcp-server",
       "mcp-server-id": "test-server-id",
-      "mcp-server-name": "test-server",
     });
 
     // Verify pod template spec
@@ -527,6 +600,7 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     const container = templateSpec?.containers[0];
     expect(container?.name).toBe("mcp-server");
     expect(container?.image).toBe(dockerImage);
+    expect(container?.imagePullPolicy).toBe("Never");
     expect(container?.command).toEqual(["node"]);
     expect(container?.args).toEqual(["server.js"]);
     expect(container?.stdin).toBe(true);
@@ -742,6 +816,46 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
 
     const container = deploymentSpec.spec?.template.spec?.containers[0];
     expect(container?.image).toBe("ghcr.io/my-org/custom-mcp-server:v2.1.0");
+    expect(container?.imagePullPolicy).toBe("Always");
+  });
+
+  test("generates deploymentSpec with resource governance (memory limit + ephemeral-storage request/limit)", () => {
+    const mcpServer: McpServer = {
+      id: "resources-id",
+      name: "resources-server",
+      catalogId: "catalog-resources",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node" },
+      false,
+      8080,
+    );
+
+    // Without ephemeral-storage requests the scheduler is blind to disk and
+    // over-packs nodes until DiskPressure eviction cascades; without limits a
+    // single runaway server can take down the whole node.
+    const resources =
+      deploymentSpec.spec?.template.spec?.containers[0]?.resources;
+    expect(resources?.requests).toEqual({
+      memory: config.orchestrator.mcpServerResources.requests.memory,
+      cpu: config.orchestrator.mcpServerResources.requests.cpu,
+      "ephemeral-storage":
+        config.orchestrator.mcpServerResources.requests.ephemeralStorage,
+    });
+    expect(resources?.limits).toEqual({
+      memory: config.orchestrator.mcpServerResources.limits.memory,
+      "ephemeral-storage":
+        config.orchestrator.mcpServerResources.limits.ephemeralStorage,
+    });
+    // Defaults are non-empty valid quantities
+    expect(resources?.requests?.["ephemeral-storage"]).toBe("256Mi");
+    expect(resources?.limits?.memory).toBe("512Mi");
+    expect(resources?.limits?.["ephemeral-storage"]).toBe("1Gi");
   });
 
   test("generates deploymentSpec with empty arguments array when not provided", () => {
@@ -3388,6 +3502,166 @@ describe("K8sDeployment.deleteK8sService", () => {
   });
 });
 
+describe("K8sDeployment.createServiceForHttpServer (selector reconciliation)", () => {
+  function createK8sDeploymentWithMockedApi(
+    mockK8sApi: Partial<k8s.CoreV1Api>,
+  ): K8sDeployment {
+    const mockMcpServer = {
+      id: "new-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: mockK8sApi as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+  }
+
+  type PrivateCreateService = {
+    createServiceForHttpServer: (
+      httpPort: number,
+      nodePort?: number,
+    ) => Promise<void>;
+  };
+
+  // Regression: a service whose selector still targets a stale mcp-server-id
+  // (left over after the server record was recreated with a new id) selects
+  // zero pods and gets no endpoints, so every read/connect fails. An existing
+  // service must be reconciled to the current id, not skipped.
+  test("reconciles an existing service's selector to the current mcp-server-id", async () => {
+    const mockRead = vi.fn().mockResolvedValue({}); // service already exists
+    const mockPatch = vi.fn().mockResolvedValue({});
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      readNamespacedService: mockRead,
+      patchNamespacedService: mockPatch,
+      createNamespacedService: mockCreate,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    await (
+      k8sDeployment as unknown as PrivateCreateService
+    ).createServiceForHttpServer(8080);
+
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockPatch).toHaveBeenCalledTimes(1);
+    const patchArg = mockPatch.mock.calls[0][0] as {
+      name: string;
+      namespace: string;
+      body: {
+        metadata: { labels: Record<string, string> };
+        spec: { selector: Record<string, string> };
+      };
+    };
+    expect(patchArg.name).toBe("mcp-test-server-service");
+    expect(patchArg.namespace).toBe("default");
+    expect(patchArg.body.spec.selector["mcp-server-id"]).toBe("new-server-id");
+    expect(patchArg.body.metadata.labels["mcp-server-id"]).toBe(
+      "new-server-id",
+    );
+  });
+
+  test("creates the service when it does not yet exist", async () => {
+    const notFound = { statusCode: 404, message: "Service not found" };
+    const mockRead = vi.fn().mockRejectedValue(notFound);
+    const mockPatch = vi.fn().mockResolvedValue({});
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      readNamespacedService: mockRead,
+      patchNamespacedService: mockPatch,
+      createNamespacedService: mockCreate,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    await (
+      k8sDeployment as unknown as PrivateCreateService
+    ).createServiceForHttpServer(8080);
+
+    expect(mockPatch).not.toHaveBeenCalled();
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    const createArg = mockCreate.mock.calls[0][0] as {
+      body: { spec: { selector: Record<string, string> } };
+    };
+    expect(createArg.body.spec.selector["mcp-server-id"]).toBe("new-server-id");
+  });
+});
+
+describe("K8sDeployment multitenant selector stability", () => {
+  function make(
+    // biome-ignore lint/suspicious/noExplicitAny: minimal catalog mock for tests
+    catalogItem: any,
+  ): K8sDeployment {
+    const mcpServer = {
+      id: "install-abc-123",
+      name: "archestra-pm",
+      catalogId: "cat9999-0000-0000-0000-000000000000",
+      // biome-ignore lint/suspicious/noExplicitAny: mock server for tests
+    } as any as McpServer;
+    return new K8sDeployment({
+      mcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem,
+    });
+  }
+  const localConfig: z.infer<typeof LocalConfigSchema> = {
+    command: "node",
+    arguments: ["server.js"],
+  };
+
+  // Multitenant catalogs share ONE catalog-named Deployment + Service across all
+  // installs. If the selector used the per-install id, two installs would fight
+  // over the shared resource and leave the Service with zero endpoints. The
+  // selector must be catalog-stable so every install reconciles to the same one.
+  test("multitenant: deployment selector + pod labels use the catalog id (not the per-install id)", () => {
+    const catalogItem = { multitenant: true, name: "Archestra PM" };
+    const spec = make(catalogItem).generateDeploymentSpec(
+      "img:latest",
+      localConfig,
+      true,
+      8080,
+    );
+    expect(spec.spec?.selector.matchLabels?.["mcp-server-id"]).toBe(
+      "cat9999-0000-0000-0000-000000000000",
+    );
+    expect(spec.spec?.template.metadata?.labels?.["mcp-server-id"]).toBe(
+      "cat9999-0000-0000-0000-000000000000",
+    );
+    // The name is catalog-derived too, so name and selector stay in lockstep.
+    expect(spec.metadata?.name).toContain("mcp-mt-cat9999-");
+  });
+
+  test("single-tenant (no catalog item): selector keeps the per-install id", () => {
+    const spec = make(null).generateDeploymentSpec(
+      "img:latest",
+      localConfig,
+      true,
+      8080,
+    );
+    expect(spec.spec?.selector.matchLabels?.["mcp-server-id"]).toBe(
+      "install-abc-123",
+    );
+  });
+});
+
 describe("K8sDeployment.constructHttpServiceName", () => {
   function createK8sDeploymentForServiceName(
     serverName: string,
@@ -3522,6 +3796,9 @@ describe("K8sDeployment.stopDeployment", () => {
   function createK8sDeploymentWithMockedApis(
     mockK8sApi: Partial<k8s.CoreV1Api>,
     mockK8sAppsApi: Partial<k8s.AppsV1Api>,
+    mockK8sNetworkingApi: Partial<k8s.NetworkingV1Api> = {
+      deleteNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
+    },
   ): K8sDeployment {
     const mockMcpServer = {
       id: "test-server-id",
@@ -3540,6 +3817,7 @@ describe("K8sDeployment.stopDeployment", () => {
       mcpServer: mockMcpServer,
       k8sApi: mockK8sApi as k8s.CoreV1Api,
       k8sAppsApi: mockK8sAppsApi as k8s.AppsV1Api,
+      k8sNetworkingApi: mockK8sNetworkingApi as k8s.NetworkingV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
       k8sExec: {} as Exec,
@@ -3602,10 +3880,1384 @@ describe("K8sDeployment.stopDeployment", () => {
   });
 });
 
+describe("K8sDeployment.applyK8sNetworkPolicy", () => {
+  type CustomPolicyObject = {
+    metadata?: {
+      name?: string;
+      resourceVersion?: string;
+      labels?: Record<string, string>;
+      annotations?: Record<string, string>;
+      finalizers?: string[];
+    };
+    spec?: Record<string, unknown>;
+  };
+
+  function makeNetworkPolicyTestServer(): McpServer {
+    return {
+      id: "test-server-id",
+      name: "mcp-test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+  }
+
+  function makeNetworkPolicy(
+    overrides: Partial<NonNullable<EffectiveNetworkPolicy["policy"]>> = {},
+  ): EffectiveNetworkPolicy {
+    return {
+      source: "environment",
+      policy: {
+        egressMode: "restricted",
+        domainPreset: "none",
+        allowedDomains: [],
+        allowedCidrs: [],
+        ...overrides,
+      },
+    };
+  }
+
+  function makeNetworkPolicyDeployment(params: {
+    networkingApi?: Partial<k8s.NetworkingV1Api>;
+    customObjectsApi?: Partial<k8s.CustomObjectsApi>;
+    coreApi?: Partial<k8s.CoreV1Api>;
+    effectiveNetworkPolicy: EffectiveNetworkPolicy;
+    networkPolicyCapabilities: {
+      kubernetesNetworkPolicy: boolean;
+      ciliumNetworkPolicy: boolean;
+      gkeFqdnNetworkPolicy: boolean;
+      awsApplicationNetworkPolicy: boolean;
+      provider:
+        | "kubernetes"
+        | "cilium"
+        | "gke-fqdn"
+        | "aws-application-network-policy";
+      supportsFqdn: boolean;
+      supportsHttpMethods: boolean;
+      message: string | null;
+    };
+    multitenant?: boolean;
+  }): K8sDeployment {
+    return new K8sDeployment({
+      mcpServer: makeNetworkPolicyTestServer(),
+      k8sApi: (params.coreApi ?? {}) as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sNetworkingApi: params.networkingApi as k8s.NetworkingV1Api,
+      k8sCustomObjectsApi: params.customObjectsApi as k8s.CustomObjectsApi,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: params.multitenant
+        ? ({
+            multitenant: true,
+            name: "test-catalog",
+          } as unknown as import("@/types").InternalMcpCatalog)
+        : null,
+      effectiveNetworkPolicy: params.effectiveNetworkPolicy,
+      networkPolicyCapabilities: params.networkPolicyCapabilities,
+    });
+  }
+
+  function makeStatefulNetworkingApi(
+    initialPolicies: k8s.V1NetworkPolicy[] = [],
+  ): {
+    api: Partial<k8s.NetworkingV1Api>;
+    policies: Map<string, k8s.V1NetworkPolicy>;
+  } {
+    const policies = new Map(
+      initialPolicies.map((policy) => [policy.metadata?.name ?? "", policy]),
+    );
+
+    const api = {
+      createNamespacedNetworkPolicy: vi.fn(
+        async ({ body }: { body: k8s.V1NetworkPolicy }) => {
+          const name = body.metadata?.name;
+          if (!name) throw new Error("NetworkPolicy name is required");
+          if (policies.has(name)) throw { statusCode: 409 };
+          policies.set(name, structuredClone(body));
+          return {};
+        },
+      ),
+      replaceNamespacedNetworkPolicy: vi.fn(
+        async ({ name, body }: { name: string; body: k8s.V1NetworkPolicy }) => {
+          if (!policies.has(name)) throw { statusCode: 404 };
+          policies.set(name, structuredClone(body));
+          return {};
+        },
+      ),
+      listNamespacedNetworkPolicy: vi.fn(
+        async ({ labelSelector }: { labelSelector?: string }) => ({
+          items: [...policies.values()].filter((policy) =>
+            hasLabels(policy.metadata?.labels, labelSelector),
+          ),
+        }),
+      ),
+      deleteNamespacedNetworkPolicy: vi.fn(
+        async ({ name }: { name: string }) => {
+          if (!policies.delete(name)) throw { statusCode: 404 };
+          return {};
+        },
+      ),
+    };
+
+    return { api, policies };
+  }
+
+  function makeStatefulCustomObjectsApi(params: {
+    resource: {
+      group: string;
+      version: string;
+      plural: string;
+    };
+    initialPolicies?: CustomPolicyObject[];
+  }): {
+    api: Partial<k8s.CustomObjectsApi>;
+    policies: Map<string, CustomPolicyObject>;
+  } {
+    const policies = new Map(
+      (params.initialPolicies ?? []).map((policy) => [
+        policy.metadata?.name ?? "",
+        policy,
+      ]),
+    );
+
+    const api = {
+      createNamespacedCustomObject: vi.fn(
+        async ({ body }: { body: CustomPolicyObject }) => {
+          const name = body.metadata?.name;
+          if (!name) throw new Error("Custom policy name is required");
+          if (policies.has(name)) throw { statusCode: 409 };
+          policies.set(name, structuredClone(body));
+          return {};
+        },
+      ),
+      patchNamespacedCustomObject: vi.fn(
+        async ({ name, body }: { name: string; body: CustomPolicyObject }) => {
+          const existing = policies.get(name);
+          if (!existing) throw { statusCode: 404 };
+          policies.set(
+            name,
+            applyJsonMergePatch(existing, body) as CustomPolicyObject,
+          );
+          return {};
+        },
+      ),
+      getNamespacedCustomObject: vi.fn(async ({ name }: { name: string }) => {
+        const existing = policies.get(name);
+        if (!existing) throw { statusCode: 404 };
+        return structuredClone(existing);
+      }),
+      replaceNamespacedCustomObject: vi.fn(
+        async ({ name, body }: { name: string; body: CustomPolicyObject }) => {
+          if (!policies.has(name)) throw { statusCode: 404 };
+          // Full replace: store the body wholesale, so keys absent from it
+          // (a stale selector label) are dropped — unlike merge-patch.
+          policies.set(name, structuredClone(body));
+          return {};
+        },
+      ),
+      listNamespacedCustomObject: vi.fn(
+        async ({
+          group,
+          version,
+          plural,
+          labelSelector,
+        }: {
+          group: string;
+          version: string;
+          plural: string;
+          labelSelector?: string;
+        }) => {
+          if (
+            group !== params.resource.group ||
+            version !== params.resource.version ||
+            plural !== params.resource.plural
+          ) {
+            return { items: [] };
+          }
+
+          return {
+            items: [...policies.values()].filter((policy) =>
+              hasLabels(policy.metadata?.labels, labelSelector),
+            ),
+          };
+        },
+      ),
+      deleteNamespacedCustomObject: vi.fn(
+        async ({
+          group,
+          version,
+          plural,
+          name,
+        }: {
+          group: string;
+          version: string;
+          plural: string;
+          name: string;
+        }) => {
+          if (
+            group !== params.resource.group ||
+            version !== params.resource.version ||
+            plural !== params.resource.plural
+          ) {
+            throw { statusCode: 404 };
+          }
+          if (!policies.delete(name)) throw { statusCode: 404 };
+          return {};
+        },
+      ),
+    };
+
+    return { api, policies };
+  }
+
+  /** RFC 7386 JSON merge patch: objects merge recursively, everything else replaces. */
+  function applyJsonMergePatch(target: unknown, patch: unknown): unknown {
+    if (
+      patch === null ||
+      typeof patch !== "object" ||
+      Array.isArray(patch) ||
+      target === null ||
+      typeof target !== "object" ||
+      Array.isArray(target)
+    ) {
+      return structuredClone(patch);
+    }
+    const result: Record<string, unknown> = {
+      ...(target as Record<string, unknown>),
+    };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null) {
+        delete result[key];
+      } else {
+        result[key] = applyJsonMergePatch(result[key], value);
+      }
+    }
+    return result;
+  }
+
+  function hasLabels(
+    labels: Record<string, string> | undefined,
+    selector: string | undefined,
+  ): boolean {
+    if (!selector) return true;
+    if (!labels) return false;
+    return selector.split(",").every((part) => {
+      const [key, value] = part.split("=");
+      return labels[key] === value;
+    });
+  }
+
+  test("creates CiliumNetworkPolicy and removes Kubernetes NetworkPolicy when FQDN rules are available", async () => {
+    const createNamespacedCustomObject = vi.fn().mockResolvedValue({});
+    const deleteNamespacedCustomObject = vi
+      .fn()
+      .mockRejectedValue({ statusCode: 404 });
+    const createNamespacedNetworkPolicy = vi.fn().mockResolvedValue({});
+    const deleteNamespacedNetworkPolicy = vi.fn().mockResolvedValue({});
+
+    const deployment = new K8sDeployment({
+      mcpServer: makeNetworkPolicyTestServer(),
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sNetworkingApi: {
+        createNamespacedNetworkPolicy,
+        deleteNamespacedNetworkPolicy,
+      } as unknown as k8s.NetworkingV1Api,
+      k8sCustomObjectsApi: {
+        createNamespacedCustomObject,
+        deleteNamespacedCustomObject,
+      } as unknown as k8s.CustomObjectsApi,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+      }),
+      networkPolicyCapabilities: {
+        kubernetesNetworkPolicy: true,
+        ciliumNetworkPolicy: true,
+        gkeFqdnNetworkPolicy: false,
+        awsApplicationNetworkPolicy: false,
+        provider: "cilium",
+        supportsFqdn: true,
+        supportsHttpMethods: false,
+        message: null,
+      },
+    });
+
+    await deployment.applyK8sNetworkPolicy();
+
+    expect(createNamespacedCustomObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        group: "cilium.io",
+        version: "v2",
+        namespace: "default",
+        plural: "ciliumnetworkpolicies",
+      }),
+    );
+    expect(createNamespacedNetworkPolicy).not.toHaveBeenCalled();
+    expect(deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: "mcp-egress-mcp-mcp-test-server",
+      namespace: "default",
+    });
+  });
+
+  test("creates Kubernetes NetworkPolicy for CIDR-only restricted policies", async () => {
+    const createNamespacedCustomObject = vi.fn().mockResolvedValue({});
+    const deleteNamespacedCustomObject = vi
+      .fn()
+      .mockRejectedValue({ statusCode: 404 });
+    const createNamespacedNetworkPolicy = vi.fn().mockResolvedValue({});
+
+    const deployment = new K8sDeployment({
+      mcpServer: makeNetworkPolicyTestServer(),
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sNetworkingApi: {
+        createNamespacedNetworkPolicy,
+        deleteNamespacedNetworkPolicy: vi.fn().mockRejectedValue({
+          statusCode: 404,
+        }),
+      } as unknown as k8s.NetworkingV1Api,
+      k8sCustomObjectsApi: {
+        createNamespacedCustomObject,
+        deleteNamespacedCustomObject,
+      } as unknown as k8s.CustomObjectsApi,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: {
+        kubernetesNetworkPolicy: true,
+        ciliumNetworkPolicy: false,
+        gkeFqdnNetworkPolicy: false,
+        awsApplicationNetworkPolicy: false,
+        provider: "kubernetes",
+        supportsFqdn: false,
+        supportsHttpMethods: false,
+        message: null,
+      },
+    });
+
+    await deployment.applyK8sNetworkPolicy();
+
+    expect(createNamespacedNetworkPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespace: "default",
+        body: expect.objectContaining({
+          kind: "NetworkPolicy",
+        }),
+      }),
+    );
+    expect(createNamespacedCustomObject).not.toHaveBeenCalled();
+  });
+
+  test("throws a clear error when applying without the K8s networking API", async () => {
+    const deployment = new K8sDeployment({
+      mcpServer: makeNetworkPolicyTestServer(),
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: {
+        kubernetesNetworkPolicy: true,
+        ciliumNetworkPolicy: false,
+        gkeFqdnNetworkPolicy: false,
+        awsApplicationNetworkPolicy: false,
+        provider: "kubernetes",
+        supportsFqdn: false,
+        supportsHttpMethods: false,
+        message: null,
+      },
+    });
+
+    await expect(deployment.applyK8sNetworkPolicy()).rejects.toThrow(
+      "Cannot apply network policy: K8s networking API not available",
+    );
+  });
+
+  test("throws a clear error when applying FQDN policy without the K8s custom objects API", async () => {
+    const deployment = new K8sDeployment({
+      mcpServer: makeNetworkPolicyTestServer(),
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sNetworkingApi: {
+        createNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
+        deleteNamespacedNetworkPolicy: vi.fn().mockRejectedValue({
+          statusCode: 404,
+        }),
+      } as unknown as k8s.NetworkingV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+      }),
+      networkPolicyCapabilities: {
+        kubernetesNetworkPolicy: true,
+        ciliumNetworkPolicy: true,
+        gkeFqdnNetworkPolicy: false,
+        awsApplicationNetworkPolicy: false,
+        provider: "cilium",
+        supportsFqdn: true,
+        supportsHttpMethods: false,
+        message: null,
+      },
+    });
+
+    await expect(deployment.applyK8sNetworkPolicy()).rejects.toThrow(
+      "Cannot apply network policy: K8s custom objects API not available",
+    );
+  });
+
+  test("creates GKE FQDNNetworkPolicy alongside Kubernetes NetworkPolicy when GKE FQDN rules are available", async () => {
+    const createNamespacedCustomObject = vi.fn().mockResolvedValue({});
+    const deleteNamespacedCustomObject = vi
+      .fn()
+      .mockRejectedValue({ statusCode: 404 });
+    const createNamespacedNetworkPolicy = vi.fn().mockResolvedValue({});
+
+    const deployment = new K8sDeployment({
+      mcpServer: makeNetworkPolicyTestServer(),
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sNetworkingApi: {
+        createNamespacedNetworkPolicy,
+        deleteNamespacedNetworkPolicy: vi.fn().mockRejectedValue({
+          statusCode: 404,
+        }),
+      } as unknown as k8s.NetworkingV1Api,
+      k8sCustomObjectsApi: {
+        createNamespacedCustomObject,
+        deleteNamespacedCustomObject,
+      } as unknown as k8s.CustomObjectsApi,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+      }),
+      networkPolicyCapabilities: {
+        kubernetesNetworkPolicy: true,
+        ciliumNetworkPolicy: false,
+        gkeFqdnNetworkPolicy: true,
+        awsApplicationNetworkPolicy: false,
+        provider: "gke-fqdn",
+        supportsFqdn: true,
+        supportsHttpMethods: false,
+        message: null,
+      },
+    });
+
+    await deployment.applyK8sNetworkPolicy();
+
+    expect(createNamespacedNetworkPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespace: "default",
+        body: expect.objectContaining({
+          kind: "NetworkPolicy",
+        }),
+      }),
+    );
+    expect(createNamespacedCustomObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        group: "networking.gke.io",
+        version: "v1alpha1",
+        namespace: "default",
+        plural: "fqdnnetworkpolicies",
+      }),
+    );
+  });
+
+  test("creates AWS ApplicationNetworkPolicy and removes Kubernetes NetworkPolicy when EKS Auto Mode FQDN rules are available", async () => {
+    const createNamespacedCustomObject = vi.fn().mockResolvedValue({});
+    const deleteNamespacedCustomObject = vi
+      .fn()
+      .mockRejectedValue({ statusCode: 404 });
+    const createNamespacedNetworkPolicy = vi.fn().mockResolvedValue({});
+    const deleteNamespacedNetworkPolicy = vi.fn().mockResolvedValue({});
+
+    const deployment = new K8sDeployment({
+      mcpServer: makeNetworkPolicyTestServer(),
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sNetworkingApi: {
+        createNamespacedNetworkPolicy,
+        deleteNamespacedNetworkPolicy,
+      } as unknown as k8s.NetworkingV1Api,
+      k8sCustomObjectsApi: {
+        createNamespacedCustomObject,
+        deleteNamespacedCustomObject,
+      } as unknown as k8s.CustomObjectsApi,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+      }),
+      networkPolicyCapabilities: {
+        kubernetesNetworkPolicy: true,
+        ciliumNetworkPolicy: false,
+        gkeFqdnNetworkPolicy: false,
+        awsApplicationNetworkPolicy: true,
+        provider: "aws-application-network-policy",
+        supportsFqdn: true,
+        supportsHttpMethods: false,
+        message: null,
+      },
+    });
+
+    await deployment.applyK8sNetworkPolicy();
+
+    expect(createNamespacedCustomObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        group: "networking.k8s.aws",
+        version: "v1alpha1",
+        namespace: "default",
+        plural: "applicationnetworkpolicies",
+        body: expect.objectContaining({
+          kind: "ApplicationNetworkPolicy",
+        }),
+      }),
+    );
+    expect(createNamespacedNetworkPolicy).not.toHaveBeenCalled();
+    expect(deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: "mcp-egress-mcp-mcp-test-server",
+      namespace: "default",
+    });
+  });
+
+  test("updates an existing Kubernetes NetworkPolicy and cleans up stale duplicate managed policies", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api, policies } = makeStatefulNetworkingApi();
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: false,
+      provider: "kubernetes" as const,
+      supportsFqdn: false,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    const stalePolicy = structuredClone(policies.get(policyName));
+    expect(stalePolicy).toBeDefined();
+    if (!stalePolicy?.metadata) throw new Error("expected policy metadata");
+    stalePolicy.metadata.name = "mcp-egress-generated-stale";
+    policies.set(stalePolicy.metadata.name, stalePolicy);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["198.51.100.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([policyName]);
+    expect(api.replaceNamespacedNetworkPolicy).toHaveBeenCalledTimes(1);
+    expect(api.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: "mcp-egress-generated-stale",
+      namespace: "default",
+    });
+    expect(
+      policies.get(policyName)?.metadata?.annotations?.[
+        "archestra.io/network-policy-allowed-cidrs"
+      ],
+    ).toBe("198.51.100.0/24");
+  });
+
+  test("updates an existing AWS ApplicationNetworkPolicy in place and cleans up stale duplicate managed policies", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies } = makeStatefulCustomObjectsApi({
+      resource: {
+        group: "networking.k8s.aws",
+        version: "v1alpha1",
+        plural: "applicationnetworkpolicies",
+      },
+    });
+    const coreApi = {
+      readNamespacedService: vi.fn(async () => ({
+        spec: { clusterIP: "172.20.0.10", clusterIPs: ["172.20.0.10"] },
+      })),
+    };
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: true,
+      provider: "aws-application-network-policy" as const,
+      supportsFqdn: true,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      coreApi: coreApi as unknown as Partial<k8s.CoreV1Api>,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    // Simulate a policy generated by an older release (no DNS bootstrap rule,
+    // one domainNames entry per rule, plus a controller-owned finalizer).
+    const existingPolicy = policies.get(policyName);
+    expect(existingPolicy).toBeDefined();
+    if (!existingPolicy?.metadata) throw new Error("expected policy metadata");
+    existingPolicy.metadata.finalizers = ["networking.k8s.aws/anp-resources"];
+    (existingPolicy as { spec?: Record<string, unknown> }).spec = {
+      podSelector: existingPolicy.spec?.podSelector,
+      policyTypes: ["Egress"],
+      egress: [{ to: [{ domainNames: ["api.example.com"] }] }],
+    };
+
+    const stalePolicy = structuredClone(policies.get(policyName));
+    expect(stalePolicy).toBeDefined();
+    if (!stalePolicy?.metadata) throw new Error("expected policy metadata");
+    stalePolicy.metadata.name = "mcp-egress-generated-stale";
+    policies.set(stalePolicy.metadata.name, stalePolicy);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      coreApi: coreApi as unknown as Partial<k8s.CoreV1Api>,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com", "cdn.example.com"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([policyName]);
+    expect(
+      customObjectsApi.replaceNamespacedCustomObject,
+    ).toHaveBeenCalledTimes(1);
+    expect(customObjectsApi.patchNamespacedCustomObject).not.toHaveBeenCalled();
+    expect(customObjectsApi.deleteNamespacedCustomObject).toHaveBeenCalledWith({
+      group: "networking.k8s.aws",
+      version: "v1alpha1",
+      namespace: "default",
+      plural: "applicationnetworkpolicies",
+      name: "mcp-egress-generated-stale",
+    });
+
+    const updatedPolicy = policies.get(policyName);
+    expect(updatedPolicy?.metadata?.annotations).toMatchObject({
+      "archestra.io/network-policy-allowed-domains":
+        "api.example.com,cdn.example.com",
+      "archestra.io/network-policy-cluster-dns": "172.20.0.10",
+    });
+    // The improper egress rules are rewritten with the DNS bootstrap rule and
+    // a single consolidated domainNames list, without touching the finalizer.
+    expect(
+      (updatedPolicy as { spec?: { egress?: unknown } }).spec?.egress,
+    ).toEqual([
+      {
+        to: [{ ipBlock: { cidr: "172.20.0.10/32" } }],
+        ports: [
+          { protocol: "UDP", port: 53 },
+          { protocol: "TCP", port: 53 },
+        ],
+      },
+      { to: [{ domainNames: ["api.example.com", "cdn.example.com"] }] },
+    ]);
+    expect(updatedPolicy?.metadata?.finalizers).toEqual([
+      "networking.k8s.aws/anp-resources",
+    ]);
+  });
+
+  test("updates an existing CiliumNetworkPolicy and cleans up stale duplicate managed policies", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies } = makeStatefulCustomObjectsApi({
+      resource: {
+        group: "cilium.io",
+        version: "v2",
+        plural: "ciliumnetworkpolicies",
+      },
+    });
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: true,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: false,
+      provider: "cilium" as const,
+      supportsFqdn: true,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    const stalePolicy = structuredClone(policies.get(policyName));
+    expect(stalePolicy).toBeDefined();
+    if (!stalePolicy?.metadata) throw new Error("expected policy metadata");
+    stalePolicy.metadata.name = "mcp-egress-generated-stale";
+    policies.set(stalePolicy.metadata.name, stalePolicy);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com", "*.example.org"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([policyName]);
+    expect(
+      customObjectsApi.replaceNamespacedCustomObject,
+    ).toHaveBeenCalledTimes(1);
+    expect(customObjectsApi.patchNamespacedCustomObject).not.toHaveBeenCalled();
+    expect(customObjectsApi.deleteNamespacedCustomObject).toHaveBeenCalledWith({
+      group: "cilium.io",
+      version: "v2",
+      namespace: "default",
+      plural: "ciliumnetworkpolicies",
+      name: "mcp-egress-generated-stale",
+    });
+    expect(
+      policies.get(policyName)?.metadata?.annotations?.[
+        "archestra.io/network-policy-allowed-domains"
+      ],
+    ).toBe("api.example.com,*.example.org");
+  });
+
+  test("updates GKE FQDNNetworkPolicy while keeping the desired Kubernetes NetworkPolicy and cleaning stale duplicates", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api: networkingApi, policies: kubernetesPolicies } =
+      makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: gkePolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "networking.gke.io",
+          version: "v1alpha1",
+          plural: "fqdnnetworkpolicies",
+        },
+      });
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: true,
+      awsApplicationNetworkPolicy: false,
+      provider: "gke-fqdn" as const,
+      supportsFqdn: true,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    const staleKubernetesPolicy = structuredClone(
+      kubernetesPolicies.get(policyName),
+    );
+    expect(staleKubernetesPolicy).toBeDefined();
+    if (!staleKubernetesPolicy?.metadata) {
+      throw new Error("expected Kubernetes policy metadata");
+    }
+    staleKubernetesPolicy.metadata.name = "mcp-egress-generated-stale-k8s";
+    kubernetesPolicies.set(
+      staleKubernetesPolicy.metadata.name,
+      staleKubernetesPolicy,
+    );
+
+    const staleGkePolicy = structuredClone(gkePolicies.get(policyName));
+    expect(staleGkePolicy).toBeDefined();
+    if (!staleGkePolicy?.metadata) {
+      throw new Error("expected GKE policy metadata");
+    }
+    staleGkePolicy.metadata.name = "mcp-egress-generated-stale-gke";
+    gkePolicies.set(staleGkePolicy.metadata.name, staleGkePolicy);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com", "cdn.example.com"],
+        allowedCidrs: ["198.51.100.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    expect([...kubernetesPolicies.keys()]).toEqual([policyName]);
+    expect([...gkePolicies.keys()]).toEqual([policyName]);
+    expect(networkingApi.replaceNamespacedNetworkPolicy).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(
+      customObjectsApi.replaceNamespacedCustomObject,
+    ).toHaveBeenCalledTimes(1);
+    expect(customObjectsApi.patchNamespacedCustomObject).not.toHaveBeenCalled();
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: "mcp-egress-generated-stale-k8s",
+      namespace: "default",
+    });
+    expect(customObjectsApi.deleteNamespacedCustomObject).toHaveBeenCalledWith({
+      group: "networking.gke.io",
+      version: "v1alpha1",
+      namespace: "default",
+      plural: "fqdnnetworkpolicies",
+      name: "mcp-egress-generated-stale-gke",
+    });
+    expect(
+      gkePolicies.get(policyName)?.metadata?.annotations?.[
+        "archestra.io/network-policy-allowed-domains"
+      ],
+    ).toBe("api.example.com,cdn.example.com");
+  });
+
+  test("deleting managed network policy also cleans up stale duplicate managed policies", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api: networkingApi, policies } = makeStatefulNetworkingApi();
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: false,
+      provider: "kubernetes" as const,
+      supportsFqdn: false,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    const deployment = makeNetworkPolicyDeployment({
+      networkingApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    });
+    await deployment.applyK8sNetworkPolicy();
+
+    const stalePolicy = structuredClone(policies.get(policyName));
+    expect(stalePolicy).toBeDefined();
+    if (!stalePolicy?.metadata) throw new Error("expected policy metadata");
+    stalePolicy.metadata.name = "mcp-egress-generated-stale";
+    policies.set(stalePolicy.metadata.name, stalePolicy);
+
+    await deployment.deleteK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([]);
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: policyName,
+      namespace: "default",
+    });
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: "mcp-egress-generated-stale",
+      namespace: "default",
+    });
+  });
+
+  const PLAIN_CAPS = {
+    kubernetesNetworkPolicy: true,
+    ciliumNetworkPolicy: false,
+    gkeFqdnNetworkPolicy: false,
+    awsApplicationNetworkPolicy: false,
+    provider: "kubernetes" as const,
+    supportsFqdn: false,
+    supportsHttpMethods: false,
+    message: null,
+  };
+  const AWS_CAPS = {
+    kubernetesNetworkPolicy: true,
+    ciliumNetworkPolicy: false,
+    gkeFqdnNetworkPolicy: false,
+    awsApplicationNetworkPolicy: true,
+    provider: "aws-application-network-policy" as const,
+    supportsFqdn: true,
+    supportsHttpMethods: false,
+    message: null,
+  };
+  const CILIUM_CAPS = {
+    kubernetesNetworkPolicy: true,
+    ciliumNetworkPolicy: true,
+    gkeFqdnNetworkPolicy: false,
+    awsApplicationNetworkPolicy: false,
+    provider: "cilium" as const,
+    supportsFqdn: true,
+    supportsHttpMethods: false,
+    message: null,
+  };
+  const POLICY_NAME = "mcp-egress-mcp-mcp-test-server";
+  const DNS_PORTS = [
+    { protocol: "UDP", port: 53 },
+    { protocol: "TCP", port: 53 },
+  ];
+  const FLOOR_PUBLIC_EGRESS = [
+    {
+      to: [
+        {
+          ipBlock: {
+            cidr: "0.0.0.0/0",
+            except: [
+              "10.0.0.0/8",
+              "172.16.0.0/12",
+              "192.168.0.0/16",
+              "169.254.0.0/16",
+              "100.64.0.0/10",
+              "127.0.0.0/8",
+              "0.0.0.0/8",
+              "168.63.129.16/32",
+            ],
+          },
+        },
+      ],
+    },
+    {
+      to: [
+        {
+          ipBlock: {
+            cidr: "::/0",
+            except: ["::1/128", "fc00::/7", "fe80::/10", "64:ff9b::/96"],
+          },
+        },
+      ],
+    },
+  ];
+  // Plain NetworkPolicy floor: DNS to the kube-dns pods by label (DNAT-proof),
+  // not the resolver ClusterIP.
+  const PLAIN_FLOOR_EGRESS = [
+    {
+      to: [
+        {
+          namespaceSelector: {
+            matchLabels: { "kubernetes.io/metadata.name": "kube-system" },
+          },
+          podSelector: { matchLabels: { "k8s-app": "kube-dns" } },
+        },
+      ],
+      ports: DNS_PORTS,
+    },
+    ...FLOOR_PUBLIC_EGRESS,
+  ];
+  // AWS ApplicationNetworkPolicy floor: cannot express selector peers, and with
+  // no resolved ClusterIP the DNS bootstrap allows :53 to any IP.
+  const AWS_FLOOR_EGRESS = [
+    { to: [{ ipBlock: { cidr: "0.0.0.0/0" } }], ports: DNS_PORTS },
+    ...FLOOR_PUBLIC_EGRESS,
+  ];
+
+  test("applies the SSRF floor as a plain NetworkPolicy for an unrestricted policy", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const policy = policies.get(POLICY_NAME);
+    expect(policy?.spec?.policyTypes).toEqual(["Egress"]);
+    expect(policy?.spec?.egress).toEqual(PLAIN_FLOOR_EGRESS);
+  });
+
+  test("per-pod policy selector keys on app + mcp-server-id only, never the per-install name", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const selector = policies.get(POLICY_NAME)?.spec?.podSelector?.matchLabels;
+    expect(selector).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "test-server-id",
+    });
+    // mcp-server-name is per-install; including it in the AND-semantics selector
+    // makes a multitenant policy select zero pods.
+    expect(selector).not.toHaveProperty("mcp-server-name");
+  });
+
+  test("multitenant per-pod policy selects on the catalog-stable id, matching the shared pod", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+      multitenant: true,
+    }).applyK8sNetworkPolicy();
+
+    const selector = [...policies.values()][0]?.spec?.podSelector?.matchLabels;
+    expect(selector).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "test-catalog-id",
+    });
+    expect(selector).not.toHaveProperty("mcp-server-name");
+  });
+
+  test("applies the SSRF floor for a built-in (null) policy — the case the union bug silently opened", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(PLAIN_FLOOR_EGRESS);
+  });
+
+  test("emits the floor as an ApplicationNetworkPolicy on AWS and removes the plain NetworkPolicy", async () => {
+    const { api: networkingApi, policies: kubernetesPolicies } =
+      makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: anpPolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "networking.k8s.aws",
+          version: "v1alpha1",
+          plural: "applicationnetworkpolicies",
+        },
+      });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const anp = anpPolicies.get(POLICY_NAME);
+    expect((anp as { kind?: string })?.kind).toBe("ApplicationNetworkPolicy");
+    expect(anp?.spec?.egress).toEqual(AWS_FLOOR_EGRESS);
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: POLICY_NAME,
+      namespace: "default",
+    });
+    expect([...kubernetesPolicies.keys()]).not.toContain(POLICY_NAME);
+  });
+
+  test("full-replaces a custom policy on conflict, stripping a stale selector label a merge-patch would keep", async () => {
+    const staleAnp: CustomPolicyObject = {
+      metadata: {
+        name: POLICY_NAME,
+        resourceVersion: "42",
+        finalizers: ["some-controller/finalizer"],
+      },
+      spec: {
+        podSelector: {
+          matchLabels: {
+            app: "mcp-server",
+            "mcp-server-id": "test-server-id",
+            // A stale per-install label the full replace must strip.
+            "mcp-server-name": "stale-name",
+          },
+        },
+        policyTypes: ["Egress"],
+        egress: [],
+      },
+    };
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies } = makeStatefulCustomObjectsApi({
+      resource: {
+        group: "networking.k8s.aws",
+        version: "v1alpha1",
+        plural: "applicationnetworkpolicies",
+      },
+      initialPolicies: [staleAnp],
+    });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const selector = (
+      policies.get(POLICY_NAME)?.spec as
+        | { podSelector?: { matchLabels?: Record<string, string> } }
+        | undefined
+    )?.podSelector?.matchLabels;
+    // The full replace dropped the stale mcp-server-name a merge-patch would keep.
+    expect(selector).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "test-server-id",
+    });
+    expect(customObjectsApi.patchNamespacedCustomObject).not.toHaveBeenCalled();
+    // The replace carried the live resourceVersion + finalizers.
+    expect(customObjectsApi.replaceNamespacedCustomObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          metadata: expect.objectContaining({
+            resourceVersion: "42",
+            finalizers: ["some-controller/finalizer"],
+          }),
+        }),
+      }),
+    );
+  });
+
+  test("retries the custom-policy replace on a resourceVersion conflict (409) between GET and PUT", async () => {
+    const existingAnp: CustomPolicyObject = {
+      metadata: { name: POLICY_NAME, resourceVersion: "1" },
+      spec: {
+        podSelector: {
+          matchLabels: { app: "mcp-server", "mcp-server-id": "test-server-id" },
+        },
+        policyTypes: ["Egress"],
+        egress: [],
+      },
+    };
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies } = makeStatefulCustomObjectsApi({
+      resource: {
+        group: "networking.k8s.aws",
+        version: "v1alpha1",
+        plural: "applicationnetworkpolicies",
+      },
+      initialPolicies: [existingAnp],
+    });
+    // First PUT loses the resourceVersion race (a controller bumped it); the
+    // retry re-reads and succeeds.
+    (
+      customObjectsApi.replaceNamespacedCustomObject as ReturnType<typeof vi.fn>
+    ).mockRejectedValueOnce({ statusCode: 409 });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    // Re-read then re-PUT on the conflict — 2 GETs, 2 replaces, no throw.
+    expect(customObjectsApi.getNamespacedCustomObject).toHaveBeenCalledTimes(2);
+    expect(
+      customObjectsApi.replaceNamespacedCustomObject,
+    ).toHaveBeenCalledTimes(2);
+    expect(policies.get(POLICY_NAME)?.spec).toBeDefined();
+  });
+
+  test("emits a restricted CIDR-only allow-list as an ApplicationNetworkPolicy on AWS", async () => {
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: anpPolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "networking.k8s.aws",
+          version: "v1alpha1",
+          plural: "applicationnetworkpolicies",
+        },
+      });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const anp = anpPolicies.get(POLICY_NAME);
+    expect((anp as { kind?: string })?.kind).toBe("ApplicationNetworkPolicy");
+    const egress = (anp?.spec?.egress ?? []) as Array<{
+      to?: Array<{ ipBlock?: { cidr?: string } }>;
+    }>;
+    expect(
+      egress.some((rule) =>
+        rule.to?.some((peer) => peer.ipBlock?.cidr === "203.0.113.0/24"),
+      ),
+    ).toBe(true);
+  });
+
+  test("emits off as a deny-all ApplicationNetworkPolicy on AWS, not an unenforced plain NetworkPolicy", async () => {
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: anpPolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "networking.k8s.aws",
+          version: "v1alpha1",
+          plural: "applicationnetworkpolicies",
+        },
+      });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "off" }),
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const anp = anpPolicies.get(POLICY_NAME);
+    expect((anp as { kind?: string })?.kind).toBe("ApplicationNetworkPolicy");
+    expect(anp?.spec?.egress).toEqual([]);
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: POLICY_NAME,
+      namespace: "default",
+    });
+  });
+
+  test("emits the unrestricted floor as a plain NetworkPolicy on Cilium, not a CiliumNetworkPolicy", async () => {
+    const { api: networkingApi, policies } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: ciliumPolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "cilium.io",
+          version: "v2",
+          plural: "ciliumnetworkpolicies",
+        },
+      });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: CILIUM_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(PLAIN_FLOOR_EGRESS);
+    expect(ciliumPolicies.has(POLICY_NAME)).toBe(false);
+  });
+
+  test("emits the floor as an ApplicationNetworkPolicy for a built-in (null) policy on AWS", async () => {
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: anpPolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "networking.k8s.aws",
+          version: "v1alpha1",
+          plural: "applicationnetworkpolicies",
+        },
+      });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const anp = anpPolicies.get(POLICY_NAME);
+    expect((anp as { kind?: string })?.kind).toBe("ApplicationNetworkPolicy");
+    expect(anp?.spec?.egress).toEqual(AWS_FLOOR_EGRESS);
+  });
+
+  test("reconciles in place when relaxing from a restricted policy to the unrestricted floor", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+    expect(policies.get(POLICY_NAME)?.spec?.egress).not.toEqual(
+      PLAIN_FLOOR_EGRESS,
+    );
+
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([POLICY_NAME]);
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(PLAIN_FLOOR_EGRESS);
+  });
+
+  test("reconciles in place when tightening from the unrestricted floor to off (deny-all)", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(PLAIN_FLOOR_EGRESS);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "off" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([POLICY_NAME]);
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual([]);
+  });
+
+  test("the namespace default-deny baseline survives per-pod policy cleanup", async () => {
+    const baseline = buildEgressBaselineNetworkPolicy({
+      name: "mcp-server-egress-baseline",
+      labels: {
+        "app.kubernetes.io/managed-by": "archestra",
+        "archestra.io/resource": "mcp-egress-baseline",
+      },
+    });
+    const { api, policies } = makeStatefulNetworkingApi([baseline]);
+
+    // Applying a per-pod floor runs cleanupStaleManagedNetworkPolicies over the
+    // namespace; the baseline's distinct resource label and broad app-only
+    // selector must keep it out of that sweep.
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    expect(policies.get("mcp-server-egress-baseline")).toBeDefined();
+    expect(api.deleteNamespacedNetworkPolicy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-server-egress-baseline" }),
+    );
+  });
+});
+
 describe("K8sDeployment.removeDeployment", () => {
   function createK8sDeploymentWithMockedApis(
     mockK8sApi: Partial<k8s.CoreV1Api>,
     mockK8sAppsApi: Partial<k8s.AppsV1Api>,
+    mockK8sNetworkingApi: Partial<k8s.NetworkingV1Api> = {
+      deleteNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
+    },
   ): K8sDeployment {
     const mockMcpServer = {
       id: "test-server-id",
@@ -3624,6 +5276,7 @@ describe("K8sDeployment.removeDeployment", () => {
       mcpServer: mockMcpServer,
       k8sApi: mockK8sApi as k8s.CoreV1Api,
       k8sAppsApi: mockK8sAppsApi as k8s.AppsV1Api,
+      k8sNetworkingApi: mockK8sNetworkingApi as k8s.NetworkingV1Api,
       k8sAttach: {} as Attach,
       k8sLog: {} as Log,
       k8sExec: {} as Exec,
@@ -5041,5 +6694,564 @@ describe("K8sDeployment.streamLogs", () => {
     }
 
     expect(k8sLogMock).not.toHaveBeenCalled();
+  });
+
+  test("ready-poll does not accumulate abort listeners on the signal across iterations", async () => {
+    const deployment = createK8sDeploymentInstance();
+    const ac = new AbortController();
+
+    // Pod never becomes Ready, so every 2s iteration takes the timeout path.
+    vi.spyOn(
+      deployment as unknown as {
+        findAnyPodForDeployment: () => Promise<k8s.V1Pod | undefined>;
+      },
+      "findAnyPodForDeployment",
+    ).mockResolvedValue(makePendingPod());
+
+    const out = new PassThrough();
+
+    vi.useFakeTimers();
+    try {
+      const done = (
+        deployment as unknown as {
+          pollAndStreamLogsWhenReady(
+            stream: NodeJS.WritableStream,
+            lines: number,
+            abortSignal?: AbortSignal,
+          ): Promise<void>;
+        }
+      ).pollAndStreamLogsWhenReady(out, 100, ac.signal);
+
+      const listenerCounts: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        await vi.advanceTimersByTimeAsync(2000);
+        listenerCounts.push(getEventListeners(ac.signal, "abort").length);
+      }
+      // Only the in-flight iteration may hold a listener; finished
+      // iterations must have removed theirs.
+      expect(Math.max(...listenerCounts)).toBeLessThanOrEqual(1);
+
+      ac.abort();
+      await vi.advanceTimersByTimeAsync(2000);
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(getEventListeners(ac.signal, "abort")).toHaveLength(0);
+  });
+});
+
+describe("K8sDeployment pod lookup fallbacks", () => {
+  test("findPodForDeployment fallback lists only app=mcp-server pods", async () => {
+    const deployment = createK8sDeploymentInstance();
+    const deploymentName = (deployment as unknown as { deploymentName: string })
+      .deploymentName;
+
+    const listNamespacedPod = vi
+      .fn()
+      // lookup by mcp-server-id label finds no running pod
+      .mockResolvedValueOnce({ items: [] })
+      // multi-tenant fallback list
+      .mockResolvedValueOnce({
+        items: [
+          {
+            metadata: { name: `${deploymentName}-abc12` },
+            status: { phase: "Running" },
+          },
+        ],
+      });
+    (deployment as unknown as { k8sApi: k8s.CoreV1Api }).k8sApi = {
+      listNamespacedPod,
+    } as unknown as k8s.CoreV1Api;
+
+    await expect(deployment.hasRunningPod()).resolves.toBe(true);
+
+    expect(listNamespacedPod).toHaveBeenNthCalledWith(2, {
+      namespace: "default",
+      labelSelector: "app=mcp-server",
+    });
+  });
+
+  test("findAnyPodForDeployment fallback lists only app=mcp-server pods", async () => {
+    const deployment = createK8sDeploymentInstance();
+    const deploymentName = (deployment as unknown as { deploymentName: string })
+      .deploymentName;
+
+    const ownPod = {
+      metadata: { name: `${deploymentName}-xyz99` },
+      status: { phase: "Pending" },
+    };
+    const listNamespacedPod = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [ownPod] });
+    (deployment as unknown as { k8sApi: k8s.CoreV1Api }).k8sApi = {
+      listNamespacedPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const pod = await (
+      deployment as unknown as {
+        findAnyPodForDeployment(): Promise<k8s.V1Pod | undefined>;
+      }
+    ).findAnyPodForDeployment();
+
+    expect(pod?.metadata?.name).toBe(`${deploymentName}-xyz99`);
+    expect(listNamespacedPod).toHaveBeenNthCalledWith(2, {
+      namespace: "default",
+      labelSelector: "app=mcp-server",
+    });
+  });
+});
+
+describe("K8sDeployment image pull failure handling", () => {
+  function makeDeploymentWithMockedApis(params: {
+    listNamespacedPod: ReturnType<typeof vi.fn>;
+    readNamespacedDeployment?: ReturnType<typeof vi.fn>;
+  }): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      // null catalogId so getCatalogItem() short-circuits without a DB lookup
+      catalogId: null,
+    } as unknown as McpServer;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {
+        listNamespacedPod: params.listNamespacedPod,
+      } as unknown as k8s.CoreV1Api,
+      k8sAppsApi: {
+        readNamespacedDeployment: params.readNamespacedDeployment ?? vi.fn(),
+      } as unknown as k8s.AppsV1Api,
+      k8sNetworkingApi: {} as k8s.NetworkingV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+  }
+
+  function makeWaitingPod(reason: string, message: string): k8s.V1Pod {
+    return {
+      metadata: {
+        name: "test-server-abc123",
+        creationTimestamp: new Date(),
+      },
+      status: {
+        phase: "Pending",
+        containerStatuses: [
+          {
+            name: "mcp-server",
+            ready: false,
+            restartCount: 0,
+            state: { waiting: { reason, message } },
+          },
+        ],
+      },
+    } as k8s.V1Pod;
+  }
+
+  const runningPod = {
+    metadata: {
+      name: "test-server-abc123",
+      creationTimestamp: new Date(),
+    },
+    status: {
+      phase: "Running",
+      containerStatuses: [
+        {
+          name: "mcp-server",
+          ready: true,
+          restartCount: 0,
+          state: { running: {} },
+        },
+      ],
+    },
+  } as k8s.V1Pod;
+
+  const imagePullPod = makeWaitingPod(
+    "ImagePullBackOff",
+    'Back-off pulling image "ghcr.io/example/mcp:latest"',
+  );
+
+  describe("refreshState", () => {
+    test("keeps state pending on transient image pull errors", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [imagePullPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+      // @ts-expect-error - accessing private property for testing
+      deployment.state = "pending";
+
+      await deployment.refreshState();
+
+      expect(deployment.statusSummary.state).toBe("pending");
+      expect(deployment.statusSummary.error).toContain(
+        "Back-off pulling image",
+      );
+    });
+
+    test("recovers to running once the kubelet pull succeeds", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        // first refresh: findAnyPodForDeployment + failure check see the pull error
+        .mockResolvedValueOnce({ items: [imagePullPod] })
+        .mockResolvedValueOnce({ items: [imagePullPod] })
+        // second refresh: pod is running
+        .mockResolvedValue({ items: [runningPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce({ status: { availableReplicas: 0 } })
+        .mockResolvedValue({ status: { availableReplicas: 1 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+      // @ts-expect-error - accessing private property for testing
+      deployment.state = "pending";
+
+      await deployment.refreshState();
+      expect(deployment.statusSummary.state).toBe("pending");
+
+      await deployment.refreshState();
+      expect(deployment.statusSummary.state).toBe("running");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("still marks terminal container failures as failed", async () => {
+      const crashLoopPod = makeWaitingPod(
+        "CrashLoopBackOff",
+        "back-off 5m0s restarting failed container",
+      );
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [crashLoopPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+      // @ts-expect-error - accessing private property for testing
+      deployment.state = "running";
+
+      await deployment.refreshState();
+
+      expect(deployment.statusSummary.state).toBe("failed");
+      expect(deployment.statusSummary.error).toContain(
+        "restarting failed container",
+      );
+    });
+  });
+
+  describe("waitForDeploymentReady", () => {
+    test("keeps waiting through image pull errors and succeeds once the pull completes", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        // attempt 1: failure scan sees the pull error (must not fail fast)
+        .mockResolvedValueOnce({ items: [imagePullPod] })
+        // attempt 2: pod is running
+        .mockResolvedValue({ items: [runningPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce({ status: { availableReplicas: 0 } })
+        .mockResolvedValue({ status: { availableReplicas: 1 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+
+      await expect(
+        deployment.waitForDeploymentReady(5, 1),
+      ).resolves.toBeUndefined();
+      expect(deployment.statusSummary.state).toBe("running");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("fails fast on terminal container states", async () => {
+      const crashLoopPod = makeWaitingPod(
+        "CrashLoopBackOff",
+        "back-off 5m0s restarting failed container",
+      );
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [crashLoopPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+
+      await expect(deployment.waitForDeploymentReady(5, 1)).rejects.toThrow(
+        /CrashLoopBackOff/,
+      );
+      expect(deployment.statusSummary.state).toBe("failed");
+    });
+
+    test("includes the last image pull error when timing out", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [imagePullPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+
+      await expect(deployment.waitForDeploymentReady(2, 1)).rejects.toThrow(
+        /did not become ready after 2 attempts.*ImagePullBackOff/,
+      );
+    });
+  });
+});
+
+describe("K8sDeployment selector self-heal (multitenant drift)", () => {
+  const notFound = { statusCode: 404, message: "not found" };
+
+  function makeDeployment(params: {
+    readNamespacedPod?: ReturnType<typeof vi.fn>;
+    readNamespacedDeployment: ReturnType<typeof vi.fn>;
+    deleteNamespacedDeployment?: ReturnType<typeof vi.fn>;
+    createNamespacedDeployment?: ReturnType<typeof vi.fn>;
+  }): K8sDeployment {
+    const mockMcpServer = {
+      id: "current-install-id",
+      name: "test-server",
+      // null catalogId so getCatalogItem() short-circuits without a DB lookup;
+      // the recreate path then fails fast on missing local config, which is all
+      // we need — the assertion is that the drifted deployment was deleted first.
+      catalogId: null,
+    } as unknown as McpServer;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {
+        readNamespacedPod: params.readNamespacedPod ?? vi.fn(),
+      } as unknown as k8s.CoreV1Api,
+      k8sAppsApi: {
+        readNamespacedDeployment: params.readNamespacedDeployment,
+        deleteNamespacedDeployment:
+          params.deleteNamespacedDeployment ?? vi.fn().mockResolvedValue({}),
+        createNamespacedDeployment:
+          params.createNamespacedDeployment ?? vi.fn().mockResolvedValue({}),
+      } as unknown as k8s.AppsV1Api,
+      k8sNetworkingApi: {} as k8s.NetworkingV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+  }
+
+  // Regression: a Deployment created before the catalog-stable selector fix
+  // (#6340) keeps its old per-install `mcp-server-id` pod label while the shared
+  // Service's selector is reconciled to the catalog-stable id. The two diverge,
+  // the Service selects zero pods, and every connect/read fails ("fetch failed").
+  // A Deployment selector is immutable, so the only fix is delete + recreate.
+  test("recreates a deployment whose mcp-server-id selector drifted from the target", async () => {
+    const readNamespacedPod = vi.fn().mockRejectedValue(notFound); // no legacy bare pod
+    // 1st read: the deployment exists with a STALE selector (a different
+    // install's id). After deletion every read returns 404, which drains
+    // waitForDeploymentAbsent and sends the recreate down the create path.
+    const readNamespacedDeployment = vi
+      .fn()
+      .mockResolvedValueOnce({
+        spec: {
+          selector: { matchLabels: { "mcp-server-id": "stale-install-id" } },
+        },
+        status: { availableReplicas: 1 },
+      })
+      .mockRejectedValue(notFound);
+    const deleteNamespacedDeployment = vi.fn().mockResolvedValue({});
+
+    const deployment = makeDeployment({
+      readNamespacedPod,
+      readNamespacedDeployment,
+      deleteNamespacedDeployment,
+    });
+
+    // The recreate fails fast in this mock (no catalog/local config) — expected.
+    await expect(deployment.startOrCreateDeployment()).rejects.toThrow();
+
+    expect(deleteNamespacedDeployment).toHaveBeenCalledTimes(1);
+    expect(deleteNamespacedDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({ name: deployment.k8sDeploymentName }),
+    );
+  });
+
+  // Regression: the pod's egress policy MUST be applied before the deployment is
+  // created. A pod that starts before its per-pod policy lands is selected only
+  // by the namespace deny-all baseline (no DNS, no egress) and crashloops on
+  // startup connectivity.
+  test("applies the per-pod egress policy before creating the deployment", async () => {
+    const createNamespacedDeployment = vi.fn().mockResolvedValue({});
+    const deployment = makeDeployment({
+      readNamespacedPod: vi.fn().mockRejectedValue(notFound), // no legacy bare pod
+      readNamespacedDeployment: vi.fn().mockRejectedValue(notFound), // 404 → create path
+      createNamespacedDeployment,
+    });
+
+    // Stub everything the create path touches except the two calls we're ordering.
+    vi.spyOn(
+      deployment as unknown as { getCatalogItem: () => unknown },
+      "getCatalogItem",
+    ).mockResolvedValue({ localConfig: { dockerImage: "img" } });
+    vi.spyOn(
+      deployment as unknown as { needsHttpPort: () => unknown },
+      "needsHttpPort",
+    ).mockResolvedValue(false);
+    vi.spyOn(
+      deployment as unknown as { generateDeploymentSpec: () => unknown },
+      "generateDeploymentSpec",
+    ).mockReturnValue({});
+    vi.spyOn(
+      deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+      "ensureHttpServerConfigured",
+    ).mockResolvedValue(undefined);
+    const applySpy = vi
+      .spyOn(deployment, "applyK8sNetworkPolicy")
+      .mockResolvedValue(undefined);
+
+    await deployment.startOrCreateDeployment();
+
+    expect(applySpy).toHaveBeenCalled();
+    expect(createNamespacedDeployment).toHaveBeenCalled();
+    expect(applySpy.mock.invocationCallOrder[0]).toBeLessThan(
+      createNamespacedDeployment.mock.invocationCallOrder[0],
+    );
+  });
+
+  // A concurrent reconcile (another orchestrator replica) can create the Deployment
+  // between our 404 read and our create call. The resulting 409 must re-enter the
+  // reconcile (re-read + validate the now-existing deployment), not blindly assume
+  // success — a stale-selector deployment left by an older replica must still be
+  // self-healed, and a healthy one must not be marked failed.
+  test("on a 409 (concurrent create), re-reconciles the now-existing deployment", async () => {
+    const conflict = { statusCode: 409, message: "already exists" };
+    // Initial read: absent (→ create path). Create conflicts (409). The re-entry
+    // then reads the now-present deployment and reconciles it (here: not-ready).
+    const readNamespacedDeployment = vi
+      .fn()
+      .mockRejectedValueOnce(notFound)
+      .mockResolvedValue({ status: {} });
+    const createNamespacedDeployment = vi.fn().mockRejectedValue(conflict);
+    const deployment = makeDeployment({
+      readNamespacedPod: vi.fn().mockRejectedValue(notFound), // no legacy bare pod
+      readNamespacedDeployment,
+      createNamespacedDeployment,
+    });
+    vi.spyOn(
+      deployment as unknown as { getCatalogItem: () => unknown },
+      "getCatalogItem",
+    ).mockResolvedValue({ localConfig: { dockerImage: "img" } });
+    vi.spyOn(
+      deployment as unknown as { needsHttpPort: () => unknown },
+      "needsHttpPort",
+    ).mockResolvedValue(false);
+    vi.spyOn(
+      deployment as unknown as { generateDeploymentSpec: () => unknown },
+      "generateDeploymentSpec",
+    ).mockReturnValue({});
+    vi.spyOn(
+      deployment as unknown as {
+        checkPodContainerStatusesForFailure: () => unknown;
+      },
+      "checkPodContainerStatusesForFailure",
+    ).mockResolvedValue({ hasFailed: false, isTransientImagePull: false });
+    vi.spyOn(
+      deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+      "ensureHttpServerConfigured",
+    ).mockResolvedValue(undefined);
+    const applySpy = vi
+      .spyOn(deployment, "applyK8sNetworkPolicy")
+      .mockResolvedValue(undefined);
+
+    await expect(deployment.startOrCreateDeployment()).resolves.toBeUndefined();
+    // Re-read on conflict (not a blind "continue"), and no create-retry loop.
+    expect(readNamespacedDeployment.mock.calls.length).toBeGreaterThanOrEqual(
+      2,
+    );
+    expect(createNamespacedDeployment).toHaveBeenCalledTimes(1);
+    expect(applySpy).toHaveBeenCalled();
+  });
+
+  // Regression: the reconcile path for an existing-but-not-ready deployment must
+  // also (re)apply the egress policy before HTTP config, so a slow or failing
+  // Service setup can't leave an already-created pod on the deny-all baseline.
+  test("reapplies the egress policy before HTTP config on a not-ready deployment, even when HTTP config fails", async () => {
+    const deployment = makeDeployment({
+      readNamespacedPod: vi.fn().mockRejectedValue(notFound), // no legacy bare pod
+      readNamespacedDeployment: vi.fn().mockResolvedValue({ status: {} }), // exists, not ready
+    });
+    vi.spyOn(
+      deployment as unknown as {
+        checkPodContainerStatusesForFailure: () => unknown;
+      },
+      "checkPodContainerStatusesForFailure",
+    ).mockResolvedValue({ hasFailed: false, isTransientImagePull: false });
+    const applySpy = vi
+      .spyOn(deployment, "applyK8sNetworkPolicy")
+      .mockResolvedValue(undefined);
+    const httpSpy = vi
+      .spyOn(
+        deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+        "ensureHttpServerConfigured",
+      )
+      .mockRejectedValue(new Error("Service setup failed"));
+
+    await expect(deployment.startOrCreateDeployment()).rejects.toThrow(
+      "Service setup failed",
+    );
+
+    // The policy was (re)applied before — and independently of — the HTTP failure.
+    expect(applySpy).toHaveBeenCalled();
+    expect(applySpy.mock.invocationCallOrder[0]).toBeLessThan(
+      httpSpy.mock.invocationCallOrder[0],
+    );
+  });
+
+  describe("waitForDeploymentAbsent", () => {
+    test("resolves once the deployment returns 404", async () => {
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce({}) // still present
+        .mockRejectedValue(notFound); // then gone
+      const deployment = makeDeployment({ readNamespacedDeployment });
+
+      await expect(
+        // @ts-expect-error - exercising a private method directly
+        deployment.waitForDeploymentAbsent(5, 1),
+      ).resolves.toBeUndefined();
+    });
+
+    test("throws if the deployment never disappears", async () => {
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const deployment = makeDeployment({ readNamespacedDeployment });
+
+      await expect(
+        // @ts-expect-error - exercising a private method directly
+        deployment.waitForDeploymentAbsent(2, 1),
+      ).rejects.toThrow(/was not deleted after 2 attempts/);
+    });
   });
 });

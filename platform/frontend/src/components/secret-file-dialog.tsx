@@ -1,6 +1,6 @@
 "use client";
 
-import { parseVaultReference } from "@shared";
+import { parseVaultReference } from "@archestra/shared";
 import { CheckCircle2, Info, Key, Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
@@ -11,10 +11,9 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretTextarea } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { MCP_SECRET_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
-import { usePresetEntityName } from "@/lib/organization.query";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -65,7 +64,6 @@ export function SecretFileDialog({
   onClose,
   onConfirm,
 }: SecretFileDialogProps) {
-  const { singular } = usePresetEntityName();
   const [draft, setDraft] = useState<SecretFileDraft>(
     initial ?? makeEmptyDraft(disableInstallation),
   );
@@ -172,12 +170,6 @@ export function SecretFileDialog({
                 and your description below as the helper text.
               </>
             }
-          />
-        )}
-        {draft.scope === "preset" && (
-          <ScopeCallout
-            title={`An admin sets this for each ${singular}`}
-            body={`Each ${singular} that uses this server supplies its own value.`}
           />
         )}
         {draft.scope === "static" && (
@@ -317,14 +309,13 @@ function StaticValueEditor({
   return (
     <div className="space-y-2">
       <Label htmlFor="secret-file-value">File contents</Label>
-      <Textarea
+      <SecretTextarea
         id="secret-file-value"
         value={draft.value}
         onChange={(e) => onValueChange(e.target.value)}
         placeholder={hasStoredSecret ? "••••••••" : "Paste the secret here..."}
         rows={6}
         className="font-mono text-xs"
-        autoComplete={MCP_SECRET_AUTOCOMPLETE}
       />
       {hasStoredSecret && (
         <p className="text-xs text-muted-foreground">

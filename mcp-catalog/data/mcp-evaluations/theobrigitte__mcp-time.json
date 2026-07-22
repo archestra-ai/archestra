@@ -1,0 +1,125 @@
+{
+  "name": "theobrigitte__mcp-time",
+  "display_name": "mcp-time",
+  "description": "MCP (Model Context Protocol) server which provides utilities to work with time and dates, with natural language, multiple formats and timezone convertion capabilities",
+  "author": {
+    "name": "TheoBrigitte"
+  },
+  "server": {
+    "command": "mcp-time",
+    "args": [
+      "-t",
+      "${user_config.transport}",
+      "--address",
+      "${user_config.address}",
+      "--log-file",
+      "${user_config.log_file}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "transport": {
+      "type": "string",
+      "title": "Transport Layer",
+      "description": "Transport layer for the MCP server: stdio or stream.",
+      "default": "stdio",
+      "required": false
+    },
+    "address": {
+      "type": "string",
+      "title": "Stream Server Address",
+      "description": "Listen address for Stream HTTP Server (only for stream transport).",
+      "default": "http://localhost:8080/mcp",
+      "required": false
+    },
+    "log_file": {
+      "type": "file",
+      "title": "Log File Path",
+      "description": "Path to the log file. Logging is disabled if not specified.",
+      "required": false
+    }
+  },
+  "readme": "<p align=\"center\">\n    <img src=\"assets/mcp-time.png\" alt=\"MCP time logo\" height=\"100px\">\n</p>\n\n<div align=\"center\">\n\n<a href=\"https://github.com/TheoBrigitte/mcp-time/releases\"><img src=\"https://img.shields.io/github/release/TheoBrigitte/mcp-time.svg\" alt=\"Github release\"></a>\n<a href=\"https://github.com/TheoBrigitte/mcp-time/actions/workflows/go.yaml\"><img src=\"https://github.com/TheoBrigitte/mcp-time/actions/workflows/go.yaml/badge.svg?branch=main\" alt=\"Github action\"></a>\n<a href=\"https://pkg.go.dev/github.com/TheoBrigitte/mcp-time\"><img src=\"https://pkg.go.dev/badge/github.com/TheoBrigitte/mcp-time.svg)](https://pkg.go.dev/github.com/TheoBrigitte/mcp-time\"></a>\n\n<strong>Time MCP Server</strong>\n\n*A Model Context Protocol server that enables AI assistants to interact with time*\n\n</div>\n\n## Overview\n\nThe Time MCP Server is a [Model Context Protocol (MCP)](https://github.com/modelcontextprotocol) server that provides AI assistants and other MCP clients with standardized tools to perform time and date-related operations. This server acts as a bridge between AI tools and a robust time-handling backend, allowing for complex time manipulations through natural language interactions.\n\n## Features\n\n- **Time Manipulation**: Get current time, convert between timezones, and add or subtract durations.\n- **Natural Language Parsing**: Understands relative time expressions like \"yesterday\" or \"next month\".\n- **Time Comparison**: Compare two different times.\n- **Flexible Formatting**: Supports a wide variety of predefined and custom time formats.\n- **MCP Compliance**: Fully compatible with the Model Context Protocol standard.\n- **Multiple Transports**: Can be run using `stdio` for simple integrations or as an `HTTP stream` server for network access.\n\n## Installation\n\nThis MCP server can be integrated with various AI assistants that support the Model Context Protocol.\n\n### On Cursor\n\nUse the link below to install directly in [Cursor](https://cursor.com).\n\n<a href=\"cursor://anysphere.cursor-deeplink/mcp/install?name=time&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItLXJtIiwiLWkiLCJ0aGVvMDEvbWNwLXRpbWU6bGF0ZXN0Il19\">\n<picture>\n  <source media=\"(prefers-color-scheme: dark)\" srcset=\"https://cursor.com/deeplink/mcp-install-dark.svg\">\n  <source media=\"(prefers-color-scheme: light)\" srcset=\"https://cursor.com/deeplink/mcp-install-light.svg\">\n  <img alt=\"Add to Cursor\" src=\"https://cursor.com/deeplink/mcp-install-light.svg\" width=\"200\">\n</picture>\n</a>\n\n### Using Docker\n\nCopy the following JSON configuration into your MCP client to run the server using Docker:\n\n```json\n{\n  \"mcpServers\": {\n    \"time\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"theo01/mcp-time:latest\"\n      ]\n    }\n  }\n}\n```\n\n### Using binary\n\nCopy the following JSON configuration into your MCP client to run the server using the binary:\n\n```json\n{\n  \"mcpServers\": {\n    \"time\": {\n      \"command\": \"mcp-time\"\n    }\n  }\n}\n```\n\nYou need to install the `mcp-time` binary on your system. You can do this in several ways:\n\n#### Install from releases\n\nYou can download the latest binary from the [releases page](https://github.com/TheoBrigitte/mcp-time/releases).\n\n```bash\n# Replace OS-ARCH with your operating system and architecture (e.g., linux-amd64, darwin-arm64)\ncurl -Lo mcp-time https://github.com/TheoBrigitte/mcp-time/releases/latest/download/mcp-time.OS-ARCH\ninstall -D -m 755 ./mcp-time ~/.local/bin/mcp-time\n```\n\n#### Install with Go\n\n```bash\ngo install github.com/TheoBrigitte/mcp-time/cmd/mcp-time@latest\n```\n\nThis will install the `mcp-time` binary in your `$GOPATH/bin` directory.\n\n#### Building from Source\n\n```bash\ngit clone https://github.com/TheoBrigitte/mcp-time.git\ncd mcp-time\nmake install\n```\n\nThis will build and install the `mcp-time` binary in the `~/.local/bin` directory.\n\n## Usage\n\n### Basic Usage\n\nStart the MCP server with the default `stdio` transport:\n\n```bash\nmcp-time\n```\n\nStart the MCP server with the `stream` transport:\n\n```bash\nmcp-time --transport stream --address \"http://localhost:8080/mcp\"\n```\n\n### Advanced Usage\n\nThe server supports several command-line options for more advanced configurations:\n\n```\n$ mcp-time --help\nAn MCP (Model Context Protocol) server which provides utilities to work with time and dates.\n\nUsage:\n  mcp-time [flags]\n\nFlags:\n      --address string     Listen address for Stream HTTP Server (only for --transport stream) (default \"http://localhost:8080/mcp\")\n  -h, --help               help for mcp-time\n      --log-file string    Path to log file (logs is disabled if not specified)\n  -t, --transport string   Transport layer: stdio, stream. (default \"stdio\")\n      --version            Print version information and exit\n```\n\n## Available Tools\n\n### `relative_time`\n\nGet a time based on a relative natural language expression.\n\n**Parameters:**\n- `text` (required): The natural language expression (e.g., `yesterday`, `5 minutes ago`, `next month`).\n- `time` (optional): A reference time for the relative expression. Defaults to current time.\n- `timezone` (optional): The target timezone for the output.\n- `format` (optional): The output format for the time.\n\n### `convert_timezone`\n\nConvert a given time between timezones.\n\n**Parameters:**\n- `time` (required): The input time string. It can be in various formats.\n- `input_timezone` (optional): The timezone of the input time.\n- `output_timezone` (optional): The target timezone for the output.\n- `format` (optional): The output format for the time.\n\n### `current_time`\n\nGet the current time.\n\n**Parameters:**\n- `format` (optional): The output format for the time. Can be a predefined format (e.g., `RFC3339`, `Kitchen`) or a custom Go layout.\n- `timezone` (optional): The target timezone in IANA format (e.g., `America/New_York`). Defaults to UTC.\n\n### `add_time`\n\nAdd or subtract a duration to a given time.\n\n**Parameters:**\n- `time` (required): The input time string.\n- `duration` (required): The duration to add or subtract (e.g., `2h30m`, `-1h`).\n- `timezone` (optional): The target timezone for the output.\n- `format` (optional): The output format for the time.\n\n### `compare_time`\n\nCompare two times.\n\n**Parameters:**\n- `time_a` (required): The first time to compare.\n- `time_b` (required): The second time to compare.\n\n**Returns:**\n- `-1` if `time_a` is before `time_b`.\n- `0` if `time_a` is equal to `time_b`.\n- `1` if `time_a` is after `time_b`.\n\n## Credits\n\n- https://github.com/araddon/dateparse\n- https://github.com/tj/go-naturaldate\n- https://github.com/mark3labs/mcp-go\n",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "theo01-mcp-time-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "theo01/mcp-time:latest"],
+        "env": {},
+        "docker_image": "theo01/mcp-time:latest"
+      },
+      "mcp-time-stdio": {
+        "command": "mcp-time",
+        "args": [],
+        "env": {}
+      },
+      "mcp-time-stream": {
+        "command": "mcp-time",
+        "args": ["--transport", "stream", "--address", "http://localhost:8080/mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "TheoBrigitte",
+    "repo": "mcp-time",
+    "url": "https://github.com/TheoBrigitte/mcp-time",
+    "name": "mcp-time",
+    "path": null,
+    "stars": 4,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "9b10b39d169d1b6e9e9f654a24e07036d69b8cc2"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:52.629Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "araddon/dateparse",
+      "importance": 9
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "prometheus/common",
+      "importance": 5
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 8
+    },
+    {
+      "name": "tj/go-naturaldate",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/TheoBrigitte/mcp-time\n\ngo 1.24.2\n\nrequire (\n\tgithub.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de\n\tgithub.com/mark3labs/mcp-go v0.33.0\n\tgithub.com/prometheus/common v0.65.0\n\tgithub.com/spf13/cobra v1.9.1\n\tgithub.com/tj/go-naturaldate v1.3.0\n)\n\nrequire (\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/spf13/cast v1.9.2 // indirect\n\tgithub.com/spf13/pflag v1.0.6 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n)\n"
+}

@@ -1,6 +1,5 @@
-import { requiredPagePermissionsMap } from "@shared/access-control";
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePermissionMap } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
 
 import { useSecretsType } from "@/lib/secrets.query";
 
@@ -8,21 +7,32 @@ export function useSettingsTabs() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const { data: secretsType } = useSecretsType();
   return [
-    { label: "Your Account", href: "/settings/account" },
-    ...(permissionMap?.["/settings/api-keys"]
-      ? [{ label: "API Keys", href: "/settings/api-keys" }]
+    ...(permissionMap?.["/settings/organization"]
+      ? [{ label: "Organization", href: "/settings/organization" }]
+      : []),
+    ...(permissionMap?.["/settings/service-accounts"]
+      ? [{ label: "Service Accounts", href: "/settings/service-accounts" }]
       : []),
     ...(permissionMap?.["/settings/agents"]
-      ? [{ label: "Agents", href: "/settings/agents" }]
+      ? [{ label: "Chat", href: "/settings/agents" }]
       : []),
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
       : []),
-    ...(permissionMap?.["/settings/connection"]
-      ? [{ label: "Connect page", href: "/settings/connection" }]
+    ...(permissionMap?.["/settings/mcp"]
+      ? [{ label: "MCP", href: "/settings/mcp" }]
+      : []),
+    ...(permissionMap?.["/settings/skills"]
+      ? [{ label: "Skills", href: "/settings/skills" }]
+      : []),
+    ...(permissionMap?.["/settings/security"]
+      ? [{ label: "Security", href: "/settings/security" }]
       : []),
     ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge" }]
+      : []),
+    ...(permissionMap?.["/settings/environments"]
+      ? [{ label: "Environments", href: "/settings/environments" }]
       : []),
     ...(permissionMap?.["/settings/users"]
       ? [{ label: "Users", href: "/settings/users" }]
@@ -33,15 +43,17 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/roles"]
       ? [{ label: "Roles", href: "/settings/roles" }]
       : []),
-    ...(config.enterpriseFeatures.core &&
-    permissionMap?.["/settings/identity-providers"]
+    ...(permissionMap?.["/settings/github"]
+      ? [{ label: "GitHub", href: "/settings/github" }]
+      : []),
+    // Always render the Identity Providers tab when the user has the
+    // permission — the destination page handles dimming when the enterprise
+    // license is inactive, no need to gate the nav entry as well.
+    ...(permissionMap?.["/settings/identity-providers"]
       ? [{ label: "Identity Providers", href: "/settings/identity-providers" }]
       : []),
     ...(secretsType?.type === "Vault" && permissionMap?.["/settings/secrets"]
       ? [{ label: "Secrets", href: "/settings/secrets" }]
-      : []),
-    ...(permissionMap?.["/settings/organization"]
-      ? [{ label: "Organization", href: "/settings/organization" }]
       : []),
   ];
 }

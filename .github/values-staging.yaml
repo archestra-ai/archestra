@@ -1,8 +1,35 @@
 archestra:
   replicaCount: 4
 
+  # Staging runs on a 5-node pool that the cluster autoscaler cannot grow past
+  # its max, and the chart's default 2-vCPU request per pod (sized for
+  # production latency) left the nodes 90%+ requested while <10% utilized —
+  # deploy-surge pods sat Pending on every commit-to-main rollout. Staging pods
+  # actually use well under 500m, and there is no CPU limit, so pods can still
+  # burst to whatever is free on the node.
+  resources:
+    requests:
+      cpu: "500m"
+
   worker:
     replicaCount: 3
+    # Same reasoning as archestra.resources above; workers idle even lower.
+    resources:
+      requests:
+        cpu: "250m"
+
+  # The Apps Hackathon video renderer runs as its own single-replica Deployment
+  # (render jobs live in one process's memory) so the 4-replica web tier's polls
+  # and downloads always reach the pod that holds the job. The web tier is
+  # pointed at it via ARCHESTRA_APP_RECORDING_RENDERER_URL below.
+  renderer:
+    enabled: true
+
+  codeRuntime:
+    enabled: true
+    dagger:
+      managed:
+        enabled: true
 
   # Pod Disruption Budget: ensure at least 3 of 4 pods stay running during
   # voluntary disruptions (node upgrades, autoscaling, maintenance)
@@ -22,12 +49,42 @@ archestra:
   # instead of API keys for authentication
   env:
     ARCHESTRA_ANALYTICS: disabled
-    ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED: "true"
-    ARCHESTRA_AGENTS_SKILLS_ENABLED: "true"
+    ARCHESTRA_BETA: "true"
+    ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
+    # BETA: auto-sync-permissions connectors (off by default everywhere else).
+    # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
+    # flipped off.
+    ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
+    # Apps Hackathon session recording. The documented flag deliberately cannot
+    # open this on a licensed deployment (see parseHackathonRecorderEnabled),
+    # and staging activates the enterprise license above — so it takes the
+    # separate override, which exists for exactly this deployment and is
+    # deliberately absent from .env.example and the deployment docs.
+    ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE: "true"
+    # Apps Hackathon gallery share (test phase): the recorder's "Submit to
+    # Archestra for review" flow files PRs against this repository via GitHub
+    # device flow. The client id is a public identifier by design (device flow
+    # is secretless), so neither value is a secret. Swap both for the real
+    # org OAuth app + gallery repository when it exists.
+    ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID: "Ov23liqkaqAROe7B7ZZ4"
+    ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO: "archestra-ai/apps-gallery"
+    # Offload video rendering to the dedicated single-replica renderer Service
+    # (see renderer.enabled above), so a render's status polls and download land
+    # on the one pod that holds its in-memory job instead of scattering across
+    # the 4 web replicas.
+    ARCHESTRA_APP_RECORDING_RENDERER_URL: "http://archestra-platform-renderer:9000"
     ARCHESTRA_API_BASE_URL: "https://frontend.archestra.dev,https://backend.archestra.dev"
+    # Dedicated origin for MCP App sandboxes so browser device permissions
+    # (camera/mic/geolocation/clipboard) can be delegated to app iframes. Each
+    # app renders at <hash>.sandbox.archestra.dev (a real cross-origin); without
+    # this, sandboxes fall back to the frontend's opaque origin and browsers
+    # block those features. Wildcard DNS + the cert-manager-issued wildcard TLS
+    # secret come from archestra-ai/infra (gke/dns.tf, gke-apps/cert-manager);
+    # the ingress rule + tls entry below route the sandbox hosts to the frontend.
+    ARCHESTRA_MCP_SANDBOX_DOMAIN: "sandbox.archestra.dev"
     ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
     ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
     ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
@@ -35,13 +92,22 @@ archestra:
     ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu"
     ARCHESTRA_AUTH_COOKIE_DOMAIN: ".archestra.dev"
     ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
-    ARCHESTRA_TRUST_PROXY: "true"
+    ARCHESTRA_TRUST_PROXY: "false"
     ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS: "agents@archestraai.onmicrosoft.com"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://backend.archestra.dev/api/webhooks/incoming-email"
     ARCHESTRA_CHAT_DEFAULT_PROVIDER: "anthropic"
     ARCHESTRA_CHAT_DEFAULT_MODEL: "claude-opus-4-5-20251101"
+    # 20 connections per Node process. The old value of 8 predates the Cloud
+    # SQL migration (it protected the fragile in-cluster Postgres) and caused
+    # silent connection-checkout queueing: every API request runs an auth
+    # lookup plus per-route query fanout, so bursts exhausted 8 connections and
+    # requests waited (up to the 10s connect timeout) for a free client —
+    # visible as trivial indexed selects with p95 ~370ms. Budget: 8 Node
+    # processes (4 web + 3 worker + 1 renderer) x 20 = 160, comfortably under
+    # Cloud SQL max_connections=200 with headroom for migration jobs.
+    ARCHESTRA_DATABASE_POOL_MAX: "20"
 
   diagnostics:
     enabled: true
@@ -56,6 +122,13 @@ archestra:
       networkPolicy:
         # Enable SSRF protection for MCP server pods
         create: true
+
+      rbac:
+        # Namespaces backing deployment environments the platform may deploy
+        # MCP servers into. Each entry gets a namespace-scoped Role + RoleBinding
+        # and is surfaced to the app as ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES.
+        environmentNamespaces:
+          - env-test
 
       serviceAccount:
         # GKE Workload Identity binding to allow Vertex AI access via ADC
@@ -81,6 +154,7 @@ archestra:
       # Maps backend port (9000) and frontend port (3000) to their respective BackendConfigs
       # These BackendConfigs are defined in archestra-ai/infra repo (gke/ingress.tf)
       cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config", "3000":"archestra-platform-frontend-config"}}'
+      cloud.google.com/neg: '{"ingress": true}'
 
   ingress:
     enabled: true
@@ -100,10 +174,34 @@ archestra:
             pathType: Prefix
       - host: backend.archestra.dev
         paths:
-          # Block public access to metrics endpoint
-          - path: /metrics
-            port: 1
-            pathType: Exact
           - path: /
             port: 9000
             pathType: Prefix
+      # MCP App sandbox origins (<hash>.sandbox.archestra.dev) go straight to
+      # the backend, which serves /_sandbox/* itself and validates the Host
+      # header (routing via the frontend rewrites the Host header -> 403).
+      - host: "*.sandbox.archestra.dev"
+        paths:
+          - path: /
+            port: 9000
+            pathType: Prefix
+
+    # Wildcard cert for the sandbox hosts, issued and renewed by cert-manager
+    # (archestra-ai/infra, gke-apps/cert-manager). GKE combines spec.tls
+    # secrets with the ManagedCertificate annotation above. The secret must
+    # exist before this deploys, or ingress-gce fails to sync the Ingress.
+    tls:
+      - hosts:
+          - "*.sandbox.archestra.dev"
+        secretName: archestra-sandbox-wildcard-tls
+
+postgresql:
+  # Staging's database is Cloud SQL for PostgreSQL 18 (private IP, no public
+  # endpoint), not the bundled chart, so the database's durability no longer
+  # depends on the GKE node lifecycle — replacing a node used to take the only
+  # database pod down with it, which is what kept staging dying at random.
+  #
+  # The connection string is injected by the deploy workflow from the
+  # ARCHESTRA_STAGING_DATABASE_URL repo secret, so it is not in this file.
+  # The chart hard-fails if external_database_url is set while this is true.
+  enabled: false

@@ -16,7 +16,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
+import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -39,6 +39,7 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
 import { ApiError, type OpenAi } from "@/types";
 import {
+  openAiEmbeddingsAdapterFactory,
   openAiResponsesAdapterFactory,
   openaiAdapterFactory,
 } from "../adapters";
@@ -149,7 +150,7 @@ function createOpenAiRouteTestApp() {
     return reply.status(500).send({
       error: {
         message,
-        type: "internal_server_error",
+        type: "api_internal_server_error",
       },
     });
   });
@@ -191,7 +192,7 @@ describe("OpenAI proxy streaming", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
 
     // The route uses reply.raw.write() which produces SSE format
     const body = response.body;
@@ -220,7 +221,7 @@ describe("OpenAI proxy streaming", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
 
     //  adapter only emits chunks with actual content
     const chunks = response.body
@@ -239,6 +240,50 @@ describe("OpenAI proxy streaming", () => {
         chunk.choices?.[0]?.delta?.content,
     );
     expect(contentChunks.length).toBeGreaterThan(0);
+  });
+
+  test("streaming response includes token usage in the SSE body", async ({
+    makeAgent,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+
+    const agent = await makeAgent({ name: "Test Streaming Usage Agent" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: true,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+
+    // The provider sends usage in a trailing chunk; the proxy must carry it into the SSE the
+    // client reads (otherwise streaming clients — and archestra-bench — see no token usage).
+    const chunks = response.body
+      .split("\n")
+      .filter(
+        (line: string) => line.startsWith("data: ") && line !== "data: [DONE]",
+      )
+      .map((line: string) => JSON.parse(line.substring(6)));
+    const usageChunk = chunks.find(
+      (chunk: OpenAi.Types.ChatCompletionChunk & { usage?: unknown }) =>
+        chunk.usage,
+    );
+    expect(usageChunk?.usage).toMatchObject({
+      prompt_tokens: 12,
+      completion_tokens: 10,
+      total_tokens: 22,
+    });
   });
 });
 
@@ -300,6 +345,135 @@ describe("OpenAI cost tracking", () => {
     expect(typeof interaction.baselineCost).toBe("string");
   });
 
+  test("maps an upstream provider error to its status code and records the failed interaction", async ({
+    makeAgent,
+  }) => {
+    // An SDK error carrying the upstream HTTP status (e.g. a provider 429)
+    // must reach the client with that status — not as a generic 500 — and the
+    // failed call must land in LLM logs. Regression test for the proxy's
+    // `return promise` (without await) letting rejections bypass its catch.
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          chat: {
+            completions: {
+              create: async () => {
+                throw Object.assign(
+                  new Error(
+                    "429 You've exceeded the rate limit, please slow down",
+                  ),
+                  { status: 429 },
+                );
+              },
+            },
+          },
+        }) as never,
+    );
+
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Upstream Error Agent" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json().error.message).toContain("rate limit");
+
+    // The failed call is persisted so it appears in LLM logs.
+    const { InteractionModel } = await import("@/models");
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.length).toBeGreaterThan(0);
+    expect(interactions[interactions.length - 1].response).toMatchObject({
+      error: expect.stringContaining("rate limit"),
+    });
+  });
+
+  test("creates embeddings through OpenAI proxy routes", async ({
+    makeAgent,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+
+    await ModelModel.upsert({
+      externalId: "openai/text-embedding-3-small",
+      provider: "openai",
+      modelId: "text-embedding-3-small",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      embeddingDimensions: 1536,
+      customPricePerMillionInput: "0.02",
+      customPricePerMillionOutput: "0.00",
+      lastSyncedAt: new Date(),
+    });
+    const agent = await makeAgent({
+      name: "Test Embedding Agent",
+      agentType: "llm_proxy",
+    });
+
+    let capturedApiKey: string | undefined;
+    vi.spyOn(openAiEmbeddingsAdapterFactory, "createClient").mockImplementation(
+      (apiKey) => {
+        capturedApiKey = apiKey;
+        return createOpenAiTestClient() as never;
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/embeddings`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-openai-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "text-embedding-3-small",
+        input: ["first", "second"],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      object: "list",
+      model: "text-embedding-3-small",
+      data: [
+        { object: "embedding", index: 0 },
+        { object: "embedding", index: 1 },
+      ],
+      usage: {
+        prompt_tokens: 2,
+        total_tokens: 2,
+      },
+    });
+    expect(capturedApiKey).toBe("test-openai-key");
+
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    const interaction = interactions[interactions.length - 1];
+    expect(interaction).toMatchObject({
+      type: "openai:embeddings",
+      model: "text-embedding-3-small",
+      inputTokens: 2,
+      outputTokens: 0,
+    });
+  });
+
   test("accepts LLM OAuth client credentials on provider-specific proxy routes", async ({
     makeAgent,
     makeLlmProviderApiKey,
@@ -325,6 +499,7 @@ describe("OpenAI cost tracking", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -413,6 +588,7 @@ describe("OpenAI cost tracking", () => {
       redirectUris: ["http://localhost:3107/callback"],
       grantTypes: ["authorization_code"],
       responseTypes: ["code"],
+      scopes: ["mcp"],
       tokenEndpointAuthMethod: "none",
       isPublic: true,
       metadata: { test: true },
@@ -489,6 +665,7 @@ describe("OpenAI cost tracking", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Unmapped Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -548,6 +725,7 @@ describe("OpenAI cost tracking", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Expired Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -607,6 +785,7 @@ describe("OpenAI cost tracking", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Disabled Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -670,6 +849,7 @@ describe("OpenAI cost tracking", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: user.id,
       name: "Revoked Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -744,6 +924,7 @@ describe("OpenAI cost tracking", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Wrong Scope Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [

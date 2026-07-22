@@ -16,7 +16,12 @@ import {
 import type OpenAI from "openai";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
-import { ModelModel, OrganizationModel } from "@/models";
+import {
+  EnvironmentDefaultUserLimitModel,
+  EnvironmentModel,
+  ModelModel,
+} from "@/models";
+import AgentModel from "@/models/agent";
 import LimitModel from "@/models/limit";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -113,7 +118,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     return harness;
   }
 
-  test("blocks request with 429 when virtual_key limit is exceeded", async ({
+  test("blocks request with 402 when virtual_key limit is exceeded", async ({
     makeAgent,
     makeOrganization,
     makeSecret,
@@ -166,15 +171,19 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "virtual_key",
+          limit_type: "token_cost",
+        },
       },
     });
   });
 
-  test("blocks request with 429 when user limit is exceeded", async ({
+  test("blocks request with 402 when user limit is exceeded", async ({
     makeAgent,
     makeUser,
     makeOrganization,
@@ -217,15 +226,19 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "user",
+          limit_type: "token_cost",
+        },
       },
     });
   });
 
-  test("blocks request with 429 when default user limit is exceeded", async ({
+  test("blocks request with 402 when default user limit is exceeded", async ({
     makeAgent,
     makeUser,
     makeOrganization,
@@ -240,10 +253,12 @@ describe("LLM proxy limit enforcement (integration)", () => {
       name: "Default User Limit Agent",
     });
 
-    await OrganizationModel.patch(org.id, {
-      defaultUserLimitValue: 1,
-      defaultUserLimitModel: ["gpt-4o"],
-      defaultUserLimitCleanupInterval: "1w",
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: ["gpt-4o"],
+      cleanupInterval: "1w",
     });
     const interaction = await makeInteraction(agent.id, {
       model: "gpt-4o",
@@ -267,10 +282,14 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "user",
+          limit_type: "token_cost",
+        },
       },
     });
     expect(response.json().error.message).toContain("user-level");
@@ -291,10 +310,12 @@ describe("LLM proxy limit enforcement (integration)", () => {
       name: "Custom User Limit Override Agent",
     });
 
-    await OrganizationModel.patch(org.id, {
-      defaultUserLimitValue: 1,
-      defaultUserLimitModel: null,
-      defaultUserLimitCleanupInterval: "1w",
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: null,
+      cleanupInterval: "1w",
     });
     await LimitModel.create({
       entityType: "user",
@@ -355,6 +376,57 @@ describe("LLM proxy limit enforcement (integration)", () => {
     });
 
     expect(response.statusCode).toBe(200);
+  });
+
+  test("blocks org-scoped agent with 402 when organization limit is exceeded", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Org Limit Agent",
+      scope: "org",
+      teams: [],
+    });
+
+    await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: null,
+      lastCleanup: new Date(),
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "organization",
+      org.id,
+      "gpt-4o",
+      1_000_000,
+      1_000_000,
+    );
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: OPENAI_HEADERS(),
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(402);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "organization",
+          limit_type: "token_cost",
+        },
+      },
+    });
+    expect(response.json().error.message).toContain("organization-level");
   });
 
   test("records usage in limit after successful request", async ({
@@ -488,11 +560,11 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     const body = response.json();
     expect(body.error.code).toBe("token_cost_limit_exceeded");
     // virtual_key is checked first (most specific), so error should mention it
-    expect(body.error.message).toContain("virtual_key-level");
+    expect(body.error.message).toContain("virtual key-level");
   });
 
   test("records usage in team all-models limit after successful request", async ({
@@ -635,7 +707,7 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(orgUsage[0].tokensOut).toBe(60);
   });
 
-  test("blocks request with 429 when team all-models limit is exceeded", async ({
+  test("blocks request with 402 when team all-models limit is exceeded", async ({
     makeAgent,
     makeOrganization,
     makeAdmin,
@@ -681,13 +753,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     const body = response.json();
     expect(body.error.code).toBe("token_cost_limit_exceeded");
     expect(body.error.message).toContain("team-level");
   });
 
-  test("blocks request with 429 when user all-models limit is exceeded", async ({
+  test("blocks request with 402 when user all-models limit is exceeded", async ({
     makeAgent,
     makeUser,
     makeOrganization,
@@ -732,13 +804,13 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     const body = response.json();
     expect(body.error.code).toBe("token_cost_limit_exceeded");
     expect(body.error.message).toContain("user-level");
   });
 
-  test("blocks request with 429 when virtual_key all-models limit is exceeded", async ({
+  test("blocks request with 402 when virtual_key all-models limit is exceeded", async ({
     makeAgent,
     makeOrganization,
     makeSecret,
@@ -791,9 +863,296 @@ describe("LLM proxy limit enforcement (integration)", () => {
       payload: SIMPLE_PAYLOAD(),
     });
 
-    expect(response.statusCode).toBe(429);
+    expect(response.statusCode).toBe(402);
     const body = response.json();
     expect(body.error.code).toBe("token_cost_limit_exceeded");
-    expect(body.error.message).toContain("virtual_key-level");
+    expect(body.error.message).toContain("virtual key-level");
+  });
+
+  test("blocks request with 402 when environment limit is exceeded", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const environment = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "production",
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Env Limit Agent",
+      environmentId: environment.id,
+    });
+
+    await LimitModel.create({
+      entityType: "environment",
+      entityId: environment.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: ["gpt-4o"],
+      lastCleanup: new Date(),
+    });
+    await LimitModel.updateTokenLimitUsage(
+      "environment",
+      environment.id,
+      "gpt-4o",
+      1000000,
+      1000000,
+    );
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: OPENAI_HEADERS(),
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(402);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "environment",
+          limit_type: "token_cost",
+        },
+      },
+    });
+  });
+
+  test("does not apply an environment limit to an agent in a different environment", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const limitedEnv = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "production",
+    });
+    // Agent has no environment, so the production env limit must not apply.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "No-Env Agent",
+    });
+
+    await LimitModel.create({
+      entityType: "environment",
+      entityId: limitedEnv.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: ["gpt-4o"],
+      lastCleanup: new Date(),
+    });
+    await LimitModel.updateTokenLimitUsage(
+      "environment",
+      limitedEnv.id,
+      "gpt-4o",
+      1000000,
+      1000000,
+    );
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: OPENAI_HEADERS(),
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("blocks request with 402 when per-environment default user limit is exceeded", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const environment = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "production",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Env Default Agent",
+      environmentId: environment.id,
+    });
+
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: environment.id,
+      limitValue: 1,
+      cleanupInterval: "1w",
+    });
+
+    const interaction = await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      inputTokens: 100,
+      outputTokens: 100,
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ userId: user.id, environmentId: environment.id, cost: "2" })
+      .where(eq(schema.interactionsTable.id, interaction.id));
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: {
+        ...OPENAI_HEADERS(),
+        "X-Archestra-User-Id": user.id,
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(402);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "environment",
+          limit_type: "token_cost",
+        },
+      },
+    });
+  });
+
+  test("per-environment default user limit overrides the org-wide default", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const environment = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "production",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Override Agent",
+      environmentId: environment.id,
+    });
+
+    // Org-wide default (NULL environment) would block (limit of 1, usage of 2)...
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: ["gpt-4o"],
+      cleanupInterval: "1w",
+    });
+    // ...but a generous per-environment default overrides it for this env.
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: environment.id,
+      limitValue: 1000000,
+      cleanupInterval: "1w",
+    });
+
+    const interaction = await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      inputTokens: 100,
+      outputTokens: 100,
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ userId: user.id, environmentId: environment.id, cost: "2" })
+      .where(eq(schema.interactionsTable.id, interaction.id));
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: {
+        ...OPENAI_HEADERS(),
+        "X-Archestra-User-Id": user.id,
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("per-environment default user usage still counts interactions from a deleted agent", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const environment = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "production",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+
+    // The agent that produced past usage is later deleted; a sibling agent in
+    // the same environment serves the new request.
+    const deletedAgent = await makeAgent({
+      organizationId: org.id,
+      name: "Deleted Env Agent",
+      environmentId: environment.id,
+    });
+    const activeAgent = await makeAgent({
+      organizationId: org.id,
+      name: "Active Env Agent",
+      environmentId: environment.id,
+    });
+
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: environment.id,
+      limitValue: 1,
+      cleanupInterval: "1w",
+    });
+
+    const interaction = await makeInteraction(deletedAgent.id, {
+      model: "gpt-4o",
+      inputTokens: 100,
+      outputTokens: 100,
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ userId: user.id, environmentId: environment.id, cost: "2" })
+      .where(eq(schema.interactionsTable.id, interaction.id));
+
+    await AgentModel.delete(deletedAgent.id);
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(activeAgent.id),
+      headers: {
+        ...OPENAI_HEADERS(),
+        "X-Archestra-User-Id": user.id,
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(402);
+    expect(response.json()).toMatchObject({
+      error: {
+        usage_limit: {
+          entity_type: "environment",
+          limit_type: "token_cost",
+        },
+      },
+    });
   });
 });

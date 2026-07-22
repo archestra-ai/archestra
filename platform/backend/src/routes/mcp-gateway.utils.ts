@@ -1,8 +1,28 @@
 import { createHash } from "node:crypto";
+import type { IncomingMessage } from "node:http";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  hasArchestraTokenPrefix,
+  isAgentTool,
+  isAlwaysExposedArchestraToolShortName,
+  isSkillTool,
+  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  MCP_GATEWAY_OAUTH_SCOPE,
+  MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
+  OAUTH_TOKEN_ID_PREFIX,
+  parseFullToolName,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  ElicitResultSchema,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
@@ -11,29 +31,26 @@ import {
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  hasArchestraTokenPrefix,
-  isAgentTool,
-  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
-  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-  OAUTH_TOKEN_ID_PREFIX,
-  parseFullToolName,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
 import type { FastifyRequest } from "fastify";
 import {
   archestraMcpBranding,
   executeArchestraTool,
   filterToolNamesByPermission,
+  getAgentTools,
   getArchestraMcpTools,
+  getSkillDelegationTools,
 } from "@/archestra-mcp-server";
+import {
+  getUnassignedDiscoverableTools,
+  resolveDynamicTool,
+} from "@/archestra-mcp-server/dynamic-tools";
+import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
+import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
+import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -43,9 +60,11 @@ import {
   InternalMcpCatalogModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  McpOauthClientModel,
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
+  TeamModel,
   TeamTokenModel,
   ToolModel,
   UserModel,
@@ -57,20 +76,32 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import {
+  agentToolExclusionsService,
+  isToolRowExcluded,
+} from "@/services/agent-tool-exclusions";
+import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import {
+  appLaunchToolDescription,
+  appLaunchToolTitle,
+  sanitizeAppNameForToolMetadata,
+} from "@/services/apps/app-run-link";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
-import type {
-  AgentAccessContext,
-  AgentType,
-  CommonToolCall,
-  SelectTeamToken,
-  SelectUserToken,
-  ToolExposureMode,
+import {
+  type AgentAccessContext,
+  type AgentType,
+  agentOwner,
+  type CommonToolCall,
+  type SelectTeamToken,
+  type SelectUserToken,
+  type ToolExposureMode,
 } from "@/types";
+import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
@@ -142,6 +173,7 @@ export async function createAgentServer(
   const extensionCapabilities = {
     ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
     ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+    ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
   } as const;
 
   const mcpServer = new McpServer(
@@ -163,8 +195,22 @@ export async function createAgentServer(
   );
   const { server } = mcpServer;
 
-  const agent = await AgentModel.findById(agentId);
+  // Slim lookup: this runs on every stateless gateway request, and the tool
+  // handlers below only read scalar agent config plus labels — never the
+  // tools/teams/knowledge/connector hydration `findById` performs.
+  const agent = await AgentModel.findGatewayAgentById(agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
+
+  // Fetch the agent's teams and the calling user's teams (with labels) for
+  // trace span team attributes.
+  const teams = await AgentTeamModel.getTeamLabelInfoForAgent(agentId);
+  const userTeams =
+    tokenAuth?.userId && tokenAuth.organizationId
+      ? await TeamModel.getTeamLabelInfoForUser({
+          userId: tokenAuth.userId,
+          organizationId: tokenAuth.organizationId,
+        })
+      : [];
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
@@ -177,14 +223,100 @@ export async function createAgentServer(
     // Get MCP tools (from connected MCP servers + Archestra built-in tools)
     // Excludes proxy-discovered tools
     // Fetch fresh on every request to ensure we get newly assigned tools
-    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+    // Per-agent exclusions (Auto-tool mode): excluded assigned tools must not
+    // be advertised, and their catalogs must not be named in the search_tools
+    // description built below. Every built-in except the search_tools/run_tool
+    // meta tools (rejected at write time) is a valid exclusion target — this
+    // filter runs BEFORE filterExposedTools, so an excluded always-exposed
+    // built-in is dropped here and never re-admitted below. Empty (no-op)
+    // unless the agent's accessAllTools setting is on.
+    const { tools: mcpTools, exclusionSets } =
+      await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+
+    // A tools/list is served to one of two surfaces, and the whole gateway/chat
+    // difference lives in this policy. An internal chat (agentType "agent") is
+    // host and server both: it mounts an app from the tool RESULT — render_app
+    // for owned apps, run_tool for any UI tool — resolving the `ui://` resource
+    // from its own catalog, so it advertises render_app and NO UI-providing tool,
+    // keeping the list compact regardless of dynamic reach. An external MCP client
+    // on any other surface (mcp_gateway, legacy profile) renders only from a
+    // discovery-time tool DEFINITION (per the MCP Apps extension), so it must
+    // advertise UI-providing tools — both assigned and dynamically-reached, which
+    // have no agent_tools row — and drops render_app, which no-ops for it. The
+    // three flags are independently motivated; they coincide on agentType, the
+    // surface signal this codebase keys on throughout.
+    const surface =
+      agent.agentType === "agent"
+        ? {
+            widenDynamicUiTools: false,
+            advertiseUiTools: false,
+            keepRenderApp: true,
+          }
+        : {
+            widenDynamicUiTools: true,
+            advertiseUiTools: true,
+            keepRenderApp: false,
+          };
+
+    const dynamicUiTools = (
+      agent.accessAllTools &&
+      surface.widenDynamicUiTools &&
+      tokenAuth?.userId &&
+      tokenAuth.organizationId
+        ? await ToolModel.getMcpToolsAccessibleToUser({
+            userId: tokenAuth.userId,
+            organizationId: tokenAuth.organizationId,
+            environmentId: agent.environmentId,
+            isAdmin: await userHasPermission(
+              tokenAuth.userId,
+              tokenAuth.organizationId,
+              "mcpServerInstallation",
+              "admin",
+            ),
+            requireUiResource: true,
+          })
+        : []
+    ).filter((tool) => !isToolRowExcluded(tool, exclusionSets));
 
     const implicitMetaTools =
       agent.toolExposureMode === "search_and_run_only"
         ? getImplicitArchestraMetaTools()
         : [];
+
+    // Delegation tools resolve through the Auto/Custom subagent seam, not the
+    // assigned-rows query: Auto mode synthesizes caller-scoped tools that have
+    // no agent_tools rows at all, and exclusions/user access apply in both
+    // modes. Drop the raw delegation rows and splice in the resolved surface so
+    // the gateway advertises the same delegation set the dispatch path accepts.
+    const [delegationTools, skillDelegationTools] = await Promise.all([
+      getAgentTools({
+        agentId,
+        organizationId: agent.organizationId,
+        userId: tokenAuth?.userId,
+      }),
+      // Agent-designated skills surface as skill__<slug> delegation tools,
+      // resolved per calling user with the same env/access symmetry.
+      getSkillDelegationTools({
+        agentId,
+        organizationId: agent.organizationId,
+        userId: tokenAuth?.userId,
+      }),
+    ]);
     const candidateTools = dedupeToolsByName(
-      [...mcpTools, ...implicitMetaTools].map(toMcpListTool),
+      [
+        ...mcpTools.filter((tool) => !tool.delegateToAgentId),
+        ...dynamicUiTools,
+        ...implicitMetaTools,
+        ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          meta: {
+            annotations: (tool.annotations ?? {}) as Record<string, unknown>,
+            _meta: tool._meta,
+          },
+        })),
+      ].map(toMcpListTool),
     );
 
     // Filter Archestra tools based on user RBAC permissions
@@ -193,22 +325,98 @@ export async function createAgentServer(
       tokenAuth?.userId,
       tokenAuth?.organizationId,
     );
-    const permittedTools = filterExposedTools({
+    const exposureFiltered = filterExposedTools({
       toolExposureMode: agent.toolExposureMode ?? "full",
+      advertiseUiResourceTools: surface.advertiseUiTools,
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
+    const permittedTools = surface.keepRenderApp
+      ? exposureFiltered
+      : exposureFiltered.filter(
+          (tool) =>
+            archestraMcpBranding.getToolShortName(tool.name) !==
+            TOOL_RENDER_APP_SHORT_NAME,
+        );
 
-    // Dynamically enrich the knowledge sources tool description with
-    // the agent's actual knowledge base names and connector types
+    // Resolve the backing catalogs of the advertised tools once: their names
+    // feed both the search_tools description and the app launch-tool title and
+    // description below. Cover BOTH assigned tools and the dynamically-widened
+    // ones (access-all-tools) — otherwise a dynamically-surfaced app launch
+    // tool has no catalog here and falls through to its raw stored metadata.
+    const catalogsById = await InternalMcpCatalogModel.getByIds([
+      ...new Set(
+        [...mcpTools, ...dynamicUiTools]
+          .map((tool) => tool.catalogId)
+          .filter(
+            (id): id is string =>
+              Boolean(id) && id !== ARCHESTRA_MCP_CATALOG_ID,
+          ),
+      ),
+    ]);
+
+    // An app's launch tool keeps its unique slug `name` for invocation, but a
+    // gateway client should show a human label and description. Both derive from
+    // the backing catalog name (kept in lockstep with the app) so they never go
+    // stale and are sanitized regardless of the stored value. `appLaunchCatalog`
+    // is the single gate: the catalog only when this row IS the app's `__open`
+    // launch tool, so a non-launch tool that ever shares an app catalog is never
+    // mislabeled. Non-app tools keep their existing title/description.
+    const appLaunchCatalog = (
+      catalogId: string | null | undefined,
+      toolName: string,
+    ) => {
+      const catalog = catalogId ? catalogsById.get(catalogId) : undefined;
+      return catalog?.serverType === "app" &&
+        ToolModel.unslugifyName(toolName) === APP_LAUNCH_TOOL_NAME
+        ? catalog
+        : undefined;
+    };
+    const appLaunchTitle = (
+      catalogId: string | null | undefined,
+      toolName: string,
+    ): string | undefined => {
+      const catalog = appLaunchCatalog(catalogId, toolName);
+      return catalog ? appLaunchToolTitle(catalog.name) : undefined;
+    };
+    const appLaunchDescription = (
+      catalogId: string | null | undefined,
+      toolName: string,
+    ): string | undefined => {
+      const catalog = appLaunchCatalog(catalogId, toolName);
+      return catalog ? appLaunchToolDescription(catalog.name) : undefined;
+    };
+
+    // Dynamically enrich the knowledge sources tool description with the
+    // agent's actual knowledge base names and connector types, and the
+    // search_tools description with the servers in its search space. The
+    // latter involves resolving the dynamically discoverable tool space, so
+    // skip it when search_tools is not in the advertised list anyway ("full"
+    // exposure mode hides the meta tools).
+    const advertisesSearchTools = permittedTools.some(
+      (tool) =>
+        archestraMcpBranding.getToolShortName(tool.name) ===
+        TOOL_SEARCH_TOOLS_SHORT_NAME,
+    );
     const [kbToolDescription, searchToolsDescription] = await Promise.all([
       buildKnowledgeSourcesDescription(agentId),
-      buildSearchToolsDescription(mcpTools),
+      advertisesSearchTools
+        ? buildSearchToolsDescription({
+            mcpTools,
+            agentId,
+            userId: tokenAuth?.userId,
+            organizationId: tokenAuth?.organizationId,
+            prefetchedCatalogs: catalogsById,
+          })
+        : null,
     ]);
 
     const toolsList: McpListTool[] = permittedTools.map(
-      ({ name, description, parameters, meta }) => ({
+      ({ name, description, parameters, meta, catalogId }) => ({
         name,
-        title: archestraToolTitles.get(name) || name,
+        title:
+          archestraToolTitles.get(name) ||
+          appLaunchTitle(catalogId, name) ||
+          name,
         description:
           name ===
             archestraMcpBranding.getToolName(
@@ -220,7 +428,9 @@ export async function createAgentServer(
                     TOOL_SEARCH_TOOLS_SHORT_NAME,
                   ) && searchToolsDescription
               ? searchToolsDescription
-              : (description ?? undefined),
+              : (appLaunchDescription(catalogId, name) ??
+                description ??
+                undefined),
         inputSchema: parameters,
         annotations: meta?.annotations || {},
         _meta: meta?._meta || {},
@@ -265,19 +475,29 @@ export async function createAgentServer(
         );
         return result;
       } catch (error) {
-        logger.error(
-          {
-            agentId,
-            uri,
-            error: error instanceof Error ? error.message : "Unknown error",
-            stack: error instanceof Error ? error.stack : undefined,
-          },
-          "Resource read failed",
-        );
+        // A third-party tool can advertise a `ui://` UI resource whose upstream
+        // server does not actually implement `resources/read` (returning -32601
+        // Method not found) or has no such resource. That is an expected upstream
+        // limitation, not a platform fault — the client degrades to the plain
+        // tool result — so log it at a lower severity to avoid flooding error
+        // logs. Genuine failures still log at error.
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+        const logContext = {
+          agentId,
+          uri,
+          error: message,
+          stack: error instanceof Error ? error.stack : undefined,
+        };
+        if (isUnavailableResourceError(error)) {
+          logger.info(logContext, "Resource read unavailable (upstream)");
+        } else {
+          logger.error(logContext, "Resource read failed");
+        }
         throw {
           code: -32603,
           message: "Resource read failed",
-          data: error instanceof Error ? error.message : "Unknown error",
+          data: message,
         };
       }
     },
@@ -286,20 +506,20 @@ export async function createAgentServer(
   // SEP-1865: resources/list, resources/templates/list, prompts/list
   // Proxy to all upstream MCP servers connected to this agent and aggregate results.
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return mcpClient.listResources(agentId);
+    return mcpClient.listResources(agentId, tokenAuth);
   });
 
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-    return mcpClient.listResourceTemplates(agentId);
+    return mcpClient.listResourceTemplates(agentId, tokenAuth);
   });
 
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
-    return mcpClient.listPrompts(agentId);
+    return mcpClient.listPrompts(agentId, tokenAuth);
   });
 
   server.setRequestHandler(
     CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }) => {
+    async ({ params: { name, arguments: args } }, extra) => {
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
@@ -321,21 +541,141 @@ export async function createAgentServer(
       }
 
       try {
-        // Check if this is an Archestra tool or agent delegation tool
+        // Check if this is an Archestra tool or a delegation tool (agent or
+        // skill delegation — both dispatch through executeArchestraTool)
         const isArchestraTool = archestraMcpBranding.isToolName(name);
         const isAgentDelegationTool = isAgentTool(name);
+        const isSkillDelegationTool = isSkillTool(name);
+        const contextIsTrusted = !agent.considerContextUntrusted;
 
-        if (isArchestraTool || isAgentDelegationTool) {
+        // tools/list advertises an all-tools agent's dynamically-accessible
+        // UI-providing tools top-level (see the dynamicUiTools widening above),
+        // so a caller may call one directly rather than through run_tool. Two
+        // gates on this path only know assigned tools and must be told about
+        // the dynamic resolution, exactly as run_tool's own dispatch does
+        // (archestra-mcp-server/run-tool.ts): the invocation-policy evaluator
+        // (whose enabled-tools filter otherwise refuses the unassigned name as
+        // "disabled"), and executeToolCallForOwner (which only accepts an
+        // unassigned tool via a pre-resolved availableTool). A no-op for
+        // assigned tools; policies still evaluate the dynamic tool itself.
+        //
+        // Fetch the agent's assigned names once (all-tools agents only): they
+        // gate the dynamic lookup — an already-assigned name is reachable
+        // without it, so skip the heavier resolveDynamicTool — and feed the
+        // invocation-policy enabled-tools filter below, so neither path
+        // re-queries assignments.
+        const assignedToolNames =
+          !isArchestraTool &&
+          !isAgentDelegationTool &&
+          !isSkillDelegationTool &&
+          agent.accessAllTools &&
+          tokenAuth?.userId &&
+          tokenAuth.organizationId
+            ? await ToolModel.getAssignedToolNames(agent.id)
+            : null;
+        const dynamicTool =
+          assignedToolNames &&
+          !assignedToolNames.has(name) &&
+          tokenAuth?.userId &&
+          tokenAuth.organizationId
+            ? await resolveDynamicTool({
+                toolName: name,
+                agentId,
+                userId: tokenAuth.userId,
+                organizationId: tokenAuth.organizationId,
+              })
+            : null;
+        // Direct-call availability mirrors tools/list exposure: only the
+        // UI-providing subset is listed top-level, so only that subset is
+        // directly callable. A non-UI dynamic tool stays behind
+        // search_tools/run_tool — resolving it here would silently make every
+        // hidden tool name directly executable.
+        const availableTool =
+          dynamicTool && providesUiResource(dynamicTool)
+            ? dynamicTool
+            : undefined;
+
+        const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+          agentId: agent.id,
+          toolName: name,
+          toolInput: args ?? {},
+          organizationId: tokenAuth?.organizationId,
+          contextIsTrusted,
+          ...(availableTool &&
+            assignedToolNames && {
+              enabledToolNames: new Set([...assignedToolNames, name]),
+            }),
+          // The dynamically-resolved All-mode row that will execute: evaluate the
+          // policy against it and ride its id along on a block so the "Edit
+          // policy" modal can resolve a tool with no agent_tools assignment.
+          resolvedToolId: availableTool?.id,
+        });
+        if (policyBlock) {
+          // Carry the machine-readable policy_denied error alongside the prose
+          // (in _meta + structuredContent) so MCP clients render the block
+          // structurally instead of scraping the refusal text. When the caller
+          // can edit guardrails, both gain a deep link to this tool's policy
+          // editor so the external client can offer to review/modify it.
+          const { error, text } = await buildPolicyBlockedToolResult({
+            policyBlock,
+            userId: tokenAuth?.userId,
+            organizationId: tokenAuth?.organizationId,
+          });
+          const blockedResult = structuredToolErrorResult({ error, text });
+
+          // Blocked calls are still tool calls: report metrics and persist them
+          // (isError) so they show up in the MCP gateway logs and dashboards
+          // rather than vanishing before any recording.
+          const durationSeconds = (Date.now() - startTime) / 1000;
+          metrics.mcp.reportMcpToolCall({
+            agentId: agent.id,
+            agentName: agent.name,
+            agentType: agent.agentType ?? null,
+            mcpServerName,
+            toolName: name,
+            durationSeconds,
+            isError: true,
+            agentLabels: agent.labels,
+            requestSizeBytes: args ? JSON.stringify(args).length : undefined,
+          });
+
+          try {
+            await McpToolCallModel.create({
+              agentId,
+              mcpServerName,
+              method: "tools/call",
+              toolCall: {
+                id: `blocked-${Date.now()}`,
+                name,
+                arguments: args || {},
+              },
+              toolResult: blockedResult,
+              userId: tokenAuth?.userId ?? null,
+              authMethod: deriveAuthMethod(tokenAuth) ?? null,
+            });
+          } catch (dbError) {
+            logger.info(
+              { err: dbError },
+              "Failed to persist blocked tool call",
+            );
+          }
+
+          return blockedResult;
+        }
+
+        if (isArchestraTool || isAgentDelegationTool || isSkillDelegationTool) {
           logger.info(
             {
               agentId,
               toolName: name,
               toolType: isAgentDelegationTool
                 ? "agent-delegation"
-                : "archestra",
+                : isSkillDelegationTool
+                  ? "skill-delegation"
+                  : "archestra",
             },
-            isAgentDelegationTool
-              ? "Agent delegation tool call received"
+            isAgentDelegationTool || isSkillDelegationTool
+              ? "Delegation tool call received"
               : "Archestra MCP tool call received",
           );
 
@@ -344,6 +684,8 @@ export async function createAgentServer(
             toolName: name,
             mcpServerName,
             agent,
+            teams,
+            userTeams,
             agentType: agent.agentType,
             toolCallId: `archestra-${Date.now()}`,
             toolArgs: args,
@@ -355,6 +697,7 @@ export async function createAgentServer(
                 userId: tokenAuth?.userId,
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
+                contextIsTrusted,
               });
               span.setAttribute(
                 ATTR_MCP_IS_ERROR_RESULT,
@@ -440,15 +783,39 @@ export async function createAgentServer(
           toolName: name,
           mcpServerName,
           agent,
+          teams,
+          userTeams,
           agentType: agent.agentType,
           toolCallId,
           toolArgs: args,
           user: mcpUser,
           callback: async (span) => {
-            const r = await mcpClient.executeToolCall(
+            const r = await mcpClient.executeToolCallForOwner(
               toolCall,
-              agentId,
+              agentOwner(agentId),
               tokenAuth,
+              {
+                availableTool,
+                elicitationHandler: async (request) => {
+                  try {
+                    return await extra.sendRequest(request, ElicitResultSchema);
+                  } catch (error) {
+                    logger.warn(
+                      {
+                        agentId,
+                        toolName: name,
+                        mode: request.params.mode ?? "form",
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      },
+                      "MCP elicitation request was not completed by caller",
+                    );
+                    throw error;
+                  }
+                },
+              },
             );
             span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, r.isError ?? false);
             return r;
@@ -544,6 +911,33 @@ export function createStatelessTransport(
 
   logger.info({ agentId }, "Stateless transport instance created");
   return transport;
+}
+
+/**
+ * Hono's Node adapter drains unread request bodies by calling
+ * `request.socket.destroySoon()`. Fastify inject uses a socket-like test object
+ * without that legacy method, so provide the method only when the socket lacks it.
+ */
+export function ensureRequestSocketDestroySoon(request: IncomingMessage): void {
+  const socket = request.socket as
+    | (IncomingMessage["socket"] & {
+        destroySoon?: () => void;
+        end?: () => void;
+      })
+    | undefined;
+
+  if (!socket || typeof socket.destroySoon === "function") {
+    return;
+  }
+
+  socket.destroySoon = () => {
+    if (typeof socket.destroy === "function") {
+      socket.destroy();
+      return;
+    }
+
+    socket.end?.();
+  };
 }
 
 /**
@@ -847,6 +1241,30 @@ async function validateOAuthTokenByHash(params: {
       return null;
     }
 
+    // A token audience-bound to a shareable-App connector is valid only at that
+    // connector, never at the MCP gateway — reject it before the user-access
+    // branch would otherwise accept it on team membership alone.
+    if (isAppConnectorAudienceRef(accessToken.referenceId)) {
+      logger.warn(
+        { profileId: params.profileId },
+        "validateOAuthToken: rejecting an app-connector-bound token at the MCP gateway",
+      );
+      return null;
+    }
+
+    // Application (client_credentials) tokens minted for an MCP OAuth client
+    // carry no acting user. Authorize them against the client's allowed gateways
+    // instead of a user's team membership.
+    if (
+      accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX)
+    ) {
+      return validateMcpOauthClientToken({
+        accessToken,
+        profileId: params.profileId,
+        organizationId: agent.organizationId,
+      });
+    }
+
     const userId = accessToken.userId;
     if (!userId) {
       return null;
@@ -872,18 +1290,31 @@ async function validateOAuthTokenByHash(params: {
       };
     }
 
-    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (
-      !(await AgentTeamModel.userHasAgentAccess(
-        userId,
-        params.profileId,
-        false,
-        agent,
-      ))
-    ) {
+    // Non-admin access has two additive sources:
+    //   1. the user's own RBAC (profile is teamless/org-wide or shares a team), or
+    //   2. an admin-controlled grant on the authorization_code MCP OAuth client
+    //      that minted this token — its allowedGatewayIds may grant access to
+    //      gateways the user could not otherwise reach (e.g. a gateway reachable
+    //      only through a specific pre-registered app).
+    const hasRbacAccess = await AgentTeamModel.userHasAgentAccess(
+      userId,
+      params.profileId,
+      false,
+      agent,
+    );
+    const hasClientGrant =
+      hasRbacAccess || !accessToken.clientId
+        ? false
+        : await mcpOauthClientGrantsGatewayAccess({
+            clientId: accessToken.clientId,
+            profileId: params.profileId,
+            organizationId,
+          });
+
+    if (!hasRbacAccess && !hasClientGrant) {
       logger.warn(
         { profileId: params.profileId, userId },
-        "validateOAuthToken: profile not accessible via OAuth token (no shared teams)",
+        "validateOAuthToken: profile not accessible via OAuth token (no RBAC access and no client grant)",
       );
       return null;
     }
@@ -906,6 +1337,102 @@ async function validateOAuthTokenByHash(params: {
     );
     return null;
   }
+}
+
+/**
+ * Authorize a client_credentials access token minted for an MCP OAuth client.
+ *
+ * These are application tokens (machine-to-machine): there is no acting user,
+ * so authorization is the client's explicit `allowedGatewayIds` list rather
+ * than team membership. The per-gateway check here is the real authorization
+ * gate — a successful result grants access to exactly the requested gateway and
+ * nothing broader (teamId/isOrganizationToken stay null/false, so no downstream
+ * code re-broadens access).
+ *
+ * Note: an MCP OAuth client is a shared application credential with no acting
+ * user, so gateway tools that resolve per-user/dynamic upstream credentials at
+ * call time are not supported — assign shared/org-scoped credentials to those
+ * tools.
+ */
+async function validateMcpOauthClientToken(params: {
+  accessToken: {
+    id: string;
+    clientId: string | null;
+    referenceId: string | null;
+    scopes: string[] | null;
+  };
+  profileId: string;
+  organizationId: string;
+}): Promise<TokenAuthResult | null> {
+  const { accessToken, profileId, organizationId } = params;
+
+  // Require the mcp scope (parallels the llm:proxy scope check on the LLM path).
+  if (!accessToken.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE)) {
+    return null;
+  }
+  if (!accessToken.clientId) {
+    return null;
+  }
+
+  // findByClientId returns null when the client was deleted or disabled.
+  const oauthClient = await McpOauthClientModel.findByClientId(
+    accessToken.clientId,
+  );
+  if (!oauthClient) {
+    return null;
+  }
+
+  // Defense in depth: the token's referenceId must point at this exact client.
+  if (
+    accessToken.referenceId !==
+    `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`
+  ) {
+    return null;
+  }
+
+  // Cross-org tokens are never valid for this gateway.
+  if (oauthClient.organizationId !== organizationId) {
+    return null;
+  }
+
+  // The client must be explicitly scoped to the requested gateway.
+  if (!oauthClient.allowedGatewayIds.includes(profileId)) {
+    logger.warn(
+      { profileId, clientId: oauthClient.clientId },
+      "validateOAuthToken: MCP OAuth client not authorized for this gateway",
+    );
+    return null;
+  }
+
+  return {
+    tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+    teamId: null,
+    isOrganizationToken: false,
+    organizationId,
+  };
+}
+
+/**
+ * Whether the authorization_code MCP OAuth client that minted a user-bound token
+ * grants access to a gateway beyond the user's own RBAC. This is an additive,
+ * admin-controlled access grant: only client_credentials clients use
+ * allowedGatewayIds as a sole authority, whereas an authorization_code client's
+ * list confers extra access to anyone who authenticates through it. Disabled or
+ * deleted clients (findByClientId returns null) grant nothing.
+ */
+async function mcpOauthClientGrantsGatewayAccess(params: {
+  clientId: string;
+  profileId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const oauthClient = await McpOauthClientModel.findByClientId(params.clientId);
+  if (!oauthClient || oauthClient.grantType !== "authorization_code") {
+    return false;
+  }
+  if (oauthClient.organizationId !== params.organizationId) {
+    return false;
+  }
+  return oauthClient.allowedGatewayIds.includes(params.profileId);
 }
 
 /**
@@ -1017,7 +1544,7 @@ export async function validateExternalIdpToken(
 ): Promise<TokenAuthResult | null> {
   try {
     // Look up the agent to check if it has an identity provider configured
-    const agent = await AgentModel.findById(profileId);
+    const agent = await AgentModel.findGatewayAgentById(profileId);
     if (!agent?.identityProviderId) {
       return null;
     }
@@ -1034,19 +1561,15 @@ export async function validateExternalIdpToken(
       return null;
     }
 
-    // Only OIDC providers support JWKS validation
     if (!idpProvider.oidcConfig) {
-      logger.debug(
+      logger.warn(
         { profileId, identityProviderId: agent.identityProviderId },
-        "validateExternalIdpToken: Identity provider has no OIDC config",
+        "validateExternalIdpToken: identity provider has no OIDC config",
       );
       return null;
     }
 
     const oidcConfig = idpProvider.oidcConfig;
-    if (!oidcConfig) {
-      return null;
-    }
 
     if (!oidcConfig.clientId) {
       logger.warn(
@@ -1163,11 +1686,10 @@ export async function validateExternalIdpToken(
       rawToken: tokenValue,
     };
   } catch (error) {
-    logger.debug(
-      {
-        profileId,
-        error: error instanceof Error ? error.message : String(error),
-      },
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+    logger.warn(
+      { profileId, error: message, stack },
       "validateExternalIdpToken: unexpected error",
     );
     return null;
@@ -1323,7 +1845,11 @@ export async function buildKnowledgeSourcesDescription(
   const [knowledgeBases, kbConnectors, directConnectors] = await Promise.all([
     kbIds.length > 0 ? KnowledgeBaseModel.findByIds(kbIds) : [],
     kbIds.length > 0
-      ? KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds)
+      ? // Query scope: the description lists the sources queries may span,
+        // which includes auto-sync-permissions connectors for every user.
+        KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
+          visibilityScope: "query",
+        })
       : [],
     KnowledgeBaseConnectorModel.findByIds(directConnectorIds),
   ]);
@@ -1365,20 +1891,31 @@ export async function buildKnowledgeSourcesDescription(
 
 function filterExposedTools(params: {
   toolExposureMode: ToolExposureMode;
+  advertiseUiResourceTools: boolean;
   tools: McpListToolCandidate[];
 }) {
-  const { toolExposureMode, tools } = params;
+  const { toolExposureMode, advertiseUiResourceTools, tools } = params;
   return tools.filter((tool) => {
-    const isMetaTool = isArchestraMetaTool(tool.name);
+    // `search_and_run_only` normally hides every tool behind search_tools/run_tool,
+    // but the meta tools themselves and the always-exposed skill path must stay
+    // top-level. UI-providing tools (app launch tools, external ext-apps tools)
+    // stay too ONLY on a surface that advertises them: an MCP Apps host renders a
+    // UI from a tool DEFINITION listed at discovery time, so a gateway must keep
+    // it top-level; the chat surface renders from the tool result instead, so it
+    // reaches UI tools through search_tools/run_tool and keeps its list compact.
+    // `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
-      ? isMetaTool
-      : !isMetaTool;
+      ? isArchestraMetaTool(tool.name) ||
+          isAlwaysExposedTool(tool.name) ||
+          (advertiseUiResourceTools && providesUiResource(tool))
+      : !isArchestraMetaTool(tool.name);
   });
 }
 
 type McpListTool = ListToolsResult["tools"][number];
 
 type McpToolForSearchDescription = {
+  name: string;
   catalogId: string | null;
 };
 
@@ -1419,17 +1956,36 @@ function getImplicitArchestraMetaTools() {
   );
 }
 
+// First occurrence wins: callers (getMcpToolsByAgent) order candidates with
+// a healthy MCP server connection first, so when two catalog items' installs
+// collide on display name, the working one is the one advertised.
 function dedupeToolsByName<T extends { name: string }>(tools: T[]) {
   const deduped = new Map<string, T>();
   for (const tool of tools) {
-    deduped.set(tool.name, tool);
+    if (!deduped.has(tool.name)) {
+      deduped.set(tool.name, tool);
+    }
   }
   return Array.from(deduped.values());
 }
 
-async function buildSearchToolsDescription(
-  mcpTools: McpToolForSearchDescription[],
-) {
+// Caps for the server list appended to the search_tools description: how many
+// servers are named (past this the list degrades to ", and N more") and how
+// much of each server's own description is quoted alongside its name.
+const SEARCH_TOOLS_DESCRIPTION_MAX_SERVERS = 100;
+const SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH = 200;
+
+async function buildSearchToolsDescription(params: {
+  mcpTools: McpToolForSearchDescription[];
+  agentId: string;
+  userId?: string;
+  organizationId?: string;
+  prefetchedCatalogs?: Awaited<
+    ReturnType<typeof InternalMcpCatalogModel.getByIds>
+  >;
+}) {
+  const { agentId, mcpTools, organizationId, prefetchedCatalogs, userId } =
+    params;
   const searchTool = getArchestraMcpTools().find(
     (tool) =>
       archestraMcpBranding.getToolShortName(tool.name) ===
@@ -1440,9 +1996,20 @@ async function buildSearchToolsDescription(
     return null;
   }
 
+  // Mirror search_tools' actual search space: the catalogs backing the
+  // assigned tools, widened by the dynamically discoverable ones when the
+  // agent's "access all tools" setting is on (getUnassignedDiscoverableTools
+  // self-gates on that setting and a real authenticated user).
+  const discoverableTools = await getUnassignedDiscoverableTools({
+    assignedToolNames: new Set(mcpTools.map((tool) => tool.name)),
+    agentId,
+    userId,
+    organizationId,
+  });
+
   const catalogIds = [
     ...new Set(
-      mcpTools
+      [...mcpTools, ...discoverableTools]
         .map((tool) => tool.catalogId)
         .filter(
           (catalogId): catalogId is string =>
@@ -1455,31 +2022,56 @@ async function buildSearchToolsDescription(
     return baseDescription;
   }
 
-  const catalogs = await InternalMcpCatalogModel.getByIds(catalogIds);
-  const catalogSummaries = catalogIds
+  const catalogs = new Map(prefetchedCatalogs ?? []);
+  const missingCatalogIds = catalogIds.filter((id) => !catalogs.has(id));
+  if (missingCatalogIds.length > 0) {
+    const fetched = await InternalMcpCatalogModel.getByIds(missingCatalogIds);
+    for (const [id, catalog] of fetched) {
+      catalogs.set(id, catalog);
+    }
+  }
+
+  const resolvedCatalogs = catalogIds
     .map((catalogId) => catalogs.get(catalogId))
-    .filter((catalog) => catalog !== undefined)
-    .slice(0, 10)
+    .filter((catalog) => catalog !== undefined);
+  const catalogSummaries = resolvedCatalogs
+    .slice(0, SEARCH_TOOLS_DESCRIPTION_MAX_SERVERS)
     .map((catalog) => {
-      const labels = catalog.labels
-        .slice(0, 3)
-        .map((label) => `${label.key}:${label.value}`)
-        .join(", ");
-      return labels ? `${catalog.name} (labels: ${labels})` : catalog.name;
+      // Author-controlled catalog name/description flow into this model-facing
+      // description, so neutralize control/format/whitespace before embedding.
+      const name = sanitizeAppNameForToolMetadata(catalog.name);
+      return catalog.description
+        ? `${name} (${summarizeCatalogDescription(catalog.description)})`
+        : name;
     });
 
   if (catalogSummaries.length === 0) {
     return baseDescription;
   }
 
-  const remainingCount = catalogIds.length - catalogSummaries.length;
+  const remainingCount = resolvedCatalogs.length - catalogSummaries.length;
   const remainingText =
     remainingCount > 0 ? `, and ${remainingCount} more` : "";
 
   return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
 }
 
-function normalizeToolInputSchema(schema: unknown): McpListTool["inputSchema"] {
+// One-line, length-capped rendering of a catalog's own description for
+// embedding in the search_tools description. Collapses control/format
+// characters (bidi overrides, and conservatively ZWJ/ZWNJ) alongside
+// whitespace so an author-set description cannot reshape the model-facing text.
+function summarizeCatalogDescription(description: string): string {
+  const collapsed = description.replace(/[\p{Cc}\p{Cf}\s]+/gu, " ").trim();
+  return collapsed.length >
+    SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH
+    ? `${collapsed.slice(0, SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH)}…`
+    : collapsed;
+}
+
+/** @public — also consumed by the app MCP server (mcp-app-gateway.utils.ts). */
+export function normalizeToolInputSchema(
+  schema: unknown,
+): McpListTool["inputSchema"] {
   if (isRecord(schema) && schema.type === "object") {
     return schema as McpListTool["inputSchema"];
   }
@@ -1497,4 +2089,51 @@ function isArchestraMetaTool(toolName: string) {
     shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
     shortName === TOOL_RUN_TOOL_SHORT_NAME
   );
+}
+
+function isAlwaysExposedTool(toolName: string) {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  return shortName !== null && isAlwaysExposedArchestraToolShortName(shortName);
+}
+
+/**
+ * True when the tool carries an MCP App `ui://` resource in its definition —
+ * canonical `_meta.ui.resourceUri` or the legacy flat `ui/resourceUri` key.
+ * Mirrors {@link toolUiResourceUriSql} (models/tool.ts) so the in-memory gate and
+ * the DB-side `providesUi` predicate never drift.
+ */
+function providesUiResource(tool: {
+  meta?: McpListToolCandidate["meta"] | null;
+}): boolean {
+  const meta = tool.meta?._meta as
+    | { ui?: { resourceUri?: unknown }; "ui/resourceUri"?: unknown }
+    | undefined;
+  // Scheme-check each key independently before falling back, matching the SQL's
+  // per-key `like 'ui://%'` inside coalesce — so a non-ui:// canonical value
+  // doesn't mask a valid legacy one.
+  const isUiUri = (value: unknown): boolean =>
+    typeof value === "string" && value.startsWith("ui://");
+  return isUiUri(meta?.ui?.resourceUri) || isUiUri(meta?.["ui/resourceUri"]);
+}
+
+/**
+ * Whether a resource-read failure is an expected "the upstream server can't
+ * serve this" condition — method not found (-32601) or resource not found
+ * (-32002) — rather than a genuine platform fault. A third-party tool can
+ * advertise a `ui://` UI resource whose server never implemented
+ * `resources/read`; the client degrades to the plain tool result, so the
+ * gateway logs this quietly instead of at error level.
+ */
+function isUnavailableResourceError(error: unknown): boolean {
+  if (
+    error instanceof Error &&
+    /method not found|resource not found/i.test(error.message)
+  ) {
+    return true;
+  }
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    return code === -32601 || code === -32002;
+  }
+  return false;
 }

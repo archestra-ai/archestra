@@ -1,0 +1,85 @@
+{
+  "name": "louiscklaw__hko-mcp",
+  "display_name": "hko-mcp",
+  "description": "Fetch data from Hong Kong Observatory with MCP",
+  "author": {
+    "name": "louiscklaw"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "github:louiscklaw/mcp-hko"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# mcp-hko (Hong Kong Observatory MCP Server)\n\nThis MCP server provides access to Hong Kong Observatory weather data APIs.\nIt implements various tools that allow clients to retrieve weather forecasts, earthquake information, tide data, and other meteorological information through the Model Context Protocol.\n\n## Available Weather Data Tools\n\n- 9-day Weather Forecast (**fnd**)\n- Current Weather Report (**rhrread**)\n- Local Weather Forecast (**flw**)\n- Weather Warning Information (**warningInfo**)\n- Weather Warning Summary (**warnsum**)\n- Special Weather Tips (**swt**)\n- Quick Earthquake Messages (**qem**)\n- Locally Felt Earth Tremor Report (**feltearthquake**)\n- Tide Information (**HHOT, HLT**)\n- Astronomical Data (**SRS, lunardate**)\n- Lightning and Visibility Data (**LHL, LTMV**)\n- Temperature Records (**CLMTEMP, CLMMAXT, CLMMINT**)\n- Radiation Level Reports (**RYES**)\n- Rainfall Data (**hourlyrainfall**)\n\n## Usage Examples\n\n### Get 9-day weather forecast\n> **prompt:**\n>\n> what is the weather in next Wed ?\n\n### Get current weather report\n> **prompt:**\n>\n> what is the weather now ?\n\n## Development Setup\n\n1. Install dependencies:\n```bash\nnpm install\n```\n\n2. Start the MCP development server:\n```bash\nnpm run inspect\n```\n\n3. Build the MCP server:\n```bash\nnpm run build\n```\n\n4. Run tests:\n```bash\nnpm test\n```\n\n5. Run tests in watch mode:\n```bash\nnpm run test:watch\n```\n\nComprehensive tests have been created for all API functions. See [docs/TESTING.md](docs/TESTING.md) for details.\n\n## Configuration (Claude Desktop)\n```json\n{\n  \"mcpServers\": {\n    \"mcp-hko\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"github:louiscklaw/mcp-hko\"\n      ]\n    }\n  }\n}\n```\n\n## Configuration (docker)\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-hko-docker\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"-i\", \"--rm\", \"mcp-hko:latest\"],\n      \"name\": \"mcp-hko (Docker)\",\n    }\n  }\n}\n```\n\n\n## Project Structure\n- `src/` - Server source code\n- `src/lib/` - API implementation modules\n- `documentation/` - API documentation and test cases\n- `scripts/` - Development utilities\n- `src/tests/` - Test files\n\n## Server Architecture\nThe MCP server is built on the FastMCP framework and implements various tools that correspond to Hong Kong Observatory APIs.\nThe architecture is shown in two diagrams for better readability:\n\n### Server Overview\n\n### Detailed Tool Structure\n\n#### REQ01xx: Weather Forecasts & Warnings\n```mermaid\nflowchart TD\n    subgraph REQ01xx[Weather Forecasts & Warnings]\n        direction BT\n        B1[9-day Forecast]\n        B2[Current Weather]\n        B3[Local Forecast]\n        B4[Warning Info]\n        B5[Warning Summary]\n        B6[Special Weather Tips]\n    end\n```\n\n#### REQ02xx: Earthquake Information\n```mermaid\nflowchart TD\n    subgraph REQ02xx[Earthquake Information]\n        C1[Quick Earthquake]\n        C2[Felt Earthquake]\n    end\n```\n\n#### REQ03xx: Tides, Astronomy & Climate\n```mermaid\nflowchart TD\n    subgraph REQ03xx[Tides, Astronomy & Climate]\n        D1[Tide: HHOT]\n        D2[Tide: HLT]\n        D3[Sunrise/Sunset: SRS]\n        D4[Lightning: LHL]\n        D5[Visibility: LTMV]\n        D6[Temperature: CLMTEMP]\n        D7[Max Temperature: CLMMAXT]\n        D8[Min Temperature: CLMMINT]\n        D9[Radiation: RYES]\n    end\n```\n\n#### REQ04xx: Lunar Calendar\n```mermaid\nflowchart TD\n    subgraph REQ04xx[Lunar Calendar]\n        E1[Lunar Date]\n    end\n```\n\n#### REQ05xx: Rainfall\n```mermaid\nflowchart TD\n    subgraph REQ05xx[Rainfall]\n        F1[Hourly Rainfall]\n    end\n```\n\n## Credits:\n\n- [mcp-hk-transport-eta](https://github.com/kennyfong19931/mcp-hk-transport-eta)\n",
+  "category": "Data",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-hko-dev": {
+        "command": "npm",
+        "args": ["run", "inspect"],
+        "env": {}
+      },
+      "mcp-hko-stdio": {
+        "command": "npx",
+        "args": ["-y", "github:louiscklaw/mcp-hko"],
+        "env": {}
+      },
+      "mcp-hko-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "mcp-hko:latest"],
+        "env": {},
+        "docker_image": "mcp-hko:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "louiscklaw",
+    "repo": "hko-mcp",
+    "url": "https://github.com/louiscklaw/hko-mcp",
+    "name": "hko-mcp",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "10437d53beb2f2eec7396d916e10c9e7ceae29b8"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:50.206Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"mcp-hko\",\n    \"version\": \"1.0.1\",\n    \"description\": \"Model Context Protocol server to get ETA (Estimated Time of Arrival) for public transport in Hong Kong\",\n    \"type\": \"module\",\n    \"main\": \"dist/index.js\",\n    \"bin\": {\n        \"mcp-hko\": \"dist/index.js\"\n    },\n    \"engines\": {\n        \"node\": \">=18\"\n    },\n    \"scripts\": {\n        \"build\": \"tsc\",\n        \"dev\": \"tsx src/index.ts\",\n        \"inspect\": \"export DANGEROUSLY_OMIT_AUTH=true && npx fastmcp inspect src/index.ts\",\n        \"start\": \"npm run build && node dist/index.js\",\n        \"test\": \"mocha\",\n        \"test:watch\": \"mocha --watch\",\n        \"clean\": \"rm -rf ./dist\"\n    },\n    \"keywords\": [\n        \"mcp\",\n        \"model-context-protocol\",\n        \"hk\",\n        \"hko\",\n        \"observatory\",\n        \"weather\",\n        \"hong kong\"\n    ],\n    \"license\": \"MIT\",\n    \"dependencies\": {\n        \"fastmcp\": \"^1.21.0\",\n        \"zod\": \"^3.24.2\"\n    },\n    \"devDependencies\": {\n        \"@types/chai\": \"^5.2.2\",\n        \"@types/mocha\": \"^10.0.10\",\n        \"@types/node\": \"^22.14.0\",\n        \"chai\": \"^5.2.1\",\n        \"mocha\": \"^11.7.1\",\n        \"ts-node\": \"^10.9.2\",\n        \"tsx\": \"^4.19.3\",\n        \"typescript\": \"^5.8.3\"\n    }\n}"
+}

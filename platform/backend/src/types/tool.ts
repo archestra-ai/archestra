@@ -78,6 +78,8 @@ export const ToolWithAssignmentsSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   parameters: ToolParametersContentSchema,
+  /** MCP tool annotations (readOnlyHint, destructiveHint, …) from discovery. */
+  annotations: z.record(z.string(), z.unknown()).nullable(),
   catalogId: z.string().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -99,6 +101,12 @@ export const ToolFilterSchema = z.object({
     .boolean()
     .optional()
     .describe("Hide built-in Archestra tools"),
+  includeKnowledgeSourcesTool: z.coerce
+    .boolean()
+    .optional()
+    .describe(
+      "Include the built-in query_knowledge_sources tool in global listings (default: hidden)",
+    ),
 });
 
 export const ToolSortBy = [

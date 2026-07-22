@@ -1,0 +1,120 @@
+{
+  "name": "neilberkman__editorconfig_mcp",
+  "display_name": "editorconfig_mcp",
+  "description": "MCP server from neilberkman/editorconfig_mcp",
+  "author": {
+    "name": "neilberkman"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "editorconfig-mcp-server"],
+    "env": {
+      "PORT": "${user_config.port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "Server port (default: 8432)",
+      "required": false,
+      "default": 8432,
+      "min": 1,
+      "max": 65535
+    }
+  },
+  "readme": "# EditorConfig MCP Server\n\nA Model Context Protocol (MCP) compliant server that formats files using `.editorconfig` rules.\n\nThis project started from a specific workflow issue I kept running into. I found that while working with AI coding agents, they would often generate code with minor formatting errors, like trailing whitespace or inconsistent newlines. Our linters would then flag these issues, and the agent would spend valuable cycles fixing its own simple mistakes.\n\nThis EditorConfig MCP Server is the tool I built to solve that problem for myself. It acts as a proactive formatting gatekeeper, using your project's .editorconfig rules to ensure files are correct from the start. My hope is that it might be useful to others who've encountered a similar frustration in their AI-assisted development process.\n\n## Installation\n\n### Global Installation (Recommended)\n\n```bash\nnpm install -g editorconfig-mcp-server\n```\n\nThen start the server:\n\n```bash\neditorconfig-mcp-server\n```\n\n### Using npx (No Installation)\n\n```bash\nnpx editorconfig-mcp-server\n```\n\n### Local Installation\n\n```bash\nnpm install editorconfig-mcp-server\n```\n\nThen add to your project's scripts in `package.json`:\n\n```json\n{\n  \"scripts\": {\n    \"format-server\": \"editorconfig-mcp-server\"\n  }\n}\n```\n\n### From Source\n\n```bash\ngit clone https://github.com/yourusername/editorconfig-mcp-server.git\ncd editorconfig-mcp-server\nnpm install\nnpm start\n```\n\n## Features\n\n- **MCP Compliant**: Follows all MCP design patterns and best practices\n- **JSON Schema Validation**: All inputs are validated using JSON Schema\n- **Rate Limiting**: Built-in rate limiting (100 requests/minute)\n- **OpenAPI Spec**: Self-documenting API with OpenAPI 3.0 specification\n- **Versioned API**: Uses semantic versioning with `/v1/` prefix\n- **Stateless**: No state retained between requests\n- **Security**: Path validation prevents directory traversal attacks\n- **Error Handling**: Consistent error format with helpful hints\n\n## Installation\n\n```bash\nnpm install\n```\n\n## Usage\n\n### Starting the Server\n\n```bash\n# If installed globally\neditorconfig-mcp-server\n\n# Using npx\nnpx editorconfig-mcp-server\n\n# With custom port\nPORT=8080 editorconfig-mcp-server\n\n# From source\nnpm start\n```\n\nThe server will start on port 8432 by default.\n\n### Configuration\n\n- `PORT` - Server port (default: 8432)\n  - Default port chosen to avoid conflicts with common development servers\n  - Example: `PORT=8080 editorconfig-mcp-server`\n\n### Integration with AI Tools\n\n#### Claude Code\n\nTo add this server to Claude Code, run:\n\n```bash\nclaude mcp add editorconfig npx editorconfig-mcp-server\n```\n\n#### Other MCP-Compatible Tools\n\nThis server is designed to be used with AI coding assistants that support MCP. Configure your AI tool to connect to:\n\n- Base URL: `http://localhost:8432`\n- Protocol: MCP over HTTP\n\n## API Endpoints\n\n### Tools (Actions)\n\n#### `POST /v1/tools/format_file`\n\nFormat a single file using .editorconfig rules.\n\n**Request:**\n\n```json\n{\n  \"file_path\": \"src/index.js\"\n}\n```\n\n**Response:**\n\n```json\n{\n  \"success\": true,\n  \"file_path\": \"src/index.js\",\n  \"bytes\": 1234\n}\n```\n\n#### `POST /v1/tools/format_files`\n\nFormat multiple files matching a glob pattern.\n\n**Request:**\n\n```json\n{\n  \"pattern\": \"**/*.js\"\n}\n```\n\n**Response:**\n\n```json\n{\n  \"success\": true,\n  \"pattern\": \"**/*.js\",\n  \"count\": 5,\n  \"files\": [\"src/index.js\", \"src/utils.js\", ...]\n}\n```\n\n### Metadata\n\n- `GET /openapi.json` - OpenAPI 3.0 specification\n- `GET /.well-known/mcp/servers.json` - MCP server manifest\n- `GET /health` - Health check endpoint\n\n## Error Handling\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"error\": \"Error type\",\n  \"message\": \"Human-readable message\",\n  \"hint\": \"Helpful suggestion\",\n  \"expected_format\": {} // Optional, for validation errors\n}\n```\n\n## Rate Limiting\n\nThe server implements rate limiting:\n\n- Window: 1 minute\n- Max requests: 100 per window\n- Returns 429 status when exceeded\n\n## Security\n\n- Input validation using JSON Schema\n- Path traversal protection\n- Payload size limit (1MB)\n- Ignores sensitive directories (node_modules, .git)\n\n## Versioning\n\nThis project follows [Semantic Versioning](https://semver.org/):\n\n- MAJOR version for incompatible API changes\n- MINOR version for backwards-compatible functionality additions\n- PATCH version for backwards-compatible bug fixes\n\nTo release a new version:\n\n```bash\n# For a patch release (1.0.0 -> 1.0.1)\nnpm version patch\n\n# For a minor release (1.0.0 -> 1.1.0)\nnpm version minor\n\n# For a major release (1.0.0 -> 2.0.0)\nnpm version major\n```\n\nThis will:\n\n1. Run the linter\n2. Update the version in package.json\n3. Create a git commit and tag\n4. Push the commit and tag to GitHub\n\n## Publishing\n\n### NPM Package\n\nTo publish this package to npm:\n\n1. Create an npm account at https://www.npmjs.com\n2. Login to npm: `npm login`\n3. Update version using `npm version` (see above)\n4. Run: `npm publish`\n\nFor automated publishing via GitHub:\n\n1. Add your npm token as a GitHub secret named `NPM_TOKEN`\n2. Create a GitHub release - the publish workflow will automatically publish to npm\n\n### MCP Server Registry\n\nTo register this server in the MCP registry:\n\n1. Ensure your server implements the MCP specification\n2. Host your server publicly (e.g., npm, GitHub releases)\n3. Submit a PR to the MCP registry repository\n\n## Development\n\n```bash\n# Install dependencies\nnpm install\n\n# Run linter\nnpm run lint\n\n# Fix linting issues\nnpm run lint:fix\n\n# Start server\nnpm start\n```\n\n## License\n\nMIT\n",
+  "category": "Development",
+  "quality_score": 37,
+  "archestra_config": {
+    "client_config_permutations": {
+      "editorconfig-mcp-server": {
+        "command": "editorconfig-mcp-server",
+        "args": [],
+        "env": {}
+      },
+      "editorconfig-mcp-server-npx": {
+        "command": "npx",
+        "args": ["-y", "editorconfig-mcp-server"],
+        "env": {}
+      },
+      "editorconfig-mcp-server-npm-script": {
+        "command": "npm",
+        "args": ["run", "format-server"],
+        "env": {}
+      },
+      "editorconfig-mcp-server-npm-start": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "editorconfig-mcp-server-port-8080": {
+        "command": "editorconfig-mcp-server",
+        "args": [],
+        "env": {
+          "PORT": "8080"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "neilberkman",
+    "repo": "editorconfig_mcp",
+    "url": "https://github.com/neilberkman/editorconfig_mcp",
+    "name": "neilberkman__editorconfig_mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "bfc9b03f1659067e6fc46de21c9f60a133863bbd"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:40.984Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "ajv",
+      "importance": 7
+    },
+    {
+      "name": "eclint",
+      "importance": 9
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "express-rate-limit",
+      "importance": 7
+    },
+    {
+      "name": "vinyl-fs",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"editorconfig-mcp-server\",\n  \"version\": \"1.0.2\",\n  \"description\": \"MCP server that formats files using .editorconfig rules\",\n  \"main\": \"mcp-server.js\",\n  \"bin\": {\n    \"editorconfig-mcp-server\": \"./mcp-server.js\"\n  },\n  \"scripts\": {\n    \"start\": \"node server.js\",\n    \"test\": \"jest\",\n    \"test:watch\": \"jest --watch\",\n    \"test:coverage\": \"jest --coverage\",\n    \"lint\": \"eslint . && npm run format:check && npm run eclint:check\",\n    \"lint:fix\": \"eslint . --fix && npm run format && npm run eclint:fix\",\n    \"eclint:check\": \"eclint check \\\"**/*.{js,json,yml,md}\\\"\",\n    \"eclint:fix\": \"eclint fix \\\"**/*.{js,json,yml,md}\\\"\",\n    \"format\": \"prettier --write .\",\n    \"format:check\": \"prettier --check .\",\n    \"version\": \"npm run lint && git add -A\",\n    \"postversion\": \"git push && git push --tags\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"editorconfig\",\n    \"formatter\",\n    \"linter\"\n  ],\n  \"author\": \"Neil Berkman\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"ajv\": \"^8.12.0\",\n    \"eclint\": \"^2.8.1\",\n    \"express\": \"^4.21.2\",\n    \"express-rate-limit\": \"^7.1.5\",\n    \"vinyl-fs\": \"^4.0.2\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.14\",\n    \"eslint\": \"^9.28.0\",\n    \"jest\": \"^29.7.0\",\n    \"prettier\": \"^3.5.3\",\n    \"supertest\": \"^7.1.1\"\n  }\n}\n"
+}

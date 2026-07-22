@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId, parseVaultReference } from "@shared";
+import { E2eTestId, parseVaultReference } from "@archestra/shared";
 import { CheckCircle2, Info, Key, Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretInput } from "@/components/ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -21,11 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  MCP_CONFIG_AUTOCOMPLETE,
-  MCP_SECRET_AUTOCOMPLETE,
-} from "@/lib/mcp/mcp-form-autocomplete";
-import { usePresetEntityName } from "@/lib/organization.query";
+import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -55,6 +52,12 @@ interface EnvironmentVariableDialogProps {
   useExternalSecretsManager?: boolean;
   disableInstallation?: boolean;
   disableInstallationReason?: string;
+  /**
+   * Optional validator for a static plain-text value (e.g. an environment's
+   * allowlist regex). Returns an error message to show under the value input
+   * and block confirm, or null when the value is allowed.
+   */
+  validateValue?: (value: string) => string | null;
   onClose: () => void;
   onConfirm: (draft: EnvVarDraft) => void;
 }
@@ -79,10 +82,10 @@ export function EnvironmentVariableDialog({
   useExternalSecretsManager = false,
   disableInstallation = false,
   disableInstallationReason,
+  validateValue,
   onClose,
   onConfirm,
 }: EnvironmentVariableDialogProps) {
-  const { singular } = usePresetEntityName();
   const [draft, setDraft] = useState<EnvVarDraft>(
     initial ?? makeEmptyDraft(disableInstallation),
   );
@@ -114,9 +117,21 @@ export function EnvironmentVariableDialog({
   const valueRequired =
     draft.scope === "static" && !hasStoredSecret && !(draft.type === "boolean");
 
+  // Apply the environment's allowlist rule to free-text values only: a static,
+  // plain-text value the user actually typed. Secrets and number/boolean types
+  // are exempt (the rule targets free-text), mirroring the install dialogs.
+  const valueError =
+    validateValue &&
+    draft.scope === "static" &&
+    draft.type === "plain_text" &&
+    draft.value.length > 0
+      ? validateValue(draft.value)
+      : null;
+
   const canSubmit =
     trimmedKey.length > 0 &&
     !duplicate &&
+    !valueError &&
     (!valueRequired || draft.value.trim().length > 0);
 
   function updateDraft(patch: Partial<EnvVarDraft>) {
@@ -234,18 +249,13 @@ export function EnvironmentVariableDialog({
             }
           />
         )}
-        {draft.scope === "preset" && (
-          <ScopeCallout
-            title={`An admin sets this for each ${singular}`}
-            body={`Each ${singular} that uses this server supplies its own value.`}
-          />
-        )}
         {draft.scope === "static" && (
           <StaticValueEditor
             draft={draft}
             hasStoredSecret={hasStoredSecret}
             isVaultRef={isVaultRef}
             useExternalSecretsManager={useExternalSecretsManager}
+            valueError={valueError}
             onOpenVault={() => setVaultDialogOpen(true)}
             onClearVault={() => updateDraft({ value: "" })}
             onValueChange={(value) => updateDraft({ value })}
@@ -333,6 +343,7 @@ function StaticValueEditor({
   hasStoredSecret,
   isVaultRef,
   useExternalSecretsManager,
+  valueError,
   onOpenVault,
   onClearVault,
   onValueChange,
@@ -341,6 +352,7 @@ function StaticValueEditor({
   hasStoredSecret: boolean;
   isVaultRef: boolean;
   useExternalSecretsManager: boolean;
+  valueError: string | null;
   onOpenVault: () => void;
   onClearVault: () => void;
   onValueChange: (value: string) => void;
@@ -408,20 +420,17 @@ function StaticValueEditor({
   return (
     <div className="space-y-2">
       <Label htmlFor="env-var-value">Value</Label>
-      <Input
+      <SecretInput
         id="env-var-value"
-        type={draft.type === "secret" ? "password" : "text"}
+        masked={draft.type === "secret"}
         inputMode={draft.type === "number" ? "numeric" : undefined}
         value={draft.value}
         onChange={(e) => onValueChange(e.target.value)}
         placeholder={hasStoredSecret ? "••••••••" : "your-value"}
         className="font-mono"
-        autoComplete={
-          draft.type === "secret"
-            ? MCP_SECRET_AUTOCOMPLETE
-            : MCP_CONFIG_AUTOCOMPLETE
-        }
+        aria-invalid={valueError ? true : undefined}
       />
+      {valueError && <p className="text-xs text-destructive">{valueError}</p>}
       {hasStoredSecret && (
         <p className="text-xs text-muted-foreground">
           A value is already stored. Leave blank to keep it, or enter a new

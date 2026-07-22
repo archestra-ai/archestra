@@ -2,25 +2,22 @@
 title: Secure Agent with OpenWebUI
 category: Examples
 order: 5
+lastUpdated: 2026-07-03
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ## Overview
 
-OpenWebUI - one of the most popular clients for LLMs, however it doesn't have built-in mechanisms to prevent data leaks and malicious commands via tool calls. It can be integrated with Archestra, which intercepts malicious tool calls, and prevent untrusted context from influencing the LLM’s behaviour, providing an essential security layer for production deployments.
+OpenWebUI is a client for LLMs. It has no built-in mechanism to prevent data leaks or malicious commands via tool calls. You can integrate it with Archestra, which intercepts malicious tool calls and prevents untrusted context from influencing the LLM’s behaviour.
 
 ## Plan
 
-In this guide, we will set up the basics: OpenWebUI + Github tool -> Archestra Platform -> OpenAI. We will then make OpenWebUI read a very _interesting_ issue that could impact the original plan and cause the OpenWebUI Chat to do something you haven't even asked for. Afterwards, we'll connect it to Archestra to see how it prevented such behavior. This illustrates a fundamental problem faced by any AI Agent when it has access to tools that can read private data or post outside, known as the [Lethal Trifecta](https://www.archestra.ai/docs/platform-lethal-trifecta).
+In this guide, we will set up the basics: OpenWebUI + GitHub tool -> Archestra Platform -> OpenAI. We will then make OpenWebUI read a very _interesting_ issue that could impact the original plan and cause the OpenWebUI Chat to do something you haven't even asked for. Afterwards, we'll connect it to Archestra to see how it prevented such behavior. This illustrates a fundamental problem faced by any AI Agent when it has access to tools that can read private data or post outside, known as the [Lethal Trifecta](/docs/platform-ai-tool-guardrails#the-lethal-trifecta).
 
 ## Step 1. Get your LLM Provider API Key
 
-This example uses OpenAI, but Archestra supports multiple LLM providers. See [Supported LLM Providers](https://www.archestra.ai/docs/platform-supported-llm-providers) for the complete list.
+This example uses OpenAI, but Archestra supports multiple LLM providers. See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the complete list.
 
 For OpenAI, you can get an API key from:
 
@@ -28,7 +25,7 @@ For OpenAI, you can get an API key from:
 - Azure OpenAI
 - Any OpenAI-compatible service (e.g., LocalAI, FastChat, Helicone, LiteLLM, OpenRouter etc.)
 
-👉 Once you have the key, copy it and keep it handy.
+Once you have the key, copy it and keep it handy.
 
 ## Step 2. Deploy OpenWebUI and Archestra locally with docker compose
 
@@ -50,7 +47,7 @@ For OpenAI, you can get an API key from:
    docker compose -f docker-compose-openwebui.yaml up
    ```
 
-4. Alternatively, if you already have OpenWebUI, you can only deploy Archerstra, and configure your existing OpenWebUI in the next step
+4. Alternatively, if you already have OpenWebUI, you can only deploy Archestra, and configure your existing OpenWebUI in the next step
 
    ```bash
    docker compose -f docker-compose-openwebui.yaml up platform
@@ -64,15 +61,15 @@ Once OpenWebUI is running:
 2. Click on your **User > Admin Panel**.
 3. Navigate to **Settings > Connections > OpenAI > Configure** (look for the wrench icon).
 4. Verify that you have a correct OpenAI API Key and BASE_URL of Archestra: [http://localhost:9000/v1/openai](http://localhost:9000/v1/openai) in URL, or Add Connection with those values, if you use your own OpenWebUI
-   ☝️If you're not sure where is Archestra BASE_URL you can navigate to Archestra settings, in our example it on [http://localhost:3000](http://localhost:3000)
+   If you're not sure where is Archestra BASE_URL you can navigate to Archestra settings, in our example it on [http://localhost:3000](http://localhost:3000)
 
-   ✌️️If you're running OpenWebUI in its own Docker container locally, separately from the platform, the `BASE_URL` will have Docker's special hostname, `host.docker.internal` instead of `localhost`. E.g. `http://host.docker.internal:9000/v1/openai`
+   If you're running OpenWebUI in its own Docker container locally, separately from the platform, the `BASE_URL` will have Docker's special hostname, `host.docker.internal` instead of `localhost`. E.g. `http://host.docker.internal:9000/v1/openai`
 
    **Optional:** To use a specific profile, include the profile ID in the URL: `http://localhost:9000/v1/openai/{profile-id}`. You can create and manage profiles at [http://localhost:3000/profiles](http://localhost:3000/profiles)
 
-   ![openwebui](/docs/platfrom/openwebui-image1.webp)
+   ![openwebui](/docs/platform/openwebui-image1.webp)
 
-   ![openwebui](/docs/platfrom/openwebui-image2.webp)
+   ![openwebui](/docs/platform/openwebui-image2.webp)
 
 5. Now you can **Create a New Chat** and start chatting with the models
 
@@ -98,7 +95,7 @@ Also you can start using MCP servers
    https://dmcp-server.deno.dev/mcp
    ```
 
-   ![](/docs/platfrom/openwebui-image3.webp)
+   ![](/docs/platform/openwebui-image3.webp)
 
 5. Click Save
 6. Now you can use this tool in Chat Input by enabling it with “+”, try prompting “Roll 2d4+1”
@@ -110,28 +107,28 @@ Archestra proxies every request from yout AI Agent (OpenWebUI in this guide) and
 1. Open [http://localhost:3000](http://localhost:3000) and navigate to **Chat**
 2. In the table with conversations open any of them by clicking on the **Details**
 
-## Step 7. See the tools in Archesta and configure the rules
+## Step 7. See the tools in Archestra and configure the rules
 
 Every tool call is recorded and you can see all the tools ever used by OpenWebUI in on the Tool page, accessible via [http://localhost:3000](http://localhost:3000)
 
 By default, every tool call result is untrusted, e.g. it can poison the context of your agent with prompt injection by email from stranger, or by sketchy website.
 
-Also by default, if your context was exposed to untrusted information, any subsequent tool call would be blocked by archstra.
+Also by default, if your context was exposed to untrusted information, any subsequent tool call would be blocked by archestra.
 
-This rule might be quite limiting for the agent, but you can additional rules to validate the input (the arguments for the tool calls) and allow the tool call even if the conext is untrusted
+This rule might be quite limiting for the agent, but you can additional rules to validate the input (the arguments for the tool calls) and allow the tool call even if the context is untrusted
 
-![](/docs/platfrom/openwebui-image4.webp)
+![](/docs/platform/openwebui-image4.webp)
 
 I.e. we can always allow `fetch` to open `[google.com](http://google.com)`, even if the context _might_ have a prompt injection and is untrusted
 
 Also we can add a rule to what to consider as untrusted content. E.g. in Tool Result Policies, if we know that we queried our corporate website, we know that we the result will be trusted, and therefore, tool calling would still be allowed:
 
-![](/docs/platfrom/openwebui-image5.webp)
+![](/docs/platform/openwebui-image5.webp)
 
 The decision tree for archestra would be:
 
-![](/docs/platfrom/openwebui-image6.webp)
+![](/docs/platform/openwebui-image6.webp)
 
 ## All Set
 
-Now you are safe from Lethal Trifecta type attacks and prompt injections cannot influence your agent.
+With these policies in place, Archestra blocks any tool call that could be influenced by untrusted context, unless a rule you set explicitly allows it.

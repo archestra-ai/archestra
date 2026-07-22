@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Copy, Eye, Plus, Shield, Trash2, UserCog } from "lucide-react";
@@ -14,6 +14,7 @@ import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { RoleOptionLabel } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { TableFilters } from "@/components/table-filters";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import {
   useCanImpersonate,
@@ -60,6 +62,7 @@ import { useSetSettingsAction } from "../layout";
 export default function UsersPageClient() {
   return (
     <ErrorBoundary>
+      <SmallTeamTierBanner />
       <UsersPageContent />
     </ErrorBoundary>
   );
@@ -338,6 +341,7 @@ function MembersTab({
         if ("provider" in member) {
           return (
             <TableRowActions
+              itemName={member.email}
               actions={[
                 {
                   icon: <Copy className="h-4 w-4" />,
@@ -349,7 +353,7 @@ function MembersTab({
                   onClick: async () => {
                     if (!member.invitationId) return;
                     const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${member.invitationId}&email=${encodeURIComponent(member.email)}`;
-                    await navigator.clipboard.writeText(link);
+                    await copyToClipboard(link);
                   },
                 },
                 {
@@ -372,6 +376,7 @@ function MembersTab({
 
         return (
           <TableRowActions
+            itemName={member.email}
             actions={[
               {
                 icon: <UserCog className="h-4 w-4" />,
@@ -689,6 +694,7 @@ function InvitationsTab({
       enableHiding: false,
       cell: ({ row }) => (
         <TableRowActions
+          itemName={row.original.email}
           actions={[
             {
               icon: <Trash2 className="h-4 w-4" />,

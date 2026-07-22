@@ -1,3 +1,31 @@
+## Running e2e tests locally (lite harness)
+
+The fastest way to run the suite locally — no Tilt, no Kind on the host, no
+Helm. It boots the platform as one quickstart-mode container plus WireMock and
+Keycloak sidecars, the exact stack CI's "Platform E2E Tests (Lite)" job uses:
+
+```bash
+cd platform
+pnpm test:e2e:lite:up      # start the stack (pulls the prebuilt CI image on a clean checkout)
+pnpm test:e2e:lite         # run the lite suite (chromium, api, identity-providers)
+pnpm test:e2e:lite -- --project=chromium tests/agents.spec.ts   # or just one spec
+pnpm test:e2e:lite:down    # tear everything down
+```
+
+Requirements: Docker running, `pnpm install` done. With uncommitted changes
+under `platform/` the script docker-builds the image locally instead of
+pulling. MCP-server installs work — the container provisions an embedded Kind
+cluster through the mounted docker socket. On Apple Silicon the prebuilt CI
+image is amd64 and runs emulated; if short UI timeouts flake, build a native
+image (commit your changes and the script builds locally, or pass
+`PLATFORM_IMAGE`).
+
+Not covered here: the `api-k8s` and `vault-k8s` projects (host-cluster
+kubectl, NetworkPolicy enforcement, Vault K8s auth, helm-deployed fixture
+servers) need the Kind+Helm environment (`scripts/e2e-local.sh`), and the
+`@quickstart` onboarding specs need a key-less pristine instance (CI runs
+them in their own job; this stack seeds provider keys).
+
 ## Troubleshooting e2e tests that fail on CI
 
 1. Go to the failing GitHub workflow run (e.g. from a PR check)

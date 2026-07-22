@@ -1,0 +1,90 @@
+{
+  "name": "transcribe-app__mcp-transcribe",
+  "display_name": "mcp-transcribe",
+  "description": "Add transcription tools to your AI-powered assistants.",
+  "author": {
+    "name": "transcribe-app"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "MCP_INTEGRATION_URL": "${user_config.mcp_integration_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mcp_integration_url": {
+      "type": "string",
+      "title": "MCP Integration URL",
+      "description": "Your private MCP integration URL from the Transcribe.com online editor's Automation popup.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "<h3 align=\"center\">Transcribe MCP</h3>\n\n<p align=\"center\">\n  Automate your transcriptions with AI.\n  <br />\n  <a href=\"https://transcribe.com\"><strong>Website</strong></a> \n</p>\n\n# About\n\nTranscribe MCP instantly connects your account to assistants like Claude, Windsurf, Cursor, and more so they can automate tasks on your behalf. The Local Server can add local files for transcription and return result to your Assistant in seconds.\n\n# Features\n- ⚡ Fast, lightweight and LLM-friendly. No special ASR models needed, no setup and fighting python packages, results in seconds.\n- 🏆 High-quality transcriptions. Works with noisy audio, over 100 languages supported, featuring word-level timestamps and speaker separation.\n- 🔋 Wide variety of formats out-of-the-box and Cloud storage for your audio notes and records.\n- 👥 Collaboration support via Transcribe.com teams feature\n\n## 🚀 Local installation: Claude Desktop\n\n🔹 Get your private MCP integration URL\n- Sign in to the Transcribe [online editor](https://transcribe.com/app)\n- Copy your private URL from Automation popup\n\n🔹 Download pre-built Desktop Extension (DXT): [Download DXT](https://transcribe.com/mcp-integration#jumpto=mcp_download_dxt)\n\n📦 The DXT includes:\n\n- ✅ One-click installation in Claude Desktop\n- ✅ Secure environment variable configuration\n- ✅ Automatic dependency management\n- ✅ Built-in error handling and debugging\n- ✅ The DXT file is automatically updated for the latest features and fixes\n\n### Option 1: Double-Click Installation (Recommended)\n- Double-click the .dxt file\n- Claude Desktop will automatically install the extension\n- Follow the configuration prompts\n\n### Option 2: Manual Installation\n- Open Claude Desktop\n- Go to Settings → Extensions\n- Click \"Install Extension\" and select the .dxt file\n\n### Configuration\nDuring installation, you'll be prompted to configure MCP integration URL. Paste your private URL.\n\n## 🚀 Local installation: Other assistants\n\n🔹 Get your private MCP integration URL\n- Sign in to the Transcribe [online editor](https://transcribe.com/app)\n- Copy your private URL from Automation popup\n\n🔹 Before installing the server, ensure you have Node.js and Git\n- Download from: https://nodejs.org/\n- Verify Node with: node --version\n- Verify NPX with: npx --version\n\n🔹 Add Local Server via your assistant settings and use this snippet for server setup:\n\n```\n{\n  \"key\": \"transcribe-local\",\n  \"command\": \"npx\",\n  \"args\": [\n    \"args\": [\"-y\", \"github:transcribe-app/mcp-transcribe\"],\n  ],\n  \"env\": {\n    \"MCP_INTEGRATION_URL\": \"<your-MCP-integration-URL>\"\n  }\n}\n```\n\n### Configuration\nReplace \\<your-MCP-integration-URL\\> with your private URL.\n\n---\n\n## ⚡ Available Tools\n\nList of tools is expanded with each new version.\n\n1\\. `convert-to-text`: converts audio to text and returns the text immediately.\n- Note: This tool use your time credits.\n- Note: Remote server expect public-accessible URL, Local Server can use both URL and a path to local file in your file system.\n\n2\\. `get-balance`: returns balance of your account.\n\n3\\. `read-transcriptions`: returns content of ready transcriptions with optional filtering/search.\n\n4\\. `update-transcription`: renames or deletes transcriptions in your account at Transcribe.com\n\n\n## 💡 Security Notes\n\n- **Private URL**: Store your private URL securely, do not share it with others\n\n## ⚠️ Troubleshooting\n\n### \"MCP_INTEGRATION_URL environment variable is required\"\n- Sign in to the Transcribe [online editor](https://transcribe.com/app)\n- Copy your private URL from Automation popup\n- Add it as server's \"MCP_INTEGRATION_URL\" environment variable in your AI assistant settings\n\n### Extension Won't Install\n- Ensure you have the latest Claude Desktop version\n- Check that `node` is installed and in your PATH",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "transcribe-local": {
+        "command": "node",
+        "args": ["<path-to-unpacked-dxt-location>/build/index.js"],
+        "env": {
+          "MCP_INTEGRATION_URL": "<your-MCP-integration-URL>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "transcribe-app",
+    "repo": "mcp-transcribe",
+    "url": "https://github.com/transcribe-app/mcp-transcribe",
+    "name": "mcp-transcribe",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e50ac058b13d85cf51b458d94258398dc5f07b81"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:37.445Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "form-data",
+      "importance": 6
+    },
+    {
+      "name": "node-fetch",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"integr_mcp\",\n  \"version\": \"1.0.2\",\n  \"main\": \"src/index.js\",\n  \"scripts\": {\n    \"test\": \"echo \\\"Skipping, no tests\\\" && exit 1\"\n  },\n  \"keywords\": [],\n  \"author\": \"Transcribe.com\",\n  \"license\": \"MIT\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.16.0\",\n    \"form-data\": \"^4.0.4\",\n    \"node-fetch\": \"^3.3.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.1.0\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

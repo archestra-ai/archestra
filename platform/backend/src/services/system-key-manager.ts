@@ -1,4 +1,5 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import {
   isAnthropicAzureFoundryEntraIdEnabled,
   isAzureOpenAiEntraIdEnabled,
@@ -18,8 +19,22 @@ import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
 import { fetchAzureModels } from "@/routes/chat/model-fetchers/azure";
 import { fetchBedrockModelsViaIam } from "@/routes/chat/model-fetchers/bedrock";
 import { fetchGeminiModelsViaVertexAi } from "@/routes/chat/model-fetchers/gemini";
+import type { FetchedModelCapabilities } from "@/routes/chat/model-fetchers/types";
 import { buildModelsToUpsert } from "@/services/model-sync";
 import type { CreateModel } from "@/types";
+
+/**
+ * A keyless provider's model list. `capabilities` is preserved (not stripped to
+ * `{ id, displayName }`) so authoritative facts like an embedding model's
+ * dimension survive the sync — e.g. Bedrock Titan embedding models.
+ */
+type CustomModelFetch = () => Promise<
+  Array<{
+    id: string;
+    displayName: string;
+    capabilities?: FetchedModelCapabilities;
+  }>
+>;
 
 /**
  * Configuration for a keyless provider that uses system API keys.
@@ -29,7 +44,7 @@ interface KeylessProviderConfig {
   name: string;
   isEnabled: () => boolean;
   /** Custom fetch function for providers that need special handling (e.g., Vertex AI) */
-  customFetch: () => Promise<Array<{ id: string; displayName: string }>>;
+  customFetch: CustomModelFetch;
 }
 
 /**
@@ -67,11 +82,21 @@ class SystemKeyManager {
       },
     },
     {
+      // One entry covers both keyless Anthropic auth methods (Azure Foundry
+      // Entra ID and Workload Identity Federation): system keys are looked up
+      // per provider, so two "anthropic" entries would delete each other's key.
       provider: "anthropic",
-      name: "Anthropic Azure Foundry Entra ID",
+      // Lazy so the created key's name reflects whichever method is actually
+      // active at sync time, not the value captured at class construction.
+      get name() {
+        return anthropicWorkloadIdentity.isEnabled()
+          ? "Anthropic Workload Identity Federation"
+          : "Anthropic Azure Foundry Entra ID";
+      },
       isEnabled: () =>
-        isAnthropicAzureFoundryEntraIdEnabled() &&
-        isAzureAiFoundryBaseUrl(config.llm.anthropic.baseUrl),
+        (isAnthropicAzureFoundryEntraIdEnabled() &&
+          isAzureAiFoundryBaseUrl(config.llm.anthropic.baseUrl)) ||
+        anthropicWorkloadIdentity.isEnabled(),
       customFetch: async () => {
         const models = await fetchAnthropicModels(
           "",
@@ -86,7 +111,13 @@ class SystemKeyManager {
       isEnabled: () => isBedrockIamAuthEnabled(),
       customFetch: async () => {
         const models = await fetchBedrockModelsViaIam();
-        return models.map((m) => ({ id: m.id, displayName: m.displayName }));
+        // Preserve capabilities so Titan embedding models keep their dimension
+        // (which marks them as embedding models) through the sync.
+        return models.map((m) => ({
+          id: m.id,
+          displayName: m.displayName,
+          capabilities: m.capabilities,
+        }));
       },
     },
   ];
@@ -172,7 +203,7 @@ class SystemKeyManager {
   private async syncModelsForSystemKey(
     apiKeyId: string,
     provider: SupportedProvider,
-    customFetch: () => Promise<Array<{ id: string; displayName: string }>>,
+    customFetch: CustomModelFetch,
   ): Promise<void> {
     try {
       await this.syncModelsWithCustomFetch(apiKeyId, provider, customFetch);
@@ -194,7 +225,7 @@ class SystemKeyManager {
   private async syncModelsWithCustomFetch(
     apiKeyId: string,
     provider: SupportedProvider,
-    customFetch: () => Promise<Array<{ id: string; displayName: string }>>,
+    customFetch: CustomModelFetch,
   ): Promise<void> {
     const models = await customFetch();
 
@@ -231,7 +262,7 @@ class SystemKeyManager {
       "Upserted models to database",
     );
 
-    // Link models to the API key with fastest/best detection
+    // Link models to the API key with best-model detection
     const modelsWithIds = upsertedModels.map((m) => ({
       id: m.id,
       modelId: m.modelId,

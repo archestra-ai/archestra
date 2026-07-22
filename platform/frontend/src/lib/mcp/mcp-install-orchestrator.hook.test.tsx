@@ -1,5 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useSession } from "@/lib/auth/auth.query";
 import { useMcpInstallOrchestrator } from "./mcp-install-orchestrator.hook";
 
 const {
@@ -44,6 +46,10 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/auth/auth.query");
+
+vi.mock("sonner");
+
 vi.mock("@/lib/auth/oauth.query", () => ({
   useInitiateOAuth: () => ({
     mutateAsync: mutateAsyncMock,
@@ -81,6 +87,9 @@ vi.mock("@/lib/auth/oauth-session", () => ({
 describe("useMcpInstallOrchestrator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "test-user" } },
+    } as unknown as ReturnType<typeof useSession>);
     mutateAsyncMock.mockResolvedValue({
       authorizationUrl: "https://posthog.example.com/oauth/authorize",
       state: "oauth-state-123",
@@ -112,5 +121,55 @@ describe("useMcpInstallOrchestrator", () => {
     expect(redirectBrowserToUrlMock).toHaveBeenCalledWith(
       "https://posthog.example.com/oauth/authorize",
     );
+  });
+
+  it("captures the return URL when starting OAuth for a first-time install", async () => {
+    const { result } = renderHook(() => useMcpInstallOrchestrator());
+
+    // Opening the OAuth confirmation dialog should not start OAuth yet.
+    act(() => {
+      result.current.triggerInstallByCatalogId("catalog-posthog");
+    });
+    expect(redirectBrowserToUrlMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.handleOAuthConfirm({
+        scope: "personal",
+        teamId: null,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mutateAsyncMock).toHaveBeenCalledWith({
+        catalogId: "catalog-posthog",
+      });
+    });
+
+    // New behavior: first-time installs remember where they started so the
+    // callback can return the user there (e.g. a chat conversation) instead of
+    // the registry. This is not a re-auth flow.
+    expect(setOAuthReturnUrlMock).toHaveBeenCalledWith(window.location.href);
+    expect(setOAuthMcpServerIdMock).not.toHaveBeenCalled();
+    expect(redirectBrowserToUrlMock).toHaveBeenCalledWith(
+      "https://posthog.example.com/oauth/authorize",
+    );
+  });
+
+  it("surfaces the backend error message when initiating OAuth fails", async () => {
+    mutateAsyncMock.mockRejectedValue(new Error("No client ID available"));
+
+    const { result } = renderHook(() => useMcpInstallOrchestrator());
+
+    act(() => {
+      result.current.triggerReauthByCatalogIdAndServerId(
+        "catalog-posthog",
+        "server-123",
+      );
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("No client ID available");
+    });
+    expect(redirectBrowserToUrlMock).not.toHaveBeenCalled();
   });
 });

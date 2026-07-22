@@ -1,0 +1,89 @@
+{
+  "name": "tumf__mcp-text-editor",
+  "display_name": "mcp-text-editor",
+  "description": "MCP server from tumf/mcp-text-editor",
+  "author": {
+    "name": "tumf"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-text-editor"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Text Editor Server\n\n[![codecov](https://codecov.io/gh/tumf/mcp-text-editor/branch/main/graph/badge.svg?token=52D51U0ZUR)](https://codecov.io/gh/tumf/mcp-text-editor)\n[![smithery badge](https://smithery.ai/badge/mcp-text-editor)](https://smithery.ai/server/mcp-text-editor)\n[![Glama MCP Server](https://glama.ai/mcp/servers/k44dnvso10/badge)](https://glama.ai/mcp/servers/k44dnvso10)\n\nA Model Context Protocol (MCP) server that provides line-oriented text file editing capabilities through a standardized API. Optimized for LLM tools with efficient partial file access to minimize token usage.\n\n## Quick Start for Claude.app Users\n\nTo use this editor with Claude.app, add the following configuration to your prompt:\n\n```shell\ncode ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n```\n\n```json\n{\n  \"mcpServers\": {\n    \"text-editor\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"mcp-text-editor\"\n      ]\n    }\n  }\n}\n```\n\n## Overview\n\nMCP Text Editor Server is designed to facilitate safe and efficient line-based text file operations in a client-server architecture. It implements the Model Context Protocol, ensuring reliable file editing with robust conflict detection and resolution. The line-oriented approach makes it ideal for applications requiring synchronized file access, such as collaborative editing tools, automated text processing systems, or any scenario where multiple processes need to modify text files safely. The partial file access capability is particularly valuable for LLM-based tools, as it helps reduce token consumption by loading only the necessary portions of files.\n\n### Key Benefits\n\n- Line-based editing operations\n- Token-efficient partial file access with line-range specifications\n- Optimized for LLM tool integration\n- Safe concurrent editing with hash-based validation\n- Atomic multi-file operations\n- Robust error handling with custom error types\n- Comprehensive encoding support (utf-8, shift_jis, latin1, etc.)\n\n## Features\n\n- Line-oriented text file editing and reading\n- Smart partial file access to minimize token usage in LLM applications\n- Get text file contents with line range specification\n- Read multiple ranges from multiple files in a single operation\n- Line-based patch application with correct handling of line number shifts\n- Edit text file contents with conflict detection\n- Flexible character encoding support (utf-8, shift_jis, latin1, etc.)\n- Support for multiple file operations\n- Proper handling of concurrent edits with hash-based validation\n- Memory-efficient processing of large files\n\n## Requirements\n\n- Python 3.11 or higher\n- POSIX-compliant operating system (Linux, macOS, etc.) or Windows\n- Sufficient disk space for text file operations\n- File system permissions for read/write operations\n\n1. Install Python 3.11+\n\n```bash\npyenv install 3.11.6\npyenv local 3.11.6\n```\n\n2. Install uv (recommended) or pip\n\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n3. Create virtual environment and install dependencies\n\n```bash\nuv venv\nsource .venv/bin/activate  # On Windows: .venv\\Scripts\\activate\nuv pip install -e \".[dev]\"\n```\n\n## Requirements\n\n- Python 3.13+\n- POSIX-compliant operating system (Linux, macOS, etc.) or Windows\n- File system permissions for read/write operations\n\n## Installation\n\n### Run via uvx\n\n```bash\nuvx mcp-text-editor\n```\n\n### Installing via Smithery\n\nTo install Text Editor Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-text-editor):\n\n```bash\nnpx -y @smithery/cli install mcp-text-editor --client claude\n```\n\n### Manual Installation\n\n1. Install Python 3.13+\n\n```bash\npyenv install 3.13.0\npyenv local 3.13.0\n```\n\n2. Install uv (recommended) or pip\n\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n3. Create virtual environment and install dependencies\n\n```bash\nuv venv\nsource .venv/bin/activate  # On Windows: .venv\\Scripts\\activate\nuv pip install -e \".[dev]\"\n```\n\n## Usage\n\nStart the server:\n\n```bash\npython -m mcp_text_editor\n```\n\n### MCP Tools\n\nThe server provides several tools for text file manipulation:\n\n#### get_text_file_contents\n\nGet the contents of one or more text files with line range specification.\n\n**Single Range Request:**\n\n```json\n{\n  \"file_path\": \"path/to/file.txt\",\n  \"line_start\": 1,\n  \"line_end\": 10,\n  \"encoding\": \"utf-8\"  // Optional, defaults to utf-8\n}\n```\n\n**Multiple Ranges Request:**\n\n```json\n{\n  \"files\": [\n    {\n      \"file_path\": \"file1.txt\",\n      \"ranges\": [\n        {\"start\": 1, \"end\": 10},\n        {\"start\": 20, \"end\": 30}\n      ],\n      \"encoding\": \"shift_jis\"  // Optional, defaults to utf-8\n    },\n    {\n      \"file_path\": \"file2.txt\",\n      \"ranges\": [\n        {\"start\": 5, \"end\": 15}\n      ]\n    }\n  ]\n}\n```\n\nParameters:\n- `file_path`: Path to the text file\n- `line_start`/`start`: Line number to start from (1-based)\n- `line_end`/`end`: Line number to end at (inclusive, null for end of file)\n- `encoding`: File encoding (default: \"utf-8\"). Specify the encoding of the text file (e.g., \"shift_jis\", \"latin1\")\n\n**Single Range Response:**\n\n```json\n{\n  \"contents\": \"File contents\",\n  \"line_start\": 1,\n  \"line_end\": 10,\n  \"hash\": \"sha256-hash-of-contents\",\n  \"file_lines\": 50,\n  \"file_size\": 1024\n}\n```\n\n**Multiple Ranges Response:**\n\n```json\n{\n  \"file1.txt\": [\n    {\n      \"content\": \"Lines 1-10 content\",\n      \"start\": 1,\n      \"end\": 10,\n      \"hash\": \"sha256-hash-1\",\n      \"total_lines\": 50,\n      \"content_size\": 512\n    },\n    {\n      \"content\": \"Lines 20-30 content\",\n      \"start\": 20,\n      \"end\": 30,\n      \"hash\": \"sha256-hash-2\",\n      \"total_lines\": 50,\n      \"content_size\": 512\n    }\n  ],\n  \"file2.txt\": [\n    {\n      \"content\": \"Lines 5-15 content\",\n      \"start\": 5,\n      \"end\": 15,\n      \"hash\": \"sha256-hash-3\",\n      \"total_lines\": 30,\n      \"content_size\": 256\n    }\n  ]\n}\n```\n\n#### patch_text_file_contents\n\nApply patches to text files with robust error handling and conflict detection. Supports editing multiple files in a single operation.\n\n**Request Format:**\n\n```json\n{\n  \"files\": [\n    {\n      \"file_path\": \"file1.txt\",\n      \"hash\": \"sha256-hash-from-get-contents\",\n      \"encoding\": \"utf-8\",  // Optional, defaults to utf-8\n      \"patches\": [\n        {\n          \"start\": 5,\n          \"end\": 8,\n          \"range_hash\": \"sha256-hash-of-content-being-replaced\",\n          \"contents\": \"New content for lines 5-8\\n\"\n        },\n        {\n          \"start\": 15,\n          \"end\": null,  // null means end of file\n          \"range_hash\": \"sha256-hash-of-content-being-replaced\",\n          \"contents\": \"Content to append\\n\"\n        }\n      ]\n    }\n  ]\n}\n```\n\nImportant Notes:\n1. Always get the current hash and range_hash using get_text_file_contents before editing\n2. Patches are applied from bottom to top to handle line number shifts correctly\n3. Patches must not overlap within the same file\n4. Line numbers are 1-based\n5. `end: null` can be used to append content to the end of file\n6. File encoding must match the encoding used in get_text_file_contents\n\n**Success Response:**\n\n```json\n{\n  \"file1.txt\": {\n    \"result\": \"ok\",\n    \"hash\": \"sha256-hash-of-new-contents\"\n  }\n}\n```\n\n**Error Response with Hints:**\n\n```json\n{\n  \"file1.txt\": {\n    \"result\": \"error\",\n    \"reason\": \"Content hash mismatch\",\n    \"suggestion\": \"get\",  // Suggests using get_text_file_contents\n    \"hint\": \"Please run get_text_file_contents first to get current content and hashes\"\n  }\n}\n```\n\n    \"result\": \"error\",\n    \"reason\": \"Content hash mismatch - file was modified\",\n    \"hash\": \"current-hash\",\n    \"content\": \"Current file content\"\n\n  }\n}\n\n```\n\n### Common Usage Pattern\n\n1. Get current content and hash:\n\n```python\ncontents = await get_text_file_contents({\n    \"files\": [\n        {\n            \"file_path\": \"file.txt\",\n            \"ranges\": [{\"start\": 1, \"end\": null}]  # Read entire file\n        }\n    ]\n})\n```\n\n2. Edit file content:\n\n```python\nresult = await edit_text_file_contents({\n    \"files\": [\n        {\n            \"path\": \"file.txt\",\n            \"hash\": contents[\"file.txt\"][0][\"hash\"],\n            \"encoding\": \"utf-8\",  # Optional, defaults to \"utf-8\"\n            \"patches\": [\n                {\n                    \"line_start\": 5,\n                    \"line_end\": 8,\n                    \"contents\": \"New content\\n\"\n                }\n            ]\n        }\n    ]\n})\n```\n\n3. Handle conflicts:\n\n```python\nif result[\"file.txt\"][\"result\"] == \"error\":\n    if \"hash mismatch\" in result[\"file.txt\"][\"reason\"]:\n        # File was modified by another process\n        # Get new content and retry\n        pass\n```\n\n### Error Handling\n\nThe server handles various error cases:\n- File not found\n- Permission errors\n- Hash mismatches (concurrent edit detection)\n- Invalid patch ranges\n- Overlapping patches\n- Encoding errors (when file cannot be decoded with specified encoding)\n- Line number out of bounds\n\n## Security Considerations\n\n- File Path Validation: The server validates all file paths to prevent directory traversal attacks\n- Access Control: Proper file system permissions should be set to restrict access to authorized directories\n- Hash Validation: All file modifications are validated using SHA-256 hashes to prevent race conditions\n- Input Sanitization: All user inputs are properly sanitized and validated\n- Error Handling: Sensitive information is not exposed in error messages\n\n## Troubleshooting\n\n### Common Issues\n\n1. Permission Denied\n   - Check file and directory permissions\n   - Ensure the server process has necessary read/write access\n\n2. Hash Mismatch and Range Hash Errors\n   - The file was modified by another process\n   - Content being replaced has changed\n   - Run get_text_file_contents to get fresh hashes\n\n3. Encoding Issues\n   - Verify file encoding matches the specified encoding\n   - Use utf-8 for new files\n   - Check for BOM markers in files\n\n4. Connection Issues\n   - Verify the server is running and accessible\n   - Check network configuration and firewall settings\n\n5. Performance Issues\n   - Consider using smaller line ranges for large files\n   - Monitor system resources (memory, disk space)\n   - Use appropriate encoding for file type\n\n## Development\n\n### Setup\n\n1. Clone the repository\n2. Create and activate a Python virtual environment\n3. Install development dependencies: `uv pip install -e \".[dev]\"`\n4. Run tests: `make all`\n\n### Code Quality Tools\n\n- Ruff for linting\n- Black for code formatting\n- isort for import sorting\n- mypy for type checking\n- pytest-cov for test coverage\n\n### Testing\n\nTests are located in the `tests` directory and can be run with pytest:\n\n```bash\n# Run all tests\npytest\n\n# Run tests with coverage report\npytest --cov=mcp_text_editor --cov-report=term-missing\n\n# Run specific test file\npytest tests/test_text_editor.py -v\n```\n\nCurrent test coverage: 90%\n\n### Project Structure\n\n```\nmcp-text-editor/\n├── mcp_text_editor/\n│   ├── __init__.py\n│   ├── __main__.py      # Entry point\n│   ├── models.py        # Data models\n│   ├── server.py        # MCP Server implementation\n│   ├── service.py       # Core service logic\n│   └── text_editor.py   # Text editor functionality\n├── tests/               # Test files\n└── pyproject.toml       # Project configuration\n```\n\n## License\n\nMIT\n\n## Contributing\n\n1. Fork the repository\n2. Create a feature branch\n3. Make your changes\n4. Run tests and code quality checks\n5. Submit a pull request\n\n### Type Hints\n\nThis project uses Python type hints throughout the codebase. Please ensure any contributions maintain this.\n\n### Error Handling\n\nAll error cases should be handled appropriately and return meaningful error messages. The server should never crash due to invalid input or file operations.\n\n### Testing\n\nNew features should include appropriate tests. Try to maintain or improve the current test coverage.\n\n### Code Style\n\nAll code should be formatted with Black and pass Ruff linting. Import sorting should be handled by isort.\n",
+  "category": "AI Tools",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-text-editor": {
+        "command": "uvx",
+        "args": ["mcp-text-editor"],
+        "env": {}
+      },
+      "mcp-text-editor-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "--mount", "type=bind,src=/some/path/src,dst=/some/path/dst", "mcp/text-editor"],
+        "env": {},
+        "docker_image": "mcp/text-editor"
+      },
+      "mcp-text-editor-python": {
+        "command": "python",
+        "args": ["-m", "mcp_text_editor"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tumf",
+    "repo": "mcp-text-editor",
+    "url": "https://github.com/tumf/mcp-text-editor",
+    "name": "tumf__mcp-text-editor",
+    "path": null,
+    "stars": 155,
+    "contributors": 12,
+    "issues": 6,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "3161f58d57261bb3a69239ac98cd0145d6e0f91e"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:43.329Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "asyncio",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "chardet",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-text-editor\"\ndynamic = [\"version\"]\ndescription = \"MCP Text Editor Server - Edit text files via MCP protocol\"\nauthors = [\n    { name = \"tumf\" }\n]\ndependencies = [\n    \"asyncio>=3.4.3\",\n    \"mcp>=1.2.0\",\n    \"chardet>=5.2.0\",\n]\nrequires-python = \">=3.13\"\nreadme = \"README.md\"\nlicense = { text = \"MIT\" }\n\n[project.scripts]\nmcp-text-editor = \"mcp_text_editor:run\"\n\n[project.optional-dependencies]\ntest = [\n    \"pytest>=8.3.4\",\n    \"pytest-asyncio>=0.24.0\",\n    \"pytest-env>=1.1.0\",\n    \"pytest-cov>=6.0.0\",\n    \"pytest-mock>=3.12.0\",\n]\ndev = [\n    \"ruff>=0.0.262\",\n    \"black>=23.3.0\",\n    \"isort>=5.12.0\",\n    \"mypy>=1.2.0\",\n    \"pre-commit>=3.2.2\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\ntestpaths = \"tests\"\nasyncio_default_fixture_loop_scope = \"function\"\npythonpath = [\"src\"]\n\n[tool.ruff]\nlint.select = [\n    \"E\",  # pycodestyle errors\n    \"F\",  # pyflakes\n    \"W\",  # pycodestyle warnings\n    \"I\",  # isort\n    \"C\",  # flake8-comprehensions\n    \"B\",  # flake8-bugbear\n]\nlint.ignore = [\n    \"E501\",  # line too long, handled by black\n    \"B008\",  # do not perform function calls in argument defaults\n    \"C901\",  # too complex\n]\nlint.extend-select = [\"I\"]\nline-length = 88\nsrc = [\"src\"]\n\n[tool.black]\nline-length = 88\ntarget-version = ['py313']\n\n[tool.isort]\nprofile = \"black\"\nline_length = 88\n\n[tool.mypy]\npython_version = \"3.13\"\nignore_missing_imports = true\nnamespace_packages = true\nexplicit_package_bases = true\nmypy_path = \"src\"\n\n[tool.hatch.build.targets.wheel]\n\n\n[tool.hatch.version]\npath = \"src/mcp_text_editor/version.py\"\n\n[tool.coverage.run]\nsource = [\"mcp_text_editor\"]\nbranch = true\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"raise NotImplementedError\",\n    \"if __name__ == .__main__.:\",\n    \"pass\",\n    \"raise ImportError\",\n    \"__version__\",\n    \"if TYPE_CHECKING:\",\n    \"raise FileNotFoundError\",\n    \"raise ValueError\",\n    \"raise RuntimeError\",\n    \"raise OSError\",\n    \"except Exception as e:\",\n    \"except ValueError:\",\n    \"except FileNotFoundError:\",\n    \"except OSError as e:\",\n    \"except Exception:\",\n    \"if not os.path.exists\",\n    \"if os.path.exists\",\n    \"def __init__\",\n]\n\nomit = [\n    \"src/mcp_text_editor/__init__.py\",\n    \"src/mcp_text_editor/version.py\",\n]\n"
+}

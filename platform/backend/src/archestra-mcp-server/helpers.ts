@@ -1,10 +1,10 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   type ArchestraToolFullName,
   type ArchestraToolShortName,
   getArchestraToolFullName,
   type McpToolError,
-} from "@shared";
+} from "@archestra/shared";
+import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
 import {
@@ -15,6 +15,7 @@ import {
   ToolModel,
 } from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
+import { isUniqueConstraintError } from "@/utils/db";
 import type { ArchestraContext } from "./types";
 
 export function isAbortLikeError(error: unknown): boolean {
@@ -197,6 +198,22 @@ export function deduplicateLabels(
   return Array.from(new Map(rawLabels.map((l) => [l.key, l])).values());
 }
 
+/**
+ * Decode bytes as text, or null when they are not safe to treat as text. The
+ * mime label is never trusted (a binary payload can be saved as e.g.
+ * text/plain), so readability is decided by the bytes: a NUL byte or any
+ * invalid UTF-8 sequence means "binary". NUL is rejected even though it is
+ * valid UTF-8 — Postgres cannot store it in a text column.
+ */
+export function decodeUtf8Text(data: Buffer): string | null {
+  if (data.includes(0)) return null;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(data);
+  } catch {
+    return null;
+  }
+}
+
 export function successResult(text: string): CallToolResult {
   return {
     content: [{ type: "text" as const, text }],
@@ -213,6 +230,23 @@ export function structuredSuccessResult(
     structuredContent,
     isError: false,
   };
+}
+
+// Wrap arbitrary content (source HTML, a JSON dump — anything author- or
+// model-controlled) in a markdown code fence so nothing inside it is rendered as
+// markdown. The fence is one backtick longer than the longest backtick run in
+// the content, so no line inside can close it early and break out.
+export function fencedBlock(content: string, lang = ""): string {
+  // Iterate rather than spread the matches into Math.max — adversarial content
+  // (an app's HTML can be ~512 KiB) can hold enough backtick runs to blow the
+  // call-argument limit.
+  let longestBacktickRun = 0;
+  for (const match of content.matchAll(/`+/g)) {
+    if (match[0].length > longestBacktickRun)
+      longestBacktickRun = match[0].length;
+  }
+  const fence = "`".repeat(Math.max(3, longestBacktickRun + 1));
+  return `${fence}${lang}\n${content}\n${fence}`;
 }
 
 export function structuredToolErrorResult(params: {
@@ -442,15 +476,217 @@ export function formatZodError(error: ZodError): string {
   return error.issues.map(formatZodIssue).join("; ");
 }
 
-function isUniqueConstraintError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  // PostgreSQL unique_violation code
-  return "code" in error && (error as { code: string }).code === "23505";
+/**
+ * Like {@link formatZodError}, but uses the validating schema to enrich two
+ * issue classes that otherwise leave a model no way to recover:
+ *  - a missing/invalid discriminated-union discriminator renders as the opaque
+ *    "type: Invalid input"; with the schema in hand we enumerate the allowed
+ *    values, e.g. `source.type: set "type" to one of: "base64", "text"`;
+ *  - an unrecognized key on a strict object renders as `Unrecognized key:
+ *    "timeout"` without naming the keys that ARE accepted; we list them and
+ *    suggest the closest match, e.g.
+ *    `unrecognized key "timeout" — did you mean "timeoutSeconds"? ...`.
+ * Best-effort: every introspection step is guarded, so any shape we cannot read
+ * falls back to the plain message rather than throwing.
+ */
+export function formatZodErrorWithSchema(
+  error: ZodError,
+  schema: ZodType,
+): string {
+  return error.issues
+    .map((issue) => {
+      const enriched =
+        enumerateDiscriminatorValues(issue, schema) ??
+        enumerateUnknownKeys(issue, schema);
+      if (!enriched) {
+        return formatZodIssue(issue);
+      }
+      const path = formatIssuePath(issue.path);
+      return path ? `${path}: ${enriched}` : enriched;
+    })
+    .join("; ");
 }
 
 function formatZodIssue(issue: z.core.$ZodIssue): string {
   const path = formatIssuePath(issue.path);
   return path ? `${path}: ${issue.message}` : issue.message;
+}
+
+// minimal view over the Zod v4 schema internals (`.def`) we read to enumerate a
+// discriminated union's allowed discriminator values. accessed defensively — an
+// absent field just ends the walk.
+interface ZodDefView {
+  innerType?: ZodType;
+  element?: ZodType;
+  shape?: Record<string, ZodType>;
+  discriminator?: string;
+  options?: ZodType[];
+  values?: unknown[];
+}
+
+function defOf(schema: ZodType): ZodDefView | undefined {
+  const def = (schema as { def?: unknown }).def;
+  return def && typeof def === "object" ? (def as ZodDefView) : undefined;
+}
+
+/** Peel optional/nullable/default/readonly wrappers to the inner schema. */
+function unwrapSchema(schema: ZodType): ZodType {
+  let current = schema;
+  // bounded to avoid spinning on an unexpected self-referential def.
+  for (let depth = 0; depth < 16; depth++) {
+    const inner = defOf(current)?.innerType;
+    if (!inner) break;
+    current = inner;
+  }
+  return current;
+}
+
+// Walk a schema down an issue path (object keys, array indices) or bail. Only
+// object/array containers are traversed; a path that descends through a union's
+// variants (a discriminated union nested inside another union's option) returns
+// null and the caller falls back to the plain message. No such schema exists in
+// the tool surface today, and the fallback is graceful (never throws).
+function navigateSchema(root: ZodType, path: PropertyKey[]): ZodType | null {
+  let current = unwrapSchema(root);
+  for (const segment of path) {
+    const def = defOf(current);
+    if (!def) return null;
+    if (typeof segment === "string" && def.shape?.[segment]) {
+      current = unwrapSchema(def.shape[segment]);
+    } else if (typeof segment === "number" && def.element) {
+      current = unwrapSchema(def.element);
+    } else {
+      return null;
+    }
+  }
+  return current;
+}
+
+/**
+ * For a discriminated-union `invalid_union` issue, resolve the allowed
+ * discriminator values from the schema and render a recovery hint, or null when
+ * the issue is unrelated or the schema cannot be introspected.
+ */
+function enumerateDiscriminatorValues(
+  issue: z.core.$ZodIssue,
+  root: ZodType,
+): string | null {
+  if (issue.code !== "invalid_union") return null;
+  const discriminator = (issue as { discriminator?: unknown }).discriminator;
+  if (typeof discriminator !== "string") return null;
+
+  const path = issue.path ?? [];
+  // the issue points at the discriminator field inside the union; the union
+  // itself is one level up.
+  if (path[path.length - 1] !== discriminator) return null;
+  const union = navigateSchema(root, path.slice(0, -1));
+  const def = union ? defOf(union) : undefined;
+  if (
+    !def ||
+    def.discriminator !== discriminator ||
+    !Array.isArray(def.options)
+  )
+    return null;
+
+  const values: string[] = [];
+  for (const option of def.options) {
+    const field = defOf(unwrapSchema(option))?.shape?.[discriminator];
+    const literals = field ? defOf(unwrapSchema(field))?.values : undefined;
+    // each option must declare its discriminator as a renderable literal; a
+    // z.enum (which uses `entries`, not `values`) or anything exotic makes the
+    // menu incomplete, so bail to the plain message rather than mislead.
+    if (!Array.isArray(literals) || literals.length === 0) return null;
+    for (const value of literals) {
+      if (!isRenderableLiteral(value)) return null;
+      values.push(typeof value === "string" ? `"${value}"` : String(value));
+    }
+  }
+  if (values.length === 0) return null;
+  return `set "${discriminator}" to one of: ${values.join(", ")}`;
+}
+
+function isRenderableLiteral(
+  value: unknown,
+): value is string | number | boolean {
+  return (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
+}
+
+/**
+ * For an `unrecognized_keys` issue on a strict object, list the keys the object
+ * DOES accept and suggest the closest match per rejected key, or null when the
+ * issue is unrelated or the object schema cannot be introspected (e.g. the bad
+ * key sits inside a discriminated-union variant {@link navigateSchema} declines
+ * to traverse). The issue carries every rejected key in one `keys` array.
+ */
+function enumerateUnknownKeys(
+  issue: z.core.$ZodIssue,
+  root: ZodType,
+): string | null {
+  if (issue.code !== "unrecognized_keys") return null;
+  const badKeys = (issue as { keys?: unknown }).keys;
+  if (!Array.isArray(badKeys) || badKeys.length === 0) return null;
+
+  const container = navigateSchema(root, issue.path ?? []);
+  const shape = container ? defOf(container)?.shape : undefined;
+  if (!shape) return null;
+  const validKeys = Object.keys(shape);
+  if (validKeys.length === 0) return null;
+
+  const rendered = badKeys.map((key) => {
+    const name = String(key);
+    const suggestion = suggestClosestKey(name, validKeys);
+    return suggestion
+      ? `"${name}" (did you mean "${suggestion}"?)`
+      : `"${name}"`;
+  });
+  const noun = rendered.length === 1 ? "key" : "keys";
+  const allowed = validKeys.map((key) => `"${key}"`).join(", ");
+  return `unrecognized ${noun} ${rendered.join(", ")} — valid keys are ${allowed}`;
+}
+
+/**
+ * Closest accepted key for a rejected one, or null when nothing is close.
+ * Substring containment is checked first so a truncated/extended name like
+ * `timeout` → `timeoutSeconds` matches (their edit distance is large); a small
+ * edit distance then catches ordinary typos. Edit-distance matching is gated on
+ * a minimum length: on very short keys (`cwd`, `env`) a one-character distance
+ * is mostly coincidence (`cmd` is as near `cwd` as `command`), so we skip it and
+ * let the always-shown valid-keys list guide instead of a misleading guess.
+ */
+function suggestClosestKey(badKey: string, validKeys: string[]): string | null {
+  const lower = badKey.toLowerCase();
+  let best: { key: string; score: number } | null = null;
+  for (const key of validKeys) {
+    const candidate = key.toLowerCase();
+    let score: number | null = null;
+    if (candidate.includes(lower) || lower.includes(candidate)) {
+      score = Math.abs(candidate.length - lower.length);
+    } else if (Math.min(lower.length, candidate.length) >= 4) {
+      const distance = levenshtein(lower, candidate);
+      if (distance <= 2) score = 10 + distance;
+    }
+    if (score !== null && (!best || score < best.score)) {
+      best = { key, score };
+    }
+  }
+  return best?.key ?? null;
+}
+
+function levenshtein(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const curr = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[b.length];
 }
 
 function formatIssuePath(path: PropertyKey[] | undefined): string {

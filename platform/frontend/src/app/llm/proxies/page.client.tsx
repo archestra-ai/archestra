@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -12,13 +12,16 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   ActiveFilterBadges,
+  AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
+import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -32,11 +35,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
-import { useDeleteProfile, useProfilesPaginated } from "@/lib/agent.query";
+import {
+  useDeleteProfile,
+  useProfile,
+  useProfilesPaginated,
+  useRestoreProfile,
+} from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useTeams } from "@/lib/teams/team.query";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { LlmProxyActions } from "./llm-proxy-actions";
 
 type LlmProxiesInitialData = {
@@ -74,7 +83,7 @@ function SortIcon({
     return downArrow;
   }
   return (
-    <div className="text-muted-foreground/50 flex flex-col items-center">
+    <div className="text-muted-foreground flex flex-col items-center">
       {upArrow}
       <span className="mt-[-4px]">{downArrow}</span>
     </div>
@@ -113,9 +122,19 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const authorIdsFromUrl = searchParams.get("authorIds");
   const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
+  const statusFromUrl = searchParams.get("status") as
+    | "active"
+    | "deleted"
+    | null;
+  const isDeletedView = statusFromUrl === "deleted";
 
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
+  const { data: canDeleteAgents } = useHasPermissions({ agent: ["delete"] });
+  const proxyAgentTypes: Array<"llm_proxy" | "profile"> =
+    isDeletedView && !canDeleteAgents
+      ? ["llm_proxy"]
+      : ["llm_proxy", "profile"];
 
   const { data: agentsResponse, isPending } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
@@ -124,7 +143,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     sortBy,
     sortDirection,
     name: nameFilter || undefined,
-    agentTypes: ["llm_proxy", "profile"],
+    agentTypes: proxyAgentTypes,
     scope: scopeFromUrl || undefined,
     teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
     authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
@@ -138,11 +157,11 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         ? true
         : undefined,
     labels: labelsFromUrl || undefined,
+    status: statusFromUrl || undefined,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
-  const { data: userTeams } = useTeams({
-    initialData: initialData?.teams,
+  const { data: userTeams } = useMyTeams({
     enabled: !!canReadTeams,
   });
 
@@ -167,6 +186,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const router = useRouter();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [postCreateProxy, setPostCreateProxy] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const navigateToConnection = useCallback(
     (agentId: string) => {
       router.push(
@@ -175,8 +198,15 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     },
     [router],
   );
-  const [editingProxy, setEditingProxy] = useState<ProxyData | null>(null);
+  const editId = searchParams.get("edit");
+  const { data: editFromUrl } = useProfile(editId ?? undefined);
+  const editDialog = useDialogUrlParam<ProxyData>({
+    paramName: "edit",
+    entityFromUrl: editFromUrl ?? null,
+  });
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
+  const [cloningProxy, setCloningProxy] = useState<ProxyData | null>(null);
+  const restoreProxy = useRestoreProfile();
 
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
@@ -247,7 +277,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         return (
           <AgentNameCell
             name={agent.name}
-            scope={agent.scope}
             description={agent.description}
             extraBadges={
               agent.agentType === "profile" ? (
@@ -274,24 +303,21 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         );
       },
     },
-    ...(isAdmin
-      ? [
-          {
-            id: "team",
-            header: "Accessible to",
-            enableSorting: false,
-            cell: ({ row }: { row: { original: ProxyData } }) => (
-              <ResourceVisibilityBadge
-                scope={row.original.scope}
-                teams={row.original.teams}
-                authorId={row.original.authorId}
-                authorName={row.original.authorName}
-                currentUserId={currentUserId}
-              />
-            ),
-          } satisfies ColumnDef<ProxyData>,
-        ]
-      : []),
+    {
+      id: "team",
+      header: "Accessible to",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={row.original.teams}
+          authorId={row.original.authorId}
+          authorName={row.original.authorName}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
+      ),
+    },
     {
       id: "actions",
       header: "Actions",
@@ -316,10 +342,17 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             agent={agent}
             canModify={canModify}
             onConnect={(a) => navigateToConnection(a.id)}
-            onEdit={(agentData) => {
-              setEditingProxy(agentData);
-            }}
+            onEdit={editDialog.open}
             onDelete={setDeletingProxyId}
+            onRestore={(agentId) => {
+              restoreProxy.mutate(agentId, {
+                onSuccess: (data) => {
+                  if (!data) return;
+                  toast.success("LLM Proxy restored successfully");
+                },
+              });
+            }}
+            onClone={setCloningProxy}
           />
         );
       },
@@ -371,7 +404,13 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter ownerLabelPlural="LLM proxies" />
+                <AgentScopeFilter
+                  ownerLabelPlural="LLM proxies"
+                  adminPermission={{ llmProxy: ["admin"] }}
+                />
+                <AgentDeletedStatusFilter
+                  deletePermission={{ llmProxy: ["delete"] }}
+                />
               </div>
               {!canReadTeams && (
                 <PermissionRequirementHint
@@ -379,7 +418,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                   permissions={[{ resource: "team", action: "read" }]}
                 />
               )}
-              <ActiveFilterBadges />
+              <ActiveFilterBadges adminPermission={{ llmProxy: ["admin"] }} />
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>
@@ -402,7 +441,8 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                     teamIdsFromUrl ||
                     authorIdsFromUrl ||
                     excludeAuthorIdsFromUrl ||
-                    labelsFromUrl,
+                    labelsFromUrl ||
+                    isDeletedView,
                 )}
                 onClearFilters={() =>
                   updateQueryParams({
@@ -412,10 +452,20 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                     authorIds: null,
                     excludeAuthorIds: null,
                     labels: null,
+                    status: null,
                     page: "1",
                   })
                 }
-                emptyMessage="No LLM proxies found"
+                emptyMessage={
+                  isDeletedView
+                    ? "No deleted LLM proxies found"
+                    : "No LLM proxies found"
+                }
+                filteredEmptyMessage={
+                  isDeletedView
+                    ? "No deleted LLM proxies found."
+                    : "No LLM proxies match your filters. Try adjusting your search."
+                }
               />
             </div>
 
@@ -424,16 +474,25 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               onOpenChange={setIsCreateDialogOpen}
               agentType="llm_proxy"
               defaultIconType="llm_proxy"
-              onCreated={() => {
+              onCreated={(created) => {
                 setIsCreateDialogOpen(false);
+                setPostCreateProxy(created);
+              }}
+            />
+
+            <PostCreateConnectDialog
+              created={postCreateProxy}
+              agentType="llm_proxy"
+              onOpenChange={(open) => {
+                if (!open) setPostCreateProxy(null);
               }}
             />
 
             <AgentDialog
-              open={!!editingProxy}
-              onOpenChange={(open) => !open && setEditingProxy(null)}
-              agent={editingProxy}
-              agentType={editingProxy?.agentType || "llm_proxy"}
+              open={!!editDialog.entity}
+              onOpenChange={(open) => !open && editDialog.close()}
+              agent={editDialog.entity}
+              agentType={editDialog.entity?.agentType || "llm_proxy"}
               defaultIconType="llm_proxy"
             />
 
@@ -444,6 +503,17 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 onOpenChange={(open) => !open && setDeletingProxyId(null)}
               />
             )}
+
+            <CloneAgentDialog
+              agent={cloningProxy}
+              onOpenChange={(open) => {
+                if (!open) setCloningProxy(null);
+              }}
+              onCloned={(cloned) => {
+                // Open edit dialog for the clone so user can rename immediately
+                editDialog.open(cloned as ProxyData);
+              }}
+            />
           </div>
         </div>
       </PageLayout>

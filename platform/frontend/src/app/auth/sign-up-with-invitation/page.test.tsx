@@ -1,13 +1,15 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { authClient } from "@/lib/clients/auth/auth-client";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import SignUpWithInvitationPage from "./page";
 
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
-  useSearchParams: vi.fn(),
-}));
+vi.mock("next/navigation");
+
+vi.mock("@/lib/clients/auth/auth-client");
 
 vi.mock("@/lib/auth/invitation.query", () => ({
   useInvitationCheck: vi.fn(() => ({
@@ -21,9 +23,7 @@ vi.mock("@/lib/auth/invitation.query", () => ({
   })),
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/components/app-logo", () => ({
   AppLogo: () => <div data-testid="app-logo">App Logo</div>,
@@ -43,60 +43,62 @@ vi.mock("@/app/_parts/error-boundary", () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-vi.mock("@daveyplate/better-auth-ui", () => ({
-  AuthView: () => <DelayedAuthView />,
-}));
+const routerReplace = vi.fn();
 
-function DelayedAuthView() {
-  const [showInputs, setShowInputs] = useState(false);
+function renderPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => setShowInputs(true), 25);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  if (!showInputs) {
-    return <div data-testid="auth-view-loading">AuthView loading</div>;
-  }
-
-  return (
-    <form>
-      <input name="name" />
-      <input name="email" type="email" />
-      <input name="password" type="password" />
-    </form>
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <SignUpWithInvitationPage />
+    </QueryClientProvider>,
   );
 }
 
 describe("SignUpWithInvitationPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
+      replace: routerReplace,
     } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams(
         "invitationId=inv-123&email=yoo%40example.com&name=Yoo",
       ) as unknown as ReturnType<typeof useSearchParams>,
     );
+    vi.mocked(authClient.signUp.email).mockResolvedValue({
+      data: {},
+      error: null,
+    } as Awaited<ReturnType<typeof authClient.signUp.email>>);
   });
 
-  it("prefills invitation email and name even when auth inputs mount late", async () => {
-    render(<SignUpWithInvitationPage />);
+  it("submits invitation signup and redirects to a clean chat URL", async () => {
+    const user = userEvent.setup();
+    renderPage();
 
     expect(screen.getByText("Email: yoo@example.com")).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue("Yoo");
+    expect(screen.getByLabelText("Email")).toHaveValue("yoo@example.com");
+
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: "Create an account" }));
 
     await waitFor(() => {
-      expect(document.querySelector('input[name="email"]')).toBeInTheDocument();
+      expect(authClient.signUp.email).toHaveBeenCalledWith({
+        name: "Yoo",
+        email: "yoo@example.com",
+        password: "password123",
+        callbackURL: "/chat",
+        invitationId: "inv-123",
+      });
     });
-
-    const emailInput = document.querySelector<HTMLInputElement>(
-      'input[name="email"]',
-    );
-    const nameInput =
-      document.querySelector<HTMLInputElement>('input[name="name"]');
-
-    expect(emailInput?.value).toBe("yoo@example.com");
-    expect(nameInput?.value).toBe("Yoo");
+    expect(routerReplace).toHaveBeenCalledWith("/chat");
   });
 });

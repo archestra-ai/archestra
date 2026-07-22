@@ -4,10 +4,22 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { fetchBedrockModels } from "./bedrock";
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+// The shared test setup restores the real fetch after every test, so
+// re-apply the mock before each one.
+vi.stubGlobal("fetch", mockFetch);
+beforeEach(() => {
+  vi.stubGlobal("fetch", mockFetch);
+});
 
 describe("fetchBedrockModels", () => {
   const originalBaseUrl = config.llm.bedrock.baseUrl;
+
+  // The fetcher now surfaces embedding models too (tagged with a dimension) and
+  // statically injects Titan (which has no inference profile). These chat-model
+  // tests filter those out to assert only the chat models a profile listing
+  // yields; embedding discovery is covered separately below.
+  const chatOnly = (models: Awaited<ReturnType<typeof fetchBedrockModels>>) =>
+    models.filter((m) => m.capabilities?.embeddingDimensions == null);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -43,11 +55,136 @@ describe("fetchBedrockModels", () => {
 
     const models = await fetchBedrockModels("test-api-key");
 
-    expect(models).toEqual([
+    expect(chatOnly(models)).toEqual([
       {
         id: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
         displayName: "Claude 3.5 Sonnet v2",
         provider: "bedrock",
+      },
+    ]);
+  });
+
+  test("excludes non-chat models (image, rerank, unsupported embeddings) from the chat picker", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId: "global.anthropic.claude-opus-4-8",
+              inferenceProfileName: "Claude Opus 4.8",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "global.cohere.embed-v4:0",
+              inferenceProfileName: "Cohere Embed v4",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.twelvelabs.marengo-embed-3-0-v1:0",
+              inferenceProfileName: "Marengo Embed 3.0",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.stability.stable-image-inpaint-v1:0",
+              inferenceProfileName: "Stable Image Inpaint",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.amazon.nova-canvas-v1:0",
+              inferenceProfileName: "Nova Canvas",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.amazon.nova-reel-v1:1",
+              inferenceProfileName: "Nova Reel",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "cohere.rerank-v3-5:0",
+              inferenceProfileName: "Cohere Rerank 3.5",
+              status: "ACTIVE",
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    // Only the text-generation model survives the chat picker; image/video
+    // generators, rerank, and not-yet-supported embeddings (cohere.embed,
+    // twelvelabs) are dropped so a member can't pick one and break chat. Chat
+    // families that merely resemble excluded ones (e.g. nova-lite) must NOT be
+    // filtered.
+    expect(chatOnly(models).map((model) => model.id)).toEqual([
+      "global.anthropic.claude-opus-4-8",
+    ]);
+  });
+
+  test("keeps text-generation models whose names resemble non-chat families", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId: "us.amazon.nova-lite-v1:0",
+              inferenceProfileName: "Nova Lite",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.amazon.titan-text-express-v1",
+              inferenceProfileName: "Titan Text Express",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.cohere.command-r-plus-v1:0",
+              inferenceProfileName: "Command R+",
+              status: "ACTIVE",
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    expect(chatOnly(models).map((model) => model.id)).toEqual([
+      "us.amazon.nova-lite-v1:0",
+      "us.amazon.titan-text-express-v1",
+      "us.cohere.command-r-plus-v1:0",
+    ]);
+  });
+
+  test("captures the foundation-model id from the profile's model ARN for pricing", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId:
+                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+              inferenceProfileName: "Claude 3.5 Sonnet v2",
+              status: "ACTIVE",
+              models: [
+                {
+                  modelArn:
+                    "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0",
+                },
+              ],
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    expect(chatOnly(models)).toEqual([
+      {
+        id: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        displayName: "Claude 3.5 Sonnet v2",
+        provider: "bedrock",
+        underlyingModelName: "anthropic.claude-3-5-sonnet-20241022-v2:0",
       },
     ]);
   });
@@ -100,7 +237,7 @@ describe("fetchBedrockModels", () => {
 
     const models = await fetchBedrockModels("test-api-key");
 
-    expect(models.map((model) => model.id)).toEqual([
+    expect(chatOnly(models).map((model) => model.id)).toEqual([
       "us.anthropic.claude-3-sonnet",
       "us.anthropic.claude-3-haiku",
     ]);
@@ -172,5 +309,59 @@ describe("fetchBedrockModels", () => {
     await expect(fetchBedrockModels("bad-key")).rejects.toThrow(
       "Failed to fetch Bedrock inference profiles: 403",
     );
+  });
+
+  test("injects the Titan embedding models with their dimensions", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId: "global.anthropic.claude-opus-4-8",
+              inferenceProfileName: "Claude Opus 4.8",
+              status: "ACTIVE",
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    // Titan has no inference profile, so it is statically injected and tagged as
+    // an embedding model (a dimension marks it as embedding + excludes it from chat).
+    const titanV2 = models.find((m) => m.id === "amazon.titan-embed-text-v2:0");
+    expect(titanV2?.capabilities?.embeddingDimensions).toBe(1024);
+    const titanV1 = models.find((m) => m.id === "amazon.titan-embed-text-v1");
+    expect(titanV1?.capabilities?.embeddingDimensions).toBe(1536);
+  });
+
+  test("does not inject Titan when amazon is not in the allowed providers", async () => {
+    const originalAllowedProviders = config.llm.bedrock.allowedProviders;
+    config.llm.bedrock.allowedProviders = ["anthropic"];
+
+    try {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            inferenceProfileSummaries: [
+              {
+                inferenceProfileId: "global.anthropic.claude-opus-4-8",
+                inferenceProfileName: "Claude Opus 4.8",
+                status: "ACTIVE",
+              },
+            ],
+          }),
+      });
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      expect(models.some((m) => m.id.startsWith("amazon.titan-embed"))).toBe(
+        false,
+      );
+    } finally {
+      config.llm.bedrock.allowedProviders = originalAllowedProviders;
+    }
   });
 });

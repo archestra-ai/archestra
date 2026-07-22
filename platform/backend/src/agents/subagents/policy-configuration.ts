@@ -2,7 +2,7 @@ import {
   BUILT_IN_AGENT_IDS,
   buildPolicyConfigSystemPromptContext,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { generateText, Output } from "ai";
 import { createLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
@@ -203,7 +203,7 @@ export class PolicyConfigurationService {
 
   /**
    * Configure a single tool with timeout and loading state management.
-   * This is the unified method used by both manual button clicks and automatic tool assignment.
+   * This is the unified method used by manual button clicks and bulk flows.
    * Pass `resolvedLlm` to skip redundant LLM resolution in bulk flows.
    */
   async configurePoliciesForToolWithTimeout(params: {
@@ -224,12 +224,13 @@ export class PolicyConfigurationService {
       await ToolModel.setAutoConfiguringState(toolId);
 
       // Create a 20-second timeout promise
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<{
         success: false;
         timedOut: true;
         error: string;
       }>((resolve) => {
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           resolve({
             success: false,
             timedOut: true,
@@ -245,7 +246,7 @@ export class PolicyConfigurationService {
           timedOut: false,
         })),
         timeoutPromise,
-      ]);
+      ]).finally(() => clearTimeout(timeoutId));
 
       // Handle the result and clear loading timestamp
       if (result.timedOut) {

@@ -1,3 +1,4 @@
+import type { InteractionSource, SupportedProvider } from "@archestra/shared";
 import {
   type Context,
   context,
@@ -6,11 +7,14 @@ import {
   SpanStatusCode,
   trace,
 } from "@opentelemetry/api";
-import type { InteractionSource, SupportedProvider } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { SESSION_ID_KEY } from "@/observability/request-context";
-import type { Agent, GenAiOperationName, InteractionAuthMethod } from "@/types";
+import type {
+  GatewayAgent,
+  GenAiOperationName,
+  InteractionAuthMethod,
+} from "@/types";
 import {
   ATTR_ARCHESTRA_APP_ID,
   ATTR_ARCHESTRA_APP_NAME,
@@ -27,10 +31,12 @@ import {
   ATTR_SERVER_ADDRESS,
   EVENT_GENAI_CONTENT_PROMPT,
   RouteCategory,
+  type SpanTeamInfo,
   type SpanUserInfo,
   setAgentAttributes,
   setSessionId,
   setSpanError,
+  setTeamAttributes,
   setUserAttributes,
   truncateContent,
 } from "./attributes";
@@ -68,7 +74,9 @@ export async function startActiveLlmSpan<T>(params: {
   provider: SupportedProvider;
   model: string;
   stream: boolean;
-  agent?: Agent;
+  agent?: GatewayAgent;
+  teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
   sessionId?: string | null;
   executionId?: string;
   externalAgentId?: string;
@@ -118,6 +126,8 @@ export async function startActiveLlmSpan<T>(params: {
       setAgentAttributes(span, params.agent);
     }
 
+    setTeamAttributes(span, params.teams, "agent");
+    setTeamAttributes(span, params.userTeams, "user");
     setSessionId(span, params.sessionId);
 
     if (params.executionId) {

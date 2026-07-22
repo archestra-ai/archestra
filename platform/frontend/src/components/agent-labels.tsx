@@ -1,6 +1,6 @@
 "use client";
 
-import { LABEL_RESERVED_CHARS } from "@shared";
+import { LABEL_RESERVED_CHARS } from "@archestra/shared";
 import { Plus, Tags, X } from "lucide-react";
 import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -191,6 +191,7 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
                   type="button"
                   onClick={() => handleRemoveLabel(label.key)}
                   className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
+                  aria-label="Remove label"
                 >
                   <X className="h-3 w-3" />
                 </button>

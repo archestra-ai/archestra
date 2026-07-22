@@ -1,6 +1,6 @@
 "use client";
 
-import { GITHUB_REPO_URL } from "@shared";
+import { GITHUB_REPO_URL } from "@archestra/shared";
 import {
   AlertCircle,
   CheckCircle2,

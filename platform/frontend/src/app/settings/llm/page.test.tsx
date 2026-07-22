@@ -1,9 +1,8 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@shared";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockOrganization: Record<string, unknown> | null = null;
@@ -15,28 +14,47 @@ let mockTeams: Array<{
 }> = [];
 const mockUpdateLlmSettingsMutateAsync = vi.fn();
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({
-    data: mockOrganization,
+vi.mock("@/lib/organization.query");
+vi.mock("@/lib/teams/team.query");
+vi.mock("@/lib/auth/auth.query");
+
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+import {
+  useOrganization,
+  useUpdateLlmSettings,
+} from "@/lib/organization.query";
+import { useTeams } from "@/lib/teams/team.query";
+
+beforeEach(() => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
     isPending: false,
-  }),
-  useUpdateLlmSettings: () => ({
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useMissingPermissions).mockReturnValue(
+    [] as unknown as ReturnType<typeof useMissingPermissions>,
+  );
+  vi.mocked(useOrganization).mockImplementation(
+    () =>
+      ({
+        data: mockOrganization,
+        isPending: false,
+      }) as ReturnType<typeof useOrganization>,
+  );
+  vi.mocked(useUpdateLlmSettings).mockReturnValue({
     mutateAsync: mockUpdateLlmSettingsMutateAsync,
     isPending: false,
-  }),
-}));
-
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: () => ({
-    data: mockTeams,
-    isPending: false,
-  }),
-}));
-
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true, isPending: false }),
-  useMissingPermissions: () => [],
-}));
+  } as unknown as ReturnType<typeof useUpdateLlmSettings>);
+  vi.mocked(useTeams).mockImplementation(
+    () =>
+      ({
+        data: mockTeams,
+        isPending: false,
+      }) as ReturnType<typeof useTeams>,
+  );
+});
 
 import LlmSettingsPage from "./page";
 
@@ -78,27 +96,8 @@ describe("LlmSettingsPage", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("lets admins unset the default user limit", async () => {
-    mockOrganization = {
-      compressionScope: "organization",
-      convertToolResultsToToon: true,
-      defaultUserLimitValue: 500,
-      defaultUserLimitModel: null,
-      defaultUserLimitCleanupInterval: "1w",
-    };
-    const user = userEvent.setup();
-
-    renderPage();
-
-    await user.click(await screen.findByRole("button", { name: "Unset" }));
-
-    expect(screen.getByPlaceholderText("Disabled")).toHaveValue("");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(mockUpdateLlmSettingsMutateAsync).toHaveBeenCalledWith({
-      defaultUserLimitValue: null,
-      defaultUserLimitModel: null,
-      defaultUserLimitCleanupInterval: null,
-    });
-  });
+  // The org-wide default user limit is no longer edited from the LLM settings
+  // save bar (the old "Unset" button). It now lives in the unified
+  // "Default user limits" list (a NULL-environment row with its own delete
+  // action), whose CRUD is covered by the default-user-limit route tests.
 });

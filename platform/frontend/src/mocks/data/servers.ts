@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type InstalledServer = archestraApiTypes.GetMcpServersResponses["200"][number];
 
@@ -9,6 +9,7 @@ export function makeInstalledServer(
   return {
     id: "test-server",
     name: "test-server",
+    deploymentName: null,
     catalogId: "test-catalog",
     serverType: "local",
     secretId: null,
@@ -17,10 +18,13 @@ export function makeInstalledServer(
     teamId: null,
     scope: "personal",
     reinstallRequired: false,
+    reinstallReason: "restart",
     localInstallationStatus: "success",
     localInstallationError: null,
-    oauthRefreshError: "no_refresh_token",
-    oauthRefreshFailedAt: null,
+    oauthRefreshError: "refresh_failed",
+    oauthRefreshErrorMessage: "invalid_grant",
+    oauthRefreshErrorDescription: "The refresh token is invalid or has expired",
+    oauthRefreshFailedAt: "2026-01-01T00:00:00.000Z",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...overrides,

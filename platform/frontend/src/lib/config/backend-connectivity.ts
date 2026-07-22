@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const { getHealth } = archestraApiSdk;
@@ -83,7 +83,7 @@ export function calculateEstimatedTotalAttempts(
 async function defaultCheckHealth(): Promise<boolean> {
   try {
     const response = await getHealth();
-    return response.response.ok;
+    return response.response?.ok ?? false;
   } catch {
     return false;
   }

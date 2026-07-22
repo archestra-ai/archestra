@@ -16,15 +16,20 @@ import {
   TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_KNOWLEDGE_BASE_SHORT_NAME,
   TOOL_UPDATE_KNOWLEDGE_BASE_SHORT_NAME,
   TOOL_UPDATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { z } from "zod";
 import {
   buildUserAccessControlList,
+  checkAutoSyncPermissionSyncSupported,
+  checkCanSetAutoSyncPermissionsVisibility,
+  checkHasAutoSyncConnectorPermission,
   didKnowledgeSourceAclInputsChange,
+  findAccessTokensForUserCached,
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
+import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -34,16 +39,20 @@ import {
   KnowledgeBaseModel,
   UserModel,
 } from "@/models";
+import * as metrics from "@/observability/metrics";
 import {
   type AclEntry,
+  ConnectorTypeSchema,
   InsertKnowledgeBaseConnectorSchema,
   InsertKnowledgeBaseSchema,
+  type KnowledgeBaseConnector,
   KnowledgeSourceVisibilitySchema,
   UpdateKnowledgeBaseConnectorSchema,
   UpdateKnowledgeBaseSchema,
   UuidIdSchema,
 } from "@/types";
 import { archestraMcpBranding } from "./branding";
+import { dynamicAccessContext } from "./dynamic-tools";
 import {
   catchError,
   defineArchestraTool,
@@ -51,11 +60,18 @@ import {
   EmptyToolArgsSchema,
   errorResult,
   structuredSuccessResult,
+  structuredToolErrorResult,
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
+
+// Fallback for the userId-less (system) caller, where the permission gate
+// cannot even be evaluated — managing auto-sync visibility always requires an
+// identified user holding the knowledgeSourceAutoSync permission.
+const AUTO_SYNC_REQUIRES_PERMISSION_ERROR =
+  "Auto-sync-permissions connectors require an authenticated user with the auto-sync connectors permission";
 
 const KnowledgeBaseCreateToolArgsSchema = z
   .object({
@@ -460,7 +476,6 @@ const registry = defineArchestraTools([
   }),
 ] as const);
 
-export const toolShortNames = registry.toolShortNames;
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
@@ -487,18 +502,11 @@ async function handleQueryKnowledgeSources(params: {
       return errorResult("Organization context not available.");
     }
 
-    const agent = await AgentModel.findById(contextAgent.id);
-
-    const hasKbs = agent?.knowledgeBaseIds?.length;
-    const connectorAssignments =
-      await AgentConnectorAssignmentModel.findByAgent(contextAgent.id);
-    const directConnectorIds = connectorAssignments.map((a) => a.connectorId);
-
-    if (!hasKbs && directConnectorIds.length === 0) {
-      return errorResult(
-        "No knowledge base or connector assigned to this agent. Assign a knowledge base or connector in agent settings to enable knowledge search.",
-      );
-    }
+    // Environment isolation: the agent may only query knowledge connectors in its
+    // own environment (strict equality, null = Default).
+    const agentEnvironmentId = await AgentModel.findEnvironmentId(
+      contextAgent.id,
+    );
 
     const access =
       context.userId && organizationId
@@ -508,67 +516,141 @@ async function handleQueryKnowledgeSources(params: {
           })
         : null;
 
-    const validKbs = hasKbs
-      ? await KnowledgeBaseModel.findByIds(agent.knowledgeBaseIds)
-      : [];
-    const visibleKbs = access
-      ? knowledgeSourceAccessControlService.filterKnowledgeBases(
-          access,
-          validKbs,
-        )
-      : validKbs;
+    // Dynamic tool access: when the agent's "access all tools" setting is on,
+    // the query spans every connector visible to the user — a superset of the
+    // visible agent-assigned set — so the agent can search whatever the user
+    // could search themselves. Otherwise the query keeps the curated agent
+    // scoping (assigned knowledge bases / connectors, visibility-filtered).
+    const dynamicCtx = await dynamicAccessContext({
+      agentId: contextAgent.id,
+      userId: context.userId,
+      organizationId,
+    });
 
-    const directConnectors = directConnectorIds.length
-      ? await KnowledgeBaseConnectorModel.findByIds(directConnectorIds)
-      : [];
-    const visibleDirectConnectors = access
-      ? knowledgeSourceAccessControlService.filterConnectors(
-          access,
-          directConnectors,
-        )
-      : directConnectors;
+    let connectorIds: string[];
+    if (dynamicCtx && access) {
+      const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
+        organizationId,
+        canReadAll: access.canReadAll,
+        viewerTeamIds: access.teamIds,
+        // Query scope: auto-sync-permissions connectors stay searchable for
+        // everyone — their per-chunk ACLs (userAcl below) do the enforcement.
+        visibilityScope: "query",
+        environmentId: agentEnvironmentId,
+      });
+      connectorIds = connectors.map((connector) => connector.id);
 
-    const connectorIdsFromVisibleKbs = visibleKbs.length
-      ? (
-          await Promise.all(
-            visibleKbs.map((kb) =>
-              KnowledgeBaseConnectorModel.findByKnowledgeBaseId(kb.id, {
-                canReadAll: access?.canReadAll,
-                viewerTeamIds: access?.teamIds,
-              }),
-            ),
+      if (connectorIds.length === 0) {
+        return errorResult(
+          "No knowledge sources are accessible to the current user. Create a knowledge connector or ask an admin for access.",
+        );
+      }
+    } else {
+      const agent = await AgentModel.findById(contextAgent.id);
+
+      const hasKbs = agent?.knowledgeBaseIds?.length;
+      const connectorAssignments =
+        await AgentConnectorAssignmentModel.findByAgent(contextAgent.id);
+      const directConnectorIds = connectorAssignments.map((a) => a.connectorId);
+
+      if (!hasKbs && directConnectorIds.length === 0) {
+        return errorResult(
+          "No knowledge base or connector assigned to this agent. Assign a knowledge base or connector in agent settings to enable knowledge search.",
+        );
+      }
+
+      const validKbs = hasKbs
+        ? await KnowledgeBaseModel.findByIds(agent.knowledgeBaseIds)
+        : [];
+      const visibleKbs = access
+        ? knowledgeSourceAccessControlService.filterKnowledgeBases(
+            access,
+            validKbs,
           )
-        )
-          .flat()
-          .map((connector) => connector.id)
-      : [];
-    const connectorIds = [
-      ...new Set([
-        ...connectorIdsFromVisibleKbs,
-        ...visibleDirectConnectors.map((connector) => connector.id),
-      ]),
-    ];
+        : validKbs;
 
-    if (visibleKbs.length === 0 && visibleDirectConnectors.length === 0) {
-      return errorResult(
-        "No visible knowledge sources found for the current user.",
-      );
-    }
+      const directConnectors = directConnectorIds.length
+        ? await KnowledgeBaseConnectorModel.findByIds(directConnectorIds)
+        : [];
+      const visibleDirectConnectors = (
+        access
+          ? knowledgeSourceAccessControlService.filterQueryableConnectors(
+              access,
+              directConnectors,
+            )
+          : directConnectors
+      )
+        // Environment isolation: drop directly-assigned connectors from other envs.
+        .filter((connector) => connector.environmentId === agentEnvironmentId);
 
-    if (connectorIds.length === 0) {
-      return errorResult(
-        "No connectors found for the assigned knowledge bases or agent. Add connectors to enable knowledge search.",
-      );
+      const connectorIdsFromVisibleKbs = visibleKbs.length
+        ? (
+            await Promise.all(
+              visibleKbs.map((kb) =>
+                KnowledgeBaseConnectorModel.findByKnowledgeBaseId(kb.id, {
+                  canReadAll: access?.canReadAll,
+                  viewerTeamIds: access?.teamIds,
+                  visibilityScope: "query",
+                  environmentId: agentEnvironmentId,
+                }),
+              ),
+            )
+          )
+            .flat()
+            .map((connector) => connector.id)
+        : [];
+      connectorIds = [
+        ...new Set([
+          ...connectorIdsFromVisibleKbs,
+          ...visibleDirectConnectors.map((connector) => connector.id),
+        ]),
+      ];
+
+      if (visibleKbs.length === 0 && visibleDirectConnectors.length === 0) {
+        return errorResult(
+          "No visible knowledge sources found for the current user.",
+        );
+      }
+
+      if (connectorIds.length === 0) {
+        return errorResult(
+          "No connectors found for the assigned knowledge bases or agent. Add connectors to enable knowledge search.",
+        );
+      }
     }
 
     let userAcl: AclEntry[] = ["org:*"];
-    if (context.userId) {
+    // Admins bypass the ACL filter entirely — skip the resolution work.
+    if (context.userId && !access?.canReadAll) {
       const user = await UserModel.getById(context.userId);
       if (user?.email) {
+        // Resolve the user's upstream access tokens for any in-scope
+        // auto-sync-permissions connector (local SQL, no upstream call):
+        // `group:` tokens from the membership snapshot plus `container:`
+        // tokens for containers whose audience the user matches. Rows only
+        // exist for auto-sync connectors, so this is a no-op for the
+        // org-wide / team-scoped case. Cached per (user, connector set);
+        // any finished permission sync invalidates.
+        const accessTokens = await findAccessTokensForUserCached({
+          memberEmail: user.email,
+          userId: context.userId,
+          connectorIds,
+        });
         userAcl = buildUserAccessControlList({
           userEmail: user.email,
           teamIds: access?.teamIds ?? [],
+          groupTokens: accessTokens,
         });
+      } else {
+        // The caller has no resolvable email, so their identity can't be joined
+        // to any `user_email:` / `group:` grant — they see only `org:*` chunks
+        // (fail-closed under-grant, never over-grant). Surface the coverage gap
+        // so admins can see it rather than silently dropping the caller.
+        logger.warn(
+          { userId: context.userId },
+          "query_knowledge_sources caller has no resolvable email; returning org-wide chunks only (fail-closed)",
+        );
+        metrics.rag.reportKnowledgeQueryUnresolvedIdentity();
       }
     }
 
@@ -578,6 +660,9 @@ async function handleQueryKnowledgeSources(params: {
       queryText: args.query,
       userAcl,
       bypassAcl: access?.canReadAll ?? false,
+      // Defense-in-depth: even though connectorIds is already env-filtered above,
+      // the chunk search re-checks the connector environment.
+      environmentId: agentEnvironmentId,
       limit: 10,
     });
 
@@ -587,6 +672,15 @@ async function handleQueryKnowledgeSources(params: {
     };
     return structuredSuccessResult(output, JSON.stringify(output));
   } catch (error) {
+    // A diagnosable KB failure (unsupported/unreachable provider, dimension
+    // mismatch, unusable response, unresolvable config) maps to its own
+    // actionable message; only genuinely-unexpected faults fall through to the
+    // generic catch-all.
+    const kbMessage = toKnowledgeBaseUserMessage(error);
+    if (kbMessage) {
+      logger.error({ err: error }, "Error querying knowledge base");
+      return errorResult(kbMessage);
+    }
     return catchError(error, "querying knowledge base");
   }
 }
@@ -657,7 +751,7 @@ async function handleGetKnowledgeBase(params: {
 
     const kb = await KnowledgeBaseModel.findById(args.id);
     if (!kb || kb.organizationId !== context.organizationId) {
-      return errorResult(`Knowledge base not found: ${args.id}`);
+      return knowledgeBaseNotFound(args.id);
     }
     return structuredSuccessResult(
       { knowledgeBase: kb },
@@ -688,11 +782,11 @@ async function handleUpdateKnowledgeBase(params: {
 
     const existing = await KnowledgeBaseModel.findById(args.id);
     if (!existing || existing.organizationId !== context.organizationId) {
-      return errorResult(`Knowledge base not found: ${args.id}`);
+      return knowledgeBaseNotFound(args.id);
     }
     const kb = await KnowledgeBaseModel.update(args.id, updates);
     if (!kb) {
-      return errorResult(`Knowledge base not found: ${args.id}`);
+      return knowledgeBaseNotFound(args.id);
     }
     return structuredSuccessResult(
       { knowledgeBase: kb },
@@ -716,7 +810,7 @@ async function handleDeleteKnowledgeBase(params: {
 
     const existing = await KnowledgeBaseModel.findById(args.id);
     if (!existing || existing.organizationId !== context.organizationId) {
-      return errorResult(`Knowledge base not found: ${args.id}`);
+      return knowledgeBaseNotFound(args.id);
     }
     await KnowledgeBaseModel.delete(args.id);
     return successResult(`Knowledge base deleted: ${args.id}`);
@@ -743,6 +837,36 @@ async function handleCreateKnowledgeConnector(params: {
         "At least one team must be selected for team-scoped connectors",
       );
     }
+    if (visibility === "auto-sync-permissions") {
+      // connector_type is a free-form string arg; the gate needs a known type
+      const parsedConnectorType = ConnectorTypeSchema.safeParse(
+        args.connector_type,
+      );
+      if (!parsedConnectorType.success) {
+        return errorResult(`Unknown connector type: ${args.connector_type}`);
+      }
+      // Same gate as the REST create route: beta flag + enterprise license +
+      // connector-type support + knowledgeSourceAutoSync:create.
+      const violation = context.userId
+        ? await checkCanSetAutoSyncPermissionsVisibility({
+            userId: context.userId,
+            organizationId: context.organizationId,
+            connectorType: parsedConnectorType.data,
+            action: "create",
+          })
+        : null;
+      if (!context.userId || violation) {
+        return errorResult(
+          violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
+        );
+      }
+    }
+
+    // Environment isolation: a connector created through a gateway belongs to the
+    // gateway's environment, so the creator can actually use it afterwards.
+    const agentEnvironmentId = await AgentModel.findEnvironmentId(
+      context.agent.id,
+    );
 
     const connector = await KnowledgeBaseConnectorModel.create(
       InsertKnowledgeBaseConnectorSchema.parse({
@@ -753,6 +877,7 @@ async function handleCreateKnowledgeConnector(params: {
         description: args.description ?? null,
         visibility: args.visibility,
         teamIds: args.team_ids,
+        environmentId: agentEnvironmentId,
       }),
     );
     return structuredSuccessResult(
@@ -774,17 +899,22 @@ async function handleGetKnowledgeConnectors(params: {
       return errorResult("Organization context not available");
     }
 
-    const access = context.userId
-      ? await knowledgeSourceAccessControlService.buildAccessControlContext({
-          userId: context.userId,
-          organizationId: context.organizationId,
-        })
-      : null;
+    const [access, agentEnvironmentId] = await Promise.all([
+      context.userId
+        ? knowledgeSourceAccessControlService.buildAccessControlContext({
+            userId: context.userId,
+            organizationId: context.organizationId,
+          })
+        : null,
+      AgentModel.findEnvironmentId(context.agent.id),
+    ]);
 
+    // Environment isolation: a gateway only sees connectors in its own environment.
     const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
       organizationId: context.organizationId,
       canReadAll: access?.canReadAll,
       viewerTeamIds: access?.teamIds,
+      environmentId: agentEnvironmentId,
     });
     if (connectors.length === 0) {
       return structuredSuccessResult(
@@ -812,7 +942,7 @@ async function handleGetKnowledgeConnector(params: {
       return errorResult("Organization context not available");
     }
 
-    const [connector, access] = await Promise.all([
+    const [connector, access, agentEnvironmentId] = await Promise.all([
       KnowledgeBaseConnectorModel.findById(args.id),
       context.userId
         ? knowledgeSourceAccessControlService.buildAccessControlContext({
@@ -820,17 +950,20 @@ async function handleGetKnowledgeConnector(params: {
             organizationId: context.organizationId,
           })
         : null,
+      AgentModel.findEnvironmentId(context.agent.id),
     ]);
     if (
       !connector ||
       connector.organizationId !== context.organizationId ||
+      // Environment isolation: a connector in another environment is invisible.
+      connector.environmentId !== agentEnvironmentId ||
       (access &&
         !knowledgeSourceAccessControlService.canAccessConnector(
           access,
           connector,
         ))
     ) {
-      return errorResult(`Knowledge connector not found: ${args.id}`);
+      return knowledgeConnectorNotFound(args.id);
     }
     return structuredSuccessResult(
       { knowledgeConnector: connector },
@@ -866,7 +999,7 @@ async function handleUpdateKnowledgeConnector(params: {
 
     const updates =
       UpdateKnowledgeBaseConnectorSchema.partial().parse(rawUpdates);
-    const [existingConnector, access] = await Promise.all([
+    const [existingConnector, access, agentEnvironmentId] = await Promise.all([
       KnowledgeBaseConnectorModel.findById(args.id),
       context.userId
         ? knowledgeSourceAccessControlService.buildAccessControlContext({
@@ -874,17 +1007,20 @@ async function handleUpdateKnowledgeConnector(params: {
             organizationId: context.organizationId,
           })
         : null,
+      AgentModel.findEnvironmentId(context.agent.id),
     ]);
     if (
       !existingConnector ||
       existingConnector.organizationId !== context.organizationId ||
+      // Environment isolation: cannot mutate a connector in another environment.
+      existingConnector.environmentId !== agentEnvironmentId ||
       (access &&
         !knowledgeSourceAccessControlService.canAccessConnector(
           access,
           existingConnector,
         ))
     ) {
-      return errorResult(`Knowledge connector not found: ${args.id}`);
+      return knowledgeConnectorNotFound(args.id);
     }
     const nextVisibility = updates.visibility ?? existingConnector.visibility;
     const nextTeamIds = updates.teamIds ?? existingConnector.teamIds;
@@ -898,12 +1034,56 @@ async function handleUpdateKnowledgeConnector(params: {
         "At least one team must be selected for team-scoped connectors",
       );
     }
+    if (
+      existingConnector.visibility !== "auto-sync-permissions" &&
+      nextVisibility === "auto-sync-permissions"
+    ) {
+      // Same transition gate as the REST update route: beta flag + enterprise
+      // license + connector-type support + knowledgeSourceAutoSync:update.
+      const violation = context.userId
+        ? await checkCanSetAutoSyncPermissionsVisibility({
+            userId: context.userId,
+            organizationId: context.organizationId,
+            connectorType: existingConnector.connectorType,
+            action: "update",
+          })
+        : null;
+      if (!context.userId || violation) {
+        return errorResult(
+          violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
+        );
+      }
+    } else if (existingConnector.visibility === "auto-sync-permissions") {
+      // Mutating a connector that already carries the auto-sync visibility
+      // (or switching it away): mirrors the REST update route's dedicated
+      // permission check.
+      const violation = context.userId
+        ? await checkHasAutoSyncConnectorPermission({
+            userId: context.userId,
+            organizationId: context.organizationId,
+            action: "update",
+          })
+        : null;
+      if (!context.userId || violation) {
+        return errorResult(
+          violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
+        );
+      }
+      if (nextVisibility === "auto-sync-permissions") {
+        const unsupported = checkAutoSyncPermissionSyncSupported(
+          existingConnector.connectorType,
+        );
+        if (unsupported) {
+          return errorResult(unsupported.message);
+        }
+      }
+    }
     const connector = await KnowledgeBaseConnectorModel.update(
       args.id,
       updates,
     );
     if (!connector) {
-      return errorResult(`Knowledge connector not found: ${args.id}`);
+      return knowledgeConnectorNotFound(args.id);
     }
     if (
       didKnowledgeSourceAclInputsChange({
@@ -940,7 +1120,7 @@ async function handleDeleteKnowledgeConnector(params: {
       return errorResult("Organization context not available");
     }
 
-    const [existing, access] = await Promise.all([
+    const [existing, access, agentEnvironmentId] = await Promise.all([
       KnowledgeBaseConnectorModel.findById(args.id),
       context.userId
         ? knowledgeSourceAccessControlService.buildAccessControlContext({
@@ -948,17 +1128,35 @@ async function handleDeleteKnowledgeConnector(params: {
             organizationId: context.organizationId,
           })
         : null,
+      AgentModel.findEnvironmentId(context.agent.id),
     ]);
     if (
       !existing ||
       existing.organizationId !== context.organizationId ||
+      // Environment isolation: cannot delete a connector in another environment.
+      existing.environmentId !== agentEnvironmentId ||
       (access &&
         !knowledgeSourceAccessControlService.canAccessConnector(
           access,
           existing,
         ))
     ) {
-      return errorResult(`Knowledge connector not found: ${args.id}`);
+      return knowledgeConnectorNotFound(args.id);
+    }
+    if (existing.visibility === "auto-sync-permissions") {
+      // Mirrors the REST delete route's dedicated permission check.
+      const violation = context.userId
+        ? await checkHasAutoSyncConnectorPermission({
+            userId: context.userId,
+            organizationId: context.organizationId,
+            action: "delete",
+          })
+        : null;
+      if (!context.userId || violation) {
+        return errorResult(
+          violation?.message ?? AUTO_SYNC_REQUIRES_PERMISSION_ERROR,
+        );
+      }
     }
     await KnowledgeBaseConnectorModel.delete(args.id);
     return successResult(`Knowledge connector deleted: ${args.id}`);
@@ -971,9 +1169,29 @@ async function handleAssignKnowledgeConnectorToKnowledgeBase(params: {
   args: ConnectorKnowledgeBaseAssignmentArgs;
   context: ArchestraContext;
 }) {
-  const { args } = params;
+  const { args, context } = params;
 
   try {
+    if (!context.organizationId) {
+      return errorResult("Organization context not available");
+    }
+    const connector = await findManageableConnector({
+      connectorId: args.connector_id,
+      organizationId: context.organizationId,
+      userId: context.userId,
+    });
+    if (!connector) {
+      return knowledgeConnectorNotFound(args.connector_id);
+    }
+    const knowledgeBase = await KnowledgeBaseModel.findById(
+      args.knowledge_base_id,
+    );
+    if (
+      !knowledgeBase ||
+      knowledgeBase.organizationId !== context.organizationId
+    ) {
+      return knowledgeBaseNotFound(args.knowledge_base_id);
+    }
     await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
       args.connector_id,
       args.knowledge_base_id,
@@ -990,9 +1208,20 @@ async function handleUnassignKnowledgeConnectorFromKnowledgeBase(params: {
   args: ConnectorKnowledgeBaseAssignmentArgs;
   context: ArchestraContext;
 }) {
-  const { args } = params;
+  const { args, context } = params;
 
   try {
+    if (!context.organizationId) {
+      return errorResult("Organization context not available");
+    }
+    const connector = await findManageableConnector({
+      connectorId: args.connector_id,
+      organizationId: context.organizationId,
+      userId: context.userId,
+    });
+    if (!connector) {
+      return knowledgeConnectorNotFound(args.connector_id);
+    }
     const kbIds = await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(
       args.connector_id,
     );
@@ -1063,9 +1292,32 @@ async function handleAssignKnowledgeConnectorToAgent(params: {
   args: ConnectorAgentAssignmentArgs;
   context: ArchestraContext;
 }) {
-  const { args } = params;
+  const { args, context } = params;
 
   try {
+    if (!context.organizationId) {
+      return errorResult("Organization context not available");
+    }
+    // Environment isolation: a connector can only be assigned to an agent in the
+    // same environment, otherwise the agent could never use it and the binding
+    // would cross the environment boundary.
+    const [connector, targetAgentEnvironmentId] = await Promise.all([
+      findManageableConnector({
+        connectorId: args.connector_id,
+        organizationId: context.organizationId,
+        userId: context.userId,
+      }),
+      AgentModel.findEnvironmentId(args.agent_id),
+    ]);
+    if (!connector) {
+      return knowledgeConnectorNotFound(args.connector_id);
+    }
+    if (connector.environmentId !== targetAgentEnvironmentId) {
+      return errorResult(
+        "The connector and the agent are in different environments. Assign a connector from the agent's environment.",
+      );
+    }
+
     await AgentConnectorAssignmentModel.assign(
       args.agent_id,
       args.connector_id,
@@ -1082,9 +1334,20 @@ async function handleUnassignKnowledgeConnectorFromAgent(params: {
   args: ConnectorAgentAssignmentArgs;
   context: ArchestraContext;
 }) {
-  const { args } = params;
+  const { args, context } = params;
 
   try {
+    if (!context.organizationId) {
+      return errorResult("Organization context not available");
+    }
+    const connector = await findManageableConnector({
+      connectorId: args.connector_id,
+      organizationId: context.organizationId,
+      userId: context.userId,
+    });
+    if (!connector) {
+      return knowledgeConnectorNotFound(args.connector_id);
+    }
     const connectorIds = await AgentConnectorAssignmentModel.getConnectorIds(
       args.agent_id,
     );
@@ -1103,4 +1366,68 @@ async function handleUnassignKnowledgeConnectorFromAgent(params: {
   } catch (error) {
     return catchError(error, "unassigning knowledge connector from agent");
   }
+}
+
+// === Internal helpers ===
+
+// Recovery-oriented results for unknown knowledge ids: a missing/inaccessible id
+// is recoverable by listing the accessible entries first. Branded so the tool
+// name matches what the model sees.
+function knowledgeBaseNotFound(id: string) {
+  const listTool = archestraMcpBranding.getToolName(
+    TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
+  );
+  return structuredToolErrorResult({
+    error: {
+      type: "tool_state",
+      code: "unknown_knowledge_base",
+      message: `Knowledge base not found: ${id}. Call ${listTool} to list accessible knowledge bases and use an exact id.`,
+    },
+  });
+}
+
+function knowledgeConnectorNotFound(id: string) {
+  const listTool = archestraMcpBranding.getToolName(
+    TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
+  );
+  return structuredToolErrorResult({
+    error: {
+      type: "tool_state",
+      code: "unknown_knowledge_connector",
+      message: `Knowledge connector not found: ${id}. Call ${listTool} to list accessible connectors and use an exact id.`,
+    },
+  });
+}
+
+/**
+ * Resolve a connector the caller may MANAGE (org match + management
+ * visibility: team-scoped needs team membership, auto-sync-permissions needs
+ * knowledgeSource admin). Assignment tools route through this so referencing
+ * a connector by id can't bypass the visibility rules the list/get tools
+ * enforce. Returns null when the connector should read as "not found".
+ */
+async function findManageableConnector(params: {
+  connectorId: string;
+  organizationId: string;
+  userId?: string;
+}): Promise<KnowledgeBaseConnector | null> {
+  const connector = await KnowledgeBaseConnectorModel.findById(
+    params.connectorId,
+  );
+  if (!connector || connector.organizationId !== params.organizationId) {
+    return null;
+  }
+  if (params.userId) {
+    const access =
+      await knowledgeSourceAccessControlService.buildAccessControlContext({
+        userId: params.userId,
+        organizationId: params.organizationId,
+      });
+    if (
+      !knowledgeSourceAccessControlService.canAccessConnector(access, connector)
+    ) {
+      return null;
+    }
+  }
+  return connector;
 }

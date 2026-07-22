@@ -1,12 +1,12 @@
 import {
   DEFAULT_MODELS,
-  FAST_MODELS,
+  isCompleteModelSelection,
   type ModelSelection,
-  OPENROUTER_FREE_MODEL_ID,
+  providerRequiresPerUserCredential,
   resolveModelSelection,
   type SupportedProvider,
   SupportedProvidersSchema,
-} from "@shared";
+} from "@archestra/shared";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
@@ -16,9 +16,11 @@ import {
   MemberModel,
   ModelModel,
   OrganizationModel,
+  selectionKey,
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
 /** A fully dereferenced selection ready for an LLM call. */
@@ -53,6 +55,15 @@ interface ConversationLlmSelection {
  * Each level is a foreign key, so a deleted model is simply NULL and the chain
  * falls through. When the database has no models at all, falls back to
  * environment / Vertex AI / config defaults (and `modelId` is null).
+ *
+ * The member-default level is the model/key the user last picked in the /chat
+ * model selector — a personal preference for that UI. It should NOT bleed into
+ * runs the user isn't actively driving there (chatops replies, scheduled
+ * triggers, external A2A), where the surprising outcome is a Slack bot or a cron
+ * job silently using whatever model someone last chose in web chat. Those
+ * callers pass `includeMemberChatDefault: false` so resolution reflects the
+ * agent's own configuration (then org default, then best-available) — which is
+ * both predictable and self-explanatory to the user.
  */
 export async function resolveConversationLlmSelectionForAgent(params: {
   agent: { llmApiKeyId: string | null; modelId: string | null };
@@ -62,18 +73,53 @@ export async function resolveConversationLlmSelectionForAgent(params: {
   explicitModelId?: string | null;
   /** The API key the user explicitly picked, alongside `explicitModelId`. */
   explicitApiKeyId?: string | null;
+  /**
+   * Whether the acting member's /chat default (defaultModelId /
+   * defaultChatApiKeyId) participates in resolution. Defaults to true (the
+   * /chat surfaces). Non-/chat A2A callers pass false. See the doc comment.
+   */
+  includeMemberChatDefault?: boolean;
 }): Promise<ConversationLlmSelection> {
   const { agent, organizationId, userId } = params;
+  const includeMemberChatDefault = params.includeMemberChatDefault ?? true;
 
-  const member = await MemberModel.getByUserId(userId, organizationId);
-  const organization = await OrganizationModel.getById(organizationId);
+  // A per-user provider model (e.g. GitHub Copilot) is catalogued org-wide and
+  // its credential is resolved per-user at request time, so an explicit pick is
+  // honored by model alone: the key is not pinned and need not be linked to the
+  // picked key (which, for a member who hasn't connected, is some other
+  // provider's key the picker carried over). The acting user's own credential is
+  // resolved when the message is sent — or a connect prompt is surfaced if they
+  // haven't linked one.
+  if (params.explicitModelId) {
+    const explicitModel = await ModelModel.findById(params.explicitModelId);
+    if (
+      explicitModel &&
+      providerRequiresPerUserCredential(explicitModel.provider)
+    ) {
+      return {
+        modelId: explicitModel.id,
+        chatApiKeyId: null,
+        selectedModel: explicitModel.modelId,
+        selectedProvider: explicitModel.provider,
+      };
+    }
+  }
 
-  const levels: ModelSelection[] = [
+  const [member, organization] = await Promise.all([
+    MemberModel.getByUserId(userId, organizationId),
+    OrganizationModel.getById(organizationId),
+  ]);
+
+  const configuredLevels: ModelSelection[] = [
     { modelId: params.explicitModelId, apiKeyId: params.explicitApiKeyId },
-    {
-      modelId: member?.defaultModelId,
-      apiKeyId: member?.defaultChatApiKeyId,
-    },
+    ...(includeMemberChatDefault
+      ? [
+          {
+            modelId: member?.defaultModelId,
+            apiKeyId: member?.defaultChatApiKeyId,
+          },
+        ]
+      : []),
     { modelId: agent.modelId, apiKeyId: agent.llmApiKeyId },
     {
       modelId: organization?.defaultModelId,
@@ -81,10 +127,13 @@ export async function resolveConversationLlmSelectionForAgent(params: {
     },
   ];
 
-  const availableModels = await getAvailableRankedModels({
-    organizationId,
-    userId,
-  });
+  const [levels, availableModels] = await Promise.all([
+    filterLinkedModelSelectionLevels(configuredLevels),
+    getAvailableRankedModels({
+      organizationId,
+      userId,
+    }),
+  ]);
 
   const resolved = resolveModelSelection({ levels, availableModels });
 
@@ -93,7 +142,14 @@ export async function resolveConversationLlmSelectionForAgent(params: {
     if (model) {
       return {
         modelId: model.id,
-        chatApiKeyId: resolved.apiKeyId ?? null,
+        // A per-user provider model never pins a key: the resolved key (e.g. the
+        // admin's, when the org default points at a Copilot model) belongs to
+        // whoever configured it and isn't usable by — or visible to — the acting
+        // user. Persist the model alone; the acting user's own credential is
+        // resolved per-user at request time (or a connect prompt is surfaced).
+        chatApiKeyId: providerRequiresPerUserCredential(model.provider)
+          ? null
+          : (resolved.apiKeyId ?? null),
         selectedModel: model.modelId,
         selectedProvider: model.provider,
       };
@@ -147,7 +203,11 @@ export async function resolveBestAvailableLlm(params: {
       provider,
     });
 
-    if (chatApiKeyId) {
+    // A ChatGPT-subscription (Codex) openai credential only works through the
+    // proxy adapter, not the direct AI-SDK path this selection feeds (built-in
+    // subagents). Skip it so resolution falls through to a usable provider
+    // instead of handing the marker to createDirectLLMModel.
+    if (chatApiKeyId && !isOpenAiCodexCredential(apiKey)) {
       const bestModel =
         await LlmProviderApiKeyModelLinkModel.getBestModel(chatApiKeyId);
       if (bestModel) {
@@ -193,11 +253,27 @@ export async function resolveConfiguredAgentLlm(agent: {
     }
 
     let apiKey: string | undefined;
-    if (apiKeyRecord.secretId) {
+    // For per-user providers (GitHub Copilot) the attached key is the agent
+    // owner's personal token — never hand it to another user. Leave apiKey
+    // undefined so resolveAgentLlmOrDefault falls through to per-user
+    // resolution for the acting user.
+    if (
+      apiKeyRecord.secretId &&
+      !providerRequiresPerUserCredential(apiKeyRecord.provider)
+    ) {
       const secret = await getSecretValueForLlmProviderApiKey(
         apiKeyRecord.secretId,
       );
       apiKey = (secret as string) ?? undefined;
+      // A ChatGPT-subscription (Codex) credential is likewise one person's
+      // token — per-user at the KEY level on `openai`, only detectable on the
+      // decrypted secret. This helper doesn't know the acting user, so never
+      // hand the credential out from here; the fall-through resolution
+      // enforces ownership (owner gets this same key back, anyone else gets
+      // their own subscription or the connect prompt).
+      if (apiKey !== undefined && isOpenAiCodexCredential(apiKey)) {
+        apiKey = undefined;
+      }
     }
 
     const model = agent.modelId
@@ -235,51 +311,86 @@ export async function resolveConfiguredAgentLlm(agent: {
 }
 
 /**
- * Resolve the fastest/cheapest model for a provider (used for title generation).
- * Tries the database lookup first, falls back to the hardcoded FAST_MODELS map.
+ * Resolve an agent's configured LLM, filling in the provider API key when the
+ * agent only pins a model. If the agent has no usable model selection, fall
+ * back to organization/default resolution.
  */
-export async function resolveFastModelName(
-  provider: SupportedProvider,
-  chatApiKeyId: string | undefined,
-): Promise<string> {
-  // OpenRouter meta calls always go through the free router: the "fastest"
-  // marker is openrouter/auto, which is paid and fails outright on a
-  // zero-balance free-only key.
-  if (provider === "openrouter") {
-    return OPENROUTER_FREE_MODEL_ID;
+export async function resolveAgentLlmOrDefault(params: {
+  agent?: { llmApiKeyId: string | null; modelId: string | null } | null;
+  organizationId: string;
+  userId?: string;
+  conversationId?: string;
+}): Promise<ResolvedLlmSelection> {
+  const configuredLlm = params.agent
+    ? await resolveConfiguredAgentLlm(params.agent)
+    : null;
+
+  if (configuredLlm) {
+    const fallbackKey = configuredLlm.apiKey
+      ? null
+      : await resolveProviderApiKey({
+          organizationId: params.organizationId,
+          userId: params.userId,
+          provider: configuredLlm.provider,
+          conversationId: params.conversationId,
+          agentLlmApiKeyId: params.agent?.llmApiKeyId ?? null,
+        });
+
+    return {
+      ...configuredLlm,
+      apiKey: configuredLlm.apiKey ?? fallbackKey?.apiKey,
+      baseUrl: configuredLlm.baseUrl ?? fallbackKey?.baseUrl ?? null,
+    };
   }
 
-  if (!chatApiKeyId) {
-    const fallback = FAST_MODELS[provider];
-    logger.debug(
-      { provider, modelName: fallback },
-      "resolveFastModelName: no chatApiKeyId, using hardcoded fast model",
-    );
-    return fallback;
-  }
+  return resolveDefaultLlmSelection(params);
+}
 
-  try {
-    const fastestModel =
-      await LlmProviderApiKeyModelLinkModel.getFastestModel(chatApiKeyId);
-    if (fastestModel) {
-      logger.debug(
-        { provider, chatApiKeyId, modelId: fastestModel.modelId },
-        "resolveFastModelName: resolved fastest model from DB",
-      );
-      return fastestModel.modelId;
+/**
+ * Resolve the default LLM for built-in subagent operations:
+ * organization default first, then best available DB-backed model, then the
+ * env/Vertex/config fallback used during bootstrap.
+ */
+async function resolveDefaultLlmSelection(params: {
+  organizationId: string;
+  userId?: string;
+}): Promise<ResolvedLlmSelection> {
+  const organization = await OrganizationModel.getById(params.organizationId);
+
+  if (organization?.defaultModelId && organization.defaultLlmApiKeyId) {
+    const model = await ModelModel.findById(organization.defaultModelId);
+    if (model) {
+      const { apiKey, baseUrl } = await resolveProviderApiKey({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        provider: model.provider,
+        agentLlmApiKeyId: organization.defaultLlmApiKeyId,
+      });
+      return {
+        provider: model.provider,
+        apiKey,
+        modelName: model.modelId,
+        baseUrl,
+      };
     }
-    logger.debug(
-      { provider, chatApiKeyId },
-      "resolveFastModelName: no fastest model in DB, using hardcoded fallback",
-    );
-  } catch (error) {
-    logger.warn(
-      { error, chatApiKeyId },
-      "resolveFastModelName: failed to resolve from DB, falling back to hardcoded model",
-    );
   }
 
-  return FAST_MODELS[provider];
+  const bestAvailable = await resolveBestAvailableLlm(params);
+  if (bestAvailable) {
+    return bestAvailable;
+  }
+
+  const fallback = resolveDefaultLlmFromEnv();
+  return {
+    provider: fallback.provider,
+    // Per-user providers must never use the shared env token (it would be one
+    // account's token for everyone).
+    apiKey: providerRequiresPerUserCredential(fallback.provider)
+      ? undefined
+      : getProviderEnvApiKey(fallback.provider),
+    modelName: fallback.model,
+    baseUrl: null,
+  };
 }
 
 // ===== Internal helpers =====
@@ -304,6 +415,32 @@ async function getAvailableRankedModels(params: {
   );
 }
 
+async function filterLinkedModelSelectionLevels(
+  levels: ModelSelection[],
+): Promise<ModelSelection[]> {
+  const completeLevels = levels.filter(isCompleteModelSelection);
+  const linkedSelectionKeys =
+    await LlmProviderApiKeyModelLinkModel.getLinkedModelSelectionKeys(
+      completeLevels,
+    );
+
+  return levels.map((level) => {
+    if (!isCompleteModelSelection(level)) {
+      return level;
+    }
+
+    if (linkedSelectionKeys.has(selectionKey(level))) {
+      return level;
+    }
+
+    logger.info(
+      { modelId: level.modelId, apiKeyId: level.apiKeyId },
+      "Skipping configured LLM model selection because it is no longer linked to the API key",
+    );
+    return { modelId: null, apiKeyId: null };
+  });
+}
+
 /**
  * Last-resort default when the database has no synced models: an environment
  * API key, then Vertex AI, then the configured chat default.
@@ -313,7 +450,12 @@ function resolveDefaultLlmFromEnv(): {
   provider: SupportedProvider;
 } {
   for (const provider of SupportedProvidersSchema.options) {
-    if (getProviderEnvApiKey(provider)) {
+    // Skip per-user providers: their env token is shared and must not back a
+    // system default (it would also resolve to no usable key downstream).
+    if (
+      getProviderEnvApiKey(provider) &&
+      !providerRequiresPerUserCredential(provider)
+    ) {
       return { model: DEFAULT_MODELS[provider], provider };
     }
   }

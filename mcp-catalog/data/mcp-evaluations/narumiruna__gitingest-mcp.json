@@ -1,0 +1,88 @@
+{
+  "name": "narumiruna__gitingest-mcp",
+  "display_name": "gitingest-mcp",
+  "description": "MCP server from narumiruna/gitingest-mcp",
+  "author": {
+    "name": "narumiruna"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["gitingestmcp@latest"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Gitingest MCP Server\n\nA Model Context Protocol (MCP) server implementation that integrates with [gitingest](https://github.com/cyclotruc/gitingest) for turning any Git repository into a simple text digest of its codebase.\n\n<a href=\"https://glama.ai/mcp/servers/@narumiruna/gitingest-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@narumiruna/gitingest-mcp/badge\" alt=\"Gitingest Server MCP server\" />\n</a>\n\n## Features\n\n- Easy integration with AI assistants through the Model Context Protocol\n- Git repository analysis and ingestion capabilities\n- Support for filtering files by size, patterns, and branches\n- Returns comprehensive repository information including summaries, file structure, and content\n\n## Usage\n\n### Configuration Options\n\nAdd the following configuration to your AI assistant's settings to enable gitingest-mcp as an MCP server:\n\n#### PyPI Installation\n\n```json\n{\n  \"mcpServers\": {\n    \"gitingestmcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\"gitingestmcp@latest\"]\n    }\n  }\n}\n```\n\n#### GitHub Installation\n\n```json\n{\n  \"mcpServers\": {\n    \"gitingestmcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--from\",\n        \"git+https://github.com/narumiruna/gitingest-mcp\",\n        \"gitingestmcp\"\n      ]\n    }\n  }\n}\n```\n\n#### Local Installation\n\n```json\n{\n  \"mcpServers\": {\n    \"gitingestmcp\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--directory\",\n        \"/home/<user>/workspace/gitingest-mcp\",\n        \"gitingestmcp\"\n      ]\n    }\n  }\n}\n```\n\n## API\n\nThe server provides the following tool:\n\n### `ingest_git`\n\nAnalyzes a Git repository and returns its content in a structured format.\n\n#### Parameters:\n\n- `source`: The URL of a Git repository or a local directory path\n- `max_file_size` (optional): Maximum allowed file size in bytes (default: 10MB)\n- `include_patterns` (optional): Pattern or set of patterns specifying files to include (e.g., \"\\*.md, src/\")\n- `exclude_patterns` (optional): Pattern or set of patterns specifying files to exclude\n- `branch` (optional): The branch to clone and analyze (default: \"main\")\n\n#### Returns:\n\nA string containing:\n\n1. Repository summary\n2. Tree-like structure of the files\n3. Content of the repository files\n\n## Resources\n\n- gitingest website: https://gitingest.com/\n- gitingest repository: https://github.com/cyclotruc/gitingest\n\n## License\n\nSee the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gitingestmcp": {
+        "command": "uvx",
+        "args": ["gitingestmcp@latest"],
+        "env": {}
+      },
+      "gitingestmcp-github": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/narumiruna/gitingest-mcp", "gitingestmcp"],
+        "env": {}
+      },
+      "gitingestmcp-local": {
+        "command": "uv",
+        "args": ["run", "--directory", "/home/<user>/workspace/gitingest-mcp", "gitingestmcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "narumiruna",
+    "repo": "gitingest-mcp",
+    "url": "https://github.com/narumiruna/gitingest-mcp",
+    "name": "narumiruna__gitingest-mcp",
+    "path": null,
+    "stars": 7,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "7cfcd87ea3a932a14430c285b1caaffac98ebd9e"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:40.020Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "gitingest",
+      "importance": 9
+    },
+    {
+      "name": "loguru",
+      "importance": 4
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"gitingestmcp\"\nversion = \"0.1.4\"\ndescription = \"\"\nreadme = \"README.md\"\nauthors = [{ name = \"narumi\", email = \"toucans-cutouts0f@icloud.com\" }]\nrequires-python = \">=3.12\"\ndependencies = [\"gitingest>=0.1.4\", \"loguru>=0.7.3\", \"mcp[cli]>=1.6.0\"]\n\n[project.scripts]\ngitingestmcp = \"gitingestmcp.server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[dependency-groups]\ndev = [\n    \"mypy>=1.13.0\",\n    \"pip>=25.0.1\",\n    \"pytest>=8.3.3\",\n    \"pytest-asyncio>=0.26.0\",\n    \"pytest-cov>=6.0.0\",\n    \"ruff>=0.7.3\",\n]\n\n[tool.ruff]\nexclude = [\"build\"]\nline-length = 120\n\n[tool.ruff.lint]\nselect = [\n    \"B\",   # flake8-bugbear\n    \"C\",   # flake8-comprehensions\n    \"E\",   # pycodestyle errors\n    \"F\",   # pyflakes\n    \"I\",   # isort\n    \"N\",   # pep8-naming\n    \"SIM\", # flake8-simplify\n    \"UP\",  # pyupgrade\n    \"W\",   # pycodestyle warnings\n]\n\n[tool.ruff.lint.per-file-ignores]\n\"__init__.py\" = [\"F401\", \"F403\"]\n\n[tool.ruff.lint.isort]\nforce-single-line = true\n\n[tool.pytest.ini_options]\nfilterwarnings = [\"ignore::DeprecationWarning\"]\n\n[tool.mypy]\nignore_missing_imports = true\n\n[tool.bumpversion]\ncurrent_version = \"0.1.4\"\ntag = true\ncommit = true\npre_commit_hooks = [\"uv lock\", \"git add uv.lock\"]\n"
+}

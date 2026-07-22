@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
+  agentRequiresPerUserConnect,
+  agentToolsUnavailableForModel,
   CHAT_STORAGE_KEYS,
   deriveModelSource,
   getSavedAgent,
@@ -130,6 +132,59 @@ describe("resolveInitialModel", () => {
     // uuid-gpt-4o-mini is marked best.
     expect(result?.modelId).toBe("uuid-gpt-4o-mini");
   });
+
+  // A per-user provider (GitHub Copilot) is catalogued org-wide but its key is
+  // the viewer's own, resolved at send time. A member viewing an org/agent
+  // default that points at a Copilot model holds no key for it, so the model
+  // must still be selected (by model alone) with the key dropped.
+  const copilotModels = {
+    ...baseModels,
+    "github-copilot": [{ id: "uuid-copilot-sonnet", isBest: true }],
+  };
+
+  test("resolves an org default pointing at a per-user model, dropping the key", () => {
+    const result = resolveInitialModel({
+      modelsByProvider: copilotModels,
+      agent: { modelId: null, llmApiKeyId: null },
+      // The member has no GitHub Copilot key — only openai/anthropic.
+      chatApiKeys: baseChatApiKeys,
+      organization: {
+        defaultModelId: "uuid-copilot-sonnet",
+        // The admin's personal Copilot key — not visible/usable by the member.
+        defaultLlmApiKeyId: "key-admin-copilot",
+      },
+      memberDefault: null,
+    });
+    expect(result).toEqual({ modelId: "uuid-copilot-sonnet", apiKeyId: null });
+  });
+
+  test("resolves an agent default pointing at a per-user model, dropping the key", () => {
+    const result = resolveInitialModel({
+      modelsByProvider: copilotModels,
+      agent: {
+        modelId: "uuid-copilot-sonnet",
+        llmApiKeyId: "key-owner-copilot",
+      },
+      chatApiKeys: baseChatApiKeys,
+      organization: null,
+      memberDefault: null,
+    });
+    expect(result).toEqual({ modelId: "uuid-copilot-sonnet", apiKeyId: null });
+  });
+
+  test("keeps the member's own keyed model over a lower per-user org default", () => {
+    const result = resolveInitialModel({
+      modelsByProvider: copilotModels,
+      agent: { modelId: null, llmApiKeyId: null },
+      chatApiKeys: baseChatApiKeys,
+      organization: {
+        defaultModelId: "uuid-copilot-sonnet",
+        defaultLlmApiKeyId: "key-admin-copilot",
+      },
+      memberDefault: { modelId: "uuid-gpt-4o", chatApiKeyId: "key-openai" },
+    });
+    expect(result).toEqual({ modelId: "uuid-gpt-4o", apiKeyId: "key-openai" });
+  });
 });
 
 describe("resolveModelForAgent", () => {
@@ -181,6 +236,199 @@ describe("resolveAutoSelectedModel", () => {
         isLoading: false,
       }),
     ).toBe("uuid-a");
+  });
+
+  test("prefers a keyed model over an unconnected per-user 'best' model", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "uuid-deleted",
+        availableModels: [
+          {
+            id: "uuid-copilot",
+            isBest: true,
+            requiresUserConnection: true,
+            isConnected: false,
+          },
+          { id: "uuid-kimi" },
+        ],
+        isLoading: false,
+      }),
+    ).toBe("uuid-kimi");
+  });
+
+  test("falls back to an unconnected per-user model when nothing else is available", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "uuid-deleted",
+        availableModels: [
+          {
+            id: "uuid-copilot",
+            isBest: true,
+            requiresUserConnection: true,
+            isConnected: false,
+          },
+        ],
+        isLoading: false,
+      }),
+    ).toBe("uuid-copilot");
+  });
+
+  test("a connected per-user 'best' model stays eligible", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "uuid-deleted",
+        availableModels: [
+          {
+            id: "uuid-copilot",
+            isBest: true,
+            requiresUserConnection: true,
+            isConnected: true,
+          },
+          { id: "uuid-kimi" },
+        ],
+        isLoading: false,
+      }),
+    ).toBe("uuid-copilot");
+  });
+});
+
+describe("agentRequiresPerUserConnect", () => {
+  const perUserAgent = {
+    modelId: "uuid-copilot",
+    llmProviderRequiresPerUserCredential: true,
+  };
+
+  test("true when the per-user agent model is selected but unavailable", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: perUserAgent,
+        selectedModelId: "uuid-copilot",
+        isModelAvailable: false,
+      }),
+    ).toBe(true);
+  });
+
+  test("false when the viewer can use the model (connected)", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: perUserAgent,
+        selectedModelId: "uuid-copilot",
+        isModelAvailable: true,
+      }),
+    ).toBe(false);
+  });
+
+  test("false when the selection is not the agent's pinned model (user override)", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: perUserAgent,
+        selectedModelId: "uuid-other",
+        isModelAvailable: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("false for a non-per-user provider agent", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: {
+          modelId: "uuid-anthropic",
+          llmProviderRequiresPerUserCredential: false,
+        },
+        selectedModelId: "uuid-anthropic",
+        isModelAvailable: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("false when no agent is selected", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: undefined,
+        selectedModelId: "uuid-copilot",
+        isModelAvailable: false,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("agentToolsUnavailableForModel", () => {
+  const noToolsModel = {
+    dbId: "uuid-m365",
+    capabilities: { supportsToolCalling: false },
+  };
+  const toolCallingModel = {
+    dbId: "uuid-anthropic",
+    capabilities: { supportsToolCalling: true },
+  };
+  const unknownCapabilityModel = { dbId: "uuid-unknown" };
+  const models = [noToolsModel, toolCallingModel, unknownCapabilityModel];
+
+  test("true for a tooled agent on a no-tools model", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: false, tools: [{}] },
+        selectedModelId: "uuid-m365",
+        models,
+      }),
+    ).toBe(true);
+  });
+
+  test("true for an Auto-mode agent (no assignments) on a no-tools model", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: true, tools: [] },
+        selectedModelId: "uuid-m365",
+        models,
+      }),
+    ).toBe(true);
+  });
+
+  test("false for a tool-less Custom agent on a no-tools model", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: false, tools: [] },
+        selectedModelId: "uuid-m365",
+        models,
+      }),
+    ).toBe(false);
+  });
+
+  test("false when the model supports tool calling", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: true, tools: [{}] },
+        selectedModelId: "uuid-anthropic",
+        models,
+      }),
+    ).toBe(false);
+  });
+
+  test("false when the model's capability is unknown", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: true, tools: [{}] },
+        selectedModelId: "uuid-unknown",
+        models,
+      }),
+    ).toBe(false);
+  });
+
+  test("false without an agent or a selection", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: undefined,
+        selectedModelId: "uuid-m365",
+        models,
+      }),
+    ).toBe(false);
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: true, tools: [] },
+        selectedModelId: null,
+        models,
+      }),
+    ).toBe(false);
   });
 });
 

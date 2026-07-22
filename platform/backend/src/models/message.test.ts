@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import ConversationModel from "./conversation";
@@ -45,6 +45,43 @@ describe("MessageModel", () => {
 
       expect(updatedConversation.updatedAt.getTime()).toBeGreaterThan(
         originalUpdatedAt.getTime(),
+      );
+    });
+  });
+
+  describe("existsForConversation", () => {
+    test("reports emptiness without loading rows", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Exists Test Agent", teams: [] });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Exists Test",
+      });
+
+      expect(await MessageModel.existsForConversation(conversation.id)).toBe(
+        false,
+      );
+
+      await MessageModel.create({
+        conversationId: conversation.id,
+        role: "user",
+        content: {
+          id: "temp-id",
+          role: "user",
+          parts: [{ type: "text", text: "Hello" }],
+        },
+      });
+
+      expect(await MessageModel.existsForConversation(conversation.id)).toBe(
+        true,
       );
     });
   });
@@ -678,6 +715,64 @@ describe("MessageModel", () => {
     });
   });
 
+  describe("updateTextPartAndDeleteSubsequent", () => {
+    // A stale client can PATCH a part index that no longer exists (e.g. the
+    // message changed under it). That's a client-input problem, so it must
+    // surface as a 400 ApiError rather than an unhandled 500.
+    test("rejects an out-of-range part index with a 400 ApiError", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Edit Part Agent", teams: [] });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Edit Part Test",
+      });
+
+      const message = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "user",
+        content: {
+          id: "temp-id",
+          role: "user",
+          parts: [{ type: "text", text: "only part" }],
+        },
+      });
+
+      await expect(
+        MessageModel.updateTextPartAndDeleteSubsequent(
+          message.id,
+          5,
+          "new text",
+          false,
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        message: "Invalid part index",
+      });
+    });
+
+    test("rejects an unknown message id with a 404 ApiError", async () => {
+      await expect(
+        MessageModel.updateTextPartAndDeleteSubsequent(
+          "00000000-0000-0000-0000-000000000000",
+          0,
+          "text",
+          false,
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 404,
+        message: "Message not found",
+      });
+    });
+  });
+
   describe("deleteAfterMessage", () => {
     test("deletes messages created after target message", async ({
       makeUser,
@@ -705,8 +800,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       const message2 = await MessageModel.create({
         conversationId: conversation.id,
         role: "assistant",
@@ -716,8 +809,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "Message 2" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       const message3 = await MessageModel.create({
         conversationId: conversation.id,
@@ -729,8 +820,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       await MessageModel.create({
         conversationId: conversation.id,
         role: "assistant",
@@ -740,8 +829,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "Message 4" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       await MessageModel.create({
         conversationId: conversation.id,
@@ -753,6 +840,7 @@ describe("MessageModel", () => {
         },
       });
 
+      await pinMessageTimestamps(conversation.id);
       await MessageModel.deleteAfterMessage(conversation.id, message3.id);
 
       const remaining = await MessageModel.findByConversation(conversation.id);
@@ -790,8 +878,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       await MessageModel.create({
         conversationId: conversation.id,
         role: "assistant",
@@ -801,8 +887,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "Message 2" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       const message3 = await MessageModel.create({
         conversationId: conversation.id,
@@ -814,6 +898,7 @@ describe("MessageModel", () => {
         },
       });
 
+      await pinMessageTimestamps(conversation.id);
       await MessageModel.deleteAfterMessage(conversation.id, message3.id);
 
       const remaining = await MessageModel.findByConversation(conversation.id);
@@ -880,8 +965,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       await MessageModel.create({
         conversationId: conversationA.id,
         role: "assistant",
@@ -891,8 +974,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "A2" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       await MessageModel.create({
         conversationId: conversationA.id,
@@ -914,8 +995,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       await MessageModel.create({
         conversationId: conversationB.id,
         role: "assistant",
@@ -925,8 +1004,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "B2" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       await MessageModel.create({
         conversationId: conversationB.id,
@@ -938,6 +1015,7 @@ describe("MessageModel", () => {
         },
       });
 
+      await pinMessageTimestamps(conversationA.id);
       await MessageModel.deleteAfterMessage(conversationA.id, messageA1.id);
 
       const remainingA = await MessageModel.findByConversation(
@@ -977,8 +1055,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       await MessageModel.create({
         conversationId: conversation.id,
         role: "assistant",
@@ -988,8 +1064,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "Message 2" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       await MessageModel.create({
         conversationId: conversation.id,
@@ -1001,6 +1075,7 @@ describe("MessageModel", () => {
         },
       });
 
+      await pinMessageTimestamps(conversation.id);
       await MessageModel.deleteAfterMessage(conversation.id, message1.id);
 
       const remaining = await MessageModel.findByConversation(conversation.id);
@@ -1056,3 +1131,25 @@ describe("MessageModel", () => {
     });
   });
 });
+
+/**
+ * Pin the conversation's messages to strictly increasing `createdAt` in
+ * insertion order (ids are client-generated monotonic UUIDv7). "After" tests
+ * must not derive order from insert-time clocks: `now()` is not monotonic — a
+ * clock step between back-to-back writes can date a later message before an
+ * earlier one, which flakes every assertion built on sleeps between inserts.
+ */
+async function pinMessageTimestamps(conversationId: string): Promise<void> {
+  const rows = await db
+    .select({ id: schema.messagesTable.id })
+    .from(schema.messagesTable)
+    .where(eq(schema.messagesTable.conversationId, conversationId))
+    .orderBy(asc(schema.messagesTable.id));
+  const base = Date.now() - rows.length * 1_000;
+  for (const [index, row] of rows.entries()) {
+    await db
+      .update(schema.messagesTable)
+      .set({ createdAt: new Date(base + index * 1_000) })
+      .where(eq(schema.messagesTable.id, row.id));
+  }
+}

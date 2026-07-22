@@ -1,0 +1,95 @@
+{
+  "name": "qainsights__k6-mcp-server",
+  "display_name": "k6-mcp-server",
+  "description": "k6 MCP server",
+  "author": {
+    "name": "QAInsights"
+  },
+  "server": {
+    "command": "${user_config.uv_bin}",
+    "args": ["--directory", "${__dirname}", "run", "k6_server.py"],
+    "env": {
+      "K6_BIN": "${user_config.k6_bin}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "k6_bin": {
+      "type": "string",
+      "title": "Path to k6 binary",
+      "description": "Optional: Path to the k6 load testing tool executable. Defaults to 'k6' in system PATH.",
+      "required": false,
+      "default": "k6"
+    },
+    "uv_bin": {
+      "type": "string",
+      "title": "Path to uv binary",
+      "description": "Path to the uv package manager executable. Defaults to 'uv' in system PATH.",
+      "required": false,
+      "default": "uv"
+    }
+  },
+  "readme": "# 🚀 ⚡️ k6-mcp-server\n\nA Model Context Protocol (MCP) server implementation for running k6 load tests.\n\n## ✨ Features\n\n- Simple integration with Model Context Protocol framework\n- Support for custom test durations and virtual users (VUs)\n- Easy-to-use API for running k6 load tests\n- Configurable through environment variables\n- Real-time test execution output\n\n## 🔧 Prerequisites\n\nBefore you begin, ensure you have the following installed:\n\n- Python 3.12 or higher\n- k6 load testing tool ([Installation guide](https://grafana.com/docs/k6/latest/set-up/install-k6/))\n- uv package manager ([Installation guide](https://github.com/astral-sh/uv))\n\n## 📦 Installation\n\n1. Clone the repository:\n\n```bash\ngit clone https://github.com/qainsights/k6-mcp-server.git\n```\n\n2. Install the required dependencies:\n\n```bash\nuv pip install -r requirements.txt\n```\n\n3. Set up environment variables (optional):\n   Create a `.env` file in the project root:\n\n```bash\nK6_BIN=/path/to/k6  # Optional: defaults to 'k6' in system PATH\n```\n\n## 🚀 Getting Started\n\n1. Create a k6 test script (e.g., `test.js`):\n\n```javascript\nimport http from \"k6/http\";\nimport { sleep } from \"k6\";\n\nexport default function () {\n  http.get(\"http://test.k6.io\");\n  sleep(1);\n}\n```\n\n2. Configure the MCP server using the below specs in your favorite MCP client (Claude Desktop, Cursor, Windsurf and more):\n\n```json\n{\n  \"mcpServers\": {\n    \"k6\": {\n      \"command\": \"/path/to/bin/uv\",\n      \"args\": [\n        \"--directory\",\n        \"/path/to/k6-mcp-server\",\n        \"run\",\n        \"k6_server.py\"\n      ]\n    }\n  }\n}\n\n```\n3. Now ask the LLM to run the test e.g. `run k6 test for hello.js`. The k6 mcp server will leverage either one of the below tools to start the test.\n\n- `execute_k6_test`: Run a test with default options (30s duration, 10 VUs)\n- `execute_k6_test_with_options`: Run a test with custom duration and VUs\n\n![k6-MCP](./images/k6-mcp.png)\n\n\n## 📝 API Reference\n\n### Execute K6 Test\n\n```python\nexecute_k6_test(\n    script_file: str,\n    duration: str = \"30s\",  # Optional\n    vus: int = 10          # Optional\n)\n```\n\n### Execute K6 Test with Custom Options\n\n```python\nexecute_k6_test_with_options(\n    script_file: str,\n    duration: str,\n    vus: int\n)\n```\n\n## ✨ Use cases\n\n- LLM powered results analysis\n- Effective debugging of load tests\n\n## 🤝 Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n",
+  "category": "Development",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "k6": {
+        "command": "/path/to/bin/uv",
+        "args": ["--directory", "/path/to/k6-mcp-server", "run", "k6_server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "QAInsights",
+    "repo": "k6-mcp-server",
+    "url": "https://github.com/QAInsights/k6-mcp-server",
+    "name": "qainsights__k6-mcp-server",
+    "path": null,
+    "stars": 14,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "883c1157ed7318afe5702546bf12b5688ab83d18"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:41.860Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"k6-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"Model context protocol server for k6 load testing\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"mcp[cli]>=1.6.0\",\n]\n\n=== requirements.txt ===\nfastmcp>=0.1.0\npython-dotenv>=1.0.0 "
+}

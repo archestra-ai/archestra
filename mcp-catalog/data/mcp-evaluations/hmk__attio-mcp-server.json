@@ -1,0 +1,101 @@
+{
+  "name": "hmk__attio-mcp-server",
+  "display_name": "attio-mcp-server",
+  "description": "MCP server from hmk/attio-mcp-server",
+  "author": {
+    "name": "hmk"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["attio-mcp-server"],
+    "env": {
+      "ATTIO_API_KEY": "${user_config.attio_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "attio_api_key": {
+      "type": "string",
+      "title": "Attio API Key",
+      "description": "Your Attio API key. This is expected to be a bearer token, obtainable from the API Explorer or via OAuth.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# attio-mcp-server\n\nThis is an MCP server for [Attio](https://attio.com/), the AI-native CRM. It allows mcp clients (like Claude) to connect to the Attio API.\n\n#### Current Capabilities\n\n- [x] reading company records\n- [x] reading company notes\n- [x] writing company notes\n- [ ] other activities\n\n## Usage\n\nYou will need:\n\n- `ATTIO_API_KEY` \n\nThis is expected to be a *bearer token* which means you can get one through the [API Explorer](https://developers.attio.com/reference/get_v2-objects) on the right hand side or configure OAuth and retrieve one throught the Attio API.\n\n\n### Claude Desktop Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"attio\": {\n      \"command\": \"npx\",\n      \"args\": [\"attio-mcp-server\"],\n      \"env\": {\n        \"ATTIO_API_KEY\": \"YOUR_ATTIO_API_KEY\"\n      }\n    }\n  }\n}\n```\n## Development\n\n### Prerequisites\n\nBefore you begin, ensure you have the following installed:\n\n- Node.js (recommended v22 or higher)\n- npm\n- git\n- dotenv\n\n### Setting up Development Environment\n\nTo set up the development environment, follow these steps:\n\n1. Fork the repository\n\n   - Click the \"Fork\" button in the top-right corner of this repository\n   - This creates your own copy of the repository under your Github acocunt\n\n1. Clone Your Fork:\n\n   ```sh\n   git clone https://github.com/YOUR_USERNAME/attio-mcp-server.git\n   cd attio-mcp-server\n   ```\n\n1. Add Upstream Remote\n   ```sh\n   git remote add upstream https://github.com/hmk/attio-mcp-server.git\n   ```\n\n1. Copy the dotenv file\n    ```sh\n    cp .env.template .env\n    ```\n\n1. Install dependencies:\n\n   ```sh\n   npm install\n   ```\n\n1. Run watch to keep index.js updated:\n\n   ```sh\n   npm run build:watch\n   ```\n\n1. Start the model context protocol development server:\n\n   ```sh\n   dotenv npx @modelcontextprotocol/inspector node PATH_TO_YOUR_CLONED_REPO/dist/index.js\n   ```\n\n1. If the development server did not load the environment variable correctly, set the `ATTIO_API_KEY` on the left-hand side of the mcp inspector.",
+  "category": "CRM",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "attio-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "attio-mcp-server"],
+        "env": {
+          "ATTIO_API_KEY": "YOUR_ATTIO_API_KEY"
+        }
+      },
+      "attio-mcp-server-inspector": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/inspector", "node", "PATH_TO_YOUR_CLONED_REPO/dist/index.js"],
+        "env": {
+          "ATTIO_API_KEY": "YOUR_ATTIO_API_KEY"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hmk",
+    "repo": "attio-mcp-server",
+    "url": "https://github.com/hmk/attio-mcp-server",
+    "name": "attio-mcp-server",
+    "path": null,
+    "stars": 13,
+    "contributors": 2,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "1cb8b567ae54436c782ab7025e8e23ab49a50ac6"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.292Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "shx",
+      "importance": 3
+    },
+    {
+      "name": "typescript",
+      "importance": 1
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"attio-mcp-server\",\n  \"version\": \"0.0.2\",\n  \"description\": \"A Model Context Protocol server that connects Attio to LLMs\",\n  \"main\": \"dist/index.js\",\n  \"module\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"access\": \"public\",\n  \"bin\": {\n    \"attio-mcp-server\": \"dist/index.js\"\n  },\n  \"scripts\": {\n    \"clean\": \"shx rm -rf dist\",\n    \"build\": \"tsc\",\n    \"postbuild\": \"shx chmod +x dist/*.js\",\n    \"check\": \"tsc --noEmit\",\n    \"build:watch\": \"tsc --watch\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.4.1\",\n    \"axios\": \"^1.7.9\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.7.2\"\n  },\n  \"author\": \"@hmk\",\n  \"license\": \"BSD-3-Clause\",\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.14\",\n    \"jest\": \"^29.7.0\",\n    \"ts-jest\": \"^29.2.5\",\n    \"tsx\": \"^4.19.2\"\n  },\n  \"jest\": {\n    \"preset\": \"ts-jest\",\n    \"testEnvironment\": \"node\",\n    \"testPathIgnorePatterns\": [\n      \"<rootDir>/dist/\"\n    ]\n  }\n}\n"
+}

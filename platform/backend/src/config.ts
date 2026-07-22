@@ -1,25 +1,46 @@
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
   DEFAULT_APP_NAME,
+  DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
+  isValidK8sCpuQuantity,
+  isValidK8sMemoryQuantity,
+  MCP_ORCHESTRATOR_DEFAULTS,
   type SupportedProvider,
   SupportedProviders,
-} from "@shared";
+} from "@archestra/shared";
+import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import logger from "@/logging";
+import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
   EmailProviderTypeSchema,
 } from "@/types/email-provider-type";
 import packageJson from "../../package.json";
 
-type ProcessType = "web" | "worker" | "all";
+type ProcessType = "web" | "worker" | "renderer" | "all";
+type FileStorageProviderType = "db" | "filesystem" | "s3";
+
+/**
+ * Resolved S3 byte-store config (validated only when provider === "s3").
+ * @public — consumed by the S3 file-storage provider in a later task
+ */
+export type FileStorageS3Config = {
+  bucket: string;
+  region: string;
+  endpoint: string | undefined;
+  forcePathStyle: boolean;
+  accessKeyId: string | undefined;
+  secretAccessKey: string | undefined;
+  keyPrefix: string;
+};
 
 /**
  * Load .env from platform root
@@ -35,6 +56,24 @@ const isProduction = ["production", "prod"].includes(environment);
 const isDevelopment = !isProduction;
 
 const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
+
+/**
+ * Developer-only convenience: when set (and NOT in production), the login screen
+ * is skipped by minting a real session for the user with this email (see the
+ * dev-auto-login Better Auth plugin). Hard-disabled in production so it can never
+ * bypass authentication on a real deployment. The session is an ordinary one for
+ * that user — RBAC is unchanged.
+ */
+const devAutoAuthenticateEmail = isProduction
+  ? undefined
+  : process.env.ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL?.trim() || undefined;
+
+if (devAutoAuthenticateEmail) {
+  logger.warn(
+    { email: devAutoAuthenticateEmail },
+    "[config] ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL is set: the login screen is skipped by auto-minting a session for this user. Developer-only, ignored in production.",
+  );
+}
 
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
@@ -126,8 +165,8 @@ const getPortFromUrl = (): number => {
  *
  * Quickstart mode (Docker):
  *   - Inside the container the app binds to 0.0.0.0.
- *   - On the host, Docker's `-p 3000:3000` maps to 0.0.0.0 by default,
- *     making the app accessible from LAN IPs.
+ *   - Quickstart examples bind host ports to 127.0.0.1 by default.
+ *     Users can opt into LAN access with explicit `0.0.0.0` port bindings.
  *   - Quickstart is designed for quick evaluation, so all origins are
  *     accepted without checks. It's ok if someone will decide to
  *     access Archestra from the mobile phone.
@@ -150,6 +189,11 @@ const getConfiguredOrigins = (): string[] => {
   const frontendUrl = process.env.ARCHESTRA_FRONTEND_URL?.trim();
   if (frontendUrl) {
     origins.push(frontendUrl);
+  }
+
+  const ngrokDomain = process.env.ARCHESTRA_NGROK_DOMAIN?.trim();
+  if (ngrokDomain) {
+    origins.push(ngrokDomain);
   }
 
   const additional =
@@ -180,6 +224,44 @@ const addLoopbackEquivalents = (origins: string[]): string[] => {
   }
   return [...result];
 };
+
+/**
+ * Where the offline video renderer reaches this deployment's own frontend to
+ * load the replay page it films.
+ *
+ * Falls back to this deployment's first configured origin before loopback.
+ * That set is the same one CORS, auth and the app sandbox are built from, so
+ * whichever way a deployment spells its frontend — a public hostname, a
+ * tunnel, an extra trusted origin — the renderer targets something already
+ * trusted rather than an address nothing was configured for. Defaulting
+ * straight to loopback is what makes a tunnelled deployment film an empty app
+ * pane: the sandbox declines to be framed by an untrusted origin, and the
+ * render cannot tell that apart from an app that drew nothing.
+ *
+ * The backend's own base URL is deliberately not a candidate: the page being
+ * filmed is a frontend route.
+ *
+ * @public — exported for testability
+ */
+export function resolveRenderBaseUrl(params: {
+  explicit: string | undefined;
+  configuredOrigins: string[];
+}): string {
+  return (
+    params.explicit?.trim() ||
+    params.configuredOrigins[0] ||
+    "http://localhost:3000"
+  );
+}
+
+const hackathonRecorderRenderBaseUrl = resolveRenderBaseUrl({
+  // Undocumented on purpose, like the rest of the Apps Hackathon recorder (a
+  // temporary, hackathon-only feature — see the recorder flag below). Do not add
+  // this to .env.example or the deployment docs. It rarely needs setting anyway:
+  // the fallback already targets a trusted configured origin.
+  explicit: process.env.ARCHESTRA_HACKATHON_RECORDER_RENDER_BASE_URL,
+  configuredOrigins: getConfiguredOrigins(),
+});
 
 /**
  * Get CORS origin configuration for Fastify.
@@ -262,14 +344,27 @@ export const parseBodyLimit = (
   return defaultValue;
 };
 
-const DEFAULT_BODY_LIMIT = 50 * 1024 * 1024; // 50MB
+// 70MB body limit: accommodates the 50MB user-facing file cap with
+// headroom for base64 encoding overhead (~33%) on chat attachment uploads.
+const DEFAULT_BODY_LIMIT = 70 * 1024 * 1024;
 
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;
 
+// Upper bound applied to every agent turn's output-token budget. Defaults high
+// enough to unblock large tool-call payloads while capping cost; the real
+// per-model output ceiling still applies when it is lower.
+const DEFAULT_CHAT_MAX_OUTPUT_TOKENS = 32_768;
+const MAX_CHAT_MAX_OUTPUT_TOKENS = 1_000_000;
+
+// Per-connection statement timeout (ms). Defense-in-depth: kills runaway
+// queries instead of letting them hang a connection indefinitely. 0 disables.
+const DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS = 30000;
+
 // Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
 const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
+const DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS = 60;
 const DEFAULT_METRICS_PORT = 9050;
 const MIN_TCP_PORT = 1;
 const MAX_TCP_PORT = 65_535;
@@ -370,6 +465,48 @@ export const parseContentMaxLength = (
   return parsed;
 };
 
+/**
+ * Grace window (seconds) during which a replayed — i.e. already-rotated —
+ * refresh token is treated as a benign rotation race (a lost token-exchange
+ * response the client retried) and a fresh pair is re-issued, rather than a
+ * reuse attack. See services/oauth-refresh-replay.ts. `0` disables the grace,
+ * so every replay is treated as reuse immediately.
+ *
+ * @public — exercised by config.test.ts
+ */
+export const parseRefreshTokenReuseGraceSeconds = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_AUTH_REFRESH_TOKEN_REUSE_GRACE_SECONDS value "${value}", using default ${DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS}`,
+    );
+    return DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS;
+  }
+
+  return parsed;
+};
+
+/** @public — exported for testability */
+export const parseLogFormat = (
+  envValue?: string | undefined,
+): "json" | "pretty" => {
+  const value = envValue?.toLowerCase().trim();
+  if (value === "pretty" || value === "json") return value;
+  if (value && value.length > 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_LOGGING_FORMAT value "${envValue}", using default "json"`,
+    );
+  }
+  return "json";
+};
+
 /** @public — exported for testability */
 export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
   const value = envValue?.trim();
@@ -383,6 +520,153 @@ export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
       `Invalid ARCHESTRA_DATABASE_POOL_MAX value "${value}", using default ${DEFAULT_DATABASE_POOL_MAX}`,
     );
     return DEFAULT_DATABASE_POOL_MAX;
+  }
+
+  return parsed;
+};
+
+/** @public — exported for testability */
+export const parseChatMaxOutputTokens = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+  }
+
+  // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
+  // ("1.5") are rejected rather than silently truncated to a tiny cap.
+  const parsed = Number(value);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 1 ||
+    parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
+  ) {
+    logger.warn(
+      `Invalid ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS value "${value}", using default ${DEFAULT_CHAT_MAX_OUTPUT_TOKENS}`,
+    );
+    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+  }
+
+  return parsed;
+};
+
+/** @public — exported for testability */
+export const parseDatabaseStatementTimeoutMillis = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  // 0 disables the timeout; negative/NaN falls back to the default.
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS value "${value}", using default ${DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS}`,
+    );
+    return DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS;
+  }
+
+  return parsed;
+};
+
+/** @public — exported for testability */
+export interface AnthropicWifConfig {
+  federationRuleId: string;
+  organizationId: string;
+  serviceAccountId: string;
+  workspaceId?: string;
+  identityTokenFile?: string;
+  /**
+   * Inline identity token (a JWT). Held in the config singleton, so prefer
+   * `identityTokenFile` in production — only the path is stored, not the secret,
+   * and the file is re-read on every exchange to pick up rotation.
+   */
+  identityToken?: string;
+}
+
+/**
+ * Parse Anthropic Workload Identity Federation (keyless auth) configuration.
+ * Enabled only when the federation rule ID, organization ID, service account
+ * ID, and an identity token source are all present; a partial configuration
+ * logs a warning and disables WIF rather than failing at request time.
+ *
+ * @public — exported for testability
+ */
+export const parseAnthropicWifConfig = (env: {
+  federationRuleId?: string | undefined;
+  organizationId?: string | undefined;
+  serviceAccountId?: string | undefined;
+  workspaceId?: string | undefined;
+  identityTokenFile?: string | undefined;
+  identityToken?: string | undefined;
+}): AnthropicWifConfig | null => {
+  const federationRuleId = env.federationRuleId?.trim();
+  const organizationId = env.organizationId?.trim();
+  const serviceAccountId = env.serviceAccountId?.trim();
+  const workspaceId = env.workspaceId?.trim();
+  const identityTokenFile = env.identityTokenFile?.trim();
+  const identityToken = env.identityToken?.trim();
+
+  const anySet = Boolean(
+    federationRuleId ||
+      organizationId ||
+      serviceAccountId ||
+      workspaceId ||
+      identityTokenFile ||
+      identityToken,
+  );
+  if (!anySet) {
+    return null;
+  }
+
+  if (
+    !federationRuleId ||
+    !organizationId ||
+    !serviceAccountId ||
+    !(identityTokenFile || identityToken)
+  ) {
+    logger.warn(
+      "Anthropic Workload Identity Federation is partially configured and will be disabled. Set ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID, ARCHESTRA_ANTHROPIC_ORGANIZATION_ID, ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID, and one of ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE or ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN.",
+    );
+    return null;
+  }
+
+  return {
+    federationRuleId,
+    organizationId,
+    serviceAccountId,
+    ...(workspaceId ? { workspaceId } : {}),
+    ...(identityTokenFile ? { identityTokenFile } : {}),
+    ...(identityToken ? { identityToken } : {}),
+  };
+};
+
+/**
+ * Parse an optional dedicated-port env var (e.g. ARCHESTRA_PUBLIC_ENDPOINTS_PORT).
+ * Unset/empty means the feature is disabled (returns undefined); an invalid
+ * value also disables it (with a warning) rather than falling back to a
+ * default, since accidentally listening on a wrong port would silently
+ * expose endpoints somewhere unintended.
+ * @public — exported for testability
+ */
+export const parseOptionalPort = (params: {
+  envVarName: string;
+  envValue: string | undefined;
+}): number | undefined => {
+  const value = params.envValue?.trim();
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < MIN_TCP_PORT || parsed > MAX_TCP_PORT) {
+    logger.warn(
+      `Invalid ${params.envVarName} value "${value}", the dedicated listener will not be started`,
+    );
+    return undefined;
   }
 
   return parsed;
@@ -471,6 +755,151 @@ export const parseSampleRate = (
   return parsed;
 };
 
+/** @public — exported for testability */
+export function parseActiveChatRunPollIntervalMs(params: {
+  value: string | undefined;
+  defaultValue: number;
+  envName: string;
+}): number {
+  const trimmed = params.value?.trim();
+  if (!trimmed) {
+    return params.defaultValue;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    logger.warn(
+      `Invalid ${params.envName} value "${trimmed}", using default ${params.defaultValue}`,
+    );
+    return params.defaultValue;
+  }
+
+  return parsed;
+}
+
+/**
+ * Hostnames that `getPublicRequestOrigin` is willing to return when forwarded
+ * headers are trusted. Always contains the frontend origin (`frontendBaseUrl`,
+ * which defaults to http://localhost:3000 when ARCHESTRA_FRONTEND_URL is
+ * unset) plus every URL in `ARCHESTRA_API_BASE_URL` — the same
+ * comma-separated list the frontend's `getExternalProxyUrls` reads (after
+ * supervisord re-exports it as `NEXT_PUBLIC_ARCHESTRA_API_BASE_URL` for the
+ * Next.js process). The backend inherits the canonical `ARCHESTRA_API_BASE_URL`
+ * directly, so we read that here.
+ *
+ * Returned as a set of normalized `host` strings (lowercased; default ports
+ * stripped — i.e. matching what `new URL(...).host` produces).
+ * @public — exported for testability
+ */
+/**
+ * Raw URL sources a /connection setup baseUrl may come from: the frontend
+ * origin, every URL in `ARCHESTRA_API_BASE_URL`, and the in-cluster
+ * `ARCHESTRA_INTERNAL_API_BASE_URL` (the connection page falls back to the
+ * internal URL when every external URL is hidden). Returned unparsed; callers
+ * normalize and compare full URLs, not just hosts.
+ * @public — exported for testability
+ */
+export const getConnectionBaseUrlSources = (): string[] => {
+  const sources = [frontendBaseUrl];
+  const internalUrl = process.env.ARCHESTRA_INTERNAL_API_BASE_URL?.trim();
+  if (internalUrl) sources.push(internalUrl);
+  const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
+  if (externalUrls) {
+    for (const url of externalUrls.split(",")) {
+      const trimmed = url.trim();
+      if (trimmed) sources.push(trimmed);
+    }
+  }
+  return sources;
+};
+
+/**
+ * Absolute origin the backend serves its `/_sandbox/*` assets on. Used to build
+ * absolute SDK/stylesheet URLs in the owned-app envelope so they resolve from a
+ * foreign MCP host's opaque-origin iframe (a relative `/_sandbox/...` has no
+ * base there). This URL is handed to the browser as a script source and CSP
+ * source, so it must be the public origin the app is viewed on.
+ *
+ * Resolution order:
+ *  1. A public `https://` entry in `ARCHESTRA_API_BASE_URL` — that var is an
+ *     internal-first list (e.g. `http://archestra.default.svc:9000,https://api…`),
+ *     so a public entry is preferred over a cluster-internal one.
+ *  2. Any `ARCHESTRA_API_BASE_URL` entry.
+ *  3. `frontendBaseUrl` (`ARCHESTRA_FRONTEND_URL`) — the origin the browser
+ *     actually loads the app on, and whose Next.js rewrite proxies `/_sandbox/*`
+ *     to the backend. Falling back here (rather than to a loopback API origin)
+ *     keeps the assets same-origin with the page, so the browser's Private
+ *     Network Access policy never blocks them when the app is served over a
+ *     tunnel or any public origin. The old loopback fallback only ever loaded
+ *     when the browser itself was on localhost; over a public origin it was
+ *     refused, taking the injected recorder/replay SDK down with it.
+ *
+ * This only widens the CSP's fixed asset-URL host from loopback to the trusted,
+ * operator-configured frontend origin — it does not touch the network lockdown
+ * (`connect-src 'none'`, CDN allowlist), and is never request-derived (those are
+ * spoofable, see request-origin.ts). Each candidate is parsed to its
+ * `URL.origin` (dropping any path). Foreign-host renders inline their assets
+ * (`selfContained`) and set `ARCHESTRA_API_BASE_URL` explicitly, so this
+ * fallback is confined to Archestra's own session render.
+ * @public — consumed by the owned-app SDK injection
+ */
+export const getAppAssetBaseOrigin = (): string => {
+  const entries =
+    process.env.ARCHESTRA_API_BASE_URL?.split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean) ?? [];
+  const candidates = [
+    ...entries.filter((entry) => entry.startsWith("https://")),
+    ...entries,
+    frontendBaseUrl,
+  ];
+  for (const candidate of candidates) {
+    try {
+      return new URL(candidate).origin;
+    } catch {
+      // skip a malformed entry and try the next candidate
+    }
+  }
+  // `frontendBaseUrl` itself defaults to http://localhost:3000, so this is only
+  // reached if it was overridden with a malformed value.
+  return new URL("http://localhost:3000").origin;
+};
+
+export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
+  const hosts = new Set<string>();
+
+  const addHostFromUrl = (raw: string) => {
+    try {
+      hosts.add(new URL(raw).host.toLowerCase());
+    } catch {
+      // ignore malformed values
+    }
+  };
+
+  addHostFromUrl(frontendBaseUrl);
+
+  // In local development the Next.js dev server always serves on
+  // http://localhost:3000, even when ARCHESTRA_FRONTEND_URL points elsewhere
+  // (e.g. an ngrok tunnel configured for webhooks). Allow-list it so an MCP
+  // client connecting to the local origin can still complete the gateway OAuth
+  // handshake without extra config. Never enabled in production, where the
+  // allowlist must stay restricted to the configured public hosts.
+  if (isDevelopment) {
+    addHostFromUrl("http://localhost:3000");
+    addHostFromUrl("http://127.0.0.1:3000");
+  }
+
+  const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
+  if (externalUrls) {
+    for (const url of externalUrls.split(",")) {
+      const trimmed = url.trim();
+      if (trimmed) addHostFromUrl(trimmed);
+    }
+  }
+
+  return hosts;
+};
+
 /**
  * Parse ARCHESTRA_TRUST_PROXY into the value Fastify's trustProxy option accepts.
  *
@@ -500,15 +929,419 @@ export const parseTrustProxy = (
 };
 
 /** @public — exported for testability */
-export const getAnalyticsConfig = () => ({
-  enabled: process.env.ARCHESTRA_ANALYTICS !== "disabled",
-  posthog: {
-    key:
-      process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
-      DEFAULT_POSTHOG_KEY,
-    host:
-      process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST?.trim() ||
-      DEFAULT_POSTHOG_HOST,
+export function parseFileStorageProvider(
+  value: string | undefined,
+): FileStorageProviderType {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "filesystem") return "filesystem";
+  if (normalized === "s3") return "s3";
+  return "db";
+}
+
+/** @public — exported for testability */
+export function parseFileStorageFilesystemRoot(params: {
+  provider: FileStorageProviderType;
+  value: string | undefined;
+}): string {
+  const root = params.value?.trim() ?? "";
+  if (params.provider !== "filesystem") return root;
+  if (!root) {
+    throw new Error(
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT is required when ARCHESTRA_FILE_STORAGE_PROVIDER=filesystem",
+    );
+  }
+  if (!path.isAbsolute(root)) {
+    throw new Error(
+      "ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT must be an absolute path",
+    );
+  }
+  return root;
+}
+
+/** @public — exported for testability */
+export function parseFileStorageS3Config(params: {
+  provider: FileStorageProviderType;
+  env: {
+    bucket: string | undefined;
+    region: string | undefined;
+    endpoint: string | undefined;
+    forcePathStyle: string | undefined;
+    accessKeyId: string | undefined;
+    secretAccessKey: string | undefined;
+    keyPrefix: string | undefined;
+  };
+}): FileStorageS3Config {
+  const { env } = params;
+  const bucket = env.bucket?.trim() ?? "";
+  if (params.provider === "s3" && !bucket) {
+    throw new Error(
+      "ARCHESTRA_FILE_STORAGE_S3_BUCKET is required when ARCHESTRA_FILE_STORAGE_PROVIDER=s3",
+    );
+  }
+  const accessKeyId = env.accessKeyId?.trim() || undefined;
+  const secretAccessKey = env.secretAccessKey?.trim() || undefined;
+  // Static credentials are all-or-nothing: a half-set pair would silently fall
+  // back to the AWS default credential chain (a different identity), so reject it
+  // loudly rather than resolve an unintended identity against the bucket.
+  if (
+    params.provider === "s3" &&
+    Boolean(accessKeyId) !== Boolean(secretAccessKey)
+  ) {
+    throw new Error(
+      "ARCHESTRA_FILE_STORAGE_S3_ACCESS_KEY_ID and ARCHESTRA_FILE_STORAGE_S3_SECRET_ACCESS_KEY must be set together, or both omitted to use the AWS default credential chain",
+    );
+  }
+  return {
+    bucket,
+    region: env.region?.trim() || "us-east-1",
+    endpoint: env.endpoint?.trim() || undefined,
+    forcePathStyle: env.forcePathStyle?.trim().toLowerCase() === "true",
+    accessKeyId,
+    secretAccessKey,
+    keyPrefix: env.keyPrefix?.trim().replace(/^\/+|\/+$/g, "") ?? "",
+  };
+}
+
+/**
+ * Parse the per-run sync work budget (seconds). A run stops at ~90% of this,
+ * checkpoints, and a continuation resumes from there. Invalid or non-positive
+ * values disable the budget (a run then goes to completion in one pass).
+ * @public — exported for testability
+ */
+export function parseConnectorSyncMaxDuration(
+  value: string | undefined,
+): number | undefined {
+  const DEFAULT = 3300; // 55 minutes
+  const seconds = Number.parseInt(value || String(DEFAULT), 10);
+  if (Number.isNaN(seconds) || seconds <= 0) return undefined;
+  return seconds;
+}
+
+/** @public — exported for testability */
+export function parseProcessType(value: string | undefined): ProcessType {
+  const normalized = value?.toLowerCase();
+  if (
+    normalized === "web" ||
+    normalized === "worker" ||
+    normalized === "renderer"
+  ) {
+    return normalized;
+  }
+  return "all";
+}
+
+/**
+ * Parse ARCHESTRA_AUDIT_LOG_RETENTION_DAYS into a non-negative integer.
+ * Default is 0 (retention disabled — audit rows are never auto-deleted).
+ * Org admins opt in by setting a positive number of days.
+ * @public — exported for testability
+ */
+export const parseAuditLogRetentionDays = (
+  envValue: string | undefined,
+): number => {
+  const DEFAULT_RETENTION_DAYS = 0;
+  const value = envValue?.trim();
+  if (!value) return DEFAULT_RETENTION_DAYS;
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_AUDIT_LOG_RETENTION_DAYS value "${value}", using default ${DEFAULT_RETENTION_DAYS} (disabled)`,
+    );
+    return DEFAULT_RETENTION_DAYS;
+  }
+  return parsed;
+};
+
+/**
+ * Parse a Kubernetes resource quantity (memory/CPU/ephemeral-storage) from an
+ * environment variable, falling back to the default when unset or invalid.
+ *
+ * @public — exported for testability
+ */
+export function parseK8sResourceQuantity(params: {
+  envName: string;
+  value: string | undefined;
+  validator: (value: string) => boolean;
+  defaultValue: string;
+}): string {
+  const trimmed = params.value?.trim();
+  if (!trimmed) {
+    return params.defaultValue;
+  }
+  if (!params.validator(trimmed)) {
+    logger.warn(
+      `Invalid ${params.envName} value "${trimmed}", using default "${params.defaultValue}"`,
+    );
+    return params.defaultValue;
+  }
+  return trimmed;
+}
+
+/** @public — consumed by config.test.ts */
+export function parseCommaSeparatedList(value: string): string[] {
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** @public — exported for testability */
+export const getAnalyticsConfig = () => {
+  const analyticsEnv = process.env.ARCHESTRA_ANALYTICS?.trim();
+  // Evaluated at call time (not the module-level `isProduction`) so tests can
+  // exercise both environments.
+  const isProductionEnv = ["production", "prod"].includes(
+    process.env.NODE_ENV?.toLowerCase() ?? "",
+  );
+  return {
+    // Analytics (PostHog product analytics, instance heartbeats, and backend
+    // error tracking) defaults to on only in production builds. Local dev and
+    // test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't "production")
+    // stay silent unless ARCHESTRA_ANALYTICS is explicitly set, which always
+    // wins in both directions ("disabled" → off, any other value → on).
+    enabled: analyticsEnv ? analyticsEnv !== "disabled" : isProductionEnv,
+    posthog: {
+      key:
+        process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
+        DEFAULT_POSTHOG_KEY,
+      host:
+        process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST?.trim() ||
+        DEFAULT_POSTHOG_HOST,
+    },
+  };
+};
+
+const mcpServerBaseImage =
+  process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
+  `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
+
+/**
+ * Default resource requests/limits applied to generated MCP server
+ * containers. Ephemeral-storage governance is required so the scheduler
+ * accounts for disk usage — without it nodes get over-packed until kubelet
+ * DiskPressure eviction cascades kick in.
+ */
+const mcpServerResources = {
+  requests: {
+    cpu: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST",
+      value: process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST,
+      validator: isValidK8sCpuQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
+    }),
+    memory: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST",
+      value: process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
+    }),
+    ephemeralStorage: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST",
+      value:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestEphemeralStorage,
+    }),
+  },
+  limits: {
+    memory: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT",
+      value: process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceLimitMemory,
+    }),
+    ephemeralStorage: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT",
+      value:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceLimitEphemeralStorage,
+    }),
+  },
+};
+
+/**
+ * resolves the Dagger runner host. A misconfigured host returns `undefined`
+ * (and logs) rather than throwing — config is built at module import, so a
+ * throw here would crash the whole backend over one optional feature.
+ *
+ * @public — exported for testability
+ */
+export const parseCodeRuntimeDaggerRunnerHost = (
+  envValue: string | undefined,
+): string | undefined => {
+  const runnerHost = envValue?.trim();
+
+  // No host configured is the normal "this deployment runs no code sandbox"
+  // case, not a misconfiguration — stay silent and leave the sandbox off.
+  if (!runnerHost) {
+    return undefined;
+  }
+
+  // A host that's set but malformed is a genuine misconfiguration (unlike an
+  // absent host, which just means "no sandbox here") — surface it loudly.
+  if (!isSupportedDaggerRunnerHost(runnerHost)) {
+    logger.error(
+      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must use tcp:// or kube-pod:// — code runtime disabled",
+    );
+    return undefined;
+  }
+
+  return runnerHost;
+};
+
+const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
+  runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
+
+/**
+ * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
+ * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
+ * always wins (`"true"`/`"false"`); a blank or unset value falls back to
+ * `ARCHESTRA_BETA`, so `ARCHESTRA_BETA=true` turns on every gate wired through
+ * this helper while a per-feature flag keeps its own opt-out. Backs *product*
+ * features only, never credential/auth-mode toggles (e.g. Bedrock IAM,
+ * Azure/Vertex Entra).
+ *
+ * @public — the shared gate for a product feature that ships off by default; also exported for testability
+ */
+export function betaFeatureEnabled(envValue: string | undefined): boolean {
+  if (envValue === undefined || envValue === "") {
+    return process.env.ARCHESTRA_BETA === "true";
+  }
+  return envValue === "true";
+}
+
+/**
+ * The hackathon recorder (record/replay/edit app demo sessions).
+ *
+ * On for every community deployment, and NEVER on for a deployment running an
+ * activated enterprise license: a licensed customer must not be shown a
+ * temporary community promotion. There is no deployment opt-out flag, because
+ * the two gates above this one already cover "when" and "whether" — the
+ * hackathon date window keeps it hidden outside the event, and the
+ * per-organization toggle lets an admin switch it off — so a community
+ * deployment needs no third switch of its own.
+ *
+ * `enterpriseOverride` is the single escape hatch: it turns the recorder on for
+ * Archestra's own licensed staging AND bypasses the date window. It is
+ * documented nowhere and named as an enterprise override on purpose, so no
+ * customer stumbles onto the enterprise path.
+ *
+ * This is the DEPLOYMENT gate only. Two more gates sit above it at request
+ * time — the organization's own toggle, and the hackathon date window —
+ * because neither can be decided once at boot. See `assertAppsHackathonAvailable`.
+ *
+ * @public — exported for testability
+ */
+export function parseHackathonRecorderEnabled(params: {
+  enterpriseLicenseActivated: boolean;
+  enterpriseOverride: string | undefined;
+}): boolean {
+  if (params.enterpriseLicenseActivated) {
+    return params.enterpriseOverride === "true";
+  }
+  return true;
+}
+
+/**
+ * Defaults for the "Archestra App Gallery" sharing surface — the PUBLIC
+ * device-flow OAuth client id and the public gallery repository. Baked in so
+ * every non-enterprise deployment (local dev and OSS included) offers sharing
+ * to the official gallery out of the box; an env override repoints a fork
+ * elsewhere. Enterprise has the whole hackathon recorder disabled, so these
+ * never surface there.
+ *
+ * @public — exported for testability
+ */
+export const DEFAULT_HACKATHON_GALLERY_GITHUB_CLIENT_ID =
+  "Ov23liqkaqAROe7B7ZZ4";
+/** @public — exported for testability (see the client-id default above) */
+export const DEFAULT_HACKATHON_GALLERY_REPO = "archestra-ai/apps-gallery";
+
+/**
+ * The App Gallery repository a shared recording is submitted to, as
+ * `owner/name` on github.com. Unset means sharing is not offered — the
+ * recorder itself works without it (record/replay/download stay local).
+ *
+ * Undocumented on purpose, like the rest of the recorder — not in
+ * .env.example or the deployment docs.
+ *
+ * @public — exported for testability
+ */
+export function parseHackathonGalleryRepo(
+  envValue: string | undefined,
+): { owner: string; name: string } | undefined {
+  const raw = envValue?.trim();
+  if (!raw) {
+    return undefined;
+  }
+  const match = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(raw);
+  if (!match) {
+    throw new Error(
+      `ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO must be "owner/name" (a github.com repository), got "${raw}"`,
+    );
+  }
+  return { owner: match[1], name: match[2] };
+}
+
+/**
+ * The public App Gallery sharing config: each value is the env override, else
+ * the baked default (see DEFAULT_HACKATHON_GALLERY_*), so every non-enterprise
+ * deployment offers sharing to the official gallery out of the box. The
+ * explicit optional types are load-bearing: the values are never actually
+ * undefined here, but the route's "not configured" guard and its tests still
+ * drive them to undefined, and an object-property annotation (unlike an
+ * annotated const, which CFA narrows to its string initializer) keeps that
+ * assignable.
+ */
+const hackathonGallery: {
+  githubClientId: string | undefined;
+  repo: { owner: string; name: string } | undefined;
+} = {
+  githubClientId:
+    process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID?.trim() ||
+    DEFAULT_HACKATHON_GALLERY_GITHUB_CLIENT_ID,
+  repo: parseHackathonGalleryRepo(
+    process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO?.trim() ||
+      DEFAULT_HACKATHON_GALLERY_REPO,
+  ),
+};
+
+// the code execution sandbox (run_command / upload_file / download_file, plus
+// skill activation-mounts) needs a Dagger runner host: it runs when a host is
+// configured and stays off otherwise — presence of the host is the switch. it
+// is independent of the skills *read* feature — skills can be listed/activated/
+// read with the sandbox off.
+const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost(
+  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
+);
+const skillsSandboxEnabled = skillsSandboxDaggerRunnerHost !== undefined;
+
+// the Dagger runtime fronts the sandbox; enabling the sandbox lights up the
+// shared session + warm base.
+const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
+const daggerRuntimeEnabled =
+  skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;
+
+// persistent "My Files" byte storage backend; the root is validated (required +
+// absolute) eagerly so a misconfigured filesystem provider fails boot loudly.
+const fileStorageProvider = parseFileStorageProvider(
+  process.env.ARCHESTRA_FILE_STORAGE_PROVIDER,
+);
+const fileStorageFilesystemRoot = parseFileStorageFilesystemRoot({
+  provider: fileStorageProvider,
+  value: process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT,
+});
+const fileStorageS3Config = parseFileStorageS3Config({
+  provider: fileStorageProvider,
+  env: {
+    bucket: process.env.ARCHESTRA_FILE_STORAGE_S3_BUCKET,
+    region: process.env.ARCHESTRA_FILE_STORAGE_S3_REGION,
+    endpoint: process.env.ARCHESTRA_FILE_STORAGE_S3_ENDPOINT,
+    forcePathStyle: process.env.ARCHESTRA_FILE_STORAGE_S3_FORCE_PATH_STYLE,
+    accessKeyId: process.env.ARCHESTRA_FILE_STORAGE_S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.ARCHESTRA_FILE_STORAGE_S3_SECRET_ACCESS_KEY,
+    keyPrefix: process.env.ARCHESTRA_FILE_STORAGE_S3_KEY_PREFIX,
   },
 });
 
@@ -532,12 +1365,60 @@ const config = {
       DEFAULT_BODY_LIMIT,
     ),
     trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
+    /**
+     * When set, a dedicated Fastify listener additionally serves the
+     * publicly-exposable endpoints (currently the MS Teams incoming webhook)
+     * on this port. Same handlers as the main API port — just an alias, so a
+     * firewall can expose only these endpoints publicly without exposing the
+     * whole API. The main API port keeps serving them either way.
+     */
+    publicEndpointsPort: parseOptionalPort({
+      envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+      envValue: process.env.ARCHESTRA_PUBLIC_ENDPOINTS_PORT,
+    }),
   },
   websocket: {
     path: "/ws",
   },
   mcpGateway: {
     endpoint: "/v1/mcp",
+    /**
+     * Per-request timeout (ms) for an upstream MCP tool call made through the
+     * gateway. The MCP SDK defaults to 60s, which is too short for tools that
+     * do slow work (long-running scrapers, report builders, etc.). Raise this
+     * env var to give such tools more time before the request times out.
+     */
+    toolCallTimeoutMs: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS,
+      60000,
+    ),
+  },
+  mcpServer: {
+    /**
+     * Opt-in periodic re-discovery of installed MCP servers' tools. Every N
+     * minutes each installed server's catalog tool snapshot is re-synced from
+     * the live server (add/update/remove — same as the reload-tools endpoint,
+     * no pod restart). Unset or 0 disables the refresher (the default).
+     */
+    toolsRefreshIntervalMinutes: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES,
+      0,
+    ),
+  },
+  skillMarketplace: {
+    endpoint: SKILL_MARKETPLACE_PREFIX,
+    /**
+     * Cache directory for materialized share-link git repos. The cache is a
+     * derived view of the `skill_share_link_revision` history — wiping it is
+     * safe and replays produce byte-identical SHAs. For prod, point this at a
+     * persistent volume so reboots don't trigger an unnecessary rebuild.
+     */
+    cacheDir:
+      process.env.ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR?.trim() ||
+      path.join(homedir(), ".archestra", "skill-marketplace-cache"),
+  },
+  git: {
+    binaryPath: process.env.ARCHESTRA_GIT_BINARY_PATH?.trim() || "git",
   },
   a2aGateway: {
     endpoint: "/v1/a2a",
@@ -546,9 +1427,6 @@ const config = {
     endpoint: "/v2/a2a",
   },
   agents: {
-    advancedToolFeaturesEnabled:
-      process.env.ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED === "true",
-    skillsEnabled: process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true",
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {
@@ -580,19 +1458,90 @@ const config = {
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
+    /**
+     * Prefix for auth cookie names (`<prefix>.session_token` etc.). Browsers
+     * scope cookies to the host without the port, so parallel local instances
+     * on different localhost ports clobber each other's sessions unless each
+     * uses a distinct prefix.
+     */
+    cookiePrefix:
+      process.env.ARCHESTRA_AUTH_COOKIE_PREFIX?.trim() || "archestra",
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
+    /**
+     * OAuth Dynamic Client Registration (DCR, RFC 7591) and CIMD auto-registration.
+     * Enabled by default. Set ARCHESTRA_AUTH_DCR_ENABLED=false to allow only
+     * pre-registered OAuth clients (e.g. manually registered MCP OAuth clients) to
+     * run OAuth flows — runtime self-registration is then rejected. Instance-level
+     * because unauthenticated DCR has no org to scope a per-org toggle to.
+     */
+    dynamicClientRegistrationEnabled:
+      process.env.ARCHESTRA_AUTH_DCR_ENABLED !== "false",
+    /**
+     * Grace window (seconds) for the OAuth refresh-token replay shield: a
+     * replayed refresh token revoked within this window is treated as a benign
+     * rotation race and re-issued instead of triggering reuse invalidation.
+     * See services/oauth-refresh-replay.ts.
+     */
+    refreshTokenReuseGraceSeconds: parseRefreshTokenReuseGraceSeconds(
+      process.env.ARCHESTRA_AUTH_REFRESH_TOKEN_REUSE_GRACE_SECONDS,
+    ),
+    devAutoAuthenticateEmail,
   },
   analytics: getAnalyticsConfig(),
   database: {
     url: getDatabaseUrl(),
     poolMax: parseDatabasePoolMax(process.env.ARCHESTRA_DATABASE_POOL_MAX),
+    statementTimeoutMillis: parseDatabaseStatementTimeoutMillis(
+      process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
+    ),
+  },
+  // Cost/billing behavior for LLM interactions. Kept separate from `llm` (which
+  // is a per-provider config map iterated as provider descriptors).
+  llmCost: {
+    // When on (default), traffic robustly attributed to a Claude client AND
+    // forwarding an OAuth Bearer token (Claude Code/Desktop on a Max/Pro
+    // subscription) is classified `subscription` and reported as $0 billed spend
+    // while retaining its list-price estimate. Set to "false" to treat all
+    // raw-passthrough traffic as metered and rely solely on the per-provider-key
+    // billing-mode override. See resolveInteractionBillingMode.
+    subscriptionAutodetect:
+      process.env.ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT !== "false",
   },
   llm: {
     openai: {
       baseUrl:
         process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
+      /**
+       * "ChatGPT subscription" (Codex) auth mode on the OpenAI provider: reuse a
+       * user's ChatGPT/Codex subscription for chat instead of a static API key.
+       * The defaults are the first-party Codex CLI values (the same OAuth client
+       * and endpoints the `codex` CLI uses), overridable for testing.
+       */
+      codex: {
+        /** Codex backend serving the subscription Responses API (`/responses`). */
+        apiBaseUrl:
+          process.env.ARCHESTRA_OPENAI_CODEX_API_BASE_URL ||
+          "https://chatgpt.com/backend-api/codex",
+        /** OAuth issuer hosting the authorize/token/device endpoints. */
+        issuer:
+          process.env.ARCHESTRA_OPENAI_CODEX_ISSUER ||
+          "https://auth.openai.com",
+        /** Public OAuth client id used for the ChatGPT/Codex login flow. */
+        clientId:
+          process.env.ARCHESTRA_OPENAI_CODEX_CLIENT_ID ||
+          "app_EMoamEEZ73f0CkXaXp7hrann",
+        /**
+         * `originator` header value the Codex backend attributes traffic by.
+         * Defaults to Archestra's own identity — matching OpenCode, which sends
+         * its own `opencode` originator rather than impersonating the CLI (proof
+         * the backend accepts non-CLI originators). Overridable to `codex_cli_rs`
+         * if OpenAI ever restricts unknown originators.
+         */
+        originator:
+          process.env.ARCHESTRA_OPENAI_CODEX_ORIGINATOR || "archestra",
+      },
     },
     openrouter: {
       baseUrl:
@@ -615,6 +1564,15 @@ const config = {
       azureFoundryEntraIdEnabled:
         process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
         "true",
+      // Workload Identity Federation (keyless upstream auth); null when not configured.
+      wif: parseAnthropicWifConfig({
+        federationRuleId: process.env.ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID,
+        organizationId: process.env.ARCHESTRA_ANTHROPIC_ORGANIZATION_ID,
+        serviceAccountId: process.env.ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID,
+        workspaceId: process.env.ARCHESTRA_ANTHROPIC_WORKSPACE_ID,
+        identityTokenFile: process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE,
+        identityToken: process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN,
+      }),
     },
     gemini: {
       baseUrl:
@@ -674,6 +1632,75 @@ const config = {
     deepseek: {
       baseUrl:
         process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+    },
+    archestra: {
+      // The "archestra" provider targets another Archestra instance's OpenAI-
+      // compatible LLM proxy. There is no meaningful global default — the
+      // upstream endpoint is supplied per key as a base URL. A global base URL
+      // only enables raw passthrough at the /v1/archestra proxy prefix.
+      enabled: Boolean(process.env.ARCHESTRA_ARCHESTRA_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_ARCHESTRA_BASE_URL,
+    },
+    kimi: {
+      baseUrl:
+        process.env.ARCHESTRA_KIMI_BASE_URL || "https://api.moonshot.ai/v1",
+    },
+    "github-copilot": {
+      baseUrl:
+        process.env.ARCHESTRA_GITHUB_COPILOT_BASE_URL ||
+        "https://api.githubcopilot.com",
+      /**
+       * Endpoint exchanging a long-lived GitHub OAuth token for a short-lived
+       * Copilot API bearer. Overridable for GitHub Enterprise
+       * (https://copilot-api.<ghe-domain>/copilot_internal/v2/token) and e2e tests.
+       */
+      tokenExchangeUrl:
+        process.env.ARCHESTRA_GITHUB_COPILOT_TOKEN_EXCHANGE_URL ||
+        "https://api.github.com/copilot_internal/v2/token",
+      /**
+       * Host serving the GitHub OAuth device-flow endpoints
+       * (/login/device/code and /login/oauth/access_token).
+       */
+      deviceAuthBaseUrl:
+        process.env.ARCHESTRA_GITHUB_COPILOT_DEVICE_AUTH_BASE_URL ||
+        "https://github.com",
+      /**
+       * GitHub App client id used for the device flow. Defaults to the
+       * community-standard VS Code client id accepted by the Copilot token
+       * exchange; organizations with their own GitHub App can override it.
+       */
+      clientId:
+        process.env.ARCHESTRA_GITHUB_COPILOT_CLIENT_ID ||
+        "Iv1.b507a08c87ecfe98",
+    },
+    "microsoft-365-copilot": {
+      /** Microsoft Graph base URL serving the Microsoft 365 Copilot Chat API (beta). */
+      baseUrl:
+        process.env.ARCHESTRA_MICROSOFT_365_COPILOT_BASE_URL ||
+        "https://graph.microsoft.com/beta",
+      /**
+       * Host serving the Entra ID OAuth endpoints
+       * (/{tenant}/oauth2/v2.0/devicecode and /{tenant}/oauth2/v2.0/token).
+       * Overridable for sovereign clouds and e2e tests.
+       */
+      authBaseUrl:
+        process.env.ARCHESTRA_MICROSOFT_365_COPILOT_AUTH_BASE_URL ||
+        "https://login.microsoftonline.com",
+      /**
+       * Entra tenant segment of the OAuth endpoints. "organizations" allows any
+       * work/school account; operators can pin their own tenant id to restrict
+       * sign-in to one directory.
+       */
+      tenantId:
+        process.env.ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID ||
+        "organizations",
+      /**
+       * Application (client) ID of the operator's Entra app registration (a
+       * public client with "Allow public client flows" enabled and the Graph
+       * delegated scopes the Chat API requires). No community default exists,
+       * so device-flow sign-in is unavailable until this is set.
+       */
+      clientId: process.env.ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID || "",
     },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
@@ -749,6 +1776,20 @@ const config = {
     deepseek: {
       apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
     },
+    archestra: {
+      apiKey: process.env.ARCHESTRA_CHAT_ARCHESTRA_API_KEY || "",
+    },
+    kimi: {
+      apiKey: process.env.ARCHESTRA_CHAT_KIMI_API_KEY || "",
+    },
+    "github-copilot": {
+      apiKey: process.env.ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY || "",
+    },
+    "microsoft-365-copilot": {
+      // Per-user provider: every env-key consumer skips it (resolution
+      // fallback, env seeding, system defaults), so no env var is read.
+      apiKey: "",
+    },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
     },
@@ -759,7 +1800,7 @@ const config = {
       apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
     },
     defaultModel:
-      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || "claude-opus-4-1-20250805",
+      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || DEFAULT_MODELS.anthropic,
     defaultProvider: ((): SupportedProvider => {
       const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
       if (
@@ -770,6 +1811,32 @@ const config = {
       }
       return "anthropic";
     })(),
+    activeRun: {
+      replayPollIntervalMs: parseActiveChatRunPollIntervalMs({
+        value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS,
+        defaultValue: 500,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+      }),
+      stopPollIntervalMs: parseActiveChatRunPollIntervalMs({
+        value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS,
+        defaultValue:
+          process.env
+            .ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED === "true"
+            ? 500
+            : 30_000,
+        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS",
+      }),
+      pollingCompatibilityEnabled:
+        process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED ===
+        "true",
+      notifyDatabaseUrl:
+        process.env.ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL?.trim() || "",
+    },
+    secretScanEnabled:
+      process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
+    maxOutputTokensCeiling: parseChatMaxOutputTokens(
+      process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
+    ),
   },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
@@ -779,6 +1846,83 @@ const config = {
     fullWhiteLabeling:
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING === "true",
   },
+  hackathonRecorder: {
+    enabled: parseHackathonRecorderEnabled({
+      enterpriseLicenseActivated:
+        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+      // Undocumented on purpose — see parseHackathonRecorderEnabled. Do not
+      // add this to .env.example or the deployment docs.
+      enterpriseOverride:
+        process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
+    }),
+    /**
+     * The staging override is active. It forces the recorder on for Archestra's
+     * own licensed staging (see parseHackathonRecorderEnabled) AND bypasses the
+     * hackathon date window, so staging can exercise the feature before it
+     * opens and after it closes. Undocumented, same as the override itself.
+     */
+    overrideActive:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
+    /**
+     * Sharing a recording to the public App Gallery (a PR filed on the
+     * participant's own GitHub account). Both values default to the official
+     * Archestra gallery + its public device-flow OAuth client (see
+     * DEFAULT_HACKATHON_GALLERY_*), so every non-enterprise deployment offers
+     * sharing out of the box; an env override repoints a fork elsewhere.
+     *
+     * `githubClientId` is the PUBLIC client id of the "Archestra App Gallery"
+     * GitHub OAuth app with the device flow enabled — the device flow needs no
+     * client secret, which is what lets community deployments offer sharing
+     * with nothing but this id. Register a classic OAuth app, not a GitHub
+     * App: a GitHub App's user token cannot write to the participant's fork
+     * unless they also install the app on their account.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
+     */
+    gallery: hackathonGallery,
+    /**
+     * Escape hatch, not a requirement: the renderer finds or installs its own
+     * Chromium (see app-recording-render-runtime). Set this only to pin a
+     * specific browser — it must be a FULL Chromium, since Playwright's
+     * headless shell carries no WebCodecs encoder.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
+     */
+    chromiumPath:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_CHROMIUM_PATH?.trim() ||
+      undefined,
+    /**
+     * Where the renderer reaches this deployment's own frontend to load the
+     * replay page it films.
+     */
+    renderBaseUrl: hackathonRecorderRenderBaseUrl,
+    /**
+     * The origins that base URL may be reached as, so the app sandbox can name
+     * them as permitted frame ancestors. Loopback is spelled two ways and they
+     * are distinct origins to a browser: a render that loads `127.0.0.1` is
+     * refused by a policy naming only `localhost`, and the app pane films
+     * empty.
+     */
+    renderFrameAncestors: addLoopbackEquivalents([
+      hackathonRecorderRenderBaseUrl,
+    ]),
+    /**
+     * The in-cluster URL of the dedicated render service, when video rendering
+     * runs as its own single-replica deployment (see startRenderer). Set it and
+     * the web tier stops rendering in-process and proxies render/status/
+     * download/cancel there instead — so a multi-replica web tier no longer
+     * scatters a render's follow-up requests across pods that never held its
+     * (in-memory) job. Unset — the OSS single container, local dev — and the web
+     * process renders in-process exactly as before.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
+     */
+    rendererUrl:
+      process.env.ARCHESTRA_APP_RECORDING_RENDERER_URL?.trim() || undefined,
+  },
   /**
    * Codegen mode is set when running `pnpm codegen` via turbo.
    * This ensures enterprise routes are always included in generated API specs,
@@ -786,9 +1930,21 @@ const config = {
    */
   codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
-    mcpServerBaseImage:
-      process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`,
+    mcpServerBaseImage,
+    mcpServerResources,
+    /**
+     * How often (in seconds) to sweep Failed/Evicted MCP server pods.
+     * DiskPressure eviction cascades can leave hundreds of Failed pod
+     * corpses behind that nothing else cleans up. Set to 0 to disable.
+     */
+    failedPodReapIntervalSeconds:
+      process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS?.trim() ===
+      "0"
+        ? 0
+        : parsePositiveInt(
+            process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS,
+            600,
+          ),
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -801,7 +1957,86 @@ const config = {
       clusterDomain:
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN ||
         "cluster.local",
+      // Namespaces the platform ServiceAccount is granted RBAC in (Helm
+      // rbac.environmentNamespaces). Surfaced to the UI so the environment
+      // editor can offer a namespace dropdown instead of free text.
+      environmentNamespaces: parseCommaSeparatedList(
+        process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
+      ),
     },
+  },
+  /**
+   * code execution sandbox runtime — the per-conversation Dagger container that
+   * runs commands, holds uploaded files, and materializes activated skills.
+   * runs when a Dagger runner host is configured
+   * (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`), off otherwise.
+   */
+  skillsSandbox: {
+    enabled: skillsSandboxEnabled,
+    cpuLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_CPU_LIMIT_SECONDS,
+      30,
+    ),
+    memoryLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_MEMORY_LIMIT_BYTES,
+      1024 * 1024 * 1024,
+    ),
+    wallClockSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_WALL_CLOCK_SECONDS,
+      120,
+    ),
+    outputBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT,
+      256 * 1024,
+    ),
+    artifactBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
+      16 * 1024 * 1024,
+    ),
+  },
+  /**
+   * agent lifecycle hooks — user scripts run at chat lifecycle events.
+   * Available whenever the agent runtime (the code execution sandbox) is on,
+   * since hooks execute in the conversation sandbox; off otherwise. This
+   * `enabled` is the fully-resolved flag — the dispatcher, the `/debug` toggle,
+   * and the chip read-gate all key off it.
+   */
+  hooks: {
+    enabled: skillsSandboxEnabled,
+  },
+  /**
+   * unified Dagger runtime — one shared session with a pre-warmed base
+   * container that hosts the code execution sandbox commands. The Rust crate
+   * (`@archestra/sandbox-rs`) owns the session; this block only carries
+   * enable + connection knobs.
+   */
+  daggerRuntime: {
+    enabled: daggerRuntimeEnabled,
+    runnerHost: daggerRuntimeRunnerHost,
+    cliBin:
+      process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
+      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
+      undefined,
+    maxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT,
+      10,
+    ),
+    maxQueueLength: parsePositiveInt(
+      process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
+      50,
+    ),
+  },
+  /**
+   * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
+   * default) and `filesystem` (a mounted volume / PVC) are co-equal: the active
+   * provider is used for new writes while reads dispatch per row, so a
+   * deployment can hold a mix. `filesystemRoot` is the absolute mount path,
+   * required + validated when `provider === "filesystem"`.
+   */
+  fileStorage: {
+    provider: fileStorageProvider,
+    filesystemRoot: fileStorageFilesystemRoot,
+    s3: fileStorageS3Config,
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
@@ -824,6 +2059,9 @@ const config = {
      * Mirrors the CORS/trusted-origin configuration so all three stay in sync.
      */
     allowedOrigins: addLoopbackEquivalents(getConfiguredOrigins()),
+  },
+  logging: {
+    format: parseLogFormat(process.env.ARCHESTRA_LOGGING_FORMAT),
   },
   observability: {
     otel: {
@@ -880,31 +2118,87 @@ const config = {
     virtualKeyDefaultExpirationSeconds: parseVirtualKeyDefaultExpiration(
       process.env.ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS,
     ),
+    upstreamTimeoutMs: process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS
+      ? parsePositiveInt(
+          process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS,
+          300000,
+        )
+      : undefined,
   },
   kb: {
+    // BETA gate for the auto-sync-permissions connector visibility: the
+    // permission-sync passes, the connector Permissions tab APIs, and manual
+    // member overrides. Off by default; a blank value falls back to the
+    // ARCHESTRA_BETA master switch (see betaFeatureEnabled).
+    autoSyncPermissionsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED,
+    ),
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
+    taskWorkerPollIntervalSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
+      5,
+    ),
+    taskWorkerMaxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT,
+      2,
+    ),
+    // Concurrency cap for the runtime-isolated permission-sync lane. Separate
+    // from the content lane so permission passes can neither starve nor be
+    // starved by content ingestion.
+    permissionSyncWorkerMaxConcurrent: parsePositiveInt(
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT,
+      1,
+    ),
+    taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
+      30,
+    ),
+    // Liveness lease for connector sync runs. The owning worker renews the
+    // lease every `heartbeatInterval`; a run whose lease is not renewed within
+    // `leaseTtl` is treated as orphaned and reclaimed. TTL must be several times
+    // the heartbeat interval so a missed beat (GC pause, slow batch) doesn't
+    // falsely expire a live run.
+    connectorRunLeaseTtlSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_LEASE_TTL_SECONDS,
+      300,
+    ),
+    connectorRunHeartbeatIntervalSeconds: parsePositiveInt(
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_HEARTBEAT_INTERVAL_SECONDS,
+      90,
+    ),
+    // Max wall-clock time a single sync run works before it checkpoints and
+    // yields; a continuation then resumes from that checkpoint. This bounds how
+    // long one run holds a worker and chunks large syncs into resumable pieces.
+    // A run stops at ~90% of this, so 3300s (55m) yields ~49m of work per run.
+    // Liveness is enforced by the lease/heartbeat, not by this budget. (Retains
+    // the older env var name so existing custom configs keep working.)
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
-    taskWorkerPollIntervalSeconds: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS ||
-        "5",
-      10,
-    ),
-    taskWorkerMaxConcurrent: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT || "2",
-      10,
-    ),
-    taskWorkerShutdownTimeoutSeconds: Number.parseInt(
-      process.env
-        .ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS || "30",
-      10,
+    // A document still `pending`/`processing` this long after its last touch has
+    // no live `batch_embedding` task behind it: a task exhausts its 5 retries in
+    // ~8 min (30s * 2^(attempt-1) backoff), so past that it is stalled and the
+    // recovery sweep re-enqueues it. Kept comfortably above that ~8 min span (not
+    // at it) so a slow-but-live embedding batch is never reset out from under its
+    // worker, which would double-embed and waste embedding-API cost.
+    stalledEmbeddingAgeSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS,
+      15 * 60,
     ),
   },
   secretsManager: {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
     vaultKvVersion: process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2",
+    /**
+     * One-boot escape hatch for a deliberate ARCHESTRA_AUTH_SECRET rotation:
+     * lets startup accept an encryption key that cannot decrypt previously
+     * stored secrets instead of aborting.
+     */
+    acceptNewEncryptionKey:
+      process.env.ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY === "true",
   },
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",
@@ -914,26 +2208,66 @@ const config = {
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
-  ngrokDomain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
+  /**
+   * ARCHESTRA_BETA master switch (the same flag betaFeatureEnabled() falls back
+   * to). Surfaced to the frontend via /api/config so beta-gated UI — e.g. making
+   * the new connection page the default Connect destination — can key off it.
+   */
+  beta: process.env.ARCHESTRA_BETA === "true",
+  ngrok: {
+    // When set, the backend brings up an ngrok tunnel in-process (via the ngrok
+    // agent SDK) so the instance is reachable from the Internet for inbound
+    // chatops webhooks (MS Teams, Slack).
+    authToken: process.env.ARCHESTRA_NGROK_AUTH_TOKEN || "",
+    // Optional reserved domain for a stable public URL across restarts. Without
+    // it ngrok assigns an ephemeral domain that rotates on each restart.
+    domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
+  },
+  chatops: {
+    // The Telegram integration is generally available: on by default, with
+    // ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=false as the operator opt-out.
+    // Off = the provider never starts (even with a token saved in the DB),
+    // the config endpoint rejects updates, and the frontend hides the
+    // Telegram messaging channel.
+    telegramEnabled: process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED !== "false",
+    // Per-process cap on concurrent chatops file downloads + image shrinking.
+    // Chatops events are acked to the provider before processing, so an OOM
+    // during a burst of attachment-heavy messages means silent message loss —
+    // this bounds the transient memory (JS buffer + native copy + decode
+    // alloc) a burst can hold. 4 matches libuv's default threadpool, which
+    // already serializes the native image decodes. Currently gates Slack only:
+    // MS Teams has no image-shrink path and enforces a flat 10 MB per-file cap.
+    maxConcurrentFileTransfers: parsePositiveInt(
+      process.env.ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS,
+      4,
+    ),
+  },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
+  maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
+  // Instance-wide banner (markdown) shown at the top of the UI. Unlike
+  // maintenanceMode it does not affect request handling.
+  siteNotificationMessage:
+    process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
+  auditLog: {
+    retentionDays: parseAuditLogRetentionDays(
+      process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,
+    ),
+  },
 };
 
-export const shouldRunWebServer = config.processType !== "worker";
-export const shouldRunWorker = config.processType !== "web";
+// "all" runs the web server and the worker in one process; "web"/"worker" run
+// exactly one. "renderer" is neither — it runs only the isolated app-recording
+// video render service (see startRenderer), so a multi-replica web tier can
+// offload rendering to a single stable pod that owns every in-memory job.
+export const shouldRunWebServer =
+  config.processType === "web" || config.processType === "all";
+export const shouldRunWorker =
+  config.processType === "worker" || config.processType === "all";
+export const shouldRunRenderer = config.processType === "renderer";
 
 export default config;
 
 // ===== Internal helpers =====
-
-/** @public — exported for testability */
-export function parseConnectorSyncMaxDuration(
-  value: string | undefined,
-): number | undefined {
-  const DEFAULT = 3300; // 55 minutes
-  const seconds = Number.parseInt(value || String(DEFAULT), 10);
-  if (Number.isNaN(seconds) || seconds <= 0) return undefined;
-  return seconds;
-}
 
 /**
  * Get the environment variable API key for a provider.
@@ -949,17 +2283,17 @@ export function getProviderEnvApiKey(
   return undefined;
 }
 
-/** @public — exported for testability */
-export function parseProcessType(value: string | undefined): ProcessType {
-  const normalized = value?.toLowerCase();
-  if (normalized === "web" || normalized === "worker") return normalized;
-  return "all";
-}
-
-/** @public — exported for testability */
-export function parseCommaSeparatedList(value: string): string[] {
-  return value
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+/**
+ * Get the configured base URL for a provider, normalized to undefined when empty.
+ * Centralizes the config.llm[provider].baseUrl lookup; mirrors getProviderEnvApiKey.
+ */
+export function getProviderConfiguredBaseUrl(
+  provider: SupportedProvider,
+): string | undefined {
+  const entry = config.llm[provider as keyof typeof config.llm];
+  if (typeof entry === "object" && entry !== null && "baseUrl" in entry) {
+    const baseUrl = entry.baseUrl?.trim();
+    return baseUrl || undefined;
+  }
+  return undefined;
 }

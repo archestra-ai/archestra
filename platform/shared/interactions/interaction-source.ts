@@ -9,13 +9,20 @@ export const InteractionSourceSchema = z.enum([
   "model_router",
   "chat",
   "chat:compaction",
+  "a2a:compaction",
+  "chat:title_generation",
+  "chat:tool_call_repair",
+  "skill:description_generation",
   "chatops:slack",
   "chatops:ms-teams",
+  "chatops:telegram",
   "email",
   "schedule-trigger",
   "knowledge:embedding",
   "knowledge:reranker",
   "knowledge:query-expansion",
+  "app:llm_complete",
+  "app:recording_enhancement",
 ]);
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
@@ -33,13 +40,20 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   model_router: { label: "Model Router" },
   chat: { label: "Chat" },
   "chat:compaction": { label: "Chat Compaction" },
+  "a2a:compaction": { label: "Agent Context Compaction" },
+  "chat:title_generation": { label: "Chat Title Generation" },
+  "chat:tool_call_repair": { label: "Chat Tool Call Repair" },
+  "skill:description_generation": { label: "Skill Description Generation" },
   "chatops:slack": { label: "Slack" },
   "chatops:ms-teams": { label: "MS Teams" },
+  "chatops:telegram": { label: "Telegram" },
   email: { label: "Email" },
   "schedule-trigger": { label: "Scheduled Trigger" },
   "knowledge:embedding": { label: "Knowledge - Embedding" },
   "knowledge:reranker": { label: "Knowledge - Reranker" },
   "knowledge:query-expansion": { label: "Knowledge - Query Expansion" },
+  "app:llm_complete": { label: "App LLM Completion" },
+  "app:recording_enhancement": { label: "App Recording Enhancement" },
 };
 
 /**

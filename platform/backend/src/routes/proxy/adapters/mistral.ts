@@ -9,7 +9,7 @@
  *
  * @see https://docs.mistral.ai/api
  */
-import { ArchestraInternalErrorCode } from "@shared";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -229,12 +229,7 @@ export const mistralAdapterFactory: LLMProvider<
     options: CreateClientOptions,
   ): OpenAIProvider {
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "mistral",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("mistral", options.agent, options.source)
       : undefined;
 
     return new OpenAIProvider({

@@ -1,6 +1,5 @@
 "use client";
 import { useDebounce } from "@uidotdev/usehooks";
-import { isToday, isWithinInterval, isYesterday, subDays } from "date-fns";
 import {
   Bot,
   Cable,
@@ -54,6 +53,7 @@ import {
   getConversationDisplayTitle,
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
+import { getDateBucketLabel } from "@/lib/chat/group-conversations-by-date";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
 /**
@@ -79,39 +79,6 @@ function extractTextFromMessages(
   return textParts.join(" ");
 }
 
-/** Groups conversations into time-based buckets for organized display */
-function groupConversationsByDate<
-  T extends { updatedAt: string | Date; pinnedAt?: string | Date | null },
->(conversations: T[]) {
-  const pinned: T[] = [];
-  const today: T[] = [];
-  const yesterday: T[] = [];
-  const previous7Days: T[] = [];
-  const older: T[] = [];
-
-  const now = new Date();
-  const sevenDaysAgo = subDays(now, 7);
-
-  for (const conv of conversations) {
-    if (conv.pinnedAt) {
-      pinned.push(conv);
-      continue;
-    }
-    const updatedAt = new Date(conv.updatedAt);
-    if (isToday(updatedAt)) {
-      today.push(conv);
-    } else if (isYesterday(updatedAt)) {
-      yesterday.push(conv);
-    } else if (isWithinInterval(updatedAt, { start: sevenDaysAgo, end: now })) {
-      previous7Days.push(conv);
-    } else {
-      older.push(conv);
-    }
-  }
-
-  return { pinned, today, yesterday, previous7Days, older };
-}
-
 // Product navigation items matching sidebar names
 const navigationItems = [
   {
@@ -123,10 +90,11 @@ const navigationItems = [
   },
   {
     icon: Zap,
-    label: "Agent Triggers",
-    value: "agent-triggers",
-    keywords: "triggers automation webhooks ms teams",
-    href: "/agents/triggers/ms-teams",
+    label: "Messaging Channels",
+    value: "messaging-channels",
+    keywords:
+      "messaging channels triggers automation webhooks slack ms teams email a2a",
+    href: "/messaging-channels/ms-teams",
   },
   {
     icon: Shield,
@@ -147,14 +115,15 @@ const navigationItems = [
     label: "Model Providers",
     value: "model-providers",
     keywords: "provider settings api keys models llm",
-    href: "/llm/model-providers/api-keys",
+    href: "/llm/model-providers",
   },
   {
     icon: Key,
-    label: "Credentials",
+    label: "Client Credentials",
     value: "credentials",
-    keywords: "virtual keys oauth clients client credentials llm",
-    href: "/llm/credentials/virtual-keys",
+    keywords:
+      "virtual keys oauth clients client credentials llm mcp gateways agents a2a",
+    href: "/credentials",
   },
   {
     icon: MessagesSquare,
@@ -249,11 +218,14 @@ export function ConversationSearchPalette({
   const isTyping = searchQuery !== debouncedSearch;
   const isSearchingAndFetching = isSearching && (isTyping || isFetching);
 
-  const groupedConversations = useMemo(() => {
+  const browseConversations = useMemo(() => {
     if (debouncedSearch.trim()) {
       return null;
     }
-    return groupConversationsByDate(conversations);
+    return {
+      pinned: conversations.filter((c) => c.pinnedAt),
+      unpinned: conversations.filter((c) => !c.pinnedAt),
+    };
   }, [conversations, debouncedSearch]);
 
   // Reset state on every open/close transition.
@@ -443,8 +415,9 @@ export function ConversationSearchPalette({
 
   const renderConversationItem = (
     conv: (typeof conversations)[number],
-    showPinIcon = false,
+    opts?: { showPinIcon?: boolean; dateLabel?: string },
   ) => {
+    const { showPinIcon = false, dateLabel } = opts ?? {};
     const isSearchActive = debouncedSearch.trim().length > 0;
     const displayTitle = getConversationDisplayTitle(conv.title, conv.messages);
     const preview = isSearchActive
@@ -477,9 +450,15 @@ export function ConversationSearchPalette({
           <span className="text-sm flex-1 min-w-0 break-words leading-snug line-clamp-2">
             {displayTitle}
           </span>
+          {dateLabel && !isPending && (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {dateLabel}
+            </span>
+          )}
           {isPending && (
             <Badge
               variant="destructive"
+              role="status"
               className="absolute right-3 top-2.5 text-[10px] shadow-sm animate-in fade-in zoom-in duration-200"
             >
               Press "{SHORTCUT_DELETE.label}" to confirm
@@ -591,40 +570,24 @@ export function ConversationSearchPalette({
                   {conversations.map((conv) => renderConversationItem(conv))}
                 </CommandGroup>
               )
-            ) : groupedConversations ? (
+            ) : browseConversations ? (
               <>
-                {groupedConversations.pinned.length > 0 && (
+                {browseConversations.pinned.length > 0 && (
                   <CommandGroup heading="Pinned">
-                    {groupedConversations.pinned.map((conv) =>
-                      renderConversationItem(conv, true),
+                    {browseConversations.pinned.map((conv) =>
+                      renderConversationItem(conv, {
+                        showPinIcon: true,
+                        dateLabel: getDateBucketLabel(conv.lastMessageAt),
+                      }),
                     )}
                   </CommandGroup>
                 )}
-                {groupedConversations.today.length > 0 && (
-                  <CommandGroup heading="Today">
-                    {groupedConversations.today.map((conv) =>
-                      renderConversationItem(conv),
-                    )}
-                  </CommandGroup>
-                )}
-                {groupedConversations.yesterday.length > 0 && (
-                  <CommandGroup heading="Yesterday">
-                    {groupedConversations.yesterday.map((conv) =>
-                      renderConversationItem(conv),
-                    )}
-                  </CommandGroup>
-                )}
-                {groupedConversations.previous7Days.length > 0 && (
-                  <CommandGroup heading="Previous 7 Days">
-                    {groupedConversations.previous7Days.map((conv) =>
-                      renderConversationItem(conv),
-                    )}
-                  </CommandGroup>
-                )}
-                {groupedConversations.older.length > 0 && (
-                  <CommandGroup heading="Previous 30 Days">
-                    {groupedConversations.older.map((conv) =>
-                      renderConversationItem(conv),
+                {browseConversations.unpinned.length > 0 && (
+                  <CommandGroup>
+                    {browseConversations.unpinned.map((conv) =>
+                      renderConversationItem(conv, {
+                        dateLabel: getDateBucketLabel(conv.lastMessageAt),
+                      }),
                     )}
                   </CommandGroup>
                 )}
@@ -650,7 +613,7 @@ export function ConversationSearchPalette({
                 {SHORTCUT_SEARCH.label}
               </kbd>
             </div>
-            <span className="text-muted-foreground/70">Search</span>
+            <span className="text-muted-foreground">Search</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1">
@@ -661,19 +624,19 @@ export function ConversationSearchPalette({
                 {SHORTCUT_NEW_CHAT.label}
               </kbd>
             </div>
-            <span className="text-muted-foreground/70">New Chat</span>
+            <span className="text-muted-foreground">New Chat</span>
           </div>
           <div className="flex items-center gap-1.5">
             <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
               {SHORTCUT_PIN.label}
             </kbd>
-            <span className="text-muted-foreground/70">Pin / Unpin Chat</span>
+            <span className="text-muted-foreground">Pin / Unpin Chat</span>
           </div>
           <div className="flex items-center gap-1.5">
             <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
               {SHORTCUT_DELETE.label}
             </kbd>
-            <span className="text-muted-foreground/70">Delete Chat</span>
+            <span className="text-muted-foreground">Delete Chat</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1">
@@ -684,7 +647,7 @@ export function ConversationSearchPalette({
                 {SHORTCUT_SIDEBAR.label}
               </kbd>
             </div>
-            <span className="text-muted-foreground/70">Sidebar</span>
+            <span className="text-muted-foreground">Sidebar</span>
           </div>
         </div>
       </div>

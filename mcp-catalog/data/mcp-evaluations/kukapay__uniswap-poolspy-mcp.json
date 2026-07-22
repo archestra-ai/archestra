@@ -1,0 +1,96 @@
+{
+  "name": "kukapay__uniswap-poolspy-mcp",
+  "display_name": "uniswap-poolspy-mcp",
+  "description": "An MCP server that tracks newly created liquidity pools on Uniswap across nine blockchain networks.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {
+      "THEGRAPH_API_KEY": "${user_config.thegraph_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "thegraph_api_key": {
+      "type": "string",
+      "title": "The Graph API Key",
+      "description": "Your API key for The Graph",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Uniswap PoolSpy MCP Server\n\nAn MCP server that tracks newly created liquidity pools on Uniswap across nine blockchain networks — Ethereum, Base, Optimism, Arbitrum, Polygon, BNB Smart Chain (BSC), Avalanche, Celo, and Blast — providing real-time data for DeFi analysts, traders, and developers.\n\n![Python](https://img.shields.io/badge/python-3.10+-blue.svg)\n![License](https://img.shields.io/badge/license-MIT-green.svg)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- Monitors Uniswap V3 pool creation across 9 blockchain networks.\n- Customizable time range and result limits for querying new pools.\n- Supports sorting by timestamp, transaction count, volume, or TVL.\n\n## Prerequisites\n\n- Python 3.10 or higher\n- [uv](https://github.com/astral-sh/uv) for package management\n- A valid [The Graph API key](https://thegraph.com/studio/apikeys/)\n- MCP-compatible environment (e.g., Claude Desktop) for full functionality\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/yourusername/uniswap-poolspy-mcp.git\n   cd uniswap-poolspy-mcp\n   ```\n\n2. **Set Up Environment**:\n   Install `uv` if you haven't already:\n   ```bash\n   curl -LsSf https://astral.sh/uv/install.sh | sh\n   ```\n\n3. **Install Dependencies**:\n   Use `uv` to sync dependencies from `pyproject.toml`:\n   ```bash\n   uv sync\n   ```\n\n4. **Configure API Key**:\n   Create a `.env` file in the project root:\n   ```bash\n   echo \"THEGRAPH_API_KEY=your-api-key-here\" > .env\n   ```\n   Replace `your-api-key-here` with your actual The Graph API key.\n\n## Usage\n\n### Running the Server\n\nStart the MCP server:\n```bash\nuv run main.py\n```\n\nFor development with MCP Inspector:\n```bash\nuv run mcp dev main.py\n```\n\n### Integrating with Claude Desktop\n\nInstall the server as an MCP plugin:\n```bash\nuv run mcp install main.py --name \"UniswapPoolSpy\"\n```\n\n### Configuration\n\nTo make the server discoverable by MCP clients (e.g., Claude Desktop), configure it in an `mcpServers` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"Uniswap-PoolSpy\": {\n      \"command\": \"uv\",\n      \"args\": [\"--directory\", \"path/to/uniswap-poolspy-mcp\", \"run\", \"main.py\"],\n      \"env\": {\n        \"THEGRAPH_API_KEY\": \"your api key from The Graph\"\n      }\n    }\n  }\n}\n   ```\n\n\n### Querying New Pools\n\nUse the `get_new_pools` tool in Claude Desktop with natural language queries like:\n- \"Show me new pools on Ethereum from the last 10 minutes\"\n- \"List pools on Base sorted by volume, limit to 50\"\n- \"What pools were created on Polygon in the past hour, ordered by TVL?\"\n\nThe tool accepts these parameters:\n- `chain`: Blockchain network (e.g., \"ethereum\", \"base\", \"optimism\")\n- `order_by`: Sort field (\"timestamp\", \"txcount\", \"volume\", \"tvl\")\n- `time_range_seconds`: Lookback period in seconds (default: 300)\n- `limit`: Maximum number of pools to return (default: 100)\n\n### Example Output\n```\nNewly Created Trading Pools (Last 5 Minutes, Limit: 100):\nPool Address: 0x1234...abcd\nTokens: WETH/USDC\nCreated At: 2025-03-18 12:34:56\nBlock Number: 12345678\nTransaction Count: 5\nVolume (USD): 15000.25\nTotal Value Locked (USD): 50000.75\n\nPool Address: 0x5678...efgh\nTokens: DAI/USDT\nCreated At: 2025-03-18 12:33:45\nBlock Number: 12345670\nTransaction Count: 3\nVolume (USD): 8000.50\nTotal Value Locked (USD): 25000.00\n```\n\n## Supported Chains\n\n- Ethereum\n- Base\n- Optimism\n- Arbitrum\n- Polygon\n- BNB Smart Chain (BSC)\n- Avalanche\n- Celo\n- Blast\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Finance",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "Uniswap-PoolSpy": {
+        "command": "uv",
+        "args": ["--directory", "path/to/uniswap-poolspy-mcp", "run", "main.py"],
+        "env": {
+          "THEGRAPH_API_KEY": "your api key from The Graph"
+        }
+      },
+      "Uniswap-PoolSpy-basic": {
+        "command": "uv",
+        "args": ["run", "main.py"],
+        "env": {}
+      },
+      "Uniswap-PoolSpy-dev": {
+        "command": "uv",
+        "args": ["run", "mcp", "dev", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "uniswap-poolspy-mcp",
+    "url": "https://github.com/kukapay/uniswap-poolspy-mcp",
+    "name": "uniswap-poolspy-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 1,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a4dfb09adf9cddaade5c6b2ce4ef45c44c2a4864"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.084Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"uniswap-poolspy-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that tracks newly created liquidity pools on Uniswap across nine blockchain networks\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.4.1\",\n]\n"
+}

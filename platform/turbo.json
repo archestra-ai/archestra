@@ -5,12 +5,25 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "*.node"],
       "env": ["VERSION"]
+    },
+    "@archestra/app-runtime-rs#build": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "@archestra/sandbox-rs#build": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "@archestra/image-rs#build": {
+      "dependsOn": ["^build"],
+      "cache": false
     },
     "dev": {
       "persistent": true,
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["PORT"]
     },
     "start": {
       "persistent": true,
@@ -26,10 +39,13 @@
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json"]
     },
     "check:ci": {
-      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json"]
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]
+    },
+    "@backend#check:ci": {
+      "dependsOn": ["@archestra/app-runtime-rs#build", "@archestra/sandbox-rs#build"]
     },
     "check:commit": {
-      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json"]
+      "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]
     },
     "knip": {
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "**/knip.config.ts", "**/package.json"]
@@ -64,7 +80,7 @@
     "codegen": {
       "cache": false
     },
-    "@shared#codegen": {
+    "@archestra/shared#codegen": {
       "dependsOn": ["@backend#codegen"],
       "cache": false
     },

@@ -1,26 +1,38 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
 import { Eye } from "lucide-react";
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
+import { QueryLoadError } from "@/components/query-load-error";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { Button } from "@/components/ui/button";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
-import config from "@/lib/config/config";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import {
   useCanImpersonate,
   useImpersonateUser,
   useImpersonationCandidates,
 } from "@/lib/impersonation.query";
 
-const { RolesList } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional ee component with roles
-    await import("@/components/roles/roles-list.ee")
-  : await import("@/components/roles/roles-list");
+const RolesListEnterprise = dynamic(() =>
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+  import("@/components/roles/roles-list.ee").then((m) => ({
+    default: m.RolesList,
+  })),
+);
 
 function RoleDebuggerCallout() {
   const canImpersonate = useCanImpersonate();
-  const { data: candidates, isLoading } = useImpersonationCandidates();
+  const {
+    data: candidates,
+    isLoading,
+    isLoadingError: isCandidatesLoadError,
+    refetch: refetchCandidates,
+  } = useImpersonationCandidates();
   const { mutate: impersonate, isPending } = useImpersonateUser();
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const userOptions = (candidates ?? []).map((candidate) => ({
@@ -40,45 +52,68 @@ function RoleDebuggerCallout() {
         Pick a user and view the app as them. The session expires after one hour
         or when you click <em>Return to admin</em> in the banner.
       </p>
-      <div className="mt-3 flex items-center gap-2">
-        <UserSearchableSelect
-          value={selectedUserId}
-          onValueChange={setSelectedUserId}
-          users={userOptions}
-          disabled={isLoading || !candidates || candidates.length === 0}
-          placeholder={
-            isLoading
-              ? "Loading users..."
-              : !candidates || candidates.length === 0
-                ? "No users available"
-                : "Select a user"
-          }
-          searchPlaceholder="Search users by name or email"
-          className="w-72"
-          emptyMessage="No matching users found."
+      {isCandidatesLoadError ? (
+        <QueryLoadError
+          className="mt-3"
+          title="Couldn't load users to impersonate"
+          onRetry={() => refetchCandidates()}
         />
-        <Button
-          size="sm"
-          variant="outline"
-          data-testid={E2eTestId.ImpersonationViewAsButton}
-          disabled={!selectedUserId || isPending}
-          onClick={() => {
-            if (selectedUserId) impersonate(selectedUserId);
-          }}
-        >
-          <Eye className="mr-2 h-4 w-4" />
-          View as user
-        </Button>
-      </div>
+      ) : (
+        <div className="mt-3 flex items-center gap-2">
+          <UserSearchableSelect
+            value={selectedUserId}
+            onValueChange={setSelectedUserId}
+            users={userOptions}
+            disabled={isLoading || !candidates || candidates.length === 0}
+            placeholder={
+              isLoading
+                ? "Loading users..."
+                : !candidates || candidates.length === 0
+                  ? "No users available"
+                  : "Select a user"
+            }
+            searchPlaceholder="Search users by name or email"
+            className="w-72"
+            emptyMessage="No matching users found."
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            data-testid={E2eTestId.ImpersonationViewAsButton}
+            disabled={!selectedUserId || isPending}
+            onClick={() => {
+              if (selectedUserId) impersonate(selectedUserId);
+            }}
+          >
+            <Eye className="mr-2 h-4 w-4" />
+            View as user
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function RolesSettingsPage() {
+  const enterpriseCoreActive = useEnterpriseFeature("core");
   return (
     <ErrorBoundary>
+      <SmallTeamTierBanner featureName="RBAC" />
+      <p className="mb-4 text-sm text-muted-foreground">
+        New users who join via email/password self-signup or ChatOps
+        auto-provisioning are assigned a default role. Change it in{" "}
+        <Link
+          href="/settings/organization"
+          className="font-medium underline underline-offset-4"
+        >
+          Organization → Auth
+        </Link>
+        .
+      </p>
       <RoleDebuggerCallout />
-      <RolesList />
+      <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
+        <RolesListEnterprise />
+      </DisabledEnterpriseSection>
     </ErrorBoundary>
   );
 }

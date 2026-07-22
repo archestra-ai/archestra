@@ -1,0 +1,44 @@
+{
+  "name": "paypal__remote-mcp",
+  "display_name": "PayPal",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjg1ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDMwMiI+PHBhdGggZmlsbD0iIzI3MzQ2YSIgZD0iTTIxNy4xNjggMjMuNTA3QzIwMy4yMzQgNy42MjUgMTc4LjA0Ni44MTYgMTQ1LjgyMy44MTZoLTkzLjUyQTEzLjM5IDEzLjM5IDAgMCAwIDM5LjA3NiAxMi4xMUwuMTM2IDI1OS4wNzdjLS43NzQgNC44NyAyLjk5NyA5LjI4IDcuOTMzIDkuMjhoNTcuNzM2bDE0LjUtOTEuOTcxbC0uNDUgMi44OGMxLjAzMy02LjUwMSA2LjU5My0xMS4yOTYgMTMuMTc3LTExLjI5NmgyNy40MzZjNTMuODk4IDAgOTYuMTAxLTIxLjg5MiAxMDguNDI5LTg1LjIyMWMuMzY2LTEuODczLjY4My0zLjY5Ni45NTctNS40NzdxLTIuMzM0LTEuMjM2IDAgMGMzLjY3MS0yMy40MDctLjAyNS0zOS4zNC0xMi42ODYtNTMuNzY1Ii8+PHBhdGggZmlsbD0iIzI3MzQ2YSIgZD0iTTEwMi4zOTcgNjguODRhMTEuNyAxMS43IDAgMCAxIDUuMDUzLTEuMTRoNzMuMzE4YzguNjgyIDAgMTYuNzguNTY1IDI0LjE4IDEuNzU2YTEwMiAxMDIgMCAwIDEgNi4xNzcgMS4xODJhOTAgOTAgMCAwIDEgOC41OSAyLjM0N2MzLjYzOCAxLjIxNSA3LjAyNiAyLjYzIDEwLjE0IDQuMjg3YzMuNjctMjMuNDE2LS4wMjYtMzkuMzQtMTIuNjg3LTUzLjc2NUMyMDMuMjI2IDcuNjI1IDE3OC4wNDYuODE2IDE0NS44MjMuODE2SDUyLjI5NUM0NS43MS44MTYgNDAuMTA4IDUuNjEgMzkuMDc2IDEyLjExTC4xMzYgMjU5LjA2OGMtLjc3NCA0Ljg3OCAyLjk5NyA5LjI4MiA3LjkyNSA5LjI4Mmg1Ny43NDRMOTUuODg4IDc3LjU4YTExLjcyIDExLjcyIDAgMCAxIDYuNTA5LTguNzQiLz48cGF0aCBmaWxsPSIjMjc5MGMzIiBkPSJNMjI4Ljg5NyA4Mi43NDljLTEyLjMyOCA2My4zMi01NC41MyA4NS4yMjEtMTA4LjQyOSA4NS4yMjFIOTMuMDI0Yy02LjU4NCAwLTEyLjE0NSA0Ljc5NS0xMy4xNjggMTEuMjk2TDYxLjgxNyAyOTMuNjIxYy0uNjc0IDQuMjYyIDIuNjIyIDguMTI0IDYuOTM0IDguMTI0aDQ4LjY3YTExLjcxIDExLjcxIDAgMCAwIDExLjU2My05Ljg4bC40NzQtMi40OGw5LjE3My01OC4xMzZsLjU5MS0zLjIxM2ExMS43MSAxMS43MSAwIDAgMSAxMS41NjItOS44OGg3LjI4NGM0Ny4xNDcgMCA4NC4wNjQtMTkuMTU0IDk0Ljg1Mi03NC41NWM0LjUwMy0yMy4xNSAyLjE3My00Mi40NzgtOS43MzktNTYuMDU0Yy0zLjYxMy00LjExMi04LjEtNy41MDgtMTMuMzI3LTEwLjI4Yy0uMjgzIDEuNzktLjU5IDMuNjA0LS45NTcgNS40NzciLz48cGF0aCBmaWxsPSIjMWYyNjRmIiBkPSJNMjE2Ljk1MiA3Mi4xMjhhOTAgOTAgMCAwIDAtNS44MTgtMS40OWExMTAgMTEwIDAgMCAwLTYuMTc3LTEuMTc0Yy03LjQwOC0xLjE5OS0xNS41LTEuNzY1LTI0LjE5LTEuNzY1aC03My4zMDlhMTEuNiAxMS42IDAgMCAwLTUuMDUzIDEuMTQ5YTExLjY4IDExLjY4IDAgMCAwLTYuNTEgOC43NGwtMTUuNTgyIDk4Ljc5OGwtLjQ1IDIuODhjMS4wMjUtNi41MDEgNi41ODUtMTEuMjk2IDEzLjE3LTExLjI5NmgyNy40NDRjNTMuODk4IDAgOTYuMS0yMS44OTIgMTA4LjQyOC04NS4yMjFjLjM2Ny0xLjg3My42NzUtMy42ODguOTU4LTUuNDc3cS00LjY4Mi0yLjQ3LTEwLjE0LTQuMjc5YTgzIDgzIDAgMCAwLTIuNzctLjg2NSIvPjwvc3ZnPg==",
+  "description": "Remote MCP server for PayPal - online payments and financial services",
+  "oauth_config": {
+    "name": "PayPal MCP",
+    "server_url": "https://mcp.paypal.com/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "PayPal MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Finance",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "paypal"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.paypal.com/mcp",
+    "docs_url": "https://www.paypal.ai/"
+  },
+  "github_info": null,
+  "programming_language": null
+}

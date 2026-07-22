@@ -2,21 +2,27 @@
 
 import {
   type archestraApiTypes,
+  CLIENT_FILTER_OPTIONS,
+  type ClientFilter,
+  clientForExternalAgentIds,
   DynamicInteraction,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
-} from "@shared";
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
+import { BilledCost } from "@/components/billed-cost";
+import { ClientSourceBadge } from "@/components/client-source-badge";
 import {
+  ClientFilterOption,
   ProfileFilterOption,
   SourceFilterOption,
   UserFilterOption,
 } from "@/components/log-filter-option";
-import { Savings } from "@/components/savings";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { SourceBadge } from "@/components/source-badge";
 import { TableFilters } from "@/components/table-filters";
@@ -34,6 +40,7 @@ import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import {
+  isSessionId,
   useInteractionSessions,
   useUniqueUserIds,
 } from "@/lib/interactions/interaction.query";
@@ -85,7 +92,10 @@ function getSessionDisplayData(session: SessionData) {
   const conversationTitle = session.conversationTitle;
   const isArchestraChat = conversationTitle && session.sessionId;
   const claudeCodeTitle = session.claudeCodeTitle;
-  const isClaudeCodeSession = session.sessionSource === "claude_code";
+  // Known clients (Claude, Codex) get a source badge next to the session's last
+  // user message. Derived from the client-attribution column (external_agent_id),
+  // not the session-id provenance.
+  const clientSource = clientForExternalAgentIds(session.externalAgentIds);
 
   let lastUserMessage = "";
   if (session.lastInteractionRequest && session.lastInteractionType) {
@@ -110,7 +120,7 @@ function getSessionDisplayData(session: SessionData) {
     isSingleInteraction,
     conversationTitle,
     isArchestraChat,
-    isClaudeCodeSession,
+    clientSource,
     lastUserMessage,
     displayText,
   };
@@ -149,12 +159,21 @@ function SessionsTable({
   const profileIdFromUrl = searchParams.get("profileId");
   const userIdFromUrl = searchParams.get("userId");
   const sourceFromUrl = searchParams.get("source");
+  const clientFromUrl = searchParams.get("client");
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
   const searchFromUrl = searchParams.get("search");
   const profileFilter = profileIdFromUrl || "all";
   const userFilter = userIdFromUrl || "all";
   const sourceFilter = sourceFromUrl || "all";
+  const clientFilter = clientFromUrl || "all";
+
+  // The logs search box only filters by session ID (free-text content search
+  // was removed). Translate the typed term into a sessionId filter when it is a
+  // valid session ID; otherwise it filters nothing and we surface a hint.
+  const sessionIdFromSearch =
+    searchFromUrl && isSessionId(searchFromUrl) ? searchFromUrl : undefined;
+  const searchIsNotSessionId = !!searchFromUrl && !sessionIdFromSearch;
 
   // Date time range picker hook
   const dateTimePicker = useDateTimeRangePicker({
@@ -212,16 +231,33 @@ function SessionsTable({
     [updateQueryParams],
   );
 
-  const { data: sessionsResponse, isFetching } = useInteractionSessions({
+  const handleClientFilterChange = useCallback(
+    (value: string) => {
+      updateQueryParams({
+        client: value === "all" ? null : value,
+        page: "1", // Reset to first page
+      });
+    },
+    [updateQueryParams],
+  );
+
+  const {
+    data: sessionsResponse,
+    isFetching,
+    isLoadingError,
+    refetch: refetchSessions,
+  } = useInteractionSessions({
     limit: pageSize,
     offset,
     profileId: profileFilter !== "all" ? profileFilter : undefined,
     userId: userFilter !== "all" ? userFilter : undefined,
     source:
       sourceFilter !== "all" ? (sourceFilter as InteractionSource) : undefined,
+    client: clientFilter !== "all" ? (clientFilter as ClientFilter) : undefined,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
-    search: searchFromUrl || undefined,
+    sessionId: sessionIdFromSearch,
+    toastOnError: false,
   });
 
   const { data: agents } = useProfiles({
@@ -237,6 +273,7 @@ function SessionsTable({
     profileFilter !== "all" ||
     userFilter !== "all" ||
     sourceFilter !== "all" ||
+    clientFilter !== "all" ||
     dateTimePicker.startDate !== undefined ||
     !!searchFromUrl;
 
@@ -246,6 +283,7 @@ function SessionsTable({
       profileId: null,
       userId: null,
       source: null,
+      client: null,
       startDate: null,
       endDate: null,
       search: null,
@@ -258,21 +296,23 @@ function SessionsTable({
       {
         id: "session",
         header: "Session",
+        size: 300,
+        minSize: 220,
         cell: ({ row }) => {
           const session = row.original;
           const {
             conversationTitle,
             displayText,
             isArchestraChat,
-            isClaudeCodeSession,
+            clientSource,
             lastUserMessage,
           } = getSessionDisplayData(session);
 
           return (
-            <div className="flex items-center gap-1 text-xs">
+            <div className="flex max-w-full min-w-0 items-center gap-2 overflow-hidden text-xs">
               {isArchestraChat ? (
                 <>
-                  <span className="truncate">
+                  <span className="min-w-0 flex-1 truncate">
                     {(conversationTitle ?? "").length > 60
                       ? `${(conversationTitle ?? "").slice(0, 60)}...`
                       : conversationTitle}
@@ -291,36 +331,40 @@ function SessionsTable({
                     </Badge>
                   </Link>
                 </>
-              ) : isClaudeCodeSession ? (
+              ) : clientSource ? (
                 <>
-                  <span className="truncate">
-                    {displayText
-                      ? displayText.length > 80
+                  {displayText ? (
+                    <span className="min-w-0 flex-1 truncate">
+                      {displayText.length > 80
                         ? `${displayText.slice(0, 80)}...`
-                        : displayText
-                      : "Claude Code session"}
-                  </span>
-                  <Badge
-                    variant="secondary"
-                    className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 shrink-0"
-                  >
-                    Claude Code
-                  </Badge>
+                        : displayText}
+                    </span>
+                  ) : (
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      No message
+                    </span>
+                  )}
+                  <ClientSourceBadge
+                    client={clientSource}
+                    className="shrink-0"
+                  />
                 </>
               ) : lastUserMessage ? (
-                <span>
+                <span className="min-w-0 max-w-full truncate">
                   {lastUserMessage.length > 80
                     ? `${lastUserMessage.slice(0, 80)}...`
                     : lastUserMessage}
                 </span>
               ) : session.source?.startsWith("knowledge:") ? (
-                <span className="text-muted-foreground">
+                <span className="min-w-0 max-w-full truncate text-muted-foreground">
                   {INTERACTION_SOURCE_DISPLAY[
                     session.source as keyof typeof INTERACTION_SOURCE_DISPLAY
                   ]?.label ?? session.source}
                 </span>
               ) : (
-                <span className="text-muted-foreground">No message</span>
+                <span className="min-w-0 max-w-full truncate text-muted-foreground">
+                  No message
+                </span>
               )}
             </div>
           );
@@ -329,11 +373,34 @@ function SessionsTable({
       {
         id: "requests",
         header: "Requests",
+        size: 96,
+        minSize: 88,
         cell: ({ row }) => (
           <span className="font-mono text-xs">
             {row.original.requestCount.toLocaleString()}
           </span>
         ),
+      },
+      {
+        id: "cache",
+        header: "Cache read",
+        size: 120,
+        minSize: 96,
+        cell: ({ row }) => {
+          const read = row.original.totalCacheReadTokens;
+          const write = row.original.totalCacheWriteTokens;
+          if (read === 0 && write === 0) {
+            return <span className="text-muted-foreground text-xs">—</span>;
+          }
+          const totalInput = row.original.totalInputTokens + read + write;
+          const hitRate =
+            totalInput > 0 ? Math.round((read / totalInput) * 100) : 0;
+          return (
+            <span className="font-mono text-xs">
+              {hitRate}% · {read.toLocaleString()}
+            </span>
+          );
+        },
       },
       {
         id: "models",
@@ -366,8 +433,10 @@ function SessionsTable({
         cell: ({ row }) =>
           row.original.totalCost ? (
             <TooltipProvider>
-              <Savings
+              <BilledCost
                 cost={row.original.totalCost}
+                billedCost={row.original.totalBilledCost}
+                subscriptionCost={row.original.totalSubscriptionCost}
                 baselineCost={
                   row.original.totalBaselineCost || row.original.totalCost
                 }
@@ -382,13 +451,21 @@ function SessionsTable({
       {
         id: "source",
         header: "Source",
-        cell: ({ row }) => <SessionSourceBadge session={row.original} />,
+        size: 220,
+        minSize: 170,
+        cell: ({ row }) => (
+          <div className="max-w-full min-w-0 overflow-hidden">
+            <SessionSourceBadge session={row.original} />
+          </div>
+        ),
       },
       {
         id: "time",
         header: "Time",
+        size: 160,
+        minSize: 145,
         cell: ({ row }) => (
-          <div className="flex flex-col gap-0.5 font-mono text-xs">
+          <div className="flex min-w-0 flex-col gap-0.5 font-mono text-xs">
             {row.original.lastRequestTime && (
               <span>
                 {formatDate({ date: String(row.original.lastRequestTime) })}
@@ -410,17 +487,19 @@ function SessionsTable({
       {
         id: "details",
         header: "Details",
+        size: 280,
+        minSize: 220,
         cell: ({ row }) => {
           const agent = agents?.find((a) => a.id === row.original.profileId);
           return (
-            <div className="flex flex-wrap gap-1">
-              <Badge variant="secondary" className="text-xs max-w-[200px]">
+            <div className="flex max-w-full min-w-0 flex-wrap gap-1 overflow-hidden">
+              <Badge variant="secondary" className="min-w-0 max-w-full text-xs">
                 {row.original.source?.startsWith("knowledge:") ? (
                   <Database className="h-3 w-3 mr-1 shrink-0" />
                 ) : (
                   <Layers className="h-3 w-3 mr-1 shrink-0" />
                 )}
-                <span className="truncate">
+                <span className="min-w-0 truncate">
                   {agent?.name ??
                     row.original.profileName ??
                     (row.original.source?.startsWith("knowledge:")
@@ -434,10 +513,10 @@ function SessionsTable({
                 <Badge
                   key={userName}
                   variant="outline"
-                  className="text-xs max-w-[150px]"
+                  className="min-w-0 max-w-full text-xs"
                 >
                   <User className="h-3 w-3 mr-1 shrink-0" />
-                  <span className="truncate">{userName}</span>
+                  <span className="min-w-0 truncate">{userName}</span>
                 </Badge>
               ))}
             </div>
@@ -448,14 +527,37 @@ function SessionsTable({
     [agents],
   );
 
+  // A failed fetch leaves no rows; show a retry state instead of the table's
+  // "No LLM proxy logs found" empty message, which would misrepresent the error.
+  if (isLoadingError) {
+    return (
+      <div className="space-y-4">
+        <QueryLoadError
+          title="Couldn't load logs"
+          onRetry={() => refetchSessions()}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <TableFilters>
-        <SearchInput
-          objectNamePlural="logs"
-          searchFields={["session ID", "model", "message"]}
-          paramName="search"
-        />
+        {/* Anchor the "not a session ID" hint as a floating overlay under the
+            input so toggling it never reflows the filter bar or the table. */}
+        <div className="relative w-full sm:w-[320px] sm:max-w-[320px]">
+          <SearchInput
+            objectNamePlural="logs"
+            searchFields={["session ID"]}
+            paramName="search"
+            className="relative w-full"
+          />
+          {searchIsNotSessionId && (
+            <output className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-md">
+              Enter a valid session UUID
+            </output>
+          )}
+        </div>
 
         <SearchableSelect
           value={profileFilter}
@@ -507,6 +609,24 @@ function SessionsTable({
                 ),
               }),
             ),
+          ]}
+          className="w-[200px]"
+        />
+
+        <SearchableSelect
+          value={clientFilter}
+          onValueChange={handleClientFilterChange}
+          placeholder="Filter by Client"
+          items={[
+            { value: "all", label: "All Clients" },
+            ...CLIENT_FILTER_OPTIONS.map(({ value, label, provider }) => ({
+              value,
+              label,
+              content: <ClientFilterOption label={label} provider={provider} />,
+              selectedContent: (
+                <ClientFilterOption label={label} provider={provider} />
+              ),
+            })),
           ]}
           className="w-[200px]"
         />
@@ -570,13 +690,17 @@ function SessionSourceBadge({ session }: { session: SessionData }) {
     return (
       <SourceBadge
         source={session.source ?? sources[0]}
-        className="max-w-[12.5rem]"
+        className="max-w-[11rem] min-w-0 overflow-hidden"
+        labelClassName="min-w-0"
       />
     );
   }
 
   return (
-    <Badge variant="outline" className="max-w-[12.5rem] text-xs">
+    <Badge
+      variant="outline"
+      className="max-w-[11rem] min-w-0 overflow-hidden text-xs"
+    >
       <span className="flex min-w-0 items-center gap-1.5">
         <Layers className="h-3 w-3 shrink-0" />
         <span className="truncate">Mixed Sources</span>

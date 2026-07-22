@@ -1,5 +1,13 @@
-import type { SecretsManagerType } from "@shared";
+import type { SecretsManagerType } from "@archestra/shared";
 import type { SecretValue, SelectSecret } from "./secret";
+
+/**
+ * `ApiError.internalCode` set when the external secrets backend (e.g. Vault)
+ * cannot be reached or fails an operation. Lets error tracking group one
+ * secrets-backend outage into a single issue instead of one per endpoint.
+ */
+export const SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE =
+  "secrets_manager_unavailable";
 
 /**
  * SecretManager interface for managing secrets

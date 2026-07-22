@@ -1,4 +1,3 @@
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createCerebras } from "@ai-sdk/cerebras";
 import { createCohere } from "@ai-sdk/cohere";
@@ -7,37 +6,44 @@ import { createVertex } from "@ai-sdk/google-vertex";
 import { createGroq } from "@ai-sdk/groq";
 import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
-import { context, propagation } from "@opentelemetry/api";
-import type { InteractionSource } from "@shared";
+import type { InteractionSource } from "@archestra/shared";
 import {
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
+  providerRequiresPerUserCredential,
+  requiresOpenAiResponsesApi,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
   type SupportedProvider,
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
-} from "@shared";
+} from "@archestra/shared";
+import { context, propagation } from "@opentelemetry/api";
 import type { streamText } from "ai";
+import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   createAzureFetchWithApiVersion,
   normalizeAzureApiKey,
 } from "@/clients/azure-url";
 import {
-  decodeBedrockSigV4Marker,
-  getBedrockCredentialProvider,
-  getBedrockRegion,
+  buildBedrockProvider,
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
+import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import logger from "@/logging";
+import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -46,8 +52,10 @@ import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 const KEYLESS_PROVIDER_API_KEY_PLACEHOLDER = "EMPTY";
 
 /**
- * Note: vLLM and Ollama use the @ai-sdk/openai provider since they expose OpenAI-compatible APIs.
- * When creating a vLLM/Ollama model, we use createOpenAI with the respective base URL.
+ * Note: vLLM uses the @ai-sdk/openai provider (createOpenAI) since it exposes an
+ * OpenAI-compatible API. Ollama uses @ai-sdk/openai-compatible instead so that
+ * reasoning ("thinking") streamed in the `reasoning_content` field — which the
+ * strict @ai-sdk/openai chat parser drops — surfaces as native reasoning parts.
  */
 
 /**
@@ -90,6 +98,17 @@ export function createDirectLLMModel({
   if (cfg.apiKeyRequiredMessage && !apiKey) {
     throw new ApiError(400, cfg.apiKeyRequiredMessage);
   }
+  if (provider === "openai" && isOpenAiCodexCredential(apiKey)) {
+    // ChatGPT-subscription (Codex) credentials only work through the LLM proxy's
+    // openai adapter, which redeems a short-lived Codex access token and targets
+    // the Codex backend. This direct AI-SDK path (built-in subagents, knowledge
+    // base) would send the encoded refresh token to api.openai.com as a bearer —
+    // a credential leak and a guaranteed 401 — so fail closed.
+    throw new ApiError(
+      400,
+      "ChatGPT subscription (Codex) credentials cannot be used on the direct LLM path (built-in subagents, knowledge base). Configure a standard OpenAI API key for these, or pick a different model.",
+    );
+  }
   const resolvedBaseUrl = baseUrl ?? cfg.defaultBaseUrl;
   const baseURL =
     resolvedBaseUrl && cfg.proxiedPathSuffix
@@ -100,6 +119,9 @@ export function createDirectLLMModel({
     modelName,
     baseURL,
     headers: providerHeaders(cfg),
+    // Direct OpenRouter models bypass the proxy adapter, so heal the request
+    // body here; the wrapper no-ops for non-healable requests.
+    fetch: provider === "openrouter" ? createResponseHealingFetch() : undefined,
   });
 }
 
@@ -208,6 +230,13 @@ export async function createLLMModelForAgent(params: {
   model: LLMModel;
   provider: SupportedProvider;
   apiKeySource: string;
+  /**
+   * True when this resolves to genuine Anthropic (vs an Anthropic-compatible
+   * endpoint behind a custom base URL serving a non-Claude model). Gates
+   * Anthropic-only request-body features in chat normalization, mirroring the
+   * proxy's `anthropic-beta` header gating so the two can't drift.
+   */
+  anthropicNativeEndpoint: boolean;
 }> {
   const {
     organizationId,
@@ -228,6 +257,7 @@ export async function createLLMModelForAgent(params: {
     source: apiKeySource,
     baseUrl,
     chatApiKeyId,
+    authRequired,
   } = await resolveProviderApiKey({
     organizationId,
     userId,
@@ -246,6 +276,8 @@ export async function createLLMModelForAgent(params: {
   const isOllama = provider === "ollama";
   const isAzureWithEntra =
     provider === "azure" && isAzureOpenAiEntraIdEnabled();
+  const isAnthropicWithWif =
+    provider === "anthropic" && anthropicWorkloadIdentity.isEnabled();
 
   logger.info(
     {
@@ -256,6 +288,7 @@ export async function createLLMModelForAgent(params: {
       isVllm,
       isOllama,
       isAzureWithEntra,
+      isAnthropicWithWif,
     },
     "Using LLM provider API key",
   );
@@ -266,8 +299,24 @@ export async function createLLMModelForAgent(params: {
     !isBedrockWithIamAuth &&
     !isVllm &&
     !isOllama &&
-    !isAzureWithEntra
+    !isAzureWithEntra &&
+    !isAnthropicWithWif
   ) {
+    // Per-user credentials need the acting user's own linked account; surface
+    // a typed error so callers can prompt them to connect rather than showing
+    // a generic "configure a key" message. Two per-user cases: resolution
+    // refused a credential-level key (a ChatGPT subscription belonging to
+    // someone else) and said so via authRequired, or the provider itself is
+    // per-user (GitHub/Microsoft Copilot) and the user has no personal key.
+    if (authRequired) {
+      throw new LlmProviderAuthRequiredError(
+        authRequired.provider,
+        authRequired.providerLabel,
+      );
+    }
+    if (providerRequiresPerUserCredential(provider)) {
+      throw new LlmProviderAuthRequiredError(provider);
+    }
     throw new ApiError(
       400,
       "LLM Provider API key not configured. Please configure it in Provider Settings.",
@@ -288,7 +337,13 @@ export async function createLLMModelForAgent(params: {
     chatApiKeyId,
   });
 
-  return { model, provider, apiKeySource };
+  const anthropicNativeEndpoint = isAnthropicNativeEndpoint({
+    provider,
+    model: modelName,
+    baseUrl,
+  });
+
+  return { model, provider, apiKeySource, anthropicNativeEndpoint };
 }
 
 // =============================================================================
@@ -390,8 +445,14 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // --- OpenAI-compatible providers (use createOpenAI with .chat()) ---
 
   openai: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      const client = createOpenAI({ apiKey, baseURL, headers, fetch });
+      // "pro" reasoning models are Responses-API-only; routing them through
+      // .chat() hits /chat/completions and 404s. See requiresOpenAiResponsesApi.
+      return requiresOpenAiResponsesApi(modelName)
+        ? client.responses(modelName)
+        : client.chat(modelName);
+    },
     defaultBaseUrl: config.llm.openai.baseUrl,
     apiKeyRequiredMessage:
       "OpenAI API key is required. Please configure OPENAI_API_KEY.",
@@ -436,6 +497,49 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     defaultBaseUrl: config.llm.deepseek.baseUrl,
     apiKeyRequiredMessage:
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
+  },
+
+  // Another Archestra instance's OpenAI-compatible LLM proxy. Base URL is always
+  // supplied per key (no global default), so direct calls rely on that override.
+  archestra: {
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: config.llm.archestra.baseUrl,
+    apiKeyRequiredMessage:
+      "Archestra API key is required. Please configure an Archestra API key.",
+  },
+
+  kimi: {
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: config.llm.kimi.baseUrl,
+    apiKeyRequiredMessage:
+      "Kimi API key is required. Please configure ARCHESTRA_CHAT_KIMI_API_KEY.",
+  },
+
+  "github-copilot": {
+    // The model always talks to the local LLM proxy (buildProxyBaseUrl), and
+    // the proxy's github-copilot adapter exchanges the GitHub OAuth token for
+    // the short-lived Copilot bearer — exchanging here too would hand the
+    // proxy an already-exchanged bearer it cannot exchange again.
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: config.llm["github-copilot"].baseUrl,
+    apiKeyRequiredMessage:
+      "GitHub Copilot requires a GitHub OAuth token. Connect your GitHub account or configure ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY.",
+  },
+
+  "microsoft-365-copilot": {
+    // The model always talks to the local LLM proxy (buildProxyBaseUrl); the
+    // proxy's microsoft-365-copilot adapter redeems the Entra refresh token for a
+    // short-lived Graph access token and translates the OpenAI wire format to
+    // the Graph Chat API — redeeming here too would hand the proxy an access
+    // token it cannot redeem again.
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: config.llm["microsoft-365-copilot"].baseUrl,
+    apiKeyRequiredMessage:
+      "Microsoft 365 Copilot requires a connected Microsoft account. Sign in with Microsoft when adding the provider key.",
   },
 
   azure: {
@@ -487,13 +591,26 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   ollama: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      if (!baseURL) {
+        throw new ApiError(400, "Ollama base URL is required.");
+      }
+      // Ollama is OpenAI-compatible, but streams reasoning ("thinking") in a
+      // `reasoning_content` delta field that @ai-sdk/openai's chat parser drops
+      // — so qwen3-style thinking never reaches the UI. @ai-sdk/openai-compatible
+      // parses `reasoning_content` / `reasoning` into native reasoning parts.
+      return createOpenAICompatible({
+        name: "ollama",
         apiKey: apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER,
         baseURL,
         headers,
         fetch,
-      }).chat(modelName),
+        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+        // provider only sends it when asked. Keep it on so the final usage chunk
+        // still arrives and cost/usage metrics are unaffected.
+        includeUsage: true,
+      }).chatModel(modelName);
+    },
     defaultBaseUrl: config.llm.ollama.baseUrl,
     // No apiKeyRequiredMessage — key is optional
   },
@@ -540,44 +657,10 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   bedrock: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
-      const region = getBedrockRegion(baseURL);
-
-      if (!apiKey && isBedrockIamAuthEnabled()) {
-        return createAmazonBedrock({
-          region,
-          baseURL,
-          credentialProvider: getBedrockCredentialProvider(),
-          headers,
-          fetch,
-        })(modelName);
-      }
-
-      const sigV4 = decodeBedrockSigV4Marker(apiKey);
-      if (sigV4) {
-        return createAmazonBedrock({
-          region,
-          baseURL,
-          accessKeyId: sigV4.accessKeyId,
-          secretAccessKey: sigV4.secretAccessKey,
-          sessionToken: sigV4.sessionToken,
-          headers,
-          fetch,
-        })(modelName);
-      }
-
-      return createAmazonBedrock({
-        apiKey,
-        region,
-        baseURL,
-        secretAccessKey: undefined,
-        accessKeyId: undefined,
-        sessionToken: undefined,
-        credentialProvider: undefined,
-        headers,
-        fetch,
-      })(modelName);
-    },
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      buildBedrockProvider({ apiKey, baseUrl: baseURL, headers, fetch })(
+        modelName,
+      ),
     defaultBaseUrl: config.llm.bedrock.baseUrl,
     apiKeyRequiredMessage: isBedrockIamAuthEnabled()
       ? undefined
@@ -601,7 +684,19 @@ function createTracedFetch(): typeof globalThis.fetch {
     for (const [key, value] of Object.entries(carrier)) {
       headers.set(key, value);
     }
-    return globalThis.fetch(input, { ...init, headers });
+    // Opt-in upstream timeout dispatcher; undefined leaves undici defaults
+    // untouched. See @/clients/llm-upstream-dispatcher.
+    const dispatcher = getLlmUpstreamDispatcher();
+
+    if (!dispatcher) {
+      return globalThis.fetch(input, { ...init, headers });
+    }
+
+    return globalThis.fetch(input, {
+      ...init,
+      headers,
+      dispatcher,
+    } as RequestInit);
   };
 }
 

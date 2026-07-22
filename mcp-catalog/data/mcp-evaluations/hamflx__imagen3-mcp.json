@@ -1,0 +1,173 @@
+{
+  "name": "hamflx__imagen3-mcp",
+  "display_name": "imagen3-mcp",
+  "description": "MCP server from hamflx/imagen3-mcp",
+  "author": {
+    "name": "hamflx"
+  },
+  "server": {
+    "command": "${__dirname}/imagen3-mcp.exe",
+    "args": [],
+    "env": {
+      "GEMINI_API_KEY": "${user_config.gemini_api_key}",
+      "BASE_URL": "${user_config.base_url}",
+      "SERVER_LISTEN_ADDR": "${user_config.server_listen_addr}",
+      "SERVER_PORT": "${user_config.server_port}",
+      "IMAGE_RESOURCE_SERVER_ADDR": "${user_config.image_resource_server_addr}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "gemini_api_key": {
+      "type": "string",
+      "title": "Gemini API Key",
+      "description": "Your valid Google Gemini API key.",
+      "required": true,
+      "sensitive": true
+    },
+    "base_url": {
+      "type": "string",
+      "title": "Base URL (Proxy)",
+      "description": "Optional proxy URL for the Gemini API.",
+      "required": false
+    },
+    "server_listen_addr": {
+      "type": "string",
+      "title": "Server Listen Address",
+      "description": "The IP address the server listens on.",
+      "required": false,
+      "default": "127.0.0.1"
+    },
+    "server_port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port the server listens on and uses for image URLs.",
+      "required": false,
+      "default": 9981
+    },
+    "image_resource_server_addr": {
+      "type": "string",
+      "title": "Image Resource Server Address",
+      "description": "The server address used in the image URLs. Useful if the server runs in a container or remote machine.",
+      "required": false,
+      "default": "127.0.0.1"
+    }
+  },
+  "readme": "# Imagen3-MCP\n\n[English Version](#imagen3-mcp-english)\n\n基于 Google 的 Imagen 3.0 的图像生成工具，通过 MCP（Model Control Protocol）提供服务。\n\n## 效果\n\n画一只奔跑的杰克罗素犬，长焦镜头，阳光透过狗狗的毛发，照片级画质\n\n![奔跑的杰克罗素犬](./docs/Snipaste_2025-04-26_15-18-15.png)\n\n画一个科技感十足的苹果\n\n![科技感十足的苹果](./docs/Snipaste_2025-04-26_15-18-02.png)\n\n## 安装要求\n\n- 有效的 [Google Gemini API 密钥](https://aistudio.google.com/apikey)\n\n## 安装步骤——Cherry Studio\n\n1. 从 [GitHub Releases](https://github.com/hamflx/imagen3-mcp/releases) 下载最新版本的可执行文件\n2. 将下载的可执行文件放置在系统中的任意位置，例如 `C:\\bin\\imagen3-mcp.exe`\n3. 在 Cherry Studio 中配置：\n   - Command 字段填写可执行文件路径，例如 `C:\\bin\\imagen3-mcp.exe`\n   - 环境变量 `GEMINI_API_KEY` 中填写你的 Gemini API 密钥\n   - [可选] 环境变量 `BASE_URL` 中填写代理地址，例如 `https://lingxi-proxy.hamflx.dev/api/provider/google`（这个地址可以解决 GFW 的问题，但是解决不了 Google 对 IP 的限制问题，因此还是得挂梯子）。\n   - [可选] 环境变量 `SERVER_LISTEN_ADDR`：设置服务器监听的 IP 地址（默认为 `127.0.0.1`）。\n   - [可选] 环境变量 `SERVER_PORT`：设置服务器监听的端口和图片 URL 使用的端口（默认为 `9981`）。\n   - [可选] 环境变量 `IMAGE_RESOURCE_SERVER_ADDR`：设置图片 URL 中使用的服务器地址（默认为 `127.0.0.1`）。这在服务器运行在容器或远程机器上时很有用。\n\n![配置](./docs/config.png)\n\n## 安装步骤——Cursor\n\n```json\n{\n  \"mcpServers\": {\n    \"imagen3\": {\n      \"command\": \"C:\\\\bin\\\\imagen3-mcp.exe\",\n      \"env\": {\n        \"GEMINI_API_KEY\": \"<GEMINI_API_KEY>\"\n        // Optional environment variables:\n        // \"BASE_URL\": \"<PROXY_URL>\",\n        // \"SERVER_LISTEN_ADDR\": \"0.0.0.0\", // Example: Listen on all interfaces\n        // \"SERVER_PORT\": \"9981\",\n        // \"IMAGE_RESOURCE_SERVER_ADDR\": \"your.domain.com\" // Example: Use a domain name for image URLs\n      }\n    }\n  }\n}\n```\n\n## 许可证\n\nMIT\n\n---\n\n# Imagen3-MCP (English)\n\nAn image generation tool based on Google's Imagen 3.0, providing services through MCP (Model Control Protocol).\n\n## Examples\n\nA running Jack Russell Terrier, telephoto lens, sunlight filtering through the dog's fur, photorealistic quality\n\n![Running Jack Russell Terrier](./docs/Snipaste_2025-04-26_15-18-15.png)\n\nA high-tech apple\n\n![High-tech apple](./docs/Snipaste_2025-04-26_15-18-02.png)\n\n## Requirements\n\n- Valid [Google Gemini API key](https://aistudio.google.com/apikey)\n\n## Installation Steps—Cherry Studio\n\n1. Download the latest executable from [GitHub Releases](https://github.com/hamflx/imagen3-mcp/releases)\n2. Place the downloaded executable anywhere in your system, e.g., `C:\\bin\\imagen3-mcp.exe`\n3. Configure in Cherry Studio:\n   - Fill in the Command field with the executable path, e.g., `C:\\bin\\imagen3-mcp.exe`\n   - Enter your Gemini API key in the `GEMINI_API_KEY` environment variable\n   - [Optional] Enter a proxy URL in the `BASE_URL` environment variable, e.g., `https://your-proxy.com`.\n   - [Optional] Set the `SERVER_LISTEN_ADDR` environment variable: The IP address the server listens on (defaults to `127.0.0.1`).\n   - [Optional] Set the `SERVER_PORT` environment variable: The port the server listens on and uses for image URLs (defaults to `9981`).\n   - [Optional] Set the `IMAGE_RESOURCE_SERVER_ADDR` environment variable: The server address used in the image URLs (defaults to `127.0.0.1`). Useful if the server runs in a container or remote machine.\n\n![Configuration](./docs/config.png)\n\n## Installation Steps—Cursor\n\n```json\n{\n  \"mcpServers\": {\n    \"imagen3\": {\n      \"command\": \"C:\\\\bin\\\\imagen3-mcp.exe\",\n      \"env\": {\n        \"GEMINI_API_KEY\": \"<GEMINI_API_KEY>\"\n        // Optional environment variables:\n        // \"BASE_URL\": \"<PROXY_URL>\",\n        // \"SERVER_LISTEN_ADDR\": \"0.0.0.0\", // Example: Listen on all interfaces\n        // \"SERVER_PORT\": \"9981\",\n        // \"IMAGE_RESOURCE_SERVER_ADDR\": \"your.domain.com\" // Example: Use a domain name for image URLs\n      }\n    }\n  }\n}\n```\n\n## License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "imagen3-mcp": {
+        "command": "imagen3-mcp.exe",
+        "args": [],
+        "env": {
+          "GEMINI_API_KEY": "<GEMINI_API_KEY>",
+          "BASE_URL": "<PROXY_URL>",
+          "SERVER_LISTEN_ADDR": "127.0.0.1",
+          "SERVER_PORT": "9981",
+          "IMAGE_RESOURCE_SERVER_ADDR": "127.0.0.1"
+        }
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hamflx",
+    "repo": "imagen3-mcp",
+    "url": "https://github.com/hamflx/imagen3-mcp",
+    "name": "hamflx__imagen3-mcp",
+    "path": null,
+    "stars": 42,
+    "contributors": 1,
+    "issues": 4,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "1b293dca12153bb0440de5091825b3c746b6cf9d"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:09.993Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "warp",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "reqwest",
+      "importance": 9
+    },
+    {
+      "name": "serde",
+      "importance": 8
+    },
+    {
+      "name": "serde_json",
+      "importance": 8
+    },
+    {
+      "name": "image",
+      "importance": 8
+    },
+    {
+      "name": "tracing",
+      "importance": 7
+    },
+    {
+      "name": "tokio-util",
+      "importance": 6
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 6
+    },
+    {
+      "name": "base64",
+      "importance": 4
+    },
+    {
+      "name": "chrono",
+      "importance": 4
+    },
+    {
+      "name": "nanoid",
+      "importance": 4
+    },
+    {
+      "name": "directories",
+      "importance": 3
+    },
+    {
+      "name": "tracing-appender",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"imagen3-mcp\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nrmcp = { version = \"0.1\", features = [\"server\", \"transport-io\"] }\ntokio = { version = \"1.44.2\", features = [\"macros\", \"rt-multi-thread\", \"fs\", \"io-util\"] }\ntokio-util = \"0.7.15\"\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\nwarp = \"0.3\"\nimage = \"0.24.8\"\ndirectories = \"5.0.1\"\nreqwest = { version = \"0.11\", features = [\"json\"] }\nbase64 = \"0.21\"\nchrono = \"0.4\"\nnanoid = \"0.4.0\"\ntracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\"env-filter\", \"fmt\"] }\ntracing-appender = \"0.2\"\n"
+}

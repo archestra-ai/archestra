@@ -1,12 +1,14 @@
-import { archestraApiSdk, type Permissions } from "@shared";
+import { archestraApiSdk, type Permissions } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { throwOnApiError } from "@/lib/utils";
 
 export const authQueryKeys = {
   all: ["auth"] as const,
   session: () => [...authQueryKeys.all, "session"] as const,
   orgMembers: () => [...authQueryKeys.all, "orgMembers"] as const,
+  sessions: () => [...authQueryKeys.all, "sessions"] as const,
   userPermissions: () => [...authQueryKeys.all, "userPermissions"] as const,
   defaultCredentialsEnabled: () =>
     [...authQueryKeys.all, "defaultCredentialsEnabled"] as const,
@@ -122,7 +124,8 @@ export function useAllPermissions() {
   return useQuery({
     queryKey: authQueryKeys.userPermissions(),
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getUserPermissions();
+      const { data, error } = await archestraApiSdk.getUserPermissions();
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
     retry: false,
@@ -163,7 +166,9 @@ export function useDefaultCredentialsEnabled() {
   return useQuery({
     queryKey: authQueryKeys.defaultCredentialsEnabled(),
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getDefaultCredentialsStatus();
+      const { data, error } =
+        await archestraApiSdk.getDefaultCredentialsStatus();
+      throwOnApiError(error, { toastOnError: false });
       return data?.enabled ?? false;
     },
     // Refetch when window is focused to catch password changes

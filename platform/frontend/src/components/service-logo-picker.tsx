@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_APP_NAME } from "@shared";
+import { DEFAULT_APP_NAME } from "@archestra/shared";
 import { Search } from "lucide-react";
 import {
   useCallback,
@@ -533,6 +533,7 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
+            aria-label="Search logos"
             placeholder="Search logos..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}

@@ -1,0 +1,97 @@
+{
+  "name": "calendarmcp__remote-mcp",
+  "display_name": "Google Calendar",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI1NiI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTE5NS4zNjggNjAuNjMySDYwLjYzMnYxMzQuNzM2aDEzNC43MzZ6Ii8+PHBhdGggZmlsbD0iI2VhNDMzNSIgZD0iTTE5NS4zNjggMjU2TDI1NiAxOTUuMzY4bC0zMC4zMTYtNS4xNzJsLTMwLjMxNiA1LjE3MmwtNS41MzMgMjcuNzN6Ii8+PHBhdGggZmlsbD0iIzE4ODAzOCIgZD0iTTAgMTk1LjM2OHY0MC40MjFDMCAyNDYuOTU2IDkuMDQ0IDI1NiAyMC4yMSAyNTZoNDAuNDIybDYuMjI1LTMwLjMxNmwtNi4yMjUtMzAuMzE2bC0zMy4wMzMtNS4xNzJ6Ii8+PHBhdGggZmlsbD0iIzE5NjdkMiIgZD0iTTI1NiA2MC42MzJWMjAuMjFDMjU2IDkuMDQ0IDI0Ni45NTYgMCAyMzUuNzkgMGgtNDAuNDIycS01LjUzMiAyMi41NTQtNS41MzMgMzMuMTk2cTAgMTAuNjQxIDUuNTMzIDI3LjQzNnEyMC4xMTUgNS43NiAzMC4zMTYgNS43NlQyNTYgNjAuNjMxIi8+PHBhdGggZmlsbD0iI2ZiYmMwNCIgZD0iTTI1NiA2MC42MzJoLTYwLjYzMnYxMzQuNzM2SDI1NnoiLz48cGF0aCBmaWxsPSIjMzRhODUzIiBkPSJNMTk1LjM2OCAxOTUuMzY4SDYwLjYzMlYyNTZoMTM0LjczNnoiLz48cGF0aCBmaWxsPSIjNDI4NWY0IiBkPSJNMTk1LjM2OCAwSDIwLjIxMUM5LjA0NCAwIDAgOS4wNDQgMCAyMC4yMXYxNzUuMTU4aDYwLjYzMlY2MC42MzJoMTM0LjczNnoiLz48cGF0aCBmaWxsPSIjNDI4NWY0IiBkPSJNODguMjcgMTY1LjE1NGMtNS4wMzYtMy40MDItOC41MjMtOC4zNy0xMC40MjYtMTQuOTRsMTEuNjg5LTQuODE2cTEuNTkgNi4wNjMgNS41NTggOS4zOThjMi42MjcgMi4yMjMgNS44MjcgMy4zMTggOS41NjYgMy4zMThxNS43MzQgMCA5Ljg1Mi0zLjQ4N2MyLjc0Ni0yLjMyNCA0LjEyNy01LjI4OCA0LjEyNy04Ljg3NXEwLTUuNTA4LTQuMzQ1LTguOTk0Yy0yLjg5Ny0yLjMyNC02LjUzNS0zLjQ4Ni0xMC44OC0zLjQ4NmgtNi43NTR2LTExLjU3aDYuMDYzcTUuNjA4IDAgOS40NDgtMy4wMzNjMi41Ni0yLjAyIDMuODQtNC43ODMgMy44NC04LjMwM2MwLTMuMTMyLTEuMTQ1LTUuNjI1LTMuNDM1LTcuNDk0Yy0yLjI5LTEuODctNS4xODgtMi44MTMtOC43MDgtMi44MTNjLTMuNDM2IDAtNi4xNjQuOTEtOC4xODUgMi43NDVhMTYuMSAxNi4xIDAgMCAwLTQuNDEzIDYuNzU0bC0xMS41Ny00LjgxN2MxLjUzMi00LjM0NSA0LjM0NS04LjE4NSA4LjQ3MS0xMS41MDNzOS4zOTgtNC45ODUgMTUuNzk4LTQuOTg1YzQuNzMzIDAgOC45OTQuOTEgMTIuNzY3IDIuNzQ1YzMuNzcyIDEuODM2IDYuNzM2IDQuMzc5IDguODc1IDcuNjEzYzIuMTQgMy4yNSAzLjIgNi44ODggMy4yIDEwLjkzYzAgNC4xMjYtLjk5MyA3LjYxMy0yLjk4IDEwLjQ3NnMtNC40MyA1LjA1Mi03LjMyNyA2LjU4NXYuNjlhMjIuMjUgMjIuMjUgMCAwIDEgOS4zOTggNy4zMjdjMi40NDIgMy4yODQgMy42NzIgNy4yMDggMy42NzIgMTEuNzljMCA0LjU4LTEuMTYzIDguNjczLTMuNDg3IDEyLjI2Yy0yLjMyNCAzLjU4OC01LjU0IDYuNDE3LTkuNjE3IDguNDcyYy00LjA5MiAyLjA1NS04LjY5IDMuMS0xMy43OTMgMy4xYy01LjkxMi4wMTYtMTEuMzY5LTEuNjg1LTE2LjQwNS01LjA4N203MS43OTctNTguMDA1bC0xMi44MzMgOS4yOGwtNi40MTctOS43MzRsMjMuMDIzLTE2LjYwN2g4LjgyNXY3OC4zMzNoLTEyLjU5OHoiLz48L3N2Zz4=",
+  "description": "Official Google remote MCP server for Google Calendar. List calendars, read and manage events, check free/busy, and suggest meeting times. OAuth 2.0.",
+  "homepage": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+  "instructions": "**⚠️ Apply for the [Google Workspace Developer Preview Program](https://developers.google.com/workspace/preview) first.** The Google Calendar MCP server (`calendarmcp.googleapis.com`) is preview-only. You can enable the API and list its tools without enrollment, but every tool call fails with \"The caller does not have permission\" until your Google Workspace organization is accepted into the program. A Workspace super-admin must enroll and wait for acceptance before this connection will work.\n\n**Requires your own Google Cloud OAuth client** — these servers do not support dynamic client registration.\n\n1. Enable the APIs in your Google Cloud project:\n   ```\n   gcloud services enable calendar-json.googleapis.com calendarmcp.googleapis.com\n   ```\n2. Configure the OAuth consent screen, then add these scopes:\n- `https://www.googleapis.com/auth/calendar.calendarlist.readonly`\n- `https://www.googleapis.com/auth/calendar.events.freebusy`\n- `https://www.googleapis.com/auth/calendar.events.readonly`\n3. Create an OAuth client (**Web application**) and register this redirect URI:\n   `http://localhost:3000/oauth-callback`\n4. Paste the **Client ID** and **Client Secret** into this form.\n\nEndpoints (if not auto-discovered from the server URL):\n- Authorization Server URL — `https://accounts.google.com`\n- Authorization Endpoint — `https://accounts.google.com/o/oauth2/v2/auth`\n- Token Endpoint — `https://oauth2.googleapis.com/token`\n\nSetup guide: https://developers.google.com/workspace/guides/configure-mcp-servers",
+  "tools": [
+    {
+      "name": "create_event",
+      "description": "Schedule new meetings"
+    },
+    {
+      "name": "delete_event",
+      "description": "Cancel scheduled events"
+    },
+    {
+      "name": "get_event",
+      "description": "Retrieve specific event details"
+    },
+    {
+      "name": "list_calendars",
+      "description": "Show available calendars"
+    },
+    {
+      "name": "list_events",
+      "description": "Display scheduled appointments"
+    },
+    {
+      "name": "respond_to_event",
+      "description": "Accept or decline invitations"
+    },
+    {
+      "name": "suggest_time",
+      "description": "Recommend available meeting slots"
+    },
+    {
+      "name": "update_event",
+      "description": "Modify existing event details"
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "google",
+    "google-workspace",
+    "google-calendar",
+    "calendar",
+    "events",
+    "scheduling",
+    "meetings",
+    "oauth"
+  ],
+  "user_config": {},
+  "oauth_config": {
+    "name": "Google Calendar",
+    "server_url": "https://calendarmcp.googleapis.com/mcp/v1",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+      "https://www.googleapis.com/auth/calendar.events.freebusy",
+      "https://www.googleapis.com/auth/calendar.events.readonly"
+    ],
+    "description": "Google Calendar MCP Server (Google OAuth 2.0)",
+    "default_scopes": [
+      "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+      "https://www.googleapis.com/auth/calendar.events.freebusy",
+      "https://www.googleapis.com/auth/calendar.events.readonly"
+    ],
+    "supports_resource_metadata": true
+  },
+  "readme": null,
+  "category": "Enterprise",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "Google"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://calendarmcp.googleapis.com/mcp/v1",
+    "docs_url": "https://developers.google.com/workspace/guides/configure-mcp-servers"
+  },
+  "github_info": null,
+  "programming_language": null
+}

@@ -5,12 +5,13 @@ import type {
   McpExecErrorMessage,
   McpExecOutputMessage,
   McpExecStartedMessage,
-} from "@shared";
+} from "@archestra/shared";
 import { Copy } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { copyToClipboard } from "@/lib/clipboard";
 import websocketService from "@/lib/websocket/websocket";
 
 type ConnectionStatus =
@@ -33,6 +34,7 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
   const fitAddonRef = useRef<import("@xterm/addon-fit").FitAddon | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [closedReason, setClosedReason] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const initializedRef = useRef(false);
 
@@ -138,6 +140,7 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
         "mcp_exec_closed",
         (message: McpExecClosedMessage) => {
           if (message.payload.serverId !== serverId || disposed) return;
+          setClosedReason(message.payload.reason ?? null);
           setStatus("disconnected");
         },
       );
@@ -204,7 +207,9 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
     idle: "",
     connecting: "Connecting...",
     connected: "",
-    disconnected: "Session terminated",
+    disconnected: closedReason
+      ? `Session terminated — ${closedReason}`
+      : "Session terminated",
     error: errorMessage || "Connection error",
   }[status];
 
@@ -213,7 +218,7 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
   const handleCopyCommand = useCallback(async () => {
     if (!command) return;
     try {
-      await navigator.clipboard.writeText(command);
+      await copyToClipboard(command);
       setCommandCopied(true);
       toast.success("Command copied to clipboard");
       setTimeout(() => setCommandCopied(false), 2000);

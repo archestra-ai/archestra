@@ -1,236 +1,447 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { vi } from "vitest";
 
-const mockRunFindById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
-const mockRunMarkCompleted = vi.hoisted(() => vi.fn().mockResolvedValue(null));
-const mockTriggerFindById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
-const mockUserGetById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
-const mockAgentFindById = vi.hoisted(() => vi.fn().mockResolvedValue(null));
-const mockUserHasAgentAccess = vi.hoisted(() =>
-  vi.fn().mockResolvedValue(true),
-);
-const mockHasAnyAgentTypeAdminPermission = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({ success: false }),
-);
+vi.mock("@/auth");
 
-vi.mock("@/models", () => ({
-  ScheduleTriggerRunModel: {
-    findById: mockRunFindById,
-    markCompleted: mockRunMarkCompleted,
+const A2A_RESULT = {
+  messageId: "msg-1",
+  text: "done",
+  finishReason: "stop",
+  responseUiMessage: {
+    id: "asst-1",
+    role: "assistant",
+    parts: [{ type: "text", text: "done" }],
   },
-  ScheduleTriggerModel: {
-    findById: mockTriggerFindById,
-  },
-  UserModel: {
-    getById: mockUserGetById,
-  },
-  AgentModel: {
-    findById: mockAgentFindById,
-  },
-  AgentTeamModel: {
-    userHasAgentAccess: mockUserHasAgentAccess,
-  },
-}));
+};
 
-vi.mock("@/auth", () => ({
-  hasAnyAgentTypeAdminPermission: mockHasAnyAgentTypeAdminPermission,
-}));
-
-const mockExecuteA2AMessage = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({ messageId: "msg-1", text: "done" }),
-);
+const mockExecuteA2AMessage = vi.hoisted(() => vi.fn());
 vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: mockExecuteA2AMessage,
 }));
 
-vi.mock("@/logging", () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
+const mockCreateAndLinkRunConversation = vi.hoisted(() => vi.fn());
+const mockPersistRunConversationMessages = vi.hoisted(() => vi.fn());
+const mockRecordRunConversationError = vi.hoisted(() => vi.fn());
+const mockPersistRunUserMessage = vi.hoisted(() => vi.fn());
+vi.mock("@/services/scheduled-run-conversation", () => ({
+  createAndLinkRunConversation: mockCreateAndLinkRunConversation,
+  persistRunConversationMessages: mockPersistRunConversationMessages,
+  persistRunUserMessage: mockPersistRunUserMessage,
+  recordRunConversationError: mockRecordRunConversationError,
 }));
 
+import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import {
+  ProjectModel,
+  ScheduleTriggerModel,
+  ScheduleTriggerRunModel,
+  UserModel,
+} from "@/models";
+import { beforeEach, describe, expect, test } from "@/test";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
-
-const makeRun = (overrides = {}) => ({
-  id: "run-1",
-  organizationId: "org-1",
-  triggerId: "trigger-1",
-  runKind: "due" as const,
-  status: "running" as const,
-  initiatedByUserId: null,
-  chatConversationId: null,
-  startedAt: new Date(),
-  completedAt: null,
-  error: null,
-  createdAt: new Date(),
-  ...overrides,
-});
-
-const makeTrigger = (overrides = {}) => ({
-  id: "trigger-1",
-  organizationId: "org-1",
-  name: "Test Trigger",
-  agentId: "agent-1",
-  messageTemplate: "Run the task",
-  cronExpression: "* * * * *",
-  timezone: "UTC",
-  enabled: true,
-  actorUserId: "user-1",
-  lastExecutedAt: null,
-  createdAt: new Date(),
-  ...overrides,
-});
-
-const makeUser = () => ({
-  id: "user-1",
-  name: "Test User",
-  email: "test@test.com",
-});
-
-const makeAgent = (overrides = {}) => ({
-  id: "agent-1",
-  organizationId: "org-1",
-  agentType: "agent",
-  name: "Test Agent",
-  ...overrides,
-});
 
 describe("handleScheduleTriggerRunExecution", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    mockRunFindById.mockResolvedValue(null);
-    mockRunMarkCompleted.mockResolvedValue(null);
-    mockTriggerFindById.mockResolvedValue(null);
-    mockUserGetById.mockResolvedValue(null);
-    mockAgentFindById.mockResolvedValue(null);
-    mockUserHasAgentAccess.mockResolvedValue(true);
-    mockHasAnyAgentTypeAdminPermission.mockResolvedValue({ success: false });
-    mockExecuteA2AMessage.mockResolvedValue({
-      messageId: "msg-1",
-      text: "done",
-    });
+    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(false);
+    mockExecuteA2AMessage.mockReset().mockResolvedValue(A2A_RESULT);
+    mockCreateAndLinkRunConversation.mockReset();
+    mockPersistRunConversationMessages.mockReset().mockResolvedValue(undefined);
+    mockRecordRunConversationError.mockReset().mockResolvedValue(undefined);
+    mockPersistRunUserMessage.mockReset().mockResolvedValue(undefined);
   });
 
-  test("executes A2A message and marks run as success", async () => {
-    mockRunFindById.mockResolvedValue(makeRun());
-    mockTriggerFindById.mockResolvedValue(makeTrigger());
-    mockUserGetById.mockResolvedValue(makeUser());
-    mockAgentFindById.mockResolvedValue(makeAgent());
-    mockUserHasAgentAccess.mockResolvedValue(true);
+  test("executes A2A message and marks run as success", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
 
     await handleScheduleTriggerRunExecution({
-      runId: "run-1",
-      triggerId: "trigger-1",
+      runId: run.id,
+      triggerId: trigger.id,
     });
 
     expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        agentId: "agent-1",
-        message: "Run the task",
-        organizationId: "org-1",
-        userId: "user-1",
-        sessionId: "scheduled-run-1",
+        agentId: agent.id,
+        message: trigger.messageTemplate,
+        organizationId: org.id,
+        userId: actor.id,
+        sessionId: `scheduled-${run.id}`,
         source: "schedule-trigger",
       }),
     );
-    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
-      runId: "run-1",
-      status: "success",
-      error: null,
-    });
+    const updated = await ScheduleTriggerRunModel.findById(run.id);
+    expect(updated?.status).toBe("success");
+    expect(updated?.error).toBeNull();
   });
 
-  test("marks run as failed when trigger no longer exists", async () => {
-    mockRunFindById.mockResolvedValue(makeRun());
-    mockTriggerFindById.mockResolvedValue(null);
+  test("marks run as failed when trigger no longer exists", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    // Simulate the trigger being deleted between run pickup and lookup.
+    vi.spyOn(ScheduleTriggerModel, "findById").mockResolvedValue(null);
 
     await handleScheduleTriggerRunExecution({
-      runId: "run-1",
-      triggerId: "trigger-1",
+      runId: run.id,
+      triggerId: trigger.id,
     });
 
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
-    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
-      runId: "run-1",
-      status: "failed",
-      error: "Trigger no longer exists",
-    });
+    const updated = await ScheduleTriggerRunModel.findById(run.id);
+    expect(updated?.status).toBe("failed");
+    expect(updated?.error).toBe("Trigger no longer exists");
   });
 
-  test("marks run as failed when actor user no longer exists", async () => {
-    mockRunFindById.mockResolvedValue(makeRun());
-    mockTriggerFindById.mockResolvedValue(makeTrigger());
-    mockUserGetById.mockResolvedValue(null);
+  test("marks run as failed when actor user no longer exists", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    // Simulate the actor being deleted between scheduling and execution.
+    vi.spyOn(UserModel, "getById").mockResolvedValue(null as never);
 
     await handleScheduleTriggerRunExecution({
-      runId: "run-1",
-      triggerId: "trigger-1",
+      runId: run.id,
+      triggerId: trigger.id,
     });
 
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
-    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
-      runId: "run-1",
-      status: "failed",
-      error: "Scheduled trigger actor no longer exists",
-    });
+    const updated = await ScheduleTriggerRunModel.findById(run.id);
+    expect(updated?.status).toBe("failed");
+    expect(updated?.error).toBe("Scheduled trigger actor no longer exists");
   });
 
-  test("marks run as failed when actor lost agent access", async () => {
-    mockRunFindById.mockResolvedValue(makeRun());
-    mockTriggerFindById.mockResolvedValue(makeTrigger());
-    mockUserGetById.mockResolvedValue(makeUser());
-    mockUserHasAgentAccess.mockResolvedValue(false);
+  test("marks run as failed when actor lost agent access", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const otherUser = await makeUser();
+    // A personal agent owned by someone else — the actor has no access to it.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "You are a test agent",
+      scope: "personal",
+      authorId: otherUser.id,
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
 
     await handleScheduleTriggerRunExecution({
-      runId: "run-1",
-      triggerId: "trigger-1",
+      runId: run.id,
+      triggerId: trigger.id,
     });
 
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
-    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
-      runId: "run-1",
-      status: "failed",
-      error: "Scheduled trigger actor no longer has access to the target agent",
-    });
+    const updated = await ScheduleTriggerRunModel.findById(run.id);
+    expect(updated?.status).toBe("failed");
+    expect(updated?.error).toBe(
+      "Scheduled trigger actor no longer has access to the target agent",
+    );
   });
 
-  test("marks run as failed when executeA2AMessage throws", async () => {
-    mockRunFindById.mockResolvedValue(makeRun());
-    mockTriggerFindById.mockResolvedValue(makeTrigger());
-    mockUserGetById.mockResolvedValue(makeUser());
-    mockAgentFindById.mockResolvedValue(makeAgent());
-    mockUserHasAgentAccess.mockResolvedValue(true);
+  test("marks run as failed when executeA2AMessage throws", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
     mockExecuteA2AMessage.mockRejectedValue(new Error("LLM provider down"));
 
     await handleScheduleTriggerRunExecution({
-      runId: "run-1",
-      triggerId: "trigger-1",
+      runId: run.id,
+      triggerId: trigger.id,
     });
 
-    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
-      runId: "run-1",
-      status: "failed",
-      error: "LLM provider down",
-    });
+    const updated = await ScheduleTriggerRunModel.findById(run.id);
+    expect(updated?.status).toBe("failed");
+    expect(updated?.error).toBe("LLM provider down");
   });
 
-  test("skips execution when run is not in running state", async () => {
-    mockRunFindById.mockResolvedValue(makeRun({ status: "success" }));
+  test("skips execution when run is not in running state", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    // Move the run out of the running state before the handler picks it up.
+    await ScheduleTriggerRunModel.markCompleted({
+      runId: run.id,
+      status: "success",
+    });
 
     await handleScheduleTriggerRunExecution({
-      runId: "run-1",
-      triggerId: "trigger-1",
+      runId: run.id,
+      triggerId: trigger.id,
     });
 
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
-    expect(mockRunMarkCompleted).not.toHaveBeenCalled();
+    const updated = await ScheduleTriggerRunModel.findById(run.id);
+    expect(updated?.status).toBe("success");
   });
 
   test("throws when payload is missing runId", async () => {
     await expect(
       handleScheduleTriggerRunExecution({ triggerId: "trigger-1" }),
     ).rejects.toThrow("Missing runId");
+  });
+
+  test("persists the run transcript from the executor result on a successful project-scoped run", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: actor.id,
+      name: `Project ${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+      projectId: project.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    mockCreateAndLinkRunConversation.mockResolvedValue({
+      id: "conv-1",
+      userId: actor.id,
+    });
+
+    await handleScheduleTriggerRunExecution({
+      runId: run.id,
+      triggerId: trigger.id,
+    });
+
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: "conv-1" }),
+    );
+    const updated = await ScheduleTriggerRunModel.findById(run.id);
+    expect(updated?.status).toBe("success");
+    // Transcript comes from the executor's in-memory result — the user prompt and
+    // the complete assistant turn — not reconstructed from interactions.
+    expect(mockPersistRunConversationMessages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversation: expect.objectContaining({ id: "conv-1" }),
+        userText: trigger.messageTemplate,
+        assistantMessage: expect.objectContaining({
+          role: "assistant",
+          parts: [{ type: "text", text: "done" }],
+        }),
+      }),
+    );
+  });
+
+  test("does not persist messages for an unscoped run", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+
+    await handleScheduleTriggerRunExecution({
+      runId: run.id,
+      triggerId: trigger.id,
+    });
+
+    expect(mockCreateAndLinkRunConversation).not.toHaveBeenCalled();
+    expect(mockPersistRunConversationMessages).not.toHaveBeenCalled();
+  });
+
+  test("does not persist messages when a project-scoped run fails", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: actor.id,
+      name: `Project ${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+      projectId: project.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    mockCreateAndLinkRunConversation.mockResolvedValue({
+      id: "conv-1",
+      userId: actor.id,
+    });
+    mockExecuteA2AMessage.mockRejectedValue(new Error("LLM provider down"));
+
+    await handleScheduleTriggerRunExecution({
+      runId: run.id,
+      triggerId: trigger.id,
+    });
+
+    const updated = await ScheduleTriggerRunModel.findById(run.id);
+    expect(updated?.status).toBe("failed");
+    expect(updated?.error).toBe("LLM provider down");
+    expect(mockPersistRunConversationMessages).not.toHaveBeenCalled();
+    // The failed run keeps its conversation: the scheduled prompt is persisted as
+    // the user message (so the chat carries it and "Try again" can resend it)...
+    expect(mockPersistRunUserMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversation: expect.objectContaining({ id: "conv-1" }),
+        userText: trigger.messageTemplate,
+      }),
+    );
+    // ...and the error is recorded as a chat error so the run's chat shows an
+    // inline error card. A plain Error (not a ProviderError) becomes the generic
+    // fallback card carrying the message.
+    expect(mockRecordRunConversationError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "conv-1",
+        error: expect.objectContaining({ message: "LLM provider down" }),
+      }),
+    );
+  });
+
+  test("a persist failure does not fail the run", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+    makeScheduleTrigger,
+    makeScheduleTriggerRun,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: actor.id,
+      name: `Project ${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const trigger = await makeScheduleTrigger({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+      projectId: project.id,
+    });
+    const run = await makeScheduleTriggerRun(trigger.id);
+    mockCreateAndLinkRunConversation.mockResolvedValue({
+      id: "conv-1",
+      userId: actor.id,
+    });
+    mockPersistRunConversationMessages.mockRejectedValue(
+      new Error("persist blew up"),
+    );
+
+    await expect(
+      handleScheduleTriggerRunExecution({
+        runId: run.id,
+        triggerId: trigger.id,
+      }),
+    ).resolves.toBeUndefined();
+
+    const updated = await ScheduleTriggerRunModel.findById(run.id);
+    expect(updated?.status).toBe("success");
   });
 });

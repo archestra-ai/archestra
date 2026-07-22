@@ -11,12 +11,10 @@ import {
   DialogStickyFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { usePresetEntityName } from "@/lib/organization.query";
 
 interface ReinstallTarget {
   id: string;
   name: string;
-  presetLabel: string | null;
 }
 
 interface ReinstallConfirmationDialogProps {
@@ -36,11 +34,7 @@ export function ReinstallConfirmationDialog({
   isReinstalling,
   targets = [],
 }: ReinstallConfirmationDialogProps) {
-  const { plural: presetPlural } = usePresetEntityName();
-
   const installationCount = targets.length;
-  const envCount = new Set(targets.map((t) => t.presetLabel)).size;
-  const showEnvBreakdown = envCount > 1;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -53,14 +47,7 @@ export function ReinstallConfirmationDialog({
             {installationCount > 0 ? (
               <>
                 <strong>{installationCount}</strong>{" "}
-                {installationCount === 1 ? "installation" : "installations"}
-                {showEnvBreakdown ? (
-                  <>
-                    {" "}
-                    across <strong>{envCount}</strong>{" "}
-                    {presetPlural.toLowerCase()}
-                  </>
-                ) : null}{" "}
+                {installationCount === 1 ? "installation" : "installations"}{" "}
                 will be reinstalled for the changes to take effect.
               </>
             ) : (

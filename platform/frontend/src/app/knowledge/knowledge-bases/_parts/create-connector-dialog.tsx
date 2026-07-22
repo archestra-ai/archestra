@@ -1,10 +1,15 @@
 "use client";
 
-import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
+import {
+  type archestraApiTypes,
+  DEFAULT_PERMISSION_SYNC_INTERVAL_SECONDS,
+  getConnectorNamePlaceholder,
+} from "@archestra/shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
@@ -33,20 +38,26 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { useCreateConnector } from "@/lib/knowledge/connector.query";
 import {
+  AdminApiKeyDescription,
   CONNECTOR_OPTIONS,
   ConnectorAdvancedConfigFields,
   ConnectorInlineConfigFields,
   type ConnectorType,
   connectorNeedsEmail,
+  connectorSupportsAdminApiKey,
+  connectorSupportsAutoSync,
   getConnectorCredentialConfig,
   getConnectorDocsUrl,
   getConnectorTypeLabel,
   getConnectorUrlConfig,
   getDefaultConnectorConfig,
+  getPermissionSyncCredentialNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
@@ -57,7 +68,10 @@ type CreateConnectorFormValues = {
   config: Record<string, unknown>;
   email: string;
   apiToken: string;
+  adminApiKey: string;
   schedule: string;
+  permissionSyncIntervalSeconds: number;
+  environmentId: string | null;
 };
 
 type ConnectorVisibility = NonNullable<
@@ -95,7 +109,10 @@ export function CreateConnectorDialog({
       config: { type: "jira", isCloud: true },
       email: "",
       apiToken: "",
+      adminApiKey: "",
       schedule: "0 */6 * * *",
+      permissionSyncIntervalSeconds: DEFAULT_PERMISSION_SYNC_INTERVAL_SECONDS,
+      environmentId: null,
     },
   });
 
@@ -105,6 +122,13 @@ export function CreateConnectorDialog({
     setSelectedType(type);
     form.setValue("connectorType", type);
     form.setValue("config", getDefaultConnectorConfig(type));
+    // Reset an auto-sync selection when switching to a type that can't support it.
+    if (
+      visibility === "auto-sync-permissions" &&
+      !connectorSupportsAutoSync(type)
+    ) {
+      setVisibility("org-wide");
+    }
     setStep("configure");
   };
 
@@ -121,6 +145,12 @@ export function CreateConnectorDialog({
 
   const handleSubmit = async (values: CreateConnectorFormValues) => {
     const config = transformConfigArrayFields(values.config);
+    // App-auth GitHub connectors carry their credentials in a github_app_configs
+    // row referenced by the config, so no inline credentials are sent
+    const usesGithubApp =
+      values.connectorType === "github" &&
+      (values.config as { authMethod?: string }).authMethod === "github_app";
+    const requiresCredentials = values.connectorType !== "web_crawler";
     const result = await createConnector.mutateAsync({
       name: values.name,
       description: values.description || null,
@@ -128,11 +158,20 @@ export function CreateConnectorDialog({
       teamIds: visibility === "team-scoped" ? teamIds : [],
       connectorType: values.connectorType,
       config: config as archestraApiTypes.CreateConnectorData["body"]["config"],
-      credentials: {
-        ...(values.email && { email: values.email }),
-        apiToken: values.apiToken,
-      },
+      environmentId: values.environmentId,
+      ...(usesGithubApp || !requiresCredentials
+        ? {}
+        : {
+            credentials: {
+              ...(values.email && { email: values.email }),
+              apiToken: values.apiToken,
+              ...(values.adminApiKey && { adminApiKey: values.adminApiKey }),
+            },
+          }),
       schedule: values.schedule,
+      ...(visibility === "auto-sync-permissions" && {
+        permissionSyncIntervalSeconds: values.permissionSyncIntervalSeconds,
+      }),
       ...(knowledgeBaseId && { knowledgeBaseIds: [knowledgeBaseId] }),
     });
     if (result) {
@@ -156,8 +195,13 @@ export function CreateConnectorDialog({
     onOpenChange(isOpen);
   };
 
-  const urlConfig = getConnectorUrlConfig(connectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
+  const authMethod = form.watch("config.authMethod") as string | undefined;
+  // App-auth GitHub connectors inherit their host from the App config, so the
+  // connector's own URL field is hidden to avoid a misleading second host
+  const usesGithubApp =
+    connectorType === "github" && authMethod === "github_app";
+  const urlConfig = usesGithubApp ? null : getConnectorUrlConfig(connectorType);
   const needsEmail = connectorNeedsEmail(connectorType);
   const emailRequired = needsEmail && isCloud !== false;
   const connectorDocsUrl = selectedType
@@ -166,13 +210,17 @@ export function CreateConnectorDialog({
   const {
     apiTokenHelpText,
     apiTokenLabel,
+    apiTokenMultiline,
     apiTokenPlaceholder,
     apiTokenRequiredMessage,
   } = getConnectorCredentialConfig({
     type: connectorType,
     emailRequired,
     mode: "create",
+    authMethod,
   });
+  const permissionSyncCredentialNote =
+    getPermissionSyncCredentialNote(connectorType);
 
   useLayoutEffect(() => {
     if (open && step === "select") {
@@ -196,6 +244,7 @@ export function CreateConnectorDialog({
                     size="icon"
                     className="h-7 w-7"
                     onClick={handleBackToChooser}
+                    aria-label="Go back"
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
@@ -259,6 +308,7 @@ export function CreateConnectorDialog({
                     size="icon"
                     className="h-7 w-7"
                     onClick={handleBack}
+                    aria-label="Go back"
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
@@ -325,13 +375,30 @@ export function CreateConnectorDialog({
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name="environmentId"
+                  render={({ field }) => (
+                    <EnvironmentSelector
+                      value={field.value ?? null}
+                      onChange={field.onChange}
+                      resource="knowledgeSource"
+                      helpText="The environment this connector belongs to, controlling which gateways and agents can use its knowledge."
+                    />
+                  )}
+                />
+
                 <KnowledgeSourceVisibilitySelector
                   visibility={visibility}
                   onVisibilityChange={setVisibility}
                   teamIds={teamIds}
                   onTeamIdsChange={setTeamIds}
                   showTeamRequired
+                  supportsAutoSync={connectorSupportsAutoSync(connectorType)}
+                  autoSyncPermissionAction="create"
                 />
+
+                <div className="border-t" />
 
                 {urlConfig && (
                   <FormField
@@ -366,54 +433,93 @@ export function CreateConnectorDialog({
                   emailRequired={emailRequired}
                 />
 
-                {connectorType === "file_upload" && (
-                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    After creating the connector, you can upload text files or
-                    ZIP archives directly from the connector page.
-                  </div>
+                {Boolean(apiTokenLabel) && (
+                  <FormField
+                    control={form.control}
+                    name="apiToken"
+                    rules={{ required: apiTokenRequiredMessage }}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{apiTokenLabel}</FormLabel>
+                        <FormControl>
+                          {apiTokenMultiline ? (
+                            <SecretTextarea
+                              placeholder={apiTokenPlaceholder}
+                              rows={5}
+                              {...field}
+                            />
+                          ) : (
+                            <SecretInput
+                              placeholder={apiTokenPlaceholder}
+                              {...field}
+                            />
+                          )}
+                        </FormControl>
+                        {apiTokenHelpText}
+                        {visibility === "auto-sync-permissions" &&
+                          permissionSyncCredentialNote && (
+                            <FormDescription>
+                              {permissionSyncCredentialNote}
+                            </FormDescription>
+                          )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 )}
 
-                {Boolean(apiTokenLabel) && (
-                  <>
+                {visibility === "auto-sync-permissions" &&
+                  connectorSupportsAdminApiKey(connectorType) && (
                     <FormField
                       control={form.control}
-                      name="apiToken"
-                      rules={{ required: apiTokenRequiredMessage }}
+                      name="adminApiKey"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>{apiTokenLabel}</FormLabel>
+                          <FormLabel>
+                            Organization admin API key (optional)
+                          </FormLabel>
                           <FormControl>
-                            <Input
-                              type="password"
-                              placeholder={apiTokenPlaceholder}
-                              autoComplete="new-password"
-                              data-1p-ignore
-                              data-lpignore="true"
+                            <SecretInput
+                              placeholder="Atlassian organization admin API key"
                               {...field}
                             />
                           </FormControl>
-                          {apiTokenHelpText}
+                          <FormDescription>
+                            <AdminApiKeyDescription type={connectorType} />
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+                  )}
 
-                    <Collapsible>
-                      <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
-                        <span className="text-sm font-medium">Advanced</span>
-                        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="pt-4 space-y-4">
-                        <SchedulePicker form={form} name="schedule" />
-                        <ConnectorAdvancedConfigFields
-                          connectorType={connectorType}
-                          form={form}
-                          mode="create"
-                        />
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </>
-                )}
+                <Collapsible>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+                    <span className="text-sm font-medium">Advanced</span>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-4 space-y-4">
+                    <SchedulePicker
+                      form={form}
+                      name="schedule"
+                      connectorTypeLabel={getConnectorTypeLabel(connectorType)}
+                    />
+                    {visibility === "auto-sync-permissions" && (
+                      <PermissionSyncIntervalPicker
+                        form={form}
+                        name="permissionSyncIntervalSeconds"
+                        connectorTypeLabel={getConnectorTypeLabel(
+                          connectorType,
+                        )}
+                      />
+                    )}
+                    <ConnectorAdvancedConfigFields
+                      connectorType={connectorType}
+                      form={form}
+                      mode="create"
+                    />
+                  </CollapsibleContent>
+                </Collapsible>
               </DialogBody>
 
               <DialogStickyFooter className="mt-0">

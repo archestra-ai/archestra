@@ -1,0 +1,258 @@
+{
+  "name": "longportapp__openapi__mcp",
+  "display_name": "mcp",
+  "description": "LongPort OpenAPI SDK Base.",
+  "author": {
+    "name": "longportapp"
+  },
+  "server": {
+    "command": "/usr/local/bin/longport-mcp",
+    "args": [
+      "${user_config.enable_sse_server ? '--sse' : ''}",
+      "${user_config.enable_sse_server && user_config.sse_bind_address ? '--bind' : ''}",
+      "${user_config.enable_sse_server && user_config.sse_bind_address ? user_config.sse_bind_address : ''}",
+      "${user_config.readonly_mode ? '--readonly' : ''}",
+      "${user_config.log_directory ? '--log-dir' : ''}",
+      "${user_config.log_directory ? user_config.log_directory : ''}"
+    ],
+    "env": {
+      "LONGPORT_APP_KEY": "${user_config.longport_app_key}",
+      "LONGPORT_APP_SECRET": "${user_config.longport_app_secret}",
+      "LONGPORT_ACCESS_TOKEN": "${user_config.longport_access_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "longport_app_key": {
+      "type": "string",
+      "title": "LongPort App Key",
+      "description": "Your application key for LongPort OpenAPI.",
+      "sensitive": true,
+      "required": true
+    },
+    "longport_app_secret": {
+      "type": "string",
+      "title": "LongPort App Secret",
+      "description": "Your application secret for LongPort OpenAPI.",
+      "sensitive": true,
+      "required": true
+    },
+    "longport_access_token": {
+      "type": "string",
+      "title": "LongPort Access Token",
+      "description": "Your access token for LongPort OpenAPI.",
+      "sensitive": true,
+      "required": true
+    },
+    "enable_sse_server": {
+      "type": "boolean",
+      "title": "Enable SSE Server",
+      "description": "Run the server as an SSE (Server-Sent Events) server.",
+      "default": false,
+      "required": false
+    },
+    "sse_bind_address": {
+      "type": "string",
+      "title": "SSE Bind Address",
+      "description": "The address and port for the SSE server to bind to (e.g., 127.0.0.1:8000). Only applicable if SSE Server is enabled.",
+      "default": "127.0.0.1:8000",
+      "required": false
+    },
+    "readonly_mode": {
+      "type": "boolean",
+      "title": "Read-Only Mode",
+      "description": "Run the server in read-only mode, preventing order submission.",
+      "default": false,
+      "required": false
+    },
+    "log_directory": {
+      "type": "directory",
+      "title": "Log Directory",
+      "description": "Directory where server logs will be stored.",
+      "required": false
+    }
+  },
+  "readme": "# LongPort MCP\n\nA [MCP](https://modelcontextprotocol.io/introduction) server implementation for [LongPort OpenAPI](https://open.longportapp.com), provides real-time stock market data, provides AI access analysis and trading capabilities through MCP.\n\n## Features\n\n- Trading - Create, amend, cancel orders, query today’s/past orders and transaction details, etc.\n- Quotes - Real-time quotes, acquisition of historical quotes, etc.\n- Portfolio - Real-time query of the account assets, positions, funds\n\n## Installation\n\n### macOS or Linux\n\nRun script to install:\n\n```bash\ncurl -sSL https://raw.githubusercontent.com/longportapp/openapi/refs/heads/main/mcp/install | bash\n```\n\n### Windows\n\nDownload the latest binary from the [Releases](https://github.com/longportapp/openapi/releases/tag/longport-mcp-0.1.0) page.\n\n## Example Prompts\n\nOnce you done server setup, and connected, you can talk with AI:\n\n- What's the current price of AAPL and TSLA stock?\n- How has Tesla performed over the past month?\n- Show me the current values of major market indices.\n- What's the stock price history for TSLA, AAPL over the last year?\n- Compare the performance of TSLA, AAPL and NVDA over the past 3 months.\n- Generate a portfolio performance chart for my holding stocks, and return me with data table and pie chart (Just return result no code).\n- Check the price of the stocks I hold today, and if they fall/rise by more than 3%, sell(If fall, buy if rise) 1/3 at the market price.\n\n## Usage\n\n### Use in Cursor\n\nTo configure LongPort MCP in Cursor:\n\n- Open Cursor Settings\n- Go to Features > MCP Servers\n- Click `+ Add New MCP Server`\n- Enter the following:\n  - Name: `longport-mcp` (or your preferred name)\n  - Type: `command`\n  - Command: `env LONGPORT_APP_KEY=your-app-key LONGPORT_APP_SECRET=your-app-secret LONGPORT_ACCESS_TOKEN=your-access-token longport-mcp`\n\nIf you are using Windows, replace command with `cmd /c \"set LONGPORT_APP_KEY=your-app-key && set LONGPORT_APP_SECRET=your-app-secret && set LONGPORT_ACCESS_TOKEN=your-access-token && longport-mcp\"`\n\nOr use this config:\n\n```json\n{\n  \"mcpServers\": {\n    \"longport-mcp\": {\n      \"command\": \"/usr/local/bin/longport-mcp\",\n      \"env\": {\n        \"LONGPORT_APP_KEY\": \"your-app-key\",\n        \"LONGPORT_APP_SECRET\": \"your-app-secret\",\n        \"LONGPORT_ACCESS_TOKEN\": \"your-access-token\"\n      }\n    }\n  }\n}\n```\n\n### Use in Cherry Studio\n\nTo configure LongPort MCP in Cherry Studio:\n\n- Go to Settings > MCP Servers\n- Click `+ Add Server`\n- Enter the following:\n  - Name: `longport-mcp` (or your preferred name)\n  - Type: `STDIO`\n  - Command: `env LONGPORT_APP_KEY=your-app-key LONGPORT_APP_SECRET=your-app-secret LONGPORT_ACCESS_TOKEN=your-access-token longport-mcp`\n\nIf you are using Windows, replace command with `cmd /c \"set LONGPORT_APP_KEY=your-app-key && set LONGPORT_APP_SECRET=your-app-secret && set LONGPORT_ACCESS_TOKEN=your-access-token && longport-mcp\"`\n\n## Running as a SSE server\n\n```bash\nenv LONGPORT_APP_KEY=your-app-key LONGPORT_APP_SECRET=your-app-secret LONGPORT_ACCESS_TOKEN=your-access-token longport-mcp --sse\n```\n\nDefault bind address is `127.0.0.1:8000`, you can change it by using the `--bind` flag:\n\n```bash\nlongport-mcp --sse --bind 127.0.0.1:3000\n```\n\n## Configuration\n\n### Readonly mode\n\nTo run the server in read-only mode, set the flag `--readonly`:\n\n```bash\nlongport-mcp --readonly\n```\n\nThis will prevent the server from submitting orders to the exchange.\n\n### Enable logging\n\nTo enable logging, set the flag `--log-dir` to the directory where you want to store the logs:\n\n```bash\nlongport-mcp --log-dir /path/to/log/dir\n```\n",
+  "category": "AI Tools",
+  "quality_score": 77,
+  "archestra_config": {
+    "client_config_permutations": {
+      "longport-mcp-env-prefix": {
+        "command": "env",
+        "args": [
+          "LONGPORT_APP_KEY=your-app-key",
+          "LONGPORT_APP_SECRET=your-app-secret",
+          "LONGPORT_ACCESS_TOKEN=your-access-token",
+          "longport-mcp"
+        ],
+        "env": {
+          "LONGPORT_APP_KEY": "your-app-key",
+          "LONGPORT_APP_SECRET": "your-app-secret",
+          "LONGPORT_ACCESS_TOKEN": "your-access-token"
+        }
+      },
+      "longport-mcp-windows-cmd-prefix": {
+        "command": "cmd",
+        "args": [
+          "/c",
+          "set LONGPORT_APP_KEY=your-app-key && set LONGPORT_APP_SECRET=your-app-secret && set LONGPORT_ACCESS_TOKEN=your-access-token && longport-mcp"
+        ],
+        "env": {
+          "LONGPORT_APP_KEY": "your-app-key",
+          "LONGPORT_APP_SECRET": "your-app-secret",
+          "LONGPORT_ACCESS_TOKEN": "your-access-token"
+        }
+      },
+      "longport-mcp-with-config": {
+        "command": "/usr/local/bin/longport-mcp",
+        "args": [],
+        "env": {
+          "LONGPORT_APP_KEY": "your-app-key",
+          "LONGPORT_APP_SECRET": "your-app-secret",
+          "LONGPORT_ACCESS_TOKEN": "your-access-token"
+        }
+      },
+      "longport-mcp-sse": {
+        "command": "env",
+        "args": [
+          "LONGPORT_APP_KEY=your-app-key",
+          "LONGPORT_APP_SECRET=your-app-secret",
+          "LONGPORT_ACCESS_TOKEN=your-access-token",
+          "longport-mcp",
+          "--sse"
+        ],
+        "env": {
+          "LONGPORT_APP_KEY": "your-app-key",
+          "LONGPORT_APP_SECRET": "your-app-secret",
+          "LONGPORT_ACCESS_TOKEN": "your-access-token"
+        }
+      },
+      "longport-mcp-sse-bind": {
+        "command": "longport-mcp",
+        "args": ["--sse", "--bind", "127.0.0.1:3000"],
+        "env": {
+          "LONGPORT_APP_KEY": "your-app-key",
+          "LONGPORT_APP_SECRET": "your-app-secret",
+          "LONGPORT_ACCESS_TOKEN": "your-access-token"
+        }
+      },
+      "longport-mcp-readonly": {
+        "command": "longport-mcp",
+        "args": ["--readonly"],
+        "env": {
+          "LONGPORT_APP_KEY": "your-app-key",
+          "LONGPORT_APP_SECRET": "your-app-secret",
+          "LONGPORT_ACCESS_TOKEN": "your-access-token"
+        }
+      },
+      "longport-mcp-logging": {
+        "command": "longport-mcp",
+        "args": ["--log-dir", "/path/to/log/dir"],
+        "env": {
+          "LONGPORT_APP_KEY": "your-app-key",
+          "LONGPORT_APP_SECRET": "your-app-secret",
+          "LONGPORT_ACCESS_TOKEN": "your-access-token"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "longportapp",
+    "repo": "openapi",
+    "url": "https://github.com/longportapp/openapi/tree/main/mcp",
+    "name": "openapi",
+    "path": "mcp",
+    "stars": 269,
+    "contributors": 14,
+    "issues": 72,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "c96cef2a4766c608e1cd391ef0ea226b66a3e1be"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.982Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "poem-mcpserver",
+      "importance": 10
+    },
+    {
+      "name": "poem-mcpserver-macros",
+      "importance": 9
+    },
+    {
+      "name": "poem",
+      "importance": 9
+    },
+    {
+      "name": "poem-derive",
+      "importance": 8
+    },
+    {
+      "name": "serde",
+      "importance": 8
+    },
+    {
+      "name": "schemars",
+      "importance": 7
+    },
+    {
+      "name": "longport",
+      "importance": 9
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "clap",
+      "importance": 6
+    },
+    {
+      "name": "dotenvy",
+      "importance": 5
+    },
+    {
+      "name": "time",
+      "importance": 4
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 7
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "tracing-appender",
+      "importance": 6
+    },
+    {
+      "name": "tracing",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"longport-mcp\"\nversion = \"3.0.11\"\nedition.workspace = true\n\n[dependencies]\npoem-mcpserver = { version = \"0.2.3\", features = [\"streamable-http\"] }\npoem-mcpserver-macros = { version = \"0.2.3\" }\npoem = { version = \"3.1.9\", features = [\"sse\"] }\npoem-derive = { version = \"3.1.9\" }\nserde = { version = \"1.0.219\", features = [\"derive\"] }\nschemars = { version = \"0.8.22\", features = [\"chrono\", \"rust_decimal\"] }\nlongport = { path = \"../rust\" }\ntokio = { version = \"1.44.1\", features = [\"macros\", \"rt-multi-thread\", \"sync\"] }\nclap = { version = \"4.5.32\", features = [\"derive\"] }\ndotenvy = \"0.15.7\"\ntime = { version = \"0.3.39\", features = [\"formatting\", \"parsing\"] }\ntracing-subscriber = \"0.3.19\"\nserde_json = \"1.0.140\"\ntracing-appender = \"0.2.3\"\ntracing = \"0.1.41\"\n"
+}

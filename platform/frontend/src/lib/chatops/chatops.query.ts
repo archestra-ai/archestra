@@ -1,4 +1,4 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
   keepPreviousData,
   useMutation,
@@ -6,17 +6,14 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 export function useChatOpsStatus() {
   return useQuery({
     queryKey: ["chatops", "status"],
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getChatOpsStatus();
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      throwOnApiError(error);
       return data?.providers || [];
     },
   });
@@ -41,10 +38,8 @@ export function useChatOpsBindings(
           status: params.status,
         },
       });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
+      // Screen renders its own QueryLoadError panel; don't also toast.
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
   });
@@ -53,10 +48,19 @@ export function useChatOpsBindings(
 export function useUpdateChatOpsBinding() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { id: string; agentId: string | null }) => {
+    mutationFn: async (params: {
+      id: string;
+      agentId?: string | null;
+      answerAllMessages?: boolean;
+    }) => {
       const { data, error } = await archestraApiSdk.updateChatOpsBinding({
         path: { id: params.id },
-        body: { agentId: params.agentId },
+        body: {
+          ...(params.agentId !== undefined && { agentId: params.agentId }),
+          ...(params.answerAllMessages !== undefined && {
+            answerAllMessages: params.answerAllMessages,
+          }),
+        },
       });
       if (error) {
         handleApiError(error);
@@ -99,7 +103,7 @@ export function useCreateChatOpsDmBinding() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (params: {
-      provider: "ms-teams" | "slack";
+      provider: "ms-teams" | "slack" | "telegram";
       agentId: string | null;
     }) => {
       const { data, error } = await archestraApiSdk.createChatOpsDmBinding({

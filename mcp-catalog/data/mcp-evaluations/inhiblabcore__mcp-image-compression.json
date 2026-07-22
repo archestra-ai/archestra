@@ -1,0 +1,114 @@
+{
+  "name": "inhiblabcore__mcp-image-compression",
+  "display_name": "mcp-image-compression",
+  "description": "A high-performance image compression microservice based on MCP (Modal Context Protocol)",
+  "author": {
+    "name": "InhiblabCore"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@inhiblab-core/mcp-image-compression"],
+    "env": {
+      "IMAGE_COMPRESSION_DOWNLOAD_DIR": "${user_config.image_compression_download_dir}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "image_compression_download_dir": {
+      "type": "directory",
+      "title": "Image Compression Download Directory",
+      "description": "The directory where compressed images will be downloaded.",
+      "required": true,
+      "default": "${DOWNLOADS}"
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/inhiblabcore-mcp-image-compression-badge.png)](https://mseep.ai/app/inhiblabcore-mcp-image-compression)\n\n# mcp-image-compression\n\n## Project Overview\n\nmcp-image-compression is a high-performance image compression microservice based on MCP (Modal Context Protocol) architecture. This service focuses on providing fast and high-quality image compression capabilities to help developers optimize image resources for websites and applications, improving loading speed and user experience.\n\n## Features\n\n- **Multi-format support**: Compress mainstream image formats including JPEG, PNG, WebP, AVIF\n- **Offline Usage**: No need to connect to the internet to use\n- **Smart compression**: Automatically select optimal compression parameters based on image content\n- **Batch processing**: Support parallel compression of multiple images for improved efficiency\n- **Quality control**: Customizable compression quality to balance file size and visual quality\n\n## TOOLS\n\n1. `image_compression`\n   - Image compression\n   - Inputs:\n     - `urls` (strings): URLs of images to compress\n     - `quality` (int): Quality of compression (0-100)\n     - `format` (string): Format of compressed image (e.g. \"jpeg\", \"png\", \"webp\", \"avif\")\n   - Returns: Compressed images url\n\n## Setup\n\n### NPX\n\n```json\n{\n  \"mcpServers\": {\n    \"Image compression\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@inhiblab-core/mcp-image-compression\"\n      ],\n      \"env\": {\n        \"IMAGE_COMPRESSION_DOWNLOAD_DIR\": \"<YOUR_DIR>\"\n      },\n      \"disabled\": false,\n      \"autoApprove\": []\n    }\n  }\n}\n```\n\n## Build\n\n```bash\ndocker build -t mcp-image-compression .\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n\n",
+  "category": "Development",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "inhiblab-core-mcp-image-compression": {
+        "command": "npx",
+        "args": ["-y", "@inhiblab-core/mcp-image-compression"],
+        "env": {
+          "IMAGE_COMPRESSION_DOWNLOAD_DIR": "<YOUR_DIR>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "InhiblabCore",
+    "repo": "mcp-image-compression",
+    "url": "https://github.com/InhiblabCore/mcp-image-compression",
+    "name": "inhiblabcore__mcp-image-compression",
+    "path": null,
+    "stars": 26,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "4d0b0408ab873a07df2e4468829926e290201881"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:38.000Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "file-type",
+      "importance": 7
+    },
+    {
+      "name": "sharp",
+      "importance": 9
+    },
+    {
+      "name": "shrinkpng",
+      "importance": 9
+    },
+    {
+      "name": "shx",
+      "importance": 3
+    },
+    {
+      "name": "uuid",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@inhiblab-core/mcp-image-compression\",\n  \"version\": \"0.1.2\",\n  \"description\": \"\",\n  \"type\": \"module\",\n  \"main\": \"index.js\",\n  \"bin\": {\n    \"@inhiblab-core/mcp-image-compression\": \"./bin/www.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"bin\",\n    \"README.md\"\n  ],\n  \"scripts\": {\n    \"watch\": \"rimraf dist && tsc --watch\",\n    \"build\": \"rimraf dist && tsc && shx chmod +x dist/*.js\",\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\",\n    \"start\": \"pnpm build && node server.js\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector npx node dist/index.js\"\n  },\n  \"keywords\": [\n    \"MCP server\",\n    \"image compression\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"axios\": \"^1.8.3\",\n    \"express\": \"^4.21.2\",\n    \"file-type\": \"^20.4.1\",\n    \"sharp\": \"^0.33.5\",\n    \"shrinkpng\": \"1.2.0-beta.1\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.8.2\",\n    \"uuid\": \"^11.1.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"18.x\",\n    \"rimraf\": \"^6.0.1\"\n  },\n  \"repository\": \"https://github.com/InhiblabCore/mcp-image-compression\",\n  \"author\": \"NelsonYong\",\n  \"license\": \"MIT\"\n}\n"
+}

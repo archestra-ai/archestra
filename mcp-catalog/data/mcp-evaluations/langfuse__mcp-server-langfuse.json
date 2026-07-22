@@ -1,0 +1,117 @@
+{
+  "name": "langfuse__mcp-server-langfuse",
+  "display_name": "mcp-server-langfuse",
+  "description": "Model Context Protocol (MCP) Server for Langfuse Prompt Management. This server allows you to access and manage your Langfuse prompts through the Model Context Protocol.",
+  "author": {
+    "name": "langfuse"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "LANGFUSE_PUBLIC_KEY": "${user_config.langfuse_public_key}",
+      "LANGFUSE_SECRET_KEY": "${user_config.langfuse_secret_key}",
+      "LANGFUSE_BASEURL": "${user_config.langfuse_baseurl}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "langfuse_public_key": {
+      "type": "string",
+      "title": "Langfuse Public Key",
+      "description": "Your Langfuse public key for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "langfuse_secret_key": {
+      "type": "string",
+      "title": "Langfuse Secret Key",
+      "description": "Your Langfuse secret key for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "langfuse_baseurl": {
+      "type": "string",
+      "title": "Langfuse Base URL",
+      "description": "The base URL for the Langfuse API.",
+      "default": "https://cloud.langfuse.com",
+      "required": false
+    }
+  },
+  "readme": "# Langfuse Prompt Management MCP Server\n\n[Model Context Protocol](https://github.com/modelcontextprotocol) (MCP) Server for [Langfuse Prompt Management](https://langfuse.com/docs/prompts/get-started). This server allows you to access and manage your Langfuse prompts through the Model Context Protocol.\n\n## Demo\n\nQuick demo of Langfuse Prompts MCP in Claude Desktop (_unmute for voice-over explanations_):\n\nhttps://github.com/user-attachments/assets/61da79af-07c2-4f69-b28c-ca7c6e606405\n\n## Features\n\n### MCP Prompt\n\nThis server implements the [MCP Prompts specification](https://modelcontextprotocol.io/docs/concepts/prompts) for prompt discovery and retrieval.\n\n- `prompts/list`: List all available prompts\n\n  - Optional cursor-based pagination\n  - Returns prompt names and their required arguments, limitation: all arguments are assumed to be optional and do not include descriptions as variables do not have specification in Langfuse\n  - Includes next cursor for pagination if there's more than 1 page of prompts\n\n- `prompts/get`: Get a specific prompt\n\n  - Transforms Langfuse prompts (text and chat) into MCP prompt objects\n  - Compiles prompt with provided variables\n\n### Tools\n\nTo increase compatibility with other MCP clients that do not support the prompt capability, the server also exports tools that replicate the functionality of the MCP Prompts.\n\n- `get-prompts`: List available prompts\n\n  - Optional `cursor` parameter for pagination\n  - Returns a list of prompts with their arguments\n\n- `get-prompt`: Retrieve and compile a specific prompt\n  - Required `name` parameter: Name of the prompt to retrieve\n  - Optional `arguments` parameter: JSON object with prompt variables\n\n## Development\n\n```bash\nnpm install\n\n# build current file\nnpm run build\n\n# test in mcp inspector\nnpx @modelcontextprotocol/inspector node ./build/index.js\n```\n\n## Usage\n\n### Step 1: Build\n\n```bash\nnpm install\nnpm run build\n```\n\n### Step 2: Add the server to your MCP servers:\n\n#### Claude Desktop\n\nConfigure Claude for Desktop by editing `claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"langfuse\": {\n      \"command\": \"node\",\n      \"args\": [\"<absolute-path>/build/index.js\"],\n      \"env\": {\n        \"LANGFUSE_PUBLIC_KEY\": \"your-public-key\",\n        \"LANGFUSE_SECRET_KEY\": \"your-secret-key\",\n        \"LANGFUSE_BASEURL\": \"https://cloud.langfuse.com\"\n      }\n    }\n  }\n}\n```\n\nMake sure to replace the environment variables with your actual Langfuse API keys. The server will now be available to use in Claude Desktop.\n\n#### Cursor\n\nAdd new server to Cursor:\n\n- Name: `Langfuse Prompts`\n- Type: `command`\n- Command:\n  ```bash\n  LANGFUSE_PUBLIC_KEY=\"your-public-key\" LANGFUSE_SECRET_KEY=\"your-secret-key\" LANGFUSE_BASEURL=\"https://cloud.langfuse.com\" node absolute-path/build/index.js\n  ```\n\n## Limitations\n\nThe MCP Server is a work in progress and has some limitations:\n\n- Only prompts with a `production` label in Langfuse are returned\n- All arguments are assumed to be optional and do not include descriptions as variables do not have specification in Langfuse\n- List operations require fetching each prompt individually in the background to extract the arguments, this works but is not efficient\n\nContributions are welcome! Please open an issue or a PR ([repo](https://github.com/langfuse/mcp-server-langfuse)) if you have any suggestions or feedback.\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "langfuse-claude-desktop": {
+        "command": "node",
+        "args": ["<absolute-path>/build/index.js"],
+        "env": {
+          "LANGFUSE_PUBLIC_KEY": "your-public-key",
+          "LANGFUSE_SECRET_KEY": "your-secret-key",
+          "LANGFUSE_BASEURL": "https://cloud.langfuse.com"
+        }
+      },
+      "langfuse-cursor": {
+        "command": "node",
+        "args": ["absolute-path/build/index.js"],
+        "env": {
+          "LANGFUSE_PUBLIC_KEY": "your-public-key",
+          "LANGFUSE_SECRET_KEY": "your-secret-key",
+          "LANGFUSE_BASEURL": "https://cloud.langfuse.com"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "langfuse",
+    "repo": "mcp-server-langfuse",
+    "url": "https://github.com/langfuse/mcp-server-langfuse",
+    "name": "langfuse__mcp-server-langfuse",
+    "path": null,
+    "stars": 133,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "a534b5a995d50c21ba45f14419246ef64d3ca6f4"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:39.944Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "langfuse",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-server-langfuse\",\n  \"version\": \"0.0.1\",\n  \"description\": \"A MCP Server for Langfuse Prompt Management\",\n  \"main\": \"index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-langfuse\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.5.0\",\n    \"langfuse\": \"^3.35.2\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.4\",\n    \"typescript\": \"^5.7.3\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"hu\"\n  },\n  \"keywords\": [\n    \"langfuse\",\n    \"model-context-protocol\",\n    \"prompt\",\n    \"management\"\n  ],\n  \"author\": \"marcklingen\",\n  \"license\": \"MIT\"\n}\n"
+}

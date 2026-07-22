@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME } from "@shared";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -130,7 +130,7 @@ describe("API key route authorization", () => {
     expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({
       error: {
-        message: "Forbidden",
+        message: expect.stringContaining("apiKey:read"),
         type: "api_authorization_error",
       },
     });

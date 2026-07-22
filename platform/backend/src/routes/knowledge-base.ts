@@ -1,50 +1,86 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
+  MAX_PERMISSION_SYNC_INTERVAL_SECONDS,
+  MIN_PERMISSION_SYNC_INTERVAL_SECONDS,
   PaginationQuerySchema,
+  PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
   RouteId,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+
+// 0 = follow the documents sync schedule (no interval-scheduled passes);
+// anything else must clear the interval floor.
+const PermissionSyncIntervalSchema = z
+  .number()
+  .int()
+  .min(PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE)
+  .refine(
+    (value) =>
+      value === PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE ||
+      (value >= MIN_PERMISSION_SYNC_INTERVAL_SECONDS &&
+        value <= MAX_PERMISSION_SYNC_INTERVAL_SECONDS),
+    {
+      message: `Permission sync interval must be ${PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE} (follow the documents sync schedule) or between ${MIN_PERMISSION_SYNC_INTERVAL_SECONDS} and ${MAX_PERMISSION_SYNC_INTERVAL_SECONDS} seconds`,
+    },
+  );
+
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import {
+  AUTO_SYNC_PERMISSIONS_DISABLED_ERROR,
+  checkAutoSyncPermissionSyncSupported,
+  checkCanSetAutoSyncPermissionsVisibility,
+  checkHasAutoSyncConnectorPermission,
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
 } from "@/knowledge-base";
 import {
-  isSupportedMimeType,
-  MAX_FILE_SIZE_BYTES,
-  MAX_ZIP_TOTAL_BYTES,
-} from "@/knowledge-base/connectors/file-upload/file-processor";
+  buildContainerToken,
+  buildGroupToken,
+} from "@/knowledge-base/acl-tokens";
+import { resolveConnectorCredentials } from "@/knowledge-base/connector-credentials";
 import { getConnector } from "@/knowledge-base/connectors/registry";
+import { invalidateGroupTokenCache } from "@/knowledge-base/group-token-cache";
+import { nextPermissionSyncDueAt } from "@/knowledge-base/permission-sync-schedule";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
   AgentKnowledgeBaseModel,
   AgentModel,
   ConnectorRunModel,
+  GithubAppConfigModel,
+  KbContainerAclModel,
   KbDocumentModel,
-  KbUploadedFileModel,
+  KbExternalUserGroupModel,
+  KbMemberOverrideModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  MemberModel,
   TaskModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
+  type ConnectorConfig,
   ConnectorConfigSchema,
-  type ConnectorCredentials,
   ConnectorCredentialsSchema,
+  ConnectorRunTypeSchema,
+  ConnectorSyncStatusSchema,
   type ConnectorType,
   ConnectorTypeSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  EmbeddingStatusSchema,
   KnowledgeSourceVisibilitySchema,
+  SelectConnectorRunDetailSchema,
   SelectConnectorRunListSchema,
-  SelectConnectorRunSchema,
+  SelectKbDocumentSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
 } from "@/types";
@@ -65,6 +101,26 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
   ),
   totalDocsIndexed: z.number(),
   assignedAgents: z.array(AssignedAgentSummarySchema),
+});
+
+// `permissionSyncState` (probe cursors/fingerprints) is internal permission-
+// sync bookkeeping — never part of the API surface.
+const KnowledgeBaseConnectorResponseSchema =
+  SelectKnowledgeBaseConnectorSchema.omit({ permissionSyncState: true });
+
+// `containerKey` is internal permission-sync bookkeeping; API consumers see
+// the document's EFFECTIVE audience (container tokens expanded server-side).
+const KnowledgeBaseDocumentListItemSchema = SelectKbDocumentSchema.omit({
+  content: true,
+  containerKey: true,
+}).extend({
+  connectorType: ConnectorTypeSchema,
+});
+
+const KnowledgeBaseDocumentDetailSchema = SelectKbDocumentSchema.omit({
+  containerKey: true,
+}).extend({
+  connectorType: ConnectorTypeSchema,
 });
 
 const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -125,15 +181,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { id: string; name: string; agentType: string }
       >();
       if (allAgentIds.length > 0) {
-        const agents = await AgentModel.findByOrganizationId(organizationId);
+        const agents = await AgentModel.findBasicByOrganizationIdAndIds({
+          organizationId,
+          agentIds: allAgentIds,
+        });
         for (const agent of agents) {
-          if (allAgentIds.includes(agent.id)) {
-            agentDetailsMap.set(agent.id, {
-              id: agent.id,
-              name: agent.name,
-              agentType: agent.agentType,
-            });
-          }
+          agentDetailsMap.set(agent.id, {
+            id: agent.id,
+            name: agent.name,
+            agentType: agent.agentType,
+          });
         }
       }
 
@@ -204,7 +261,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBase,
         description: "Get a knowledge base by ID",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
     },
@@ -225,7 +282,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateKnowledgeBase,
         description: "Update a knowledge base",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
@@ -257,7 +314,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Delete a knowledge base and remove its connector assignments",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -284,7 +341,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetKnowledgeBaseHealth,
         description: "Check the health of a knowledge base",
         tags: ["Knowledge Bases"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             status: z.enum(["healthy", "unhealthy"]),
@@ -325,7 +382,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(
-            SelectKnowledgeBaseConnectorSchema.extend({
+            KnowledgeBaseConnectorResponseSchema.extend({
               assignedAgents: z.array(AssignedAgentSummarySchema),
             }),
           ),
@@ -417,11 +474,31 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
       }));
 
+      const validatedData = enrichedData.filter((connector) => {
+        const parsed = SelectKnowledgeBaseConnectorSchema.safeParse(connector);
+        if (parsed.success) return true;
+        logger.warn(
+          {
+            connectorId: connector.id,
+            connectorType: connector.connectorType,
+            configType: (connector.config as Record<string, unknown> | null)
+              ?.type,
+            validationErrors: parsed.error.issues.map((i) => ({
+              path: i.path.join("."),
+              code: i.code,
+              message: i.message,
+            })),
+          },
+          "Skipping connector with invalid persisted schema",
+        );
+        return false;
+      });
+
       const currentPage = Math.floor(offset / limit) + 1;
       const totalPages = Math.ceil(total / limit);
 
       return reply.send({
-        data: enrichedData,
+        data: validatedData,
         pagination: {
           currentPage,
           limit,
@@ -448,33 +525,61 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds: z.array(z.string()).optional(),
           connectorType: ConnectorTypeSchema,
           config: ConnectorConfigSchema,
-          credentials: ConnectorCredentialsSchema,
+          // optional: GitHub App connectors authenticate via a referenced
+          // github_app_configs row instead of an inline secret
+          credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),
+          permissionSyncIntervalSeconds:
+            PermissionSyncIntervalSchema.optional(),
           enabled: z.boolean().optional(),
           knowledgeBaseIds: z.array(z.string()).optional(),
+          environmentId: z.string().uuid().nullable().optional(),
         }),
-        response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
+        response: constructResponseSchema(KnowledgeBaseConnectorResponseSchema),
       },
     },
     async ({ body, organizationId, user }, reply) => {
       const teamIds = body.teamIds ?? [];
       const visibility = body.visibility ?? "org-wide";
+
+      await assertEnvironmentAssignable({
+        userId: user.id,
+        organizationId,
+        environmentId: body.environmentId ?? null,
+      });
+
       if (isTeamScopedWithoutTeams({ visibility, teamIds })) {
         throw new ApiError(
           400,
           "At least one team must be selected for team-scoped connectors",
         );
       }
-
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (
         visibility === "team-scoped" &&
-        !config.enterpriseFeatures.knowledgeBase
+        !enterpriseTier.isKnowledgeBaseActive()
       ) {
         throw new ApiError(
           403,
-          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+          "Team-scoped connectors require an enterprise license",
         );
       }
+      if (visibility === "auto-sync-permissions") {
+        // beta flag + enterprise license + connector-type support +
+        // knowledgeSourceAutoSync:create (admin-only by default)
+        const violation = await checkCanSetAutoSyncPermissionsVisibility({
+          userId: user.id,
+          organizationId,
+          connectorType: body.connectorType,
+          action: "create",
+        });
+        if (violation) {
+          throw violation;
+        }
+      }
+      // SPDX-SnippetEnd
 
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
@@ -497,11 +602,44 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Store credentials as a secret
-      const secret = await secretManager().createSecret(
-        body.credentials,
-        `connector-${body.name}`,
-      );
+      // GitHub App connectors reference a github_app_configs row for their
+      // credentials; everything else stores an inline secret.
+      const appConfigRef = await resolveGithubAppConfigReference({
+        config: body.config,
+        organizationId,
+        userId: user.id,
+      });
+      const usesGithubAppConfig = appConfigRef !== null;
+      const requiresCredentials = body.connectorType !== "web_crawler";
+      if (appConfigRef && body.config.type === "github") {
+        // the App config owns the host the installation token is minted against,
+        // so it is the single source of truth for the connector's API host
+        body.config.githubUrl = appConfigRef.githubUrl;
+      }
+
+      let secretId: string | null = null;
+      if (usesGithubAppConfig || !requiresCredentials) {
+        if (body.credentials) {
+          throw new ApiError(
+            400,
+            usesGithubAppConfig
+              ? "GitHub App connectors must not include inline credentials"
+              : "Web Crawler connectors must not include inline credentials",
+          );
+        }
+      } else {
+        if (!body.credentials) {
+          throw new ApiError(
+            400,
+            "Credentials are required for this connector",
+          );
+        }
+        const secret = await secretManager().createSecret(
+          body.credentials,
+          `connector-${body.name}`,
+        );
+        secretId = secret.id;
+      }
 
       // Create the connector
       const connector = await KnowledgeBaseConnectorModel.create({
@@ -512,8 +650,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds: body.teamIds,
         connectorType: body.connectorType,
         config: body.config,
-        secretId: secret.id,
+        secretId,
+        environmentId: body.environmentId ?? null,
         schedule: body.schedule,
+        permissionSyncIntervalSeconds: body.permissionSyncIntervalSeconds,
         enabled: body.enabled,
       });
 
@@ -527,14 +667,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Auto-trigger initial sync
+      // Auto-trigger initial sync. "queued" (not "running"): the worker
+      // stamps "running" when it actually claims the task.
       await taskQueueService.enqueue({
         taskType: "connector_sync",
         payload: { connectorId: connector.id },
       });
       const updatedConnector = await KnowledgeBaseConnectorModel.update(
         connector.id,
-        { lastSyncStatus: "running" },
+        { lastSyncStatus: "queued" },
       );
 
       return reply.send(updatedConnector ?? connector);
@@ -548,9 +689,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnector,
         description: "Get a connector by ID",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
-          SelectKnowledgeBaseConnectorSchema.extend({
+          KnowledgeBaseConnectorResponseSchema.extend({
             totalDocsIngested: z.number(),
           }),
         ),
@@ -567,6 +708,140 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/connectors/:id/documents",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorDocuments,
+        description: "List documents for a connector",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        querystring: PaginationQuerySchema.extend({
+          search: z.string().optional(),
+          group: z
+            .string()
+            .describe(
+              "Only documents whose effective audience grants this upstream group (auto-sync-permissions connectors)",
+            )
+            .optional(),
+        }),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(KnowledgeBaseDocumentListItemSchema),
+        ),
+      },
+    },
+    async (
+      {
+        params: { id },
+        query: { limit, offset, search, group },
+        organizationId,
+        user,
+      },
+      reply,
+    ) => {
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+      const groupToken = group
+        ? buildGroupToken({
+            connectorType: connector.connectorType,
+            groupId: group,
+          })
+        : undefined;
+
+      const [data, total] = await Promise.all([
+        KbDocumentModel.findListItemsByConnector({
+          connectorId: id,
+          organizationId,
+          limit,
+          offset,
+          search,
+          groupToken,
+        }),
+        KbDocumentModel.countByConnectorWithSearch({
+          connectorId: id,
+          organizationId,
+          search,
+          groupToken,
+        }),
+      ]);
+
+      return reply.send({
+        data: await expandContainerAcls({ connectorId: id, documents: data }),
+        pagination: calculatePaginationMeta(total, { limit, offset }),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/connectors/:id/documents/:docId",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorDocument,
+        description: "Get a single connector document",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid(), docId: z.uuid() }),
+        response: constructResponseSchema(KnowledgeBaseDocumentDetailSchema),
+      },
+    },
+    async ({ params: { id, docId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const existing = await KbDocumentModel.findListItemByIdAndConnector({
+        documentId: docId,
+        connectorId: id,
+        organizationId,
+      });
+      if (!existing) {
+        throw new ApiError(404, "Document not found");
+      }
+
+      const [expanded] = await expandContainerAcls({
+        connectorId: id,
+        documents: [existing],
+      });
+      return reply.send(expanded);
+    },
+  );
+
+  fastify.delete(
+    "/api/connectors/:id/documents/:docId",
+    {
+      schema: {
+        operationId: RouteId.DeleteConnectorDocument,
+        description: "Delete a connector document",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid(), docId: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id, docId }, organizationId, user }, reply) => {
+      await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const existing = await KbDocumentModel.findListItemByIdAndConnector({
+        documentId: docId,
+        connectorId: id,
+        organizationId,
+      });
+      if (!existing) {
+        throw new ApiError(404, "Document not found");
+      }
+
+      await KbDocumentModel.delete(docId);
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.put(
     "/api/connectors/:id",
     {
@@ -574,18 +849,27 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UpdateConnector,
         description: "Update a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
           visibility: KnowledgeSourceVisibilitySchema.optional(),
           teamIds: z.array(z.string()).optional(),
           config: ConnectorConfigSchema.optional(),
-          credentials: ConnectorCredentialsSchema.optional(),
+          // Partial on purpose: the edit dialog sends only the credential
+          // fields the admin re-entered, and they merge over the stored
+          // secret — so an admin API key can be added without retyping the
+          // API token.
+          credentials: ConnectorCredentialsSchema.partial({
+            apiToken: true,
+          }).optional(),
           schedule: z.string().optional(),
+          permissionSyncIntervalSeconds:
+            PermissionSyncIntervalSchema.optional(),
           enabled: z.boolean().optional(),
+          environmentId: z.string().uuid().nullable().optional(),
         }),
-        response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
+        response: constructResponseSchema(KnowledgeBaseConnectorResponseSchema),
       },
     },
     async ({ params: { id }, body, organizationId, user }, reply) => {
@@ -595,17 +879,36 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // Update credentials secret if provided
-      if (body.credentials && connector.secretId) {
-        await secretManager().updateSecret(
-          connector.secretId,
-          body.credentials,
-        );
+      if (body.environmentId !== undefined) {
+        await assertEnvironmentAssignable({
+          userId: user.id,
+          organizationId,
+          environmentId: body.environmentId,
+        });
+      }
+
+      // resolve the connector's auth shape after this update so credential
+      // storage stays consistent across App <-> inline-secret transitions
+      const nextConfig = body.config ?? connector.config;
+      const appConfigRef = await resolveGithubAppConfigReference({
+        config: nextConfig,
+        organizationId,
+        userId: user.id,
+      });
+      const usesGithubAppConfig = appConfigRef !== null;
+      const requiresCredentials = connector.connectorType !== "web_crawler";
+      if (appConfigRef && body.config?.type === "github") {
+        // the App config owns the host the installation token is minted against
+        body.config.githubUrl = appConfigRef.githubUrl;
       }
 
       const { credentials: _, ...updateData } = body;
       const nextVisibility = updateData.visibility ?? connector.visibility;
       const nextTeamIds = updateData.teamIds ?? connector.teamIds;
+
+      // validate everything that can reject the request BEFORE touching any
+      // secret, so a rejected update never leaves the connector with a
+      // deleted or replaced credential
       if (
         isTeamScopedWithoutTeams({
           visibility: nextVisibility,
@@ -617,26 +920,150 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "At least one team must be selected for team-scoped connectors",
         );
       }
-
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       if (
-        nextVisibility === "team-scoped" &&
         connector.visibility !== "team-scoped" &&
-        !config.enterpriseFeatures.knowledgeBase
+        nextVisibility === "team-scoped" &&
+        !enterpriseTier.isKnowledgeBaseActive()
       ) {
         throw new ApiError(
           403,
-          "Team-scoped connectors require an enterprise license. Please contact sales@archestra.ai to enable it.",
+          "Team-scoped connectors require an enterprise license",
         );
+      }
+      if (
+        connector.visibility !== "auto-sync-permissions" &&
+        nextVisibility === "auto-sync-permissions"
+      ) {
+        // Transition INTO auto-sync: beta flag + enterprise license +
+        // connector-type support + knowledgeSourceAutoSync:update. An
+        // existing auto-sync connector is exempt from the transition-only
+        // gates (mirrors team-scoped); its mutations are covered by the
+        // dedicated permission check below.
+        const violation = await checkCanSetAutoSyncPermissionsVisibility({
+          userId: user.id,
+          organizationId,
+          connectorType: connector.connectorType,
+          action: "update",
+        });
+        if (violation) {
+          throw violation;
+        }
+      } else if (connector.visibility === "auto-sync-permissions") {
+        // Mutating a connector that already carries the auto-sync visibility
+        // (settings, credentials, or switching AWAY from it): viewing rights
+        // (findConnectorOrThrow above) are not enough — require the dedicated
+        // update permission.
+        const violation = await checkHasAutoSyncConnectorPermission({
+          userId: user.id,
+          organizationId,
+          action: "update",
+        });
+        if (violation) {
+          throw violation;
+        }
+        if (nextVisibility === "auto-sync-permissions") {
+          const unsupported = checkAutoSyncPermissionSyncSupported(
+            connector.connectorType,
+          );
+          if (unsupported) {
+            throw unsupported;
+          }
+        }
+      }
+      // SPDX-SnippetEnd
+      if (usesGithubAppConfig && body.credentials) {
+        throw new ApiError(
+          400,
+          "GitHub App connectors must not include inline credentials",
+        );
+      }
+      if (!requiresCredentials && body.credentials) {
+        throw new ApiError(
+          400,
+          "Web Crawler connectors must not include inline credentials",
+        );
+      }
+      const wasGithubApp =
+        connector.config.type === "github" &&
+        connector.config.authMethod === "github_app";
+      if (
+        wasGithubApp &&
+        !usesGithubAppConfig &&
+        !body.credentials &&
+        !connector.secretId
+      ) {
+        // leaving App auth means the connector has no inline secret yet, so a
+        // new credential must be supplied with the switch
+        throw new ApiError(
+          400,
+          "Credentials are required when switching this connector to token authentication",
+        );
+      }
+
+      let nextSecretId = connector.secretId;
+      let secretToDeleteAfterUpdate: string | null = null;
+      if (usesGithubAppConfig || !requiresCredentials) {
+        // defer dropping the connector's own inline secret until the update has
+        // been persisted, so a later failure can't orphan the connector
+        if (connector.secretId) {
+          secretToDeleteAfterUpdate = connector.secretId;
+          nextSecretId = null;
+        }
+      } else if (body.credentials) {
+        if (connector.secretId) {
+          // The edit dialog promises "leave empty to keep existing
+          // credentials" per field and omits blank fields, but updateSecret
+          // replaces the whole value — merge over the stored secret so
+          // rotating only the token keeps the email, and adding only the
+          // admin API key keeps the token.
+          const existing = await secretManager().getSecret(connector.secretId);
+          const stored = (existing?.secret ?? {}) as Record<string, unknown>;
+          const merged = ConnectorCredentialsSchema.safeParse({
+            ...stored,
+            ...body.credentials,
+          });
+          if (!merged.success) {
+            throw new ApiError(
+              400,
+              "The stored credentials are incomplete — re-enter the API token",
+            );
+          }
+          await secretManager().updateSecret(connector.secretId, merged.data);
+        } else {
+          const created = ConnectorCredentialsSchema.safeParse(
+            body.credentials,
+          );
+          if (!created.success) {
+            // no stored secret to merge over (e.g. leaving GitHub App auth)
+            throw new ApiError(
+              400,
+              "An API token is required when setting credentials for the first time",
+            );
+          }
+          const secret = await secretManager().createSecret(
+            created.data,
+            `connector-${body.name ?? connector.name}`,
+          );
+          nextSecretId = secret.id;
+        }
       }
 
       // Reset checkpoint when config changes to force a full re-sync
       // (filters, queries, inclusion/exclusion criteria affect which items get synced)
       const updated = await KnowledgeBaseConnectorModel.update(id, {
         ...updateData,
+        secretId: nextSecretId,
         ...(updateData.config ? { checkpoint: null } : {}),
       });
       if (!updated) {
         throw new ApiError(404, "Connector not found");
+      }
+
+      if (secretToDeleteAfterUpdate) {
+        await secretManager().deleteSecret(secretToDeleteAfterUpdate);
       }
 
       if (
@@ -648,11 +1075,40 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         })
       ) {
-        // This rewrites ACLs across every document and chunk for the connector,
-        // so only run it when the connector's actual ACL inputs changed.
+        // Bump the ACL fencing epoch so any in-flight ACL write computed against
+        // the old visibility/teamIds no-ops (the newest config change wins). For
+        // org-wide/team-scoped this then runs the authoritative bulk refresh; for
+        // auto-sync-permissions the refresh is a no-op and the (epoch-fenced)
+        // permission pass enqueued below is the authoritative writer — existing
+        // docs stay fail-closed until it runs.
+        await KnowledgeBaseConnectorModel.bumpAclConfigEpoch(id);
         await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
           id,
         );
+
+        if (
+          nextVisibility === "auto-sync-permissions" &&
+          connector.visibility !== "auto-sync-permissions"
+        ) {
+          // Switching TO auto-sync fail-closes the whole corpus; run the first
+          // pass now instead of leaving everything invisible until the next
+          // content ingest or interval tick. De-duplicated like every other
+          // permission-sync trigger.
+          const alreadyQueued = await TaskModel.hasPendingOrProcessing(
+            "permission_sync",
+            id,
+          );
+          if (!alreadyQueued) {
+            await taskQueueService.enqueue({
+              taskType: "permission_sync",
+              payload: { connectorId: id },
+            });
+            logger.info(
+              { connectorId: id },
+              "Enqueued permission sync after visibility switch to auto-sync-permissions",
+            );
+          }
+        }
       }
 
       return reply.send(updated);
@@ -666,7 +1122,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DeleteConnector,
         description: "Delete a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -676,6 +1132,29 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (connector.visibility === "auto-sync-permissions") {
+        const violation = await checkHasAutoSyncConnectorPermission({
+          userId: user.id,
+          organizationId,
+          action: "delete",
+        });
+        if (violation) {
+          throw violation;
+        }
+      }
+      // SPDX-SnippetEnd
+
+      // Drop the connector's queued work before the cascade removes its runs.
+      // The tasks table has no FK to connectors, so these would otherwise be
+      // orphaned — and orphaned batch_embedding tasks keep occupying content-lane
+      // worker slots, head-of-line-blocking the surviving connectors' syncs. An
+      // in-flight run stops cooperatively on its own once its (cascade-deleted)
+      // run row disappears and its fenced writes no-op.
+      await TaskModel.deleteQueuedForConnector(id);
 
       // Delete the secret
       if (connector.secretId) {
@@ -708,7 +1187,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.SyncConnector,
         description: "Manually trigger a connector sync",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             taskId: z.string(),
@@ -740,14 +1219,413 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         payload: { connectorId: id },
       });
 
-      // Set status immediately so the UI can react before the worker picks up the task
+      // Stamp "queued" immediately so the UI can react before the worker
+      // picks up the task; the worker stamps "running" when it claims it.
       await KnowledgeBaseConnectorModel.update(id, {
-        lastSyncStatus: "running",
+        lastSyncStatus: "queued",
       });
 
       return reply.send({ taskId, status: "enqueued" });
     },
   );
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  fastify.post(
+    "/api/connectors/:id/permission-sync",
+    {
+      schema: {
+        operationId: RouteId.TriggerPermissionSync,
+        description:
+          "Manually trigger a permission-sync pass for an auto-sync-permissions connector",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(
+          z.object({
+            taskId: z.string(),
+            status: z.string(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      assertAutoSyncPermissionsFeatureEnabled();
+
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (connector.visibility !== "auto-sync-permissions") {
+        throw new ApiError(
+          400,
+          "Permission sync only applies to auto-sync-permissions connectors",
+        );
+      }
+      if (!getConnector(connector.connectorType).supportsPermissionSync) {
+        throw new ApiError(
+          400,
+          `Permission sync is not supported for ${connector.connectorType} connectors`,
+        );
+      }
+
+      const hasPendingOrProcessing = await TaskModel.hasPendingOrProcessing(
+        "permission_sync",
+        id,
+      );
+      if (hasPendingOrProcessing) {
+        throw new ApiError(
+          409,
+          "A permission sync is already in progress for this connector",
+        );
+      }
+
+      const taskId = await taskQueueService.enqueue({
+        taskType: "permission_sync",
+        // Manual sync is the operator's "reconcile everything NOW" — always a
+        // full pass, never a probe-scoped delta.
+        payload: { connectorId: id, mode: "full" },
+      });
+
+      await KnowledgeBaseConnectorModel.update(id, {
+        lastPermissionSyncStatus: "queued",
+      });
+
+      return reply.send({ taskId, status: "enqueued" });
+    },
+  );
+
+  fastify.get(
+    "/api/connectors/:id/permission-coverage",
+    {
+      schema: {
+        operationId: RouteId.GetPermissionSyncCoverage,
+        description:
+          "Live ACL coverage for an auto-sync-permissions connector: how many ingested documents are tagged vs still fail-closed (awaiting a permission-sync pass)",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(
+          z.object({
+            totalDocuments: z.number(),
+            failClosedDocuments: z.number(),
+            /** A permission-sync pass is currently running. */
+            permissionSyncRunning: z.boolean(),
+            /** Next scheduled pass: one interval after the last pass. */
+            nextScheduledAt: z.string().nullable(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      assertAutoSyncPermissionsFeatureEnabled();
+
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (connector.visibility !== "auto-sync-permissions") {
+        throw new ApiError(
+          400,
+          "Permission coverage only applies to auto-sync-permissions connectors",
+        );
+      }
+
+      // "Running" includes a queued (pending/processing) task: a manual
+      // trigger enqueues first and the run row only appears once the worker
+      // claims it, so the task check keeps the UI live through that gap.
+      const [coverage, hasRunningRun, hasQueuedTask] = await Promise.all([
+        KbDocumentModel.getAclCoverageByConnector(id),
+        ConnectorRunModel.hasRunningRun({
+          connectorId: id,
+          runType: "permission",
+        }),
+        TaskModel.hasPendingOrProcessing("permission_sync", id),
+      ]);
+      const permissionSyncRunning = hasRunningRun || hasQueuedTask;
+
+      // Cadence semantics (one interval after the last pass), matching the
+      // scheduler. Follow mode has no scheduled pass — the next one comes
+      // from the documents-sync trigger.
+      const nextScheduledAt =
+        connector.permissionSyncIntervalSeconds ===
+        PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE
+          ? null
+          : nextPermissionSyncDueAt({
+              intervalSeconds: connector.permissionSyncIntervalSeconds,
+              lastPermissionSyncAt: connector.lastPermissionSyncAt,
+            }).toISOString();
+
+      return reply.send({
+        totalDocuments: coverage.totalDocuments,
+        failClosedDocuments: coverage.failClosedDocuments,
+        permissionSyncRunning,
+        nextScheduledAt,
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/connectors/:id/user-groups",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorUserGroups,
+        description:
+          "Synced external user groups for an auto-sync-permissions connector: each group's member emails, the Archestra org users they resolve to, and how many documents grant the group",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(
+          z.object({
+            /**
+             * The snapshot holds more memberships than this endpoint returns, so
+             * the `members` lists below are partial. The document counts are not.
+             */
+            truncated: z.boolean(),
+            /** Membership rows (group x account) stored for this connector. */
+            totalMemberships: z.number(),
+            groups: z.array(
+              z.object({
+                /** Upstream group identifier as the source system names it. */
+                groupId: z.string(),
+                /** The exact `group:` ACL token written on documents. */
+                token: z.string(),
+                /** Documents on this connector whose ACL grants the group. */
+                documentCount: z.number(),
+                /** Most recent membership snapshot update, if any members. */
+                lastSyncedAt: z.string().nullable(),
+                members: z.array(
+                  z.object({
+                    /** Stable upstream principal id (accountId / login). */
+                    accountId: z.string(),
+                    /** Upstream display name, if the source exposes one. */
+                    displayName: z.string().nullable(),
+                    /** Null when the upstream hides the member's email — the member is fail-closed. */
+                    email: z.string().nullable(),
+                    /** Upstream account classification ("app" = add-on/bot); null when the source has no notion of it. */
+                    accountType: z.string().nullable(),
+                    /** Org user this member resolves to; null = grant currently resolves to nobody. */
+                    user: z
+                      .object({ id: z.string(), name: z.string() })
+                      .nullable(),
+                    /** How `user` resolved: a manual admin mapping or the email join; null when unresolved. */
+                    resolvedVia: z.enum(["override", "email"]).nullable(),
+                  }),
+                ),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      assertAutoSyncPermissionsFeatureEnabled();
+
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (connector.visibility !== "auto-sync-permissions") {
+        throw new ApiError(
+          400,
+          "User groups only apply to auto-sync-permissions connectors",
+        );
+      }
+
+      const [{ memberships, truncated }, totalMemberships, documentCounts] =
+        await Promise.all([
+          KbExternalUserGroupModel.findMembershipsWithUsersByConnector({
+            connectorId: id,
+            organizationId,
+            limit: MAX_USER_GROUP_MEMBERSHIPS,
+          }),
+          KbExternalUserGroupModel.countByConnector(id),
+          KbDocumentModel.getGroupTokenDocumentCounts(id),
+        ]);
+
+      const groups = new Map<
+        string,
+        {
+          groupId: string;
+          token: string;
+          documentCount: number;
+          lastSyncedAt: string | null;
+          members: {
+            accountId: string;
+            displayName: string | null;
+            email: string | null;
+            accountType: string | null;
+            user: { id: string; name: string } | null;
+            resolvedVia: "override" | "email" | null;
+          }[];
+        }
+      >();
+
+      for (const membership of memberships) {
+        const token = buildGroupToken({
+          connectorType: connector.connectorType,
+          groupId: membership.groupId,
+        });
+        let group = groups.get(token);
+        if (!group) {
+          group = {
+            groupId: membership.groupId,
+            token,
+            documentCount: 0,
+            lastSyncedAt: null,
+            members: [],
+          };
+          groups.set(token, group);
+        }
+        group.members.push({
+          accountId: membership.externalAccountId,
+          displayName: membership.displayName,
+          email: membership.memberEmail,
+          accountType: membership.accountType,
+          user: membership.user,
+          resolvedVia: membership.resolvedVia,
+        });
+        const syncedAt = membership.updatedAt.toISOString();
+        if (group.lastSyncedAt === null || syncedAt > group.lastSyncedAt) {
+          group.lastSyncedAt = syncedAt;
+        }
+      }
+
+      // Groups granted on documents but absent from the membership snapshot
+      // still show up (with no members) — those grants resolve to nobody.
+      const tokenPrefix = `group:${connector.connectorType}_`;
+      for (const [token, documentCount] of documentCounts) {
+        const group = groups.get(token);
+        if (group) {
+          group.documentCount = documentCount;
+        } else {
+          groups.set(token, {
+            groupId: token.startsWith(tokenPrefix)
+              ? token.slice(tokenPrefix.length)
+              : token,
+            token,
+            documentCount,
+            lastSyncedAt: null,
+            members: [],
+          });
+        }
+      }
+
+      return reply.send({
+        truncated,
+        totalMemberships,
+        groups: [...groups.values()].sort((a, b) =>
+          a.groupId.localeCompare(b.groupId),
+        ),
+      });
+    },
+  );
+
+  fastify.put(
+    "/api/connectors/:id/member-overrides",
+    {
+      schema: {
+        operationId: RouteId.UpsertConnectorMemberOverride,
+        description:
+          "Manually map an upstream member account to an Archestra user for an auto-sync-permissions connector — the admin escape hatch when the upstream hides the member's email from every credential",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        body: z.object({
+          /** Stable upstream principal id (accountId / login) as reported in user-groups. */
+          externalAccountId: z.string().min(1),
+          /** The Archestra org user the account should resolve to. */
+          userId: z.string().min(1),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }, reply) => {
+      assertAutoSyncPermissionsFeatureEnabled();
+
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (connector.visibility !== "auto-sync-permissions") {
+        throw new ApiError(
+          400,
+          "Member overrides only apply to auto-sync-permissions connectors",
+        );
+      }
+
+      const member = await MemberModel.getByUserId(body.userId, organizationId);
+      if (!member) {
+        throw new ApiError(404, "User is not a member of this organization");
+      }
+
+      await KbMemberOverrideModel.upsert({
+        organizationId,
+        connectorId: id,
+        externalAccountId: body.externalAccountId,
+        userId: body.userId,
+      });
+      // Overrides feed the query-time group-token join; drop the cache so the
+      // mapping takes effect on the next query, not after the TTL.
+      await invalidateGroupTokenCache();
+      // DIRECT grants (role actors, user grants) only pick the mapping up when
+      // container audiences are re-resolved — enqueue a (deduped) pass with a
+      // forced audience refresh so it lands in seconds, not at the next full
+      // reconcile.
+      await enqueueAudienceRefreshPass(id);
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/connectors/:id/member-overrides/:externalAccountId",
+    {
+      schema: {
+        operationId: RouteId.DeleteConnectorMemberOverride,
+        description:
+          "Remove a manual member mapping; the member falls back to email-based resolution (fail-closed when the upstream hides their email)",
+        tags: ["Connectors"],
+        params: z.object({
+          id: z.uuid(),
+          // Path-segment assumption: every supported connector's account ids
+          // are URL-safe (Atlassian accountId `557058:<uuid>`, GitHub login).
+          // A future connector whose ids can contain `/` or percent-encoded
+          // sequences must move this to a query/body parameter instead.
+          externalAccountId: z.string().min(1),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (
+      { params: { id, externalAccountId }, organizationId, user },
+      reply,
+    ) => {
+      assertAutoSyncPermissionsFeatureEnabled();
+
+      await findConnectorOrThrow({ id, organizationId, userId: user.id });
+
+      const deleted = await KbMemberOverrideModel.deleteByConnectorAndAccount({
+        connectorId: id,
+        externalAccountId,
+      });
+      if (!deleted) {
+        throw new ApiError(404, "Member override not found");
+      }
+      await invalidateGroupTokenCache();
+      // Un-materialize the mapped email from any direct grants promptly (see
+      // the upsert route).
+      await enqueueAudienceRefreshPass(id);
+
+      return reply.send({ success: true });
+    },
+  );
+  // SPDX-SnippetEnd
 
   fastify.post(
     "/api/connectors/:id/force-resync",
@@ -757,7 +1635,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Force a full re-sync: deletes all documents, chunks, run history, and resets the checkpoint",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             taskId: z.string(),
@@ -788,10 +1666,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await KbDocumentModel.deleteByConnector(id);
       await ConnectorRunModel.deleteByConnector(id);
 
-      // Reset connector checkpoint and sync status
+      // Reset connector checkpoint and sync status ("queued" until the
+      // worker claims the fresh sync).
       await KnowledgeBaseConnectorModel.update(id, {
         checkpoint: null,
-        lastSyncStatus: "running",
+        lastSyncStatus: "queued",
         lastSyncAt: null,
       });
 
@@ -812,7 +1691,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.TestConnectorConnection,
         description: "Test a connector connection",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             success: z.boolean(),
@@ -828,8 +1707,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // Load credentials
-      const credentials = await loadConnectorCredentials(connector.secretId);
+      // Load credentials (resolves github_app_configs references when needed)
+      const credentials = await resolveConnectorCredentials(connector);
 
       // Get the connector implementation and test
       const connectorImpl = getConnector(connector.connectorType);
@@ -851,7 +1730,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.AssignConnectorToKnowledgeBases,
         description: "Assign a connector to one or more knowledge bases",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         body: z.object({
           knowledgeBaseIds: z.array(z.string()).min(1),
         }),
@@ -885,7 +1764,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.UnassignConnectorFromKnowledgeBase,
         description: "Unassign a connector from a knowledge base",
         tags: ["Connectors"],
-        params: z.object({ id: z.string(), kbId: z.string() }),
+        params: z.object({ id: z.uuid(), kbId: z.uuid() }),
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
@@ -918,7 +1797,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnectorKnowledgeBases,
         description: "List knowledge bases assigned to a connector",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
           z.object({
             data: z.array(SelectKnowledgeBaseSchema),
@@ -965,15 +1844,38 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetConnectorRuns,
         description: "List connector runs",
         tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
-        querystring: PaginationQuerySchema,
+        params: z.object({ id: z.uuid() }),
+        querystring: PaginationQuerySchema.extend({
+          runType: ConnectorRunTypeSchema.optional(),
+          status: ConnectorSyncStatusSchema.optional(),
+          result: z
+            .enum(["changes", "no-changes"])
+            .describe("Only runs that changed something (or nothing)")
+            .optional(),
+        }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectConnectorRunListSchema),
+          createPaginatedResponseSchema(SelectConnectorRunListSchema).extend({
+            /**
+             * Per job family: a sync task is enqueued but no worker has
+             * claimed it yet (no run row exists to list). Derived from the
+             * task queue, so it can never go stale the way a status stamp
+             * can — the UI renders these as synthetic "Queued" rows.
+             */
+            queued: z.object({
+              content: z.boolean(),
+              permission: z.boolean(),
+            }),
+          }),
         ),
       },
     },
     async (
-      { params: { id }, query: { limit, offset }, organizationId, user },
+      {
+        params: { id },
+        query: { limit, offset, runType, status, result },
+        organizationId,
+        user,
+      },
       reply,
     ) => {
       await findConnectorOrThrow({
@@ -982,13 +1884,40 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      const [data, total] = await Promise.all([
+      // A claimed task stays pending/processing for the whole run, so
+      // "queued" is task-present AND no running run row yet.
+      const [
+        data,
+        total,
+        contentTaskActive,
+        permissionTaskActive,
+        contentRunning,
+        permissionRunning,
+      ] = await Promise.all([
         ConnectorRunModel.findByConnectorList({
           connectorId: id,
           limit,
           offset,
+          runType,
+          status,
+          result,
         }),
-        ConnectorRunModel.countByConnector(id),
+        ConnectorRunModel.countByConnector({
+          connectorId: id,
+          runType,
+          status,
+          result,
+        }),
+        TaskModel.hasPendingOrProcessing("connector_sync", id),
+        TaskModel.hasPendingOrProcessing("permission_sync", id),
+        ConnectorRunModel.hasRunningRun({
+          connectorId: id,
+          runType: "content",
+        }),
+        ConnectorRunModel.hasRunningRun({
+          connectorId: id,
+          runType: "permission",
+        }),
       ]);
 
       const currentPage = Math.floor(offset / limit) + 1;
@@ -996,6 +1925,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         data,
+        queued: {
+          content: contentTaskActive && !contentRunning,
+          permission: permissionTaskActive && !permissionRunning,
+        },
         pagination: {
           currentPage,
           limit,
@@ -1016,10 +1949,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a single connector run (including logs)",
         tags: ["Connectors"],
         params: z.object({
-          id: z.string(),
-          runId: z.string(),
+          id: z.uuid(),
+          runId: z.uuid(),
         }),
-        response: constructResponseSchema(SelectConnectorRunSchema),
+        response: constructResponseSchema(SelectConnectorRunDetailSchema),
       },
     },
     async ({ params: { id, runId }, organizationId, user }, reply) => {
@@ -1037,374 +1970,129 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(run);
     },
   );
-
-  // ===== File Upload Routes =====
-
-  const UploadResultSchema = z.object({
-    filename: z.string(),
-    status: z.enum([
-      "created",
-      "duplicate",
-      "unsupported",
-      "too_large",
-      "extraction_failed",
-    ]),
-    fileId: z.string().optional(),
-  });
-
-  const UploadedFileSchema = z.object({
-    id: z.string(),
-    connectorId: z.string(),
-    originalName: z.string().min(1),
-    mimeType: z.string(),
-    fileSize: z.number().int().nonnegative(),
-    contentHash: z.string(),
-    createdAt: z.string(),
-    processingStatus: z.string(),
-    processingError: z.string().nullable(),
-    embeddingStatus: EmbeddingStatusSchema,
-  });
-
-  fastify.post(
-    "/api/connectors/:id/files",
-    {
-      bodyLimit: config.api.bodyLimit,
-      schema: {
-        operationId: RouteId.UploadConnectorFiles,
-        description:
-          "Upload files to a file-upload connector. " +
-          "Send files as base64-encoded content in a JSON array.",
-        tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
-        body: z.object({
-          files: z.array(
-            z.object({
-              name: z.string(),
-              mimeType: z.string(),
-              content: z.string(), // base64-encoded file bytes
-            }),
-          ),
-        }),
-        response: constructResponseSchema(
-          z.object({ results: z.array(UploadResultSchema) }),
-        ),
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params as { id: string };
-      const { organizationId, user } = request;
-
-      const connector = await findConnectorOrThrow({
-        id,
-        organizationId,
-        userId: user.id,
-      });
-
-      if (connector.connectorType !== "file_upload") {
-        throw new ApiError(
-          400,
-          "This endpoint is only available for file_upload connectors",
-        );
-      }
-
-      const results: z.infer<typeof UploadResultSchema>[] = [];
-      const createdFileIds: string[] = [];
-
-      for (const file of request.body.files) {
-        const filename = file.name;
-        const mimeType = file.mimeType;
-
-        if (!isSupportedMimeType(filename, mimeType)) {
-          results.push({ filename, status: "unsupported" });
-          continue;
-        }
-
-        const rawBuffer = Buffer.from(file.content, "base64");
-
-        const isZip =
-          filename.toLowerCase().endsWith(".zip") ||
-          mimeType === "application/zip" ||
-          mimeType === "application/x-zip-compressed";
-        const uploadSizeLimit = isZip
-          ? MAX_ZIP_TOTAL_BYTES
-          : MAX_FILE_SIZE_BYTES;
-
-        if (rawBuffer.byteLength > uploadSizeLimit) {
-          results.push({ filename, status: "too_large" });
-          continue;
-        }
-
-        if (isZip) {
-          const JSZip = (await import("jszip")).default;
-          const zip = await JSZip.loadAsync(rawBuffer);
-          let totalBytes = 0;
-
-          for (const [relativePath, entry] of Object.entries(zip.files)) {
-            if (entry.dir) continue;
-            const basename = relativePath.split("/").pop() ?? relativePath;
-            if (basename.startsWith(".")) continue;
-            if (relativePath.startsWith("__MACOSX/")) continue;
-
-            if (!isSupportedMimeType(basename, "")) {
-              results.push({ filename: relativePath, status: "unsupported" });
-              continue;
-            }
-
-            const entryBytes = await entry.async("nodebuffer");
-            if (entryBytes.byteLength > MAX_FILE_SIZE_BYTES) {
-              results.push({ filename: relativePath, status: "too_large" });
-              continue;
-            }
-            totalBytes += entryBytes.byteLength;
-            if (totalBytes > MAX_ZIP_TOTAL_BYTES) {
-              results.push({ filename: relativePath, status: "too_large" });
-              break;
-            }
-
-            const contentHash = KbUploadedFileModel.computeContentHash(
-              entryBytes.toString("base64"),
-            );
-
-            const existing = await KbUploadedFileModel.findByContentHash(
-              id,
-              contentHash,
-            );
-            if (existing) {
-              results.push({
-                filename: relativePath,
-                status: "duplicate",
-              });
-              continue;
-            }
-
-            try {
-              const created = await KbUploadedFileModel.create({
-                connectorId: id,
-                organizationId,
-                originalName: relativePath,
-                mimeType: "",
-                fileSize: entryBytes.byteLength,
-                contentHash,
-                fileData: entryBytes,
-                processingStatus: "pending",
-              });
-              createdFileIds.push(created.id);
-              results.push({
-                filename: relativePath,
-                status: "created",
-                fileId: created.id,
-              });
-            } catch (err) {
-              if (isContentHashConflict(err)) {
-                results.push({
-                  filename: relativePath,
-                  status: "duplicate",
-                });
-                continue;
-              }
-              throw err;
-            }
-          }
-        } else {
-          const contentHash = KbUploadedFileModel.computeContentHash(
-            rawBuffer.toString("base64"),
-          );
-
-          const existing = await KbUploadedFileModel.findByContentHash(
-            id,
-            contentHash,
-          );
-          if (existing) {
-            results.push({
-              filename,
-              status: "duplicate",
-            });
-            continue;
-          }
-
-          try {
-            const created = await KbUploadedFileModel.create({
-              connectorId: id,
-              organizationId,
-              originalName: filename,
-              mimeType,
-              fileSize: rawBuffer.byteLength,
-              contentHash,
-              fileData: rawBuffer,
-              processingStatus: "pending",
-            });
-            createdFileIds.push(created.id);
-            results.push({
-              filename,
-              status: "created",
-              fileId: created.id,
-            });
-          } catch (err) {
-            if (isContentHashConflict(err)) {
-              results.push({ filename, status: "duplicate" });
-              continue;
-            }
-            throw err;
-          }
-        }
-      }
-
-      if (createdFileIds.length > 0) {
-        await taskQueueService.enqueue({
-          taskType: "process_uploaded_files",
-          payload: {
-            connectorId: id,
-            fileIds: createdFileIds,
-          },
-        });
-      }
-
-      return reply.send({ results });
-    },
-  );
-
-  fastify.get(
-    "/api/connectors/:id/files",
-    {
-      schema: {
-        operationId: RouteId.GetConnectorFiles,
-        description: "List files uploaded to a file-upload connector",
-        tags: ["Connectors"],
-        params: z.object({ id: z.string() }),
-        querystring: PaginationQuerySchema.extend({
-          search: z.string().optional(),
-        }),
-        response: constructResponseSchema(
-          createPaginatedResponseSchema(UploadedFileSchema),
-        ),
-      },
-    },
-    async (
-      {
-        params: { id },
-        query: { limit, offset, search },
-        organizationId,
-        user,
-      },
-      reply,
-    ) => {
-      await findConnectorOrThrow({ id, organizationId, userId: user.id });
-
-      const [uploadedFiles, total] = await Promise.all([
-        KbUploadedFileModel.findByConnectorPaginated({
-          connectorId: id,
-          limit,
-          offset,
-          search,
-        }),
-        KbUploadedFileModel.countByConnector({
-          connectorId: id,
-          search,
-        }),
-      ]);
-
-      const docs = await KbDocumentModel.findBySourceIds({
-        connectorId: id,
-        sourceIds: uploadedFiles.map((f) => f.id),
-      });
-      const docBySourceId = new Map(docs.map((d) => [d.sourceId, d]));
-
-      const data = uploadedFiles.map((file) => {
-        const doc = docBySourceId.get(file.id);
-        return {
-          id: file.id,
-          connectorId: file.connectorId,
-          originalName: file.originalName,
-          mimeType: file.mimeType,
-          fileSize: file.fileSize,
-          contentHash: file.contentHash,
-          createdAt: file.createdAt.toISOString(),
-          processingStatus: file.processingStatus,
-          processingError: file.processingError ?? null,
-          embeddingStatus: doc?.embeddingStatus ?? "pending",
-        };
-      });
-
-      return reply.send({
-        data,
-        pagination: calculatePaginationMeta(total, { limit, offset }),
-      });
-    },
-  );
-
-  fastify.get(
-    "/api/connectors/:id/files/:fileId",
-    {
-      schema: {
-        operationId: RouteId.GetConnectorFile,
-        description: "Get a single uploaded file by ID",
-        tags: ["Connectors"],
-        params: z.object({ id: z.string(), fileId: z.string() }),
-        response: constructResponseSchema(UploadedFileSchema),
-      },
-    },
-    async ({ params: { id, fileId }, organizationId, user }, reply) => {
-      await findConnectorOrThrow({ id, organizationId, userId: user.id });
-
-      const file = await KbUploadedFileModel.findById(fileId);
-      if (!file || file.connectorId !== id) {
-        throw new ApiError(404, "File not found");
-      }
-
-      const doc = await KbDocumentModel.findBySourceId({
-        connectorId: id,
-        sourceId: fileId,
-      });
-
-      return reply.send({
-        id: file.id,
-        connectorId: file.connectorId,
-        originalName: file.originalName,
-        mimeType: file.mimeType,
-        fileSize: file.fileSize,
-        contentHash: file.contentHash,
-        createdAt: file.createdAt.toISOString(),
-        processingStatus: file.processingStatus,
-        processingError: file.processingError ?? null,
-        embeddingStatus: doc?.embeddingStatus ?? "pending",
-      });
-    },
-  );
-
-  fastify.delete(
-    "/api/connectors/:id/files/:fileId",
-    {
-      schema: {
-        operationId: RouteId.DeleteConnectorFile,
-        description: "Delete an uploaded file and its indexed content",
-        tags: ["Connectors"],
-        params: z.object({ id: z.string(), fileId: z.string() }),
-        response: constructResponseSchema(DeleteObjectResponseSchema),
-      },
-    },
-    async ({ params: { id, fileId }, organizationId, user }, reply) => {
-      await findConnectorOrThrow({ id, organizationId, userId: user.id });
-
-      const file = await KbUploadedFileModel.findById(fileId);
-      if (!file || file.connectorId !== id) {
-        throw new ApiError(404, "File not found");
-      }
-
-      await KbDocumentModel.deleteByConnectorAndSourceId({
-        connectorId: id,
-        sourceId: fileId,
-      });
-
-      await KbUploadedFileModel.delete(fileId);
-
-      return reply.send({ success: true });
-    },
-  );
 };
 
 export default knowledgeBaseRoutes;
 
 // ===== Internal Helpers =====
+
+/**
+ * Membership rows the user-groups endpoint will return. The snapshot is group ×
+ * account, so an instance where most people belong to most groups has far more
+ * of them than it has users — and this endpoint nests every one of them into a
+ * single JSON document that the browser then renders in one client-side table.
+ * Past this many the response says `truncated` and the UI says so too; nobody
+ * reads the two-hundred-thousandth row of an audit table, and the counts (which
+ * come from aggregates, not from these rows) stay exact either way.
+ */
+const MAX_USER_GROUP_MEMBERSHIPS = 20_000;
+
+/**
+ * Replace a document's `container:` token with its container's materialized
+ * audience so API consumers (ACL badges) always see effective principals. A
+ * missing or empty container row expands to nothing — the document reads as
+ * fail-closed, which is exactly what it is. Legacy materialized ACLs (no
+ * container token) pass through unchanged.
+ */
+async function expandContainerAcls<
+  T extends { acl: string[]; containerKey: string | null },
+>(params: { connectorId: string; documents: T[] }): Promise<T[]> {
+  const containerKeys = [
+    ...new Set(
+      params.documents
+        .map((doc) => doc.containerKey)
+        .filter((key): key is string => Boolean(key)),
+    ),
+  ];
+  if (containerKeys.length === 0) return params.documents;
+
+  const audiences = await KbContainerAclModel.findAudiencesByKeys({
+    connectorId: params.connectorId,
+    containerKeys,
+  });
+  return params.documents.map((doc) => {
+    if (!doc.containerKey) return doc;
+    const token = buildContainerToken({
+      connectorId: params.connectorId,
+      containerKey: doc.containerKey,
+    });
+    if (!doc.acl.includes(token)) return doc;
+    const audience = audiences.get(doc.containerKey) ?? [];
+    return {
+      ...doc,
+      acl: [
+        ...new Set([
+          ...doc.acl.filter((entry) => entry !== token),
+          ...audience,
+        ]),
+      ],
+    };
+  });
+}
+
+/**
+ * Gate assigning a knowledge base / connector to an environment. Mirrors the
+ * agent + MCP-catalog write paths: a restricted environment (or a restricted
+ * org default when environmentId is null/omitted) requires
+ * knowledgeSource:deploy-to-restricted. Also validates the environment belongs
+ * to the org, preventing cross-tenant binding.
+ */
+async function assertEnvironmentAssignable(params: {
+  userId: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<void> {
+  const { userId, organizationId, environmentId } = params;
+  const hasKnowledgeDeploy = await userHasPermission(
+    userId,
+    organizationId,
+    "knowledgeSource",
+    "deploy-to-restricted",
+  );
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    canDeployToRestricted: hasKnowledgeDeploy,
+  });
+}
+
+/**
+ * BETA gate for everything auto-sync-permissions: selecting the visibility on
+ * create/update and the permission-family endpoints (trigger, coverage,
+ * user-groups, member overrides). Off by default; staging enables it
+ * explicitly and ARCHESTRA_BETA turns it on with every other beta gate.
+ */
+/**
+ * Enqueue a permission pass with a forced audience refresh — the follow-up to
+ * a member-mapping change, whose effect on DIRECT grants (role actors, user
+ * grants) only materializes when container audiences are re-resolved.
+ * Deliberately NOT deduped against queued passes: an in-flight pass may
+ * already be past its refresh point and a queued one lacks the flag, so
+ * either could silently drop the intent; the handler defers to task backoff
+ * when it loses the claim, and mapping edits are rare admin actions.
+ */
+async function enqueueAudienceRefreshPass(connectorId: string): Promise<void> {
+  await taskQueueService.enqueue({
+    taskType: "permission_sync",
+    payload: { connectorId, refreshAudiences: true },
+  });
+}
+
+function assertAutoSyncPermissionsFeatureEnabled(): void {
+  if (!config.kb.autoSyncPermissionsEnabled) {
+    throw new ApiError(403, AUTO_SYNC_PERMISSIONS_DISABLED_ERROR);
+  }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (!enterpriseTier.isKnowledgeBaseActive()) {
+    throw new ApiError(
+      403,
+      "Auto-sync permissions requires an enterprise license",
+    );
+  }
+  // SPDX-SnippetEnd
+}
 
 async function findKnowledgeBaseOrThrow(params: {
   id: string;
@@ -1440,36 +2128,50 @@ async function findConnectorOrThrow(params: {
   return connector;
 }
 
-function isContentHashConflict(error: unknown): boolean {
-  let current: unknown = error;
-  while (typeof current === "object" && current !== null) {
-    const msg = (current as Record<string, unknown>).message;
-    if (
-      typeof msg === "string" &&
-      msg.includes("kb_uploaded_files_content_hash_uidx")
-    ) {
-      return true;
-    }
-    current = (current as Record<string, unknown>).cause;
+/**
+ * Validate a connector's GitHub App reference. Returns the referenced
+ * github_app_configs id when the connector uses GitHub App auth (after
+ * confirming it belongs to the organization), or null otherwise.
+ */
+async function resolveGithubAppConfigReference(params: {
+  config: ConnectorConfig;
+  organizationId: string;
+  userId: string;
+}): Promise<{ id: string; githubUrl: string } | null> {
+  const { config, organizationId, userId } = params;
+  if (config.type !== "github" || config.authMethod !== "github_app") {
+    return null;
   }
-  return false;
-}
-
-async function loadConnectorCredentials(
-  secretId: string | null,
-): Promise<ConnectorCredentials> {
-  if (!secretId) {
-    throw new ApiError(400, "Connector has no associated credentials");
+  if (!config.githubAppConfigId) {
+    throw new ApiError(
+      400,
+      "GitHub App authentication requires githubAppConfigId",
+    );
   }
-
-  const secret = await secretManager().getSecret(secretId);
-  if (!secret) {
-    throw new ApiError(404, "Connector credentials not found");
+  // referencing a stored App credential lets the connector mint installation
+  // tokens, so it requires the dedicated githubAppConfig:read permission on top
+  // of the connector permission the route already enforces
+  const canUseAppConfig = await userHasPermission(
+    userId,
+    organizationId,
+    "githubAppConfig",
+    "read",
+  );
+  if (!canUseAppConfig) {
+    throw new ApiError(
+      403,
+      "You do not have permission to use GitHub App configurations",
+    );
   }
-
-  const data = secret.secret as Record<string, unknown>;
-  return {
-    email: (data.email as string) || "",
-    apiToken: (data.apiToken as string) || "",
-  };
+  const appConfig = await GithubAppConfigModel.findByIdForOrganization({
+    id: config.githubAppConfigId,
+    organizationId,
+  });
+  if (!appConfig) {
+    throw new ApiError(
+      400,
+      "Referenced GitHub App configuration was not found",
+    );
+  }
+  return { id: appConfig.id, githubUrl: appConfig.githubUrl };
 }

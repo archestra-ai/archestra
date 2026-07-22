@@ -1,4 +1,4 @@
-import { ApiError } from "@shared";
+import { ApiError } from "@archestra/shared";
 import { vi } from "vitest";
 import { ModelModel } from "@/models";
 import { afterEach, describe, expect, test } from "@/test";
@@ -107,6 +107,33 @@ describe("model-router-resolver", () => {
       }
     });
 
+    test("resolves embedding models only when embedding capability is requested", async () => {
+      await createEmbeddingModel({
+        provider: "openai",
+        modelId: "text-embedding-resolver-test",
+      });
+
+      await expect(
+        resolveModelRoute({
+          requestedModel: "openai:text-embedding-resolver-test",
+          capability: "embeddings",
+        }),
+      ).resolves.toMatchObject({
+        provider: "openai",
+        modelId: "text-embedding-resolver-test",
+      });
+      await expectApiError(
+        resolveModelRoute({
+          requestedModel: "openai:text-embedding-resolver-test",
+        }),
+        {
+          statusCode: 404,
+          message:
+            'Model "openai:text-embedding-resolver-test" is not available. Use a provider-qualified model id such as "anthropic:claude-opus-4-6-20250918".',
+        },
+      );
+    });
+
     test("returns 500 when a provider-qualified model resolves ambiguously", async () => {
       const firstModel = await createTextModel({
         provider: "openai",
@@ -192,6 +219,23 @@ async function createTextModel(params: {
     ...params,
     inputModalities: ["text"],
     outputModalities: ["text"],
+  });
+}
+
+async function createEmbeddingModel(params: {
+  provider: "openai";
+  modelId: string;
+}) {
+  return await ModelModel.create({
+    externalId: `${params.provider}/${params.modelId}`,
+    provider: params.provider,
+    modelId: params.modelId,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    embeddingDimensions: 1536,
+    promptPricePerToken: "0.000001",
+    completionPricePerToken: "0.000000",
+    lastSyncedAt: new Date(),
   });
 }
 

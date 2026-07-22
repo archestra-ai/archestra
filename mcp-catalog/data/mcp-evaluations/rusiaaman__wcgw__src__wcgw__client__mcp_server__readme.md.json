@@ -1,0 +1,87 @@
+{
+  "name": "rusiaaman__wcgw__src__wcgw__client__mcp_server__readme.md",
+  "display_name": "Readme.md",
+  "description": "Shell and coding agent on claude desktop app",
+  "author": {
+    "name": "rusiaaman"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {
+      "CLAUDE_API_KEY": "${user_config.claude_api_key}",
+      "AGENT_WORKING_DIRECTORY": "${user_config.agent_working_directory}",
+      "SHELL_EXECUTABLE_PATH": "${user_config.shell_executable_path}"
+    },
+    "type": "local"
+  },
+  "readme": null,
+  "category": "Development",
+  "quality_score": 46,
+  "programming_language": "Python",
+  "framework": null,
+  "github_info": {
+    "owner": "rusiaaman",
+    "repo": "wcgw",
+    "url": "https://github.com/rusiaaman/wcgw/blob/main/src/wcgw/client/mcp_server/Readme.md",
+    "name": "rusiaaman__wcgw__src__wcgw__client__mcp_server__readme.md",
+    "path": "src/wcgw/client/mcp_server/Readme.md",
+    "stars": 571,
+    "contributors": 10,
+    "issues": 28,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "02caebc4976cb6c5e4cb684865c626dea7226816"
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "user_config": {
+    "claude_api_key": {
+      "type": "string",
+      "title": "Claude API Key",
+      "description": "Your API key for authenticating with the Claude API.",
+      "sensitive": true,
+      "required": true
+    },
+    "agent_working_directory": {
+      "type": "directory",
+      "title": "Agent Working Directory",
+      "description": "The directory where the coding agent will perform its operations and store temporary files.",
+      "required": false,
+      "default": "${HOME}/claude-agent-work"
+    },
+    "shell_executable_path": {
+      "type": "file",
+      "title": "Shell Executable Path",
+      "description": "Path to the shell executable (e.g., /bin/bash, C:\\Windows\\System32\\cmd.exe) for the agent to use.",
+      "required": false,
+      "default": "/bin/bash"
+    }
+  },
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-flash",
+  "raw_dependencies": null,
+  "last_scraped_at": "2025-09-09T13:06:52.086Z"
+}

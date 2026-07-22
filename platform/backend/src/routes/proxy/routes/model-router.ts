@@ -3,10 +3,11 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   RouteId,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -22,6 +23,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import type { Agent, LLMProvider } from "@/types";
 import {
   ApiError,
@@ -33,10 +35,13 @@ import {
   azureAdapterFactory,
   cerebrasAdapterFactory,
   deepseekAdapterFactory,
+  geminiEmbeddingsAdapterFactory,
   groqAdapterFactory,
+  makeOpenAiCompatibleEmbeddingsAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
   ollamaAdapterFactory,
+  openAiEmbeddingsAdapterFactory,
   openaiAdapterFactory,
   openrouterAdapterFactory,
   perplexityAdapterFactory,
@@ -77,6 +82,14 @@ type OpenAiWireProvider = LLMProvider<
   unknown,
   unknown,
   unknown,
+  OpenAi.Types.ChatCompletionsHeaders
+>;
+
+type EmbeddingsModelRouterProvider = LLMProvider<
+  OpenAi.Types.EmbeddingRequest,
+  OpenAi.Types.EmbeddingResponse,
+  OpenAi.Types.ChatCompletionsRequest["messages"],
+  never,
   OpenAi.Types.ChatCompletionsHeaders
 >;
 
@@ -182,6 +195,7 @@ type TranslatedModelRouterProvider =
 
 const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const RESPONSES_SUFFIX = "/responses";
+const EMBEDDINGS_SUFFIX = "/embeddings";
 
 const openAiWireProviders = {
   openai: openaiAdapterFactory,
@@ -311,6 +325,47 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
+    `${MODEL_ROUTER_PREFIX}${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.ModelRouterEmbeddingsWithDefaultAgent,
+        description:
+          "Create embeddings through the OpenAI-compatible model router (default LLM proxy)",
+        tags: ["LLM Proxy"],
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      return routeEmbedding(request, reply);
+    },
+  );
+
+  fastify.post(
+    `${MODEL_ROUTER_PREFIX}/:agentId${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.ModelRouterEmbeddingsWithAgent,
+        description:
+          "Create embeddings through the OpenAI-compatible model router (specific LLM proxy)",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      return routeEmbedding(request, reply);
+    },
+  );
+
+  fastify.post(
     `${MODEL_ROUTER_PREFIX}${CHAT_COMPLETIONS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
@@ -435,6 +490,72 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     responsesContext,
     request,
     reply,
+  );
+}
+
+async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
+  const body = request.body as OpenAi.Types.EmbeddingRequest;
+  const params = request.params as { agentId?: string };
+  const auth = await getModelRouterAuth(request);
+  const agent = params.agentId
+    ? await getModelRouterAgent(params.agentId)
+    : await getDefaultModelRouterAgent();
+  await ensureModelRouterAgentAccess({ agent, auth });
+  const resolution = await resolveModelRoute({
+    requestedModel: body.model,
+    capability: "embeddings",
+    allowedProviders: getMappedProviders(auth),
+    allowedApiKeyIds: getMappedApiKeyIds(auth),
+  });
+
+  const embeddingsProvider = getModelRouterEmbeddingsProvider(
+    resolution.provider,
+  );
+
+  const routedBody = {
+    ...body,
+    model: resolution.modelId,
+  };
+
+  await applyModelRouterAuthOverride({
+    request,
+    auth,
+    provider: resolution.provider,
+  });
+
+  return handleLLMProxy(routedBody, request, reply, embeddingsProvider);
+}
+
+/**
+ * Resolve the embeddings adapter for a routed provider.
+ *
+ * - Gemini uses its native embedding API via a translation adapter.
+ * - Every OpenAI-wire provider (openai, mistral, azure, ollama, vllm, zhipuai, …)
+ *   exposes an OpenAI-compatible `/embeddings` endpoint, so they share the
+ *   OpenAI-compatible embeddings adapter (only the provider name and default
+ *   base URL differ; the effective base URL still comes from the mapped key).
+ *
+ * Providers reach this dispatch only when the model router resolved a
+ * provider-qualified embedding model registered for them, so unsupported
+ * providers surface a clear 501 rather than a misrouted request.
+ */
+function getModelRouterEmbeddingsProvider(
+  provider: SupportedProvider,
+): EmbeddingsModelRouterProvider {
+  if (provider === "gemini") {
+    return geminiEmbeddingsAdapterFactory;
+  }
+  if (provider === "openai") {
+    return openAiEmbeddingsAdapterFactory;
+  }
+  if (provider in openAiWireProviders) {
+    return makeOpenAiCompatibleEmbeddingsAdapterFactory(provider, () =>
+      getProviderConfiguredBaseUrl(provider),
+    );
+  }
+  throw new ApiError(
+    501,
+    `Provider "${provider}" is not yet available through the OpenAI-compatible model router embeddings endpoint.`,
   );
 }
 
@@ -576,13 +697,13 @@ async function listModels(params: { auth: ModelRouterAuth }) {
     linkedModels
       .map(({ model }) => model)
       .filter((model) => {
-        if (!ModelModel.supportsTextChat(model)) {
-          return false;
-        }
         if (!modelRouterSupportedProviders.has(model.provider)) {
           return false;
         }
-        return true;
+        return (
+          ModelModel.supportsTextChat(model) ||
+          ModelModel.supportsEmbeddings(model)
+        );
       }),
   );
 
@@ -772,6 +893,9 @@ async function getModelRouterOAuthClientAuth(
     accessToken.refreshTokenRevoked
   ) {
     throw new ApiError(401, "Invalid LLM OAuth client access token.");
+  }
+  if (isAppConnectorAudienceRef(accessToken.referenceId)) {
+    throw new ApiError(403, "Access token is bound to an app connector.");
   }
   if (!accessToken.scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
     throw new ApiError(403, "Access token is missing Model Router scope.");

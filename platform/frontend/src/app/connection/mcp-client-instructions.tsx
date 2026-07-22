@@ -2,9 +2,7 @@
 
 import {
   AlertTriangle,
-  Check,
   ChevronDown,
-  Copy,
   ExternalLink,
   Eye,
   EyeOff,
@@ -13,8 +11,11 @@ import {
 import Link from "next/link";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { CopyableCode } from "@/components/copyable-code";
+import {
+  SECRET_PLACEHOLDER_TOKEN,
+  SecretCopyButton,
+} from "@/components/secret-copy-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,7 +37,7 @@ import type {
   McpBuildParams,
   McpSupportedAuth,
 } from "./clients";
-import { toMcpServerSlug } from "./connection-flow.utils";
+import { deriveMcpServerName } from "./connection-flow.utils";
 import { TerminalBlock } from "./terminal-block";
 
 interface McpClientInstructionsProps {
@@ -84,9 +85,7 @@ export function McpClientInstructions({
   }
 
   const mcpUrl = `${baseUrl}/mcp/${gatewaySlug}`;
-  const serverName = gatewayName.trim()
-    ? gatewayName.trim().toLowerCase().replace(/\s+/g, "_")
-    : toMcpServerSlug(appName);
+  const serverName = deriveMcpServerName({ gatewayName, appName });
   const isQuick = client.mcp.kind === "custom" && client.mcp.quick === true;
 
   return (
@@ -98,10 +97,10 @@ export function McpClientInstructions({
           onValueChange={(v) => setAuthMethod(v as AuthMethod)}
           className="-mt-2"
         >
-          <TabsList className="w-full">
+          <TabsList>
             {tabs.map((t) =>
               t === "oauth" ? (
-                <TabsTrigger key="oauth" value="oauth" className="flex-1">
+                <TabsTrigger key="oauth" value="oauth">
                   OAuth 2.1
                   {client.mcp.kind !== "generic" &&
                     preferredAuth === "oauth" && (
@@ -111,7 +110,7 @@ export function McpClientInstructions({
                     )}
                 </TabsTrigger>
               ) : (
-                <TabsTrigger key="token" value="token" className="flex-1">
+                <TabsTrigger key="token" value="token">
                   Static token
                 </TabsTrigger>
               ),
@@ -133,7 +132,7 @@ export function McpClientInstructions({
             <McpBody
               client={client}
               mcpUrl={mcpUrl}
-              token="archestra_TOKEN"
+              token={SECRET_PLACEHOLDER_TOKEN}
               serverName={serverName}
               gatewayId={gatewayId}
               isQuick={isQuick}
@@ -153,7 +152,7 @@ export function McpClientInstructions({
         <McpBody
           client={client}
           mcpUrl={mcpUrl}
-          token="archestra_TOKEN"
+          token={SECRET_PLACEHOLDER_TOKEN}
           serverName={serverName}
           gatewayId={gatewayId}
           isQuick={isQuick}
@@ -217,7 +216,7 @@ function McpBody({
               key={s.title}
               className="grid grid-cols-[22px_1fr] items-start gap-3"
             >
-              <div className="mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+              <div className="mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full border bg-muted/50 font-mono text-[11px] font-semibold text-muted-foreground">
                 {i + 1}
               </div>
               <div className="min-w-0 space-y-3">
@@ -264,7 +263,7 @@ function McpBody({
         <ol className="grid gap-3.5">
           {steps.map((s, i) => (
             <li key={s.title} className="flex gap-3">
-              <div className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+              <div className="flex size-[22px] shrink-0 items-center justify-center rounded-full border bg-muted/50 font-mono text-[11px] font-semibold text-muted-foreground">
                 {i + 1}
               </div>
               <div>
@@ -362,11 +361,13 @@ function GenericAuthRow({
   });
   const tokens = tokensData?.tokens ?? [];
 
-  // Mirror the original defaulting logic: personal > org > first team token.
+  // Mirror the original defaulting logic: personal > org > first team token
+  // that can actually authenticate against this gateway.
   const orgToken = tokens.find((t) => t.isOrganizationToken);
+  const firstUsableToken = tokens.find((t) => t.worksWithProfile !== false);
   const defaultTokenId: string | null = userToken
     ? PERSONAL_TOKEN_ID
-    : (orgToken?.id ?? tokens[0]?.id ?? null);
+    : (orgToken?.id ?? firstUsableToken?.id ?? null);
   const [selectedId, setSelectedId] = useState<string | null>(defaultTokenId);
   useEffect(() => {
     if (selectedId === null && defaultTokenId) setSelectedId(defaultTokenId);
@@ -406,30 +407,39 @@ function GenericAuthRow({
         ? `${selectedTeamToken.tokenStart}***`
         : placeholder;
 
+  const fetchTokenValue = async (): Promise<string | null> => {
+    if (isPersonal) {
+      const res = await fetchUserTokenMutation.mutateAsync();
+      return res?.value ?? null;
+    }
+    if (selectedTeamToken) {
+      const res = await fetchTeamTokenMutation.mutateAsync(
+        selectedTeamToken.id,
+      );
+      return res?.value ?? null;
+    }
+    return null;
+  };
+
   const handleToggleExpose = async () => {
     if (exposedValue) {
       setExposedValue(null);
       return;
     }
-    if (isPersonal) {
-      const res = await fetchUserTokenMutation.mutateAsync();
-      if (res?.value) setExposedValue(res.value);
-    } else if (selectedTeamToken) {
-      const res = await fetchTeamTokenMutation.mutateAsync(
-        selectedTeamToken.id,
-      );
-      if (res?.value) setExposedValue(res.value);
-    }
+    const value = await fetchTokenValue();
+    if (value) setExposedValue(value);
   };
 
   const hasAnyToken = !!userToken || tokens.length > 0;
   const headerValue = bare ? previewValue : `Bearer ${previewValue}`;
-  const [copied, setCopied] = useState(false);
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(headerValue);
-    setCopied(true);
-    toast.success("Copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
+  const [isCopying, setIsCopying] = useState(false);
+  // The on-screen value is masked once a token is selected, so putting the
+  // real token on the clipboard is an explicit menu choice (SecretCopyButton).
+  const canResolveToken = isPersonal || !!selectedTeamToken;
+  const getSecretText = async (): Promise<string | null> => {
+    const value = exposedValue ?? (await fetchTokenValue());
+    if (!value) return null; // fetch failed; the mutation already surfaced a toast
+    return bare ? value : `Bearer ${value}`;
   };
 
   const teamTokens = tokens.filter((t) => !t.isOrganizationToken);
@@ -440,7 +450,7 @@ function GenericAuthRow({
       <div className="text-xs text-muted-foreground">
         No tokens available — provision one from{" "}
         <Link
-          href="/settings/account?tab=tokens"
+          href="/account?highlight=personal-token"
           className="underline hover:text-foreground"
         >
           your account
@@ -461,7 +471,7 @@ function GenericAuthRow({
             aria-label={exposedValue ? "Hide token" : "Reveal token"}
             className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
           >
-            {isLoading ? (
+            {isLoading && !isCopying ? (
               <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
             ) : exposedValue ? (
               <EyeOff className="size-3.5" strokeWidth={2} />
@@ -469,23 +479,21 @@ function GenericAuthRow({
               <Eye className="size-3.5" strokeWidth={2} />
             )}
           </button>
-          <button
-            type="button"
-            onClick={handleCopy}
-            aria-label="Copy to clipboard"
-            className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white"
-          >
-            {copied ? (
-              <Check className="size-3.5 text-[#4ade80]" strokeWidth={2.5} />
-            ) : (
-              <Copy className="size-3.5" strokeWidth={2} />
-            )}
-          </button>
+          <SecretCopyButton
+            variant="terminal"
+            getSecretText={canResolveToken ? getSecretText : null}
+            placeholderText={bare ? placeholder : `Bearer ${placeholder}`}
+            disabled={isLoading}
+            onBusyChange={setIsCopying}
+          />
+          {/* Switching tokens mid-fetch would copy the old token while the
+              row already shows the new one, so lock the switcher too. */}
           <DropdownMenuTrigger asChild>
             <button
               type="button"
+              disabled={isLoading || isCopying}
               aria-label="Switch token"
-              className="flex h-7 items-center gap-1 rounded border border-[#1f2937] bg-[#0d1117] px-2 text-[11px] text-[#9ca3af] transition-colors hover:text-white"
+              className="flex h-7 items-center gap-1 rounded border border-[#1f2937] bg-[#0d1117] px-2 text-[11px] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
             >
               {selectedLabel}
               <ChevronDown className="size-3" strokeWidth={2} />
@@ -513,7 +521,12 @@ function GenericAuthRow({
             key={t.id}
             active={selectedId === t.id}
             label={t.team?.name ? `Team Token (${t.team.name})` : t.name}
-            description="To share with your teammates"
+            description={
+              t.worksWithProfile === false
+                ? "This team can't access this gateway"
+                : "To share with your teammates"
+            }
+            disabled={t.worksWithProfile === false}
             onSelect={() => {
               setSelectedId(t.id);
               setExposedValue(null);
@@ -541,16 +554,19 @@ function TokenOption({
   active,
   label,
   description,
+  disabled,
   onSelect,
 }: {
   active: boolean;
   label: string;
   description: string;
+  disabled?: boolean;
   onSelect: () => void;
 }) {
   return (
     <DropdownMenuItem
       onSelect={onSelect}
+      disabled={disabled}
       className={cn("flex flex-col items-start gap-0.5", active && "bg-accent")}
     >
       <span>{label}</span>

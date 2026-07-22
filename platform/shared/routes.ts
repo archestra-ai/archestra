@@ -9,8 +9,13 @@ export const RouteId = {
   GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
+  RestoreAgent: "restoreAgent",
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
+  GetAgentToolExclusions: "getAgentToolExclusions",
+  UpdateAgentToolExclusions: "updateAgentToolExclusions",
+  GetAgentSubagentExclusions: "getAgentSubagentExclusions",
+  UpdateAgentSubagentExclusions: "updateAgentSubagentExclusions",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -58,18 +63,17 @@ export const RouteId = {
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
   ReinstallInternalMcpCatalogItem: "reinstallInternalMcpCatalogItem",
+  RefreshInternalMcpCatalogImage: "refreshInternalMcpCatalogImage",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
   GetInternalMcpCatalogLabelKeys: "getInternalMcpCatalogLabelKeys",
   GetInternalMcpCatalogLabelValues: "getInternalMcpCatalogLabelValues",
+  ListPendingImageApprovalCatalogItems: "listPendingImageApprovalCatalogItems",
+  ApproveCatalogItemImage: "approveCatalogItemImage",
   GetDeploymentYamlPreview: "getDeploymentYamlPreview",
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",
   GetK8sImagePullSecrets: "getK8sImagePullSecrets",
-  // MCP Catalog Children (UI-named "presets") Routes
-  GetCatalogChildren: "getCatalogChildren",
-  CreateCatalogChild: "createCatalogChild",
-  UpdateCatalogChild: "updateCatalogChild",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
@@ -80,11 +84,13 @@ export const RouteId = {
   DeleteMcpServer: "deleteMcpServer",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
+  ReloadMcpServerTools: "reloadMcpServerTools",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
   // MCP Gateway Routes
   McpGatewayGet: "mcpGatewayGet",
   McpGatewayPost: "mcpGatewayPost",
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
+  McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
 
   // MCP Server Installation Request Routes
   GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
@@ -111,7 +117,10 @@ export const RouteId = {
   DeleteTeam: "deleteTeam",
   GetTeamMembers: "getTeamMembers",
   AddTeamMember: "addTeamMember",
+  UpdateTeamMember: "updateTeamMember",
   RemoveTeamMember: "removeTeamMember",
+  GetTeamLabelKeys: "getTeamLabelKeys",
+  GetTeamLabelValues: "getTeamLabelValues",
 
   // Team External Group Routes (SSO Team Sync)
   GetTeamExternalGroups: "getTeamExternalGroups",
@@ -134,6 +143,7 @@ export const RouteId = {
   DeleteRole: "deleteRole",
 
   // Tool Routes
+  GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
   GetUnassignedTools: "getUnassignedTools",
@@ -171,6 +181,10 @@ export const RouteId = {
   OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
   OpenAiResponsesWithDefaultAgent: "openAiResponsesWithDefaultAgent",
   OpenAiResponsesWithAgent: "openAiResponsesWithAgent",
+  OpenAiEmbeddingsWithDefaultAgent: "openAiEmbeddingsWithDefaultAgent",
+  OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
+  OpenAiListModelsWithDefaultAgent: "openAiListModelsWithDefaultAgent",
+  OpenAiListModelsWithAgent: "openAiListModelsWithAgent",
 
   // Proxy Routes - OpenAI-compatible model router
   ModelRouterChatCompletionsWithDefaultAgent:
@@ -181,10 +195,19 @@ export const RouteId = {
   ModelRouterListModelsWithAgent: "modelRouterListModelsWithAgent",
   ModelRouterResponsesWithDefaultAgent: "modelRouterResponsesWithDefaultAgent",
   ModelRouterResponsesWithAgent: "modelRouterResponsesWithAgent",
+  ModelRouterEmbeddingsWithDefaultAgent:
+    "modelRouterEmbeddingsWithDefaultAgent",
+  ModelRouterEmbeddingsWithAgent: "modelRouterEmbeddingsWithAgent",
+
+  // Proxy Routes - Gemini
+  GeminiEmbeddingsWithDefaultAgent: "geminiEmbeddingsWithDefaultAgent",
+  GeminiEmbeddingsWithAgent: "geminiEmbeddingsWithAgent",
 
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+  AnthropicListModelsWithDefaultAgent: "anthropicListModelsWithDefaultAgent",
+  AnthropicListModelsWithAgent: "anthropicListModelsWithAgent",
 
   // Proxy Routes - Cohere
   CohereChatWithDefaultAgent: "cohereChatWithDefaultAgent",
@@ -198,6 +221,8 @@ export const RouteId = {
   MistralChatCompletionsWithDefaultAgent:
     "mistralChatCompletionsWithDefaultAgent",
   MistralChatCompletionsWithAgent: "mistralChatCompletionsWithAgent",
+  MistralEmbeddingsWithDefaultAgent: "mistralEmbeddingsWithDefaultAgent",
+  MistralEmbeddingsWithAgent: "mistralEmbeddingsWithAgent",
 
   // Proxy Routes - Perplexity
   PerplexityChatCompletionsWithDefaultAgent:
@@ -220,20 +245,35 @@ export const RouteId = {
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
+  VllmEmbeddingsWithDefaultAgent: "vllmEmbeddingsWithDefaultAgent",
+  VllmEmbeddingsWithAgent: "vllmEmbeddingsWithAgent",
 
   // Proxy Routes - Ollama
   OllamaChatCompletionsWithDefaultAgent:
     "ollamaChatCompletionsWithDefaultAgent",
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
+  OllamaEmbeddingsWithDefaultAgent: "ollamaEmbeddingsWithDefaultAgent",
+  OllamaEmbeddingsWithAgent: "ollamaEmbeddingsWithAgent",
   // Proxy Routes - Zhipu AI
   ZhipuaiChatCompletionsWithDefaultAgent:
     "zhipuaiChatCompletionsWithDefaultAgent",
   ZhipuaiChatCompletionsWithAgent: "zhipuaiChatCompletionsWithAgent",
+  ZhipuaiEmbeddingsWithDefaultAgent: "zhipuaiEmbeddingsWithDefaultAgent",
+  ZhipuaiEmbeddingsWithAgent: "zhipuaiEmbeddingsWithAgent",
 
   // Proxy Routes - DeepSeek
   DeepSeekChatCompletionsWithDefaultAgent:
     "deepseekChatCompletionsWithDefaultAgent",
   DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
+
+  // Proxy Routes - Archestra
+  ArchestraChatCompletionsWithDefaultAgent:
+    "archestraChatCompletionsWithDefaultAgent",
+  ArchestraChatCompletionsWithAgent: "archestraChatCompletionsWithAgent",
+
+  // Proxy Routes - Kimi (Moonshot AI)
+  KimiChatCompletionsWithDefaultAgent: "kimiChatCompletionsWithDefaultAgent",
+  KimiChatCompletionsWithAgent: "kimiChatCompletionsWithAgent",
 
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",
@@ -245,6 +285,13 @@ export const RouteId = {
   BedrockConverseWithAgentAndModel: "bedrockConverseWithAgentAndModel",
   BedrockConverseStreamWithAgentAndModel:
     "bedrockConverseStreamWithAgentAndModel",
+  // Native InvokeModel routes (Anthropic Messages wire format, model ID in URL)
+  BedrockInvokeWithDefaultAgentAndModel:
+    "bedrockInvokeWithDefaultAgentAndModel",
+  BedrockInvokeWithAgentAndModel: "bedrockInvokeWithAgentAndModel",
+  BedrockInvokeStreamWithDefaultAgentAndModel:
+    "bedrockInvokeStreamWithDefaultAgentAndModel",
+  BedrockInvokeStreamWithAgentAndModel: "bedrockInvokeStreamWithAgentAndModel",
   // OpenAI-compatible routes (translate OpenAI chat/completions ↔ Converse)
   BedrockOpenaiChatCompletionsWithDefaultAgent:
     "bedrockOpenaiChatCompletionsWithDefaultAgent",
@@ -259,26 +306,67 @@ export const RouteId = {
     "minimaxChatCompletionsWithDefaultAgent",
   MinimaxChatCompletionsWithAgent: "minimaxChatCompletionsWithAgent",
 
+  // Proxy Routes - GitHub Copilot
+  GithubCopilotChatCompletionsWithDefaultAgent:
+    "githubCopilotChatCompletionsWithDefaultAgent",
+  GithubCopilotChatCompletionsWithAgent:
+    "githubCopilotChatCompletionsWithAgent",
+  GithubCopilotListModelsWithDefaultAgent:
+    "githubCopilotListModelsWithDefaultAgent",
+  GithubCopilotListModelsWithAgent: "githubCopilotListModelsWithAgent",
+
+  // GitHub Copilot device-flow sign-in (creates personal provider keys)
+  GithubCopilotDeviceAuthStart: "githubCopilotDeviceAuthStart",
+  GithubCopilotDeviceAuthPoll: "githubCopilotDeviceAuthPoll",
+
+  // Proxy Routes - Microsoft 365 Copilot
+  Microsoft365CopilotChatCompletionsWithDefaultAgent:
+    "microsoft365CopilotChatCompletionsWithDefaultAgent",
+  Microsoft365CopilotChatCompletionsWithAgent:
+    "microsoft365CopilotChatCompletionsWithAgent",
+  Microsoft365CopilotListModelsWithDefaultAgent:
+    "microsoft365CopilotListModelsWithDefaultAgent",
+  Microsoft365CopilotListModelsWithAgent:
+    "microsoft365CopilotListModelsWithAgent",
+
+  // Microsoft 365 Copilot device-flow sign-in (creates personal provider keys)
+  Microsoft365CopilotDeviceAuthStart: "microsoft365CopilotDeviceAuthStart",
+  Microsoft365CopilotDeviceAuthPoll: "microsoft365CopilotDeviceAuthPoll",
+
+  // OpenAI "ChatGPT subscription" (Codex) device-flow sign-in — connects a
+  // ChatGPT/Codex subscription as an OpenAI provider credential
+  OpenaiCodexDeviceAuthStart: "openaiCodexDeviceAuthStart",
+  OpenaiCodexDeviceAuthPoll: "openaiCodexDeviceAuthPoll",
+
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
   AzureResponsesWithDefaultAgent: "azureResponsesWithDefaultAgent",
   AzureResponsesWithAgent: "azureResponsesWithAgent",
+  AzureEmbeddingsWithDefaultAgent: "azureEmbeddingsWithDefaultAgent",
+  AzureEmbeddingsWithAgent: "azureEmbeddingsWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",
+  ResolveChatMcpElicitation: "resolveChatMcpElicitation",
   StopChatStream: "stopChatStream",
+  GetActiveChatRun: "getActiveChatRun",
   GetChatConversations: "getChatConversations",
   GetChatConversation: "getChatConversation",
+  GetChatConversationFiles: "getChatConversationFiles",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
   CreateChatConversation: "createChatConversation",
   ForkChatConversation: "forkChatConversation",
   UpdateChatConversation: "updateChatConversation",
+  SetConversationHooksDebug: "setConversationHooksDebug",
+  MarkChatConversationRead: "markChatConversationRead",
   DeleteChatConversation: "deleteChatConversation",
+  ClearChatConversationErrors: "clearChatConversationErrors",
   CompactChatConversation: "compactChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
   UpdateChatMessage: "updateChatMessage",
+  SetChatMessageFeedback: "setChatMessageFeedback",
   GetConversationEnabledTools: "getConversationEnabledTools",
   UpdateConversationEnabledTools: "updateConversationEnabledTools",
   DeleteConversationEnabledTools: "deleteConversationEnabledTools",
@@ -287,6 +375,8 @@ export const RouteId = {
   GetConversationShare: "getConversationShare",
   GetSharedConversation: "getSharedConversation",
   ForkSharedConversation: "forkSharedConversation",
+  GetChatAttachmentContent: "getChatAttachmentContent",
+  DeleteChatAttachment: "deleteChatAttachment",
   GetLlmModels: "getLlmModels",
   SyncLlmModels: "syncLlmModels",
 
@@ -304,8 +394,19 @@ export const RouteId = {
   CreateApiKey: "createApiKey",
   DeleteApiKey: "deleteApiKey",
 
+  // Service Account Routes
+  GetServiceAccounts: "getServiceAccounts",
+  GetServiceAccount: "getServiceAccount",
+  CreateServiceAccount: "createServiceAccount",
+  UpdateServiceAccount: "updateServiceAccount",
+  DeleteServiceAccount: "deleteServiceAccount",
+  CreateServiceAccountToken: "createServiceAccountToken",
+  UpdateServiceAccountToken: "updateServiceAccountToken",
+  DeleteServiceAccountToken: "deleteServiceAccountToken",
+
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
+  GetVirtualApiKey: "getVirtualApiKey",
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
@@ -317,6 +418,13 @@ export const RouteId = {
   RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
   DeleteLlmOauthClient: "deleteLlmOauthClient",
 
+  // MCP OAuth Client Routes
+  GetMcpOauthClients: "getMcpOauthClients",
+  CreateMcpOauthClient: "createMcpOauthClient",
+  UpdateMcpOauthClient: "updateMcpOauthClient",
+  RotateMcpOauthClientSecret: "rotateMcpOauthClientSecret",
+  DeleteMcpOauthClient: "deleteMcpOauthClient",
+
   // Models with API Keys Routes
   GetModelsWithApiKeys: "getModelsWithApiKeys",
   UpdateModel: "updateModel",
@@ -327,6 +435,19 @@ export const RouteId = {
   GetLimit: "getLimit",
   UpdateLimit: "updateLimit",
   DeleteLimit: "deleteLimit",
+
+  // Per-environment default user limits
+  ListDefaultUserLimits: "listDefaultUserLimits",
+  CreateDefaultUserLimit: "createDefaultUserLimit",
+  UpdateDefaultUserLimit: "updateDefaultUserLimit",
+  DeleteDefaultUserLimit: "deleteDefaultUserLimit",
+
+  // Onboarding Routes
+  GetOnboardingSeenNavItems: "getOnboardingSeenNavItems",
+  MarkOnboardingNavItemsSeen: "markOnboardingNavItemsSeen",
+  GetOnboardingSurveyEligibility: "getOnboardingSurveyEligibility",
+  SubmitOnboardingSurvey: "submitOnboardingSurvey",
+  GetFeedbackPopupActivation: "getFeedbackPopupActivation",
 
   // Organization Routes
   GetOrganization: "getOrganization",
@@ -347,6 +468,12 @@ export const RouteId = {
   // LLM Settings Routes (organization-level)
   UpdateLlmSettings: "updateLlmSettings",
 
+  // MCP Settings Routes (organization-level)
+  UpdateMcpSettings: "updateMcpSettings",
+
+  // Skills Settings Routes (organization-level)
+  UpdateSkillsSettings: "updateSkillsSettings",
+
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
 
@@ -356,22 +483,32 @@ export const RouteId = {
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
 
-  // Preset Entity Name Routes (organization-level - configurable label for catalog presets)
-  UpdatePresetEntityName: "updatePresetEntityName",
-  UpdatePresetEntityDefaultLabel: "updatePresetEntityDefaultLabel",
-  UpdatePresetEntityDefaultValidationRegex:
-    "updatePresetEntityDefaultValidationRegex",
+  // Org-level deployment environments
+  ListEnvironments: "listEnvironments",
+  CreateEnvironment: "createEnvironment",
+  UpdateEnvironment: "updateEnvironment",
+  DeleteEnvironment: "deleteEnvironment",
+  UpdateDefaultEnvironment: "updateDefaultEnvironment",
+  GetK8sCapabilities: "getK8sCapabilities",
 
-  // Org-level preset entries (Production / Staging / Development buckets)
-  ListMcpPresetEntries: "listMcpPresetEntries",
-  CreateMcpPresetEntry: "createMcpPresetEntry",
-  UpdateMcpPresetEntry: "updateMcpPresetEntry",
-  DeleteMcpPresetEntry: "deleteMcpPresetEntry",
+  // GitHub App Configuration Routes
+  ListGithubAppConfigs: "listGithubAppConfigs",
+  CreateGithubAppConfig: "createGithubAppConfig",
+  GetGithubAppConfig: "getGithubAppConfig",
+  UpdateGithubAppConfig: "updateGithubAppConfig",
+  DeleteGithubAppConfig: "deleteGithubAppConfig",
+
+  // Stored GitHub personal access tokens
+  ListGithubPats: "listGithubPats",
+  CreateGithubPat: "createGithubPat",
+  UpdateGithubPat: "updateGithubPat",
+  DeleteGithubPat: "deleteGithubPat",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",
   TestEmbeddingConnection: "testEmbeddingConnection",
+  TestRerankerConnection: "testRerankerConnection",
 
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",
@@ -379,6 +516,7 @@ export const RouteId = {
   GetIdentityProvider: "getIdentityProvider",
   GetIdentityProviderLatestIdTokenClaims:
     "getIdentityProviderLatestIdTokenClaims",
+  GetIdentityProviderLinkStatus: "getIdentityProviderLinkStatus",
   CreateIdentityProvider: "createIdentityProvider",
   UpdateIdentityProvider: "updateIdentityProvider",
   DeleteIdentityProvider: "deleteIdentityProvider",
@@ -438,6 +576,12 @@ export const RouteId = {
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
+  LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
+  GenerateTelegramLinkCode: "generateTelegramLinkCode",
+  ConnectNgrok: "connectNgrok",
+  DisconnectNgrok: "disconnectNgrok",
+  GetNgrokConfig: "getNgrokConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Knowledge Base Routes
@@ -452,9 +596,17 @@ export const RouteId = {
   GetConnectors: "getConnectors",
   CreateConnector: "createConnector",
   GetConnector: "getConnector",
+  GetConnectorDocuments: "getConnectorDocuments",
+  GetConnectorDocument: "getConnectorDocument",
   UpdateConnector: "updateConnector",
   DeleteConnector: "deleteConnector",
+  DeleteConnectorDocument: "deleteConnectorDocument",
   SyncConnector: "syncConnector",
+  TriggerPermissionSync: "triggerPermissionSync",
+  GetPermissionSyncCoverage: "getPermissionSyncCoverage",
+  GetConnectorUserGroups: "getConnectorUserGroups",
+  UpsertConnectorMemberOverride: "upsertConnectorMemberOverride",
+  DeleteConnectorMemberOverride: "deleteConnectorMemberOverride",
   ForceResyncConnector: "forceResyncConnector",
   TestConnectorConnection: "testConnectorConnection",
 
@@ -467,26 +619,113 @@ export const RouteId = {
   GetConnectorRuns: "getConnectorRuns",
   GetConnectorRun: "getConnectorRun",
 
-  // Connector File Upload Routes
-  UploadConnectorFiles: "uploadConnectorFiles",
-  GetConnectorFiles: "getConnectorFiles",
-  GetConnectorFile: "getConnectorFile",
-  DeleteConnectorFile: "deleteConnectorFile",
+  // Knowledge File Routes
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
 
+  // Site Notification Routes
+  GetSiteNotification: "getSiteNotification",
+  GetSiteNotificationSettings: "getSiteNotificationSettings",
+  CreateSiteNotification: "createSiteNotification",
+  UpdateSiteNotification: "updateSiteNotification",
+  DeleteSiteNotification: "deleteSiteNotification",
+
   // Agent Skill Routes
   GetSkills: "getSkills",
   CreateSkill: "createSkill",
+  ConvertAgentToSkill: "convertAgentToSkill",
+  SuggestSkillDescription: "suggestSkillDescription",
   GetSkill: "getSkill",
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",
+  ResetSkill: "resetSkill",
+  UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
+  SearchSkillCatalog: "searchSkillCatalog",
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
+  GetSkillUsageStatistics: "getSkillUsageStatistics",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
+  GetSkillSandboxArtifact: "getSkillSandboxArtifact",
+  GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
+  CreateProject: "createProject",
+  CreateProjectFromConversation: "createProjectFromConversation",
+  GetProjects: "getProjects",
+  GetProject: "getProject",
+  UpdateProject: "updateProject",
+  SetProjectShare: "setProjectShare",
+  DeleteProject: "deleteProject",
+  GetProjectConversations: "getProjectConversations",
+  GetProjectFiles: "getProjectFiles",
+  UploadProjectFiles: "uploadProjectFiles",
+  GetProjectInstructions: "getProjectInstructions",
+  SetProjectInstructions: "setProjectInstructions",
+  PinProject: "pinProject",
+  UnpinProject: "unpinProject",
+  DeleteSkillSandboxArtifact: "deleteSkillSandboxArtifact",
+  UpdateSkillSandboxArtifactContent: "updateSkillSandboxArtifactContent",
+
+  // Audit Log Routes
+  GetAuditLogs: "getAuditLogs",
+  GetAuditLog: "getAuditLog",
+
+  // Hook File Routes
+  GetHooks: "getHooks",
+  CreateHook: "createHook",
+  UpdateHook: "updateHook",
+  DeleteHook: "deleteHook",
+
+  // Skill Share Link Routes
+  GetSkillShareLinks: "getSkillShareLinks",
+  CreateSkillShareLink: "createSkillShareLink",
+  RevokeSkillShareLink: "revokeSkillShareLink",
+  RotateSkillShareLink: "rotateSkillShareLink",
+
+  // Connection Setup Routes
+  CreateConnectionSetup: "createConnectionSetup",
+  GetConnectionSetupScript: "getConnectionSetupScript",
+  CreateConnectionVirtualKey: "createConnectionVirtualKey",
+  CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
+  GetConnectionHealth: "getConnectionHealth",
+
+  // MCP App Routes
+  GetApps: "getApps",
+  GetExternalApp: "getExternalApp",
+  CreateApp: "createApp",
+  GetApp: "getApp",
+  UpdateApp: "updateApp",
+  EnableApp: "enableApp",
+  DisableApp: "disableApp",
+  DeleteApp: "deleteApp",
+  GetAppVersions: "getAppVersions",
+  GetAppVersion: "getAppVersion",
+  GetAppTools: "getAppTools",
+  AssignToolToApp: "assignToolToApp",
+  UnassignToolFromApp: "unassignToolFromApp",
+  GetAppTemplates: "getAppTemplates",
+  OpenAppInChat: "openAppInChat",
+  OpenExternalAppInChat: "openExternalAppInChat",
+  PinApp: "pinApp",
+  UnpinApp: "unpinApp",
+  PinExternalApp: "pinExternalApp",
+  UnpinExternalApp: "unpinExternalApp",
+  PostAppRenderDiagnostics: "postAppRenderDiagnostics",
+  PostAppRenderScreenshot: "postAppRenderScreenshot",
+  // App session recordings live client-side (IndexedDB); the only server
+  // endpoint forwards a shared recording bundle to the public demo catalog.
+  EnhanceAppRecording: "enhanceAppRecording",
+  RenderAppRecordingVideo: "renderAppRecordingVideo",
+  GetAppRecordingRenderStatus: "getAppRecordingRenderStatus",
+  DownloadAppRecordingVideo: "downloadAppRecordingVideo",
+  CancelAppRecordingRender: "cancelAppRecordingRender",
+  // Sharing a recording to the public App Gallery: the backend only relays
+  // the GitHub device flow (browser CORS); the PR itself is filed client-side.
+  AppGalleryDeviceAuthStart: "appGalleryDeviceAuthStart",
+  AppGalleryDeviceAuthPoll: "appGalleryDeviceAuthPoll",
+  // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
+  McpAppProxyPost: "mcpAppProxyPost",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

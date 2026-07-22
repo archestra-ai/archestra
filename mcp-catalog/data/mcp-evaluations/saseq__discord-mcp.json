@@ -1,0 +1,107 @@
+{
+  "name": "saseq__discord-mcp",
+  "display_name": "discord-mcp",
+  "description": "A MCP server for the Discord integration. Enable your AI assistants to seamlessly interact with Discord. Enhance your Discord experience with powerful automation capabilities.",
+  "author": {
+    "name": "SaseQ"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-remote", "https://gitmcp.io/SaseQ/discord-mcp"],
+    "env": {
+      "DISCORD_TOKEN": "${user_config.discord_token}",
+      "DISCORD_GUILD_ID": "${user_config.discord_guild_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "discord_token": {
+      "type": "string",
+      "title": "Discord Bot Token",
+      "description": "Your Discord Bot token for authentication. Instructions on how to create a Discord Bot token can be found here: https://discordjs.guide/preparations/setting-up-a-bot-application.html#creating-your-bot",
+      "sensitive": true,
+      "required": true
+    },
+    "discord_guild_id": {
+      "type": "string",
+      "title": "Discord Guild ID",
+      "description": "Optional default Discord server ID. When provided, it sets a default Discord server ID so any tool that accepts a 'guildId' parameter can omit it.",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "<div align=\"center\">\n  <img src=\"assets/img/Discord_MCP_full_logo.svg\" width=\"60%\" alt=\"DeepSeek-V3\" />\n</div>\n<hr>\n<div align=\"center\" style=\"line-height: 1;\">\n    <a href=\"https://github.com/modelcontextprotocol/servers\" target=\"_blank\" style=\"margin: 2px;\">\n        <img alt=\"MCP Server\" src=\"https://badge.mcpx.dev?type=server\" style=\"display: inline-block; vertical-align: middle;\"/>\n    </a>\n    <a href=\"https://smithery.ai/server/@SaseQ/discord-mcp\" target=\"_blank\" style=\"margin: 2px;\">\n        <img alt=\"Smithery Badge\" src=\"https://camo.githubusercontent.com/ee5c6c6dc502821f4d57313b2885f7878af52be14142dd98526ea12aedf9b260/68747470733a2f2f736d6974686572792e61692f62616467652f40646d6f6e74676f6d65727934302f646565707365656b2d6d63702d736572766572\" data-canonical-src=\"https://smithery.ai/server/@SaseQ/discord-mcp\" style=\"display: inline-block; vertical-align: middle;\"/>\n    </a>\n    <a href=\"https://discord.gg/5Uvxe5jteM\" target=\"_blank\" style=\"margin: 2px;\">\n        <img alt=\"Discord\" src=\"https://img.shields.io/discord/936242526120194108?color=7389D8&label&logo=discord&logoColor=ffffff\" style=\"display: inline-block; vertical-align: middle;\"/>\n    </a>\n    <a href=\"https://github.com/SaseQ/discord-mcp/blob/main/LICENSE\" target=\"_blank\" style=\"margin: 2px;\">\n        <img alt=\"MIT License\" src=\"https://img.shields.io/github/license/SaseQ/discord-mcp\" style=\"display: inline-block; vertical-align: middle;\"/>\n    </a>\n</div>\n\n\n## 📖 Description\n\nA [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server for the Discord API [(JDA)](https://jda.wiki/), \nallowing seamless integration of Discord Bot with MCP-compatible applications like Claude Desktop.\n\nEnable your AI assistants to seamlessly interact with Discord. Manage channels, send messages, and retrieve server information effortlessly. Enhance your Discord experience with powerful automation capabilities.\n\n\n## 🔬 Installation\n\n### ► 🐳 Docker Installation (Recommended)\n> NOTE: Docker installation is required. Full instructions can be found on [docker.com](https://www.docker.com/products/docker-desktop/).\n```json\n{\n  \"mcpServers\": {\n    \"mcp-server\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"--rm\", \"-i\",\n        \"-e\", \"DISCORD_TOKEN=<YOUR_DISCORD_BOT_TOKEN>\",\n        \"-e\", \"DISCORD_GUILD_ID=<OPTIONAL_DEFAULT_SERVER_ID>\",\n        \"saseq/discord-mcp:latest\"\n      ]\n    }\n  }\n}\n```\n\n<details>\n    <summary style=\"font-size: 1.35em; font-weight: bold;\">\n        🔧 Manual Installation\n    </summary>\n\n#### Clone the repository\n```bash\ngit clone https://github.com/SaseQ/discord-mcp\n```\n\n#### Build the project\n> NOTE: Maven installation is required to use the mvn command. Full instructions can be found [here](https://www.baeldung.com/install-maven-on-windows-linux-mac).\n```bash\ncd discord-mcp\nmvn clean package # The jar file will be available in the /target directory\n```\n\n#### Configure AI client\nMany code editors and other AI clients use a configuration file to manage MCP servers.\n\nThe Discord MPC server can be configured by adding the following to your configuration file.\n\n> NOTE: You will need to create a Discord Bot token to use this server. Instructions on how to create a Discord Bot token can be found [here](https://discordjs.guide/preparations/setting-up-a-bot-application.html#creating-your-bot).\n```json\n{\n  \"mcpServers\": {\n    \"discord-mcp\": {\n      \"command\": \"java\",\n      \"args\": [\n        \"-jar\",\n        \"/absolute/path/to/discord-mcp-0.0.1-SNAPSHOT.jar\"\n      ],\n      \"env\": {\n        \"DISCORD_TOKEN\": \"YOUR_DISCORD_BOT_TOKEN\",\n        \"DISCORD_GUILD_ID\": \"OPTIONAL_DEFAULT_SERVER_ID\"\n      }\n    }\n  }\n}\n```\nThe `DISCORD_GUILD_ID` environment variable is optional. When provided, it sets a default Discord server ID so any tool that accepts a `guildId` parameter can omit it.\n\n</details>\n\n<details>\n    <summary style=\"font-size: 1.35em; font-weight: bold;\">\n        ⚓ Smithery Installation\n    </summary>\n\nInstall Discord MCP Server automatically via [Smithery](https://smithery.ai/):\n```bash\nnpx -y @smithery/cli@latest install @SaseQ/discord-mcp --client <CLIENT_NAME> --key <YOUR_SMITHERY_KEY>\n```\n\n</details>\n\n<details>\n    <summary style=\"font-size: 1.35em; font-weight: bold;\">\n        🖲 Cursor Installation\n    </summary>\n\nGo to: `Settings` -> `Cursor Settings` -> `MCP` -> `Add new global MCP server`\n\nPasting the following configuration into your Cursor `~/.cursor/mcp.json` file is the recommended approach. You may also install in a specific project by creating `.cursor/mcp.json` in your project folder. See [Cursor MCP docs](https://docs.cursor.com/context/model-context-protocol) for more info.\n```json\n{\n  \"mcpServers\": {\n    \"mcp-server\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"--rm\", \"-i\",\n        \"-e\", \"DISCORD_TOKEN=<YOUR_DISCORD_BOT_TOKEN>\",\n        \"-e\", \"DISCORD_GUILD_ID=<OPTIONAL_DEFAULT_SERVER_ID>\",\n        \"saseq/discord-mcp:latest\"\n      ]\n    }\n  }\n}\n```\n\n</details>\n\n<details>\n    <summary style=\"font-size: 1.35em; font-weight: bold;\">\n        ⌨️ Claude Code Installation\n    </summary>\n\nRun this command. See [Claude Code MCP docs](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/tutorials#set-up-model-context-protocol-mcp) for more info.\n```bash\nclaude mcp add mcp-server -- docker run --rm -i -e DISCORD_TOKEN=<YOUR_DISCORD_BOT_TOKEN> -e DISCORD_GUILD_ID=<OPTIONAL_DEFAULT_SERVER_ID> saseq/discord-mcp:latest\n```\n\n</details>\n\n## 🛠️ Available Tools\n\n#### Server Information\n - [`get_server_info`](): Get detailed discord server information\n\n#### User Management\n- [`get_user_id_by_name`](): Get a Discord user's ID by username in a guild for ping usage `<@id>`\n- [`send_private_message`](): Send a private message to a specific user\n- [`edit_private_message`](): Edit a private message from a specific user\n- [`delete_private_message`](): Delete a private message from a specific user\n- [`read_private_messages`](): Read recent message history from a specific user\n\n#### Message Management\n - [`send_message`](): Send a message to a specific channel\n - [`edit_message`](): Edit a message from a specific channel\n - [`delete_message`](): Delete a message from a specific channel\n - [`read_messages`](): Read recent message history from a specific channel\n - [`add_reaction`](): Add a reaction (emoji) to a specific message\n - [`remove_reaction`](): Remove a specified reaction (emoji) from a message\n\n#### Channel Management\n - [`create_text_channel`](): Create text a channel\n - [`delete_channel`](): Delete a channel\n - [`find_channel`](): Find a channel type and ID using name and server ID\n - [`list_channels`](): List of all channels\n\n#### Category Management\n - [`create_category`](): Create a new category for channels\n - [`delete_category`](): Delete a category\n - [`find_category`](): Find a category ID using name and server ID\n - [`list_channels_in_category`](): List of channels in a specific category\n\n#### Webhook Management\n - [`create_webhook`](): Create a new webhook on a specific channel\n - [`delete_webhook`](): Delete a webhook\n - [`list_webhooks`](): List of webhooks on a specific channel\n - [`send_webhook_message`](): Send a message via webhook\n\n>If `DISCORD_GUILD_ID` is set, the `guildId` parameter becomes optional for all tools above.\n\n<hr>\n\nA more detailed examples can be found in the [Wiki](https://github.com/SaseQ/discord-mcp/wiki).\n",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "discord-mcp-jar": {
+        "command": "java",
+        "args": ["-jar", "/absolute/path/to/discord-mcp-0.0.1-SNAPSHOT.jar"],
+        "env": {
+          "DISCORD_TOKEN": "YOUR_DISCORD_BOT_TOKEN",
+          "DISCORD_GUILD_ID": "OPTIONAL_DEFAULT_SERVER_ID"
+        }
+      },
+      "saseq-discord-mcp-remote": {
+        "command": "npx",
+        "args": ["mcp-remote", "https://gitmcp.io/SaseQ/discord-mcp"],
+        "env": {
+          "DISCORD_TOKEN": "YOUR_DISCORD_BOT_TOKEN",
+          "DISCORD_GUILD_ID": "OPTIONAL_DEFAULT_SERVER_ID"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "SaseQ",
+    "repo": "discord-mcp",
+    "url": "https://github.com/SaseQ/discord-mcp",
+    "name": "saseq__discord-mcp",
+    "path": null,
+    "stars": 63,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ac33c4f492fcd99b08aa9dfbd95f8ec4279c1e72"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:24.895Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "spring-web",
+      "importance": 8
+    },
+    {
+      "name": "spring-ai-starter-mcp-server",
+      "importance": 10
+    },
+    {
+      "name": "JDA",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pom.xml ===\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\"\n         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n    <modelVersion>4.0.0</modelVersion>\n    <parent>\n        <groupId>org.springframework.boot</groupId>\n        <artifactId>spring-boot-starter-parent</artifactId>\n        <version>3.3.6</version>\n        <relativePath /> <!-- lookup parent from repository -->\n    </parent>\n\n    <groupId>dev.saseq</groupId>\n    <artifactId>discord-mcp</artifactId>\n    <version>0.0.1</version>\n    <name>discord-mcp</name>\n    <description>discord-mcp</description>\n\n    <properties>\n        <maven.compiler.source>17</maven.compiler.source>\n        <maven.compiler.target>17</maven.compiler.target>\n        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n        <spring.ai.version>1.0.0-SNAPSHOT</spring.ai.version>\n    </properties>\n\n    <dependencies>\n        <dependency>\n            <groupId>org.springframework</groupId>\n            <artifactId>spring-web</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>org.springframework.ai</groupId>\n            <artifactId>spring-ai-starter-mcp-server</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>net.dv8tion</groupId>\n            <artifactId>JDA</artifactId>\n            <version>5.6.1</version>\n        </dependency>\n    </dependencies>\n\n    <build>\n        <plugins>\n            <plugin>\n                <groupId>org.springframework.boot</groupId>\n                <artifactId>spring-boot-maven-plugin</artifactId>\n            </plugin>\n        </plugins>\n    </build>\n\n    <dependencyManagement>\n        <dependencies>\n            <dependency>\n                <groupId>org.springframework.ai</groupId>\n                <artifactId>spring-ai-bom</artifactId>\n                <version>${spring.ai.version}</version>\n                <type>pom</type>\n                <scope>import</scope>\n            </dependency>\n        </dependencies>\n    </dependencyManagement>\n\n    <repositories>\n        <repository>\n            <name>Central Portal Snapshots</name>\n            <id>central-portal-snapshots</id>\n            <url>https://central.sonatype.com/repository/maven-snapshots/</url>\n            <releases>\n                <enabled>false</enabled>\n            </releases>\n            <snapshots>\n                <enabled>true</enabled>\n            </snapshots>\n        </repository>\n        <repository>\n            <id>spring-milestones</id>\n            <name>Spring Milestones</name>\n            <url>https://repo.spring.io/milestone</url>\n            <snapshots>\n                <enabled>false</enabled>\n            </snapshots>\n        </repository>\n        <repository>\n            <id>spring-snapshots</id>\n            <name>Spring Snapshots</name>\n            <url>https://repo.spring.io/snapshot</url>\n            <releases>\n                <enabled>false</enabled>\n            </releases>\n        </repository>\n    </repositories>\n\n</project>\n"
+}

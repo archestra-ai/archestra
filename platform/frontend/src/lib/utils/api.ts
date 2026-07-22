@@ -1,5 +1,7 @@
-import * as Sentry from "@sentry/nextjs";
-import type { ApiError } from "@shared";
+import type { ApiError } from "@archestra/shared";
+// Subpath import (not the barrel) so tests that factory-mock
+// "@archestra/shared" for the SDK don't erase this helper.
+import { getUserFacingApiErrorMessage } from "@archestra/shared/api-error";
 import { toast } from "sonner";
 
 type ApiSdkError =
@@ -21,35 +23,49 @@ function unwrapApiError(error: ApiSdkError): unknown {
   return error;
 }
 
+/**
+ * User-facing message for an API error. Delegates to the shared helper so a
+ * bare status token from the server ("Forbidden", "Not Found", ...) is
+ * replaced with readable copy instead of surfacing raw in a toast.
+ */
 export function getApiErrorMessage(error: unknown): string {
+  return getUserFacingApiErrorMessage(error, "API request failed");
+}
+
+/**
+ * The machine-readable `type` of an API error (e.g. `"api_not_found_error"`),
+ * if present. Lets a caller branch on the kind of failure — e.g. treat a
+ * not-found as an expected empty state instead of toasting it as an error.
+ */
+export function getApiErrorType(error: unknown): string | undefined {
   const unwrapped = unwrapApiError(error);
-
   if (
     typeof unwrapped === "object" &&
     unwrapped !== null &&
-    "message" in unwrapped &&
-    typeof unwrapped.message === "string"
+    "type" in unwrapped &&
+    typeof (unwrapped as { type?: unknown }).type === "string"
   ) {
-    return unwrapped.message;
+    return (unwrapped as { type: string }).type;
   }
+  return undefined;
+}
 
+/**
+ * The machine-readable `internal_code` of an API error, if present. Lets a caller
+ * branch on a specific failure (e.g. which field's validation failed) to show the
+ * message inline instead of a generic toast.
+ */
+export function getApiErrorInternalCode(error: unknown): string | undefined {
+  const unwrapped = unwrapApiError(error);
   if (
     typeof unwrapped === "object" &&
     unwrapped !== null &&
-    "error" in unwrapped &&
-    typeof unwrapped.error === "object" &&
-    unwrapped.error !== null &&
-    "message" in unwrapped.error &&
-    typeof unwrapped.error.message === "string"
+    "internal_code" in unwrapped &&
+    typeof (unwrapped as { internal_code?: unknown }).internal_code === "string"
   ) {
-    return unwrapped.error.message;
+    return (unwrapped as { internal_code: string }).internal_code;
   }
-
-  if (typeof unwrapped === "string" && unwrapped.trim().length > 0) {
-    return unwrapped;
-  }
-
-  return "API request failed";
+  return undefined;
 }
 
 /**
@@ -67,9 +83,55 @@ export function handleApiError(error: ApiSdkError) {
   const sentryError = toApiError(error);
 
   if (typeof window !== "undefined") {
-    toast.error(sentryError.message);
+    // Errors stay long enough to read and copy; the close button dismisses early.
+    // The toast shows the humanized message; Sentry keeps the raw error.
+    // Keyed by message so a repeating failure (retries, several queries hitting
+    // the same missing permission) refreshes one toast instead of stacking.
+    const message = getApiErrorMessage(error);
+    toast.error(message, { duration: 12000, id: message });
   }
 
-  Sentry.captureException(sentryError, { extra: { originalError: error } });
+  void import("@sentry/nextjs")
+    .then(({ captureException }) => {
+      captureException(sentryError, { extra: { originalError: error } });
+    })
+    .catch(() => undefined);
   console.error(sentryError);
+}
+
+/**
+ * Fail a query loud when the generated SDK returns an error, so the query
+ * enters its error state instead of swallowing a failed fetch into a default
+ * value. A swallowed error makes an outage indistinguishable from a genuinely
+ * empty result, which is how "Add an LLM Provider Key" showed up offline.
+ *
+ * Call right after the SDK call and keep the existing success return:
+ *
+ *   const { data, error } = await getApiKeys();
+ *   throwOnApiError(error);
+ *   return data ?? [];
+ *
+ * Toasts via `handleApiError` by default; screens that render their own error
+ * state (and would otherwise double-notify, plus re-toast on every retry) pass
+ * `toastOnError: false`. Detail endpoints where a 404 is a legitimate "does not
+ * exist" rather than an outage pass `allowNotFound: true` so the caller keeps
+ * returning its null default for that case.
+ */
+export function throwOnApiError(
+  error: unknown,
+  options?: { toastOnError?: boolean; allowNotFound?: boolean },
+): void {
+  if (!error) {
+    return;
+  }
+  if (
+    options?.allowNotFound &&
+    getApiErrorType(error) === "api_not_found_error"
+  ) {
+    return;
+  }
+  if (options?.toastOnError ?? true) {
+    handleApiError(error);
+  }
+  throw toApiError(error);
 }

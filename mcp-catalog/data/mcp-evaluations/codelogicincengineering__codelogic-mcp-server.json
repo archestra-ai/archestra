@@ -1,0 +1,164 @@
+{
+  "name": "codelogicincengineering__codelogic-mcp-server",
+  "display_name": "codelogic-mcp-server",
+  "description": "An MCP Server to utilize Codelogic's rich software dependency data in your AI programming assistant.",
+  "author": {
+    "name": "CodeLogicIncEngineering"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["codelogic-mcp-server@latest"],
+    "env": {
+      "CODELOGIC_SERVER_HOST": "${user_config.codelogic_server_host}",
+      "CODELOGIC_USERNAME": "${user_config.codelogic_username}",
+      "CODELOGIC_PASSWORD": "${user_config.codelogic_password}",
+      "CODELOGIC_WORKSPACE_NAME": "${user_config.codelogic_workspace_name}",
+      "CODELOGIC_DEBUG_MODE": "${user_config.codelogic_debug_mode}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "codelogic_server_host": {
+      "type": "string",
+      "title": "CodeLogic Server Host",
+      "description": "URL to the CodeLogic server (e.g. https://myco.app.codelogic.com)",
+      "required": true,
+      "sensitive": false
+    },
+    "codelogic_username": {
+      "type": "string",
+      "title": "CodeLogic Username",
+      "description": "Your CodeLogic username",
+      "required": true,
+      "sensitive": false
+    },
+    "codelogic_password": {
+      "type": "string",
+      "title": "CodeLogic Password",
+      "description": "Your CodeLogic password",
+      "required": true,
+      "sensitive": true
+    },
+    "codelogic_workspace_name": {
+      "type": "string",
+      "title": "CodeLogic Workspace Name",
+      "description": "Your CodeLogic workspace name",
+      "required": true,
+      "sensitive": false
+    },
+    "codelogic_debug_mode": {
+      "type": "boolean",
+      "title": "CodeLogic Debug Mode",
+      "description": "Enable debug logging for the CodeLogic MCP server",
+      "required": false,
+      "default": false,
+      "sensitive": false
+    }
+  },
+  "readme": "# codelogic-mcp-server\n\nAn [MCP Server](https://modelcontextprotocol.io/introduction) to utilize Codelogic's rich software dependency data in your AI programming assistant.\n\n## Components\n\n### Tools\n\nThe server implements two tools:\n\n- **codelogic-method-impact**: Pulls an impact assessment from the CodeLogic server's APIs for your code.\n  - Takes the given \"method\" that you're working on and its associated \"class\".\n- **codelogic-database-impact**: Analyzes impacts between code and database entities.\n  - Takes the database entity type (column, table, or view) and its name.\n\n### Install\n\n#### Pre Requisites\n\nThe MCP server relies upon Astral UV to run, please [install](https://docs.astral.sh/uv/getting-started/installation/)\n\n### MacOS Workaround for uvx\n\nThere is a known issue with `uvx` on **MacOS** where the CodeLogic MCP server may fail to launch in certain IDEs (such as Cursor), resulting in errors like:\nSee [issue #11](https://github.com/CodeLogicIncEngineering/codelogic-mcp-server/issues/11)\n```\nFailed to connect client closed\n```\n\nThis appears to be a problem with Astral `uvx` running on MacOS. The following can be used as a workaround:\n\n1. Clone this project locally.\n2. Configure your `mcp.json` to use `uv` instead of `uvx`. For example:\n\n```json\n{\n  \"mcpServers\": {\n    \"codelogic-mcp-server\": {\n      \"type\": \"stdio\",\n      \"command\": \"<PATH_TO_UV>/uv\",\n      \"args\": [\n        \"--directory\",\n        \"<PATH_TO_THIS_REPO>/codelogic-mcp-server-main\",\n        \"run\",\n        \"codelogic-mcp-server\"\n      ],\n      \"env\": {\n        \"CODELOGIC_SERVER_HOST\": \"<url to the server e.g. https://myco.app.codelogic.com>\",\n        \"CODELOGIC_USERNAME\": \"<my username>\",\n        \"CODELOGIC_PASSWORD\": \"<my password>\",\n        \"CODELOGIC_WORKSPACE_NAME\": \"<my workspace>\",\n        \"CODELOGIC_DEBUG_MODE\": \"true\"\n      }\n    }\n  }\n}\n```\n\n3. Restart Cursor.\n4. Ensure the Cursor Global Rule for CodeLogic is in place.\n5. Open the MCP tab in Cursor and refresh the `codelogic-mcp-server`.\n6. Ask Cursor to make a code change in an existing class. The MCP server should now run the impact analysis successfully.\n\n## Configuration for Different IDEs\n\n### Visual Studio Code Configuration\n\nTo configure this MCP server in VS Code:\n\n1. First, ensure you have GitHub Copilot agent mode enabled in VS Code.\n\n2. Create a `.vscode/mcp.json` file in your workspace with the following configuration:\n\n```json\n{\n  \"servers\": {\n    \"codelogic-mcp-server\": {\n      \"type\": \"stdio\",\n      \"command\": \"uvx\",\n      \"args\": [\n        \"codelogic-mcp-server@latest\"\n      ],\n      \"env\": {\n        \"CODELOGIC_SERVER_HOST\": \"<url to the server e.g. https://myco.app.codelogic.com>\",\n        \"CODELOGIC_USERNAME\": \"<my username>\",\n        \"CODELOGIC_PASSWORD\": \"<my password>\",\n        \"CODELOGIC_WORKSPACE_NAME\": \"<my workspace>\",\n        \"CODELOGIC_DEBUG_MODE\": \"true\"\n      }\n    }\n  }\n}\n```\n\n> **Note:** On some systems, you may need to use the full path to the uvx executable instead of just \"uvx\". For example: `/home/user/.local/bin/uvx` on Linux/Mac or `C:\\Users\\username\\AppData\\Local\\astral\\uvx.exe` on Windows.\n\n3. Alternatively, you can run the `MCP: Add Server` command from the Command Palette and provide the server information.\n\n4. To manage your MCP servers, use the `MCP: List Servers` command from the Command Palette.\n\n5. Once configured, the server's tools will be available to Copilot agent mode. You can toggle specific tools on/off as needed by clicking the Tools button in the Chat view when in agent mode.\n\n6. To use the Codelogic tools in agent mode, you can specifically ask about code impacts or database relationships, and the agent will utilize the appropriate tools.\n\n### Claude Desktop Configuration\n\nConfigure Claude Desktop by editing the configuration file:\n\n- On MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n- On Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n- On Linux: `~/.config/Claude/claude_desktop_config.json`\n\nAdd the following to your configuration file:\n\n```json\n\"mcpServers\": {\n  \"codelogic-mcp-server\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"codelogic-mcp-server@latest\"\n    ],\n    \"env\": {\n      \"CODELOGIC_SERVER_HOST\": \"<url to the server e.g. https://myco.app.codelogic.com>\",\n      \"CODELOGIC_USERNAME\": \"<my username>\",\n      \"CODELOGIC_PASSWORD\": \"<my password>\",\n      \"CODELOGIC_WORKSPACE_NAME\": \"<my workspace>\"\n    }\n  }\n}\n```\n\n> **Note:** On some systems, you may need to use the full path to the uvx executable instead of just \"uvx\". For example: `/home/user/.local/bin/uvx` on Linux/Mac or `C:\\Users\\username\\AppData\\Local\\astral\\uvx.exe` on Windows.\n\nAfter adding the configuration, restart Claude Desktop to apply the changes.\n\n### Windsurf IDE Configuration\n\nTo run this MCP server with [Windsurf IDE](https://codeium.com/windsurf):\n\n**Configure Windsurf IDE**:\n\nTo configure Windsurf IDE, you need to create or modify the `~/.codeium/windsurf/mcp_config.json` configuration file.\n\nAdd the following configuration to your file:\n\n```json\n\"mcpServers\": {\n  \"codelogic-mcp-server\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"codelogic-mcp-server@latest\"\n    ],\n    \"env\": {\n      \"CODELOGIC_SERVER_HOST\": \"<url to the server e.g. https://myco.app.codelogic.com>\",\n      \"CODELOGIC_USERNAME\": \"<my username>\",\n      \"CODELOGIC_PASSWORD\": \"<my password>\",\n      \"CODELOGIC_WORKSPACE_NAME\": \"<my workspace>\"\n    }\n  }\n}\n```\n\n> **Note:** On some systems, you may need to use the full path to the uvx executable instead of just \"uvx\". For example: `/home/user/.local/bin/uvx` on Linux/Mac or `C:\\Users\\username\\AppData\\Local\\astral\\uvx.exe` on Windows.\n\nAfter adding the configuration, restart Windsurf IDE or refresh the tools to apply the changes.\n\n### Cursor Configuration\n\nTo configure the CodeLogic MCP server in Cursor:\n\n1. Configure the MCP server by creating a `.cursor/mcp.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"codelogic-mcp-server\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"codelogic-mcp-server@latest\"\n      ],\n      \"env\": {\n        \"CODELOGIC_SERVER_HOST\": \"<url to the server e.g. https://myco.app.codelogic.com>\",\n        \"CODELOGIC_USERNAME\": \"<my username>\",\n        \"CODELOGIC_PASSWORD\": \"<my password>\",\n        \"CODELOGIC_WORKSPACE_NAME\": \"<my workspace>\",\n        \"CODELOGIC_DEBUG_MODE\": \"true\"\n      }\n    }\n  }\n}\n```\n\n> **Note:** On some systems, you may need to use the full path to the uvx executable instead of just \"uvx\". For example: `/home/user/.local/bin/uvx` on Linux/Mac or `C:\\Users\\username\\AppData\\Local\\astral\\uvx.exe` on Windows.\n\n2. Restart Cursor to apply the changes.\n\nThe CodeLogic MCP server tools will now be available in your Cursor workspace.\n\n## AI Assistant Instructions/Rules\n\nTo help the AI assistant use the CodeLogic tools effectively, you can add the following instructions/rules to your client's configuration. We recommend customizing these instructions to align with your team's specific coding standards, best practices, and workflow requirements:\n\n### VS Code (GitHub Copilot) Instructions\n\nCreate a `.vscode/copilot-instructions.md` file with the following content:\n\n```markdown\n# CodeLogic MCP Server Instructions\n\nWhen modifying existing code methods:\n- Use codelogic-method-impact to analyze code changes\n- Use codelogic-database-impact for database modifications\n- Highlight impact results for the modified methods\n\nWhen modifying SQL code or database entities:\n- Always use codelogic-database-impact to analyze potential impacts\n- Highlight impact results for the modified database entities\n\nTo use the CodeLogic tools effectively:\n- For code impacts: Ask about specific methods or functions\n- For database relationships: Ask about tables, views, or columns\n- Review the impact results before making changes\n- Consider both direct and indirect impacts\n```\n\n### Claude Desktop Instructions\n\nCreate a file `~/.claude/instructions.md` with the following content:\n\n```markdown\n# CodeLogic MCP Server Instructions\n\nWhen modifying existing code methods:\n- Use codelogic-method-impact to analyze code changes\n- Use codelogic-database-impact for database modifications\n- Highlight impact results for the modified methods\n\nWhen modifying SQL code or database entities:\n- Always use codelogic-database-impact to analyze potential impacts\n- Highlight impact results for the modified database entities\n\nTo use the CodeLogic tools effectively:\n- For code impacts: Ask about specific methods or functions\n- For database relationships: Ask about tables, views, or columns\n- Review the impact results before making changes\n- Consider both direct and indirect impacts\n```\n\n### Windsurf IDE Rules\n\nCreate or modify the `~/.codeium/windsurf/memories/global_rules.md` markdown file with the following content:\n\n```markdown\nWhen modifying existing code methods:\n- Use codelogic-method-impact to analyze code changes\n- Use codelogic-database-impact for database modifications\n- Highlight impact results for the modified methods\n\nWhen modifying SQL code or database entities:\n- Always use codelogic-database-impact to analyze potential impacts\n- Highlight impact results for the modified database entities\n\nTo use the CodeLogic tools effectively:\n- For code impacts: Ask about specific methods or functions\n- For database relationships: Ask about tables, views, or columns\n- Review the impact results before making changes\n- Consider both direct and indirect impacts\n```\n\n### Cursor Global Rule\n\nTo configure CodeLogic rules in Cursor:\n\n1. Open Cursor Settings\n2. Navigate to the \"Rules\" section\n3. Add the following content to \"User Rules\":\n\n```markdown\n# CodeLogic MCP Server Rules\n## Codebase\n- The CodeLogic MCP Server is for java, javascript, typescript, and C# dotnet codebases\n- don't run the tools on python or other non supported codebases\n## AI Assistant Behavior\n- When modifying existing code methods:\n  - Use codelogic-method-impact to analyze code changes\n  - Use codelogic-database-impact for database modifications\n  - Highlight impact results for the modified methods\n- When modifying SQL code or database entities:\n  - Always use codelogic-database-impact to analyze potential impacts\n  - Highlight impact results for the modified database entities\n- To use the CodeLogic tools effectively:\n  - For code impacts: Ask about specific methods or functions\n  - For database relationships: Ask about tables, views, or columns\n  - Review the impact results before making changes\n  - Consider both direct and indirect impacts\n```\n\n## Environment Variables\n\nThe following environment variables can be configured to customize the behavior of the server:\n\n- `CODELOGIC_SERVER_HOST`: The URL of the CodeLogic server.\n- `CODELOGIC_USERNAME`: Your CodeLogic username.\n- `CODELOGIC_PASSWORD`: Your CodeLogic password.\n- `CODELOGIC_WORKSPACE_NAME`: The name of the workspace to use.\n- `CODELOGIC_DEBUG_MODE`: Set to `true` to enable debug mode. When enabled, additional debug files such as `timing_log.txt` and `impact_data*.json` will be generated. Defaults to `false`.\n\n### Example Configuration\n\n```json\n\"env\": {\n  \"CODELOGIC_SERVER_HOST\": \"<url to the server e.g. https://myco.app.codelogic.com>\",\n  \"CODELOGIC_USERNAME\": \"<my username>\",\n  \"CODELOGIC_PASSWORD\": \"<my password>\",\n  \"CODELOGIC_WORKSPACE_NAME\": \"<my workspace>\",\n  \"CODELOGIC_DEBUG_MODE\": \"true\"\n}\n```\n\n### Pinning the version\n\ninstead of using the **latest** version of the server, you can pin to a specific version by changing the **args** field to match the version in [pypi](https://pypi.org/project/codelogic-mcp-server/) e.g.\n\n```json\n    \"args\": [\n      \"codelogic-mcp-server@0.2.2\"\n    ],\n```\n\n### Version Compatibility\n\nThis MCP server has the following version compatibility requirements:\n\n- Version 0.3.1 and below: Compatible with all CodeLogic API versions\n- Version 0.4.0 and above: Requires CodeLogic API version 25.10.0 or greater\n\nIf you're upgrading, make sure your CodeLogic server meets the minimum API version requirement.\n\n## Debug Logging\n\nWhen `CODELOGIC_DEBUG_MODE=true`, debug files are written to the system temporary directory:\n\n- **Windows**: `%TEMP%\\codelogic-mcp-server` (typically `C:\\Users\\{username}\\AppData\\Local\\Temp\\codelogic-mcp-server`)\n- **macOS**: `/tmp/codelogic-mcp-server` (or `$TMPDIR/codelogic-mcp-server` if set)  \n- **Linux**: `/tmp/codelogic-mcp-server` (or `$TMPDIR/codelogic-mcp-server` if set)\n\n**Debug files include**:\n- `timing_log.txt` - Performance timing information\n- `impact_data_*.json` - Raw impact analysis data for troubleshooting\n\n**Finding your log directory**:\n```python\nimport tempfile\nimport os\nprint(\"Log directory:\", os.path.join(tempfile.gettempdir(), \"codelogic-mcp-server\"))\n```\n\n## Testing\n\n### Running Unit Tests\n\nThe project uses unittest for testing. You can run unit tests without any external dependencies:\n\n```bash\npython -m unittest discover -s test -p \"unit_*.py\"\n```\n\nUnit tests use mock data and don't require a connection to a CodeLogic server.\n\n### Integration Tests (Optional)\n\nIf you want to run integration tests that connect to a real CodeLogic server:\n\n1. Copy `test/.env.test.example` to `test/.env.test` and populate with your CodeLogic server details\n2. Run the integration tests:\n\n```bash\npython -m unittest discover -s test -p \"integration_*.py\"\n```\n\nNote: Integration tests require access to a CodeLogic server instance.\n",
+  "category": "Development",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "codelogic-mcp-server-uv-workaround": {
+        "command": "uv",
+        "args": ["--directory", "<PATH_TO_THIS_REPO>/codelogic-mcp-server-main", "run", "codelogic-mcp-server"],
+        "env": {
+          "CODELOGIC_SERVER_HOST": "<url to the server e.g. https://myco.app.codelogic.com>",
+          "CODELOGIC_USERNAME": "<my username>",
+          "CODELOGIC_PASSWORD": "<my password>",
+          "CODELOGIC_MV_NAME": "<my workspace>",
+          "CODELOGIC_DEBUG_MODE": "true"
+        }
+      },
+      "codelogic-mcp-server-uvx-debug": {
+        "command": "uvx",
+        "args": ["codelogic-mcp-server@latest"],
+        "env": {
+          "CODELOGIC_SERVER_HOST": "<url to the server e.g. https://myco.app.codelogic.com>",
+          "CODELOGIC_USERNAME": "<my username>",
+          "CODELOGIC_PASSWORD": "<my password>",
+          "CODELOGIC_WORKSPACE_NAME": "<my workspace>",
+          "CODELOGIC_DEBUG_MODE": "true"
+        }
+      },
+      "codelogic-mcp-server-uvx-no-debug": {
+        "command": "uvx",
+        "args": ["codelogic-mcp-server@latest"],
+        "env": {
+          "CODELOGIC_SERVER_HOST": "<url to the server e.g. https://myco.app.codelogic.com>",
+          "CODELOGIC_USERNAME": "<my username>",
+          "CODELOGIC_PASSWORD": "<my password>",
+          "CODELOGIC_WORKSPACE_NAME": "<my workspace>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "CodeLogicIncEngineering",
+    "repo": "codelogic-mcp-server",
+    "url": "https://github.com/CodeLogicIncEngineering/codelogic-mcp-server",
+    "name": "codelogicincengineering__codelogic-mcp-server",
+    "path": null,
+    "stars": 28,
+    "contributors": 4,
+    "issues": 7,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "8dc37a111de450af5d1fa6576169ac751ad823c2"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:35.621Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "debugpy",
+      "importance": 3
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pip-licenses",
+      "importance": 3
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "tenacity",
+      "importance": 4
+    },
+    {
+      "name": "toml",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"codelogic-mcp-server\"\nversion = \"1.0.4\"\ndescription = \"Integrates CodeLogic's powerful codebase knowledge graphs with a Model Context Protocol (MCP) server\"\nreadme = \"README.md\"\nlicense = \"MPL-2.0\"\nrequires-python = \">=3.13\"\ndependencies = [ \"debugpy>=1.8.12\", \"httpx>=0.28.1\", \"mcp[cli]>=1.3.0\", \"pip-licenses>=5.0.0\", \"python-dotenv>=1.0.1\", \"tenacity>=9.0.0\", \"toml>=0.10.2\",]\nkeywords = [ \"codelogic\", \"mcp\", \"code-analysis\", \"knowledge-graph\", \"static-analysis\",]\nclassifiers = [ \"Development Status :: 4 - Beta\", \"Intended Audience :: Developers\", \"Operating System :: OS Independent\", \"Programming Language :: Python :: 3\", \"Programming Language :: Python :: 3.13\", \"Topic :: Software Development\", \"Topic :: Software Development :: Libraries :: Python Modules\", \"Topic :: Software Development :: Code Generators\", \"Environment :: Console\",]\n[[project.authors]]\nname = \"garrmark\"\nemail = \"mgarrison@codelogic.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.urls]\nHomepage = \"https://github.com/CodeLogicIncEngineering/codelogic-mcp-server\"\n\"Bug Tracker\" = \"https://github.com/CodeLogicIncEngineering/codelogic-mcp-server/issues\"\nDocumentation = \"https://github.com/CodeLogicIncEngineering/codelogic-mcp-server#readme\"\n\n[project.scripts]\ncodelogic-mcp-server = \"codelogic_mcp_server:main\"\n"
+}

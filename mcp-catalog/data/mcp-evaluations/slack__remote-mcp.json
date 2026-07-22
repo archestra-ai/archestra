@@ -1,0 +1,151 @@
+{
+  "name": "slack__remote-mcp",
+  "display_name": "Slack",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI1NiI+PHBhdGggZmlsbD0iI2UwMWU1YSIgZD0iTTUzLjg0MSAxNjEuMzJjMCAxNC44MzItMTEuOTg3IDI2LjgyLTI2LjgxOSAyNi44MlMuMjAzIDE3Ni4xNTIuMjAzIDE2MS4zMmMwLTE0LjgzMSAxMS45ODctMjYuODE4IDI2LjgyLTI2LjgxOEg1My44NHptMTMuNDEgMGMwLTE0LjgzMSAxMS45ODctMjYuODE4IDI2LjgxOS0yNi44MThzMjYuODE5IDExLjk4NyAyNi44MTkgMjYuODE5djY3LjA0N2MwIDE0LjgzMi0xMS45ODcgMjYuODItMjYuODIgMjYuODJjLTE0LjgzIDAtMjYuODE4LTExLjk4OC0yNi44MTgtMjYuODJ6Ii8+PHBhdGggZmlsbD0iIzM2YzVmMCIgZD0iTTk0LjA3IDUzLjYzOGMtMTQuODMyIDAtMjYuODItMTEuOTg3LTI2LjgyLTI2LjgxOVM3OS4yMzkgMCA5NC4wNyAwczI2LjgxOSAxMS45ODcgMjYuODE5IDI2LjgxOXYyNi44MnptMCAxMy42MTNjMTQuODMyIDAgMjYuODE5IDExLjk4NyAyNi44MTkgMjYuODE5cy0xMS45ODcgMjYuODE5LTI2LjgyIDI2LjgxOUgyNi44MkMxMS45ODcgMTIwLjg4OSAwIDEwOC45MDIgMCA5NC4wNjljMC0xNC44MyAxMS45ODctMjYuODE4IDI2LjgxOS0yNi44MTh6Ii8+PHBhdGggZmlsbD0iIzJlYjY3ZCIgZD0iTTIwMS41NSA5NC4wN2MwLTE0LjgzMiAxMS45ODctMjYuODIgMjYuODE4LTI2LjgyczI2LjgyIDExLjk4OCAyNi44MiAyNi44MnMtMTEuOTg4IDI2LjgxOS0yNi44MiAyNi44MTlIMjAxLjU1em0tMTMuNDEgMGMwIDE0LjgzMi0xMS45ODggMjYuODE5LTI2LjgyIDI2LjgxOWMtMTQuODMxIDAtMjYuODE4LTExLjk4Ny0yNi44MTgtMjYuODJWMjYuODJDMTM0LjUwMiAxMS45ODcgMTQ2LjQ4OSAwIDE2MS4zMiAwczI2LjgxOSAxMS45ODcgMjYuODE5IDI2LjgxOXoiLz48cGF0aCBmaWxsPSIjZWNiMjJlIiBkPSJNMTYxLjMyIDIwMS41NWMxNC44MzIgMCAyNi44MiAxMS45ODcgMjYuODIgMjYuODE4cy0xMS45ODggMjYuODItMjYuODIgMjYuODJjLTE0LjgzMSAwLTI2LjgxOC0xMS45ODgtMjYuODE4LTI2LjgyVjIwMS41NXptMC0xMy40MWMtMTQuODMxIDAtMjYuODE4LTExLjk4OC0yNi44MTgtMjYuODJjMC0xNC44MzEgMTEuOTg3LTI2LjgxOCAyNi44MTktMjYuODE4aDY3LjI1YzE0LjgzMiAwIDI2LjgyIDExLjk4NyAyNi44MiAyNi44MTlzLTExLjk4OCAyNi44MTktMjYuODIgMjYuODE5eiIvPjwvc3ZnPg==",
+  "description": "Official Slack remote MCP server. Search messages, files, channels, and users; send and draft messages; read threads; manage reactions and canvases. OAuth 2.0.",
+  "homepage": "https://docs.slack.dev/ai/slack-mcp-server/",
+  "instructions": "**⚠️ Enable your Slack app for MCP access first.** Open the app's **App Assistant** settings (`https://api.slack.com/apps/<APP_ID>/app-assistant`) and turn it on. Until you do, connecting fails with `App is not enabled for Slack MCP server access` — even after OAuth succeeds.\n\n**Requires your own Slack app** — the Slack MCP server only accepts OAuth from a directory-published or internal Slack app with a fixed app ID; dynamic client registration and unlisted apps are rejected. A workspace admin may also need to approve the app before it can connect.\n\n1. Create a Slack app at https://api.slack.com/apps (or reuse an existing internal app).\n2. Open the app's **App Assistant** page and enable it for MCP access.\n3. Under **OAuth & Permissions**, add the user-token scopes for the tools you need:\n   - Search — `search:read.public`, `search:read.private`, `search:read.files`, `search:read.users`\n   - Read channels & threads — `channels:history`, `groups:history`, `im:history`, `mpim:history`, `channels:read`\n   - Send & react — `chat:write`, `reactions:read`, `reactions:write`\n   - Canvases — `canvases:read`, `canvases:write`\n   - Users, files & emoji — `users:read`, `users:read.email`, `files:read`, `emoji:read`\n4. Add this redirect URL to the app: `http://localhost:3000/oauth-callback`\n5. Install the app to your workspace, then paste the **Client ID** and **Client Secret** into this form.\n\nEndpoints (auto-discovered from the server URL; set manually only if discovery is blocked):\n- Authorization Endpoint — `https://slack.com/oauth/v2_user/authorize`\n- Token Endpoint — `https://slack.com/api/oauth.v2.user.access`\n\nDocs: https://docs.slack.dev/ai/slack-mcp-server/",
+  "tools": [
+    {
+      "name": "slack_search_public",
+      "description": "Search public messages and files"
+    },
+    {
+      "name": "slack_search_public_and_private",
+      "description": "Search public and private messages and files"
+    },
+    {
+      "name": "slack_search_channels",
+      "description": "Find channels matching a query"
+    },
+    {
+      "name": "slack_search_users",
+      "description": "Find users matching a query"
+    },
+    {
+      "name": "slack_search_emojis",
+      "description": "Search the workspace's custom emoji"
+    },
+    {
+      "name": "slack_read_channel",
+      "description": "Read recent messages from a channel"
+    },
+    {
+      "name": "slack_read_thread",
+      "description": "Read the replies in a thread"
+    },
+    {
+      "name": "slack_read_file",
+      "description": "Read the contents of a file"
+    },
+    {
+      "name": "slack_read_user_profile",
+      "description": "Look up a user's profile"
+    },
+    {
+      "name": "slack_list_channel_members",
+      "description": "List the members of a channel"
+    },
+    {
+      "name": "slack_send_message",
+      "description": "Send a message to a channel or user"
+    },
+    {
+      "name": "slack_send_message_draft",
+      "description": "Draft a message for review before sending"
+    },
+    {
+      "name": "slack_schedule_message",
+      "description": "Schedule a message to be sent later"
+    },
+    {
+      "name": "slack_create_conversation",
+      "description": "Create a new channel or conversation"
+    },
+    {
+      "name": "slack_add_reaction",
+      "description": "Add an emoji reaction to a message"
+    },
+    {
+      "name": "slack_get_reactions",
+      "description": "Get the reactions on a message"
+    },
+    {
+      "name": "slack_create_canvas",
+      "description": "Create a new canvas"
+    },
+    {
+      "name": "slack_read_canvas",
+      "description": "Read the contents of a canvas"
+    },
+    {
+      "name": "slack_update_canvas",
+      "description": "Update an existing canvas"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["slack", "chat", "messaging", "communication", "channels", "canvas", "oauth"],
+  "user_config": {},
+  "oauth_config": {
+    "name": "Slack",
+    "server_url": "https://mcp.slack.com/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": [
+      "search:read.public",
+      "search:read.private",
+      "search:read.mpim",
+      "search:read.im",
+      "search:read.files",
+      "search:read.users",
+      "files:read",
+      "emoji:read",
+      "chat:write",
+      "channels:history",
+      "groups:history",
+      "mpim:history",
+      "im:history",
+      "channels:read",
+      "groups:read",
+      "mpim:read",
+      "channels:write",
+      "groups:write",
+      "im:write",
+      "mpim:write",
+      "reactions:read",
+      "reactions:write",
+      "canvases:read",
+      "canvases:write",
+      "users:read",
+      "users:read.email"
+    ],
+    "description": "Slack MCP Server (OAuth 2.0)",
+    "default_scopes": ["search:read.public", "channels:history", "channels:read", "chat:write", "users:read"],
+    "supports_resource_metadata": true
+  },
+  "readme": null,
+  "category": "Communication",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": "slack",
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "Slack"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.slack.com/mcp",
+    "docs_url": "https://docs.slack.dev/ai/slack-mcp-server/"
+  },
+  "github_info": null,
+  "programming_language": null
+}

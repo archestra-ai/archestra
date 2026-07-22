@@ -31,6 +31,15 @@ Validation: Ensure diagnostics storage supports concurrent pod mounts
 {{- if and $usesChartManagedDiagnosticsClaim (not $supportsConcurrentDiagnosticsMounts) (or (gt $totalDiagnosticsPods 1) $rolloutCanOverlapDiagnosticsPods) }}
 {{- fail "Configuration error: archestra.diagnostics.enabled with a chart-managed claim requires ReadWriteMany access when more than one diagnostics-writing pod can run concurrently. Use archestra.diagnostics.accessModes=[ReadWriteMany] with a compatible storage class, or disable diagnostics for multi-pod/shared-rollout environments." }}
 {{- end }}
+{{/*
+Validation: Ensure filesystem file storage supports concurrent pod mounts
+*/}}
+{{- $usesChartManagedFileStorageClaim := and (eq .Values.archestra.fileStorage.provider "filesystem") (not .Values.archestra.fileStorage.filesystem.existingClaim) }}
+{{- $fileStorageAccessModes := .Values.archestra.fileStorage.filesystem.accessModes | default (list) }}
+{{- $supportsConcurrentFileStorageMounts := has "ReadWriteMany" $fileStorageAccessModes }}
+{{- if and $usesChartManagedFileStorageClaim (not $supportsConcurrentFileStorageMounts) (or (gt $totalDiagnosticsPods 1) $rolloutCanOverlapDiagnosticsPods) }}
+{{- fail "Configuration error: archestra.fileStorage.provider=filesystem with a chart-managed claim requires ReadWriteMany access when more than one file-storage-writing pod can run concurrently. Use archestra.fileStorage.filesystem.accessModes=[ReadWriteMany] with a compatible storage class, or run a single replica (and no surge/worker) for filesystem storage." }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -67,6 +76,15 @@ spec:
       {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.frontend }}
       nodePort: {{ .Values.archestra.service.nodePorts.frontend }}
       {{- end }}
+    {{- if .Values.archestra.publicEndpointsPort }}
+    - port: {{ .Values.archestra.publicEndpointsPort }}
+      targetPort: public-api
+      protocol: TCP
+      name: public-api
+      {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.publicEndpoints }}
+      nodePort: {{ .Values.archestra.service.nodePorts.publicEndpoints }}
+      {{- end }}
+    {{- end }}
   selector:
     {{- include "archestra-platform.selectorLabels" . | nindent 4 }}
 ---
@@ -102,8 +120,10 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      {{- if ne (include "archestra-platform.maintenanceModeEnabled" .) "true" }}
       initContainers:
         {{- include "archestra-platform.initContainers" . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "archestra-platform.image" . }}
@@ -121,11 +141,20 @@ spec:
             - name: frontend
               containerPort: 3000
               protocol: TCP
+            {{- if .Values.archestra.publicEndpointsPort }}
+            - name: public-api
+              containerPort: {{ .Values.archestra.publicEndpointsPort }}
+              protocol: TCP
+            {{- end }}
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}
             {{- if .Values.archestra.worker.enabled }}
             - name: ARCHESTRA_PROCESS_TYPE
               value: "web"
+            {{- end }}
+            {{- if .Values.archestra.publicEndpointsPort }}
+            - name: ARCHESTRA_PUBLIC_ENDPOINTS_PORT
+              value: {{ .Values.archestra.publicEndpointsPort | quote }}
             {{- end }}
           {{- with .Values.archestra.envFrom }}
           envFrom:

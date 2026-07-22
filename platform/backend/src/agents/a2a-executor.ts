@@ -1,30 +1,64 @@
 import crypto from "node:crypto";
 import {
-  buildUserSystemPromptContext,
+  type ChatUploadRejectionReason,
+  chatUploadRejectionReason,
+  getModelReadableMimeTypes,
+  INLINE_TEXT_MAX_BYTES,
   type InteractionSource,
+  isInlineableTextMimeType,
   PLAYWRIGHT_MCP_CATALOG_ID,
-} from "@shared";
+  requiresOpenAiResponsesApi,
+  type SupportedProvider,
+} from "@archestra/shared";
 import type { ModelMessage, UIMessage, UserContent } from "ai";
 import {
   consumeStream as consumeReadableStream,
+  convertToModelMessages,
   NoOutputGeneratedError,
+  type StepResult,
   stepCountIs,
-  streamText,
+  type streamText,
+  type ToolSet,
 } from "ai";
+import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
+import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
+import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
+import { DelegationLoopError } from "@/agents/errors";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
-import logger from "@/logging";
-import { AgentModel, McpServerModel, TeamModel, UserModel } from "@/models";
-import { mapProviderError, ProviderError } from "@/routes/chat/errors";
+import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import {
-  promptNeedsRendering,
-  renderSystemPrompt,
-  type UserSystemPromptContext,
-} from "@/templating";
+  REPEAT_CALL_TERMINATION_NOTICE,
+  recordUnavailableToolCallStep,
+  repeatCeilingStopCondition,
+  ToolCallRepeatTracker,
+} from "@/clients/tool-call-repeat-tracker";
+import config from "@/config";
+import logger from "@/logging";
+import { AgentModel, McpServerModel, ModelModel } from "@/models";
+import {
+  formatUnavailableToolErrorDetails,
+  getUnavailableToolErrorDetails,
+  mapProviderError,
+  ProviderError,
+} from "@/routes/chat/errors";
+import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
+import type { ChatMessage } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import {
+  stripThinkingBlocks,
+  THINKING_ONLY_NOTICE,
+} from "@/utils/strip-thinking-blocks";
+import {
+  type StageResult,
+  stageAttachmentsIntoSandbox,
+} from "./a2a/stage-attachments";
 
 /**
  * Source-agnostic attachment for A2A execution.
@@ -39,6 +73,14 @@ export interface A2AAttachment {
   /** Optional filename for context */
   name?: string;
 }
+
+/**
+ * Longest delegation chain (root agent + delegated descendants) allowed before
+ * a further hop is refused. Mirrors MAX_AGENT_STEPS: a named constant, not
+ * configuration.
+ * @public exported for tests; used internally otherwise.
+ */
+export const MAX_DELEGATION_DEPTH = 5;
 
 /** @public — exported for testability */
 export interface A2AExecuteParams {
@@ -72,13 +114,20 @@ export interface A2AExecuteParams {
    */
   parentDelegationChain?: string;
   /**
-   * Conversation ID for browser tab isolation.
-   * When provided (e.g., from chat delegation), sub-agents get their own tab
-   * keyed by (agentId, userId, conversationId).
-   * When not provided (direct A2A call), a unique execution ID is generated
-   * and cleaned up after execution.
+   * Id of a persisted `conversations` row, when the execution belongs to one
+   * (chat delegation). Tools may persist it as a foreign key — never pass a
+   * synthetic id here. When absent, the execution is headless and an isolation
+   * key scopes its per-execution state instead.
    */
   conversationId?: string;
+  /**
+   * Isolation scope inherited from the parent execution (headless
+   * delegation), so sub-agents share the parent's browser tab tracking and
+   * per-execution sandbox. When neither this nor `conversationId` is
+   * provided (root headless call), a unique key is generated and its state is
+   * cleaned up after execution.
+   */
+  isolationKey?: string;
   /** Optional cancellation signal propagated from parent chat/tool execution */
   abortSignal?: AbortSignal;
   /** Optional attachments to include in the message (e.g., images from email, Slack, Teams) */
@@ -89,7 +138,7 @@ export interface A2AExecuteParams {
   chatOpsThreadId?: string;
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
-  /** Schedule trigger run ID — enables artifact_write to target the run */
+  /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
 
   /** Whether to block execution when an approval-required tool is called (defaults to true) */
@@ -102,6 +151,32 @@ export interface A2AExecuteParams {
    *    in case of tool invocation approval.
    */
   originalUiMessages?: UIMessage[];
+
+  /**
+   * When set (chat delegation), the child's tool calls are surfaced on the
+   * caller's conversation through this bridge, attributed to
+   * `delegationToolCallId`, and the bridge is forwarded into the child's own
+   * tools so deeper descendants surface too. Absent in headless executions.
+   */
+  subagentToolStream?: SubagentToolStreamBridge;
+  /**
+   * The id of the delegation tool call (`agent__<slug>`) that invoked this
+   * agent. The child's surfaced tool calls hang under it. Set together with
+   * `subagentToolStream`.
+   */
+  delegationToolCallId?: string;
+
+  /**
+   * When provided, invoked with each incremental text delta as the model
+   * streams its answer, so a caller (A2A `SendStreamingMessage`) can forward
+   * tokens to an SSE client. The buffered {@link A2AExecuteResult} is still
+   * returned unchanged when the run completes, and its `text` is the
+   * authoritative, thinking-stripped answer — interim deltas are best-effort
+   * and may include raw model output (e.g. inline `<thinking>`). Deltas for a
+   * turn that is silently retried by the recovery loop are not emitted (the
+   * stream is only surfaced for the committed attempt).
+   */
+  onTextDelta?: (delta: string) => void;
 }
 
 /** @public — exported for testability */
@@ -138,18 +213,42 @@ export async function executeA2AMessage(
     chatOpsThreadId,
     parentContextIsTrusted,
     scheduleTriggerRunId,
+    subagentToolStream,
+    delegationToolCallId,
   } = params;
 
-  // Generate isolation key for browser tab isolation.
-  // When called from chat delegation, conversationId is provided.
-  // When called directly (A2A route), generate a unique execution ID.
-  const isDirectExecutionOutsideConversation = !params.conversationId;
-  const isolationKey = params.conversationId ?? crypto.randomUUID();
+  // Isolation key scoping per-execution state (browser tabs, MCP client
+  // cache, headless sandboxes). Chat delegation provides the conversation id;
+  // headless delegation inherits the parent execution's key; a root headless
+  // call generates one and cleans its state up after execution. Only
+  // `params.conversationId` may ever be persisted as a conversation id.
+  const isDirectExecutionOutsideConversation =
+    !params.conversationId && !params.isolationKey;
+  const isolationKey =
+    params.conversationId ?? params.isolationKey ?? crypto.randomUUID();
 
   // Build delegation chain: append current agentId to parent chain
   const delegationChain = parentDelegationChain
     ? `${parentDelegationChain}:${agentId}`
     : agentId;
+
+  // The parent chain is this run's ancestor path, so re-entering an agent
+  // already on it is a delegation cycle that would recurse until the LLM budget
+  // runs out. Both existing loop guards are per-run (a fresh step budget and a
+  // fresh repeat tracker per delegation), so neither sees it. Refuse before any
+  // I/O; `handleDelegation` turns the throw into a tool error the model can
+  // recover from. Agent ids are uuids, so ":" cannot appear inside one.
+  const ancestors = parentDelegationChain?.split(":") ?? [];
+  if (ancestors.includes(agentId)) {
+    throw new DelegationLoopError(
+      "That agent is already in the current delegation chain. Answer directly instead of delegating back to it.",
+    );
+  }
+  if (ancestors.length + 1 > MAX_DELEGATION_DEPTH) {
+    throw new DelegationLoopError(
+      `Delegation depth limit of ${MAX_DELEGATION_DEPTH} reached. Answer directly instead of delegating further.`,
+    );
+  }
 
   // Fetch the internal agent
   const agent = await AgentModel.findById(agentId);
@@ -172,30 +271,11 @@ export async function executeA2AMessage(
       },
       organizationId,
       userId,
+      // A2A runs (chatops, scheduled triggers, external A2A, delegation) are not
+      // the user driving the /chat model selector, so they resolve from the
+      // agent's own configuration rather than the caller's personal chat default.
+      includeMemberChatDefault: false,
     });
-
-  // Build system prompt from agent's systemPrompt field
-  let systemPrompt: string | undefined;
-
-  // Build template context only when prompts use Handlebars syntax
-  let promptContext: UserSystemPromptContext | null = null;
-  if (promptNeedsRendering(agent.systemPrompt)) {
-    const [userDetails, userTeams] = await Promise.all([
-      UserModel.getById(userId),
-      TeamModel.getUserTeams(userId),
-    ]);
-    promptContext = buildUserSystemPromptContext({
-      userName: userDetails?.name ?? "",
-      userEmail: userDetails?.email ?? "",
-      userTeams: userTeams.map((t) => t.name),
-    });
-  }
-
-  const renderedPrompt = renderSystemPrompt(agent.systemPrompt, promptContext);
-
-  if (renderedPrompt) {
-    systemPrompt = renderedPrompt;
-  }
 
   // Track subagent execution so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -205,8 +285,12 @@ export async function executeA2AMessage(
   }
 
   try {
+    // One tracker per run, shared between the breaker (records each call) and the
+    // stop condition below (terminates the run once repeats hit the ceiling).
+    const repeatTracker = new ToolCallRepeatTracker();
+
     // Fetch MCP tools for the agent (including delegation tools)
-    // Pass sessionId, delegationChain, and conversationId for browser tab isolation
+    // Pass sessionId, delegationChain, and isolationKey for browser tab isolation
     const mcpTools = await getChatMcpTools({
       agentName: agent.name,
       agentId: agent.id,
@@ -216,10 +300,23 @@ export async function executeA2AMessage(
       chatOpsThreadId,
       sessionId,
       delegationChain,
-      conversationId: isolationKey,
+      conversationId: params.conversationId,
+      isolationKey,
       abortSignal,
       blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
+      // Forward the same bridge so a nested delegation's tool calls surface too,
+      // attributed to the nested delegation call (recursion through the chain).
+      subagentToolStream,
+      repeatTracker,
+    });
+
+    const systemPrompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools,
+      organizationId,
+      userId,
+      agentId: agent.id,
     });
 
     logger.info(
@@ -229,7 +326,7 @@ export async function executeA2AMessage(
         orgId: organizationId,
         toolCount: Object.keys(mcpTools).length,
         model: selectedModel,
-        hasSystemPrompt: !!systemPrompt,
+        hasSystemPrompt: !!agent.systemPrompt,
         isolationKey,
         isDirectExecutionOutsideConversation,
       },
@@ -240,7 +337,7 @@ export async function executeA2AMessage(
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
     // Pass agent's llmApiKeyId so it can be used without user access check
-    const { model } = await createLLMModelForAgent({
+    const { model, anthropicNativeEndpoint } = await createLLMModelForAgent({
       organizationId,
       userId,
       agentId: agent.id,
@@ -253,95 +350,237 @@ export async function executeA2AMessage(
       contextIsTrusted: parentContextIsTrusted,
     });
 
-    // Execute with AI SDK using streamText (required for long-running requests)
-    // We stream internally but collect the full result.
-    // Capture stream-level errors (e.g. API billing errors) via onError so we
-    // can surface the real cause instead of a generic NoOutputGeneratedError.
-
-    // Build multimodal user content when image attachments are present
-    const { content: userContent, skippedNote } = buildUserContent(
-      message,
-      attachments,
+    // Which attachment mime types this model can read. A missing model row
+    // (lookup failure or unknown model) falls back to the safe default set
+    // (text + images + PDF) rather than dropping everything.
+    const modelRow = await ModelModel.findByProviderAndModelId(
+      provider,
+      selectedModel,
+    ).catch(() => null);
+    const ingestibleMimeTypes = getModelReadableMimeTypes(
+      modelRow?.inputModalities ?? null,
     );
 
-    let capturedStreamError: unknown;
-    const onError = ({ error }: { error: unknown }) => {
-      capturedStreamError = error;
-    };
-
-    // By-pass "messages" param when it's provided
-    // Legacy:
-    // Use `messages` with content parts when we have images, otherwise `prompt` for plain text
-    const stream =
-      params.messages !== undefined
-        ? streamText({
-            model,
-            system: systemPrompt,
-            messages: params.messages,
-            tools: mcpTools,
-            stopWhen: stepCountIs(500),
-            abortSignal,
-            onError,
+    // A file the model cannot read inline is staged into the agent's sandbox when
+    // one is usable for this caller. Resolved only when there are attachments, so
+    // text-only turns (the common case) skip the permission/DB chain. Skip the
+    // lookup for the synthetic "system" actor (external A2A v2) — it can never
+    // hold `sandbox:execute`.
+    const sandboxAvailable =
+      (attachments?.length ?? 0) > 0 && userId && userId !== "system"
+        ? await isSkillSandboxAvailableForAgent({
+            userId,
+            organizationId,
+            agentId,
           })
-        : userContent
-          ? streamText({
-              model,
-              system: systemPrompt,
-              messages: [{ role: "user" as const, content: userContent }],
-              tools: mcpTools,
-              stopWhen: stepCountIs(500),
-              abortSignal,
-              onError,
-            })
-          : streamText({
-              model,
-              system: systemPrompt,
-              prompt: message + skippedNote,
-              tools: mcpTools,
-              stopWhen: stepCountIs(500),
-              abortSignal,
-              onError,
-            });
+        : false;
 
+    // Build the current user turn from the message + attachments, gated by the
+    // model's capabilities and normalized for the provider. `params.messages`
+    // carries only prior context; this turn is appended to it below. Passing
+    // `stageAttachments` is what tells `buildUserContent` a sandbox is available.
+    const { content: userContent, note } = await buildUserContent(
+      message,
+      attachments,
+      {
+        provider,
+        anthropicNativeEndpoint,
+        ingestibleMimeTypes,
+        sandboxByteLimit: config.skillsSandbox.artifactBytesLimit,
+        stageAttachments: sandboxAvailable
+          ? (atts) =>
+              stageAttachmentsIntoSandbox({
+                attachments: atts,
+                organizationId,
+                userId,
+                conversationId: params.conversationId ?? null,
+                isolationKey,
+                agentId,
+              })
+          : undefined,
+      },
+    );
+    const currentTurnText = message + note;
+
+    // Execute via the shared agent-run primitive: it owns the streamText call
+    // and transparently recovers empty/abortive/context-length turns before any
+    // result is collected. We stream internally but collect the full result.
+    // Behavior change: A2A (and its scheduled/email/ChatOps/delegation callers)
+    // previously had no recovery — a clean-but-empty turn returned an empty
+    // success. It now retries and, on exhaustion, throws (mapped to a
+    // ProviderError below), matching the interactive chat path.
+    // The executor owns the current user turn: `params.messages` (when present)
+    // is prior context only, and the turn built from `message`/`attachments` is
+    // appended to it. When there is no current turn (e.g. an approval-decision
+    // message with no text or attachments), the context is used as-is. Callers
+    // without context (delegation, scheduled, A2A v1) fall back to a plain
+    // `prompt` for text, or a single `messages` turn when attachments survive.
+    const baseConfig = {
+      model,
+      system: systemPrompt,
+      tools: mcpTools,
+      stopWhen: [
+        stepCountIs(MAX_AGENT_STEPS),
+        repeatCeilingStopCondition(repeatTracker),
+      ],
+      // Feeds the repeat ceiling above the one call shape it cannot otherwise
+      // see: a tool that is not in the tool list never reaches an execute
+      // wrapper, so nothing fingerprints it.
+      onStepFinish: (step: StepResult<ToolSet>) =>
+        recordUnavailableToolCallStep(repeatTracker, step),
+      abortSignal,
+      // Request the model's real output ceiling (clamped by the operator
+      // ceiling), or a safe fallback when unknown. Without this, providers that
+      // inject a small default max (e.g. Anthropic's ~4096) truncated large
+      // tool-call payloads.
+      // OpenAI transport quirks, mirroring routes/chat/routes.ts:
+      // - Responses-routed models keep maxOutputTokens (mapped to
+      //   max_output_tokens) and run with store:false so the SDK resends the
+      //   full conversation each turn instead of referencing server-stored
+      //   items by id — references break on the stateless ChatGPT-subscription
+      //   (Codex) backend.
+      // - chat-completions models get the budget as max_completion_tokens
+      //   instead: the SDK maps maxOutputTokens to the legacy max_tokens for
+      //   model names its reasoning heuristic doesn't recognize (e.g. the bare
+      //   `chat-latest` alias), and newer models reject max_tokens outright.
+      ...(provider === "openai" && !requiresOpenAiResponsesApi(selectedModel)
+        ? {
+            providerOptions: {
+              openai: {
+                maxCompletionTokens: resolveAgentMaxOutputTokens({
+                  outputLength: modelRow?.outputLength ?? null,
+                  contextLength: modelRow?.contextLength ?? null,
+                  ceiling: config.chat.maxOutputTokensCeiling,
+                }),
+              },
+            },
+          }
+        : {
+            maxOutputTokens: resolveAgentMaxOutputTokens({
+              outputLength: modelRow?.outputLength ?? null,
+              contextLength: modelRow?.contextLength ?? null,
+              ceiling: config.chat.maxOutputTokensCeiling,
+            }),
+            ...(provider === "openai"
+              ? { providerOptions: { openai: { store: false } } }
+              : {}),
+          }),
+      // Per-step context guard: cap oversized tool results and keep the
+      // accumulated step history inside the model's context window, compacting
+      // the older prefix into an LLM summary when it overflows. Overrides only
+      // what each step sends to the model — the loop's own state (and the
+      // persisted/streamed UIMessage) keeps the full tool outputs.
+      prepareStep: createStepContextGuard({
+        model,
+        contextLength: modelRow?.contextLength ?? null,
+        systemPrompt,
+        abortSignal,
+        logContext: { agentId: agent.id, sessionId },
+      }),
+    };
+    const currentTurn: { role: "user"; content: UserContent } | null =
+      userContent !== null
+        ? { role: "user", content: userContent }
+        : currentTurnText.trim().length > 0
+          ? { role: "user", content: currentTurnText }
+          : null;
+    const streamConfig: Parameters<typeof streamText>[0] =
+      params.messages !== undefined
+        ? {
+            ...baseConfig,
+            messages: currentTurn
+              ? [...params.messages, currentTurn]
+              : params.messages,
+          }
+        : currentTurn
+          ? { ...baseConfig, messages: [currentTurn] }
+          : { ...baseConfig, prompt: currentTurnText };
+
+    let finalText: string;
+    let usage: Awaited<ReturnType<typeof streamText>["usage"]>;
+    let finishReason: Awaited<ReturnType<typeof streamText>["finishReason"]>;
     let responseUiMessage: UIMessage | undefined;
-    const uiMessageStreamConsumption = consumeReadableStream({
-      stream: stream.toUIMessageStream<UIMessage>({
-        originalMessages: params.originalUiMessages,
-        generateMessageId: () => crypto.randomUUID(),
-        onFinish: ({ responseMessage }) => {
-          responseUiMessage = responseMessage;
-        },
+    // Captures the committed attempt's stream-level error (e.g. API billing
+    // errors) so a generic NoOutputGeneratedError can surface the real cause.
+    let getCapturedStreamError: () => unknown = () => undefined;
+    try {
+      const runStream = await runAgentStream({
+        config: streamConfig,
+        recovery: { logContext: { agentId: agent.id, sessionId } },
+      });
+      const stream = runStream.result;
+      getCapturedStreamError = runStream.getCapturedStreamError;
+
+      const uiMessageStreamConsumption = consumeReadableStream({
+        stream: stream.toUIMessageStream<UIMessage>({
+          originalMessages: params.originalUiMessages,
+          generateMessageId: () => crypto.randomUUID(),
+          onFinish: ({ responseMessage }) => {
+            responseUiMessage = responseMessage;
+          },
+          onError: (error) => {
+            // a nonexistent-tool call is recoverable: the SDK already feeds the
+            // tool-error back to the model and continues the loop, so return the
+            // recovery text as the part's errorText instead of killing the run
+            const unavailableToolError = getUnavailableToolErrorDetails(error);
+            if (unavailableToolError) {
+              logger.info(
+                { agentId: agent.id, unavailableToolError },
+                "Returning unavailable tool error as tool-level error in A2A execution",
+              );
+              return formatUnavailableToolErrorDetails(unavailableToolError);
+            }
+            logger.error(
+              { agentId: agent.id, error },
+              "Error stream.toUIMessageStream when parsing A2A execution response",
+            );
+            throw error;
+          },
+        }),
         onError: (error) => {
           logger.error(
             { agentId: agent.id, error },
-            "Error stream.toUIMessageStream when parsing A2A execution response",
+            "Error consuming UI message stream for A2A execution response",
           );
           throw error;
         },
-      }),
-      onError: (error) => {
-        logger.error(
-          { agentId: agent.id, error },
-          "Error consuming UI message stream for A2A execution response",
-        );
-        throw error;
-      },
-    });
+      });
 
-    // Wait for the stream to complete and get the final text.
-    // When the underlying provider returns an error (e.g. 400 insufficient
-    // credits), the stream produces zero steps and the AI SDK throws
-    // NoOutputGeneratedError.  Re-throw with the real error message so callers
-    // (and ultimately end-users) see what actually went wrong.
-    let finalText: string;
-    let usage: Awaited<typeof stream.usage>;
-    let finishReason: Awaited<typeof stream.finishReason>;
-    try {
+      // Forward incremental text deltas to a streaming caller (A2A
+      // SendStreamingMessage). This is a separate buffered accessor over the
+      // same run — the AI SDK buffers each accessor independently, so draining
+      // `textStream` here does not steal events from the toUIMessageStream merge
+      // or the `.text`/`.usage`/`.finishReason` promises below. A failed forward
+      // (e.g. the SSE client disconnected) must not abort the buffered run, so
+      // each callback is guarded; the loop still drains the stream to
+      // completion.
+      const onTextDelta = params.onTextDelta;
+      const textDeltaConsumption = onTextDelta
+        ? (async () => {
+            for await (const delta of stream.textStream) {
+              try {
+                onTextDelta(delta);
+              } catch (error) {
+                logger.debug(
+                  { agentId: agent.id, error },
+                  "Failed to forward A2A text delta (non-fatal)",
+                );
+              }
+            }
+          })()
+        : Promise.resolve();
+
+      // Wait for the stream to complete and get the final text.
+      // When the underlying provider returns an error (e.g. 400 insufficient
+      // credits), the stream produces zero steps and the AI SDK throws
+      // NoOutputGeneratedError.  Re-throw with the real error message so callers
+      // (and ultimately end-users) see what actually went wrong.
       [finalText, usage, finishReason] = await Promise.all([
         stream.text,
         stream.usage,
         stream.finishReason,
         uiMessageStreamConsumption,
+        textDeltaConsumption,
       ]);
 
       if (!responseUiMessage) {
@@ -350,10 +589,68 @@ export async function executeA2AMessage(
           "A2A execution failed: no response UIMessage generated",
         );
       }
+
+      // Strip inline `<thinking>...</thinking>` text from the model's output at
+      // this single A2A boundary, so every consumer (protocol reply, delegation
+      // tool result, email, scheduled-run persistence) shares the invariant.
+      // Text parts are stripped in place — an emptied part is kept (not removed)
+      // so a thinking-only turn never collapses to a zero-part assistant message,
+      // which some providers reject when the persisted history is replayed.
+      // Structured `reasoning` parts are left untouched: the A2A protocol reply
+      // excludes them (only text parts survive), and where they are surfaced
+      // (the scheduled-run chat view) they render via the chat's reasoning UI,
+      // exactly as interactive chat does — stripping them is out of scope here.
+      const hadTextBeforeStrip = finalText.trim() !== "";
+      finalText = stripThinkingBlocks(finalText);
+      for (const part of responseUiMessage.parts) {
+        if (part.type === "text") {
+          part.text = stripThinkingBlocks(part.text);
+        }
+      }
+
+      // Surface this run's tool calls on the caller's conversation, attributed
+      // to the delegation call that invoked this agent. Nested delegations'
+      // tool calls are emitted by their own runs (which share this bridge), so
+      // the whole chain surfaces. The delegation tool's result is unaffected —
+      // it stays the child's final text.
+      if (subagentToolStream && delegationToolCallId) {
+        emitSubagentToolCalls({
+          bridge: subagentToolStream,
+          parentToolCallId: delegationToolCallId,
+          message: responseUiMessage,
+        });
+      }
+
+      // The repeat-call ceiling stops the loop on a tool-call step, so the model
+      // never took a turn to produce assistant text and `finalText` is empty.
+      // Headless callers read only `text`, so surface why the run ended.
+      if (
+        finalText.trim() === "" &&
+        repeatTracker.hasReachedTerminationCeiling()
+      ) {
+        finalText = REPEAT_CALL_TERMINATION_NOTICE;
+      } else if (hadTextBeforeStrip && finalText.trim() === "") {
+        // The whole textual answer was `<thinking>` and stripped to nothing.
+        // Substitute the notice in both the headless `text` and the message so
+        // the protocol reply / persistence (built from text parts) carries it.
+        finalText = THINKING_ONLY_NOTICE;
+        const firstTextPart = responseUiMessage.parts.find(
+          (p) => p.type === "text",
+        );
+        if (firstTextPart?.type === "text") {
+          firstTextPart.text = THINKING_ONLY_NOTICE;
+        } else {
+          responseUiMessage.parts.push({
+            type: "text",
+            text: THINKING_ONLY_NOTICE,
+          });
+        }
+      }
     } catch (streamError) {
+      const capturedStreamError = getCapturedStreamError();
       if (
         NoOutputGeneratedError.isInstance(streamError) &&
-        capturedStreamError
+        capturedStreamError !== undefined
       ) {
         throw new ProviderError(
           mapProviderError(capturedStreamError, provider),
@@ -401,6 +698,12 @@ export async function executeA2AMessage(
     if (!isDirectExecutionOutsideConversation) {
       subagentExecutionTracker.decrement(isolationKey);
     }
+
+    // The root headless execution owns its generated isolation scope; drop the
+    // per-execution sandbox state once the run (and its delegations) finished.
+    if (isDirectExecutionOutsideConversation) {
+      executionSandboxRegistry.release(isolationKey);
+    }
   }
 }
 
@@ -408,23 +711,120 @@ export async function executeA2AMessage(
 // Exported helper functions
 // ============================================================================
 
+/** Stages raw (non-DB) attachments into the agent's per-execution sandbox. */
+type StageAttachmentsFn = (
+  attachments: A2AAttachment[],
+) => Promise<StageResult[]>;
+
 /**
- * Build AI SDK UserContent from a text message and optional attachments.
- * Returns `content: null` when there are no image attachments (caller should use plain `prompt` instead).
- * Returns `skippedNote` with a human-readable note about non-image attachments that were dropped,
- * so the caller can append it to the prompt for the LLM to mention.
- *
- * Only image attachments are currently supported as inline content parts.
- * Non-image attachments are noted so the LLM can inform the user.
+ * Emit one `data-subagent-tool-call` per tool part in a child run's final
+ * message, attributed to the delegation call that invoked the child. The bridge
+ * caps payloads and streams/collects each call. Skips non-tool parts (text,
+ * reasoning, step markers). A nested delegation call (`agent__<slug>`) is itself
+ * a tool part, so it surfaces here while its own children surface from the
+ * nested run — the client re-nests them by id.
  * @public — exported for testability
  */
-export function buildUserContent(
-  message: string,
-  attachments?: A2AAttachment[],
-): { content: UserContent | null; skippedNote: string } {
-  const allAttachments = attachments ?? [];
+export function emitSubagentToolCalls(params: {
+  bridge: SubagentToolStreamBridge;
+  parentToolCallId: string;
+  message: UIMessage;
+}): void {
+  const { bridge, parentToolCallId, message } = params;
+  type ToolPart = {
+    type?: string;
+    toolCallId?: string;
+    toolName?: string;
+    state?: string;
+    input?: unknown;
+    output?: unknown;
+    errorText?: string;
+  };
+  // Collapse to one entry per toolCallId, last-wins: a UIMessage normally holds
+  // a single part per tool call in its terminal state, but if an earlier
+  // (input-available) part and a later (output-available) part for the same id
+  // both appear, the later terminal one must win so the surfaced card shows the
+  // result/error rather than a perpetually-pending call.
+  const byCallId = new Map<string, ToolPart>();
+  for (const rawPart of message.parts ?? []) {
+    const part = rawPart as ToolPart;
+    const type = part.type;
+    if (typeof type !== "string") {
+      continue;
+    }
+    const isToolPart = type.startsWith("tool-") || type === "dynamic-tool";
+    if (!isToolPart || typeof part.toolCallId !== "string") {
+      continue;
+    }
+    byCallId.set(part.toolCallId, part);
+  }
 
-  // Split into image and non-image attachments
+  for (const [toolCallId, part] of byCallId) {
+    const type = part.type as string;
+    const toolName =
+      type === "dynamic-tool"
+        ? (part.toolName ?? "unknown")
+        : type.slice("tool-".length);
+    bridge.emit({
+      parentToolCallId,
+      toolCallId,
+      toolName,
+      ...(part.input !== undefined ? { input: part.input } : {}),
+      ...(part.state !== undefined ? { state: part.state } : {}),
+      ...(part.output !== undefined ? { output: part.output } : {}),
+      ...(part.errorText !== undefined ? { errorText: part.errorText } : {}),
+    });
+  }
+}
+
+/**
+ * Build the current user turn's AI SDK content from a text message and optional
+ * attachments, mirroring the chat-side attachment policy
+ * (`chatUploadRejectionReason`):
+ *   - images: kept inline, minus the tiny-broken-image filter;
+ *   - inlineable text ≤ {@link INLINE_TEXT_MAX_BYTES}: kept inline (decoded per
+ *     provider by `prepareMessagesForProvider`);
+ *   - other model-ingestible types (PDF, audio, video): kept inline at any size;
+ *   - anything else, when a sandbox is available and it fits the artifact limit:
+ *     staged into the sandbox and referenced by a pointer in `note` so the model
+ *     can read it with `run_command`;
+ *   - the rest: named in `note` with the reason they could not be provided.
+ *
+ * Returns `content: null` when nothing survives inline, so the caller falls back
+ * to a plain text turn carrying `note`.
+ * @public — exported for testability
+ */
+export async function buildUserContent(
+  message: string,
+  attachments: A2AAttachment[] | undefined,
+  opts: {
+    provider: SupportedProvider;
+    anthropicNativeEndpoint: boolean;
+    ingestibleMimeTypes: Set<string>;
+    sandboxByteLimit?: number;
+    stageAttachments?: StageAttachmentsFn;
+  },
+): Promise<{ content: UserContent | null; note: string }> {
+  // `A2AAttachment.contentType` is typed non-optional, but every value
+  // originates from an external source (A2A protocol parts, chat-platform or
+  // email uploads) and stays populated only because each ingestion path defaults
+  // it — the A2A path in particular narrows an optional SDK `mediaType` through
+  // an `as string` cast behind a co-located filter. Default a missing content
+  // type once here so a slip at any of those sites can't crash the image/mime
+  // classification below or emit a `data:undefined;base64,...` URL further down.
+  const allAttachments = (attachments ?? []).map((att) =>
+    att.contentType ? att : { ...att, contentType: "application/octet-stream" },
+  );
+  // A sandbox is usable iff the caller supplied a stager; deriving it here (vs a
+  // separate flag) makes the "available but unstageable" state unrepresentable.
+  const sandboxAvailable = opts.stageAttachments !== undefined;
+  const sandboxByteLimit =
+    opts.sandboxByteLimit ?? config.skillsSandbox.artifactBytesLimit;
+
+  // Images are matched broadly by `image/*` and always kept (subject to the
+  // tiny-broken-image filter), deliberately bypassing the mime classifier: a
+  // model's readable set may omit a non-standard subtype (e.g. `image/jpg`) that
+  // the provider still renders, so images are never staged or rejected here.
   const imageAttachments = allAttachments.filter((a) =>
     a.contentType.startsWith("image/"),
   );
@@ -433,69 +833,165 @@ export function buildUserContent(
   );
 
   // Filter out tiny images (broken inline references from email replies).
-  // Estimate actual byte size from base64 length: every 4 base64 chars = 3 bytes.
-  const validImageAttachments = imageAttachments.filter((a) => {
-    const estimatedBytes = Math.ceil((a.contentBase64.length * 3) / 4);
-    return estimatedBytes >= MIN_IMAGE_ATTACHMENT_SIZE;
-  });
-  const tinyImageAttachments = imageAttachments.filter((a) => {
-    const estimatedBytes = Math.ceil((a.contentBase64.length * 3) / 4);
-    return estimatedBytes < MIN_IMAGE_ATTACHMENT_SIZE;
-  });
+  const validImageAttachments = imageAttachments.filter(
+    (a) => estimateAttachmentBytes(a) >= MIN_IMAGE_ATTACHMENT_SIZE,
+  );
+  const tinyImageAttachments = imageAttachments.filter(
+    (a) => estimateAttachmentBytes(a) < MIN_IMAGE_ATTACHMENT_SIZE,
+  );
 
-  if (tinyImageAttachments.length > 0) {
-    logger.debug(
-      {
-        count: tinyImageAttachments.length,
-        images: tinyImageAttachments.map((a) => ({
-          name: a.name ?? "unnamed",
-          contentType: a.contentType,
-          estimatedBytes: Math.ceil((a.contentBase64.length * 3) / 4),
-        })),
-      },
-      "Filtering out tiny image attachments (likely broken inline references from email replies)",
-    );
+  // Classify each non-image attachment with the shared policy, then split the
+  // accepted ones into inline-now vs stage-into-sandbox.
+  const inlineNonImage: A2AAttachment[] = [];
+  const toStage: A2AAttachment[] = [];
+  const rejected: Array<{
+    att: A2AAttachment;
+    reason: ChatUploadRejectionReason;
+  }> = [];
+  for (const att of nonImageAttachments) {
+    const reason = chatUploadRejectionReason({
+      mimeType: att.contentType,
+      byteLength: estimateAttachmentBytes(att),
+      ingestibleMimeTypes: opts.ingestibleMimeTypes,
+      sandboxAvailable,
+      sandboxByteLimit,
+    });
+    if (reason) {
+      rejected.push({ att, reason });
+    } else if (canInlineAttachment(att, opts.ingestibleMimeTypes)) {
+      inlineNonImage.push(att);
+    } else {
+      toStage.push(att);
+    }
   }
 
-  if (nonImageAttachments.length > 0) {
-    logger.debug(
-      {
-        skippedCount: nonImageAttachments.length,
-        skippedTypes: nonImageAttachments.map(
-          (a) => `${a.name ?? "unnamed"} (${a.contentType})`,
-        ),
-      },
-      "Skipping non-image attachments in buildUserContent (only image/* is currently supported)",
-    );
+  // Stage the sandbox-bound attachments. A creation/upload failure surfaces as a
+  // note (no silent drop) and the turn continues with whatever else survived.
+  const stagedPointers: Array<{ name: string; path: string }> = [];
+  const stageFailed: A2AAttachment[] = [];
+  if (toStage.length > 0) {
+    const results = opts.stageAttachments
+      ? await opts.stageAttachments(toStage)
+      : toStage.map(() => ({ error: true as const }));
+    results.forEach((result, i) => {
+      if ("path" in result) {
+        stagedPointers.push({
+          name: toStage[i].name ?? "unnamed",
+          path: result.path,
+        });
+      } else {
+        stageFailed.push(toStage[i]);
+      }
+    });
   }
 
-  // Build a note about all skipped attachments so the LLM can mention them
-  const allSkipped = [...nonImageAttachments, ...tinyImageAttachments];
-  const skippedNote =
-    allSkipped.length > 0
-      ? `\n\n[Note: This message also included ${allSkipped.length} attachment(s) that could not be processed: ${allSkipped.map((a) => `${a.name ?? "unnamed"} (${a.contentType})`).join(", ")}]`
-      : "";
+  const unprovidable = [
+    ...tinyImageAttachments.map(describeAttachment),
+    ...rejected.map(
+      (r) => `${describeAttachment(r.att)} — ${rejectionText(r.reason)}`,
+    ),
+    ...stageFailed.map((a) => `${describeAttachment(a)} — could not be staged`),
+  ];
 
-  if (validImageAttachments.length === 0) {
-    return { content: null, skippedNote };
+  logger.debug(
+    {
+      inlined: validImageAttachments.length + inlineNonImage.length,
+      staged: stagedPointers.length,
+      rejected: rejected.length,
+      tinyImages: tinyImageAttachments.length,
+      stageFailed: stageFailed.length,
+    },
+    "[A2A] attachment policy outcome in buildUserContent",
+  );
+
+  let note = "";
+  if (unprovidable.length > 0) {
+    note += `\n\n[Note: This message also included ${unprovidable.length} attachment(s) that could not be processed: ${unprovidable.join(", ")}]`;
+  }
+  // Identical content dedupes to one upload (and one path) via `uploadFile`, so
+  // collapse pointers by path to avoid naming the same staged file twice.
+  const uniquePointers = [
+    ...new Map(stagedPointers.map((p) => [p.path, p])).values(),
+  ];
+  if (uniquePointers.length > 0) {
+    note += `\n\n[Note: ${uniquePointers.length} attachment(s) were placed in your sandbox: ${uniquePointers
+      .map((p) => `"${p.name}" at ${p.path}`)
+      .join(", ")}. Use the run_command tool to read or process them.]`;
   }
 
-  return {
-    content: [
-      { type: "text" as const, text: message + skippedNote },
-      ...validImageAttachments.map((a) => ({
-        type: "file" as const,
-        data: Buffer.from(a.contentBase64, "base64"),
+  const keptAttachments = [...validImageAttachments, ...inlineNonImage];
+  if (keptAttachments.length === 0) {
+    return { content: null, note };
+  }
+
+  // Hand the inline attachments to the chat provider-normalization pipeline as a
+  // synthetic user message (data: URL file parts), so each provider's SDK
+  // receives documents in the shape it accepts (Anthropic documents, decoded
+  // text for OpenAI-compatible endpoints, etc.).
+  const text = message + note;
+  const userMessage: ChatMessage = {
+    role: "user",
+    parts: [
+      ...(text.length > 0 ? [{ type: "text", text }] : []),
+      ...keptAttachments.map((a) => ({
+        type: "file",
+        url: `data:${a.contentType};base64,${a.contentBase64}`,
         mediaType: a.contentType,
+        filename: a.name,
       })),
     ],
-    skippedNote,
   };
+
+  const [preparedMessage] = prepareMessagesForProvider({
+    messages: [userMessage],
+    provider: opts.provider,
+    anthropicNativeEndpoint: opts.anthropicNativeEndpoint,
+  });
+  const modelMessages = await convertToModelMessages([
+    preparedMessage,
+  ] as unknown as Omit<UIMessage, "id">[]);
+
+  const content = (modelMessages[0]?.content ?? null) as UserContent | null;
+  return { content, note };
 }
 
 // ============================================================================
 // Internal helper functions
 // ============================================================================
+
+/** Estimate decoded byte size from base64 length: every 4 chars = 3 bytes. */
+function estimateAttachmentBytes(att: A2AAttachment): number {
+  return Math.ceil((att.contentBase64.length * 3) / 4);
+}
+
+function describeAttachment(att: A2AAttachment): string {
+  return `${att.name ?? "unnamed"} (${att.contentType})`;
+}
+
+/**
+ * Whether an accepted non-image attachment is delivered inline (vs staged):
+ * small inlineable text, or a non-text type the model ingests natively.
+ */
+function canInlineAttachment(
+  att: A2AAttachment,
+  ingestibleMimeTypes: Set<string>,
+): boolean {
+  if (isInlineableTextMimeType(att.contentType)) {
+    return estimateAttachmentBytes(att) <= INLINE_TEXT_MAX_BYTES;
+  }
+  return ingestibleMimeTypes.has(att.contentType);
+}
+
+function rejectionText(reason: ChatUploadRejectionReason): string {
+  switch (reason) {
+    case "text_too_large":
+      return "text too large to inline";
+    case "too_large_for_sandbox":
+      return "exceeds the sandbox size limit";
+    case "unsupported_type":
+      return "type not supported by this model";
+  }
+}
 
 /**
  * Clean up browser tab state after A2A execution.
@@ -558,8 +1054,9 @@ async function cleanupBrowserTab(params: {
     );
   }
 
-  // For direct A2A calls (not delegated from chat), also close MCP client
-  // to free the cache slot. For delegated calls, keep client alive for reuse.
+  // Root executions own the MCP client, so close it to free the cache slot.
+  // Delegated runs (chat or headless) share their parent's scope and keep the
+  // client alive for reuse.
   if (isDirectExecutionOutsideConversation) {
     try {
       closeChatMcpClient(agentId, userId, isolationKey);

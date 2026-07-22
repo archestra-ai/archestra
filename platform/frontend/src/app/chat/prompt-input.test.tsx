@@ -1,29 +1,38 @@
-import { E2eTestId } from "@shared";
+import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
+import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
 
 const {
-  mockUseOrganization,
   mockUseChatPlaceholder,
   mockUseSkillsPaginated,
   mockTextInputSetInput,
   mockTextInputClear,
   mockControllerState,
+  mockFeatureState,
+  mockProfileState,
 } = vi.hoisted(() => ({
-  mockUseOrganization: vi.fn(),
   mockUseChatPlaceholder: vi.fn(),
   mockUseSkillsPaginated: vi.fn(),
   mockTextInputSetInput: vi.fn(),
   mockTextInputClear: vi.fn(),
-  mockControllerState: { value: "" },
+  mockControllerState: { value: "", files: [] as { url: string }[] },
+  mockFeatureState: { chatSecretScanEnabled: false },
+  mockProfileState: {
+    agent: null as { sandboxAvailable: boolean } | null,
+  },
 }));
 
-// Mock ResizeObserver which is used by Radix UI components
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+// Mock ResizeObserver (used by Radix UI components and the prompt input's
+// toolbar-collapse hook). Must be a real constructor so `new ResizeObserver()`
+// works. jsdom reports 0 widths, so the hook measures nothing and leaves the
+// toolbar in its full (expanded) layout — which is what these tests exercise.
+global.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 // Mock window.matchMedia for useIsMobile hook
 Object.defineProperty(window, "matchMedia", {
@@ -48,15 +57,30 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   }: {
     children: React.ReactNode;
     onSubmit?: (
-      message: { text: string; files: [] },
+      message: { text: string; files: typeof mockControllerState.files },
       event: React.FormEvent<HTMLFormElement>,
-    ) => void;
+    ) => void | Promise<void>;
   }) => (
     <form
       data-testid="prompt-input"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit?.({ text: mockControllerState.value, files: [] }, event);
+        // Mirror ai-elements: a sync throw / rejected promise is swallowed
+        // here (the textarea is not cleared on rejection).
+        try {
+          const result = onSubmit?.(
+            {
+              text: mockControllerState.value,
+              files: mockControllerState.files,
+            },
+            event,
+          );
+          if (result instanceof Promise) {
+            result.catch(() => {});
+          }
+        } catch {
+          // rejected submit — keep the input
+        }
       }}
     >
       {children}
@@ -129,8 +153,14 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
     <div>{children}</div>
   ),
   PromptInputSpeechButton: () => <button type="button">Speech</button>,
-  PromptInputSubmit: ({ status }: { status?: string }) => (
-    <button data-testid="prompt-submit" type="submit">
+  PromptInputSubmit: ({
+    status,
+    disabled,
+  }: {
+    status?: string;
+    disabled?: boolean;
+  }) => (
+    <button data-testid="prompt-submit" type="submit" disabled={disabled}>
       Submit {status ?? "unset"}
     </button>
   ),
@@ -180,14 +210,14 @@ vi.mock("@/components/chat/chat-tools-display", () => ({
   ChatToolsDisplay: () => <div data-testid="chat-tools-display" />,
 }));
 
-vi.mock("@/components/chat/knowledge-base-upload-indicator", () => ({
-  KnowledgeBaseUploadIndicator: () => (
-    <div data-testid="knowledge-base-indicator" />
-  ),
-}));
-
 vi.mock("@/components/chat/model-selector", () => ({
   ModelSelector: () => <div data-testid="model-selector" />,
+}));
+
+// The Apps Hackathon recorder cluster is a self-contained feature with its own
+// tests; stub it here so the composer test needs no QueryClient/config context.
+vi.mock("@/components/app-session-recording/app-recording-controls", () => ({
+  AppRecordingControls: () => null,
 }));
 
 // Mock the Tooltip components to avoid Radix UI complexity
@@ -203,10 +233,10 @@ vi.mock("@/components/ui/tooltip", () => ({
   ),
 }));
 
-// Mock agent query hooks
+// Mock agent query hooks; mockProfileState.agent controls sandboxAvailable
 vi.mock("@/lib/agent.query", () => ({
   useProfile: () => ({
-    data: null,
+    data: mockProfileState.agent,
     isLoading: false,
     error: null,
   }),
@@ -227,11 +257,11 @@ vi.mock("@/lib/chat/chat.query", () => ({
     isLoading: false,
     error: null,
   }),
+  useConversation: () => ({ data: null }),
+  useToggleHooksDebug: () => ({ mutate: vi.fn() }),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => mockUseOrganization(),
-}));
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
   useChatPlaceholder: (...args: unknown[]) => mockUseChatPlaceholder(...args),
@@ -241,18 +271,14 @@ vi.mock("@/lib/skills/skill.query", () => ({
   useSkillsPaginated: () => mockUseSkillsPaginated(),
 }));
 
-// Mock for useHasPermissions - default to non-admin
-const mockUseHasPermissions = vi.fn().mockReturnValue({
-  data: false,
-  isPending: false,
-  isLoading: false,
-});
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => mockUseHasPermissions(),
-}));
+vi.mock("@/lib/config/config.query");
 
 // Import the component after mocks are set up
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
 import ArchestraPromptInput from "./prompt-input";
 
 describe("ArchestraPromptInput", () => {
@@ -267,9 +293,20 @@ describe("ArchestraPromptInput", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseOrganization.mockReturnValue({
+    vi.mocked(useOrganization).mockReturnValue({
       data: null,
       isLoading: false,
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+      isLoading: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation((flag) => {
+      if (flag === "chatSecretScanEnabled") {
+        return mockFeatureState.chatSecretScanEnabled;
+      }
+      return undefined;
     });
     mockUseChatPlaceholder.mockReturnValue({
       placeholder: "Animated placeholder",
@@ -280,9 +317,26 @@ describe("ArchestraPromptInput", () => {
       isLoading: false,
     });
     mockControllerState.value = "";
+    mockControllerState.files = [];
+    mockFeatureState.chatSecretScanEnabled = false;
+    mockProfileState.agent = null;
+    localStorage.clear();
   });
 
   describe("File Upload Button", () => {
+    // The composer renders more than one tooltip now (the submit button carries
+    // a keyboard-shortcut tooltip too), so scope file-upload assertions to the
+    // tooltip whose content matches.
+    const getFileUploadTooltip = (text: string): HTMLElement => {
+      const tooltip = screen
+        .getAllByTestId("tooltip-content")
+        .find((element) => element.textContent?.includes(text));
+      if (!tooltip) {
+        throw new Error(`No tooltip content matching "${text}"`);
+      }
+      return tooltip;
+    };
+
     it("should render enabled file upload button when allowFileUploads is true and model supports files", () => {
       render(
         <ArchestraPromptInput
@@ -339,7 +393,7 @@ describe("ArchestraPromptInput", () => {
       expect(disabledButton).toBeInTheDocument();
 
       // Tooltip should show message about model not supporting files
-      const tooltip = screen.getByTestId("tooltip-content");
+      const tooltip = getFileUploadTooltip("does not support file uploads");
       expect(tooltip).toHaveTextContent(
         "This model does not support file uploads",
       );
@@ -357,18 +411,18 @@ describe("ArchestraPromptInput", () => {
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
-      expect(screen.getByTestId("tooltip-content")).toHaveTextContent(
-        "Supports: chat prompts, .txt, .csv, and .md uploads",
-      );
+      // Enabled state shows the supported-types tooltip rather than the
+      // disabled "does not support file uploads" message.
+      expect(getFileUploadTooltip("Supports:")).toHaveTextContent("Supports:");
     });
 
     it("should show settings link in tooltip for admins when file uploads disabled", () => {
       // Mock admin user with agentSettings update permission
-      mockUseHasPermissions.mockReturnValue({
+      vi.mocked(useHasPermissions).mockReturnValue({
         data: true,
         isPending: false,
         isLoading: false,
-      });
+      } as ReturnType<typeof useHasPermissions>);
 
       render(
         <ArchestraPromptInput
@@ -379,7 +433,7 @@ describe("ArchestraPromptInput", () => {
       );
 
       // Tooltip should show "Enable in settings" link for admins
-      const tooltip = screen.getByTestId("tooltip-content");
+      const tooltip = getFileUploadTooltip("File uploads are disabled");
       expect(tooltip).toHaveTextContent("File uploads are disabled.");
       expect(tooltip).toHaveTextContent("Enable in settings");
       expect(screen.getByRole("link")).toHaveAttribute(
@@ -388,17 +442,17 @@ describe("ArchestraPromptInput", () => {
       );
       expect(screen.getByRole("link")).toHaveAttribute(
         "aria-label",
-        "Enable file uploads in agent settings",
+        "Enable file uploads in Chat settings",
       );
     });
 
     it("should show admin message in tooltip for non-admins when file uploads disabled", () => {
       // Mock non-admin user without agentSettings update permission
-      mockUseHasPermissions.mockReturnValue({
+      vi.mocked(useHasPermissions).mockReturnValue({
         data: false,
         isPending: false,
         isLoading: false,
-      });
+      } as ReturnType<typeof useHasPermissions>);
 
       render(
         <ArchestraPromptInput
@@ -409,7 +463,9 @@ describe("ArchestraPromptInput", () => {
       );
 
       // Tooltip should show message about admin for non-admins
-      const tooltip = screen.getByTestId("tooltip-content");
+      const tooltip = getFileUploadTooltip(
+        "File uploads are disabled by your administrator",
+      );
       expect(tooltip).toHaveTextContent(
         "File uploads are disabled by your administrator",
       );
@@ -442,11 +498,11 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should render model selector when user has provider settings permission", () => {
-      mockUseHasPermissions.mockReturnValue({
+      vi.mocked(useHasPermissions).mockReturnValue({
         data: true,
         isPending: false,
         isLoading: false,
-      });
+      } as ReturnType<typeof useHasPermissions>);
 
       render(
         <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
@@ -456,13 +512,13 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should keep a single organization placeholder static", () => {
-      mockUseOrganization.mockReturnValue({
+      vi.mocked(useOrganization).mockReturnValue({
         data: {
           chatPlaceholders: ["Ask the support agent"],
           animateChatPlaceholders: true,
         },
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useOrganization>);
       mockUseChatPlaceholder.mockReturnValue({
         placeholder: "Ask the support agent",
         isAnimating: false,
@@ -485,13 +541,13 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should keep placeholders static when animation is disabled", () => {
-      mockUseOrganization.mockReturnValue({
+      vi.mocked(useOrganization).mockReturnValue({
         data: {
           chatPlaceholders: ["First placeholder", "Second placeholder"],
           animateChatPlaceholders: false,
         },
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useOrganization>);
       mockUseChatPlaceholder.mockReturnValue({
         placeholder: "Second placeholder",
         isAnimating: false,
@@ -556,6 +612,188 @@ describe("ArchestraPromptInput", () => {
     });
   });
 
+  describe("sensitive data detection", () => {
+    const fakeGithubToken = `ghp_${"a".repeat(36)}`;
+
+    it("flag off: plain submit works", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.chatSecretScanEnabled = false;
+      mockControllerState.value = "just a normal message";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag off: token-like content submits with no dialog", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.chatSecretScanEnabled = false;
+      mockControllerState.value = `please rotate ${fakeGithubToken}`;
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag on: plain message submits as before", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.chatSecretScanEnabled = true;
+      mockControllerState.value = "just a normal message";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag on: detected token opens the dialog and suppresses onSubmit", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.chatSecretScanEnabled = true;
+      mockControllerState.value = `please rotate ${fakeGithubToken}`;
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("flag on: clicking Send anyway dispatches onSubmit with the original message", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.chatSecretScanEnabled = true;
+      const text = `please rotate ${fakeGithubToken}`;
+      mockControllerState.value = text;
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Send anyway" }));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message] = onSubmit.mock.calls[0];
+      expect(message.text).toBe(text);
+    });
+
+    it("flag on: Send anyway with a throwing consumer keeps the draft and does not hang", () => {
+      mockFeatureState.chatSecretScanEnabled = true;
+      const agentId = "agent-1";
+      // The new-chat draft key is agent-independent (so a typed prompt survives
+      // an agent switch); the agentId prop below no longer affects the key.
+      const draftKey = NEW_CHAT_DRAFT_STORAGE_KEY;
+      const text = `please rotate ${fakeGithubToken}`;
+      localStorage.setItem(draftKey, text);
+      mockControllerState.value = text;
+
+      // Mirrors a consumer rejecting a submit by throwing synchronously after
+      // the user confirms "Send anyway" (e.g. the main composer's
+      // "stop-not-submit" throw that keeps a half-typed follow-up).
+      const onSubmit = vi.fn(() => {
+        throw new Error("rejected");
+      });
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          agentId={agentId}
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      // Confirm the dialog; the throw must be caught and routed to the pending
+      // promise's reject (which the form swallows), not falsely resolved.
+      fireEvent.click(screen.getByRole("button", { name: "Send anyway" }));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      // The throwing consumer refused the submit: the draft survives and the
+      // dialog closes (composer is not stuck) instead of being cleared.
+      expect(localStorage.getItem(draftKey)).toBe(text);
+      expect(mockTextInputClear).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag on: Send anyway with an async-rejecting consumer keeps the draft and does not hang", async () => {
+      mockFeatureState.chatSecretScanEnabled = true;
+      const agentId = "agent-1";
+      // The new-chat draft key is agent-independent (so a typed prompt survives
+      // an agent switch); the agentId prop below no longer affects the key.
+      const draftKey = NEW_CHAT_DRAFT_STORAGE_KEY;
+      const text = `please rotate ${fakeGithubToken}`;
+      localStorage.setItem(draftKey, text);
+      mockControllerState.value = text;
+
+      const onSubmit = vi.fn(() => Promise.reject(new Error("rejected")));
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          agentId={agentId}
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Send anyway" }));
+
+      // Let the rejected dispatch settle; it must route to reject (no draft
+      // clear) and be swallowed by the form (no unhandled rejection).
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem(draftKey)).toBe(text);
+      expect(mockTextInputClear).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flag on: clicking Cancel does not call onSubmit", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.chatSecretScanEnabled = true;
+      mockControllerState.value = `please rotate ${fakeGithubToken}`;
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText(
+          "Your message seems to contain sensitive data, are you sure?",
+        ),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe("skill slash commands", () => {
     const skill = {
       id: "skill-1",
@@ -564,10 +802,10 @@ describe("ArchestraPromptInput", () => {
     };
 
     beforeEach(() => {
-      mockUseOrganization.mockReturnValue({
-        data: { skillSlashCommandsEnabled: true },
+      vi.mocked(useOrganization).mockReturnValue({
+        data: { skillToolsEnabled: true },
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useOrganization>);
       mockUseSkillsPaginated.mockReturnValue({
         data: { data: [skill] },
         isLoading: false,
@@ -598,6 +836,317 @@ describe("ArchestraPromptInput", () => {
       const [message, , options] = onSubmit.mock.calls[0];
       expect(message.text).toBe("summarize the repo");
       expect(options).toEqual({ skill: { id: skill.id, name: skill.name } });
+    });
+
+    it("keeps skill command handling with the sandbox available", () => {
+      const onSubmit = vi.fn();
+      mockProfileState.agent = { sandboxAvailable: true };
+      mockControllerState.value = "/my-skill summarize the repo";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("summarize the repo");
+      expect(options).toEqual({ skill: { id: skill.id, name: skill.name } });
+    });
+  });
+
+  describe("sandbox commands", () => {
+    it("sandbox available: a `!` message dispatches with the sandboxCommand option and unchanged text", () => {
+      const onSubmit = vi.fn();
+      mockProfileState.agent = { sandboxAvailable: true };
+      mockControllerState.value = "! echo hi";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("! echo hi");
+      expect(options).toEqual({ sandboxCommand: true });
+    });
+
+    it("sandbox unavailable: the same `!` message submits as a plain message", () => {
+      const onSubmit = vi.fn();
+      mockProfileState.agent = { sandboxAvailable: false };
+      mockControllerState.value = "! echo hi";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("! echo hi");
+      expect(options).toBeUndefined();
+    });
+
+    it("a bare `!` submits as a plain message even with the sandbox available", () => {
+      const onSubmit = vi.fn();
+      mockProfileState.agent = { sandboxAvailable: true };
+      mockControllerState.value = "!";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("!");
+      expect(options).toBeUndefined();
+    });
+
+    it("keeps /compact interception with the sandbox available", () => {
+      const onSubmit = vi.fn();
+      const onCompactConversation = vi.fn();
+      mockProfileState.agent = { sandboxAvailable: true };
+      mockControllerState.value = "/compact";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          onCompactConversation={onCompactConversation}
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onCompactConversation).toHaveBeenCalledTimes(1);
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("draft retention on submit", () => {
+    const agentId = "agent-1";
+    // The new-chat draft key is agent-independent (so a typed prompt survives
+    // an agent switch); the agentId prop below no longer affects the key.
+    const draftKey = NEW_CHAT_DRAFT_STORAGE_KEY;
+
+    it("keeps the saved draft when the consumer rejects the submit", () => {
+      const text = "draft text the user typed";
+      localStorage.setItem(draftKey, text);
+      mockControllerState.value = text;
+      // A consumer that refuses the submit (e.g. text + unsupported attachment)
+      // by throwing — the draft (and the typed text) must survive.
+      const onSubmit = vi.fn(() => {
+        throw new Error("rejected");
+      });
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          agentId={agentId}
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem(draftKey)).toBe(text);
+      // ai-elements only clears the textarea on a non-throwing return.
+      expect(mockTextInputClear).not.toHaveBeenCalled();
+    });
+
+    it("clears the saved draft exactly once on an accepted submit", () => {
+      const text = "a normal accepted message";
+      localStorage.setItem(draftKey, text);
+      mockControllerState.value = text;
+      const onSubmit = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          agentId={agentId}
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem(draftKey)).toBeNull();
+    });
+  });
+
+  describe("queue keyboard shortcuts", () => {
+    it("pops the most recently queued message into the composer on ArrowUp when empty", () => {
+      const conversationId = "conv-arrowup-pop";
+      chatMessageQueue.clear(conversationId);
+      chatMessageQueue.enqueue(conversationId, { text: "first queued" });
+      chatMessageQueue.enqueue(conversationId, { text: "second queued" });
+      mockControllerState.value = "";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "ArrowUp",
+      });
+
+      // The newest queued message loads into the composer...
+      expect(mockTextInputSetInput).toHaveBeenCalledWith("second queued");
+      // ...and is removed from the queue, leaving the older one behind.
+      expect(chatMessageQueue.get(conversationId).map((m) => m.text)).toEqual([
+        "first queued",
+      ]);
+
+      chatMessageQueue.clear(conversationId);
+    });
+
+    it("prefixes a queued skill command when popping it back", () => {
+      const conversationId = "conv-arrowup-skill";
+      chatMessageQueue.clear(conversationId);
+      chatMessageQueue.enqueue(conversationId, {
+        text: "do the thing",
+        skill: { name: "helper" } as ChatSkillMetadata,
+      });
+      mockControllerState.value = "";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "ArrowUp",
+      });
+
+      expect(mockTextInputSetInput).toHaveBeenCalledWith(
+        "/helper do the thing",
+      );
+      chatMessageQueue.clear(conversationId);
+    });
+
+    it("leaves the queue alone on ArrowUp when the composer already has text", () => {
+      const conversationId = "conv-arrowup-nonempty";
+      chatMessageQueue.clear(conversationId);
+      chatMessageQueue.enqueue(conversationId, { text: "queued" });
+      mockControllerState.value = "typing";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "ArrowUp",
+      });
+
+      // ArrowUp is ignored while typing: the queue is untouched and the typed
+      // text is never replaced by a queued message.
+      expect(mockTextInputSetInput).not.toHaveBeenCalledWith("queued");
+      expect(chatMessageQueue.get(conversationId)).toHaveLength(1);
+      chatMessageQueue.clear(conversationId);
+    });
+
+    it("stops the in-flight response on Escape", () => {
+      const onStop = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          onStop={onStop}
+          conversationId="conv-escape-stop"
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "Escape",
+      });
+
+      expect(onStop).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not stop on Escape when no response is in flight", () => {
+      const onStop = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="ready"
+          onStop={onStop}
+          conversationId="conv-escape-idle"
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "Escape",
+      });
+
+      expect(onStop).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("context compaction", () => {
+    // The Enter path is routed through the submit button's disabled state (the
+    // textarea refuses to requestSubmit while the button is disabled), so the
+    // button assertions below pin the keyboard contract too.
+    const getSubmitButton = (): HTMLButtonElement => {
+      const button = document.querySelector('button[type="submit"]');
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error("submit button not found");
+      }
+      return button;
+    };
+
+    it("keeps the composer usable mid-stream when queueing can absorb the message", () => {
+      const onSubmit = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="streaming"
+          conversationId="conv-compacting-queue"
+          isContextCompacting
+        />,
+      );
+
+      expect(
+        screen.getByTestId(E2eTestId.ChatPromptTextarea),
+      ).not.toBeDisabled();
+      expect(getSubmitButton()).not.toBeDisabled();
+
+      // A submit during compaction still reaches the consumer (which queues it).
+      mockControllerState.value = "queued while compacting";
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    it("locks the composer during compaction when there is no conversation to queue into", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          isContextCompacting
+        />,
+      );
+
+      expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toBeDisabled();
+      expect(getSubmitButton()).toBeDisabled();
+    });
+
+    it("locks the composer during an idle (manual) compaction", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="ready"
+          conversationId="conv-compacting-idle"
+          isContextCompacting
+        />,
+      );
+
+      expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toBeDisabled();
+      expect(getSubmitButton()).toBeDisabled();
     });
   });
 });

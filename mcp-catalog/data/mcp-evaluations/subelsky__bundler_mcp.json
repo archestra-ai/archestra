@@ -1,0 +1,94 @@
+{
+  "name": "subelsky__bundler_mcp",
+  "display_name": "bundler_mcp",
+  "description": "A Model Context Protocol (MCP) server enabling AI agents to query information about gems in a Ruby project's Gemfile, including source code and metadata.",
+  "author": {
+    "name": "subelsky"
+  },
+  "server": {
+    "command": "${__dirname}/bin/bundler_mcp",
+    "args": [],
+    "env": {
+      "BUNDLE_GEMFILE": "${user_config.bundle_gemfile}",
+      "BUNDLER_MCP_LOG_FILE": "${user_config.bundler_mcp_log_file}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bundle_gemfile": {
+      "type": "file",
+      "title": "Bundle Gemfile Path",
+      "description": "Path to the Gemfile to be used by Bundler. If not provided, Bundler will search for a Gemfile in the current directory or parent directories.",
+      "required": false
+    },
+    "bundler_mcp_log_file": {
+      "type": "file",
+      "title": "Bundler MCP Log File",
+      "description": "Path to the log file for Bundler MCP. If not provided, logging is disabled.",
+      "required": false
+    }
+  },
+  "readme": "# BundlerMCP\n\nA Model Context Protocol (MCP) server enabling AI agents to query information about dependencies in a Ruby project's `Gemfile`. Built with [fast-mcp](https://github.com/yjacquin/fast-mcp).\n\n[![CI](https://github.com/subelsky/bundler_mcp/actions/workflows/main.yml/badge.svg)](https://github.com/subelsky/bundler_mcp/actions/workflows/main.yml)\n[![Gem Version](https://badge.fury.io/rb/bundler_mcp.svg)](https://badge.fury.io/rb/bundler_mcp)\n\n## Installation\n\nInstall the gem and add to the application's Gemfile by executing:\n\n```bash\nbundle add bundler_mcp --group=development\n```\n\n## Usage\n\n1. Generate the binstub:\n\n```bash\nbundle binstubs bundler_mcp\n```\n\n2. Configure your client to execute the binstub. Here are examples that work for Claude and Cursor:\n\n### Basic Example (mcp.json)\n\n```json\n{\n  \"mcpServers\": {\n    \"bundler-mcp\": {\n      \"command\": \"/Users/mike/my_project/bin/bundler_mcp\"\n    }\n  }\n}\n```\n\n### Example with logging and explicit Gemfile\n\n```json\n{\n  \"mcpServers\": {\n    \"bundler-mcp\": {\n      \"command\": \"/Users/mike/my_project/bin/bundler_mcp\",\n\n      \"env\": {\n        \"BUNDLER_MCP_LOG_FILE\": \"/Users/mike/my_project/log/mcp.log\",\n        \"BUNDLE_GEMFILE\": \"/Users/mike/my_project/subdir/Gemfile\"\n      }\n    }\n  }\n}\n```\n\n### Documentation\n\n[Available on RubyDoc](https://www.rubydoc.info/gems/bundler_mcp/)\n\n### Available Tools\n\nThe server provides two tools for AI agents:\n\n#### list_project_gems\n\nLists all bundled Ruby gems with their:\n\n- Versions\n- Descriptions\n- Installation paths\n- Top-level documentation locations (e.g. `README` and `CHANGELOG`)\n\n![list_project_gems tool](/docs/list_project_gems.png)\n\n#### get_gem_details\n\nRetrieves detailed information about a specific gem, including:\n\n- Version\n- Description\n- Installation path\n- Top-level documentation locations\n- Source code file locations\n\n![get_gem_details tool](/docs/get_gem_details.png)\n\n## Environment Variables\n\n- `BUNDLE_GEMFILE`: Used by Bundler to locate your Gemfile. If you use the binstub method described in the [Usage](#usage) section, this is usually not needed.\n- `BUNDLER_MCP_LOG_FILE`: Path to log file. Useful for troubleshooting (defaults to no logging)\n\n## Development\n\nAfter checking out the repo, run `bin/setup` to install dependencies and `bundle exec rspec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.\n\n### Testing with the MCP Inspector\n\nYou can test the server directly using the [MCP inspector](https://modelcontextprotocol.io/docs/tools/inspector):\n\n```bash\n# Basic usage\nnpx @modelcontextprotocol/inspector ./bin/bundler_mcp\n\n# With logging enabled\nBUNDLER_MCP_LOG_FILE=/tmp/log/mcp.log npx @modelcontextprotocol/inspector ./bin/bundler_mcp\n\n# With custom Gemfile\nBUNDLE_GEMFILE=./other/Gemfile npx @modelcontextprotocol/inspector ./bin/bundler_mcp\n```\n\n### Release Process\n\nTo install this gem onto your local machine, run `bundle exec rake install`. To release a new version:\n\n1. Update the version number in `version.rb`\n2. Run `bundle exec rake release`\n\nThis will:\n\n- Create a git tag for the version\n- Push git commits and the created tag\n- Push the `.gem` file to [rubygems.org](https://rubygems.org)\n\n## Contributing\n\nBug reports and pull requests are welcome on GitHub at https://github.com/subelsky/bundler_mcp.\n\n## License\n\nOpen source under the terms of the [MIT License](https://opensource.org/licenses/MIT).\n\n## Author\n\n[Mike Subelsky](https://subelsky.com)\n",
+  "category": "AI Tools",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bundler-mcp": {
+        "command": "/Users/mike/my_project/bin/bundler_mcp",
+        "args": [],
+        "env": {}
+      },
+      "bundler-mcp-configured": {
+        "command": "/Users/mike/my_project/bin/bundler_mcp",
+        "args": [],
+        "env": {
+          "BUNDLER_MCP_LOG_FILE": "/Users/mike/my_project/log/mcp.log",
+          "BUNDLE_GEMFILE": "/Users/mike/my_project/subdir/Gemfile"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "subelsky",
+    "repo": "bundler_mcp",
+    "url": "https://github.com/subelsky/bundler_mcp",
+    "name": "subelsky__bundler_mcp",
+    "path": null,
+    "stars": 18,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "a9b35ff2745bccbe8f1997a2f3f9a1d196e7623b"
+  },
+  "programming_language": "Ruby",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:06.248Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fast-mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== Gemfile ===\n# frozen_string_literal: true\n\nsource \"https://rubygems.org\"\n\ngemspec\n\ngem \"debug\"\ngem \"irb\"\ngem \"rake\", \"~> 13.0\"\ngem \"rspec\", \"~> 3.0\"\ngem \"rubocop\", \"~> 1.21\"\ngem \"rubocop-rspec\", \"~> 3.6\"\n"
+}

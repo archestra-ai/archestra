@@ -1,0 +1,95 @@
+{
+  "name": "mrjoshuak__godoc-mcp",
+  "display_name": "godoc-mcp",
+  "description": "go doc mcp server",
+  "author": {
+    "name": "mrjoshuak"
+  },
+  "server": {
+    "command": "${__dirname}/server/godoc-mcp",
+    "args": [],
+    "env": {
+      "GOPATH": "${user_config.gopath}",
+      "GOMODCACHE": "${user_config.gomodcache}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "gopath": {
+      "type": "directory",
+      "title": "Go Path",
+      "description": "The path to your Go installation (GOPATH). Ensure this is set correctly if you encounter module-related errors.",
+      "required": false,
+      "default": "${HOME}/go"
+    },
+    "gomodcache": {
+      "type": "directory",
+      "title": "Go Module Cache Path",
+      "description": "The path to your Go module cache (GOMODCACHE). Ensure this is set correctly if you encounter module-related errors.",
+      "required": false,
+      "default": "${HOME}/go/pkg/mod"
+    }
+  },
+  "readme": "# godoc-mcp\n\n[![Go Report Card](https://goreportcard.com/badge/github.com/mrjoshuak/godoc-mcp)](https://goreportcard.com/report/github.com/mrjoshuak/godoc-mcp)\n[![GoDoc](https://godoc.org/github.com/mrjoshuak/godoc-mcp?status.svg)](https://godoc.org/github.com/mrjoshuak/godoc-mcp)\n[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)\n\n## Overview\n\n`godoc-mcp` is a Model Context Protocol (MCP) server that provides efficient access to Go documentation. It helps LLMs understand Go projects by providing direct access to package documentation without needing to read entire source files. `godoc-mcp` can vastly improve the performance of using LLMs to develop in Go by substantially reducing the number of tokens needed to understand and make use of Go packages.\n\n## Getting Started\n\n```bash\ngo install github.com/mrjoshuak/godoc-mcp@latest\n```\n\n## Why Use godoc-mcp?\n\nIn a sentence: **`godoc-mcp` provides a more token efficient way for LLMs to understand Go projects.**\n\nTraditional file-reading approaches require LLMs to process entire source files often many files to understand a single package. `godoc-mcp` provides several advantages:\n\n1. **Token Efficiency**: Returns only the essential documentation, reducing token usage significantly\n2. **Structured Information**: Provides official package documentation in a consistent, well-structured format\n3. **Project Navigation**: Smart handling of project structures helps LLMs understand multi-package projects\n4. **Integration Ready**: Works alongside other MCP servers, enabling both high-level and detailed code analysis\n5. **Performance**: Caching and optimized token usage make `godoc-mcp` a fast and efficient tool for Go development\n6. **Local**: Does not require an internet connection to access documentation\n\nWith `godoc-mcp`, a LLM can get precisely the information it needs without having to read entire source files. Here are the different levels of detail that an LLM can get.\n\n- Documentation for one exported symbol\n- The complete source for one symbol\n- A list of all exported symbols (the concise documentation)\n- A list of all symbols including unexported symbols\n- The full documentation for a package\n- The entire source for a package\n\nThis makes `godoc-mcp` an essential tool for Go developers using LLMs by enabling LLMs to understand significantly more, and in more detail, about the context than previously possible in any programming language.\n\n## Features\n\nThe server will:\n1. For directories with Go files: Return package documentation\n2. For directories without Go files: List available Go packages in subdirectories\n3. For import paths: Return standard library or third-party package documentation\n\n- **Efficient Documentation Access**: Retrieves official Go documentation with minimal token usage\n- **Smart Package Discovery**: When pointed at a directory without Go files, lists available Go packages in subdirectories\n- **Flexible Path Support**:\n  - Local file paths (e.g., \"/full/path/to/mypackage\")\n  - Import paths (e.g., \"io\", \"github.com/user/repo\")\n- **Automatic Module Context**:\n  - Creates temporary Go projects when needed\n  - Automatically sets up module context for external packages\n  - No manual module setup required for any package documentation\n  - Handles cleanup of temporary projects\n- **Module-Aware**: Supports documentation for third-party packages through working directory context (i.e. it will run `go doc` from the working directory)\n- **Performance Optimized**:\n  - Built-in response caching\n  - Efficient token usage through focused documentation retrieval\n  - Metadata about response sizes\n  - Smart handling of standard library vs external packages\n\n### Examples\n\nIn addition to providing documentation while working on coding tasks. `godoc-mcp` can also be used to explore Go projects and packages. Here are some examples for general prompting:\n\n#### Project Understanding\n\n\"I'm looking at a Go project at /path/to/some/project. What packages does it contain and what do they do?\"\n\n#### Package Interface Understanding\n\n\"What interfaces does the io package provide? I'm particularly interested in anything related to reading.\"\n\n#### Implementation Guidance\n\n\"I need to implement the io.Reader interface. Show me its documentation and any related types I should know about.\"\n\n#### API Usage\n\n\"Show me the documentation for the Resource type in the /path/to/some/project. I need to understand how to create and use it.\"\n\n#### Library Exploration\n\n\"I'm in /path/to/some/project which uses github.com/gorilla/mux. Show me the documentation for the Router type.\"\n\n#### Method Discovery\n\n\"What methods are available on the http.Request type? I'm working with standard library HTTP handlers.\"\n\n#### Focused Learning\n\n\"Explain how to configure the Server type in the /path/to/project/server package.\"\n\n#### Package Browsing\n\n\"I'm in a new Go project directory and see multiple packages. Can you show me what each one does?\"\n\n## Usage\n\nTo add to the Claude desktop app:\n\n```yaml\n{\n  \"mcpServers\": {\n    # other MCP servers ...\n    \"godoc\": {\n      \"command\": \"/path/to/godoc-mcp\",\n      \"args\": [],\n      \"env\": {\n        \"GOPATH\": \"/path/to/go\",\n        \"GOMODCACHE\": \"/path/to/go/pkg/mod\"\n      }\n    }\n  }\n}\n```\n\nWhen connected to an MCP-capable LLM (like Claude), godoc-mcp provides the `get_doc` tool with the following parameters:\n\n- `path`: Path to the Go package or file (import path or file path)\n- `target` (optional): Specific symbol to document (function, type, etc.)\n- `cmd_flags` (optional): Additional go doc command flags\n- `working_dir` (optional): Working directory for module-aware documentation (if not provided, a temporary project will be created automatically)\n\nAdvanced `cmd_flags` values that an LLM can leverage:\n- `-all`: Show all documentation for package, excluding unexported symbols\n- `-u`: Show unexported symbols\n- `-src`: Show the source code instead of documentation\n\n## Troubleshooting\n\n- For local paths, ensure they contain Go source files or point to directories containing Go packages\n- If you see module-related errors, ensure GOPATH and GOMODCACHE environment variables are set correctly in your MCP server configuration\n- The server automatically handles module context for external packages, but you can still provide a specific working_dir if needed for special cases\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Development",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "godoc-mcp": {
+        "command": "/path/to/godoc-mcp",
+        "args": [],
+        "env": {
+          "GOPATH": "/path/to/go",
+          "GOMODCACHE": "/path/to/go/pkg/mod"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mrjoshuak",
+    "repo": "godoc-mcp",
+    "url": "https://github.com/mrjoshuak/godoc-mcp",
+    "name": "godoc-mcp",
+    "path": null,
+    "stars": 77,
+    "contributors": 1,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "3296b67e5d374246e84040d4a888eda787a9d195"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:49.787Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "google/uuid",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/mrjoshuak/godoc-mcp\n\ngo 1.23.2\n\ntoolchain go1.23.4\n\nrequire github.com/mark3labs/mcp-go v0.5.1\n\nrequire github.com/google/uuid v1.6.0 // indirect\n"
+}

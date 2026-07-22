@@ -1,0 +1,74 @@
+{
+  "name": "kukapay__crypto-liquidations-mcp",
+  "display_name": "crypto-liquidations-mcp",
+  "description": "An MCP server that streams real-time cryptocurrency liquidation events from Binance.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Crypto Liquidations MCP\n[![smithery badge](https://smithery.ai/badge/@kukapay/crypto-liquidations-mcp)](https://smithery.ai/server/@kukapay/crypto-liquidations-mcp)\n\nAn MCP server that streams real-time cryptocurrency liquidation events from Binance, enabling AI agents to react instantly to high-volatility market movements.\n\n![License](https://img.shields.io/badge/license-MIT-green)\n![Python Version](https://img.shields.io/badge/python-3.10-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n\n## Features\n\n- **Real-time Liquidation Streaming**: Connects to [Binance WebSocket](wss://fstream.binance.com/ws/!forceOrder@arr`) to capture liquidation events.\n- **Liquidation Data Storage**: Maintains an in-memory list of up to 1000 liquidation events, with no persistent storage.\n- **Tool: `get_latest_liquidations`**:\n  - Retrieves the latest liquidation events in a Markdown table.\n  - Columns: `Symbol`, `Side`, `Price`, `Quantity`, `Time` (HH:MM:SS format).\n  - Parameters: `limit` (default 10).\n- **Prompt: `analyze_liquidations`**:\n  - Generates a prompt to analyze liquidation trends across all symbols, leveraging the `get_latest_liquidations` tool.\n\n## Prerequisites\n\n- **Python 3.10**: Required for compatibility.\n- **uv**: Package and dependency manager (install instructions below).\n- **Internet Access**: To connect to Binance WebSocket.\n\n## Installation\n\n### Installing via Smithery\n\nTo install Crypto Liquidations for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kukapay/crypto-liquidations-mcp):\n\n```bash\nnpx -y @smithery/cli install @kukapay/crypto-liquidations-mcp --client claude\n```\n\n### 1. Clone the Repository\n```bash\ngit clone https://github.com/kukapay/crypto-liquidations-mcp.git\ncd crypto-liquidations-mcp\n```\n\n### 2. Install Dependencies\nInstall required packages using `uv`:\n```bash\nuv sync\n```\n\n### 3. Integrate with an MCP Client\nConfigure your MCP client to connect to the server. For Claude Desktop:\n```json\n{\n \"mcpServers\": {\n   \"crypto-liquidations\": {\n     \"command\": \"uv\",\n     \"args\": [\"--directory\", \"/path/to/crypto-liquidations-mcp\", \"run\", \"main.py\"]\n   }\n }\n}\n```\n   \n## Usage\n\nTo get started, launch the MCP server to begin streaming liquidation events from Binance. The server runs quietly, collecting up to 1000 recent events in memory without generating logs or saving data to disk.\n\n### Retrieving Liquidation Events\nUse the `get_latest_liquidations` tool to fetch the most recent liquidation events. You can specify how many events to retrieve (up to 1000) using the `limit` parameter. For example, you might ask:\n\n> \"Show me the 5 most recent liquidation events from Binance.\"\n\nThis will return a neatly formatted table showing the trading pair, buy or sell side, price, quantity, and the time of each liquidation in HH:MM:SS format.\n\n\n**Example Output**:\n```markdown\n| Symbol   | Side | Price  | Quantity | Time     |\n|----------|------|--------|----------|----------|\n| BTCUSDT  | BUY  | 50000  | 1.5      | 14:30:45 |\n| ETHUSDT  | SELL | 3000   | 10.0     | 14:30:40 |\n| BNBUSDT  | BUY  | 500    | 20.0     | 14:30:35 |\n| ADAUSDT  | SELL | 1.2    | 1000.0   | 14:30:30 |\n| XRPUSDT  | BUY  | 0.8    | 5000.0   | 14:30:25 |\n```\n\nThis table makes it easy to see recent market activity, such as large buy or sell liquidations on Binance.\n\n### Analyzing Liquidation Trends\nThe `analyze_liquidations` prompt helps you dive deeper into the data. It generates instructions for analyzing liquidation trends across all trading pairs, focusing on frequency, volume, and market impact. The prompt suggests using the `get_latest_liquidations` tool to fetch data, ensuring you have the latest information to work with.\n\nThis is particularly useful for understanding broader market dynamics, such as whether liquidations are increasing or signaling significant price movements.\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Finance",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "crypto-liquidations": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/crypto-liquidations-mcp", "run", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-liquidations-mcp",
+    "url": "https://github.com/kukapay/crypto-liquidations-mcp",
+    "name": "crypto-liquidations-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d9a02cda38bdb0f3556fe9a112997f29c82e1900"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.113Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "websockets",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"crypto-liquidations-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that streams real-time cryptocurrency liquidation events from Binance\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.7.0\",\n    \"websockets>=15.0.1\",\n]\n"
+}

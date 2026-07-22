@@ -1,25 +1,18 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
-  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  getCreationDefaultArchestraToolShortNames,
   parseFullToolName,
-  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-} from "@shared";
-
-const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
-  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-);
-const SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
-  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-);
+} from "@archestra/shared";
 
 /**
- * Given catalog items and a parallel array of tool lists, find the default
- * Archestra tools and return their IDs plus the catalog index.
+ * Given catalog items and a parallel array of tool lists, find the
+ * creation-default Archestra tools and return their IDs plus the catalog
+ * index.
  *
- * Pass `includeSkillTools: true` when the org has opted in (via the skills
- * empty-state enable action) so the skill tools also appear pre-selected on
- * the new agent form, mirroring the server-side `assignSkillToolsToAgent`
- * behavior on save.
+ * The set is composed by the shared
+ * `getCreationDefaultArchestraToolShortNames` from the same feature flags
+ * `AgentModel.create` reads server-side, so the new agent form pre-selects
+ * exactly what the backend assigns at creation.
  *
  * Returns null if the Archestra catalog isn't found, tools aren't loaded,
  * or no default tools match.
@@ -27,7 +20,10 @@ const SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
 export function getDefaultArchestraToolIds(
   catalogItems: { id: string; name: string }[],
   toolsByCatalogIndex: ({ id: string; name: string }[] | undefined)[],
-  options: { includeSkillTools?: boolean } = {},
+  options: {
+    skillsEnabled?: boolean;
+    sandboxEnabled?: boolean;
+  } = {},
 ): { toolIds: Set<string>; catalogIndex: number } | null {
   const catalogIndex = catalogItems.findIndex(
     (c) => c.id === ARCHESTRA_MCP_CATALOG_ID,
@@ -37,19 +33,18 @@ export function getDefaultArchestraToolIds(
   const tools = toolsByCatalogIndex[catalogIndex];
   if (!tools || tools.length === 0) return null;
 
+  const creationDefaultShortNames = new Set<string>(
+    getCreationDefaultArchestraToolShortNames({
+      skillsEnabled: options.skillsEnabled === true,
+      sandboxEnabled: options.sandboxEnabled === true,
+    }),
+  );
+
   const toolIds = new Set(
     tools
       .filter((t) => {
         const shortName = parseFullToolName(t.name).toolName;
-        if (shortName === null) return false;
-        if (DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)) return true;
-        if (
-          options.includeSkillTools &&
-          SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)
-        ) {
-          return true;
-        }
-        return false;
+        return shortName !== null && creationDefaultShortNames.has(shortName);
       })
       .map((t) => t.id),
   );
@@ -57,6 +52,182 @@ export function getDefaultArchestraToolIds(
   if (toolIds.size === 0) return null;
 
   return { toolIds, catalogIndex };
+}
+
+type EnvScopedCatalog = {
+  id: string;
+  name: string;
+  serverType?: string | null;
+  environmentId?: string | null;
+};
+
+/**
+ * A catalog belongs to an agent's environment when it's a builtin (the
+ * Archestra platform tools, available in every environment) or its environment
+ * matches. `null`/`undefined` (Default runtime) is its own bucket.
+ */
+export function isCatalogInEnvironment(
+  catalog: EnvScopedCatalog,
+  agentEnvironmentId: string | null,
+): boolean {
+  return (
+    catalog.serverType === "builtin" ||
+    (catalog.environmentId ?? null) === (agentEnvironmentId ?? null)
+  );
+}
+
+/**
+ * Whether a catalog item may be assigned to an agent in the tools picker, and
+ * how it should read when it is.
+ *
+ * A catalog item is assignable when it has at least one **discovered** tool; an
+ * install the assigning caller can resolve is NOT required. A discovered tool
+ * with no resolvable install stays assignable as a dynamic assignment — its
+ * connection resolved per caller at call time — and is surfaced as `unavailable`,
+ * prompting install/reconnect when invoked. A catalog item with no discovered
+ * tool has nothing to assign. Environment incompatibility is a separate,
+ * orthogonal gate.
+ */
+export function getCatalogAssignmentGate(params: {
+  hasDiscoveredTools: boolean;
+  hasResolvableInstall: boolean;
+  isEnvIncompatible: boolean;
+  environmentName?: string | null;
+  /** A disabled app backing: listed for its author but not assignable. */
+  isDisabledApp?: boolean;
+}): { disabled: boolean; disabledReason?: string; unavailable: boolean } {
+  const { hasDiscoveredTools, hasResolvableInstall, isEnvIncompatible } =
+    params;
+
+  // A disabled app cannot be wired into an agent until it is enabled —
+  // surfaced greyed with "Disabled" (only its author ever sees it here).
+  if (params.isDisabledApp) {
+    return {
+      disabled: true,
+      unavailable: false,
+      disabledReason: "Disabled",
+    };
+  }
+
+  if (isEnvIncompatible) {
+    return {
+      disabled: true,
+      unavailable: false,
+      disabledReason: `Not in ${
+        params.environmentName
+          ? `the "${params.environmentName}" environment`
+          : "the Default environment"
+      }`,
+    };
+  }
+
+  if (!hasDiscoveredTools) {
+    return {
+      disabled: true,
+      unavailable: false,
+      disabledReason: "Not installed",
+    };
+  }
+
+  return { disabled: false, unavailable: !hasResolvableInstall };
+}
+
+/**
+ * Whether the tools picker should drop a per-server credential pin back to
+ * resolve-at-call-time.
+ *
+ * Only a genuinely stale pin — one absent from a non-empty set of connections
+ * that resolve for the caller — is reset. When no connection resolves at all,
+ * the pin is preserved: the assignment persists independently of install state,
+ * so coercing it here would register a pending change and silently rewrite the
+ * pin to dynamic on the next save. A dynamic/unset selection has nothing to
+ * reset.
+ */
+export function shouldResetCredentialPin(params: {
+  credentialsLoaded: boolean;
+  selectionIsDynamic: boolean;
+  pinnedServerId: string | null;
+  resolvableServerIds: readonly string[];
+}): boolean {
+  const { credentialsLoaded, selectionIsDynamic, pinnedServerId } = params;
+
+  if (!credentialsLoaded || selectionIsDynamic || pinnedServerId === null) {
+    return false;
+  }
+  if (params.resolvableServerIds.includes(pinnedServerId)) {
+    return false;
+  }
+  return params.resolvableServerIds.length > 0;
+}
+
+/**
+ * The selected catalogs that don't belong to the agent's environment (builtins
+ * are always compatible). Drives the save-blocking conflict alert. Unknown
+ * catalog ids are skipped.
+ */
+export function computeMcpEnvConflicts(
+  catalogItems: EnvScopedCatalog[],
+  selectedCatalogIds: Iterable<string>,
+  agentEnvironmentId: string | null,
+): { catalogId: string; name: string }[] {
+  const byId = new Map(catalogItems.map((c) => [c.id, c]));
+  const conflicts: { catalogId: string; name: string }[] = [];
+  for (const catalogId of selectedCatalogIds) {
+    const catalog = byId.get(catalogId);
+    if (!catalog || isCatalogInEnvironment(catalog, agentEnvironmentId)) {
+      continue;
+    }
+    conflicts.push({ catalogId, name: catalog.name });
+  }
+  return conflicts;
+}
+
+export type SharedPersonalPin = {
+  catalogId: string;
+  mcpName: string;
+  ownerEmail: string;
+  isCurrentUser: boolean;
+};
+
+/**
+ * The active tools whose effective credential is a static pin to a still-resolvable
+ * `personal`-scope connection. On a shared (team/org) agent these are exactly the
+ * pins that make every caller authenticate as one owner, so the dialog warns about
+ * them and offers to switch them to resolve-at-call-time.
+ *
+ * `pinnedServerId` is each catalog's effective credential (pending overlaid on
+ * saved), or `null` when it resolves at call time. A pin whose server is absent
+ * from `resolvableServers` is excluded: it has either already reset to dynamic or
+ * cannot resolve for the target group, so it will not be shared.
+ */
+export function computeSharedPersonalPins(
+  catalogs: {
+    catalogId: string;
+    pinnedServerId: string | null;
+    resolvableServers: readonly {
+      id: string;
+      scope: string;
+      ownerEmail?: string | null;
+      ownerId?: string | null;
+      catalogName?: string | null;
+      name: string;
+    }[];
+  }[],
+  currentUserId: string | null | undefined,
+): SharedPersonalPin[] {
+  const pins: SharedPersonalPin[] = [];
+  for (const { catalogId, pinnedServerId, resolvableServers } of catalogs) {
+    if (!pinnedServerId) continue;
+    const server = resolvableServers.find((s) => s.id === pinnedServerId);
+    if (!server || server.scope !== "personal") continue;
+    pins.push({
+      catalogId,
+      mcpName: server.catalogName ?? server.name,
+      ownerEmail: server.ownerEmail || "Deleted user",
+      isCurrentUser: !!currentUserId && server.ownerId === currentUserId,
+    });
+  }
+  return pins;
 }
 
 export function sortCatalogItems<

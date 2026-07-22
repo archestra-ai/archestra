@@ -1,0 +1,126 @@
+{
+  "name": "devflowinc__trieve__clients__mcp-server",
+  "display_name": "Trieve",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAxMjggMTI4Ij4KICAgIDxwYXRoIGZpbGw9IiMwMDAiIGQ9Ik01MC40IDc4LjVhNzUuMSA3NS4xIDAgMCAwLTI4LjUgNi45bDI0LjItNjUuN2MuNy0yIDEuOS0zLjIgMy40LTMuMmgyOWMxLjUgMCAyLjcgMS4yIDMuNCAzLjJsMjQuMiA2NS43cy0xMS42LTctMjguNS03TDY3IDQ1LjVjLS40LTEuNy0xLjYtMi44LTIuOS0yLjgtMS4zIDAtMi41IDEuMS0yLjkgMi43TDUwLjQgNzguNVptLTEuMSAyOC4yWm0tNC4yLTIwLjJjLTIgNi42LS42IDE1LjggNC4yIDIwLjJhMTcuNSAxNy41IDAgMCAxIC4yLS43IDUuNSA1LjUgMCAwIDEgNS43LTQuNWMyLjguMSA0LjMgMS41IDQuNyA0LjcuMiAxLjEuMiAyLjMuMiAzLjV2LjRjMCAyLjcuNyA1LjIgMi4yIDcuNGExMyAxMyAwIDAgMCA1LjcgNC45di0uM2wtLjItLjNjLTEuOC01LjYtLjUtOS41IDQuNC0xMi44bDEuNS0xYTczIDczIDAgMCAwIDMuMi0yLjIgMTYgMTYgMCAwIDAgNi44LTExLjRjLjMtMiAuMS00LS42LTZsLS44LjYtMS42IDFhMzcgMzcgMCAwIDEtMjIuNCAyLjdjLTUtLjctOS43LTItMTMuMi02LjJaIiAvPgogICAgCjwvc3ZnPgo=",
+  "description": "All-in-one platform for search, recommendations, RAG, and analytics offered via API",
+  "author": {
+    "name": "devflowinc"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["trieve-mcp-server@latest"],
+    "env": {
+      "TRIEVE_API_KEY": "${user_config.trieve_api_key}",
+      "TRIEVE_ORGANIZATION_ID": "${user_config.trieve_organization_id}",
+      "TRIEVE_DATASET_ID": "${user_config.trieve_dataset_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "trieve_api_key": {
+      "type": "string",
+      "title": "Trieve API Key",
+      "description": "Your Trieve API key from dashboard.trieve.ai",
+      "sensitive": true,
+      "required": true
+    },
+    "trieve_organization_id": {
+      "type": "string",
+      "title": "Trieve Organization ID",
+      "description": "Your Trieve organization ID from dashboard.trieve.ai",
+      "sensitive": false,
+      "required": true
+    },
+    "trieve_dataset_id": {
+      "type": "string",
+      "title": "Trieve Dataset ID",
+      "description": "Specific dataset ID to use (if not provided via CLI)",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# trieve-mcp-server\n\n[![smithery badge](https://smithery.ai/badge/trieve-mcp-server)](https://smithery.ai/server/trieve-mcp-server)\n\nA Model Context Protocol (MCP) server that provides agentic tools for interacting with the Trieve API. This server enables AI agents to search and interact with Trieve datasets through a standardized interface.\n\n## Features\n\n- Search across Trieve datasets using semantic search\n- List and access dataset information\n- Support for both environment variables and command-line arguments\n- Built with TypeScript for type safety and better developer experience\n\n## Installation\n\n### Installing via Smithery\n\nTo install Trieve for Claude Desktop automatically via [Smithery](https://smithery.ai/server/trieve-mcp-server):\n\n```bash\nnpx -y @smithery/cli install trieve-mcp-server --client claude\n```\n\n### Manual Installation\n```bash\nnpm install trieve-mcp-server\n```\n\n## Configuration\n\nCopy the `.env.dist` file to `.env` and fill in your Trieve credentials:\n\n```bash\ncp .env.dist .env\n```\n\nRequired environment variables:\n- `TRIEVE_API_KEY`: Your Trieve API key from dashboard.trieve.ai\n- `TRIEVE_ORGANIZATION_ID`: Your Trieve organization ID from dashboard.trieve.ai\n\nOptional environment variables:\n- `TRIEVE_DATASET_ID`: Specific dataset ID to use (if not provided via CLI)\n\nCommand-line arguments (override environment variables):\n```bash\ntrieve-mcp-server --api-key <your-api-key> --org-id <your-org-id> [--dataset-id <dataset-id>]\n```\n\n## Usage\n\n### Starting the Server\n\n```bash\ntrieve-mcp-server\n```\n\n### Available Tools\n\n#### search\nSearch through a specified Trieve dataset.\n\nParameters:\n- `query` (string): The search query\n- `datasetId` (string): ID of the dataset to search in\n- `searchType` (string, optional): \"semantic\" (default), \"fulltext\", \"hybrid\", or \"bm25\"\n- `filters` (object, optional): Advanced filtering options\n- `highlightOptions` (object, optional): Customize result highlighting\n- `page` (number, optional): Page number, default 1\n- `pageSize` (number, optional): Results per page, default 10\n\nExample:\n```json\n{\n  \"query\": \"example search query\",\n  \"datasetId\": \"your-dataset-id\",\n  \"searchType\": \"semantic\",\n  \"page\": 1,\n  \"pageSize\": 10\n}\n```\n\n### Available Resources\n\nThe server exposes Trieve datasets as resources with the following URI format:\n- `trieve://datasets/{dataset-id}`\n\n## Usage with Claude Desktop\n\nThe Trieve MCP Server supports MCP integration with [Claude Desktop](https://modelcontextprotocol.io/quickstart/user). Place the following in your Claude Desktop's `claude_desktop_config.json`.\n\n```json\n{\n  \"mcpServers\": {\n    \"trieve-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\"trieve-mcp-server@latest\"],\n      \"env\": {\n        \"TRIEVE_API_KEY\": \"$TRIEVE_API_KEY\",\n        \"TRIEVE_ORGANIZATION_ID\": \"$TRIEVE_ORGANIZATION_ID\",\n        \"TRIEVE_DATASET_ID\": \"$TRIEVE_DATASET_ID\"\n      }\n    }\n  }\n}\n```\n\nNote: Instead of environment variables, `--api-key`, `--org-id`, and `--dataset-id` can be used as command-line arguments.\n\nOnce Claude Desktop starts, attachments will be available that correspond to the [datasets available to the Trieve organization](https://docs.trieve.ai/guides/create-organizations-and-dataset). These can be used to select a dataset. After that, begin chatting with Claude and ask for information about the dataset. Claude will use search as needed in order to filter and break down queries, and may make multiple queries depending on your task.\n\n## Development\n\n### Setup\n\n1. Clone the repository\n2. Install dependencies:\n```bash\nnpm install\n```\n3. Copy `.env.dist` to `.env` and configure your credentials\n4. Build the project:\n```bash\nnpm run build\n```\n\n### Scripts\n\n- `npm run build`: Build the TypeScript project\n- `npm run watch`: Watch for changes and rebuild\n- `npm run test`: Run tests\n- `npm run inspector`: Run the MCP inspector for debugging\n\n## License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 72,
+  "archestra_config": {
+    "client_config_permutations": {
+      "trieve-mcp-server-configured": {
+        "command": "npx",
+        "args": ["trieve-mcp-server@latest"],
+        "env": {
+          "TRIEVE_API_KEY": "$TRIEVE_API_KEY",
+          "TRIEVE_ORGANIZATION_ID": "$TRIEVE_ORGANIZATION_ID",
+          "TRIEVE_DATASET_ID": "$TRIEVE_DATASET_ID"
+        }
+      },
+      "trieve-mcp-server-with-args": {
+        "command": "npx",
+        "args": [
+          "trieve-mcp-server",
+          "--api-key",
+          "<your-api-key>",
+          "--org-id",
+          "<your-org-id>",
+          "--dataset-id",
+          "<dataset-id>"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "github_info": {
+    "owner": "devflowinc",
+    "repo": "trieve",
+    "url": "https://github.com/devflowinc/trieve/tree/main/clients/mcp-server",
+    "name": "trieve",
+    "path": "clients/mcp-server",
+    "stars": 2409,
+    "contributors": 58,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "1c2f75381fb9e3fa5dd3bc546b106c7c865d2904"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:26.873Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "trieve-ts-sdk",
+      "importance": 9
+    },
+    {
+      "name": "mcp-evals",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"trieve-mcp-server\",\n  \"version\": \"0.1.3\",\n  \"description\": \"MCP server providing agentic tools for the Trieve API using Model Context Protocol (MCP)\",\n  \"private\": false,\n  \"type\": \"module\",\n  \"bin\": {\n    \"trieve-mcp-server\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector\",\n    \"test\": \"vitest run\",\n    \"test:watch\": \"vitest\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"trieve-ts-sdk\": \"^0.0.92\",\n    \"dotenv\": \"^16.4.1\",\n    \"mcp-evals\": \"^1.0.18\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"keywords\": [\n    \"trieve\",\n    \"mcp\",\n    \"ai\",\n    \"search\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"Gerred Dillon\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/devflowinc/trieve.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/devflowinc/trieve/issues\"\n  },\n  \"homepage\": \"https://github.com/devflowinc/trieve#readme\"\n}\n"
+}

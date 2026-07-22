@@ -52,30 +52,30 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Maintenance mode can serve the frontend overlay and public config without
+database access. The chart can only detect this when the env var is set
+directly through archestra.env.
+*/}}
+{{- define "archestra-platform.maintenanceModeEnabled" -}}
+{{- if and (hasKey .Values.archestra.env "ARCHESTRA_MAINTENANCE_MODE_MESSAGE") (ne (toString (get .Values.archestra.env "ARCHESTRA_MAINTENANCE_MODE_MESSAGE")) "") -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end }}
+
+{{/*
 Environment variables for the Archestra Platform container
 */}}
-{{- define "archestra-platform.env" -}}
-{{/*
-List of sensitive environment variables that should be stored in the Secret
-and referenced via secretKeyRef instead of being exposed as plaintext in Pod specs.
-This must match the list in secret.yaml.
-Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensitive.
-*/}}
-{{- $sensitiveEnvVars := list
-  "ARCHESTRA_AUTH_SECRET"
-  "ARCHESTRA_AUTH_ADMIN_PASSWORD"
-  "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD"
-  "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER"
-  "ARCHESTRA_METRICS_SECRET"
-  "ARCHESTRA_HASHICORP_VAULT_TOKEN"
-}}
+{{- define "archestra-platform.databaseEnv" -}}
+{{- $databaseSecretName := .migrationDatabaseSecretNameOverride | default (include "archestra-platform.authSecretName" .) -}}
 {{- if eq (toString .Values.postgresql.external_database_url) "from_vault" }}
 {{/* Database URL provided by vault-secrets init container — no env var generated */}}
 {{- else if .Values.postgresql.external_database_url }}
 - name: ARCHESTRA_DATABASE_URL
   valueFrom:
     secretKeyRef:
-      name: {{ include "archestra-platform.authSecretName" . }}
+      name: {{ $databaseSecretName }}
       key: database-url
 {{- else if .Values.postgresql.enabled }}
 {{/*
@@ -91,6 +91,24 @@ The Bitnami chart auto-generates a strong password and persists it across helm u
 - name: ARCHESTRA_DATABASE_URL
   value: postgresql://{{ .Values.postgresql.auth.username }}:$(PGPASSWORD)@{{ include "archestra-platform.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}
 {{- end }}
+{{- end }}
+
+{{- define "archestra-platform.env" -}}
+{{/*
+List of sensitive environment variables that should be stored in the Secret
+and referenced via secretKeyRef instead of being exposed as plaintext in Pod specs.
+This must match the list in secret.yaml.
+Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensitive.
+*/}}
+{{- $sensitiveEnvVars := list
+  "ARCHESTRA_AUTH_SECRET"
+  "ARCHESTRA_AUTH_ADMIN_PASSWORD"
+  "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD"
+  "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER"
+  "ARCHESTRA_METRICS_SECRET"
+  "ARCHESTRA_HASHICORP_VAULT_TOKEN"
+}}
+{{- include "archestra-platform.databaseEnv" . }}
 {{/*
 When both external_database_url is null and postgresql.enabled is false,
 ARCHESTRA_DATABASE_URL is not set here. Use archestra.envFromSecrets to inject it from a pre-existing K8s secret.
@@ -114,6 +132,34 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
   value: {{ .Values.archestra.orchestrator.baseImage | quote }}
 {{- end }}
+{{- with .Values.archestra.orchestrator.mcpServerResources }}
+{{- if .requests.cpu }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST
+  value: {{ .requests.cpu | quote }}
+{{- end }}
+{{- if .requests.memory }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST
+  value: {{ .requests.memory | quote }}
+{{- end }}
+{{- if .requests.ephemeralStorage }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST
+  value: {{ .requests.ephemeralStorage | quote }}
+{{- end }}
+{{- if .limits.memory }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT
+  value: {{ .limits.memory | quote }}
+{{- end }}
+{{- if .limits.ephemeralStorage }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT
+  value: {{ .limits.ephemeralStorage | quote }}
+{{- end }}
+{{- end }}
+{{/* "0" is a meaningful value (disables the reaper), so compare against the
+     empty string instead of relying on truthiness. */}}
+{{- if ne (toString .Values.archestra.orchestrator.failedPodReapIntervalSeconds) "" }}
+- name: ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS
+  value: {{ .Values.archestra.orchestrator.failedPodReapIntervalSeconds | quote }}
+{{- end }}
 {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
 - name: ARCHESTRA_ORCHESTRATOR_KUBECONFIG
   value: {{ printf "%s/config" .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath | quote }}
@@ -124,6 +170,20 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN
   value: {{ .Values.archestra.orchestrator.kubernetes.clusterDomain | quote }}
 {{- end }}
+{{- if and .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces (not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES")) }}
+- name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
+  value: {{ join "," .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces | quote }}
+{{- end }}
+{{- if .Values.archestra.codeRuntime.enabled }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_ENABLED") }}
+- name: ARCHESTRA_CODE_RUNTIME_ENABLED
+  value: "true"
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST") }}
+- name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+  value: {{ include "archestra-platform.codeRuntimeDaggerRunnerHost" . | quote }}
+{{- end }}
+{{- end }}
 {{- if .Values.archestra.diagnostics.enabled }}
 - name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
   value: "/var/diagnostics"
@@ -131,6 +191,12 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
   value: {{ .Values.archestra.diagnostics.heapSnapshotsNearHeapLimit | quote }}
 {{- end }}
+{{- end }}
+{{- if eq .Values.archestra.fileStorage.provider "filesystem" }}
+- name: ARCHESTRA_FILE_STORAGE_PROVIDER
+  value: "filesystem"
+- name: ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT
+  value: {{ .Values.archestra.fileStorage.filesystem.mountPath | quote }}
 {{- end }}
 {{- range $key, $value := .Values.archestra.env }}
 {{/* Check if env var is in the explicit sensitive list OR matches ARCHESTRA_CHAT_*_API_KEY pattern */}}
@@ -163,10 +229,63 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 {{- end }}
 
 {{/*
+dagger runner host for the code execution runtime.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerRunnerHost" -}}
+{{- $runnerHost := .Values.archestra.codeRuntime.dagger.runnerHost -}}
+{{- if $runnerHost -}}
+{{- $runnerHost -}}
+{{- else -}}
+{{- $pod := .Values.archestra.codeRuntime.dagger.pod -}}
+{{- $namespace := include "archestra-platform.codeRuntimeDaggerPodNamespace" . -}}
+{{- $runnerHost = printf "kube-pod://%s?namespace=%s&container=%s" ($pod.name | urlquery) ($namespace | urlquery) ($pod.container | urlquery) -}}
+{{- with $pod.context -}}
+{{- $runnerHost = printf "%s&context=%s" $runnerHost (. | urlquery) -}}
+{{- end -}}
+{{- $runnerHost -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+namespace containing the Dagger Engine pod.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerPodNamespace" -}}
+{{- $namespace := .Values.archestra.codeRuntime.dagger.pod.namespace -}}
+{{- if $namespace -}}
+{{- $namespace -}}
+{{- else if .Values.archestra.codeRuntime.dagger.managed.enabled -}}
+{{- .Release.Namespace -}}
+{{- else -}}
+dagger
+{{- end -}}
+{{- end }}
+
+{{/*
+namespace where the code-runtime kube-pod RBAC should be created.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerRbacNamespace" -}}
+{{- default (include "archestra-platform.codeRuntimeDaggerPodNamespace" .) .Values.archestra.codeRuntime.dagger.rbac.namespace -}}
+{{- end }}
+
+{{/*
+service account name for the managed Dagger Engine pod.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerServiceAccountName" -}}
+{{- default "dagger-runtime" .Values.dagger.engine.existingServiceAccount.name -}}
+{{- end }}
+
+{{/*
 Auth secret name for the Archestra Platform
 */}}
 {{- define "archestra-platform.authSecretName" -}}
 {{- default (printf "%s-auth" (include "archestra-platform.fullname" .)) .Values.archestra.authSecret.existingSecretName -}}
+{{- end }}
+
+{{/*
+Hook-only auth secret name for the database migration Job.
+*/}}
+{{- define "archestra-platform.migrationJobAuthSecretName" -}}
+{{- printf "%s-migrate-auth" (include "archestra-platform.fullname" .) -}}
 {{- end }}
 
 {{/*
@@ -187,6 +306,13 @@ Diagnostics PVC claim name
 {{- end }}
 
 {{/*
+File storage PVC claim name
+*/}}
+{{- define "archestra-platform.fileStorageClaimName" -}}
+{{- default (printf "%s-file-storage" (include "archestra-platform.fullname" .)) .Values.archestra.fileStorage.filesystem.existingClaim -}}
+{{- end }}
+
+{{/*
 ServiceAccount name for the Archestra Platform
 */}}
 {{- define "archestra-platform.serviceAccountName" -}}
@@ -195,6 +321,59 @@ ServiceAccount name for the Archestra Platform
 {{- else }}
 {{- default "default" .Values.archestra.orchestrator.kubernetes.serviceAccount.name }}
 {{- end }}
+{{- end }}
+
+{{/*
+RBAC rules granting the platform ServiceAccount the permissions it needs to
+manage MCP server workloads AND the per-environment Dagger sandbox engine
+(StatefulSet + engine-config ConfigMap + egress NetworkPolicy, reached via
+pods/exec + pods/attach) in a namespace. Shared by the release-namespace Role
+and the per-namespace Roles generated from rbac.environmentNamespaces, so both
+grant exactly the same access (no drift).
+*/}}
+{{- define "archestra-platform.mcpManagerRules" -}}
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods/attach"]
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# ConfigMaps for the per-environment Dagger engine config (engine.json).
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# Deployments for MCP servers; StatefulSets for the per-environment Dagger engine.
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# Standard Kubernetes NetworkPolicy for IP/CIDR egress rules.
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# CiliumNetworkPolicy for DNS/FQDN egress rules on Cilium-enabled clusters.
+- apiGroups: ["cilium.io"]
+  resources: ["ciliumnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# GKE FQDNNetworkPolicy for DNS/FQDN egress rules on supported GKE clusters.
+- apiGroups: ["networking.gke.io"]
+  resources: ["fqdnnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# EKS Auto Mode ApplicationNetworkPolicy for DNS/FQDN egress rules.
+- apiGroups: ["networking.k8s.aws"]
+  resources: ["applicationnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
 {{- end }}
 
 {{/*
@@ -212,6 +391,46 @@ Worker labels
 {{- define "archestra-platform.workerLabels" -}}
 helm.sh/chart: {{ include "archestra-platform.chart" . }}
 {{ include "archestra-platform.workerSelectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: archestra
+{{- end }}
+
+{{/*
+Renderer selector labels (app-recording video render service)
+*/}}
+{{- define "archestra-platform.rendererSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "archestra-platform.name" . }}-renderer
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: renderer
+{{- end }}
+
+{{/*
+Renderer labels
+*/}}
+{{- define "archestra-platform.rendererLabels" -}}
+helm.sh/chart: {{ include "archestra-platform.chart" . }}
+{{ include "archestra-platform.rendererSelectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: archestra
+{{- end }}
+
+{{/*
+Database migration Job labels.
+
+The name label is suffixed with `-migrate` so the platform Service selector
+never routes traffic to the short-lived migration pod.
+*/}}
+{{- define "archestra-platform.migrationJobLabels" -}}
+helm.sh/chart: {{ include "archestra-platform.chart" . }}
+app.kubernetes.io/name: {{ include "archestra-platform.name" . }}-migrate
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: migrate
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -241,7 +460,8 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
 {{- if .Values.postgresql.enabled }}
 # Ensure the pgvector extension exists in the application database.
 - name: setup-postgres-extensions
-  image: {{ printf "%s:%s" (.Values.postgresql.image.repository | default "bitnami/postgresql") (.Values.postgresql.image.tag | default "latest") }}
+  {{- /* Honor the digest pin the same way the Bitnami subchart does: with a digest, the tag is informational and the digest wins. */}}
+  image: {{ printf "%s:%s" (.Values.postgresql.image.repository | default "bitnami/postgresql") (.Values.postgresql.image.tag | default "latest") }}{{ with .Values.postgresql.image.digest }}@{{ . }}{{ end }}
   {{- with .Values.archestra.initContainers.resources }}
   resources:
     {{- toYaml . | nindent 4 }}
@@ -325,10 +545,47 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
 {{- end }}
 
 {{/*
+Worker-only init container that blocks worker startup until the web Deployment
+has applied database migrations.
+
+This is reliable on fresh installs, where no previous web pods exist. Upgrades
+are covered by the pre-upgrade migration Job.
+*/}}
+{{- define "archestra-platform.waitForMigrationsInitContainer" -}}
+{{- if .Values.archestra.initContainers.waitForMigrations.enabled }}
+- name: wait-for-migrations
+  image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
+  {{- with .Values.archestra.initContainers.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  command:
+    - sh
+    - -c
+    - |
+      HOST={{ include "archestra-platform.fullname" . | quote }}
+      PORT=9000
+      echo "Waiting for migrations (platform web server at ${HOST}:${PORT})..."
+      max_attempts={{ .Values.archestra.initContainers.waitForMigrations.timeoutSeconds | default 600 }}
+      attempt=0
+      until nc -z "${HOST}" "${PORT}"; do
+        attempt=$((attempt + 1))
+        if [ "$attempt" -ge "$max_attempts" ]; then
+          echo "Platform web server at ${HOST}:${PORT} did not become reachable after ${max_attempts}s - giving up" >&2
+          exit 1
+        fi
+        echo "Platform web server is unavailable - sleeping (${attempt}/${max_attempts})"
+        sleep 1
+      done
+      echo "Platform web server is up - migrations applied, continuing"
+{{- end }}
+{{- end }}
+
+{{/*
 Shared volumes for both platform and worker Deployments.
 */}}
 {{- define "archestra-platform.volumes" -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled .Values.archestra.extraVolumes }}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") .Values.archestra.extraVolumes }}
 volumes:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -345,6 +602,11 @@ volumes:
     persistentVolumeClaim:
       claimName: {{ include "archestra-platform.diagnosticsClaimName" . }}
   {{- end }}
+  {{- if eq .Values.archestra.fileStorage.provider "filesystem" }}
+  - name: file-storage
+    persistentVolumeClaim:
+      claimName: {{ include "archestra-platform.fileStorageClaimName" . }}
+  {{- end }}
   {{- with .Values.archestra.extraVolumes }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
@@ -355,7 +617,7 @@ volumes:
 Shared volume mounts for the main container.
 */}}
 {{- define "archestra-platform.volumeMounts" -}}
-{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled .Values.archestra.extraVolumeMounts }}
+{{- if or (and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName) .Values.archestra.initContainers.vaultSecrets.enabled .Values.archestra.diagnostics.enabled (eq .Values.archestra.fileStorage.provider "filesystem") .Values.archestra.extraVolumeMounts }}
 volumeMounts:
   {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
   - name: kubeconfig
@@ -370,6 +632,11 @@ volumeMounts:
   {{- if .Values.archestra.diagnostics.enabled }}
   - name: diagnostics
     mountPath: /var/diagnostics
+    readOnly: false
+  {{- end }}
+  {{- if eq .Values.archestra.fileStorage.provider "filesystem" }}
+  - name: file-storage
+    mountPath: {{ .Values.archestra.fileStorage.filesystem.mountPath }}
     readOnly: false
   {{- end }}
   {{- with .Values.archestra.extraVolumeMounts }}

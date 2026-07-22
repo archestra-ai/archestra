@@ -3,7 +3,7 @@
 import {
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
   DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
-} from "@shared";
+} from "@archestra/shared";
 import {
   ArrowLeft,
   ChevronDown,
@@ -52,6 +52,8 @@ interface BrowserPreviewContentProps {
   agentId?: string;
   /** When true, this is a popup that follows the active conversation */
   isPopup?: boolean;
+  /** When true, hide the title row (parent already provides chrome). */
+  hideHeader?: boolean;
   /** Called when user enters a URL without a conversation - should create conversation and navigate */
   onCreateConversationWithUrl?: (url: string) => void;
   /** Whether conversation creation is in progress */
@@ -69,6 +71,7 @@ export function BrowserPreviewContent({
   className,
   agentId: agentIdProp,
   isPopup = false,
+  hideHeader = false,
   onCreateConversationWithUrl,
   isCreatingConversation = false,
   initialNavigateUrl,
@@ -251,16 +254,27 @@ export function BrowserPreviewContent({
       {/* Header */}
       <div className="flex flex-col px-2 py-3 border-b">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Globe className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs font-medium">Browser Preview</span>
-            {isConnected && (
+          {hideHeader ? (
+            isConnected ? (
               <span
-                className="w-2 h-2 rounded-full bg-green-500"
+                className="w-2 h-2 rounded-full bg-green-500 ml-1"
                 title="Connected"
               />
-            )}
-          </div>
+            ) : (
+              <div />
+            )
+          ) : (
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs font-medium">Browser Preview</span>
+              {isConnected && (
+                <span
+                  className="w-2 h-2 rounded-full bg-green-500"
+                  title="Connected"
+                />
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-1">
             {/* Type tool */}
             <Popover>
@@ -285,6 +299,7 @@ export function BrowserPreviewContent({
                   </p>
                   <Textarea
                     placeholder="Text to type..."
+                    aria-label="Text to type"
                     value={typeText}
                     onChange={(e) => setTypeText(e.target.value)}
                     className="text-xs min-h-[60px]"
@@ -399,6 +414,7 @@ export function BrowserPreviewContent({
           <Input
             type="text"
             placeholder="Enter URL..."
+            aria-label="URL to navigate"
             value={urlInput}
             onChange={(e) => {
               setIsEditingUrl(true);
@@ -456,19 +472,22 @@ export function BrowserPreviewContent({
               alt="Browser screenshot"
               className="block w-full h-full object-contain object-top"
             />
-            {/* Clickable overlay */}
-            {/* biome-ignore lint/a11y/useSemanticElements: Need div for absolute positioning overlay */}
+            {/*
+              Pointer-coordinate overlay: forwards the exact click position to
+              the remote browser (see handleImageClick, which maps clientX/clientY
+              to a viewport coordinate). It is intentionally mouse/pointer-only and
+              is NOT a focusable control — a keyboard Enter/Space has no (x,y) to
+              forward, so exposing role="button"/tabIndex here would advertise a
+              keyboard interaction we cannot fulfil (a worse a11y outcome than
+              omitting it). Full keyboard control of the embedded browser would
+              require forwarding key events to the remote session — a separate
+              feature tracked outside this accessibility pass.
+            */}
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-coordinate overlay for the remote browser; no keyboard equivalent by design (see comment above) */}
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-coordinate overlay for the remote browser; no keyboard equivalent by design (see comment above) */}
             <div
               className="absolute inset-0 cursor-pointer"
               onClick={handleImageClick}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                }
-              }}
-              role="button"
-              tabIndex={0}
-              aria-label="Click to interact with browser"
             />
           </div>
         )}

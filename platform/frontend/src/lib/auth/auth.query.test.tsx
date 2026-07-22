@@ -1,4 +1,4 @@
-import { archestraApiSdk, type Permissions } from "@shared";
+import { archestraApiSdk, type Permissions } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,17 +13,10 @@ import * as authUtils from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 // Mock the auth client and SDK
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    getSession: vi.fn(),
-    organization: {
-      listMembers: vi.fn(),
-    },
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
-vi.mock("@shared", async () => {
-  const actual = await vi.importActual("@shared");
+vi.mock("@archestra/shared", async () => {
+  const actual = await vi.importActual("@archestra/shared");
   return {
     ...actual,
     archestraApiSdk: {

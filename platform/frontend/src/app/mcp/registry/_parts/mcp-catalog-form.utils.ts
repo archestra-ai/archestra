@@ -5,7 +5,7 @@ import {
   type ImagePullSecretConfig,
   isVaultReference,
   parseVaultReference,
-} from "@shared";
+} from "@archestra/shared";
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 
@@ -91,6 +91,10 @@ export function transformFormToApiData(
       .map((scope) => scope.trim())
       .filter((scope) => scope.length > 0);
     const scopesList = parsedScopes;
+    const additionalScopesList = (values.oauthConfig.additional_scopes ?? "")
+      .split(",")
+      .map((scope) => scope.trim())
+      .filter((scope) => scope.length > 0);
 
     // For local servers, use oauthServerUrl; for remote servers, use serverUrl
     const oauthServerUrl =
@@ -120,6 +124,9 @@ export function transformFormToApiData(
           ? undefined
           : values.oauthConfig.client_secret || undefined,
       audience: values.oauthConfig.audience || undefined,
+      resource: isClientCredentials
+        ? undefined
+        : values.oauthConfig.resource || undefined,
       redirect_uris: redirectUrisList,
       scopes: scopesList,
       // default_scopes is the fallback used by the backend's scope resolution:
@@ -138,6 +145,7 @@ export function transformFormToApiData(
             ? []
             : ["read", "write"],
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
+      additional_scopes: isClientCredentials ? undefined : additionalScopesList,
     };
 
     // BYOS: Include OAuth client secret vault path and key if set
@@ -238,7 +246,21 @@ export function transformFormToApiData(
     data.teams = values.teams;
   }
 
+  // Deployment environment assignment (null = the default environment)
+  data.environmentId = values.environmentId ?? null;
+
   return data;
+}
+
+// Build create-form values from an existing catalog item for cloning. A clone
+// is a full copy of the source's configuration (secrets included); only the
+// name is suffixed with "-copy" so the create form is valid out of the box and
+// catalog name-uniqueness validation handles collisions on submit.
+export function buildCloneFormValues(
+  item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+): McpCatalogFormValues {
+  const values = transformCatalogItemToFormValues(item);
+  return { ...values, name: `${values.name}-copy` };
 }
 
 // Transform catalog item to form values
@@ -300,8 +322,10 @@ export function transformCatalogItemToFormValues(
         client_id: string;
         client_secret: string;
         audience: string;
+        resource: string;
         redirect_uris: string;
         scopes: string;
+        additional_scopes: string;
         supports_resource_metadata: boolean;
         grantType: "authorization_code" | "client_credentials";
         authServerUrl?: string;
@@ -323,8 +347,15 @@ export function transformCatalogItemToFormValues(
         typeof item.userConfig?.audience?.default === "string"
           ? item.userConfig.audience.default
           : item.oauthConfig.audience || "",
+      resource: item.oauthConfig.resource || "",
       redirect_uris: item.oauthConfig.redirect_uris?.join(", ") || "",
       scopes: item.oauthConfig.scopes?.join(", ") || "",
+      // Undefined means the item predates this field, so show the default
+      // offline_access; an explicit empty array means the user cleared it.
+      additional_scopes:
+        item.oauthConfig.additional_scopes !== undefined
+          ? item.oauthConfig.additional_scopes.join(", ")
+          : "offline_access",
       supports_resource_metadata:
         item.oauthConfig.supports_resource_metadata ?? true,
       grantType: item.oauthConfig.grant_type ?? "authorization_code",
@@ -440,7 +471,6 @@ export function transformCatalogItemToFormValues(
       fieldName,
       headerName: config.headerName,
       promptOnInstallation: config.promptOnInstallation ?? true,
-      promptOnPreset: config.promptOnPreset ?? false,
       required: config.required ?? false,
       value: typeof config.default === "string" ? config.default : undefined,
       description: config.description ?? "",
@@ -477,8 +507,10 @@ export function transformCatalogItemToFormValues(
     labels: item.labels ?? [],
     // Scope
     scope: (item.scope as AgentScope) ?? "org",
-    // Teams
-    teams: item.teams?.map((t) => t.id) ?? [],
+    // Teams, each with the access level it holds on this item
+    teams: item.teams?.map((t) => ({ id: t.id, level: t.level })) ?? [],
+    // Deployment environment (null = the default environment)
+    environmentId: item.environmentId ?? null,
   } as McpCatalogFormValues;
 }
 
@@ -557,12 +589,17 @@ export function transformExternalCatalogToFormValues(
       client_id: server.oauth_config.client_id || "",
       client_secret: server.oauth_config.client_secret || "",
       audience: "",
+      resource:
+        getOptionalStringProperty(server.oauth_config, "resource") || "",
       redirect_uris:
         redirectUris ||
         (typeof window !== "undefined"
           ? `${window.location.origin}/oauth-callback`
           : ""),
       scopes: server.oauth_config.scopes?.join(", ") ?? "",
+      // The external catalog manifest does not carry additional_scopes, so
+      // start from the default that requests a refresh token.
+      additional_scopes: "offline_access",
       supports_resource_metadata:
         server.oauth_config.supports_resource_metadata ?? true,
       grantType:
@@ -704,6 +741,7 @@ export function transformExternalCatalogToFormValues(
   return {
     name: server.display_name || server.name,
     description: server.description || "",
+    instructions: server.instructions ?? undefined,
     icon: server.icon ?? null,
     serverType: server.server.type as "remote" | "local",
     multitenant: server.server.type === "local" && authMethod !== "none",
@@ -723,7 +761,6 @@ export function transformExternalCatalogToFormValues(
         fieldName,
         headerName: config.headerName,
         promptOnInstallation: config.promptOnInstallation ?? true,
-        promptOnPreset: config.promptOnPreset ?? false,
         required: config.required ?? false,
         value: typeof config.default === "string" ? config.default : undefined,
         description: config.description ?? "",
@@ -734,11 +771,13 @@ export function transformExternalCatalogToFormValues(
       client_id: "",
       client_secret: "",
       audience: "",
+      resource: "",
       redirect_uris:
         typeof window !== "undefined"
           ? `${window.location.origin}/oauth-callback`
           : "",
       scopes: "read, write",
+      additional_scopes: "offline_access",
       supports_resource_metadata: true,
       grantType: "authorization_code",
       authServerUrl: "",
@@ -798,13 +837,11 @@ function buildStaticHeaderUserConfig(
     // the combination, because `default` lives in plaintext jsonb on the
     // catalog row). Fall back to non-sensitive for static regardless of
     // what the form carries.
-    const isStaticHeader =
-      !header.promptOnInstallation && !header.promptOnPreset;
+    const isStaticHeader = !header.promptOnInstallation;
     userConfig[fieldName] = {
       type: "string",
       title: header.headerName,
       promptOnInstallation: header.promptOnInstallation,
-      promptOnPreset: header.promptOnPreset || undefined,
       required: header.promptOnInstallation ? header.required : false,
       default:
         !header.promptOnInstallation && header.value ? header.value : undefined,
@@ -859,7 +896,6 @@ function getHeaderMappedUserConfigEntries(
     fieldName: string;
     headerName: string;
     promptOnInstallation?: boolean;
-    promptOnPreset?: boolean;
     required?: boolean;
     default?: string | number | boolean | Array<string>;
     description?: string;
@@ -879,7 +915,6 @@ function getHeaderMappedUserConfigEntries(
         const userConfigField = config as {
           headerName: string;
           promptOnInstallation?: boolean;
-          promptOnPreset?: boolean;
           required?: boolean;
           default?: string | number | boolean | Array<string>;
           description?: string;
@@ -892,7 +927,6 @@ function getHeaderMappedUserConfigEntries(
             fieldName,
             headerName: userConfigField.headerName,
             promptOnInstallation: userConfigField.promptOnInstallation,
-            promptOnPreset: userConfigField.promptOnPreset,
             required: userConfigField.required,
             default: userConfigField.default,
             description: userConfigField.description,

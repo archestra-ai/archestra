@@ -4,7 +4,7 @@ import {
   type AgentScope,
   type archestraApiTypes,
   isBuiltInCatalogId,
-} from "@shared";
+} from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -19,7 +19,7 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
@@ -34,7 +34,10 @@ import { CatalogDocsLink } from "@/components/catalog-docs-link";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
-import { TokenSelect } from "@/components/token-select";
+import {
+  DYNAMIC_CREDENTIAL_VALUE,
+  TokenSelect,
+} from "@/components/token-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,13 +103,11 @@ type CatalogItem =
 
 interface InitialAgentSelectorProps {
   currentAgentId: string | null;
-  currentAgentName?: string;
   onAgentChange: (agentId: string) => void;
 }
 
-export function InitialAgentSelector({
+export const InitialAgentSelector = memo(function InitialAgentSelector({
   currentAgentId,
-  currentAgentName,
   onAgentChange,
 }: InitialAgentSelectorProps) {
   const { data: allAgents = [] } = useInternalAgents();
@@ -144,8 +145,7 @@ export function InitialAgentSelector({
       allAgents.find((a) => a.id === currentAgentId) ?? allAgents[0] ?? null,
     [allAgents, currentAgentId],
   );
-  const displayAgentName =
-    currentAgent?.name ?? currentAgentName ?? "Select agent";
+  const displayAgentName = currentAgent?.name ?? "Select agent";
   const effectiveAgentId = currentAgent?.id ?? currentAgentId;
   const shouldLoadAgentManagementDetails = open || !!editingAgentId;
   const installer = useMcpInstallOrchestrator({
@@ -232,6 +232,13 @@ export function InitialAgentSelector({
     setSearch("");
   };
 
+  const handleAddTool = useCallback(() => {
+    if (currentAgentId) {
+      setEditingAgentId(currentAgentId);
+      setDialogView("add-tool");
+    }
+  }, [currentAgentId]);
+
   const editingAgent = useMemo(
     () => allAgents.find((a) => a.id === editingAgentId) ?? null,
     [allAgents, editingAgentId],
@@ -269,22 +276,22 @@ export function InitialAgentSelector({
             data-agent-selector
             className="max-w-[300px] min-w-0"
           >
-            <AgentIcon icon={currentAgent.icon} size={16} />
+            <AgentIcon icon={currentAgent?.icon} size={16} />
             <span className="truncate flex-1 text-left">
               {displayAgentName}
             </span>
-            <ToolServerAvatarGroup
-              catalogs={assignedCatalogs}
-              subagents={triggerSubagents}
-              connectorTypes={agentConnectorTypes}
-              showAddButton={canEditCurrentAgent}
-              onAdd={() => {
-                if (currentAgentId) {
-                  setEditingAgentId(currentAgentId);
-                  setDialogView("add-tool");
-                }
-              }}
-            />
+            {/* In Auto mode the agent reaches everything dynamically,
+                so the per-server avatar group + its tool selector are
+                meaningless — hide them. */}
+            {!currentAgent?.accessAllTools && (
+              <ToolServerAvatarGroup
+                catalogs={assignedCatalogs}
+                subagents={triggerSubagents}
+                connectorTypes={agentConnectorTypes}
+                showAddButton={canEditCurrentAgent}
+                onAdd={handleAddTool}
+              />
+            )}
           </PromptInputButton>
         </PopoverTrigger>
         <PopoverContent
@@ -298,6 +305,7 @@ export function InitialAgentSelector({
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <Input
                 placeholder="Search..."
+                aria-label="Search agents"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="h-8 pl-8 text-sm rounded-lg border-0 bg-muted/50 focus-visible:ring-1"
@@ -510,7 +518,7 @@ export function InitialAgentSelector({
       )}
     </>
   );
-}
+});
 
 // Reusable dialog header with back button and close
 function DialogHeader({
@@ -608,6 +616,7 @@ function AgentSettingsView({
     connectorIds?: string[];
     createdAt?: string;
     authorName?: string | null;
+    accessAllTools?: boolean;
   } | null;
   onAddTool: () => void;
   onEditTool: (catalog: CatalogItem) => void;
@@ -731,6 +740,7 @@ function AgentSettingsView({
           ) : (
             <button
               type="button"
+              aria-label="Edit agent icon"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted cursor-pointer"
               onDoubleClick={() => setIsEditingIcon(true)}
             >
@@ -741,6 +751,7 @@ function AgentSettingsView({
             {isEditingName ? (
               <Input
                 ref={nameInputRef}
+                aria-label="Agent name"
                 value={editedName}
                 onChange={(e) => setEditedName(e.target.value)}
                 onBlur={() => saveName(editedName)}
@@ -817,110 +828,128 @@ function AgentSettingsView({
           height="120px"
         />
 
-        <div>
-          <Label className="mb-1.5">Tools and subagents</Label>
-          <AssignedToolsGrid
-            agentId={agent.id}
-            onAddTool={onAddTool}
-            onEditTool={onEditTool}
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <Label>Knowledge sources</Label>
+        {agent?.accessAllTools ? (
+          <div>
+            <Label className="mb-1.5">Tools &amp; Knowledge Sources</Label>
+            <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+              This agent uses{" "}
+              <span className="font-medium text-foreground">
+                Auto tool access
+              </span>{" "}
+              — every MCP tool and knowledge source the chatting user can
+              access, discovered on demand.
+            </p>
           </div>
-          {matchedKbs.length === 0 && matchedConnectors.length === 0 ? (
-            <button
-              type="button"
-              onClick={onEditKnowledgeSources}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-3 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
-            >
-              <Database className="size-4" />
-              <span className="text-xs font-medium">Add knowledge sources</span>
-            </button>
-          ) : (
-            <div className="space-y-2">
-              {matchedKbs.map((kb) => {
-                const connectors = kb.connectors ?? [];
-                const connectorTypes = [
-                  ...new Set(connectors.map((c) => c.connectorType)),
-                ];
-                return (
-                  <div
-                    key={kb.id}
-                    className="group flex items-center justify-between gap-2 rounded-lg border bg-muted/30 p-3"
-                  >
-                    <span className="text-sm font-medium truncate">
-                      {kb.name}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {connectorTypes.length > 0 && (
-                        <OverlappedIcons
-                          icons={connectorTypes.map((type) => ({
-                            key: type,
-                            icon: (
-                              <ConnectorTypeIcon
-                                type={type}
-                                className="h-full w-full"
-                              />
-                            ),
-                            tooltip: type,
-                          }))}
-                          maxVisible={3}
-                          size="sm"
-                        />
-                      )}
-                      <button
-                        type="button"
-                        className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                        onClick={() => handleRemoveKnowledgeBase(kb.id)}
-                        title={`Remove ${kb.name}`}
-                      >
-                        <XIcon className="size-3" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              {matchedConnectors.map((connector) => (
-                <div
-                  key={connector.id}
-                  className="group flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
-                >
-                  <ConnectorTypeIcon
-                    type={connector.connectorType}
-                    className="h-4 w-4 shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <span className="truncate block">{connector.name}</span>
-                    {connector.description && (
-                      <span className="truncate block text-xs text-muted-foreground">
-                        {connector.description}
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                    onClick={() => handleRemoveConnector(connector.id)}
-                    title={`Remove ${connector.name}`}
-                  >
-                    <XIcon className="size-3" />
-                  </button>
-                </div>
-              ))}
+        ) : (
+          <div>
+            <Label className="mb-1.5">Tools and subagents</Label>
+            <AssignedToolsGrid
+              agentId={agent.id}
+              onAddTool={onAddTool}
+              onEditTool={onEditTool}
+            />
+          </div>
+        )}
+
+        {!agent?.accessAllTools && (
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <Label>Knowledge sources</Label>
+            </div>
+            {matchedKbs.length === 0 && matchedConnectors.length === 0 ? (
               <button
                 type="button"
                 onClick={onEditKnowledgeSources}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-2 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-3 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
               >
-                <Plus className="size-3.5" />
-                <span className="text-xs font-medium">Add</span>
+                <Database className="size-4" />
+                <span className="text-xs font-medium">
+                  Add knowledge sources
+                </span>
               </button>
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="space-y-2">
+                {matchedKbs.map((kb) => {
+                  const connectors = kb.connectors ?? [];
+                  const connectorTypes = [
+                    ...new Set(connectors.map((c) => c.connectorType)),
+                  ];
+                  return (
+                    <div
+                      key={kb.id}
+                      className="group flex items-center justify-between gap-2 rounded-lg border bg-muted/30 p-3"
+                    >
+                      <span className="text-sm font-medium truncate">
+                        {kb.name}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {connectorTypes.length > 0 && (
+                          <OverlappedIcons
+                            icons={connectorTypes.map((type) => ({
+                              key: type,
+                              icon: (
+                                <ConnectorTypeIcon
+                                  type={type}
+                                  className="h-full w-full"
+                                />
+                              ),
+                              tooltip: type,
+                            }))}
+                            maxVisible={3}
+                            size="sm"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                          onClick={() => handleRemoveKnowledgeBase(kb.id)}
+                          title={`Remove ${kb.name}`}
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {matchedConnectors.map((connector) => (
+                  <div
+                    key={connector.id}
+                    className="group flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
+                  >
+                    <ConnectorTypeIcon
+                      type={connector.connectorType}
+                      className="h-4 w-4 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="truncate block">{connector.name}</span>
+                      {connector.description && (
+                        <span className="truncate block text-xs text-muted-foreground">
+                          {connector.description}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                      onClick={() => handleRemoveConnector(connector.id)}
+                      title={`Remove ${connector.name}`}
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={onEditKnowledgeSources}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-2 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
+                >
+                  <Plus className="size-3.5" />
+                  <span className="text-xs font-medium">Add</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="border-t px-4 py-3 shrink-0 flex items-center justify-between gap-3">
@@ -1185,7 +1214,6 @@ function AddToolView({
       const tools = await fetchCatalogTools(catalog.id);
       if (tools.length === 0) return;
       const servers = allCredentials?.[catalog.id] ?? [];
-      const _isLocal = catalog.serverType === "local";
       const isBuiltin = catalog.serverType === "builtin";
       const credentialId = servers[0]?.id;
       await Promise.all(
@@ -1234,6 +1262,7 @@ function AddToolView({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search MCP servers..."
+            aria-label="Search MCP servers"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -1430,8 +1459,10 @@ function ConfigureToolView({
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     new Set(),
   );
+  // Resolve-at-call-time is the default; pinning a static credential is an
+  // explicit choice.
   const [credential, setCredential] = useState<string | null>(
-    mcpServers[0]?.id ?? null,
+    DYNAMIC_CREDENTIAL_VALUE,
   );
   const [isSaving, setIsSaving] = useState(false);
 
@@ -1446,20 +1477,12 @@ function ConfigureToolView({
     }
   }, [allTools, assignedToolIds]);
 
-  // Auto-set default credential once loaded
-  useEffect(() => {
-    if (!credential && mcpServers.length > 0) {
-      setCredential(mcpServers[0].id);
-    }
-  }, [credential, mcpServers]);
-
   const isBuiltin = catalog.serverType === "builtin";
   const showCredentialSelector = !isBuiltin && mcpServers.length > 0;
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const _isLocal = catalog.serverType === "local";
       const toAdd = [...selectedToolIds].filter(
         (id) => !assignedToolIds.has(id),
       );
@@ -1467,12 +1490,24 @@ function ConfigureToolView({
         (id) => !selectedToolIds.has(id),
       );
 
+      const useDynamicCredential =
+        !credential || credential === DYNAMIC_CREDENTIAL_VALUE;
+
       await Promise.all([
         ...toAdd.map((toolId) =>
           assignTool.mutateAsync({
             agentId,
             toolId,
-            mcpServerId: !isBuiltin ? (credential ?? undefined) : undefined,
+            mcpServerId:
+              !isBuiltin && !useDynamicCredential
+                ? (credential ?? undefined)
+                : undefined,
+            ...(!isBuiltin && {
+              resolveAtCallTime: useDynamicCredential,
+              credentialResolutionMode: useDynamicCredential
+                ? ("dynamic" as const)
+                : ("static" as const),
+            }),
             skipInvalidation: true,
           }),
         ),
@@ -1656,6 +1691,7 @@ function AddDelegationView({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search agents..."
+            aria-label="Search agents"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -1861,6 +1897,7 @@ function EditKnowledgeSourcesView({
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search knowledge sources..."
+                aria-label="Search knowledge sources"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -2027,7 +2064,7 @@ type SubagentItem = {
   icon?: string | null;
 };
 
-function ToolServerAvatarGroup({
+const ToolServerAvatarGroup = memo(function ToolServerAvatarGroup({
   catalogs,
   subagents = [],
   connectorTypes = [],
@@ -2121,4 +2158,4 @@ function ToolServerAvatarGroup({
       )}
     </div>
   );
-}
+});

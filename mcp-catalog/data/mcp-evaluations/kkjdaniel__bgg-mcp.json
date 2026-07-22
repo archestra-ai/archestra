@@ -1,0 +1,91 @@
+{
+  "name": "kkjdaniel__bgg-mcp",
+  "display_name": "bgg-mcp",
+  "description": "BGG MCP provides access to the BoardGameGeek API through the Model Context Protocol, enabling retrieval and filtering of board game data, user collections, and profiles.",
+  "author": {
+    "name": "kkjdaniel"
+  },
+  "server": {
+    "command": "${__dirname}/build/bgg-mcp",
+    "args": [],
+    "env": {
+      "BGG_USERNAME": "${user_config.bgg_username}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bgg_username": {
+      "type": "string",
+      "title": "BGG Username",
+      "description": "Your BoardGameGeek username to enable 'me' and 'my' references in queries.",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "<p align=\"center\">\n  <img src=\"bgg-mcp-logo.png\" width=\"250\" alt=\"BGG MCP Logo\">\n</p>\n\n# BGG MCP: BoardGameGeek MCP API Server\n\n[![smithery badge](https://smithery.ai/badge/@kkjdaniel/bgg-mcp)](https://smithery.ai/server/@kkjdaniel/bgg-mcp)\n[![Go Version](https://img.shields.io/github/go-mod/go-version/kkjdaniel/bgg-mcp)](https://go.dev/)\n[![License](https://img.shields.io/github/license/kkjdaniel/bgg-mcp)](LICENSE)\n[![MCP Protocol](https://img.shields.io/badge/MCP-Protocol-blue)](https://modelcontextprotocol.io)\n\nBGG MCP provides access to the BoardGameGeek API through the [Model Context Protocol](https://www.anthropic.com/news/model-context-protocol), enabling retrieval and filtering of board game data, user collections, and profiles. The server is implemented in Go, using the [GoGeek](https://github.com/kkjdaniel/gogeek) library, which helps ensure robust API interactions.\n\nPrice data is provided by [BoardGamePrices.co.uk](https://boardgameprices.co.uk), offering real-time pricing from multiple retailers.\n\nGame recommendations are powered by [Recommend.Games](https://recommend.games/), which provides algorithmic similarity recommendations based on BoardGameGeek data.\n\n<a href=\"https://boardgamegeek.com/\">\n  <img src=\"powered-bgg.webp\" width=\"160\" alt=\"Powered by BGG\">\n</a>\n\n## Example\n\n![Example of BGG MCP in action](example.png)\n\n## Tools\n\n- **Search** - Search for board games on BoardGameGeek with type filtering (base games, expansions, or all)\n- **Game Details** - Get detailed information about a specific board game\n- **Collection** - Query and filter a user's game collection with extensive filtering options\n- **Hotness** - Get the current BGG hotness list\n- **User** - Get user profile information\n- **Price** - Get current prices from multiple retailers using BGG IDs\n- **Trade Finder** - Find trading opportunities between two BGG users\n- **Recommender** - Get game recommendations based on similarity to a specific game\n\n## Prompts\n\n- **trade-sales-post** - Generate a formatted sales post for your BGG 'for trade' collection with discounted market prices\n- **game-recommendations** - Get personalized game recommendations based on your BGG collection and preferences\n\n![Example of trade-sales-post prompt in action](prompt-example.png)\n\n## Example Prompts\n\nHere are some example prompts you can use to interact with the BGG MCP tools:\n\n### 🔍 Search\n\n```\n\"Search for Wingspan on BGG\"\n\"How many expansions does Grand Austria Hotel have?\"\n\"Search for Wingspan expansions only\"\n```\n\n### 📊 Game Details\n\n```\n\"Get details for Azul\"\n\"Show me information about game ID 224517\"\n\"What's the BGG rating for Gloomhaven?\"\n```\n\n### 📚 Collection\n\n```\n\"Show me ZeeGarcia's game collection\"\n\"Show games rated 0+ in kkjdaniel's collection\"\n\"List unplayed games in rahdo's collection\"\n\"Find games for 6 players in kkjdaniel's collection\"\n\"Show me all the games rate 3 and below in my collection\"\n\"What games in my collection does rahdo want?\"\n\"What games does kkjdaniel have that I want?\"\n```\n\n### 🔥 Hotness\n\n```\n\"Show me the current BGG hotness list\"\n\"What's trending on BGG?\"\n```\n\n### 👤 User Profile\n\n```\n\"Show me details about BGG user rahdo\"\n\"When did user ZeeGarcia join BGG?\"\n\"How many buddies do I have on bgg?\"\n```\n\n### 💰 Prices\n\n```\n\"Get the best price for Wingspan in GBP\"\n\"Show me the best UK price for Ark Nova\"\n\"Compare prices for: Wingspan & Ark Nova\"\n```\n\n### 🎯 Recommendations\n\n```\n\"Recommend games similar to Wingspan\"\n\"What games are like Azul but with at least 1000 ratings?\"\n\"Find 5 games similar to Troyes\"\n```\n\n## Setup\n\nYou have two options for setting up, the easiest is to use the integration of Smithery.\n\n### A) Installing via Smithery\n\nTo install bgg-mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kkjdaniel/bgg-mcp):\n\n```bash\nnpx -y @smithery/cli install @kkjdaniel/bgg-mcp --client claude\n```\n\n### B) Manual Setup\n\n#### 1. Install Go\n\nYou will need to have Go installed on your system to build binary. This can be easily [downloaded and setup here](https://go.dev/doc/install), or you can use the package manager that you prefer such as Brew.\n\n#### 2. Build\n\nThe project includes a Makefile to simplify building and managing the binary.\n\n```bash\n# Build the application (output goes to build/bgg-mcp)\nmake build\n\n# Clean build artifacts\nmake clean\n\n# Both clean and build\nmake all\n```\n\nOr you can simply build it directly with Go...\n\n```bash\ngo build -o build/bgg-mcp\n```\n\n#### 3. Add MCP Config\n\nIn the `settings.json` (VS Code / Cursor) or `claude_desktop_config.json` add the following to your list of servers, pointing it to the binary you created earlier, once you load up your AI tool you should see the tools provided by the server connected:\n\n```json\n\"bgg\": {\n    \"command\": \"path/to/build/bgg-mcp\",\n    \"args\": []\n}\n```\n\nMore details for configuring Claude can be [found here](https://modelcontextprotocol.io/quickstart/user).\n\n## Optional Configuration\n\n### Username Configuration (Optional)\n\nYou can optionally set the `BGG_USERNAME` environment variable to enable \"me\" and \"my\" references in queries:\n\n```json\n\"bgg\": {\n    \"command\": \"path/to/build/bgg-mcp\",\n    \"args\": [],\n    \"env\": {\n        \"BGG_USERNAME\": \"your_bgg_username\"\n    }\n}\n```\n\nThis enables:\n\n- **Collection queries**: \"Show me my collection\" instead of specifying your username\n- **User queries**: \"Show me my BGG profile\"\n- **AI assistance**: The AI can automatically use your username for comparisons and analysis\n\n**Note**: When you use self-references (me, my, I) without setting BGG_USERNAME, you'll get a clear error message.\n",
+  "category": "Gaming",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kkjdaniel-bgg-mcp": {
+        "command": "path/to/build/bgg-mcp",
+        "args": [],
+        "env": {}
+      },
+      "kkjdaniel-bgg-mcp-configured": {
+        "command": "path/to/build/bgg-mcp",
+        "args": [],
+        "env": {
+          "BGG_USERNAME": "your_bgg_username"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kkjdaniel",
+    "repo": "bgg-mcp",
+    "url": "https://github.com/kkjdaniel/bgg-mcp",
+    "name": "bgg-mcp",
+    "path": null,
+    "stars": 9,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "5a70cce9e7bd163999174e8958dfe415aa628882"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:18.607Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "kkjdaniel/gogeek",
+      "importance": 9
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/kkjdanie/bgg-mcp\n\ngo 1.23\n\nrequire (\n\tgithub.com/kkjdaniel/gogeek v1.4.0\n\tgithub.com/mark3labs/mcp-go v0.28.1-0.20250519205157-99720bb4c451\n)\n\nrequire (\n\tgithub.com/benbjohnson/clock v1.3.0 // indirect\n\tgithub.com/clbanning/mxj v1.8.4 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.uber.org/ratelimit v0.3.1 // indirect\n)\n"
+}

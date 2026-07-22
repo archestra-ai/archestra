@@ -1,0 +1,135 @@
+{
+  "name": "dagger__container-use",
+  "display_name": "container-use",
+  "description": "Development environments for coding agents. Enable multiple agents to work safely and independently with your preferred stack.",
+  "author": {
+    "name": "dagger"
+  },
+  "server": {
+    "command": "container-use",
+    "args": ["stdio"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<div align=\"center\">\n  <img src=\"./docs/images/container-use.png\" align=\"center\" alt=\"Container use: Development environments for coding agents.\" />\n  <h1 align=\"center\">container-use</h2>\n  <p align=\"center\">Containerized environments for coding agents. (📦🤖) (📦🤖) (📦🤖)</p>\n  <p align=\"center\">\n    <img src=\"https://img.shields.io/badge/stability-experimental-orange.svg\" alt=\"Experimental\" />\n    <a href=\"https://opensource.org/licenses/Apache-2.0\">\n      <img src=\"https://img.shields.io/badge/License-Apache_2.0-blue.svg\">\n    </a>\n    <a href=\"https://container-use.com/discord\">\n      <img src=\"https://img.shields.io/discord/707636530424053791?logo=discord&logoColor=white&label=Discord&color=7289DA\" alt=\"Discord\">\n    </a>\n    <a href=\"https://github.com/clinebot/awesome-claude-code\">\n      <img src=\"https://awesome.re/mentioned-badge.svg\" alt=\"Mentioned in Awesome Claude Code\">\n    </a>\n  </p>\n</div>\n\n**Container Use** lets coding agents do their work in parallel environments without getting in your way. Go from babysitting one agent at a time to enabling multiple agents to work safely and independently with your preferred stack. See the [full documentation](https://container-use.com).\n\n<p align='center'>\n    <img src='./docs/images/demo.gif' width='700' alt='container-use demo'>\n</p>\n\nIt's an open-source MCP server that works as a CLI tool with Claude Code, Cursor, and other MCP-compatible agents. Powered by [Dagger](https://dagger.io).\n\n* 📦 **Isolated Environments**: Each agent gets a fresh container in its own git branch - run multiple agents without conflicts, experiment safely, discard failures instantly.\n* 👀 **Real-time Visibility**: See complete command history and logs of what agents actually did, not just what they claim.\n* 🚁 **Direct Intervention**: Drop into any agent's terminal to see their state and take control when they get stuck.\n* 🎮 **Environment Control**: Standard git workflow - just `git checkout <branch_name>` to review any agent's work.\n* 🌎 **Universal Compatibility**: Works with any agent, model, or infrastructure - no vendor lock-in.\n\n---\n\n🦺 This project is in early development and actively evolving. Submit issues and/or reach out to us on [Discord](https://container-use.com/discord) in the #container-use channel.\n\n---\n\n## Quick Start\n\n### Install\n\n```sh\n# macOS (recommended)\nbrew install dagger/tap/container-use\n\n# All platforms\ncurl -fsSL https://raw.githubusercontent.com/dagger/container-use/main/install.sh | bash\n```\n\n### Setup with Your Agent\n\nContainer Use works with any MCP-compatible agent. The setup is always the same: **add `container-use stdio` as an MCP server**.\n\n**👉 [Complete setup guide for all agents (Cursor, Goose, VSCode, etc.)](https://container-use.com/quickstart)**\n\n**Example with Claude Code:**\n\n```sh\n# Add Container Use MCP server\ncd /path/to/repository\nclaude mcp add container-use -- container-use stdio\n\n# Add agent rules (optional)\ncurl https://raw.githubusercontent.com/dagger/container-use/main/rules/agent.md >> CLAUDE.md\n```\n\n<details>\n<summary>💡 Command Shortcut</summary>\n\nThe `container-use` command is also available as `cu` for convenience. Both commands work identically:\n- `container-use stdio` (used in documentation)\n- `cu stdio` (shortcut)\n\n</details>\n\n### Try It\n\nAsk your agent to create something:\n> Create a hello world app in python using flask\n\nYour agent will work in an isolated environment and give you URLs to view the app and explore the code!",
+  "category": "Development",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "container-use-stdio": {
+        "command": "container-use",
+        "args": ["stdio"],
+        "env": {}
+      },
+      "cu-stdio": {
+        "command": "cu",
+        "args": ["stdio"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "dagger",
+    "repo": "container-use",
+    "url": "https://github.com/dagger/container-use",
+    "name": "dagger__container-use",
+    "path": null,
+    "stars": 2977,
+    "contributors": 30,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "755562972742768b8af35a42ccb6c0a7275ff434"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:19.800Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "dagger.io/dagger",
+      "importance": 10
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 9
+    },
+    {
+      "name": "charmbracelet/bubbletea",
+      "importance": 8
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 8
+    },
+    {
+      "name": "charmbracelet/fang",
+      "importance": 7
+    },
+    {
+      "name": "charmbracelet/huh",
+      "importance": 7
+    },
+    {
+      "name": "charmbracelet/lipgloss",
+      "importance": 7
+    },
+    {
+      "name": "sourcegraph/go-diff-patch",
+      "importance": 7
+    },
+    {
+      "name": "tiborvass/go-watch",
+      "importance": 6
+    },
+    {
+      "name": "golang.org/x/term",
+      "importance": 6
+    },
+    {
+      "name": "pelletier/go-toml/v2",
+      "importance": 5
+    },
+    {
+      "name": "gopkg.in/yaml.v3",
+      "importance": 5
+    },
+    {
+      "name": "dustin/go-humanize",
+      "importance": 4
+    },
+    {
+      "name": "mitchellh/go-homedir",
+      "importance": 4
+    },
+    {
+      "name": "dustinkirkland/golang-petname",
+      "importance": 3
+    },
+    {
+      "name": "stretchr/testify",
+      "importance": 2
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/dagger/container-use\n\ngo 1.24.3\n\ntoolchain go1.24.6\n\nrequire (\n\tdagger.io/dagger v0.18.16\n\tgithub.com/charmbracelet/bubbletea v1.3.6\n\tgithub.com/charmbracelet/fang v0.4.0\n\tgithub.com/charmbracelet/huh v0.7.0\n\tgithub.com/charmbracelet/lipgloss v1.1.0\n\tgithub.com/dustin/go-humanize v1.0.1\n\tgithub.com/dustinkirkland/golang-petname v0.0.0-20240428194347-eebcea082ee0\n\tgithub.com/gofrs/flock v0.12.1\n\tgithub.com/karrick/tparse v2.4.2+incompatible\n\tgithub.com/mark3labs/mcp-go v0.38.0\n\tgithub.com/mitchellh/go-homedir v1.1.0\n\tgithub.com/pelletier/go-toml/v2 v2.2.4\n\tgithub.com/sourcegraph/go-diff-patch v0.0.0-20240223163233-798fd1e94a8e\n\tgithub.com/spf13/cobra v1.10.1\n\tgithub.com/stretchr/testify v1.11.1\n\tgithub.com/tiborvass/go-watch v0.0.0-20250608155524-0d315e1fd5ab\n\tgolang.org/x/sync v0.16.0\n\tgolang.org/x/term v0.34.0\n\tgopkg.in/yaml.v3 v3.0.1\n)\n\nrequire (\n\tgithub.com/99designs/gqlgen v0.17.78 // indirect\n\tgithub.com/Khan/genqlient v0.8.1 // indirect\n\tgithub.com/adrg/xdg v0.5.3 // indirect\n\tgithub.com/atotto/clipboard v0.1.4 // indirect\n\tgithub.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect\n\tgithub.com/bahlo/generic-list-go v0.2.0 // indirect\n\tgithub.com/buger/jsonparser v1.1.1 // indirect\n\tgithub.com/catppuccin/go v0.3.0 // indirect\n\tgithub.com/cenkalti/backoff/v5 v5.0.3 // indirect\n\tgithub.com/charmbracelet/bubbles v0.21.0 // indirect\n\tgithub.com/charmbracelet/colorprofile v0.3.1 // indirect\n\tgithub.com/charmbracelet/lipgloss/v2 v2.0.0-beta.3 // indirect\n\tgithub.com/charmbracelet/x/ansi v0.9.3 // indirect\n\tgithub.com/charmbracelet/x/cellbuf v0.0.13 // indirect\n\tgithub.com/charmbracelet/x/exp/charmtone v0.0.0-20250603201427-c31516f43444 // indirect\n\tgithub.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect\n\tgithub.com/charmbracelet/x/term v0.2.1 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect\n\tgithub.com/etdub/goparsetime v0.0.0-20160315173935-ea17b0ac3318 // indirect\n\tgithub.com/go-logr/logr v1.4.3 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/invopop/jsonschema v0.13.0 // indirect\n\tgithub.com/lucasb-eyer/go-colorful v1.2.0 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/mattn/go-localereader v0.0.1 // indirect\n\tgithub.com/mattn/go-runewidth v0.0.16 // indirect\n\tgithub.com/mitchellh/hashstructure/v2 v2.0.2 // indirect\n\tgithub.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect\n\tgithub.com/muesli/cancelreader v0.2.2 // indirect\n\tgithub.com/muesli/mango v0.1.0 // indirect\n\tgithub.com/muesli/mango-cobra v1.2.0 // indirect\n\tgithub.com/muesli/mango-pflag v0.1.0 // indirect\n\tgithub.com/muesli/roff v0.1.0 // indirect\n\tgithub.com/muesli/termenv v0.16.0 // indirect\n\tgithub.com/pkg/term v1.1.0 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/rivo/uniseg v0.4.7 // indirect\n\tgithub.com/rogpeppe/go-internal v1.14.1 // indirect\n\tgithub.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect\n\tgithub.com/sosodev/duration v1.3.1 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/spf13/pflag v1.0.9 // indirect\n\tgithub.com/vektah/gqlparser/v2 v2.5.30 // indirect\n\tgithub.com/wk8/go-ordered-map/v2 v2.1.8 // indirect\n\tgithub.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.opentelemetry.io/auto/sdk v1.1.0 // indirect\n\tgo.opentelemetry.io/otel v1.38.0 // indirect\n\tgo.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.12.2 // indirect\n\tgo.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.12.2 // indirect\n\tgo.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.38.0 // indirect\n\tgo.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.38.0 // indirect\n\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace v1.38.0 // indirect\n\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.38.0 // indirect\n\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.38.0 // indirect\n\tgo.opentelemetry.io/otel/log v0.12.2 // indirect\n\tgo.opentelemetry.io/otel/metric v1.38.0 // indirect\n\tgo.opentelemetry.io/otel/sdk v1.38.0 // indirect\n\tgo.opentelemetry.io/otel/sdk/log v0.12.2 // indirect\n\tgo.opentelemetry.io/otel/sdk/metric v1.38.0 // indirect\n\tgo.opentelemetry.io/otel/trace v1.38.0 // indirect\n\tgo.opentelemetry.io/proto/otlp v1.7.1 // indirect\n\tgolang.org/x/net v0.43.0 // indirect\n\tgolang.org/x/sys v0.35.0 // indirect\n\tgolang.org/x/text v0.28.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/api v0.0.0-20250825161204-c5933d9347a5 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250825161204-c5933d9347a5 // indirect\n\tgoogle.golang.org/grpc v1.75.0 // indirect\n\tgoogle.golang.org/protobuf v1.36.8 // indirect\n)\n\n\n=== .dagger/go.mod ===\nmodule dagger/container-use\n\ngo 1.24.3\n\nrequire (\n\tgithub.com/99designs/gqlgen v0.17.78\n\tgithub.com/Khan/genqlient v0.8.1\n\tgithub.com/vektah/gqlparser/v2 v2.5.30\n\tgo.opentelemetry.io/otel v1.37.0\n\tgo.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.12.2\n\tgo.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.12.2\n\tgo.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.37.0\n\tgo.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.37.0\n\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.37.0\n\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.37.0\n\tgo.opentelemetry.io/otel/log v0.12.2\n\tgo.opentelemetry.io/otel/metric v1.37.0\n\tgo.opentelemetry.io/otel/sdk v1.37.0\n\tgo.opentelemetry.io/otel/sdk/log v0.12.2\n\tgo.opentelemetry.io/otel/sdk/metric v1.37.0\n\tgo.opentelemetry.io/otel/trace v1.37.0\n\tgo.opentelemetry.io/proto/otlp v1.7.1\n\tgolang.org/x/sync v0.16.0\n\tgoogle.golang.org/grpc v1.74.2\n)\n\nrequire (\n\tgithub.com/agnivade/levenshtein v1.2.1 // indirect\n\tgithub.com/cenkalti/backoff/v4 v4.3.0 // indirect\n\tgithub.com/cenkalti/backoff/v5 v5.0.2 // indirect\n\tgithub.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect\n\tgithub.com/go-logr/logr v1.4.3 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect\n\tgithub.com/russross/blackfriday/v2 v2.1.0 // indirect\n\tgithub.com/sosodev/duration v1.3.1 // indirect\n\tgithub.com/urfave/cli/v2 v2.27.7 // indirect\n\tgithub.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect\n\tgo.opentelemetry.io/auto/sdk v1.1.0 // indirect\n\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace v1.37.0 // indirect\n\tgolang.org/x/mod v0.26.0 // indirect\n\tgolang.org/x/net v0.42.0 // indirect\n\tgolang.org/x/sys v0.34.0 // indirect\n\tgolang.org/x/text v0.27.0 // indirect\n\tgolang.org/x/tools v0.35.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/api v0.0.0-20250728155136-f173205681a0 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250728155136-f173205681a0 // indirect\n\tgoogle.golang.org/protobuf v1.36.6 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n\nreplace go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc => go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.12.2\n\nreplace go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp => go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.12.2\n\nreplace go.opentelemetry.io/otel/log => go.opentelemetry.io/otel/log v0.12.2\n\nreplace go.opentelemetry.io/otel/sdk/log => go.opentelemetry.io/otel/sdk/log v0.12.2\n"
+}

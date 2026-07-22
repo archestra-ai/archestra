@@ -1,0 +1,115 @@
+{
+  "name": "kukapay__uniswap-trader-mcp",
+  "display_name": "uniswap-trader-mcp",
+  "description": "An MCP server for AI agents to automate token swaps on Uniswap DEX across multiple blockchains.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {
+      "INFURA_KEY": "${user_config.infura_key}",
+      "WALLET_PRIVATE_KEY": "${user_config.wallet_private_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "infura_key": {
+      "type": "string",
+      "title": "Infura Key",
+      "description": "Your Infura key for accessing blockchain RPC endpoints.",
+      "sensitive": true,
+      "required": true
+    },
+    "wallet_private_key": {
+      "type": "string",
+      "title": "Wallet Private Key",
+      "description": "Your private key for a funded wallet to execute swaps.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Uniswap Trader MCP\n[![smithery badge](https://smithery.ai/badge/@kukapay/uniswap-trader-mcp)](https://smithery.ai/server/@kukapay/uniswap-trader-mcp)\n\nAn MCP server for AI agents to automate token swaps on Uniswap DEX across multiple blockchains.\n\n## Features\n- **Price Quotes**: Get real-time price quotes for token swaps with multi-hop route optimization.\n- **Swap Execution**: Execute swaps on Uniswap V3 with configurable slippage tolerance and deadlines.\n- **Swap Suggestions**: Generate trading suggestions based on liquidity, fees, and optimal paths.\n- **Multi-Chain Support**: Compatible with Ethereum, Optimism, Polygon, Arbitrum, Celo, BNB Chain, Avalanche, and Base.\n\n## Prerequisites\n- **Node.js**: Version 14.x or higher.\n- **npm**: For package management.\n- **Wallet**: A funded wallet with a private key for executing swaps.\n- **RPC Endpoints**: Access to blockchain RPC URLs (e.g., Infura, Alchemy) for supported chains.\n\n## Installation\n\n### Installing via Smithery\n\nTo install Uniswap Trader MCP for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kukapay/uniswap-trader-mcp):\n\n```bash\nnpx -y @smithery/cli install @kukapay/uniswap-trader-mcp --client claude\n```\n\n### Manual Installation\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/uniswap-trader-mcp.git\n   cd uniswap-trader-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   npm install\n   ```\n\n## Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"Uniswap-Trader-MCP\": {\n      \"command\": \"node\",\n      \"args\": [\"path/to/uniswap-trader-mcp/server/index.js\"],\n      \"env\": {\n        \"INFURA_KEY\": \"your infura key\",\n        \"WALLET_PRIVATE_KEY\": \"your private key\"\n      }\n    }\n  }\n}\n```\n## Usage\n\n### Supported Chains\nThe following blockchains are supported. Ensure each chain is configured in `chainConfigs.js` with a valid RPC URL, WETH address, and SwapRouter address.\n\n| Chain ID | Name         | Notes                                      |\n|----------|--------------|--------------------------------------------|\n| 1        | Ethereum     | Mainnet, widely used for Uniswap trades   |\n| 10       | Optimism     | Layer 2, requires Optimism RPC            |\n| 137      | Polygon      | Fast and low-cost, uses MATIC as native   |\n| 42161    | Arbitrum     | Layer 2, Arbitrum One network             |\n| 42220    | Celo         | Mobile-first blockchain, uses CELO        |\n| 56       | BNB Chain    | Binance Smart Chain, uses BNB             |\n| 43114    | Avalanche    | High-throughput, uses AVAX                |\n| 8453     | Base         | Coinbase’s Layer 2, built on Optimism     |\n\n\n### Tools and Prompts\n\n#### 1. `getPrice`\nFetches a price quote for a Uniswap swap.\n\n**Schema**:\n- `chainId`: Number (default: 1)\n- `tokenIn`: String (e.g., `\"NATIVE\"` or token address)\n- `tokenOut`: String (e.g., `\"NATIVE\"` or token address)\n- `amountIn`: String (optional, required for `\"exactIn\"`)\n- `amountOut`: String (optional, required for `\"exactOut\"`)\n- `tradeType`: `\"exactIn\"` or `\"exactOut\"` (default: `\"exactIn\"`)\n\nExample prompt:\n\n```\nGet me a price quote for swapping 1 ETH to DAI on Ethereum.\n```\n\nOutput:\n\n```\n{\n  \"chainId\": 1,\n  \"tradeType\": \"exactIn\",\n  \"price\": \"3000.50\",\n  \"inputAmount\": \"1.000000\",\n  \"outputAmount\": \"3000.50\",\n  \"minimumReceived\": \"2985.50\",\n  \"maximumInput\": \"1.005000\",\n  \"route\": [\n    {\n      \"tokenIn\": \"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\",\n      \"tokenOut\": \"0x6B175474E89094C44Da98b954EedeAC495271d0F\",\n      \"fee\": 3000\n    }\n  ],\n  \"estimatedGas\": \"150000\"\n}\n```\n\n#### 2. `executeSwap`\nExecutes a swap on Uniswap.\n\n**Schema**:\n- `chainId`: Number (default: 1)\n- `tokenIn`: String\n- `tokenOut`: String\n- `amountIn`: String (optional, required for `\"exactIn\"`)\n- `amountOut`: String (optional, required for `\"exactOut\"`)\n- `tradeType`: `\"exactIn\"` or `\"exactOut\"` (default: `\"exactIn\"`)\n- `slippageTolerance`: Number (default: 0.5, in percentage)\n- `deadline`: Number (default: 20, in minutes)\n\nExample prompt:\n\n```\nSwap 1 ETH for DAI on Ethereum with a 0.5% slippage tolerance and a 20-minute deadline.\n```\n\nOutput:\n\n```\n{\n  \"chainId\": 1,\n  \"txHash\": \"0x1234...abcd\",\n  \"tradeType\": \"exactIn\",\n  \"amountIn\": \"1.000000\",\n  \"outputAmount\": \"2990.75\",\n  \"minimumReceived\": \"2985.50\",\n  \"maximumInput\": \"1.005000\",\n  \"fromToken\": \"NATIVE\",\n  \"toToken\": \"0x6B175474E89094C44Da98b954EedeAC495271d0F\",\n  \"route\": [\n    {\n      \"tokenIn\": \"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\",\n      \"tokenOut\": \"0x6B175474E89094C44Da98b954EedeAC495271d0F\",\n      \"fee\": 3000\n    }\n  ],\n  \"gasUsed\": \"145000\"\n}\n```\n\n## License\nMIT License. See [LICENSE](LICENSE) for details.\n",
+  "category": "Finance",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "Uniswap-Trader-MCP": {
+        "command": "node",
+        "args": ["path/to/uniswap-trader-mcp/server/index.js"],
+        "env": {
+          "INFURA_KEY": "your infura key",
+          "WALLET_PRIVATE_KEY": "your private key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "uniswap-trader-mcp",
+    "url": "https://github.com/kukapay/uniswap-trader-mcp",
+    "name": "uniswap-trader-mcp",
+    "path": null,
+    "stars": 26,
+    "contributors": 2,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b743a9d009491ed1132836217505ddb401d1cd1e"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.084Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@uniswap/smart-order-router",
+      "importance": 9
+    },
+    {
+      "name": "@uniswap/v3-sdk",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "ethers",
+      "importance": 8
+    },
+    {
+      "name": "tslib",
+      "importance": 3
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"uniswap-trader-mcp\",\n  \"version\": \"1.0.1\",\n  \"main\": \"index.js\",\n  \"homepage\": \"https://github.com/kukapay/uniswap-trader-mcp\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"@uniswap/smart-order-router\": \"^4.20.10\",\n    \"@uniswap/v3-sdk\": \"^3.25.2\",\n    \"dotenv\": \"^16.4.7\",\n    \"ethers\": \"5.8.0\",\n    \"tslib\": \"^2.8.1\",\n    \"zod\": \"^3.24.2\"\n  }\n}\n"
+}

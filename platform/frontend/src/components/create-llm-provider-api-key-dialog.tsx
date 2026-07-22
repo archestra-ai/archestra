@@ -1,6 +1,9 @@
 "use client";
 
-import { isProviderApiKeyOptional } from "@shared";
+import {
+  CHATGPT_SUBSCRIPTION_LABEL,
+  isProviderApiKeyOptional,
+} from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -18,6 +21,7 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
@@ -31,6 +35,9 @@ export type CreateLlmProviderApiKeyDialogProps = {
   title: string;
   description: string;
   defaultValues?: Partial<LlmProviderApiKeyFormValues>;
+  /** Restrict the provider picker to this allowlist (e.g. the providers the
+   * selected connect client can actually route). Omit to allow all providers. */
+  allowedProviders?: LlmProviderApiKeyFormValues["provider"][];
   showConsoleLink?: boolean;
   onSuccess?: () => void;
 };
@@ -41,6 +48,7 @@ export function CreateLlmProviderApiKeyDialog({
   title,
   description,
   defaultValues,
+  allowedProviders,
   showConsoleLink = false,
   onSuccess,
 }: CreateLlmProviderApiKeyDialogProps) {
@@ -48,6 +56,7 @@ export function CreateLlmProviderApiKeyDialog({
   const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
+  const anthropicWifEnabled = useFeature("anthropicWifEnabled");
   const bedrockIamAuthEnabled = useFeature("bedrockIamAuthEnabled");
   const geminiVertexAiEnabled = useFeature("geminiVertexAiEnabled");
   const { data: canCreateOrgScopedKey } = useHasPermissions({
@@ -74,6 +83,7 @@ export function CreateLlmProviderApiKeyDialog({
   const formValues = form.watch();
   const isValid = getIsCreateFormValid({
     azureOpenAiEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+    anthropicWifEnabled: anthropicWifEnabled === true,
     byosEnabled: Boolean(byosEnabled),
     values: formValues,
   });
@@ -83,7 +93,12 @@ export function CreateLlmProviderApiKeyDialog({
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     try {
       await createMutation.mutateAsync({
-        name: values.name?.trim() || PROVIDER_CONFIG[values.provider].name,
+        name:
+          values.name?.trim() ||
+          (values.provider === "openai" &&
+          values.openaiAuthMethod === "chatgpt-subscription"
+            ? CHATGPT_SUBSCRIPTION_LABEL
+            : PROVIDER_CONFIG[values.provider].name),
         provider: values.provider,
         apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
@@ -126,6 +141,7 @@ export function CreateLlmProviderApiKeyDialog({
       description={description}
       size="small"
       className="sm:max-w-xl"
+      isDirty={form.formState.isDirty}
     >
       <DialogForm
         onSubmit={handleCreate}
@@ -138,18 +154,13 @@ export function CreateLlmProviderApiKeyDialog({
             form={form}
             existingKeys={existingKeys}
             isPending={createMutation.isPending}
+            allowedProviders={allowedProviders}
             bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          <DialogCancelButton>Cancel</DialogCancelButton>
           <Button type="submit" disabled={!isValid || createMutation.isPending}>
             {createMutation.isPending && (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -183,16 +194,23 @@ function getDefaultFormValues(params: {
     awsAccessKeyId: null,
     awsSecretAccessKey: null,
     awsSessionToken: null,
+    openaiAuthMethod: "api-key",
     ...defaultValues,
   };
 }
 
 function getIsCreateFormValid(params: {
   azureOpenAiEntraIdEnabled: boolean;
+  anthropicWifEnabled: boolean;
   byosEnabled: boolean;
   values: LlmProviderApiKeyFormValues;
 }) {
-  const { azureOpenAiEntraIdEnabled, byosEnabled, values } = params;
+  const {
+    azureOpenAiEntraIdEnabled,
+    anthropicWifEnabled,
+    byosEnabled,
+    values,
+  } = params;
 
   if (values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4") {
     return Boolean(
@@ -210,6 +228,7 @@ function getIsCreateFormValid(params: {
         : isProviderApiKeyOptional({
             provider: values.provider,
             azureEntraIdEnabled: azureOpenAiEntraIdEnabled,
+            anthropicWifEnabled,
           }) || values.apiKey),
   );
 }

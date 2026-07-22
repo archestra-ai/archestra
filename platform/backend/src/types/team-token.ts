@@ -59,6 +59,12 @@ export const TeamTokenResponseSchema = z.object({
     .nullable(),
   createdAt: z.date(),
   lastUsedAt: z.date().nullable(),
+  worksWithProfile: z
+    .boolean()
+    .optional()
+    .describe(
+      "Only set when the profileId query param is provided: whether this token can authenticate against that profile (org-scoped agents accept any team token; team-scoped agents only their teams'; personal agents none)",
+    ),
 });
 
 // Response with full token value (only returned on create/rotate)

@@ -1,0 +1,78 @@
+{
+  "name": "ananddtyagi__webpage-screenshot-mcp",
+  "display_name": "webpage-screenshot-mcp",
+  "description": "An MCP that gives your agent the ability to snap a screenshot of webpages. Useful when you want your agent to check its progress during development.",
+  "author": {
+    "name": "ananddtyagi"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Webpage Screenshot MCP Server\n\nAn MCP (Model Context Protocol) server that captures screenshots of web pages using Puppeteer. This server allows AI agents to visually verify web applications and see their progress when generating web apps.\n\n![Screen Recording May 27 2025 (2)](https://github.com/user-attachments/assets/9f186ec4-5a5c-449b-9a30-a5ec0cdba695)\n\n\n## Features\n\n- **Full page screenshots**: Capture entire web pages or just the viewport\n- **Element screenshots**: Target specific elements using CSS selectors\n- **Multiple formats**: Support for PNG, JPEG, and WebP formats\n- **Customizable options**: Set viewport size, image quality, wait conditions, and delays\n- **Base64 encoding**: Returns screenshots as base64 encoded images for easy integration\n- **Authentication support**: Manual login and cookie persistence\n- **Default browser integration**: Use your system's default browser for a more natural experience\n- **Session persistence**: Keep browser sessions open for multi-step workflows\n\n## Installation\n\n### Quick Start (Claude Desktop Extension)\n\nDrag and drop the generated `screenshot-webpage-mcp.dxt` file into Claude Desktop for automatic installation!\n\n### Manual Installation\n\nTo install and build the MCP from source:\n\n```bash\n# Clone the repository (if you haven't already)\ngit clone https://github.com/ananddtyagi/webpage-screenshot-mcp.git\ncd webpage-screenshot-mcp\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n\nThe MCP server is built using TypeScript and compiled to JavaScript. The `dist` folder contains the compiled JavaScript files. \n\n### Adding to Claude or Cursor\n\nTo add this MCP to Claude Desktop or Cursor:\n\n1. **Claude Desktop**:\n   - Go to Settings > Developer\n   - Click \"Edit Config\"\n   - Add the following:\n\n   ```json\n    \"webpage-screenshot\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"~/path/to/webpage-screenshot-mcp/dist/index.js\"\n      ]\n    }\n   ```\n   - Save and reload Claude\n\n2. **Cursor**:\n   - Open Cursor and go to Cursor Settings > MCP\n   - Click \"Add new global MCP server\"\n   - Add the following:\n  \n  ```json\n    \"webpage-screenshot\": {\n      \"command\": \"node\",\n      \"args\": [\"~/path/to/webpage-screenshot-mcp/dist/index.js\"]\n    }\n   ```\n\n   - Save and reload Cursor\n\n## Usage\n\n### Tools\n\nThis MCP server provides several tools:\n\n#### 1. login-and-wait\n\nOpens a webpage in a visible browser window for manual login, waits for user to complete login, then saves cookies.\n\n```json\n{\n  \"url\": \"https://example.com/login\",\n  \"waitMinutes\": 5,\n  \"successIndicator\": \".dashboard-welcome\",\n  \"useDefaultBrowser\": true\n}\n```\n\n- `url` (required): The URL of the login page\n- `waitMinutes` (optional): Maximum minutes to wait for login (default: 5)\n- `successIndicator` (optional): CSS selector or URL pattern that indicates successful login\n- `useDefaultBrowser` (optional): Whether to use the system's default browser (default: true)\n\n#### 2. screenshot-page\n\nCaptures a screenshot of a given URL and returns it as base64 encoded image.\n\n```json\n{\n  \"url\": \"https://example.com/dashboard\",\n  \"fullPage\": true,\n  \"width\": 1920,\n  \"height\": 1080,\n  \"format\": \"png\",\n  \"quality\": 80,\n  \"waitFor\": \"networkidle2\",\n  \"delay\": 500,\n  \"useSavedAuth\": true,\n  \"reuseAuthPage\": true,\n  \"useDefaultBrowser\": true,\n  \"visibleBrowser\": true\n}\n```\n\n- `url` (required): The URL of the webpage to screenshot\n- `fullPage` (optional): Whether to capture the full page or just the viewport (default: true)\n- `width` (optional): Viewport width in pixels (default: 1920)\n- `height` (optional): Viewport height in pixels (default: 1080)\n- `format` (optional): Image format - \"png\", \"jpeg\", or \"webp\" (default: \"png\")\n- `quality` (optional): Quality of the image (0-100), only applicable for jpeg and webp\n- `waitFor` (optional): When to consider page loaded - \"load\", \"domcontentloaded\", \"networkidle0\", or \"networkidle2\" (default: \"networkidle2\")\n- `delay` (optional): Additional delay in milliseconds after page load (default: 0)\n- `useSavedAuth` (optional): Whether to use saved cookies from previous login (default: true)\n- `reuseAuthPage` (optional): Whether to use the existing authenticated page (default: false)\n- `useDefaultBrowser` (optional): Whether to use the system's default browser (default: false)\n- `visibleBrowser` (optional): Whether to show the browser window (default: false)\n\n#### 3. screenshot-element\n\nCaptures a screenshot of a specific element on a webpage using a CSS selector.\n\n```json\n{\n  \"url\": \"https://example.com/dashboard\",\n  \"selector\": \".user-profile\",\n  \"waitForSelector\": true,\n  \"format\": \"png\",\n  \"quality\": 80,\n  \"padding\": 10,\n  \"useSavedAuth\": true,\n  \"useDefaultBrowser\": true,\n  \"visibleBrowser\": true\n}\n```\n\n- `url` (required): The URL of the webpage\n- `selector` (required): CSS selector for the element to screenshot\n- `waitForSelector` (optional): Whether to wait for the selector to appear (default: true)\n- `format` (optional): Image format - \"png\", \"jpeg\", or \"webp\" (default: \"png\")\n- `quality` (optional): Quality of the image (0-100), only applicable for jpeg and webp\n- `padding` (optional): Padding around the element in pixels (default: 0)\n- `useSavedAuth` (optional): Whether to use saved cookies from previous login (default: true)\n- `useDefaultBrowser` (optional): Whether to use the system's default browser (default: false)\n- `visibleBrowser` (optional): Whether to show the browser window (default: false)\n\n#### 4. clear-auth-cookies\n\nClears saved authentication cookies for a specific domain or all domains.\n\n```json\n{\n  \"url\": \"https://example.com\"\n}\n```\n\n- `url` (optional): URL of the domain to clear cookies for. If not provided, clears all cookies.\n\n## Default Browser Mode\n\nThe default browser mode allows you to use your system's regular browser (Chrome, Edge, etc.) instead of Puppeteer's bundled Chromium. This is useful for:\n\n1. Using your existing browser sessions and extensions\n2. Manually logging in to websites with your saved credentials\n3. Having a more natural browsing experience for multi-step workflows\n4. Testing with the same browser environment as your users\n\nTo enable default browser mode, set `useDefaultBrowser: true` and `visibleBrowser: true` in your tool parameters.\n\n### How Default Browser Mode Works\n\nWhen you enable default browser mode:\n\n1. The tool will attempt to locate your system's default browser (Chrome, Edge, etc.)\n2. It launches your browser with remote debugging enabled on a random port\n3. Puppeteer connects to this browser instance instead of launching its own\n4. Your existing profiles, extensions, and cookies are available during the session\n5. The browser window remains visible so you can interact with it manually\n\nThis mode is particularly useful for workflows that require authentication or complex user interactions.\n\n## Browser Persistence\n\nThe MCP server can maintain a persistent browser session across multiple tool calls:\n\n1. When you use `login-and-wait`, the browser session is kept open\n2. Subsequent calls to `screenshot-page` or `screenshot-element` with `reuseAuthPage: true` will use the same page\n3. This allows for multi-step workflows without having to re-authenticate\n\n## Cookie Management\n\nCookies are automatically saved for each domain you visit:\n\n1. After using `login-and-wait`, cookies are saved to the `.mcp-screenshot-cookies` directory in your home folder\n2. These cookies are automatically loaded when visiting the same domain again with `useSavedAuth: true`\n3. You can clear cookies using the `clear-auth-cookies` tool\n\n## Example Workflow: Protected Page Screenshots\n\nHere's an example workflow for taking screenshots of pages that require authentication:\n\n1. **Manual Login Phase**\n\n```json\n{\n  \"name\": \"login-and-wait\",\n  \"parameters\": {\n    \"url\": \"https://example.com/login\",\n    \"waitMinutes\": 3,\n    \"successIndicator\": \".dashboard-welcome\",\n    \"useDefaultBrowser\": true\n  }\n}\n```\n\nThis will open your default browser with the login page. You can manually log in, and once complete (either by detecting the success indicator or after navigating away from the login page), the session cookies will be saved.\n\n2. **Take Screenshots Using Saved Session**\n\n```json\n{\n  \"name\": \"screenshot-page\",\n  \"parameters\": {\n    \"url\": \"https://example.com/account\",\n    \"fullPage\": true,\n    \"useSavedAuth\": true,\n    \"reuseAuthPage\": true,\n    \"useDefaultBrowser\": true,\n    \"visibleBrowser\": true\n  }\n}\n```\n\nThis will take a screenshot of the account page using your saved authentication cookies in the same browser window.\n\n3. **Take Screenshots of Specific Elements**\n\n```json\n{\n  \"name\": \"screenshot-element\",\n  \"parameters\": {\n    \"url\": \"https://example.com/dashboard\",\n    \"selector\": \".user-profile-section\",\n    \"useSavedAuth\": true,\n    \"useDefaultBrowser\": true,\n    \"visibleBrowser\": true\n  }\n}\n```\n\n4. **Clear Cookies When Done**\n\n```json\n{\n  \"name\": \"clear-auth-cookies\",\n  \"parameters\": {\n    \"url\": \"https://example.com\"\n  }\n}\n```\n\nThis workflow allows you to interact with protected pages as if you were a regular user, completing the full authentication flow in your default browser.\n\n## Headless vs. Visible Mode\n\n- **Headless mode** (`visibleBrowser: false`): Faster and more suitable for automated workflows where no user interaction is needed.\n- **Visible mode** (`visibleBrowser: true`): Shows the browser window, allowing for user interaction and manual verification. Required for `useDefaultBrowser: true`.\n\n## Platform Support\n\nThe default browser detection works on:\n\n- **macOS**: Detects Chrome, Edge, and Safari\n- **Windows**: Detects Chrome and Edge via registry or common installation paths\n- **Linux**: Detects Chrome and Chromium via system commands\n\n## Troubleshooting\n\n### Common Issues\n\n1. **Default browser not found**: If the system can't find your default browser, it will fall back to Puppeteer's bundled Chromium.\n2. **Connection issues**: If there are problems connecting to the browser's debugging port, check if another instance is already using that port.\n3. **Cookie issues**: If authentication isn't working, try clearing cookies with the `clear-auth-cookies` tool.\n\n### Debugging\n\nThe MCP server logs helpful error messages to the console when issues occur. Check these messages for troubleshooting information.\n",
+  "category": "Browser Automation",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "webpage-screenshot": {
+        "command": "node",
+        "args": ["~/path/to/webpage-screenshot-mcp/dist/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ananddtyagi",
+    "repo": "webpage-screenshot-mcp",
+    "url": "https://github.com/ananddtyagi/webpage-screenshot-mcp",
+    "name": "webpage-screenshot-mcp",
+    "path": null,
+    "stars": 26,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "cad4a14af1b0c5bf883eeac253b49e3590534ba1"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:25.404Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "puppeteer",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"webpage-screenshot-mcp\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP server for capturing screenshots of web pages\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"screenshot\",\n    \"puppeteer\",\n    \"web-scraping\"\n  ],\n  \"author\": \"Anand Tyagi\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\n    \"puppeteer\": \"24.9.0\",\n    \"zod\": \"^3.22.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.0.0\",\n    \"typescript\": \"^5.0.0\"\n  },\n  \"files\": [\n    \"dist/**/*\",\n    \"README.md\",\n    \"package.json\"\n  ]\n}"
+}

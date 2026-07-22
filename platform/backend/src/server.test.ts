@@ -24,14 +24,10 @@ vi.mock("@sentry/node", async (importOriginal) => {
   };
 });
 
+import config from "@/config";
 // Import after mock setup
-import { isDatabaseHealthy } from "@/database";
 import healthRoutes from "@/routes/health";
-import {
-  buildCspHeader,
-  createFastifyInstance,
-  sanitizeCspDomains,
-} from "./server";
+import { createFastifyInstance } from "./server";
 
 // Mock process.exit to prevent it from actually exiting during tests
 const _processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
@@ -41,151 +37,161 @@ const _processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
 
 describe("createFastifyInstance", () => {
   describe("error handling", () => {
-    test("handles ApiError with 400 status code", async () => {
+    test.each([
+      [400, "Validation failed", "api_validation_error"],
+      [401, "Unauthenticated", "api_authentication_error"],
+      [403, "Forbidden", "api_authorization_error"],
+      [404, "Not found", "api_not_found_error"],
+      [500, "Internal server error", "api_internal_server_error"],
+      [409, "Resource conflict", "api_conflict_error"],
+      [418, "I'm a teapot", "unknown_api_error"],
+    ])("maps ApiError %i to its error type", async (statusCode, message, type) => {
       const app = createFastifyInstance();
 
-      app.get("/test-400", async () => {
-        throw new ApiError(400, "Validation failed");
+      app.get(`/test-${statusCode}`, async () => {
+        throw new ApiError(statusCode, message);
       });
 
       const response = await app.inject({
         method: "GET",
-        url: "/test-400",
+        url: `/test-${statusCode}`,
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(statusCode);
       expect(response.json()).toEqual({
-        error: {
-          message: "Validation failed",
-          type: "api_validation_error",
-        },
+        error: { message, type },
       });
     });
 
-    test("handles ApiError with 401 status code", async () => {
+    test("returns Fastify's own 4xx status instead of coercing it to a 500", async () => {
       const app = createFastifyInstance();
+      app.post("/test-media-type", async () => ({ ok: true }));
 
-      app.get("/test-401", async () => {
-        throw new ApiError(401, "Unauthenticated");
-      });
-
+      // An unsupported content type makes Fastify raise its typed 415 error
+      // before the handler runs; the error handler must preserve that status.
       const response = await app.inject({
-        method: "GET",
-        url: "/test-401",
+        method: "POST",
+        url: "/test-media-type",
+        headers: { "content-type": "application/x-unknown" },
+        payload: "raw",
       });
 
-      expect(response.statusCode).toBe(401);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Unauthenticated",
-          type: "api_authentication_error",
-        },
-      });
+      expect(response.statusCode).toBe(415);
+      expect(response.json().error.type).not.toBe("api_internal_server_error");
     });
 
-    test("handles ApiError with 403 status code", async () => {
+    test("captures 500s but not upstream-fault 502/504s to error tracking", async () => {
+      const { posthogErrorTrackingService } = await import(
+        "@/services/error-tracking"
+      );
+      const captureSpy = vi.spyOn(
+        posthogErrorTrackingService,
+        "captureException",
+      );
+
       const app = createFastifyInstance();
-
-      app.get("/test-403", async () => {
-        throw new ApiError(403, "Forbidden");
+      app.get("/test-upstream-502", async () => {
+        throw new ApiError(502, "Upstream provider failed");
+      });
+      app.get("/test-upstream-504", async () => {
+        throw new ApiError(504, "Upstream provider timed out");
+      });
+      app.get("/test-internal-500", async () => {
+        throw new ApiError(500, "We crashed");
       });
 
-      const response = await app.inject({
+      const res502 = await app.inject({
         method: "GET",
-        url: "/test-403",
+        url: "/test-upstream-502",
       });
+      const res504 = await app.inject({
+        method: "GET",
+        url: "/test-upstream-504",
+      });
+      expect(res502.statusCode).toBe(502);
+      expect(res504.statusCode).toBe(504);
+      expect(captureSpy).not.toHaveBeenCalled();
 
-      expect(response.statusCode).toBe(403);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Forbidden",
-          type: "api_authorization_error",
-        },
+      const res500 = await app.inject({
+        method: "GET",
+        url: "/test-internal-500",
       });
+      expect(res500.statusCode).toBe(500);
+      expect(captureSpy).toHaveBeenCalledTimes(1);
+
+      captureSpy.mockRestore();
     });
 
-    test("handles ApiError with 404 status code", async () => {
-      const app = createFastifyInstance();
+    test("skips MCP-server-unreachable errors on the PostHog sink too", async () => {
+      const { posthogErrorTrackingService } = await import(
+        "@/services/error-tracking"
+      );
+      const captureSpy = vi.spyOn(
+        posthogErrorTrackingService,
+        "captureException",
+      );
 
-      app.get("/test-404", async () => {
-        throw new ApiError(404, "Not found");
+      const app = createFastifyInstance();
+      // A user's MCP server being unreachable is an operational/config
+      // condition, not a bug: the shared tracking policy drops it, so the
+      // PostHog capture funnel skips it just as the Sentry filter does.
+      app.get("/test-mcp-unreachable", async () => {
+        throw Object.assign(new Error("MCP server is not running yet"), {
+          name: "McpServerNotReadyError",
+        });
       });
 
       const response = await app.inject({
         method: "GET",
-        url: "/test-404",
-      });
-
-      expect(response.statusCode).toBe(404);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Not found",
-          type: "api_not_found_error",
-        },
-      });
-    });
-
-    test("handles ApiError with 500 status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-500", async () => {
-        throw new ApiError(500, "Internal server error");
-      });
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-500",
+        url: "/test-mcp-unreachable",
       });
 
       expect(response.statusCode).toBe(500);
-      expect(response.json()).toEqual({
-        error: {
-          message: "Internal server error",
-          type: "api_internal_server_error",
-        },
-      });
+      expect(captureSpy).not.toHaveBeenCalled();
+
+      captureSpy.mockRestore();
     });
 
-    test("handles ApiError with 409 status code", async () => {
-      const app = createFastifyInstance();
+    test("maps transient database connectivity errors to a retryable 503 with root-cause grouping", async () => {
+      const { posthogErrorTrackingService } = await import(
+        "@/services/error-tracking"
+      );
+      const captureSpy = vi.spyOn(
+        posthogErrorTrackingService,
+        "captureException",
+      );
 
-      app.get("/test-409", async () => {
-        throw new ApiError(409, "Resource conflict");
+      const app = createFastifyInstance();
+      // Mimic the ORM's per-query wrapper around an underlying DNS failure
+      app.get("/test-db-unavailable", async () => {
+        throw new Error('Failed query: select "id" from "agents"', {
+          cause: new Error("getaddrinfo EAI_AGAIN db.example.internal"),
+        });
       });
 
       const response = await app.inject({
         method: "GET",
-        url: "/test-409",
+        url: "/test-db-unavailable",
       });
 
-      expect(response.statusCode).toBe(409);
+      expect(response.statusCode).toBe(503);
       expect(response.json()).toEqual({
         error: {
-          message: "Resource conflict",
-          type: "api_conflict_error",
+          message: "Database temporarily unavailable, please retry",
+          type: "api_service_unavailable_error",
         },
       });
-    });
 
-    test("handles ApiError with unknown status code", async () => {
-      const app = createFastifyInstance();
-
-      app.get("/test-unknown", async () => {
-        throw new ApiError(418, "I'm a teapot");
+      // Captured once, grouped by root cause rather than by query text
+      expect(captureSpy).toHaveBeenCalledTimes(1);
+      expect(captureSpy.mock.calls[0][0].properties).toMatchObject({
+        error_type: "db_unavailable",
+        db_error_code: "EAI_AGAIN",
+        status_code: 503,
+        $exception_fingerprint: "db-transient/EAI_AGAIN",
       });
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/test-unknown",
-      });
-
-      expect(response.statusCode).toBe(418);
-      expect(response.json()).toEqual({
-        error: {
-          message: "I'm a teapot",
-          type: "unknown_api_error",
-        },
-      });
+      captureSpy.mockRestore();
     });
 
     test("handles standard Error objects correctly", async () => {
@@ -733,14 +739,6 @@ describe("createFastifyInstance", () => {
   });
 });
 
-describe("isDatabaseHealthy", () => {
-  test("returns true when database is reachable", async () => {
-    // Using PGlite in tests, the database should be healthy
-    const result = await isDatabaseHealthy();
-    expect(result).toBe(true);
-  });
-});
-
 describe("health endpoints", () => {
   describe("/health endpoint", () => {
     test("returns 200 with application info", async () => {
@@ -798,129 +796,30 @@ describe("health endpoints", () => {
       expect(body.status).toBe("degraded");
       expect(body.database).toBe("disconnected");
     });
-  });
-});
 
-describe("sanitizeCspDomains", () => {
-  test("returns empty array for undefined input", () => {
-    expect(sanitizeCspDomains(undefined)).toEqual([]);
-  });
+    test("returns 200 without checking the database in maintenance mode", async () => {
+      const originalMaintenanceMode = config.maintenanceMode;
+      config.maintenanceMode = "Scheduled maintenance";
+      mockIsDatabaseHealthy.mockClear();
 
-  test("returns empty array for empty input", () => {
-    expect(sanitizeCspDomains([])).toEqual([]);
-  });
+      try {
+        const app = createFastifyInstance();
+        await app.register(healthRoutes);
 
-  test("passes through valid domain names", () => {
-    expect(
-      sanitizeCspDomains([
-        "example.com",
-        "*.cdn.net",
-        "https://api.example.com",
-      ]),
-    ).toEqual(["example.com", "*.cdn.net", "https://api.example.com"]);
-  });
+        const response = await app.inject({
+          method: "GET",
+          url: "/ready",
+        });
 
-  test("rejects domains containing semicolons", () => {
-    expect(sanitizeCspDomains(["good.com", "bad.com;evil.com"])).toEqual([
-      "good.com",
-    ]);
-  });
-
-  test("rejects domains containing newlines", () => {
-    expect(sanitizeCspDomains(["good.com", "bad\n.com", "bad\r.com"])).toEqual([
-      "good.com",
-    ]);
-  });
-
-  test("rejects domains containing single quotes", () => {
-    expect(sanitizeCspDomains(["good.com", "'unsafe-eval'"])).toEqual([
-      "good.com",
-    ]);
-  });
-
-  test("rejects domains containing double quotes", () => {
-    expect(sanitizeCspDomains(["good.com", '"injected"'])).toEqual([
-      "good.com",
-    ]);
-  });
-
-  test("rejects domains containing spaces", () => {
-    expect(sanitizeCspDomains(["good.com", "bad domain.com"])).toEqual([
-      "good.com",
-    ]);
-  });
-});
-
-describe("buildCspHeader", () => {
-  test("returns default CSP when no config is provided", () => {
-    const header = buildCspHeader(undefined);
-    expect(header).toContain("default-src 'none'");
-    expect(header).toContain("frame-src 'none'");
-    expect(header).toContain("object-src 'none'");
-    expect(header).toContain("base-uri 'none'");
-  });
-
-  test("includes resourceDomains in script-src, style-src, img-src, font-src, worker-src", () => {
-    const header = buildCspHeader({ resourceDomains: ["cdn.example.com"] });
-    expect(header).toContain(
-      "script-src 'self' 'unsafe-inline' blob: data: cdn.example.com",
-    );
-    expect(header).toContain(
-      "style-src 'self' 'unsafe-inline' blob: data: cdn.example.com",
-    );
-    expect(header).toContain("img-src 'self' data: blob: cdn.example.com");
-    expect(header).toContain("font-src 'self' data: blob: cdn.example.com");
-    expect(header).toContain("worker-src 'self' blob: cdn.example.com");
-  });
-
-  test("includes connectDomains in connect-src", () => {
-    const header = buildCspHeader({
-      connectDomains: ["api.example.com", "ws.example.com"],
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          status: "maintenance",
+          database: "not_checked",
+        });
+        expect(mockIsDatabaseHealthy).not.toHaveBeenCalled();
+      } finally {
+        config.maintenanceMode = originalMaintenanceMode;
+      }
     });
-    expect(header).toContain(
-      "connect-src 'self' api.example.com ws.example.com",
-    );
-  });
-
-  test("uses frame-src with specified frameDomains", () => {
-    const header = buildCspHeader({ frameDomains: ["iframe.example.com"] });
-    expect(header).toContain("frame-src iframe.example.com");
-    expect(header).not.toContain("frame-src 'none'");
-  });
-
-  test("uses base-uri with specified baseUriDomains", () => {
-    const header = buildCspHeader({ baseUriDomains: ["base.example.com"] });
-    expect(header).toContain("base-uri base.example.com");
-    expect(header).not.toContain("base-uri 'none'");
-  });
-
-  test("strips injected characters from domains before including in header", () => {
-    const header = buildCspHeader({
-      resourceDomains: ["good.com", "bad.com;evil"],
-      connectDomains: ["api.com", "'unsafe-eval'"],
-    });
-    expect(header).toContain("good.com");
-    expect(header).not.toContain("bad.com;evil");
-    expect(header).toContain("api.com");
-    // connect-src should NOT include the injected 'unsafe-eval' domain
-    const connectSrc = header
-      .split("; ")
-      .find((d) => d.startsWith("connect-src"));
-    expect(connectSrc).not.toContain("'unsafe-eval'");
-  });
-
-  test("returns all required CSP directives", () => {
-    const header = buildCspHeader({});
-    const directives = header.split("; ").map((d) => d.split(" ")[0]);
-    expect(directives).toContain("default-src");
-    expect(directives).toContain("script-src");
-    expect(directives).toContain("style-src");
-    expect(directives).toContain("img-src");
-    expect(directives).toContain("font-src");
-    expect(directives).toContain("connect-src");
-    expect(directives).toContain("worker-src");
-    expect(directives).toContain("frame-src");
-    expect(directives).toContain("object-src");
-    expect(directives).toContain("base-uri");
   });
 });

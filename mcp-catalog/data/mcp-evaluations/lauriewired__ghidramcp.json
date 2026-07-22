@@ -1,0 +1,167 @@
+{
+  "name": "lauriewired__ghidramcp",
+  "display_name": "GhidraMCP",
+  "description": "MCP Server for Ghidra",
+  "author": {
+    "name": "LaurieWired"
+  },
+  "server": {
+    "command": "python",
+    "args": [
+      "${__dirname}/bridge_mcp_ghidra.py",
+      "--transport",
+      "${user_config.transport}",
+      "--mcp-host",
+      "${user_config.mcp_host}",
+      "--mcp-port",
+      "${user_config.mcp_port}",
+      "--ghidra-server",
+      "${user_config.ghidra_server}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "transport": {
+      "type": "string",
+      "title": "MCP Transport Protocol",
+      "description": "The transport protocol for the MCP server (e.g., sse). This is a required argument.",
+      "required": true,
+      "default": "sse"
+    },
+    "mcp_host": {
+      "type": "string",
+      "title": "MCP Server Host",
+      "description": "The host IP address for the Ghidra MCP server.",
+      "required": false,
+      "default": "127.0.0.1"
+    },
+    "mcp_port": {
+      "type": "number",
+      "title": "MCP Server Port",
+      "description": "The port number for the Ghidra MCP server.",
+      "required": false,
+      "default": 8081,
+      "min": 1,
+      "max": 65535
+    },
+    "ghidra_server": {
+      "type": "string",
+      "title": "Ghidra HTTP Server URL",
+      "description": "The URL of the Ghidra HTTP server instance (GhidraMCP plugin).",
+      "required": false,
+      "default": "http://127.0.0.1:8080/"
+    }
+  },
+  "readme": "[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)\n[![GitHub release (latest by date)](https://img.shields.io/github/v/release/LaurieWired/GhidraMCP)](https://github.com/LaurieWired/GhidraMCP/releases)\n[![GitHub stars](https://img.shields.io/github/stars/LaurieWired/GhidraMCP)](https://github.com/LaurieWired/GhidraMCP/stargazers)\n[![GitHub forks](https://img.shields.io/github/forks/LaurieWired/GhidraMCP)](https://github.com/LaurieWired/GhidraMCP/network/members)\n[![GitHub contributors](https://img.shields.io/github/contributors/LaurieWired/GhidraMCP)](https://github.com/LaurieWired/GhidraMCP/graphs/contributors)\n[![Follow @lauriewired](https://img.shields.io/twitter/follow/lauriewired?style=social)](https://twitter.com/lauriewired)\n\n![ghidra_MCP_logo](https://github.com/user-attachments/assets/4986d702-be3f-4697-acce-aea55cd79ad3)\n\n\n# ghidraMCP\nghidraMCP is an Model Context Protocol server for allowing LLMs to autonomously reverse engineer applications. It exposes numerous tools from core Ghidra functionality to MCP clients.\n\nhttps://github.com/user-attachments/assets/36080514-f227-44bd-af84-78e29ee1d7f9\n\n\n# Features\nMCP Server + Ghidra Plugin\n\n- Decompile and analyze binaries in Ghidra\n- Automatically rename methods and data\n- List methods, classes, imports, and exports\n\n# Installation\n\n## Prerequisites\n- Install [Ghidra](https://ghidra-sre.org)\n- Python3\n- MCP [SDK](https://github.com/modelcontextprotocol/python-sdk)\n\n## Ghidra\nFirst, download the latest [release](https://github.com/LaurieWired/GhidraMCP/releases) from this repository. This contains the Ghidra plugin and Python MCP client. Then, you can directly import the plugin into Ghidra.\n\n1. Run Ghidra\n2. Select `File` -> `Install Extensions`\n3. Click the `+` button\n4. Select the `GhidraMCP-1-2.zip` (or your chosen version) from the downloaded release\n5. Restart Ghidra\n6. Make sure the GhidraMCPPlugin is enabled in `File` -> `Configure` -> `Developer`\n7. *Optional*: Configure the port in Ghidra with `Edit` -> `Tool Options` -> `GhidraMCP HTTP Server`\n\nVideo Installation Guide:\n\n\nhttps://github.com/user-attachments/assets/75f0c176-6da1-48dc-ad96-c182eb4648c3\n\n\n\n## MCP Clients\n\nTheoretically, any MCP client should work with ghidraMCP.  Three examples are given below.\n\n## Example 1: Claude Desktop\nTo set up Claude Desktop as a Ghidra MCP client, go to `Claude` -> `Settings` -> `Developer` -> `Edit Config` -> `claude_desktop_config.json` and add the following:\n\n```json\n{\n  \"mcpServers\": {\n    \"ghidra\": {\n      \"command\": \"python\",\n      \"args\": [\n        \"/ABSOLUTE_PATH_TO/bridge_mcp_ghidra.py\",\n        \"--ghidra-server\",\n        \"http://127.0.0.1:8080/\"\n      ]\n    }\n  }\n}\n```\n\nAlternatively, edit this file directly:\n```\n/Users/YOUR_USER/Library/Application Support/Claude/claude_desktop_config.json\n```\n\nThe server IP and port are configurable and should be set to point to the target Ghidra instance. If not set, both will default to localhost:8080.\n\n## Example 2: Cline\nTo use GhidraMCP with [Cline](https://cline.bot), this requires manually running the MCP server as well. First run the following command:\n\n```\npython bridge_mcp_ghidra.py --transport sse --mcp-host 127.0.0.1 --mcp-port 8081 --ghidra-server http://127.0.0.1:8080/\n```\n\nThe only *required* argument is the transport. If all other arguments are unspecified, they will default to the above. Once the MCP server is running, open up Cline and select `MCP Servers` at the top.\n\n![Cline select](https://github.com/user-attachments/assets/88e1f336-4729-46ee-9b81-53271e9c0ce0)\n\nThen select `Remote Servers` and add the following, ensuring that the url matches the MCP host and port:\n\n1. Server Name: GhidraMCP\n2. Server URL: `http://127.0.0.1:8081/sse`\n\n## Example 3: 5ire\nAnother MCP client that supports multiple models on the backend is [5ire](https://github.com/nanbingxyz/5ire). To set up GhidraMCP, open 5ire and go to `Tools` -> `New` and set the following configurations:\n\n1. Tool Key: ghidra\n2. Name: GhidraMCP\n3. Command: `python /ABSOLUTE_PATH_TO/bridge_mcp_ghidra.py`\n\n# Building from Source\n1. Copy the following files from your Ghidra directory to this project's `lib/` directory:\n- `Ghidra/Features/Base/lib/Base.jar`\n- `Ghidra/Features/Decompiler/lib/Decompiler.jar`\n- `Ghidra/Framework/Docking/lib/Docking.jar`\n- `Ghidra/Framework/Generic/lib/Generic.jar`\n- `Ghidra/Framework/Project/lib/Project.jar`\n- `Ghidra/Framework/SoftwareModeling/lib/SoftwareModeling.jar`\n- `Ghidra/Framework/Utility/lib/Utility.jar`\n- `Ghidra/Framework/Gui/lib/Gui.jar`\n2. Build with Maven by running:\n\n`mvn clean package assembly:single`\n\nThe generated zip file includes the built Ghidra plugin and its resources. These files are required for Ghidra to recognize the new extension.\n\n- lib/GhidraMCP.jar\n- extensions.properties\n- Module.manifest\n",
+  "category": "AI Tools",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bridge-mcp-ghidra-claude": {
+        "command": "python",
+        "args": ["/ABSOLUTE_PATH_TO/bridge_mcp_ghidra.py", "--ghidra-server", "http://127.0.0.1:8080/"],
+        "env": {}
+      },
+      "bridge-mcp-ghidra-cline": {
+        "command": "python",
+        "args": [
+          "bridge_mcp_ghidra.py",
+          "--transport",
+          "sse",
+          "--mcp-host",
+          "127.0.0.1",
+          "--mcp-port",
+          "8081",
+          "--ghidra-server",
+          "http://127.0.0.1:8080/"
+        ],
+        "env": {}
+      },
+      "bridge-mcp-ghidra-5ire": {
+        "command": "python",
+        "args": ["/ABSOLUTE_PATH_TO/bridge_mcp_ghidra.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "LaurieWired",
+    "repo": "GhidraMCP",
+    "url": "https://github.com/LaurieWired/GhidraMCP",
+    "name": "GhidraMCP",
+    "path": null,
+    "stars": 5517,
+    "contributors": 10,
+    "issues": 30,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "27f316f80139e2d5dec882519a1bdf4aa46ac04c"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:34.306Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 7
+    },
+    {
+      "name": "Generic",
+      "importance": 9
+    },
+    {
+      "name": "SoftwareModeling",
+      "importance": 9
+    },
+    {
+      "name": "Project",
+      "importance": 9
+    },
+    {
+      "name": "Docking",
+      "importance": 9
+    },
+    {
+      "name": "Decompiler",
+      "importance": 9
+    },
+    {
+      "name": "Utility",
+      "importance": 9
+    },
+    {
+      "name": "Base",
+      "importance": 9
+    },
+    {
+      "name": "Gui",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pom.xml ===\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\"\n         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n\n  <modelVersion>4.0.0</modelVersion>\n  <groupId>com.lauriewired</groupId>\n  <artifactId>GhidraMCP</artifactId>\n  <packaging>jar</packaging>\n  <version>1.0-SNAPSHOT</version>\n  <name>GhidraMCP</name>\n  <url>http://maven.apache.org</url>\n\n  <dependencies>\n    <!-- Ghidra JARs as system-scoped dependencies -->\n    <dependency>\n      <groupId>ghidra</groupId>\n      <artifactId>Generic</artifactId>\n      <version>11.3.2</version>\n      <scope>system</scope>\n      <systemPath>${project.basedir}/lib/Generic.jar</systemPath>\n    </dependency>\n    <dependency>\n      <groupId>ghidra</groupId>\n      <artifactId>SoftwareModeling</artifactId>\n      <version>11.3.2</version>\n      <scope>system</scope>\n      <systemPath>${project.basedir}/lib/SoftwareModeling.jar</systemPath>\n    </dependency>\n    <dependency>\n      <groupId>ghidra</groupId>\n      <artifactId>Project</artifactId>\n      <version>11.3.2</version>\n      <scope>system</scope>\n      <systemPath>${project.basedir}/lib/Project.jar</systemPath>\n    </dependency>\n    <dependency>\n      <groupId>ghidra</groupId>\n      <artifactId>Docking</artifactId>\n      <version>11.3.2</version>\n      <scope>system</scope>\n      <systemPath>${project.basedir}/lib/Docking.jar</systemPath>\n    </dependency>\n    <dependency>\n      <groupId>ghidra</groupId>\n      <artifactId>Decompiler</artifactId>\n      <version>11.3.2</version>\n      <scope>system</scope>\n      <systemPath>${project.basedir}/lib/Decompiler.jar</systemPath>\n    </dependency>\n    <dependency>\n      <groupId>ghidra</groupId>\n      <artifactId>Utility</artifactId>\n      <version>11.3.2</version>\n      <scope>system</scope>\n      <systemPath>${project.basedir}/lib/Utility.jar</systemPath>\n    </dependency>\n    <dependency>\n      <groupId>ghidra</groupId>\n      <artifactId>Base</artifactId>\n      <version>11.3.2</version>\n      <scope>system</scope>\n      <systemPath>${project.basedir}/lib/Base.jar</systemPath>\n    </dependency>\n    <dependency>\n      <groupId>ghidra</groupId>\n      <artifactId>Gui</artifactId>\n      <version>11.3.2</version>\n      <scope>system</scope>\n      <systemPath>${project.basedir}/lib/Gui.jar</systemPath>\n    </dependency>\n\n    <!-- JUnit (test only) -->\n    <dependency>\n      <groupId>junit</groupId>\n      <artifactId>junit</artifactId>\n      <version>3.8.1</version>\n      <scope>test</scope>\n    </dependency>\n  </dependencies>\n\n  <build>\n    <plugins>\n      <!-- Use custom MANIFEST.MF -->\n      <plugin>\n        <artifactId>maven-jar-plugin</artifactId>\n        <version>3.2.2</version>\n        <configuration>\n          <archive>\n            <manifestFile>src/main/resources/META-INF/MANIFEST.MF</manifestFile>\n          </archive>\n          <!-- Set a fixed name for the JAR without version -->\n          <finalName>GhidraMCP</finalName>\n          <!-- Exclude the App class -->\n          <excludes>\n            <exclude>**/App.class</exclude>\n          </excludes>\n          <!-- Make sure output directory is target for consistency -->\n          <outputDirectory>${project.build.directory}</outputDirectory>\n        </configuration>\n      </plugin>\n      \n      <!-- The Assembly Plugin for creating the Ghidra extension ZIP -->\n      <plugin>\n        <groupId>org.apache.maven.plugins</groupId>\n        <artifactId>maven-assembly-plugin</artifactId>\n        <version>3.3.0</version>\n        <configuration>\n          <!-- Using the custom assembly descriptor -->\n          <descriptors>\n            <descriptor>src/assembly/ghidra-extension.xml</descriptor>\n          </descriptors>\n          \n          <!-- The name of the final zip -->\n          <finalName>GhidraMCP-${project.version}</finalName>\n          \n          <!-- Don't append the assembly ID -->\n          <appendAssemblyId>false</appendAssemblyId>\n        </configuration>\n        \n        <executions>\n          <execution>\n            <id>make-assembly</id>\n            <phase>package</phase>\n            <goals>\n              <goal>single</goal>\n            </goals>\n          </execution>\n        </executions>\n      </plugin>\n      \n      <!-- Copy dependencies to target/lib for the assembly -->\n      <plugin>\n        <groupId>org.apache.maven.plugins</groupId>\n        <artifactId>maven-dependency-plugin</artifactId>\n        <version>3.1.2</version>\n        <executions>\n          <execution>\n            <id>copy-dependencies</id>\n            <phase>prepare-package</phase>\n            <goals>\n              <goal>copy-dependencies</goal>\n            </goals>\n            <configuration>\n              <outputDirectory>${project.build.directory}/lib</outputDirectory>\n              <includeScope>runtime</includeScope>\n            </configuration>\n          </execution>\n        </executions>\n      </plugin>\n    </plugins>\n  </build>\n</project>\n\n\n=== requirements.txt ===\nmcp==1.5.0\nrequests==2.32.3\n"
+}

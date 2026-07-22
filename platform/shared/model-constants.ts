@@ -20,7 +20,11 @@ export const SupportedProvidersSchema = z.enum([
   "zhipuai",
   "deepseek",
   "minimax",
+  "kimi",
   "azure",
+  "github-copilot",
+  "microsoft-365-copilot",
+  "archestra",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -31,6 +35,11 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "gemini:embeddings",
   "anthropic:messages",
   "bedrock:converse",
+  // Bedrock InvokeModel with an Anthropic model: the wire format is the
+  // Anthropic Messages API (what the Anthropic SDK's Bedrock client and
+  // Claude Code send), transported over Bedrock.
+  "bedrock:invoke",
+  "bedrock:embeddings",
   "cohere:chat",
   "cerebras:chatCompletions",
   "mistral:chatCompletions",
@@ -43,8 +52,12 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "zhipuai:chatCompletions",
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
+  "kimi:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
+  "github-copilot:chatCompletions",
+  "microsoft-365-copilot:chatCompletions",
+  "archestra:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -80,7 +93,11 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   zhipuai: "Zhipu AI",
   deepseek: "DeepSeek",
   minimax: "MiniMax",
+  kimi: "Moonshot (Kimi)",
   azure: "Azure AI Foundry",
+  "github-copilot": "GitHub Copilot",
+  "microsoft-365-copilot": "Microsoft 365 Copilot",
+  archestra: "Archestra",
 };
 
 /**
@@ -93,22 +110,85 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
   "vllm",
 ]);
 
+/**
+ * Providers that have no usable default endpoint, so an env-seeded key without an
+ * explicit base URL is unusable: vLLM has no default at all (the OpenAI-compatible
+ * SDK would silently fall back to api.openai.com), and Azure has no resource URL.
+ * Bedrock is intentionally excluded — at runtime it infers a region (us-east-1
+ * fallback) so chat works key-only/IAM even without a base URL (only its model-list
+ * sync needs one). Gemini is excluded — its SDK supplies its own default.
+ */
+export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
+  "azure",
+  "vllm",
+  // Archestra-as-provider points at another Archestra instance's OpenAI-compatible
+  // proxy endpoint (e.g. https://other/v1/proxy/openai/<agentId>); there is no
+  // default, so a key without a base URL would silently route to api.openai.com.
+  "archestra",
+]);
+
+/**
+ * Providers whose credential is an individual user's token rather than a shared
+ * service key (GitHub Copilot: a per-user GitHub OAuth token tied to that
+ * account's Copilot seat; Microsoft 365 Copilot: a per-user Entra ID refresh token
+ * tied to that account's Microsoft 365 Copilot license — the Graph Chat API
+ * only supports delegated auth). Sharing one token across users is a ToS gray
+ * area and breaks per-user attribution, so for these providers:
+ * - keys are personal-scope only (no team/org scope, no virtual-key sharing);
+ * - request-time resolution uses ONLY the acting user's personal key — never an
+ *   agent's attached key, a conversation key, a team/org key, or the shared env
+ *   fallback;
+ * - a missing personal key surfaces a "link your account" prompt, not a fallback.
+ */
+export const PROVIDERS_REQUIRING_PER_USER_CREDENTIAL =
+  new Set<SupportedProvider>(["github-copilot", "microsoft-365-copilot"]);
+
+export function providerRequiresPerUserCredential(
+  provider: SupportedProvider,
+): boolean {
+  return PROVIDERS_REQUIRING_PER_USER_CREDENTIAL.has(provider);
+}
+
+/**
+ * Display name of the OpenAI "ChatGPT Subscription" (Codex) auth mode — the
+ * credential-level per-user case on the `openai` provider, governed by the same
+ * rules as PROVIDERS_REQUIRING_PER_USER_CREDENTIAL.
+ */
+export const CHATGPT_SUBSCRIPTION_LABEL = "ChatGPT Subscription";
+
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
   azureEntraIdEnabled?: boolean;
+  anthropicWifEnabled?: boolean;
 }): boolean {
   return (
     PROVIDERS_WITH_OPTIONAL_API_KEY.has(params.provider) ||
-    (params.provider === "azure" && params.azureEntraIdEnabled === true)
+    (params.provider === "azure" && params.azureEntraIdEnabled === true) ||
+    (params.provider === "anthropic" && params.anthropicWifEnabled === true)
   );
+}
+
+/**
+ * Self-hosted providers whose endpoint typically points at a localhost / in-cluster
+ * URL — the only ones the Docker-localhost connection hint applies to. This is the
+ * *unconditional* optional-key set (Ollama, vLLM): cloud keyless providers (Azure
+ * Entra ID, Anthropic WIF) are optional only via runtime flags, so they are excluded
+ * automatically without a per-provider denylist.
+ */
+export function isSelfHostedProvider(provider: SupportedProvider): boolean {
+  return PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider);
 }
 
 export function getProvidersWithOptionalApiKey(params?: {
   azureEntraIdEnabled?: boolean;
+  anthropicWifEnabled?: boolean;
 }): SupportedProvider[] {
   const providers = [...PROVIDERS_WITH_OPTIONAL_API_KEY];
   if (params?.azureEntraIdEnabled === true) {
     providers.push("azure");
+  }
+  if (params?.anthropicWifEnabled === true) {
+    providers.push("anthropic");
   }
   return providers;
 }
@@ -132,10 +212,21 @@ export const PERPLEXITY_MODELS = [
  * @see https://platform.minimax.io/docs/guides/models-intro
  */
 export const MINIMAX_MODELS = [
+  { id: "MiniMax-M3", displayName: "MiniMax-M3" },
+  { id: "MiniMax-M3-highspeed", displayName: "MiniMax-M3-highspeed" },
   { id: "MiniMax-M2.7", displayName: "MiniMax-M2.7" },
   { id: "MiniMax-M2.7-highspeed", displayName: "MiniMax-M2.7-highspeed" },
   { id: "MiniMax-M2.5", displayName: "MiniMax-M2.5" },
   { id: "MiniMax-M2.5-highspeed", displayName: "MiniMax-M2.5-highspeed" },
+] as const;
+
+/**
+ * The single pseudo-model exposed by the Microsoft 365 Copilot provider. The Graph
+ * Chat API has no model selection — requests always run against the user's
+ * Microsoft 365 Copilot — so the provider serves exactly this static model.
+ */
+export const MICROSOFT_365_COPILOT_MODELS = [
+  { id: "microsoft-365-copilot", displayName: "Microsoft 365 Copilot" },
 ] as const;
 
 /**
@@ -159,7 +250,13 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   zhipuai: "https://api.z.ai/api/paas/v4",
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
+  kimi: "https://api.moonshot.ai/v1",
   azure: "https://<resource>.openai.azure.com/openai",
+  "github-copilot": "https://api.githubcopilot.com",
+  "microsoft-365-copilot": "https://graph.microsoft.com/beta",
+  // No default: the upstream is another Archestra instance's proxy endpoint,
+  // supplied per key (e.g. https://your-archestra/v1/proxy/openai/<agentId>).
+  archestra: "",
 };
 
 /**
@@ -184,120 +281,100 @@ export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
 /**
  * Pattern-based model markers per provider.
  * Patterns are substrings that model IDs must contain (case-insensitive).
- * Used to identify "fastest" (lightweight, low latency) and "best" (highest quality) models.
+ * Used to identify "best" (highest quality) models.
  *
- * IMPORTANT: Patterns are checked in array order (first match wins).
- * More specific patterns should come before general ones.
+ * Patterns are checked in array order (first match wins), so list each
+ * provider's ids most- to least-preferred (more specific before general). The
+ * first listed id present in the account is the one marked best.
  */
-export const MODEL_MARKER_PATTERNS: Record<
-  SupportedProvider,
-  {
-    fastest: string[];
-    best: string[];
-  }
-> = {
-  anthropic: {
-    fastest: ["haiku-4-5-20251001", "haiku-4-5"],
-    best: ["opus-4-7"],
-  },
-  openai: {
-    fastest: ["gpt-5.4-nano", "gpt-5.4-mini"],
-    best: ["gpt-5.5-pro", "gpt-5.5"],
-  },
-  gemini: {
-    fastest: ["gemini-3.1-flash-lite", "gemini-3.5-flash"],
-    best: ["gemini-3.1-pro-preview"],
-  },
-  cerebras: {
-    fastest: ["llama3.1-8b"],
-    best: ["zai-glm-4.7"],
-  },
-  cohere: {
-    fastest: ["command-r7b-12-2024"],
-    best: ["command-a-plus-05-2026"],
-  },
-  mistral: {
-    fastest: ["mistral-small-2603"],
-    best: ["mistral-medium-2604"],
-  },
-  perplexity: {
-    fastest: ["sonar"],
-    best: ["sonar-deep-research", "sonar-reasoning-pro", "sonar-pro"],
-  },
-  groq: {
-    fastest: ["openai/gpt-oss-20b", "llama-3.1-8b-instant"],
-    best: ["openai/gpt-oss-120b"],
-  },
-  xai: {
-    fastest: ["grok-4.3"],
-    best: ["grok-4.3"],
-  },
-  openrouter: {
-    fastest: ["openrouter/auto"],
-    best: [
-      "anthropic/claude-opus-4.7",
-      "openai/gpt-5.5-pro",
-      "openai/gpt-5.5",
-      "google/gemini-3.1-pro-preview",
-      "x-ai/grok-4.3",
-      "deepseek/deepseek-v4-pro",
-    ],
-  },
-  ollama: {
-    fastest: ["gpt-oss:20b", "llama3.2:3b", "phi4-mini"],
-    best: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
-  },
-  vllm: {
-    fastest: ["gpt-oss-20b", "llama-3.2-3b", "phi-4-mini"],
-    best: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
-  },
-  zhipuai: {
-    fastest: ["glm-4.7-flash"],
-    best: ["glm-5.1"],
-  },
-  deepseek: {
-    fastest: ["deepseek-v4-flash"],
-    best: ["deepseek-v4-pro"],
-  },
-  minimax: {
-    fastest: ["minimax-m2.7-highspeed"],
-    best: ["minimax-m2.7"],
-  },
-  azure: {
-    fastest: ["gpt-5.4-nano", "gpt-5.4-mini"],
-    best: ["gpt-5.5"],
-  },
-  bedrock: {
-    fastest: ["amazon.nova-2-lite-v1:0", "amazon.nova-lite-v1:0"],
-    best: ["anthropic.claude-opus-4-7"],
-  },
-};
-
-/**
- * Fast models for each provider, used as fallback for title generation and other quick operations.
- * These are optimized for speed and cost rather than capability.
- *
- * Primary resolution uses LlmProviderApiKeyModelLinkModel.getFastestModel() from the database.
- * This map serves as a fallback when no database result is available.
- */
-export const FAST_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-haiku-4-5-20251001",
-  openai: "gpt-5.4-mini",
-  openrouter: "openrouter/auto",
-  gemini: "gemini-3.5-flash",
-  cerebras: "llama3.1-8b", // cerebras focuses on speed, all their models are fast
-  cohere: "command-r7b-12-2024", // cohere's fast model
-  vllm: "default", // vLLM uses whatever model is deployed
-  ollama: "llama3.2", // common fast model for Ollama
-  zhipuai: "glm-4.7-flash", // zhipu's fast model
-  minimax: "MiniMax-M2.7-highspeed", // minimax's fastest model
-  deepseek: "deepseek-v4-flash", // deepSeek's fast model
-  bedrock: "amazon.nova-2-lite-v1:0", // bedrock's fast model
-  mistral: "mistral-small-2603", // mistral's fast model
-  perplexity: "sonar", // perplexity's fast model
-  groq: "llama-3.1-8b-instant", // groq's fast model
-  xai: "grok-4.3", // xAI's fast model
-  azure: "gpt-5.4-mini",
+export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
+  anthropic: ["opus-4-8", "opus-4-7", "opus", "sonnet"],
+  openai: [
+    // Sol is the 5.6 flagship tier; Terra the balanced one. Luna (nano tier)
+    // is deliberately absent so it is never marked best over a 5.5 model.
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.5-pro",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.3",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+  ],
+  gemini: [
+    "gemini-3.5-pro",
+    "gemini-3.5-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-3-pro",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+  ],
+  cerebras: ["zai-glm-4.7"],
+  cohere: ["command-a-plus", "command-a", "command-r-plus", "command-r"],
+  mistral: [
+    "mistral-medium-2604",
+    "mistral-large",
+    "mistral-medium",
+    "mistral-small",
+  ],
+  perplexity: [
+    "sonar-deep-research",
+    "sonar-reasoning-pro",
+    "sonar-pro",
+    "sonar",
+  ],
+  groq: ["openai/gpt-oss-120b", "gpt-oss", "llama-4", "llama-3.3"],
+  xai: ["grok-4.3", "grok-4", "grok-3"],
+  openrouter: [
+    "anthropic/claude-opus-4.8",
+    "anthropic/claude-opus-4.7",
+    "openai/gpt-5.5-pro",
+    "openai/gpt-5.5",
+    "google/gemini-3.1-pro-preview",
+    "x-ai/grok-4.3",
+    "deepseek/deepseek-v4-pro",
+  ],
+  ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
+  vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
+  zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
+  deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
+  minimax: ["minimax-m3", "minimax-m2.7"],
+  kimi: [
+    "kimi-k2-thinking",
+    "kimi-k2-turbo",
+    "kimi-k2",
+    "kimi-latest",
+    "moonshot-v1-128k",
+    "kimi",
+  ],
+  azure: [
+    "gpt-5.5-pro",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.3",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+  ],
+  bedrock: [
+    "anthropic.claude-opus-4-8",
+    "anthropic.claude-opus-4-7",
+    "claude-opus",
+    "claude-sonnet",
+    "amazon.nova-pro",
+  ],
+  "github-copilot": [
+    "claude-opus",
+    "claude-sonnet",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+  ],
+  "microsoft-365-copilot": [MICROSOFT_365_COPILOT_MODELS[0].id],
+  // The upstream Archestra can front any provider, so match common flagship
+  // families across vendors (most- to least-preferred).
+  archestra: ["opus", "sonnet", "gpt-5", "gemini-3", "grok-4"],
 };
 
 /**
@@ -305,10 +382,10 @@ export const FAST_MODELS: Record<SupportedProvider, string> = {
  * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
  */
 export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-opus-4-7",
+  anthropic: "claude-opus-4-8",
   openai: "gpt-5.5",
   openrouter: "openrouter/auto",
-  gemini: "gemini-3.1-pro-preview",
+  gemini: "gemini-3.5-flash",
   cohere: "command-a-plus-05-2026",
   groq: "openai/gpt-oss-120b",
   xai: "grok-4.3",
@@ -319,10 +396,59 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   perplexity: "sonar-pro",
   zhipuai: "glm-5.1",
   deepseek: "deepseek-v4-pro",
-  bedrock: "anthropic.claude-opus-4-7",
-  minimax: "MiniMax-M2.7",
+  bedrock: "anthropic.claude-opus-4-8",
+  minimax: "MiniMax-M3",
+  kimi: "kimi-k2-0711-preview",
   azure: "gpt-5.5",
+  "github-copilot": "gpt-4o",
+  "microsoft-365-copilot": MICROSOFT_365_COPILOT_MODELS[0].id,
+  // Fallback only; users pick from the upstream's fetched model list.
+  archestra: "gpt-4o",
 };
+
+/**
+ * Cache token price as a multiple of the model's per-token INPUT price.
+ * `read` = cache-read (cheap reuse); `write` = cache-creation (5-minute TTL)
+ * surcharge; `write1h` = 1-hour TTL cache-write surcharge.
+ *
+ * Used as the fallback when a model has no explicit (synced or admin-set) cache
+ * price: Anthropic/Bedrock bill a separate write surcharge (1.25x at 5m, 2x at
+ * 1h), while OpenAI/Gemini/DeepSeek auto-cache with only a read discount and no
+ * write surcharge. Providers absent from this map have no cache pricing model,
+ * so cache cost/savings are not derived for them.
+ */
+export const CACHE_PRICE_MULTIPLIERS: Partial<
+  Record<SupportedProvider, { read: number; write: number; write1h?: number }>
+> = {
+  anthropic: { read: 0.1, write: 1.25, write1h: 2 },
+  bedrock: { read: 0.1, write: 1.25, write1h: 2 },
+  openai: { read: 0.25, write: 0 },
+  gemini: { read: 0.25, write: 0 },
+  deepseek: { read: 0.1, write: 0 },
+};
+
+/**
+ * True for OpenAI models served only (or only fully) through the Responses API
+ * (`/v1/responses`), so the chat client must route them to the Responses
+ * transport instead of `/v1/chat/completions`:
+ *
+ * - "pro" reasoning models: `/chat/completions` returns `api_not_found_error`
+ *   ("not a chat model"). "pro" is matched as a hyphen/slash-delimited token,
+ *   so dated snapshots (`gpt-5.5-pro-2026-01-01`) are covered.
+ * - the gpt-5.6 family (sol/terra/luna): reasoning is on by default and
+ *   `/chat/completions` rejects function tools with any reasoning effort
+ *   (400 api_validation_error: "use /v1/responses or set reasoning_effort to
+ *   'none'"). Disabling reasoning would degrade the model, so route the whole
+ *   family to Responses. "gpt-5.6" is matched up to a `-`/`.`/end boundary so
+ *   tiers and dated snapshots are covered without matching e.g. `gpt-5.61`.
+ */
+export function requiresOpenAiResponsesApi(modelId: string): boolean {
+  return (
+    /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId) ||
+    /(?:^|\/)gpt-5\.6(?:$|[-.])/i.test(modelId)
+  );
+}
+
 /**
  * Maps models.dev provider IDs to Archestra provider names.
  * This is the single source of truth for all synchronization logic.
@@ -346,6 +472,7 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     // These providers use OpenAI-compatible API in Archestra
     llama: "openai",
     deepseek: "deepseek",
+    moonshotai: "kimi",
     groq: "groq",
     "fireworks-ai": "openai",
     togetherai: "openai",
@@ -354,6 +481,12 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     // Bedrock and Azure have dedicated auth flows and are not synced via models.dev
     "amazon-bedrock": null,
     azure: null,
+    // GitHub Copilot model availability depends on the user's subscription tier,
+    // so models are synced from Copilot's own /models endpoint, not models.dev
+    "github-copilot": null,
+    // Microsoft 365 Copilot exposes a single static pseudo-model (the Graph Chat
+    // API has no model selection), so there is nothing to sync from models.dev
+    "microsoft-365-copilot": null,
     perplexity: null,
     nvidia: null,
   };

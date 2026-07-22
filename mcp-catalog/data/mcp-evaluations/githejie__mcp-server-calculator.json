@@ -1,0 +1,75 @@
+{
+  "name": "githejie__mcp-server-calculator",
+  "display_name": "mcp-server-calculator",
+  "description": "A Model Context Protocol server for calculating.",
+  "author": {
+    "name": "githejie"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-calculator"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Calculator MCP Server\n\nA Model Context Protocol server for calculating. This server enables LLMs to use calculator for precise numerical calculations.\n\n### Available Tools\n\n- `calculate` - Calculates/evaluates the given expression.\n  - `expression` (string, required): Expression to be calculated\n\n## Installation\n\n### Using uv (recommended)\n\nWhen using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will\nuse [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-server-calculator*.\n\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n### Using PIP\n\nAlternatively you can install `mcp-server-calculator` via pip:\n\n```bash\npip install mcp-server-calculator\n```\n\nAfter installation, you can run it as a script using:\n\n```bash\npython -m mcp_server_calculator\n```\n\n## Configuration\n\n### Using uv (recommended)\n\nAdd this to your MCP client settings:\n\n```json\n\"mcpServers\": {\n  \"calculator\": {\n    \"command\": \"uvx\",\n    \"args\": [\"mcp-server-calculator\"]\n  }\n}\n```\n\n### Using PIP\n\nAlternatively add this to your MCP client settings:\n\n```json\n\"mcpServers\": {\n  \"calculator\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"mcp_server_calculator\"]\n  }\n}\n```\n\n## License\n\nmcp-server-calculator is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "AI Tools",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-calculator": {
+        "command": "uvx",
+        "args": ["mcp-server-calculator"],
+        "env": {}
+      },
+      "mcp_server_calculator": {
+        "command": "python",
+        "args": ["-m", "mcp_server_calculator"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "githejie",
+    "repo": "mcp-server-calculator",
+    "url": "https://github.com/githejie/mcp-server-calculator",
+    "name": "mcp-server-calculator",
+    "path": null,
+    "stars": 100,
+    "contributors": 1,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "a07908b443aa8494aaa08eb6f4cb6f3033532817"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.243Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-calculator\"\nversion = \"0.2.0\"\ndescription = \"A Model Context Protocol server for calculating\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nauthors = [{ name = \"He Jie\", email = \"hejie6173@gmail.com\" }]\nkeywords = [\"mcp\", \"llm\", \"math\", \"calculator\"]\nlicense = { text = \"MIT\" }\nurls = { Source = \"https://github.com/githejie/mcp-server-calculator\" }\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n]\ndependencies = [\n    \"mcp>=1.4.1\",\n]\n\n[project.scripts]\nmcp-server-calculator = \"mcp_server_calculator:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n"
+}

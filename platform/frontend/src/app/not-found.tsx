@@ -1,4 +1,4 @@
-import { GITHUB_REPO_NEW_ISSUE_URL } from "@shared";
+import { GITHUB_REPO_NEW_ISSUE_URL } from "@archestra/shared";
 import { Home } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";

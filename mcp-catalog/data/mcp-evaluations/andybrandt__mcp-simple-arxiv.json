@@ -1,0 +1,87 @@
+{
+  "name": "andybrandt__mcp-simple-arxiv",
+  "display_name": "mcp-simple-arxiv",
+  "description": "Tool to  work with arXiv, provide LLM with ability to search and read papers from there",
+  "author": {
+    "name": "andybrandt"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "mcp_simple_arxiv"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# mcp-simple-arxiv\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/andybrandt/mcp-simple-arxiv)](https://archestra.ai/mcp-catalog/andybrandt__mcp-simple-arxiv)\n[![smithery badge](https://smithery.ai/badge/mcp-simple-arxiv)](https://smithery.ai/server/mcp-simple-arxiv)\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/dc95dba9-149a-4eaa-bf08-36e0cb0f3a5a)\n\nAn MCP server that provides access to arXiv papers through their API.\n\n<a href=\"https://glama.ai/mcp/servers/p38q3nagwb\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/p38q3nagwb/badge\" alt=\"mcp-simple-arxiv MCP server\" /></a>\n\n## Features\n\nThis server allows LLM clients (like Claude Desktop) to:\n- Search for scientific papers on arXiv by title and abstract content\n- Get paper metadata and abstracts\n- Access links to available paper formats (PDF/HTML)\n\nTo use the web version just add this connector to Claude.ai https://mcp.andybrandt.net/arxiv .\nYou can also install & use it locally. \n\n## Installation and Deployment\n\nThis server can be run in two modes: as a local `stdio` server for desktop clients or as a network-accessible web server.\n\n### Installing via Smithery\n\nTo install Simple Arxiv for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-simple-arxiv):\n\n```bash\nnpx -y @smithery/cli install mcp-simple-arxiv --client claude\n```\n\n### Manual Installation\n```bash\npip install mcp-simple-arxiv\n```\n\n## Usage with Claude Desktop\n\nAdd this configuration to your `claude_desktop_config.json`:\n\n(Mac OS)\n\n```json\n{\n  \"mcpServers\": {\n    \"simple-arxiv\": {\n      \"command\": \"python\",\n      \"args\": [\"-m\", \"mcp_simple_arxiv\"]\n      }\n  }\n}\n```\n\n(Windows version):\n\n```json\n{\n  \"mcpServers\": {\n    \"simple-arxiv\": {\n      \"command\": \"C:\\\\Users\\\\YOUR_USERNAME\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe\",\n      \"args\": [\n        \"-m\",\n        \"mcp_simple_arxiv\"\n      ]\n    }\n  }\n}\n```\n\nAfter restarting Claude Desktop, the following capabilities will be available:\n\n### Searching Papers\n\nYou can ask Claude to search for papers using queries like:\n```\nCan you search arXiv for recent papers about large language models?\n```\n\nThe search will return basic information about matching papers including:\n- Paper title\n- Authors\n- arXiv ID\n- Publication date\n\n### Getting Paper Details\n\nOnce you have a paper ID, you can ask for more details:\n```\nCan you show me the details for paper 2103.08220?\n```\n\nThis will return:\n- Full paper title\n- Authors\n- Publication and update dates\n- Journal reference (if available)\n- Paper abstract\n- Links to available formats (PDF/HTML)\n\n\n*For web deployment see [DEPLOYMENT.md](DEPLOYMENT.md)*.\n\n## Development\n\nTo install for development:\n```bash\ngit clone https://github.com/andybrandt/mcp-simple-arxiv\ncd mcp-simple-arxiv\npip install -e .\n```\n\n### arXiv API Guidelines\n\nThis server follows arXiv API usage guidelines:\n- Rate limiting to max 1 request per 3 seconds\n- Single connection at a time\n- Proper error handling and retry logic\n\n## License\n\nMIT\n",
+  "category": "Aggregators",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-simple-arxiv-stdio": {
+        "command": "python",
+        "args": ["-m", "mcp_simple_arxiv"],
+        "env": {}
+      },
+      "mcp-simple-arxiv-stdio-windows-absolute-path": {
+        "command": "C:\\Users\\YOUR_USERNAME\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+        "args": ["-m", "mcp_simple_arxiv"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "andybrandt",
+    "repo": "mcp-simple-arxiv",
+    "url": "https://github.com/andybrandt/mcp-simple-arxiv",
+    "name": "mcp-simple-arxiv",
+    "path": null,
+    "stars": 126,
+    "contributors": 5,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "7027293955bcac1caae2e918b148f6b48750689c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:25.321Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "feedparser",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "beautifulsoup4",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"mcp-simple-arxiv\"\nversion = \"0.3.0\"\ndescription = \"An MCP server that provides access to arXiv papers through their API.\"\nreadme = \"README.md\"\nauthors = [\n    {name = \"Andy Brandt\", email = \"andy@codesprinters.com\"}\n]\nrequires-python = \">=3.10\"\nlicense = \"MIT\"\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"Operating System :: OS Independent\",\n]\ndependencies = [\n    \"fastmcp\",\n    \"feedparser\",  # for parsing arXiv API responses\n    \"httpx\",      # for making HTTP requests with async support\n    \"beautifulsoup4\",  # for parsing arXiv taxonomy page\n]\n\n[project.urls]\nHomepage = \"https://github.com/andybrandt/mcp-simple-arxiv\"\n\n[project.scripts]\nmcp-simple-arxiv = \"mcp_simple_arxiv:main\""
+}

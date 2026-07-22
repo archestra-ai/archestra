@@ -1,0 +1,106 @@
+{
+  "name": "higress-group__higress-ops-mcp-server",
+  "display_name": "higress-ops-mcp-server",
+  "description": "A Model Context Protocol (MCP) server implementation that enables comprehensive configuration and management of Higress.",
+  "author": {
+    "name": "higress-group"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Higress OPS MCP Server\n\nA Model Context Protocol (MCP) server implementation that enables comprehensive configuration and management of [Higress](https://higress.cn/). This repository also provides an MCP client built on top of [LangGraph](https://www.langchain.com/langgraph) and [LangChain MCP Adapters](https://github.com/langchain-ai/langchain-mcp-adapters), facilitating interaction with the Higress MCP Server through a well-designed agent flow architecture.\n\n## Demo\n\nhttps://github.com/user-attachments/assets/bae66b77-a158-452e-9196-98060bac0df7\n\n## Config Environment Variables\n\nCopy the `.env.example` file to `.env` and fill in the corresponding values.\n\n## Start MCP Client and MCP Server\n\nIn stdio mode, the MCP server process is started by the MCP client program. Run the following command to start the MCP client and MCP server:\n\n```python\nuv run client.py\n```\n\n## Add a new tool\n\n**Step 1: Create a new tool class or extend an existing one**\n\n- Create a new file in the tools directory if adding a completely new tool category\n- Or add your tool to an existing class if it fits an existing category\n\n```python\nfrom typing import Dict, List, Any\nfrom fastmcp import FastMCP\n\nclass YourTools:\n    def register_tools(self, mcp: FastMCP):\n        @mcp.tool()\n        async def your_tool_function(arg1: str, arg2: int) -> List[Dict]:\n            \"\"\"\n            Your tool description.\n            \n            Args:\n                arg1: Description of arg1\n                arg2: Description of arg2\n\n            Returns:\n                Description of the return value\n            \n            Raises:\n                ValueError: If the request fails\n            \"\"\"\n            # Implementation using self.higress_client to make API calls\n            return self.higress_client.your_api_method(arg1, arg2)\n```\n\n\n**Step 2: Add a new method to HigressClient if your tool needs to interact with the Higress Console API**\n\n- Add methods to utils/higress_client.py that encapsulate API calls\n- Use the existing HTTP methods (get, put, post) for actual API communication\n\n\n```python\ndef your_api_method(self, arg1: str, arg2: int) -> List[Dict]:\n    \"\"\"\n    Description of what this API method does.\n    \n    Args:\n        arg1: Description of arg1\n        arg2: Description of arg2\n        \n    Returns:\n        Response data\n        \n    Raises:\n        ValueError: If the request fails\n    \"\"\"\n    path = \"/v1/your/api/endpoint\"\n    data = {\"arg1\": arg1, \"arg2\": arg2}\n    return self.put(path, data)  # or self.get(path) or self.post(path, data)\n```\n\n**Step 3: Register your tool class in the server**\n\n- Add your tool class to the tool_classes list in server.py\n- This list is used by ToolsRegister to instantiate and register all tools\n- The ToolsRegister will automatically set logger and higress_client attributes\n\n```python\ntool_classes = [\n    CommonTools,\n    RequestBlockTools,\n    RouteTools,\n    ServiceSourceTools,\n    YourTools  # Add your tool class here\n]\n```\n\n**Step 4: Add your tool to `SENSITIVE_TOOLS` if it requires human confirmation**\n\n- Tools in this list will require human confirmation before execution\n\n```python\n# Define write operations that require human confirmation\nSENSITIVE_TOOLS = [\n    \"add_route\", \n    \"add_service_source\",\n    \"update_route\",\n    \"update_request_block_plugin\", \n    \"update_service_source\",\n    \"your_tool_function\"  # Add your tool name here if it requires confirmation\n]\n```\n",
+  "category": "Enterprise",
+  "quality_score": 39,
+  "archestra_config": {
+    "client_config_permutations": {
+      "higress-ops-mcp-server-stdio": {
+        "command": "uv",
+        "args": ["run", "client.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "higress-group",
+    "repo": "higress-ops-mcp-server",
+    "url": "https://github.com/higress-group/higress-ops-mcp-server",
+    "name": "higress-group__higress-ops-mcp-server",
+    "path": null,
+    "stars": 21,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "715e13be384a43bceeae01891add5643e3d59a30"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:37.048Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "starlette",
+      "importance": 9
+    },
+    {
+      "name": "requests",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 7
+    },
+    {
+      "name": "langchain-mcp-adapters",
+      "importance": 9
+    },
+    {
+      "name": "langgraph",
+      "importance": 9
+    },
+    {
+      "name": "langchain-openai",
+      "importance": 7
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"higress-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"MCP Server for Higress\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"uvicorn>=0.24.0\",\n    \"starlette>=0.27.0\",\n    \"requests>=2.31.0\",\n    \"mcp[cli]>=1.2.1\",\n    \"openai>=1.61.0\",\n    \"langchain-mcp-adapters>=0.0.5\",\n    \"langgraph>=0.3.16\",\n    \"langchain-openai>=0.3.9\",\n    \"fastmcp>=0.4.1\",\n    \"python-dotenv>=1.0.1\",\n]\n\n"
+}

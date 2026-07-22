@@ -1,0 +1,170 @@
+{
+  "name": "open-strategy-partners__osp_marketing_tools",
+  "display_name": "osp_marketing_tools",
+  "description": "A Model Context Protocol (MCP) server that empowers LLMs to use some of Open Srategy Partners' core writing and product marketing techniques.",
+  "author": {
+    "name": "open-strategy-partners"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/open-strategy-partners/osp_marketing_tools@main", "osp_marketing_tools"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Open Strategy Partners (OSP) Marketing Tools for LLMs\n\n![](https://badge.mcpx.dev?type=server 'MCP Server') \n\nA comprehensive suite of tools for technical marketing content creation, optimization, and product positioning based on [Open Strategy Partners](https://openstrategypartners.com)' proven methodologies. \n\nThis software is based on the [Model Context Protocol (MCP)](https://openstrategypartners.com/blog/the-model-context-protocol-unify-your-marketing-stack-with-ai/) and is can be used by any LLM client that supports the MCP. \n\nAs of early February 2025, the LLM clients that support MCP include:\n- [Claude desktop app](https://claude.ai/download) is the easiest to use for the less technical among us (and it is made by the inventors of the MCP).\n- [Cursor IDE](https://www.cursor.com/) is very popular with our developer friends.\n- [LibreChat](https://www.librechat.ai/) is an excellent open source AI/LLM interface app.\n\nRead our vision paper on how [Agentic AI will benefit marketing](https://openstrategypartners.com/blog/mastering-llm-interaction-preparing-marketing-teams-for-agentic-ai-success-with-mcp/).\n\n## Features\n\n### 1. OSP Product Value Map Generator\nGenerate structured [OSP product value maps](https://openstrategypartners.com/the-osp-value-map/) that effectively communicate your product's worth and positioning:\n- Tagline creation and refinement\n- Position statements across market, technical, UX, and business dimensions\n- Persona development with roles, challenges, and needs\n- Value case documentation\n- Feature categorization and organization\n- Hierarchical structure for features, areas, and categories\n- Validation system for completeness and consistency\n\n### 2. OSP Meta Information Generator\nCreate optimized metadata for web content:\n- Article titles (H1) with proper keyword placement\n- Meta titles optimized for search (50-60 characters)\n- Meta descriptions with clear value propositions (155-160 characters)\n- SEO-friendly URL slugs\n- Search intent analysis\n- Mobile display optimization\n- Click-through rate enhancement suggestions\n\n### 3. OSP Content Editing Codes\nApply [OSP's semantic editing codes](https://openstrategypartners.com/resources/the-osp-editing-codes/) for comprehensive content review:\n- Scope and narrative structure analysis\n- Flow and readability enhancement\n- Style and phrasing optimization\n- Word choice and grammar verification\n- Technical accuracy validation\n- Inclusive language guidance\n- Constructive feedback generation with before/after examples\n\n### 4. OSP Technical Writing Guide\nSystematic approach to creating high-quality technical content:\n- Narrative structure development\n- Flow optimization\n- Style guidelines\n- Technical accuracy verification\n- Content type-specific guidance (tutorials, reference docs, API documentation)\n- Accessibility considerations\n- Internationalization best practices\n- Quality assurance checklists\n\n### 5. OSP On-Page SEO Guide\nComprehensive system for optimizing web content for search engines and user experience:\n- Meta content optimization (titles, descriptions with character limits and keyword placement)\n- Content depth enhancement (subtopics, data integration, multi-format optimization)\n- Search intent alignment (5 types: informational, navigational, transactional, commercial, local)\n- Technical SEO implementation (keyword research, integration protocols, internal linking rules)\n- Structured data deployment (FAQ, How-To, Product schemas)\n- Content promotion strategies (social media, advertising approaches)\n- Quality validation protocol (constructive feedback, diff-based revision system)\n- Performance measurement methods (CTR, bounce rate, time on page metrics)\n\n\n## Usage Examples\n\nIn all of these examples, it is assumed that you will provide the texts that you wish to improve, or the technical documentation that describes the product you are marketing. \n\n### Value Map Generation\n\n```plaintext\nPrompt: \"Generate an OSP value map for [Product Name] focusing on [target audience] with the following key features: [list features]\"\n\nExample:\n\"Generate an OSP value map for CloudDeploy, focusing on DevOps engineers with these key features:\n- Automated deployment pipeline\n- Infrastructure as code support\n- Real-time monitoring\n- Multi-cloud compatibility\n- [the rest of your features or text]\"\n```\n\n### Meta Information Creation\n\n```plaintext\nPrompt: \"Use the OSP meta tool to generate metadata for an article about [topic]. Primary keyword: [keyword], audience: [target audience], content type: [type]\"\n\nExample:\n\"Use the OSP meta tool to generate metadata for an article about containerization best practices. Primary keyword: 'Docker containers', audience: system administrators, content type: technical guide\"\n```\n\n### Content Editing\n\n```plaintext\nPrompt: \"Review this technical content using OSP editing codes: [paste content]\"\n\nExample:\n\"Review this technical content using OSP editing codes:\nKubernetes helps you manage containers. It's really good at what it does. You can use it to deploy your apps and make them run better.\"\n```\n\n### Technical Writing\n\n```plaintext\nPrompt: \"Apply the OSP writing guide to create a [document type] about [topic] for [audience]\"\n\nExample:\n\"Apply the OSP writing guide to create a tutorial about setting up a CI/CD pipeline for junior developers\"\n```\n## Installation\n\n### Prerequisites\n\n#### Windows\n1. Install Claude Desktop (or another MCP-enabled AI tool)\n   - Download [Claude for Desktop](https://claude.ai/download) \n   - Follow the current installation instructions: [Installing Claude Desktop](https://support.anthropic.com/en/articles/10065433-installing-claude-for-desktop)\n     \n2. Install Python 3.10 or higher:\n   - Download the latest Python installer from [python.org](https://python.org)\n   - Run the installer, checking \"Add Python to PATH\"\n   - Open Command Prompt and verify installation with `python --version`\n\n3. Install uv:\n   - Open Command Prompt as Administrator\n   - Run `pip install --user uv`\n   - Verify installation with `uv --version`\n\n#### macOS\n1. Install Claude Desktop (or another MCP-enabled AI tool)\n   - Download [Claude for Desktop](https://claude.ai/download) \n   - Follow the current installation instructions: [Installing Claude Desktop](https://support.anthropic.com/en/articles/10065433-installing-claude-for-desktop)\n     \n2. Install Python 3.10 or higher:\n   - Using Homebrew: `brew install python`\n   - Verify installation with `python3 --version`\n\n3. Install uv:\n   - Using Homebrew: `brew install uv`\n   - Alternatively: `pip3 install --user uv`\n   - Verify installation with `uv --version`\n\n## Configuration\n\nAdd the following to your `claude_desktop_config.json`:\n\n```json\n{\n    \"mcpServers\": {\n        \"osp_marketing_tools\": {\n            \"command\": \"uvx\",\n            \"args\": [\n                \"--from\",\n                \"git+https://github.com/open-strategy-partners/osp_marketing_tools@main\",\n                \"osp_marketing_tools\"\n            ]\n        }\n    }\n}\n```\n## Attribution\n\nThis software package implements the content creation and optimization methodologies developed by [Open Strategy Partners](https://openstrategypartners.com). It is based on their LLM-enabled marketing tools and professional content creation frameworks.\n\nFor more information and original resources, visit:\n1. [The OSP Writing and Editing Guide](https://openstrategypartners.com/osp-writing-editing-guide/)\n2. [Editing Codes Quickstart Guide](https://openstrategypartners.com/blog/osp-editing-codes-quick-start-guide/)\n3. [OSP Free Resources](https://openstrategypartners.com/resources/)\n\n## License\n\nThis software is licensed under the Attribution-ShareAlike 4.0 International license from Creative Commons Corporation (\"Creative Commons\"). \n\nThis means you are free to:\n- Share: Copy and redistribute the material in any medium or format\n- Adapt: Remix, transform, and build upon the material for any purpose, even commercially\n\nUnder the following terms:\n- Attribution: You must give appropriate credit to Open Strategy Partners, provide a link to the license, and indicate if changes were made\n- ShareAlike: If you remix, transform, or build upon the material, you must distribute your contributions under the same license as the original\n\nFor the full license text, visit: [Creative Commons Attribution-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-sa/4.0/)\n\n## Contributing\n\nWe welcome contributions to improve these tools. Please submit issues and pull requests through our repository.\n\n## Support\n\nFor questions and support:\n1. Check our documentation\n2. Submit an issue in our repository\n3. Contact Open Strategy Partners for [professional consulting](https://openstrategypartners.com/contact/)\n",
+  "category": "Marketing",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "osp_marketing_tools": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "git+https://github.com/open-strategy-partners/osp_marketing_tools@main",
+          "osp_marketing_tools"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "open-strategy-partners",
+    "repo": "osp_marketing_tools",
+    "url": "https://github.com/open-strategy-partners/osp_marketing_tools",
+    "name": "osp_marketing_tools",
+    "path": null,
+    "stars": 207,
+    "contributors": 5,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "83f55198c4d4e7b315565f00792f63373ff9cc67"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.841Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 9
+    },
+    {
+      "name": "starlette",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "pydantic-core",
+      "importance": 8
+    },
+    {
+      "name": "anyio",
+      "importance": 7
+    },
+    {
+      "name": "httpx-sse",
+      "importance": 7
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 7
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 7
+    },
+    {
+      "name": "httpcore",
+      "importance": 6
+    },
+    {
+      "name": "typer",
+      "importance": 6
+    },
+    {
+      "name": "h11",
+      "importance": 5
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "click",
+      "importance": 4
+    },
+    {
+      "name": "rich",
+      "importance": 4
+    },
+    {
+      "name": "annotated-types",
+      "importance": 3
+    },
+    {
+      "name": "certifi",
+      "importance": 3
+    },
+    {
+      "name": "idna",
+      "importance": 3
+    },
+    {
+      "name": "markdown-it-py",
+      "importance": 3
+    },
+    {
+      "name": "pygments",
+      "importance": 3
+    },
+    {
+      "name": "sniffio",
+      "importance": 3
+    },
+    {
+      "name": "typing-extensions",
+      "importance": 3
+    },
+    {
+      "name": "mdurl",
+      "importance": 2
+    },
+    {
+      "name": "shellingham",
+      "importance": 2
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"osp-marketing-tools\"\nversion = \"0.1.0\"\ndescription = \"OSP Marketing Tools using Model Context Protocol\"\nauthors = [\n    {name = \"Robert Douglass, Tracy Evans, Jeffrey McGuire, other Open Srategy Partners contributors\"}\n]\nrequires-python = \">=3.10,<3.14\"\ndependencies = [\n    \"mcp[cli]\",\n    \"aiohttp==3.11.11\"\n]\n\n[project.scripts]\nosp_marketing_tools = \"osp_marketing_tools.server:main\"\n\n[tool.hatch.metadata]\nallow-direct-references = true\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/osp_marketing_tools\"]\n\n=== requirements.txt ===\n# This file was autogenerated by uv via the following command:\n#    uv pip compile pyproject.toml -o requirements.txt\nannotated-types==0.7.0\n    # via pydantic\nanyio==4.8.0\n    # via\n    #   httpx\n    #   mcp\n    #   sse-starlette\n    #   starlette\ncertifi==2024.12.14\n    # via\n    #   httpcore\n    #   httpx\nclick==8.1.8\n    # via\n    #   typer\n    #   uvicorn\nh11==0.14.0\n    # via\n    #   httpcore\n    #   uvicorn\nhttpcore==1.0.7\n    # via httpx\nhttpx==0.28.1\n    # via mcp\nhttpx-sse==0.4.0\n    # via mcp\nidna==3.10\n    # via\n    #   anyio\n    #   httpx\nmarkdown-it-py==3.0.0\n    # via rich\nmcp==1.2.0\n    # via osp-mcp-server (pyproject.toml)\nmdurl==0.1.2\n    # via markdown-it-py\npydantic==2.10.5\n    # via\n    #   osp-mcp-server (pyproject.toml)\n    #   mcp\n    #   pydantic-settings\npydantic-core==2.27.2\n    # via pydantic\npydantic-settings==2.7.1\n    # via mcp\npygments==2.19.1\n    # via rich\npython-dotenv==1.0.1\n    # via\n    #   mcp\n    #   pydantic-settings\nrich==13.9.4\n    # via typer\nshellingham==1.5.4\n    # via typer\nsniffio==1.3.1\n    # via anyio\nsse-starlette==2.2.1\n    # via mcp\nstarlette==0.45.2\n    # via\n    #   mcp\n    #   sse-starlette\ntyper==0.15.1\n    # via mcp\ntyping-extensions==4.12.2\n    # via\n    #   pydantic\n    #   pydantic-core\n    #   typer\nuvicorn==0.34.0\n    # via mcp\n"
+}

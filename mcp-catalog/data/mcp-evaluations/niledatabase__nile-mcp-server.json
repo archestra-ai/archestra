@@ -1,0 +1,140 @@
+{
+  "name": "niledatabase__nile-mcp-server",
+  "display_name": "nile-mcp-server",
+  "description": "MCP server for Nile Database - Manage and query databases, tenants, users, auth using LLMs",
+  "author": {
+    "name": "niledatabase"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {
+      "NILE_API_KEY": "${user_config.nile_api_key}",
+      "NILE_WORKSPACE_SLUG": "${user_config.nile_workspace_slug}",
+      "MCP_SERVER_MODE": "${user_config.mcp_server_mode}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "nile_api_key": {
+      "type": "string",
+      "title": "Nile API Key",
+      "description": "Your API key for authentication with Nile. Log in to your Nile account, select your workspace, and navigate to the Security section to create one.",
+      "sensitive": true,
+      "required": true
+    },
+    "nile_workspace_slug": {
+      "type": "string",
+      "title": "Nile Workspace Slug",
+      "description": "Your Nile workspace slug. Log in to your Nile account and click Workspaces in the top-left to find it.",
+      "sensitive": false,
+      "required": true
+    },
+    "mcp_server_mode": {
+      "type": "string",
+      "title": "MCP Server Mode",
+      "description": "Operational mode for the MCP server. Set to 'sse' for Server-Sent Events mode, otherwise it defaults to STDIO mode.",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "<p align=\"center\">\n <a href=\"https://thenile.dev\" target=\"_blank\"><img width=\"96px\" src=\"https://www.thenile.dev/about-logo.png\" /></a>\n <h2 align=\"center\">Nile MCP Server\n  <br/>\n  <img src=\"https://img.shields.io/npm/v/@niledatabase/server\"/>\n </h2>\n <p align=\"center\">\n  <a href=\"https://thenile.dev/docs/ai-embeddings/nile-mcp-server\"><strong>Learn more ↗️</strong></a>\n  <br />\n  <br />\n  <a href=\"https://discord.gg/akRKRPKA\">Discord</a>\n  🔵\n  <a href=\"https://thenile.dev\">Website</a>\n  🔵 \n  <a href=\"https://github.com/orgs/niledatabase/discussions\">Issues</a>\n </p>\n</p>\n\n[![smithery badge](https://smithery.ai/badge/@niledatabase/nile-mcp-server)](https://smithery.ai/server/@niledatabase/nile-mcp-server)\n\nA Model Context Protocol (MCP) server implementation for Nile database platform. This server allows LLM applications to interact with Nile platform through a standardized interface.\n\n## Features\n\n- **Database Management**: Create, list, get details, and delete databases\n- **Credential Management**: Create and list database credentials\n- **Region Management**: List available regions for database creation\n- **SQL Query Support**: Execute SQL queries directly on Nile databases\n- **MCP Protocol Support**: Full implementation of the Model Context Protocol\n- **Type Safety**: Written in TypeScript with full type checking\n- **Error Handling**: Comprehensive error handling and user-friendly error messages\n- **Test Coverage**: Comprehensive test suite using Jest\n- **Environment Management**: Automatic loading of environment variables from .env file\n- **Input Validation**: Schema-based input validation using Zod\n\n## Installation\n\nInstall the stable version:\n```bash\nnpm install @niledatabase/nile-mcp-server\n```\n\nFor the latest alpha/preview version:\n```bash\nnpm install @niledatabase/nile-mcp-server@alpha\n```\nThis will install @niledatabase/nile-mcp-server in your node_modules folder. For example: node_modules/@niledatabase/nile-mcp-server/dist/\n\n### Manual Installation\n```bash\n# Clone the repository\ngit clone https://github.com/yourusername/nile-mcp-server.git\ncd nile-mcp-server\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n### Other mcp package managers\n1. npx @michaellatman/mcp-get@latest install @niledatabase/nile-mcp-server\n\n## Starting the Server\n\nThere are several ways to start the server:\n\n1. **Direct Node Execution**:\n   ```bash\n   node dist/index.js\n   ```\n2. **Development Mode** (with auto-rebuild):\n   ```bash\n   npm run dev\n   ```\n\nThe server will start and listen for MCP protocol messages. You should see startup logs indicating:\n- Environment variables loaded\n- Server instance created\n- Tools initialized\n- Transport connection established\n\nTo stop the server, press `Ctrl+C`.\n\n### Verifying the Server is Running\n\nWhen the server starts successfully, you should see logs similar to:\n```\n[info] Starting Nile MCP Server...\n[info] Loading environment variables...\n[info] Environment variables loaded successfully\n[info] Creating server instance...\n[info] Tools initialized successfully\n[info] Setting up stdio transport...\n[info] Server started successfully\n```\n\nIf you see these logs, the server is ready to accept commands from Claude Desktop.\n\n## Configuration\n\nCreate a `.env` file in the root directory with your Nile credentials:\n\n```env\nNILE_API_KEY=your_api_key_here\nNILE_WORKSPACE_SLUG=your_workspace_slug\n```\n\nTo create a Nile API key, log in to your [Nile account](console.thenile.dev), click Workspaces in the top-left, select your workspace, and navigate to the Security section in the left menu.\n\n## Using with Claude Desktop\n\n### Setup\n\n1. Install [Claude Desktop](https://claude.ai/desktop) if you haven't already\n2. Build the project:\n   ```bash\n   npm run build\n   ```\n3. Open Claude Desktop\n4. Go to Settings > MCP Servers\n5. Click \"Add Server\"\n6. Add the following configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"nile-database\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/your/nile-mcp-server/dist/index.js\"\n      ],\n      \"env\": {\n        \"NILE_API_KEY\": \"your_api_key_here\",\n        \"NILE_WORKSPACE_SLUG\": \"your_workspace_slug\"\n      }\n    }\n  }\n}\n```\n\nReplace:\n- `/path/to/your/nile-mcp-server` with the absolute path to your project directory\n- `your_api_key_here` with your Nile API key\n- `your_workspace_slug` with your Nile workspace slug\n\n## Using with Cursor\n\n### Setup\n\n1. Install [Cursor](https://cursor.sh) if you haven't already\n2. Build the project:\n   ```bash\n   npm run build\n   ```\n3. Open Cursor\n4. Go to Settings (⌘,) > Features > MCP Servers\n5. Click \"Add New MCP Server\"\n6. Configure the server:\n   - Name: `nile-database` (or any name you prefer)\n   - Command: \n     ```bash\n     env NILE_API_KEY=your_key NILE_WORKSPACE_SLUG=your_workspace node /absolute/path/to/nile-mcp-server/dist/index.js\n     ```\n     Replace:\n     - `your_key` with your Nile API key\n     - `your_workspace` with your Nile workspace slug\n     - `/absolute/path/to` with the actual path to your project\n7. Click \"Save\"\n8. You should see a green indicator showing that the MCP server is connected\n9. Restart Cursor for the changes to take effect\n\n### Server Modes\n\nThe server supports two operational modes:\n\n#### STDIO Mode (Default)\nThe default mode uses standard input/output for communication, making it compatible with Claude Desktop and Cursor integrations.\n\n#### SSE Mode\nServer-Sent Events (SSE) mode enables real-time, event-driven communication over HTTP.\n\nTo enable SSE mode:\n1. Set `MCP_SERVER_MODE=sse` in your `.env` file\n2. The server will start an HTTP server (default port 3000)\n3. Connect to the SSE endpoint: `http://localhost:3000/sse`\n4. Send commands to: `http://localhost:3000/messages`\n\nExample SSE usage with curl:\n```bash\n# In terminal 1 - Listen for events\ncurl -N http://localhost:3000/sse\n\n# In terminal 2 - Send commands\ncurl -X POST http://localhost:3000/messages \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"type\": \"function\",\n    \"name\": \"list-databases\",\n    \"parameters\": {}\n  }'\n```\n\n### Example Prompts\n\nAfter setting up the MCP server in Cursor, you can use natural language to interact with Nile databases. Here are some example prompts:\n\n#### Database Management\n```\nCreate a new database named \"my_app\" in AWS_US_WEST_2 region\n\nList all my databases\n\nGet details for database \"my_app\"\n\nDelete database \"test_db\"\n```\n\n#### Creating Tables\n```\nCreate a users table in my_app database with columns:\n- tenant_id (UUID, references tenants)\n- id (INTEGER)\n- email (VARCHAR, unique per tenant)\n- name (VARCHAR)\n- created_at (TIMESTAMP)\n\nCreate a products table in my_app database with columns:\n- tenant_id (UUID, references tenants)\n- id (INTEGER)\n- name (VARCHAR)\n- price (DECIMAL)\n- description (TEXT)\n- created_at (TIMESTAMP)\n```\n\n#### Querying Data\n```\nExecute this query on my_app database:\nSELECT * FROM users WHERE tenant_id = 'your-tenant-id' LIMIT 5\n\nRun this query on my_app:\nINSERT INTO users (tenant_id, id, email, name) \nVALUES ('tenant-id', 1, 'user@example.com', 'John Doe')\n\nShow me all products in my_app database with price > 100\n```\n\n#### Schema Management\n```\nShow me the schema for the users table in my_app database\n\nAdd a new column 'status' to the users table in my_app database\n\nCreate an index on the email column of the users table in my_app\n```\n\n### Available Tools\n\nThe server provides the following tools for interacting with Nile databases:\n\n#### Database Management\n\n1. **create-database**\n   - Creates a new Nile database\n   - Parameters:\n     - `name` (string): Name of the database\n     - `region` (string): Either `AWS_US_WEST_2` (Oregon) or `AWS_EU_CENTRAL_1` (Frankfurt)\n   - Returns: Database details including ID, name, region, and status\n   - Example: \"Create a database named 'my-app' in AWS_US_WEST_2\"\n\n2. **list-databases**\n   - Lists all databases in your workspace\n   - No parameters required\n   - Returns: List of databases with their IDs, names, regions, and status\n   - Example: \"List all my databases\"\n\n3. **get-database**\n   - Gets detailed information about a specific database\n   - Parameters:\n     - `name` (string): Name of the database\n   - Returns: Detailed database information including API host and DB host\n   - Example: \"Get details for database 'my-app'\"\n\n4. **delete-database**\n   - Deletes a database\n   - Parameters:\n     - `name` (string): Name of the database to delete\n   - Returns: Confirmation message\n   - Example: \"Delete database 'my-app'\"\n\n#### Credential Management\n\n1. **list-credentials**\n   - Lists all credentials for a database\n   - Parameters:\n     - `databaseName` (string): Name of the database\n   - Returns: List of credentials with IDs, usernames, and creation dates\n   - Example: \"List credentials for database 'my-app'\"\n\n2. **create-credential**\n   - Creates new credentials for a database\n   - Parameters:\n     - `databaseName` (string): Name of the database\n   - Returns: New credential details including username and one-time password\n   - Example: \"Create new credentials for database 'my-app'\"\n   - Note: Save the password when it's displayed, as it won't be shown again\n\n#### Region Management\n\n1. **list-regions**\n   - Lists all available regions for creating databases\n   - No parameters required\n   - Returns: List of available AWS regions\n   - Example: \"What regions are available for creating databases?\"\n\n#### SQL Query Execution\n\n1. **execute-sql**\n   - Executes SQL queries on a Nile database\n   - Parameters:\n     - `databaseName` (string): Name of the database to query\n     - `query` (string): SQL query to execute\n     - `connectionString` (string, optional): Pre-existing connection string to use for the query\n   - Returns: Query results formatted as a markdown table with column headers and row count\n   - Features:\n     - Automatic credential management (creates new if not specified)\n     - Secure SSL connection to database\n     - Results formatted as markdown tables\n     - Detailed error messages with hints\n     - Support for using existing connection strings\n   - Example: \"Execute SELECT * FROM users LIMIT 5 on database 'my-app'\"\n\n#### Resource Management\n\n1. **read-resource**\n   - Reads schema information for database resources (tables, views, etc.)\n   - Parameters:\n     - `databaseName` (string): Name of the database\n     - `resourceName` (string): Name of the resource (table/view)\n   - Returns: Detailed schema information including:\n     - Column names and types\n     - Primary keys and indexes\n     - Foreign key relationships\n     - Column descriptions and constraints\n   - Example: \"Show me the schema for the users table in my-app\"\n\n2. **list-resources**\n   - Lists all resources (tables, views) in a database\n   - Parameters:\n     - `databaseName` (string): Name of the database\n   - Returns: List of all resources with their types\n   - Example: \"List all tables in my-app database\"\n\n#### Tenant Management\n\n1. **list-tenants**\n   - Lists all tenants in a database\n   - Parameters:\n     - `databaseName` (string): Name of the database\n   - Returns: List of tenants with their IDs and metadata\n   - Example: \"Show all tenants in my-app database\"\n\n2. **create-tenant**\n   - Creates a new tenant in a database\n   - Parameters:\n     - `databaseName` (string): Name of the database\n     - `tenantName` (string): Name for the new tenant\n   - Returns: New tenant details including ID\n   - Example: \"Create a tenant named 'acme-corp' in my-app\"\n\n3. **delete-tenant**\n   - Deletes tenants in the database\n   - Parameters:\n     - `databaseName` (string): Name of the database\n     - `tenantName` (string): Name for the tenant\n   - Returns: Success if the tenant is deleted\n   - Example: \"Delete tenant named 'acme-corp' in my-app\"\n\n### Example Usage\n\nHere are some example commands you can use in Claude Desktop:\n\n```\n# Database Management\nPlease create a new database named \"my-app\" in the AWS_US_WEST_2 region.\nCan you list all my databases?\nGet the details for database \"my-app\".\nDelete the database named \"test-db\".\n\n# Connection String Management\nGet a connection string for database \"my-app\".\n# Connection string format: postgres://<user>:<password>@<region>.db.thenile.dev:5432/<database>\n# Example: postgres://cred-123:password@us-west-2.db.thenile.dev:5432/my-app\n\n# SQL Queries\nExecute SELECT * FROM users LIMIT 5 on database \"my-app\"\nRun this query on my-app database: SELECT COUNT(*) FROM orders WHERE status = 'completed'\nUsing connection string \"postgres://user:pass@host:5432/db\", execute this query on my-app: SELECT * FROM products WHERE price > 100\n```\n\n### Response Format\n\nAll tools return responses in a standardized format:\n- Success responses include relevant data and confirmation messages\n- Error responses include detailed error messages and HTTP status codes\n- SQL query results are formatted as markdown tables\n- All responses are formatted for easy reading in Claude Desktop\n\n### Error Handling\n\nThe server handles various error scenarios:\n- Invalid API credentials\n- Network connectivity issues\n- Invalid database names or regions\n- Missing required parameters\n- Database operation failures\n- SQL syntax errors with helpful hints\n- Rate limiting and API restrictions\n\n### Troubleshooting\n\n1. If Claude says it can't access the tools:\n   - Check that the server path in the configuration is correct\n   - Ensure the project is built (`npm run build`)\n   - Verify your API key and workspace slug are correct\n   - Restart Claude Desktop\n\n2. If database creation fails:\n   - Check your API key permissions\n   - Ensure the database name is unique in your workspace\n   - Verify the region is one of the supported options\n\n3. If credential operations fail:\n   - Verify the database exists and is in the READY state\n   - Check that your API key has the necessary permissions\n\n## Development\n\n### Project Structure\n\n```\nnile-mcp-server/\n├── src/\n│   ├── server.ts      # MCP server implementation\n│   ├── tools.ts       # Tool implementations\n│   ├── types.ts       # Type definitions\n│   ├── logger.ts      # Logging utilities\n│   ├── index.ts       # Entry point\n│   └── __tests__/     # Test files\n│       └── server.test.ts\n├── dist/             # Compiled JavaScript\n├── logs/            # Log files directory\n├── .env             # Environment configuration\n├── .gitignore       # Git ignore file\n├── package.json     # Project dependencies\n└── tsconfig.json    # TypeScript configuration\n```\n\n### Key Files\n\n- `server.ts`: Main server implementation with tool registration and transport handling\n- `tools.ts`: Implementation of all database operations and SQL query execution\n- `types.ts`: TypeScript interfaces for database operations and responses\n- `logger.ts`: Structured logging with daily rotation and debug support\n- `index.ts`: Server startup and environment configuration\n- `server.test.ts`: Comprehensive test suite for all functionality\n\n### Development\n\n```bash\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n\n# Start the server in production mode\nnode dist/index.js\n\n# Start the server using npm script\nnpm start\n\n# Start in development mode with auto-rebuild\nnpm run dev\n\n# Run tests\nnpm test\n```\n\n### Development Scripts\n\nThe following npm scripts are available:\n- `npm run build`: Compiles TypeScript to JavaScript\n- `npm start`: Starts the server in production mode\n- `npm run dev`: Starts the server in development mode with auto-rebuild\n- `npm test`: Runs the test suite\n- `npm run lint`: Runs ESLint for code quality checking\n- `npm run clean`: Removes build artifacts\n\n### Testing\n\nThe project includes a comprehensive test suite that covers:\n- Tool registration and schema validation\n- Database management operations\n- Connection string generation\n- SQL query execution and error handling\n- Response formatting and error cases\n\nRun the tests with:\n```bash\nnpm test\n```\n\n### Logging\n\nThe server uses structured logging with the following features:\n- Daily rotating log files\n- Separate debug logs\n- JSON formatted logs with timestamps\n- Console output for development\n- Log categories: info, error, debug, api, sql, startup\n\n## License\n\nMIT License - See [LICENSE](LICENSE) for details.\n\n## Related Links\n\n- [Model Context Protocol](https://modelcontextprotocol.io)\n- [Nile Database](https://thenile.dev)\n- [Claude Desktop](https://claude.ai/desktop)\n- [Cursor](https://cursor.sh) \n",
+  "category": "AI Tools",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "niledatabase-nile-mcp-server-stdio": {
+        "command": "node",
+        "args": ["dist/index.js"],
+        "env": {}
+      },
+      "niledatabase-nile-mcp-server-dev": {
+        "command": "npm",
+        "args": ["run", "dev"],
+        "env": {}
+      },
+      "niledatabase-nile-mcp-server-configured": {
+        "command": "node",
+        "args": ["/path/to/your/nile-mcp-server/dist/index.js"],
+        "env": {
+          "NILE_API_KEY": "your_api_key_here",
+          "NILE_WORKSPACE_SLUG": "your_workspace_slug"
+        }
+      },
+      "niledatabase-nile-mcp-server-sse": {
+        "command": "node",
+        "args": ["dist/index.js"],
+        "env": {
+          "MCP_SERVER_MODE": "sse"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "niledatabase",
+    "repo": "nile-mcp-server",
+    "url": "https://github.com/niledatabase/nile-mcp-server",
+    "name": "niledatabase__nile-mcp-server",
+    "path": null,
+    "stars": 16,
+    "contributors": 4,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "2177d221587a092a55681f663a0ae4f5ada6a320"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.186Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "pg",
+      "importance": 9
+    },
+    {
+      "name": "winston",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "winston-daily-rotate-file",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@niledatabase/nile-mcp-server\",\n  \"version\": \"1.6.0-alpha.1\",\n  \"description\": \"Nile MCP Server Implementation\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"prebuild\": \"rm -rf dist\",\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\",\n    \"test\": \"jest\"\n  },\n  \"keywords\": [\n    \"nile\",\n    \"mcp\",\n    \"database\"\n  ],\n  \"author\": \"Nile\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.4.1\",\n    \"@types/express\": \"^5.0.0\",\n    \"@types/node\": \"^20.11.16\",\n    \"@types/pg\": \"^8.11.11\",\n    \"dotenv\": \"^16.4.7\",\n    \"express\": \"^4.21.2\",\n    \"pg\": \"^8.13.1\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.3.3\",\n    \"winston\": \"^3.17.0\",\n    \"winston-daily-rotate-file\": \"^5.0.0\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@semantic-release/changelog\": \"^6.0.0\",\n    \"@semantic-release/git\": \"^10.0.0\",\n    \"@types/jest\": \"^29.5.12\",\n    \"jest\": \"^29.7.0\",\n    \"semantic-release\": \"^24.0.0\",\n    \"ts-jest\": \"^29.1.2\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\",\n    \"registry\": \"https://registry.npmjs.org/\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/niledatabase/nile-mcp-server.git\"\n  },\n  \"release\": {\n    \"branches\": [\n      {\n        \"name\": \"alpha\",\n        \"prerelease\": true\n      },\n      {\n        \"name\": \"main\"\n      }\n    ],\n    \"plugins\": [\n      \"@semantic-release/commit-analyzer\",\n      \"@semantic-release/release-notes-generator\",\n      \"@semantic-release/changelog\",\n      [\n        \"@semantic-release/npm\",\n        {\n          \"npmPublish\": true,\n          \"pkgRoot\": \".\"\n        }\n      ],\n      \"@semantic-release/git\"\n    ]\n  },\n  \"packageManager\": \"yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e\"\n}\n"
+}

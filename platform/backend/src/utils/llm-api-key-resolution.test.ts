@@ -1,5 +1,8 @@
+import { CHATGPT_SUBSCRIPTION_LABEL } from "@archestra/shared";
 import { vi } from "vitest";
+import config from "@/config";
 import { LlmProviderApiKeyModel } from "@/models";
+import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { beforeEach, describe, expect, test } from "@/test";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
@@ -332,5 +335,160 @@ describe("resolveProviderApiKey", () => {
     });
 
     expect(result.apiKey).toBe("sk-legacy-key");
+  });
+});
+
+describe("resolveProviderApiKey — ChatGPT-subscription (Codex) per-user guard", () => {
+  const codexCredential = (accountId: string) =>
+    encodeOpenAiCodexCredential({
+      refreshToken: `refresh-${accountId}`,
+      accountId,
+    });
+
+  test("serves an agent-attached subscription key to its owner", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const secret = await makeSecret({
+      secret: { apiKey: codexCredential("owner-account") },
+    });
+    const ownerKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: owner.id,
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: owner.id,
+      provider: "openai",
+      agentLlmApiKeyId: ownerKey.id,
+    });
+
+    expect(result.apiKey).toBe(codexCredential("owner-account"));
+    expect(result.chatApiKeyId).toBe(ownerKey.id);
+  });
+
+  test("substitutes the acting user's own subscription for another user's agent-attached key", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const otherUser = await makeUser();
+    const ownerSecret = await makeSecret({
+      secret: { apiKey: codexCredential("owner-account") },
+    });
+    const ownerKey = await makeLlmProviderApiKey(org.id, ownerSecret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: owner.id,
+    });
+    const otherSecret = await makeSecret({
+      secret: { apiKey: codexCredential("other-account") },
+    });
+    const otherKey = await makeLlmProviderApiKey(org.id, otherSecret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: otherUser.id,
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: otherUser.id,
+      provider: "openai",
+      agentLlmApiKeyId: ownerKey.id,
+    });
+
+    expect(result.apiKey).toBe(codexCredential("other-account"));
+    expect(result.chatApiKeyId).toBe(otherKey.id);
+    expect(result.source).toBe("personal");
+  });
+
+  test("prompts to connect instead of serving another user's subscription", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const otherUser = await makeUser();
+    const ownerSecret = await makeSecret({
+      secret: { apiKey: codexCredential("owner-account") },
+    });
+    const ownerKey = await makeLlmProviderApiKey(org.id, ownerSecret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: owner.id,
+    });
+    // A plain personal OpenAI API key is NOT a subscription — the agent is
+    // pinned to subscription auth, so it must not be silently swapped in.
+    const plainSecret = await makeSecret({
+      secret: { apiKey: "sk-other-plain" },
+    });
+    await makeLlmProviderApiKey(org.id, plainSecret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: otherUser.id,
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: otherUser.id,
+      provider: "openai",
+      agentLlmApiKeyId: ownerKey.id,
+    });
+
+    expect(result.apiKey).toBeUndefined();
+    expect(result.authRequired).toEqual({
+      provider: "openai",
+      providerLabel: CHATGPT_SUBSCRIPTION_LABEL,
+    });
+  });
+
+  test("never serves a subscription credential smuggled into an org-scope key", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    // The routes reject non-personal subscription keys; create through the
+    // model to simulate a smuggled credential and pin the serve-time backstop.
+    const secret = await makeSecret({
+      secret: { apiKey: codexCredential("smuggled-account") },
+    });
+    await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      scope: "org",
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      provider: "openai",
+    });
+
+    expect(result.apiKey).toBeUndefined();
+    expect(result.authRequired).toBeDefined();
+  });
+
+  test("ignores a subscription credential in the provider env var", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    config.chat.openai.apiKey = codexCredential("env-account");
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      provider: "openai",
+    });
+
+    expect(result.apiKey).toBeUndefined();
   });
 });

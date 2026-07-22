@@ -1,0 +1,140 @@
+{
+  "name": "blazickjp__arxiv-mcp-server",
+  "display_name": "arxiv-mcp-server",
+  "description": "A Model Context Protocol server for searching and analyzing arXiv papers",
+  "author": {
+    "name": "blazickjp"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["tool", "run", "arxiv-mcp-server", "--storage-path", "${user_config.arxiv_storage_path}"],
+    "env": {
+      "ARXIV_STORAGE_PATH": "${user_config.arxiv_storage_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "arxiv_storage_path": {
+      "type": "directory",
+      "title": "ArXiv Storage Path",
+      "description": "Paper storage location",
+      "required": false,
+      "default": "${HOME}/.arxiv-mcp-server/papers"
+    }
+  },
+  "readme": "[![Twitter Follow](https://img.shields.io/twitter/follow/JoeBlazick?style=social)](https://twitter.com/JoeBlazick)\n[![smithery badge](https://smithery.ai/badge/arxiv-mcp-server)](https://smithery.ai/server/arxiv-mcp-server)\n[![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)\n[![Tests](https://github.com/blazickjp/arxiv-mcp-server/actions/workflows/tests.yml/badge.svg)](https://github.com/blazickjp/arxiv-mcp-server/actions/workflows/tests.yml)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![PyPI Downloads](https://img.shields.io/pypi/dm/arxiv-mcp-server.svg)](https://pypi.org/project/arxiv-mcp-server/)\n[![PyPI Version](https://img.shields.io/pypi/v/arxiv-mcp-server.svg)](https://pypi.org/project/arxiv-mcp-server/)\n\n# ArXiv MCP Server\n\n> 🔍 Enable AI assistants to search and access arXiv papers through a simple MCP interface.\n\nThe ArXiv MCP Server provides a bridge between AI assistants and arXiv's research repository through the Model Context Protocol (MCP). It allows AI models to search for papers and access their content in a programmatic way.\n\n<div align=\"center\">\n  \n🤝 **[Contribute](https://github.com/blazickjp/arxiv-mcp-server/blob/main/CONTRIBUTING.md)** • \n📝 **[Report Bug](https://github.com/blazickjp/arxiv-mcp-server/issues)**\n\n<a href=\"https://www.pulsemcp.com/servers/blazickjp-arxiv-mcp-server\"><img src=\"https://www.pulsemcp.com/badge/top-pick/blazickjp-arxiv-mcp-server\" width=\"400\" alt=\"Pulse MCP Badge\"></a>\n</div>\n\n## ✨ Core Features\n\n- 🔎 **Paper Search**: Query arXiv papers with filters for date ranges and categories\n- 📄 **Paper Access**: Download and read paper content\n- 📋 **Paper Listing**: View all downloaded papers\n- 🗃️ **Local Storage**: Papers are saved locally for faster access\n- 📝 **Prompts**: A Set of Research Prompts\n\n## 🚀 Quick Start\n\n### Installing via Smithery\n\nTo install ArXiv Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/arxiv-mcp-server):\n\n```bash\nnpx -y @smithery/cli install arxiv-mcp-server --client claude\n```\n\n### Installing Manually\nInstall using uv:\n\n```bash\nuv tool install arxiv-mcp-server\n```\n\nFor development:\n\n```bash\n# Clone and set up development environment\ngit clone https://github.com/blazickjp/arxiv-mcp-server.git\ncd arxiv-mcp-server\n\n# Create and activate virtual environment\nuv venv\nsource .venv/bin/activate\n\n# Install with test dependencies\nuv pip install -e \".[test]\"\n```\n\n### 🔌 MCP Integration\n\nAdd this configuration to your MCP client config file:\n\n```json\n{\n    \"mcpServers\": {\n        \"arxiv-mcp-server\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"tool\",\n                \"run\",\n                \"arxiv-mcp-server\",\n                \"--storage-path\", \"/path/to/paper/storage\"\n            ]\n        }\n    }\n}\n```\n\nFor Development:\n\n```json\n{\n    \"mcpServers\": {\n        \"arxiv-mcp-server\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"--directory\",\n                \"path/to/cloned/arxiv-mcp-server\",\n                \"run\",\n                \"arxiv-mcp-server\",\n                \"--storage-path\", \"/path/to/paper/storage\"\n            ]\n        }\n    }\n}\n```\n\n## 💡 Available Tools\n\nThe server provides four main tools:\n\n### 1. Paper Search\nSearch for papers with optional filters:\n\n```python\nresult = await call_tool(\"search_papers\", {\n    \"query\": \"transformer architecture\",\n    \"max_results\": 10,\n    \"date_from\": \"2023-01-01\",\n    \"categories\": [\"cs.AI\", \"cs.LG\"]\n})\n```\n\n### 2. Paper Download\nDownload a paper by its arXiv ID:\n\n```python\nresult = await call_tool(\"download_paper\", {\n    \"paper_id\": \"2401.12345\"\n})\n```\n\n### 3. List Papers\nView all downloaded papers:\n\n```python\nresult = await call_tool(\"list_papers\", {})\n```\n\n### 4. Read Paper\nAccess the content of a downloaded paper:\n\n```python\nresult = await call_tool(\"read_paper\", {\n    \"paper_id\": \"2401.12345\"\n})\n```\n\n## 📝 Research Prompts\n\nThe server offers specialized prompts to help analyze academic papers:\n\n### Paper Analysis Prompt\nA comprehensive workflow for analyzing academic papers that only requires a paper ID:\n\n```python\nresult = await call_prompt(\"deep-paper-analysis\", {\n    \"paper_id\": \"2401.12345\"\n})\n```\n\nThis prompt includes:\n- Detailed instructions for using available tools (list_papers, download_paper, read_paper, search_papers)\n- A systematic workflow for paper analysis\n- Comprehensive analysis structure covering:\n  - Executive summary\n  - Research context\n  - Methodology analysis\n  - Results evaluation\n  - Practical and theoretical implications\n  - Future research directions\n  - Broader impacts\n\n## ⚙️ Configuration\n\nConfigure through environment variables:\n\n| Variable | Purpose | Default |\n|----------|---------|---------|\n| `ARXIV_STORAGE_PATH` | Paper storage location | ~/.arxiv-mcp-server/papers |\n\n## 🧪 Testing\n\nRun the test suite:\n\n```bash\npython -m pytest\n```\n\n## 📄 License\n\nReleased under the MIT License. See the LICENSE file for details.\n\n---\n\n<div align=\"center\">\n\nMade with ❤️ by the Pearl Labs Team\n\n<a href=\"https://glama.ai/mcp/servers/04dtxi5i5n\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/04dtxi5i5n/badge\" alt=\"ArXiv Server MCP server\" /></a>\n</div>\n",
+  "category": "AI Tools",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "arxiv-mcp-server": {
+        "command": "uv",
+        "args": ["tool", "run", "arxiv-mcp-server", "--storage-path", "/path/to/paper/storage"],
+        "env": {}
+      },
+      "arxiv-mcp-server-dev": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "path/to/cloned/arxiv-mcp-server",
+          "run",
+          "arxiv-mcp-server",
+          "--storage-path",
+          "/path/to/paper/storage"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "blazickjp",
+    "repo": "arxiv-mcp-server",
+    "url": "https://github.com/blazickjp/arxiv-mcp-server",
+    "name": "arxiv-mcp-server",
+    "path": null,
+    "stars": 1523,
+    "contributors": 8,
+    "issues": 20,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "6d3419a3ea43cfd95391d2ef3b59ef58d2bf557d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:26.195Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "arxiv",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "python-dateutil",
+      "importance": 5
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pymupdf4llm",
+      "importance": 8
+    },
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 7
+    },
+    {
+      "name": "aiofiles",
+      "importance": 8
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 8
+    },
+    {
+      "name": "anyio",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"arxiv-mcp-server\"\nversion = \"0.2.11\"\ndescription = \"A flexible arXiv search and analysis service with MCP protocol support\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\nlicense = { text = \"MIT\" }\nauthors = [\n    { name = \"Joseph Blazick\", email = \"blazickjp@amazon.com\" }\n]\ndependencies = [\n    \"arxiv>=2.1.0\",\n    \"httpx>=0.24.0\",\n    \"python-dateutil>=2.8.2\",\n    \"pydantic>=2.8.0\",\n    \"mcp>=1.2.0\",\n    \"pymupdf4llm>=0.0.17\",\n    \"aiohttp>=3.9.1\",\n    \"python-dotenv>=1.0.0\",\n    \"pydantic-settings>=2.1.0\",\n    \"aiofiles>=23.2.1\",\n    \"uvicorn>=0.30.0\",\n    \"sse-starlette>=1.8.2\",\n    \"anyio>=4.2.0\"\n]\n\n[project.optional-dependencies]\ntest = [\n    \"pytest>=8.0.0\",\n    \"pytest-asyncio>=0.23.5\",\n    \"pytest-cov>=4.1.0\",\n    \"pytest-mock>=3.10.0\",\n    \"aioresponses>=0.7.6\"\n]\ndev = [\n    \"black>=23.3.0\"\n]\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\nasyncio_fixture_loop_scope = \"function\"  # Added this line\ntestpaths = [\"tests\"]\naddopts = \"-v --cov=arxiv_mcp_server\"\n\n[project.scripts]\narxiv-mcp-server = \"arxiv_mcp_server:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/arxiv_mcp_server\"]\n\n[tool.hatch.metadata]\nallow-direct-references = true\n\n[tool.black]\nline-length = 88\ntarget-version = [\"py311\"]\ninclude = '\\.pyi?$'\nexclude = '''\n/(\n    \\.git\n  | \\.hg\n  | \\.mypy_cache\n  | \\.tox\n  | \\.venv\n  | _build\n  | buck-out\n  | build\n  | dist\n)/\n'''"
+}

@@ -1,5 +1,4 @@
-import { MEMBER_ROLE_NAME } from "@shared";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -9,6 +8,7 @@ import type {
 } from "@/types";
 import AgentModel from "./agent";
 import MemberModel from "./member";
+import OrganizationModel from "./organization";
 import SessionModel from "./session";
 import UserTokenModel from "./user-token";
 
@@ -97,7 +97,11 @@ class InvitationModel {
       }
 
       const { organizationId, role: specifiedRole } = invitation;
-      const role = specifiedRole || MEMBER_ROLE_NAME;
+      // An invitation without an explicit role (self-signup) inherits the org's
+      // configured default role, which itself falls back to "member".
+      const role =
+        specifiedRole ||
+        (await OrganizationModel.getDefaultMemberRole(organizationId));
 
       // The member table has no unique constraint on (userId, organizationId),
       // so a blind insert here would silently create a duplicate row when the
@@ -205,6 +209,35 @@ class InvitationModel {
       .where(eq(schema.invitationsTable.id, invitationId));
     logger.debug({ invitationId }, "InvitationModel.delete: completed");
     return result;
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.invitationsTable)
+      .where(
+        and(
+          eq(schema.invitationsTable.id, id),
+          eq(schema.invitationsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      email: row.email,
+      role: row.role ?? null,
+      status: row.status,
+      inviterId: row.inviterId,
+      expiresAt: row.expiresAt.toISOString(),
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 }
 

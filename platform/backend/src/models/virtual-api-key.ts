@@ -3,9 +3,19 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   type PaginationQuery,
   type SupportedProvider,
-} from "@shared";
-import { and, count, eq, ilike, inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+} from "@archestra/shared";
+import {
+  and,
+  count,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
+import db, { schema, withDbTransaction } from "@/database";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
@@ -13,6 +23,7 @@ import { secretManager } from "@/secrets-manager";
 import type {
   ResourceVisibilityScope,
   SelectVirtualApiKey,
+  VirtualApiKeyType,
   VirtualApiKeyWithParentInfo,
 } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
@@ -25,6 +36,15 @@ const TOKEN_START_LENGTH = 14;
 
 /** Always use DB storage (not BYOS Vault compatible) */
 const FORCE_DB = true;
+
+/**
+ * Minimum age of lastUsedAt before validateToken refreshes it. Every request
+ * on a key validates it, so an unconditional write turns the key row into a
+ * lock hot spot — concurrent requests serialize behind the row lock and can
+ * exceed the statement timeout under bursts. The staleness window collapses a
+ * burst into at most one write.
+ */
+const LAST_USED_REFRESH_INTERVAL_MS = 60_000;
 
 type TeamInfo = { id: string; name: string };
 type ProviderApiKeyInput = {
@@ -42,6 +62,7 @@ type ProviderApiKeyRoutingInfo = ProviderApiKeyInfo & {
 type VirtualApiKeyAccessContext = {
   id: string;
   organizationId: string;
+  keyType: VirtualApiKeyType;
   scope: ResourceVisibilityScope;
   authorId: string | null;
   teamIds: string[];
@@ -55,6 +76,7 @@ class VirtualApiKeyModel {
   static async create(params: {
     organizationId?: string;
     name: string;
+    keyType?: VirtualApiKeyType;
     expiresAt?: Date | null;
     scope?: ResourceVisibilityScope;
     authorId?: string | null;
@@ -70,6 +92,7 @@ class VirtualApiKeyModel {
     const {
       organizationId: providedOrganizationId,
       name,
+      keyType = "standard",
       expiresAt,
       scope = "org",
       authorId = null,
@@ -95,12 +118,13 @@ class VirtualApiKeyModel {
       FORCE_DB,
     );
 
-    const virtualKey = await db.transaction(async (tx) => {
+    const virtualKey = await withDbTransaction(async (tx) => {
       const [createdVirtualKey] = await tx
         .insert(schema.virtualApiKeysTable)
         .values({
           organizationId: resolvedOrganizationId,
           name,
+          keyType,
           secretId: secret.id,
           tokenStart,
           scope,
@@ -129,6 +153,7 @@ class VirtualApiKeyModel {
         organizationId: resolvedOrganizationId,
         virtualKeyId: virtualKey.id,
         scope,
+        keyType,
       },
       "VirtualApiKeyModel.create: virtual key created",
     );
@@ -154,14 +179,14 @@ class VirtualApiKeyModel {
     name: string;
     expiresAt?: Date | null;
     scope: ResourceVisibilityScope;
-    authorId: string;
+    authorId: string | null;
     teamIds: string[];
     providerApiKeys: ProviderApiKeyInput[];
   }): Promise<SelectVirtualApiKey | null> {
     const { id, name, expiresAt, scope, authorId, teamIds, providerApiKeys } =
       params;
 
-    const updatedVirtualKey = await db.transaction(async (tx) => {
+    const updatedVirtualKey = await withDbTransaction(async (tx) => {
       const [updated] = await tx
         .update(schema.virtualApiKeysTable)
         .set({
@@ -203,6 +228,66 @@ class VirtualApiKeyModel {
   }
 
   /**
+   * Find a key by its identity tuple. Used by the connection-setup flow to
+   * reuse the per-user auto-provisioned key instead of creating duplicates.
+   * Names are not unique in this table, so the oldest row wins
+   * deterministically — concurrent creators converge on it (see
+   * ensureConnectionVirtualKey's create-then-dedupe).
+   */
+  static async findByAuthorScopeName(params: {
+    organizationId: string;
+    authorId: string;
+    scope: ResourceVisibilityScope;
+    name: string;
+  }): Promise<SelectVirtualApiKey | null> {
+    const [row] = await db
+      .select()
+      .from(schema.virtualApiKeysTable)
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.organizationId, params.organizationId),
+          eq(schema.virtualApiKeysTable.authorId, params.authorId),
+          eq(schema.virtualApiKeysTable.scope, params.scope),
+          eq(schema.virtualApiKeysTable.name, params.name),
+        ),
+      )
+      .orderBy(
+        schema.virtualApiKeysTable.createdAt,
+        schema.virtualApiKeysTable.id,
+      )
+      .limit(1);
+
+    return row ?? null;
+  }
+
+  /**
+   * Upsert a single provider mapping on the (virtualApiKeyId, provider) PK.
+   * Replaces a stale same-provider mapping with the newly resolved key while
+   * leaving other providers' mappings untouched — unlike update(), whose
+   * syncProviderApiKeys deletes all mappings first.
+   */
+  static async ensureProviderMapping(params: {
+    virtualApiKeyId: string;
+    provider: SupportedProvider;
+    providerApiKeyId: string;
+  }): Promise<void> {
+    await db
+      .insert(schema.virtualApiKeyProviderApiKeysTable)
+      .values({
+        virtualApiKeyId: params.virtualApiKeyId,
+        provider: params.provider,
+        providerApiKeyId: params.providerApiKeyId,
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+          schema.virtualApiKeyProviderApiKeysTable.provider,
+        ],
+        set: { providerApiKeyId: params.providerApiKeyId },
+      });
+  }
+
+  /**
    * List visible virtual keys for a provider API key.
    */
   static async findByProviderApiKeyId(
@@ -222,6 +307,7 @@ class VirtualApiKeyModel {
           id: schema.virtualApiKeysTable.id,
           organizationId: schema.virtualApiKeysTable.organizationId,
           name: schema.virtualApiKeysTable.name,
+          keyType: schema.virtualApiKeysTable.keyType,
           secretId: schema.virtualApiKeysTable.secretId,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,
@@ -277,6 +363,77 @@ class VirtualApiKeyModel {
   }
 
   /**
+   * Find a virtual key by ID with teams, author, and provider key mappings,
+   * scoped to an organization.
+   */
+  static async findByIdWithParentInfo(
+    id: string,
+    organizationId: string,
+  ): Promise<VirtualApiKeyWithParentInfo | null> {
+    const virtualKey = await VirtualApiKeyModel.findById(id);
+    if (!virtualKey || virtualKey.organizationId !== organizationId) {
+      return null;
+    }
+
+    const [metadata, mappings] = await Promise.all([
+      VirtualApiKeyModel.getVisibilityMetadata([id]),
+      VirtualApiKeyModel.getProviderApiKeys(id),
+    ]);
+
+    return {
+      ...virtualKey,
+      teams: metadata.teams.get(id) ?? [],
+      authorName: metadata.authorName.get(id) ?? null,
+      providerApiKeys: mappings,
+    };
+  }
+
+  /**
+   * Find a virtual key by ID with teams, author, and provider key mappings,
+   * returning it only when it is visible to the given user. Visibility follows
+   * the same predicate as {@link findAllByOrganization} (via
+   * {@link getAccessibleIds}): org-scoped keys are visible to every member,
+   * personal keys only to their owner, team keys only to members of an
+   * assigned team, and admins see everything. The team and admin lookups are
+   * lazy so they are only paid when the key's scope requires them.
+   */
+  static async findVisibleById(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+    getUserTeamIds: () => Promise<string[]>;
+    getIsAdmin: () => Promise<boolean>;
+  }): Promise<VirtualApiKeyWithParentInfo | null> {
+    const { id, organizationId, userId, getUserTeamIds, getIsAdmin } = params;
+
+    const virtualKey = await VirtualApiKeyModel.findByIdWithParentInfo(
+      id,
+      organizationId,
+    );
+    if (!virtualKey) {
+      return null;
+    }
+
+    if (virtualKey.scope === "org") {
+      return virtualKey;
+    }
+
+    const userTeamIds =
+      virtualKey.scope === "team" ? await getUserTeamIds() : [];
+    const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
+      organizationId,
+      userId,
+      userTeamIds,
+      isAdmin: false,
+    });
+    if (accessibleIds.includes(id)) {
+      return virtualKey;
+    }
+
+    return (await getIsAdmin()) ? virtualKey : null;
+  }
+
+  /**
    * Find access-related metadata for a virtual key.
    */
   static async findAccessContextById(
@@ -286,6 +443,7 @@ class VirtualApiKeyModel {
       .select({
         id: schema.virtualApiKeysTable.id,
         organizationId: schema.virtualApiKeysTable.organizationId,
+        keyType: schema.virtualApiKeysTable.keyType,
         scope: schema.virtualApiKeysTable.scope,
         authorId: schema.virtualApiKeysTable.authorId,
       })
@@ -375,6 +533,7 @@ class VirtualApiKeyModel {
     isAdmin?: boolean;
     search?: string;
     providerApiKeyId?: string;
+    keyType?: VirtualApiKeyType;
   }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
     const {
       organizationId,
@@ -384,6 +543,7 @@ class VirtualApiKeyModel {
       isAdmin = true,
       search,
       providerApiKeyId,
+      keyType,
     } = params;
 
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
@@ -417,6 +577,10 @@ class VirtualApiKeyModel {
       );
     }
 
+    if (keyType) {
+      whereConditions.push(eq(schema.virtualApiKeysTable.keyType, keyType));
+    }
+
     const whereClause = and(...whereConditions);
 
     const [rows, [{ total }]] = await Promise.all([
@@ -425,6 +589,7 @@ class VirtualApiKeyModel {
           id: schema.virtualApiKeysTable.id,
           organizationId: schema.virtualApiKeysTable.organizationId,
           name: schema.virtualApiKeysTable.name,
+          keyType: schema.virtualApiKeysTable.keyType,
           secretId: schema.virtualApiKeysTable.secretId,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,
@@ -462,12 +627,25 @@ class VirtualApiKeyModel {
 
   /**
    * Update last used timestamp.
+   *
+   * Skips the write when lastUsedAt is already fresh (see
+   * {@link LAST_USED_REFRESH_INTERVAL_MS}); concurrent callers that lose the
+   * race re-check the condition after the winner commits and skip too.
    */
   static async updateLastUsed(id: string): Promise<void> {
+    const cutoff = new Date(Date.now() - LAST_USED_REFRESH_INTERVAL_MS);
     await db
       .update(schema.virtualApiKeysTable)
       .set({ lastUsedAt: new Date() })
-      .where(eq(schema.virtualApiKeysTable.id, id));
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.id, id),
+          or(
+            isNull(schema.virtualApiKeysTable.lastUsedAt),
+            lt(schema.virtualApiKeysTable.lastUsedAt, cutoff),
+          ),
+        ),
+      );
   }
 
   /**
@@ -611,6 +789,41 @@ class VirtualApiKeyModel {
       );
 
     return rows.map((row) => row.teamId);
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const row = await VirtualApiKeyModel.findById(id);
+    if (!row || row.organizationId !== organizationId) return null;
+
+    const [teamIds, providerKeyRows] = await Promise.all([
+      VirtualApiKeyModel.getTeamIdsForVirtualApiKey(id),
+      db
+        .select({
+          providerApiKeyId:
+            schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+        })
+        .from(schema.virtualApiKeyProviderApiKeysTable)
+        .where(
+          eq(schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId, id),
+        ),
+    ]);
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      name: row.name,
+      scope: row.scope,
+      keyType: row.keyType,
+      authorId: row.authorId,
+      teamIds: [...teamIds].sort(),
+      providerApiKeyIds: providerKeyRows.map((r) => r.providerApiKeyId).sort(),
+      tokenStart: row.tokenStart,
+      expiresAt: row.expiresAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 
   static async getVisibilityForVirtualApiKeyIds(

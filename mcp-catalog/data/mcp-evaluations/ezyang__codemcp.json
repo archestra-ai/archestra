@@ -1,0 +1,161 @@
+{
+  "name": "ezyang__codemcp",
+  "display_name": "codemcp",
+  "description": "Coding assistant MCP for Claude Desktop",
+  "author": {
+    "name": "ezyang"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "codemcp", "serve", "--port", "${user_config.port}", "--host", "${user_config.host}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "Port for the MCP server to listen on.",
+      "default": 8000,
+      "required": false
+    },
+    "host": {
+      "type": "string",
+      "title": "Server Host",
+      "description": "Host address for the MCP server to listen on.",
+      "default": "127.0.0.1",
+      "required": false
+    }
+  },
+  "readme": "# codemcp\n\nMake Claude Desktop a pair programming assistant by installing codemcp.  With\nit, you can directly ask Claude to implement features, fix bugs and do\nrefactors on a codebase on your computer; Claude will directly edit files and\nrun tests.  Say goodbye to copying code in and out of Claude's chat window!\n\n![Screenshot of Claude Desktop with codemcp](static/screenshot.png?raw=true)\n\ncodemcp offers similar functionality to other AI coding software (Claude Code,\nCursor, Cline, Aider), but it occupies a unique point in the design space:\n\n1. It's intended to be used with **Claude Pro**, Anthropic's $20/mo\n   subscription offering.  I like paying for my usage with a subscription plan\n   because it means **zero marginal cost** for agent actions; no more feeling\n   bad that you wasted five bucks on a changeset that doesn't work.\n\n   Note that if you have Claude Max ($100/mo), Claude Code can also be used\n   with subscription based pricing.  The value proposition for codemcp is\n   murkier in this case (and it is definitely inferior to Claude Code in some\n   respects), but you can still use codemcp with Claude Max if you prefer some\n   of the other UI decisions it makes.  (Also, it's open source, so you can\n   change it if you don't like it, unlike Claude Code!)\n\n2. It's built around **auto-accept by default**.  I want my agent to get as\n   far as it can without my supervision, so I can review everything in one go at\n   the end.  There are two key things that codemcp does differently than most\n   coding agents: we **forbid unrestricted shell**, instead requiring you to\n   predeclare commands the agent can use in ``codemcp.toml``, and we **Git\n   version all LLM edits**, so you can roll back agent changes on a\n   fine-grained basis and don't have to worry about forgetting to commit\n   changes.\n\n3. It's **IDE agnostic**: you ask Claude to make changes, it makes them, and\n   then you can use your favorite IDE setup to review the changes and make\n   further edits.  I use vim as my daily driver editor, and coding environments\n   that require VSCode or a specific editor are a turn off for me.\n\n## IMPORTANT: For master users - Major changes for token efficiency\n\nTo improve codemcp's token efficiency, on master I am in the process of\nchanging codemcp back into a multi-tool tool (instead of a single tool whose\ninstructions are blatted into chat when you InitProject).  This means you have\nto manually approve tool use.  Because tool use approval is persistent across\nmultiple chats, I think this is a reasonable tradeoff to make, but if you\nreally don't like, file a bug at\n[refined-claude](https://github.com/ezyang/refined-claude/issues) browser\nextension for supporting auto-approve tool use.\n\n## Installation\n\nI recommend this specific way of installing and using codemcp:\n\n1. Install `uv` and install git, if they are not installed already.\n\n2. Install [claude-mcp](https://chromewebstore.google.com/detail/mcp-for-claudeai/jbdhaamjibfahpekpnjeikanebpdpfpb) on your browser.\n   This enables you to connect to SSE MCP servers directly from the website,\n   which means you don't need to use Claude Desktop and can easily have\n   multiple chat windows going in parallel.  We expect this extension should\n   be soon obsoleted by the rollout of\n   [Integrations](https://www.anthropic.com/news/integrations).  At time of\n   writing, however, Integrations have not yet arrived for Claude Pro subscribers.\n\n3. Run codemcp using ``uvx --from git+https://github.com/ezyang/codemcp@prod codemcp serve``.\n   You can add ``--port 1234`` if you need it to listen on a non-standard port.\n\n   Pro tip: if you like to live dangerously, you can change `prod` to `main`.  If\n   you want to pin to a specific release, replace it with `0.3.0` or similar.\n\n   Pro tip: you can run codemcp remotely!  If you use\n   [Tailscale](https://tailscale.com/) and trust all devices on your Tailnet,\n   you can do this securely by passing ``--host 100.101.102.103`` (replace the\n   IP with the Tailscale IP address of your node.  This IP typically lives in\n   the 100.64.0.0/10 range.)  **WARNING:** Anyone with access to this MCP can perform\n   arbitrary code execution on your computer, it is **EXTREMELY** unlikely you want to\n   bind to 0.0.0.0.\n\n4. Configure claude-mcp with URL: ``http://127.0.0.1:8000/sse`` (replace the port if needed.)\n\n5. Unfortunately, the web UI inconsistently displays the hammer icon.  However, you can verify\n   that the MCP server is working by looking for \"[MCP codemcp] SSE connection opened\" in the\n   Console, or by asking Claude what tools it has available (it should say\n   tools from codemcp are available.)\n\nIf you prefer to use Claude Desktop or have unusual needs, check out [INSTALL.md](INSTALL.md) for\ninstallation instructions for a variety of non-standard situations.\n\n## Usage\n\nFirst, you must create a `codemcp.toml` file in the Git repository checkout\nyou want to work on.  If you want the agent to be able to do things like run\nyour formatter or run tests, add the commands to execute them in the commands\nsection (note: these commands need to appropriately setup any virtual\nenvironment they need):\n\n```toml\nformat = [\"./run_format.sh\"]\ntest = [\"./run_test.sh\"]\n```\n\nThe ``format`` command is special; it is always run after every file edit.\n\nNext, in Claude Desktop, we recommend creating a Project and putting this in\nthe Project Instructions:\n\n```\nInitialize codemcp with $PROJECT_DIR\n```\n\nWhere `$PROJECT_DIR` is the path to the project you want to work on.\n\nThen chat with Claude about what changes you want to make to the project.\nEvery time codemcp makes a change to your code, it will generate a commit.\n\nTo see some sample transcripts using this tool, check out:\n\n- [Implement a new feature](https://claude.ai/share/a229d291-6800-4cb8-a0df-896a47602ca0)\n- [Fix failing tests](https://claude.ai/share/2b7161ef-5683-4261-ad45-fabc3708f950)\n- [Do a refactor](https://claude.ai/share/f005b43c-a657-43e5-ad9f-4714a5cd746f)\n\ncodemcp will generate a commit per chat and amend it as it is working on your feature.\n\n## Philosophy\n\n- When you get rate limited, take the time to do something else (review\n  Claude's code, review someone else's code, make plans, do some meetings)\n\n- This is *not* an autonomous agent.  At minimum, you have to intervene after\n  every chat to review the changes and request the next change.  While you\n  *can* ask for a long list of things to be done in a single chat, you will\n  likely hit Claude Desktop's output limit and have to manually \"continue\" the\n  agent anyway.  Embrace it, and use the interruptions to make sure Claude is\n  doing the right thing.\n\n- When Claude goes off the rails, it costs you time rather than dollars.\n  Behave accordingly: if time is the bottleneck, watch Claude's incremental\n  output carefully.\n\n## Configuration\n\nHere are all the config options supported by `codemcp.toml`:\n\n```toml\nproject_prompt = \"\"\"\nBefore beginning work on this feature, write a short haiku.  Do this only once.\n\"\"\"\n\n[commands]\nformat = [\"./run_format.sh\"]\ntest = [\"./run_test.sh\"]\n```\n\nThe `project_prompt` will be loaded when you initialize the project in chats.\n\nThe `commands` section allows you to configure commands for specific tools.  The\nnames are told to the LLM, who will decide when it wants to run them.  You can add\ninstructions how to use tools in the `project_prompt`; we also support a more verbose\nsyntax where you can give specific instructions on a tool-by-tool basis:\n\n```\n[commands.test]\ncommand = [\"./run_test.sh\"]\ndoc = \"Accepts a pytest-style test selector as an argument to run a specific test.\"\n```\n\n## Troubleshooting\n\nTo run the server with inspector, use:\n\n```\nPYTHONPATH=. mcp dev codemcp/__main__.py\n```\n\nLogs are written to `~/.codemcp/codemcp.log`. The log level can be set in a global configuration file at `~/.codemcprc`:\n\n```toml\n[logger]\nverbosity = \"INFO\"  # Can be DEBUG, INFO, WARNING, ERROR, or CRITICAL\n```\n\nLogging is not configurable on a per project basis, but this shouldn't matter\nmuch because it's difficult to use Claude Desktop in parallel on multiple\nprojects anyway.\n\n## Contributing\n\nSee [CONTRIBUTING.md](CONTRIBUTING.md).\n",
+  "category": "Development",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "codemcp": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/ezyang/codemcp@prod", "codemcp", "serve"],
+        "env": {}
+      },
+      "codemcp-port": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/ezyang/codemcp@prod", "codemcp", "serve", "--port", "1234"],
+        "env": {}
+      },
+      "codemcp-host": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "git+https://github.com/ezyang/codemcp@prod",
+          "codemcp",
+          "serve",
+          "--host",
+          "100.101.102.103"
+        ],
+        "env": {}
+      },
+      "codemcp-dev": {
+        "command": "mcp",
+        "args": ["dev", "codemcp/__main__.py"],
+        "env": {
+          "PYTHONPATH": "."
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ezyang",
+    "repo": "codemcp",
+    "url": "https://github.com/ezyang/codemcp",
+    "name": "ezyang__codemcp",
+    "path": null,
+    "stars": 1548,
+    "contributors": 9,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "41dfe735e1541d6db93f326e43db66f1e7038425"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:19.634Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "toml",
+      "importance": 6
+    },
+    {
+      "name": "tomli",
+      "importance": 6
+    },
+    {
+      "name": "anyio",
+      "importance": 7
+    },
+    {
+      "name": "pyyaml",
+      "importance": 5
+    },
+    {
+      "name": "editorconfig",
+      "importance": 3
+    },
+    {
+      "name": "click",
+      "importance": 8
+    },
+    {
+      "name": "agno",
+      "importance": 8
+    },
+    {
+      "name": "anthropic",
+      "importance": 9
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "starlette",
+      "importance": 9
+    },
+    {
+      "name": "google-genai",
+      "importance": 9
+    },
+    {
+      "name": "pathspec",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"codemcp\"\nversion = \"0.7.0\"\ndescription = \"MCP server for file operations\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\nlicense = {text = \"MIT\"}\ndependencies = [\n    \"mcp[cli]>=1.2.0\",\n    \"ruff>=0.9.10\",\n    \"toml>=0.10.2\",\n    \"tomli>=2.1.1\",\n    \"anyio>=3.7.0\",\n    \"pyyaml>=6.0.0\",\n    \"editorconfig>=0.17.0\",\n    \"click>=8.1.8\",\n    \"agno>=1.2.16\",\n    \"anthropic>=0.49.0\",\n    \"fastapi>=0.115.12\",\n    \"uvicorn>=0.28.0\",\n    \"starlette>=0.35.1\",\n    \"google-genai>=1.10.0\",\n    \"pathspec>=0.12.1\",\n]\n\n[dependency-groups]\ndev = [\n    \"pytest>=7.0.0\",\n    \"pytest-xdist>=3.6.1\",\n    \"pytest-asyncio>=0.23.0\",\n    \"black>=23.0.0\",\n    \"mypy>=1.0.0\",\n    \"expecttest>=0.1.4\",\n    \"ruff>=0.1.5\",\n    \"pyright>=1.1.350\",\n    \"tomli_w>=1.0.0\",\n    \"requests>=2.30.0\",\n]\n\n[project.scripts]\ncodemcp = \"codemcp:cli\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\n\n[tool.ruff]\n# Enable the formatter\ntarget-version = \"py312\"\nline-length = 88\nindent-width = 4\n\n# Enabled linters\n[tool.ruff.lint]\nselect = [\"ASYNC\"]\n\n# Exclude test files from ASYNC lints\n[tool.ruff.lint.per-file-ignores]\n\"test/**/*.py\" = [\"ASYNC\"]\n\n[tool.ruff.format]\n# Formatter settings\nquote-style = \"double\"\nindent-style = \"space\"\nskip-magic-trailing-comma = false\nline-ending = \"auto\"\n\n[tool.pytest.ini_options]\n# Pytest configuration\ntestpaths = [\"tests\", \"e2e\"]\naddopts = \"-n auto --tb=native\"\nasyncio_default_fixture_loop_scope = \"function\"\n\n[tool.pyright]\n# Pyright configuration with strict settings\ninclude = [\"codemcp\"]\nexclude = [\"**/node_modules\", \"**/__pycache__\", \"dist\"]\nvenvPath = \".\"\nvenv = \".venv\"\nreportMissingImports = true\nreportMissingTypeStubs = true\npythonVersion = \"3.12\"\npythonPlatform = \"All\"\ntypeCheckingMode = \"strict\"\nreportUnknownMemberType = true\nreportUnknownParameterType = true\nreportUnknownVariableType = true\nreportUnknownArgumentType = true\nreportPrivateImportUsage = true\nreportUntypedFunctionDecorator = true\nreportFunctionMemberAccess = true\nreportIncompatibleMethodOverride = true\nstubPath = \"./stubs\"\n\n# Type stub package mappings\nstubPackages = [\n    { source = \"tomli\", stub = \"tomli_stubs\" },\n    { source = \"mcp\", stub = \"mcp_stubs\" }\n]\n\n# For testing code specific ignores\n[[tool.pyright.ignoreExtraErrors]]\npath = \"codemcp/testing.py\"\nerrorCodes = [\"reportUnknownMemberType\", \"reportUnknownArgumentType\", \"reportUnknownVariableType\"]\n\n[[tool.pyright.ignoreExtraErrors]]\npath = \"codemcp/main.py\"\nerrorCodes = [\"reportUnknownMemberType\", \"reportUnknownArgumentType\", \"reportUnknownVariableType\", \"reportUnknownParameterType\", \"reportMissingParameterType\"]\n\n[[tool.pyright.ignoreExtraErrors]]\npath = \"codemcp/agno.py\"\nerrorCodes = [\"reportUnknownMemberType\", \"reportUnknownArgumentType\", \"reportUnknownVariableType\", \"reportUnknownParameterType\", \"reportMissingParameterType\", \"reportPrivateImportUsage\"]\n\n[[tool.pyright.ignoreExtraErrors]]\npath = \"codemcp/config.py\"\nerrorCodes = [\"reportUnknownVariableType\"]\n"
+}

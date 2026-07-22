@@ -1,8 +1,15 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useFeature } from "@/lib/config/config.query";
+import { throwOnApiError } from "@/lib/utils";
 
-const { getTeams, getTeamVaultFolder } = archestraApiSdk;
+const {
+  getTeams,
+  getTeam,
+  getTeamVaultFolder,
+  getTeamLabelKeys,
+  getTeamLabelValues,
+} = archestraApiSdk;
 
 type TeamsResponse = archestraApiTypes.GetTeamsResponses["200"];
 export type Team = TeamsResponse["data"][number];
@@ -11,11 +18,40 @@ export type TeamWithVaultPath = Team & { vaultPath?: string | null };
 type TeamsQuery = NonNullable<archestraApiTypes.GetTeamsData["query"]>;
 type TeamsPaginatedParams = Pick<TeamsQuery, "limit" | "offset" | "name">;
 
-export function useTeams(params?: { initialData?: Teams; enabled?: boolean }) {
+export function useTeams(params?: {
+  initialData?: Teams;
+  enabled?: boolean;
+  /**
+   * When true, fetch only the teams the current user is a member of (even for
+   * organization-level team managers). Use for resource team-assignment, where
+   * membership determines which teams can be assigned.
+   */
+  mine?: boolean;
+  /** Server-side name filter (case-insensitive substring match). */
+  name?: string;
+  /** Server-side label filter, serialized as `key:val1|val2;key2:val3`. */
+  labels?: string;
+}) {
+  const mine = params?.mine ?? false;
+  const name = params?.name?.trim() || undefined;
+  const labels = params?.labels || undefined;
   return useQuery({
-    queryKey: ["teams"],
+    queryKey: [
+      "teams",
+      ...(mine ? ["mine"] : []),
+      ...(name || labels ? [{ name, labels }] : []),
+    ],
     queryFn: async () => {
-      const { data } = await getTeams({ query: { limit: 100, offset: 0 } });
+      const { data, error } = await getTeams({
+        query: {
+          limit: 100,
+          offset: 0,
+          ...(mine ? { mine: true } : {}),
+          ...(name ? { name } : {}),
+          ...(labels ? { labels } : {}),
+        },
+      });
+      throwOnApiError(error, { toastOnError: false });
       return data?.data ?? [];
     },
     initialData: params?.initialData as Team[] | undefined,
@@ -23,11 +59,72 @@ export function useTeams(params?: { initialData?: Teams; enabled?: boolean }) {
   });
 }
 
+export function useTeam(id: string | undefined) {
+  return useQuery({
+    queryKey: ["teams", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const { data, error } = await getTeam({ path: { id } });
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useTeamLabelKeys() {
+  return useQuery({
+    queryKey: ["teams", "labels", "keys"],
+    queryFn: async () => {
+      const { data, error } = await getTeamLabelKeys();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+
+export function useTeamLabelValues(params?: { key?: string }) {
+  const { key } = params || {};
+  return useQuery({
+    queryKey: ["teams", "labels", "values", key],
+    queryFn: async () => {
+      const { data, error } = await getTeamLabelValues({
+        query: key ? { key } : {},
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: key !== undefined,
+  });
+}
+
+/** The teams the current user is a member of. */
+export function useMyTeams(params?: { enabled?: boolean }) {
+  return useTeams({ mine: true, enabled: params?.enabled });
+}
+
+/**
+ * Teams the current user may assign a team-scoped resource to: a full
+ * resource-admin can assign any team, anyone else only teams they belong to.
+ * Pass the resource's admin flag (e.g. agent:admin, mcpServerInstallation:admin).
+ */
+export function useAssignableTeams(params: {
+  isResourceAdmin: boolean;
+  enabled?: boolean;
+}) {
+  const enabled = params.enabled ?? true;
+  const isAdmin = !!params.isResourceAdmin;
+  const allTeams = useTeams({ enabled: enabled && isAdmin });
+  const myTeams = useTeams({ mine: true, enabled: enabled && !isAdmin });
+  return isAdmin ? allTeams : myTeams;
+}
+
 export function useTeamsPaginated(params: TeamsPaginatedParams) {
   return useQuery({
     queryKey: ["teams", "paginated", params],
     queryFn: async () => {
-      const { data } = await getTeams({ query: params });
+      const { data, error } = await getTeams({ query: params });
+      throwOnApiError(error, { toastOnError: false });
       return (
         data ?? {
           data: [] as Team[],

@@ -1,0 +1,184 @@
+{
+  "name": "jagan-shanmugam__mattermost-mcp-host",
+  "display_name": "mattermost-mcp-host",
+  "description": "A Mattermost integration that connects to Model Context Protocol (MCP) servers, leveraging a LangGraph-based Agent.",
+  "author": {
+    "name": "jagan-shanmugam"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/src/mattermost_mcp_host/main.py"],
+    "env": {
+      "MATTERMOST_URL": "${user_config.mattermost_url}",
+      "MATTERMOST_TOKEN": "${user_config.mattermost_token}",
+      "MATTERMOST_TEAM_NAME": "${user_config.mattermost_team_name}",
+      "MATTERMOST_CHANNEL_NAME": "${user_config.mattermost_channel_name}",
+      "MATTERMOST_CHANNEL_ID": "${user_config.mattermost_channel_id}",
+      "DEFAULT_PROVIDER": "${user_config.default_provider}",
+      "AZURE_OPENAI_ENDPOINT": "${user_config.azure_openai_endpoint}",
+      "AZURE_OPENAI_API_KEY": "${user_config.azure_openai_api_key}",
+      "AZURE_OPENAI_DEPLOYMENT": "${user_config.azure_openai_deployment}",
+      "AZURE_OPENAI_API_VERSION": "${user_config.azure_openai_api_version}",
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "ANTHROPIC_API_KEY": "${user_config.anthropic_api_key}",
+      "GOOGLE_API_KEY": "${user_config.google_api_key}",
+      "COMMAND_PREFIX": "${user_config.command_prefix}",
+      "TAVILY_API_KEY": "${user_config.tavily_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mattermost_url": {
+      "type": "string",
+      "title": "Mattermost URL",
+      "description": "The URL of your Mattermost server.",
+      "required": true
+    },
+    "mattermost_token": {
+      "type": "string",
+      "title": "Mattermost Bot Token",
+      "description": "The API token for the Mattermost bot account. Needs permissions to post, read channel, etc.",
+      "sensitive": true,
+      "required": true
+    },
+    "mattermost_team_name": {
+      "type": "string",
+      "title": "Mattermost Team Name",
+      "description": "The name of the Mattermost team the bot will operate in.",
+      "required": true
+    },
+    "mattermost_channel_name": {
+      "type": "string",
+      "title": "Mattermost Channel Name",
+      "description": "The name of the channel for the bot to listen in.",
+      "required": true
+    },
+    "mattermost_channel_id": {
+      "type": "string",
+      "title": "Mattermost Channel ID",
+      "description": "Optional: The ID of the channel for the bot to listen in. Auto-detected if channel name is provided.",
+      "required": false
+    },
+    "default_provider": {
+      "type": "string",
+      "title": "Default LLM Provider",
+      "description": "The default LLM provider to use (e.g., azure, openai, anthropic, google).",
+      "default": "azure",
+      "required": false
+    },
+    "azure_openai_endpoint": {
+      "type": "string",
+      "title": "Azure OpenAI Endpoint",
+      "description": "Your Azure OpenAI service endpoint. Required if DEFAULT_PROVIDER is 'azure'.",
+      "required": false
+    },
+    "azure_openai_api_key": {
+      "type": "string",
+      "title": "Azure OpenAI API Key",
+      "description": "Your Azure OpenAI API key. Required if DEFAULT_PROVIDER is 'azure'.",
+      "sensitive": true,
+      "required": false
+    },
+    "azure_openai_deployment": {
+      "type": "string",
+      "title": "Azure OpenAI Deployment Name",
+      "description": "Your Azure OpenAI deployment name (e.g., gpt-4o). Required if DEFAULT_PROVIDER is 'azure'.",
+      "required": false
+    },
+    "azure_openai_api_version": {
+      "type": "string",
+      "title": "Azure OpenAI API Version",
+      "description": "Optional: The API version for Azure OpenAI.",
+      "required": false
+    },
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key. Required if DEFAULT_PROVIDER is 'openai'.",
+      "sensitive": true,
+      "required": false
+    },
+    "anthropic_api_key": {
+      "type": "string",
+      "title": "Anthropic API Key",
+      "description": "Your Anthropic API key. Required if DEFAULT_PROVIDER is 'anthropic'.",
+      "sensitive": true,
+      "required": false
+    },
+    "google_api_key": {
+      "type": "string",
+      "title": "Google API Key",
+      "description": "Your Google API key. Required if DEFAULT_PROVIDER is 'google'.",
+      "sensitive": true,
+      "required": false
+    },
+    "command_prefix": {
+      "type": "string",
+      "title": "Command Prefix",
+      "description": "The prefix for direct commands to interact with MCP servers (default: #).",
+      "default": "#",
+      "required": false
+    },
+    "tavily_api_key": {
+      "type": "string",
+      "title": "Tavily API Key",
+      "description": "Your Tavily API key. Required for web search functionality.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Mattermost MCP Host\n\nA Mattermost integration that connects to Model Context Protocol (MCP) servers, leveraging a LangGraph-based AI agent to provide an intelligent interface for interacting with users and executing tools directly within Mattermost.\n\n![Version](https://img.shields.io/badge/version-0.1.0-blue)\n![Python](https://img.shields.io/badge/python-3.13.1%2B-blue)\n![License](https://img.shields.io/badge/license-MIT-green)\n![Package Manager](https://img.shields.io/badge/package%20manager-uv-purple)\n\n\n\n## Demo\n\n### 1. Github Agent in support channel - searches the existing issues and PRs and creates a new issue if not found\n![Description of your GIF](./demo/demo-3.gif)   \n\n\n### 2. Search internet and post to a channel using Mattermost-MCP-server\n![Description of your GIF](./demo/demo-2.gif)\n\n#### Scroll below for full demo in YouTube\n\n## Features\n\n- 🤖 **Langgraph Agent Integration**: Uses a LangGraph agent to understand user requests and orchestrate responses.\n- 🔌 **MCP Server Integration**: Connects to multiple MCP servers defined in `mcp-servers.json`.\n- 🛠️ **Dynamic Tool Loading**: Automatically discovers tools from connected MCP servers and makes them available to the AI agent. Converts MCP tools to langchain structured tools.\n- 💬 **Thread-Aware Conversations**: Maintains conversational context within Mattermost threads for coherent interactions.\n- 🔄 **Intelligent Tool Use**: The AI agent can decide when to use available tools (including chaining multiple calls) to fulfill user requests.\n- 🔍 **MCP Capability Discovery**: Allows users to list available servers, tools, resources, and prompts via direct commands.\n- #️⃣ **Direct Command Interface**: Interact directly with MCP servers using a command prefix (default: `#`).\n\n\n## Overview\n\nThe integration works as follows:\n\n1.  **Mattermost Connection (`mattermost_client.py`)**: Connects to the Mattermost server via API and WebSocket to listen for messages in a specified channel.\n2.  **MCP Connections (`mcp_client.py`)**: Establishes connections (primarily `stdio`) to each MCP server defined in `src/mattermost_mcp_host/mcp-servers.json`. It discovers available tools on each server.\n3.  **Agent Initialization (`agent/llm_agent.py`)**: A `LangGraphAgent` is created, configured with the chosen LLM provider and the dynamically loaded tools from all connected MCP servers.\n4.  **Message Handling (`main.py`)**:\n    *   If a message starts with the command prefix (`#`), it's parsed as a direct command to list servers/tools or call a specific tool via the corresponding `MCPClient`.\n    *   Otherwise, the message (along with thread history) is passed to the `LangGraphAgent`.\n5.  **Agent Execution**: The agent processes the request, potentially calling one or more MCP tools via the `MCPClient` instances, and generates a response.\n6.  **Response Delivery**: The final response from the agent or command execution is posted back to the appropriate Mattermost channel/thread.\n\n## Setup\n1.  **Clone the repository:**\n    ```bash\n    git clone <repository-url>\n    cd mattermost-mcp-host\n    ```\n\n2.  **Install:**\n    *   Using uv (recommended):\n        ```bash\n        # Install uv if you don't have it yet\n        # curl -LsSf https://astral.sh/uv/install.sh | sh \n\n        # Activate venv\n        source .venv/bin/activate\n        \n        # Install the package with uv\n        uv sync\n\n        # To install dev dependencies\n        uv sync --dev --all-extras\n        ```\n\n3.  **Configure Environment (`.env` file):**\n    Copy the `.env.example` and fill in the values or\n    Create a `.env` file in the project root (or set environment variables):\n    ```env\n    # Mattermost Details\n    MATTERMOST_URL=http://your-mattermost-url\n    MATTERMOST_TOKEN=your-bot-token # Needs permissions to post, read channel, etc.\n    MATTERMOST_TEAM_NAME=your-team-name\n    MATTERMOST_CHANNEL_NAME=your-channel-name # Channel for the bot to listen in\n    # MATTERMOST_CHANNEL_ID= # Optional: Auto-detected if name is provided\n\n    # LLM Configuration (Azure OpenAI is default)\n    DEFAULT_PROVIDER=azure\n    AZURE_OPENAI_ENDPOINT=your-azure-endpoint\n    AZURE_OPENAI_API_KEY=your-azure-api-key\n    AZURE_OPENAI_DEPLOYMENT=your-deployment-name # e.g., gpt-4o\n    # AZURE_OPENAI_API_VERSION= # Optional, defaults provided\n\n    # Optional: Other providers (install with `[all]` extra)\n    # OPENAI_API_KEY=...\n    # ANTHROPIC_API_KEY=...\n    # GOOGLE_API_KEY=...\n\n    # Command Prefix\n    COMMAND_PREFIX=# \n    ```\n    See `.env.example` for more options.\n\n4.  **Configure MCP Servers:**\n    Edit `src/mattermost_mcp_host/mcp-servers.json` to define the MCP servers you want to connect to. See `src/mattermost_mcp_host/mcp-servers-example.json`.\n    Depending on the server configuration, you might `npx`, `uvx`, `docker` installed in your system and in path.\n\n5.  **Start the Integration:**\n    ```bash\n    mattermost-mcp-host\n    ```\n\n\n## Prerequisites\n\n- Python 3.13.1+\n- uv package manager\n- Mattermost server instance\n- Mattermost Bot Account with API token\n- Access to a LLM API (Azure OpenAI)\n\n### Optional\n- One or more MCP servers configured in `mcp-servers.json` \n- Tavily web search requires `TAVILY_API_KEY` in `.env` file\n\n\n## Usage in Mattermost\n\nOnce the integration is running and connected:\n\n1.  **Direct Chat:** Simply chat in the configured channel or with the bot. The AI agent will respond, using tools as needed. It maintains context within message threads.\n2.  **Direct Commands:** Use the command prefix (default `#`) for specific actions:\n    *   `#help` - Display help information.\n    *   `#servers` - List configured and connected MCP servers.\n    *   `#<server_name> tools` - List available tools for `<server_name>`.\n    *   `#<server_name> call <tool_name> <json_arguments>` - Call `<tool_name>` on `<server_name>` with arguments provided as a JSON string.\n        *   Example: `#my-server call echo '{\"message\": \"Hello MCP!\"}'`\n    *   `#<server_name> resources` - List available resources for `<server_name>`.\n    *   `#<server_name> prompts` - List available prompts for `<server_name>`.\n\n\n\n## Next Steps\n- ⚙️ **Configurable LLM Backend**: Supports multiple AI providers (Azure OpenAI default, OpenAI, Anthropic Claude, Google Gemini) via environment variables.\n\n## Mattermost Setup\n\n1. **Create a Bot Account**\n- Go to Integrations > Bot Accounts > Add Bot Account\n- Give it a name and description\n- Save the access token in the .env file\n\n2. **Required Bot Permissions**\n- post_all\n- create_post\n- read_channel\n- create_direct_channel\n- read_user\n\n3. **Add Bot to Team/Channel**\n- Invite the bot to your team\n- Add bot to desired channels\n\n### Troubleshooting\n\n1. **Connection Issues**\n- Verify Mattermost server is running\n- Check bot token permissions\n- Ensure correct team/channel names\n\n2. **AI Provider Issues**\n- Validate API keys\n- Check API quotas and limits\n- Verify network access to API endpoints\n\n3. **MCP Server Issues**\n- Check server logs\n- Verify server configurations\n- Ensure required dependencies are installed and env variables are defined\n\n\n## Demos\n\n### Create issue via chat using Github MCP server\n![Description of your GIF](./demo/demo-1.gif)  \n\n### (in YouTube)\n[![AI Agent in Action in Mattermost](./demo/supercut-thumbnail.png)](https://youtu.be/s6CZY81DRrU)\n\n\n## Contributing\n\nPlease feel free to open a PR.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mattermost-mcp-host": {
+        "command": "mattermost-mcp-host",
+        "args": []
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jagan-shanmugam",
+    "repo": "mattermost-mcp-host",
+    "url": "https://github.com/jagan-shanmugam/mattermost-mcp-host",
+    "name": "jagan-shanmugam__mattermost-mcp-host",
+    "path": null,
+    "stars": 26,
+    "contributors": 1,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "64731f22558b9ccfd7f965b2e0269f2e0e60b97f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:22.609Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"mattermost-mcp-host\"\nversion = \"0.1.0\"\ndescription = \"Mattermost MCP Host with MCP Client\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"aiohttp>=3.11.13\",\n    \"langchain[openai]>=0.3.21\",\n    \"langchain-openai>=0.3.9\",\n    \"langgraph>=0.3.18\",\n    \"mattermost>=6.5.0\",\n    \"mattermostdriver>=7.3.2\",\n    \"mcp[cli]>=1.3.0\",\n    \"nest-asyncio>=1.6.0\",\n    \"openai>=1.65.5\",\n    \"pytest>=8.3.5\",\n    \"python-dotenv>=1.0.1\",\n]\n\n# Optional dependencies\n[project.optional-dependencies]\nanthropic = [\n    \"anthropic>=0.5.0\",\n]\ngemini = [\n    \"google-generativeai>=0.3.0\",\n]\nall = [\n    \"anthropic>=0.5.0\",\n    \"google-generativeai>=0.3.0\",\n]\n\n[project.urls]\n\"Homepage\" = \"https://github.com/jagan-shanmugam/mattermost-mcp-host\"\n\"Bug Tracker\" = \"https://github.com/jagan-shanmugam/mattermost-mcp-host/issues\"\n\n[project.scripts]\nmattermost-mcp-host = \"mattermost_mcp_host.main:main\"\n\n[dependency-groups]\ndev = [\n    \"ipykernel>=6.29.5\",\n]\n\n\n=== mattermost-mcp-server/pyproject.toml ===\n[project]\nname = \"mattermost-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"A MCP server project\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [ \"mcp>=1.3.0\",]\n[[project.authors]]\nname = \"Jagan Shanmugam\"\nemail = \"jaganshanmugam@outlook.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmattermost-mcp-server = \"mattermost_mcp_server:main\"\n\n\n=== ollama-mcp-server/pyproject.toml ===\n[project]\nname = \"ollama-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"A Ollama MCP server project\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [ \"mcp>=1.3.0\",]\n[[project.authors]]\nname = \"Jagan Shanmugam\"\nemail = \"jaganshanmugam@outlook.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n"
+}

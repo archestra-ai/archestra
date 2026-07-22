@@ -1,0 +1,103 @@
+{
+  "name": "yashshingvi__databricks-genie-mcp",
+  "display_name": "databricks-genie-MCP",
+  "description": "MCP server from yashshingvi/databricks-genie-MCP",
+  "author": {
+    "name": "yashshingvi"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {
+      "DATABRICKS_HOST": "${user_config.databricks_host}",
+      "DATABRICKS_TOKEN": "${user_config.databricks_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "databricks_host": {
+      "type": "string",
+      "title": "Databricks Host",
+      "description": "Your Databricks instance URL (e.g., your-databricks-instance.cloud.databricks.com) — do not include https://",
+      "required": true,
+      "sensitive": false
+    },
+    "databricks_token": {
+      "type": "string",
+      "title": "Databricks Personal Access Token",
+      "description": "Your personal access token for Databricks.",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": "\n# Databricks Genie MCP Server\n\nA Model Context Protocol (MCP) server that connects to the Databricks Genie API, allowing LLMs to ask natural language questions, run SQL queries, and interact with Databricks conversational agents.\n\n\n## ✨ Features\n\n- List Genie spaces available in your Databricks workspace (Currently Manual/Using Resource)\n- Fetch metadata (title, description) of a specific Genie space\n- Start new Genie conversations with natural language questions\n- Ask follow-up questions in ongoing Genie conversations\n- Retrieve SQL and result tables in structured format\n\n## 🧱 Prerequisites\n\n- Python 3.7+\n- Databricks workspace with:\n  - Personal access token\n  - Genie API enabled\n  - Permissions to access Genie spaces and run queries\n\n\n## ⚙️ Setup\n\n1. **Clone this repository**\n\n2. **Create and activate a virtual environment** (recommended):\n  \n\n```\n python -m venv .venv\n source .venv/bin/activate\n ```\n\n   \n**Install dependencies:**\n\n```\npip install -r requirements.txt\n```\n\nCreate a **.env** file in the root directory with the following variables:\n\n```\nDATABRICKS_HOST=your-databricks-instance.cloud.databricks.com # Don't add https\nDATABRICKS_TOKEN=your-personal-access-token\n```\n\n\n📌 **Manually Adding Genie Space IDs**\n\n**Note:**  \n At this time, the Databricks Genie API **does not provide a public endpoint to list all available space IDs and titles**.  (afaik)\nAs a workaround, you need to **manually add the Genie space IDs and their titles** in the `get_genie_space_id()` function in `main.py`.\n\n\n\n\n\n## 🧪 Test the Server\nYou can test the MCP server using the inspector (optional but recommended):\n\n```\nnpx @modelcontextprotocol/inspector python main.py\n```\nOR\n\n**You can directly build and run docker to test the server**\n\n## 💬 Use with Claude Desktop\n\nDownload Claude Desktop\n\n**Install Your MCP Server:**\nFrom your project directory, run:\n\n```\nmcp install main.py\n```\n**Once Server Installed**\n  1. Connect in Claude\n   \n   2. Open Claude Desktop\n   \n   3. Click Resources → Add Resource\n   \n   4. Select your Genie MCP Server\n   \n   5. Start chatting with your data using natural language! 🎯\n\n\n\n\n## 🧾 Obtaining Databricks Credentials\n**Host**\nYour Databricks instance URL (e.g., your-instance.cloud.databricks.com) — do not include https://\n\n**Token**\n\n 1. Go to your Databricks workspace\n    \n 2. Click your username (top right) → User Settings\n 3. Under the Developer tab, click Manage under \"Access tokens\"\n 4. Generate a new token and copy it\n\n\n\n\n## 🚀 Running the Server\n\n```\npython main.py\n```\nThis will start the Genie MCP server over the stdio transport for LLM interaction.\n\n## 🧰 Available MCP Tools\nThe following MCP tools are available:\n\n\n**Tool\tDescription**\n1. get_genie_space_id()\tList available Genie space IDs and titles\n2. get_space_info(space_id: str)\tRetrieve title and description of a Genie space\n3. ask_genie(space_id: str, question: str)\tStart a new Genie conversation and get results\n4. follow_up(space_id: str, conversation_id: str, question: str)\tContinue an existing Genie conversation\n\n## 🛠️ Troubleshooting\nCommon Issues\n- Invalid host: Ensure the host does not include https://\n\n- Token error: Make sure your personal access token is valid and has access to Genie\n\n- Timeout: Check if the Genie space is accessible and not idle/expired\n\n- No data returned: Ensure your query is valid for the selected space\n\n## 🔐 Security Considerations\n\n - Keep your .env file secure and never commit it to version control\n\n - Use minimal scope tokens with expiration whenever possible\n\n- Avoid exposing this server in public-facing environments unless authenticated\n\n## Claude Desktop Screenshots\n\n![image](https://github.com/user-attachments/assets/42b391d3-0ae8-48bd-8665-a1560437b8ef)\n\n![image](https://github.com/user-attachments/assets/eb80c99f-e854-4d55-bb0e-8a447c29ee51)\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "databricks-genie-mcp-server": {
+        "command": "python",
+        "args": ["main.py"],
+        "env": {
+          "DATABRICKS_HOST": "your-databricks-instance.cloud.databricks.com",
+          "DATABRICKS_TOKEN": "your-personal-access-token"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "yashshingvi",
+    "repo": "databricks-genie-MCP",
+    "url": "https://github.com/yashshingvi/databricks-genie-MCP",
+    "name": "yashshingvi__databricks-genie-mcp",
+    "path": null,
+    "stars": 9,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "049c7cbde10643b5528f4e186c00916f56ec8add"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:33.438Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\n﻿fastapi==0.115.12\r\nmcp==1.6.0\r\npython-dotenv==1.1.0\r\nrequests==2.32.3\r\nmcp[cli]\r\n"
+}

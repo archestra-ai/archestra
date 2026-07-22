@@ -1,0 +1,97 @@
+{
+  "name": "jagan-shanmugam__open-streetmap-mcp",
+  "display_name": "open-streetmap-mcp",
+  "description": "An OpenStreetMap MCP server implementation that enhances LLM capabilities with location-based services and geospatial data.",
+  "author": {
+    "name": "jagan-shanmugam"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["osm-mcp-server"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# OpenStreetMap (OSM) MCP Server\n\nAn OpenStreetMap MCP server implementation that enhances LLM capabilities with location-based services and geospatial data.\n\n## Demo\n\n### Meeting Point Optimization\n![Meeting Point Use Case](demo/use-case-meeting.gif)\n\n### Neighborhood Analysis\n![Neighborhood Analysis Use Case](demo/use-case-neighborhood.gif)\n\n### Parking Search\n![Parking Search Use Case](demo/use-case-parking.gif)\n\n\n## Installation\n\n### In MCP Hosts like Claude Desktop, Cursor, Windsurf, etc.\n- `osm-mcp-server`: The main server, available for public use.\n  \n  ```json\n  \"mcpServers\": {\n    \"osm-mcp-server\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"osm-mcp-server\"\n      ]\n    }\n  }\n  ```\n\n## Features\n\nThis server provides LLMs with tools to interact with OpenStreetMap data, enabling location-based applications to:\n\n- Geocode addresses and place names to coordinates\n- Reverse geocode coordinates to addresses\n- Find nearby points of interest\n- Get route directions between locations\n- Search for places by category within a bounding box\n- Suggest optimal meeting points for multiple people\n- Explore areas and get comprehensive location information\n- Find schools and educational institutions near a location\n- Analyze commute options between home and work\n- Locate EV charging stations with connector and power filtering\n- Perform neighborhood livability analysis for real estate\n- Find parking facilities with availability and fee information\n\n## Components\n\n### Resources\n\nThe server implements location-based resources:\n- `location://place/{query}`: Get information about places by name or address\n- `location://map/{style}/{z}/{x}/{y}`: Get styled map tiles at specified coordinates\n\n### Tools\n\nThe server implements several geospatial tools:\n- `geocode_address`: Convert text to geographic coordinates\n- `reverse_geocode`: Convert coordinates to human-readable addresses\n- `find_nearby_places`: Discover points of interest near a location\n- `get_route_directions`: Get turn-by-turn directions between locations\n- `search_category`: Find places of specific categories in an area\n- `suggest_meeting_point`: Find optimal meeting spots for multiple people\n- `explore_area`: Get comprehensive data about a neighborhood\n- `find_schools_nearby`: Locate educational institutions near a specific location\n- `analyze_commute`: Compare transportation options between home and work\n- `find_ev_charging_stations`: Locate EV charging infrastructure with filtering\n- `analyze_neighborhood`: Evaluate neighborhood livability for real estate\n- `find_parking_facilities`: Locate parking options near a destination\n\n\n## Local Testing\n\n### Running the Server\n\nTo run the server locally:\n\n1. Install the package in development mode:\n\n```bash\npip install -e .\n```\n\n2. Start the server:\n\n```bash\nosm-mcp-server\n```\n\n3. The server will start and listen for MCP requests on the standard input/output.\n\n### Testing with Example Clients\n\nThe repository includes two example clients in the `examples/` directory:\n\n#### Basic Client Example\n\n`client.py` demonstrates basic usage of the OSM MCP server:\n\n```bash\npython examples/client.py\n```\n\nThis will:\n- Connect to the locally running server\n- Get information about San Francisco\n- Search for restaurants in the area\n- Retrieve comprehensive map data with progress tracking\n\n#### LLM Integration Example\n\n`llm_client.py` provides a helper class designed for LLM integration:\n\n```bash\npython examples/llm_client.py\n```\n\nThis example shows how an LLM can use the Location Assistant to:\n- Get location information from text queries\n- Find nearby points of interest\n- Get directions between locations\n- Find optimal meeting points\n- Explore neighborhoods\n\n### Writing Your Own Client\n\nTo create your own client:\n\n1. Import the MCP client:\n```python\nfrom mcp.client import Client\n```\n\n2. Initialize the client with your server URL:\n```python\nclient = Client(\"http://localhost:8000\")\n```\n\n3. Invoke tools or access resources:\n```python\n# Example: Geocode an address\nresults = await client.invoke_tool(\"geocode_address\", {\"address\": \"New York City\"})\n```\n\n#### Claude Desktop config for local server\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n<details>\n  <summary>Development/Unpublished Servers Configuration</summary>\n  \n  ```json\n  \"mcpServers\": {\n    \"osm-mcp-server\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/path/to/osm-mcp-server\",\n        \"run\",\n        \"osm-mcp-server\"\n      ]\n    }\n  }\n  ```\n</details>\n\n\n\n## Development\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n```bash\nuv sync\n```\n\n2. Build package distributions:\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n3. Publish to PyPI:\n```bash\nuv publish\n```\n\nNote: You'll need to set PyPI credentials via environment variables or command flags.\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory /path/to/osm-mcp-server run osm-mcp-server\n```\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n\n\n\n\n",
+  "category": "Location",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "osm-mcp-server": {
+        "command": "uvx",
+        "args": ["osm-mcp-server"],
+        "env": {}
+      },
+      "osm-mcp-server-local-run": {
+        "command": "osm-mcp-server",
+        "args": [],
+        "env": {}
+      },
+      "osm-mcp-server-configured": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/osm-mcp-server", "run", "osm-mcp-server"],
+        "env": {}
+      },
+      "osm-mcp-server-inspector": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/inspector",
+          "uv",
+          "--directory",
+          "/path/to/osm-mcp-server",
+          "run",
+          "osm-mcp-server"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jagan-shanmugam",
+    "repo": "open-streetmap-mcp",
+    "url": "https://github.com/jagan-shanmugam/open-streetmap-mcp",
+    "name": "open-streetmap-mcp",
+    "path": null,
+    "stars": 90,
+    "contributors": 2,
+    "issues": 7,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "4319f9f0744f089209081e8c20fc854db7a1a43c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.024Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"osm-mcp-server\"\nversion = \"0.1.1\"\ndescription = \"An OpenStreetMap MCP server\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n \"aiohttp>=3.11.13\",\n \"mcp[cli]>=1.3.0\",\n]\n[[project.authors]]\nname = \"Jagan Shanmugam\"\nemail = \"jaganshanmugam@outlook.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nosm-mcp-server = \"osm_mcp_server:main\"\n"
+}

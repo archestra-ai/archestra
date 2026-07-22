@@ -5,7 +5,7 @@ import {
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
@@ -150,8 +150,20 @@ const EditAgentToolArgsSchema = z
           "Updated visibility scope for the agent.",
         ),
         toolExposureMode: ToolExposureModeSchema.optional().describe(
-          "How tools should be exposed to MCP clients and models.",
+          "How tools should be loaded for MCP clients and models.",
         ),
+        accessAllTools: z
+          .boolean()
+          .optional()
+          .describe(
+            "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only'.",
+          ),
+        accessAllSubagents: z
+          .boolean()
+          .optional()
+          .describe(
+            "Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions).",
+          ),
         suggestedPrompts: z
           .array(SuggestedPromptToolInputSchema)
           .optional()
@@ -201,7 +213,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_CREATE_AGENT_SHORT_NAME,
     title: "Create Agent",
-    description: `Create a new agent with the specified name, optional description, labels, prompts, icon emoji, explicit tool assignments, and sub-agent delegations. Defaults to personal scope. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up the exact tool IDs and agent IDs using ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} / ${TOOL_LIST_AGENTS_SHORT_NAME} / ${TOOL_GET_AGENT_SHORT_NAME}, then pass them via toolAssignments / subAgentIds.`,
+    description: `Create a new agent with the specified name, optional description, labels, prompts, icon emoji, explicit tool assignments, and sub-agent delegations. Defaults to personal scope. toolAssignments and subAgentIds take resource UUIDs — resolve names first with ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} / ${TOOL_LIST_AGENTS_SHORT_NAME} / ${TOOL_GET_AGENT_SHORT_NAME}.`,
     schema: AgentCreateToolArgsSchema,
     async handler({ args, context }) {
       return handleCreateResource({
@@ -259,10 +271,9 @@ const registry = defineArchestraTools([
           {
             agentType: "agent",
             ...(args.name ? { name: args.name } : {}),
-            // Hide other users' personal agents. swap_agent is the primary
-            // Archestra MCP use-case and requires only the caller's own
-            // personal agents to be visible, even though admins can see all
-            // personal agents in the UI.
+            // Hide other users' personal agents. MCP tools only need the
+            // caller's own personal agents to be visible, even though admins
+            // can see all personal agents in the UI.
             excludeOtherPersonalAgents: true,
           },
           context.userId,
@@ -379,7 +390,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_AGENT_SHORT_NAME,
     title: "Edit Agent",
-    description: `Edit an existing agent. All fields are optional except id. Only provided fields are updated. Tool assignments and sub-agent delegations are additive. Respects the calling user's access level. IMPORTANT: When the user mentions MCP servers or sub-agents by name, you MUST first look up the exact tool IDs and agent IDs using ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} / ${TOOL_LIST_AGENTS_SHORT_NAME} / ${TOOL_GET_AGENT_SHORT_NAME}, then pass them via toolAssignments / subAgentIds.`,
+    description: `Edit an existing agent. All fields are optional except id. Only provided fields are updated. Tool assignments and sub-agent delegations are additive. Respects the calling user's access level. toolAssignments and subAgentIds take resource UUIDs — resolve names first with ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} / ${TOOL_LIST_AGENTS_SHORT_NAME} / ${TOOL_GET_AGENT_SHORT_NAME}.`,
     schema: EditAgentToolArgsSchema,
     async handler({ args, context }) {
       return handleEditResource({

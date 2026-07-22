@@ -1,0 +1,97 @@
+{
+  "name": "mikechao__balldontlie-mcp",
+  "display_name": "balldontlie-mcp",
+  "description": "An MCP Server implementation that integrates the Balldontlie API, to provide information about players, teams and games for the NBA, NFL and MLB",
+  "author": {
+    "name": "mikechao"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "balldontlie-mcp"],
+    "env": {
+      "BALLDONTLIE_API_KEY": "${user_config.balldontlie_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "balldontlie_api_key": {
+      "type": "string",
+      "title": "Balldontlie API Key",
+      "description": "Your API key obtained from Balldontlie.io",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Balldontlie MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@mikechao/balldontlie-mcp)](https://smithery.ai/server/@mikechao/balldontlie-mcp)\n\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/07e29bcd-3fb7-46e6-b4b9-8908b3ef18f2)\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/mikechao-balldontlie-mcp-badge.png)](https://mseep.ai/app/mikechao-balldontlie-mcp)\n\n<a href=\"https://glama.ai/mcp/servers/@mikechao/balldontlie-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@mikechao/balldontlie-mcp/badge\" alt=\"balldontlie-mcp MCP server\" />\n</a>\n\nAn MCP Server implementation that integrates the [Balldontlie API](https://www.balldontlie.io/), to provide information about players, teams and games for the NBA, NFL and MLB.\n\n## Tools\n\n- **get_teams**\n\n  - Gets the list of team from one of the following leagues NBA (National Basketball Association), MLB (Major League Baseball), NFL (National Football League)\n  - Inputs:\n    - `league` (enum ['NBA', 'NFL', 'MLB']): The sports league to get teams for\n\n- **get_players**\n\n  - Gets the list of players from one of the following leagues NBA (National Basketball Association), MLB (Major League Baseball), NFL (National Football League)\n  - Inputs:\n    - `league` (enum ['NBA', 'NFL', 'MLB']): The sports league to get players for\n    - `firstName` (string, optional): The first name of the player to search for\n    - `lastName` (string, optional): The last name of the player to search for\n    - `cursor` (number, optional): Cursor for pagination\n\n- **get_games**\n\n  - Gets the list of games from one of the following leagues NBA (National Basketball Association), MLB (Major League Baseball), NFL (National Football League)\n  - Inputs:\n    - `league` (enum ['NBA', 'NFL', 'MLB']): The sports league to get games for\n    - `dates` (string[], optional): Get games for specific dates, format: YYYY-MM-DD\n    - `teamIds` (string[], optional): Get games for specific games\n    - `cursor` (number, optional): Cursor for pagination\n\n- **get_game**\n\n  - Get a specific game from one of the following leagues NBA (National Basketball Association), MLB (Major League Baseball), NFL (National Football League)\n  - Inputs:\n    - `league` (enum ['NBA', 'NFL', 'MLB']): The sports league to get the game for\n    - `gameId` (number): The id of the game from the get_games tool\n\n## Prompts\n\n- **schedule_generator**\n\nGiven a league (NBA, MLB, NFL), a starting date and ending date generates an interactive schedule in Claude Desktop.\n\n![claude desktop example](https://mikechao.github.io/images/schedule_geneartor_prompt.webp)\n\n## Sample queries\n\nWith this MCP Server installed you can ask Claude or other LLM questions like the following.\n\n```\nShow me today's baseball games.\nCan you find football players with the last name Purdy?\nHow many NBA players have the last name Ming?\n```\n\n## Configuration\n\n### Getting an API Key\n\n1. Sign up for account at [Balldontlie.io](https://www.balldontlie.io/)\n2. The free plan is enough for this MCP Server\n\n### Installing using Desktop Extension (DXT)\n\n1. Download the `dxt` file from the [Releases](https://github.com/mikechao/balldontlie-mcp/releases)\n2. Open it with Claude Desktop\n   or\n   Go to File -> Settings -> Extensions and drag the .DXT file to the window to install it\n\n### Installing via Smithery\n\nTo install balldontlie-mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@mikechao/balldontlie-mcp):\n\n```bash\nnpx -y @smithery/cli install @mikechao/balldontlie-mcp --client claude\n```\n\n### Usage with Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcp-servers\": {\n    \"balldontlie\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"balldontlie-mcp\"\n      ],\n      \"env\": {\n        \"BALLDONTLIE_API_KEY\": \"YOUR API KEY HERE\"\n      }\n    }\n  }\n}\n```\n\n### Usage with LibreChat\n\n```yaml\nmcpServers:\n  balldontlie:\n    command: sh\n    args:\n      - -c\n      - BALLDONTLIE_API_KEY=your-api-key-here npx -y balldontlie-mcp\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n\n## Disclaimer\n\nThis library is not officially associated with balldontlie.io. It is a third-party implementation of the balldontlie api with a MCP Server.\n",
+  "category": "Sports",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "balldontlie-mcp": {
+        "command": "npx",
+        "args": ["-y", "balldontlie-mcp"],
+        "env": {
+          "BALLDONTLIE_API_KEY": "YOUR API KEY HERE"
+        }
+      },
+      "balldontlie-mcp-sh": {
+        "command": "sh",
+        "args": ["-c", "BALLDONTLIE_API_KEY=your-api-key-here npx -y balldontlie-mcp"],
+        "env": {
+          "BALLDONTLIE_API_KEY": "your-api-key-here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mikechao",
+    "repo": "balldontlie-mcp",
+    "url": "https://github.com/mikechao/balldontlie-mcp",
+    "name": "balldontlie-mcp",
+    "path": null,
+    "stars": 12,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "a64382467a88894fe2cd00107d8b0cea747b638c"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:36.678Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@balldontlie/sdk",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"balldontlie-mcp\",\n  \"type\": \"module\",\n  \"version\": \"0.6.5\",\n  \"private\": false,\n  \"description\": \"An MCP Server implementation that integrates the Balldontlie API, to provide information about players, teams and games for the NBA, NFL and MLB\",\n  \"author\": \"mike.chao.one@gmail.com\",\n  \"license\": \"MIT\",\n  \"homepage\": \"https://github.com/mikechao/balldontlie-mcp\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/mikechao/balldontlie-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/mikechao/balldontlie-mcp/issues\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"balldontlie\",\n    \"nba\",\n    \"nfl\",\n    \"mlb\",\n    \"sports\"\n  ],\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"balldontlie-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"LICENSE\",\n    \"README.md\",\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"clean\": \"shx rm -rf dist && shx mkdir dist\",\n    \"build\": \"npm run clean && tsc && shx chmod +x dist/*.js\",\n    \"lint\": \"eslint . --ext .ts,.js,.mjs,.cjs --fix\",\n    \"lint:check\": \"eslint . --ext .ts,.js,.mjs,.cjs\",\n    \"typecheck\": \"tsc --noEmit\",\n    \"check\": \"npm run lint:check && npm run typecheck\"\n  },\n  \"dependencies\": {\n    \"@balldontlie/sdk\": \"^1.2.2\",\n    \"@modelcontextprotocol/sdk\": \"^1.15.1\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@antfu/eslint-config\": \"^4.11.0\",\n    \"@types/node\": \"^22.14.0\",\n    \"eslint\": \"^9.23.0\",\n    \"eslint-plugin-format\": \"^1.0.1\",\n    \"shx\": \"^0.4.0\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

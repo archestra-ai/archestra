@@ -1,3 +1,4 @@
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
@@ -5,6 +6,7 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import type { Anthropic } from "@/types";
+import { joinBaseUrl } from "@/utils/base-url";
 import type { ModelInfo } from "./types";
 
 export async function fetchAnthropicModels(
@@ -13,7 +15,7 @@ export async function fetchAnthropicModels(
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.anthropic.baseUrl;
-  const url = `${baseUrl}/v1/models?limit=100`;
+  const url = joinBaseUrl(baseUrl, "/v1/models?limit=100");
 
   const response = await fetch(url, {
     headers: {
@@ -44,17 +46,28 @@ export async function fetchAnthropicModels(
   }));
 }
 
-async function getAnthropicAuthHeaders(
+/**
+ * Build the auth headers for a direct Anthropic HTTP call: `x-api-key` for a
+ * real key, else the Azure-Foundry-Entra or Workload-Identity bearer when those
+ * keyless modes are enabled. Shared with the credit-probe helper.
+ */
+export async function getAnthropicAuthHeaders(
   apiKey: string | undefined,
 ): Promise<Record<string, string>> {
   if (apiKey) {
     return { "x-api-key": apiKey };
   }
 
-  if (!isAnthropicAzureFoundryEntraIdEnabled()) {
-    return { "x-api-key": "" };
+  if (isAnthropicAzureFoundryEntraIdEnabled()) {
+    const tokenProvider = getAzureAiFoundryBearerTokenProvider();
+    return { Authorization: `Bearer ${await tokenProvider()}` };
   }
 
-  const tokenProvider = getAzureAiFoundryBearerTokenProvider();
-  return { Authorization: `Bearer ${await tokenProvider()}` };
+  if (anthropicWorkloadIdentity.isEnabled()) {
+    return {
+      Authorization: `Bearer ${await anthropicWorkloadIdentity.getAccessToken()}`,
+    };
+  }
+
+  return { "x-api-key": "" };
 }

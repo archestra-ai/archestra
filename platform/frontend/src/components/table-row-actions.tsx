@@ -1,4 +1,4 @@
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -37,12 +37,19 @@ type TableRowActionsProps = {
   actions: TableRowAction[];
   dropdownActions?: TableRowAction[];
   size?: "sm" | "default";
+  /**
+   * Name of the row's item (e.g. the agent or skill name). Appended to each
+   * action's accessible name so screen reader users can tell identical
+   * buttons apart across rows ("Edit My Agent" vs. a column of "Edit"s).
+   */
+  itemName?: string;
 };
 
 export function TableRowActions({
   actions,
   dropdownActions,
   size = "sm",
+  itemName,
 }: TableRowActionsProps) {
   const buttonSize = size === "sm" ? "icon-sm" : "icon";
 
@@ -50,7 +57,12 @@ export function TableRowActions({
     <div className="flex">
       <ButtonGroup>
         {actions.map((action) => (
-          <ActionButton key={action.label} action={action} size={buttonSize} />
+          <ActionButton
+            key={action.label}
+            action={action}
+            size={buttonSize}
+            itemName={itemName}
+          />
         ))}
         {dropdownActions && dropdownActions.length > 0 && (
           <DropdownMenu>
@@ -60,7 +72,7 @@ export function TableRowActions({
                   <Button
                     variant="outline"
                     size={buttonSize}
-                    aria-label="More actions"
+                    aria-label={accessibleActionLabel("More actions", itemName)}
                     onClick={(e: React.MouseEvent) => e.stopPropagation()}
                   >
                     <MoreHorizontal className="h-4 w-4" />
@@ -87,9 +99,11 @@ export function TableRowActions({
 function ActionButton({
   action,
   size,
+  itemName,
 }: {
   action: TableRowAction;
   size: "icon-sm" | "icon";
+  itemName?: string;
 }) {
   const icon =
     action.variant === "destructive" ? (
@@ -97,6 +111,8 @@ function ActionButton({
     ) : (
       action.icon
     );
+
+  const accessibleLabel = accessibleActionLabel(action.label, itemName);
 
   const tooltipText =
     action.disabled && action.disabledTooltip
@@ -111,7 +127,7 @@ function ActionButton({
         <PermissionButton
           permissions={action.permissions as Permissions}
           tooltip={tooltipText}
-          aria-label={action.label}
+          aria-label={accessibleLabel}
           variant="outline"
           size={size}
           asChild
@@ -127,7 +143,7 @@ function ActionButton({
       <PermissionButton
         permissions={action.permissions as Permissions}
         tooltip={tooltipText}
-        aria-label={action.label}
+        aria-label={accessibleLabel}
         variant="outline"
         size={size}
         disabled={action.disabled}
@@ -148,7 +164,7 @@ function ActionButton({
       <Button
         variant="outline"
         size={size}
-        aria-label={action.label}
+        aria-label={accessibleLabel}
         asChild
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
         data-testid={action.testId}
@@ -157,7 +173,7 @@ function ActionButton({
       </Button>
     ) : (
       <Button
-        aria-label={action.label}
+        aria-label={accessibleLabel}
         variant="outline"
         size={size}
         disabled={action.disabled}
@@ -173,7 +189,17 @@ function ActionButton({
 
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipTrigger asChild>
+        {action.disabled ? (
+          // A disabled button swallows pointer events, so the tooltip (the
+          // disabled reason) would never open. The span receives them
+          // instead — same trick as PermissionButton; ButtonGroup's `>*`
+          // selectors keep the grouped-border styling intact.
+          <span className="inline-flex cursor-not-allowed">{button}</span>
+        ) : (
+          button
+        )}
+      </TooltipTrigger>
       <TooltipContent>{tooltipText}</TooltipContent>
     </Tooltip>
   );
@@ -248,6 +274,10 @@ function DropdownActionButton({ action }: { action: TableRowAction }) {
   }
 
   return content;
+}
+
+function accessibleActionLabel(label: string, itemName?: string) {
+  return itemName ? `${label} ${itemName}` : label;
 }
 
 export type { TableRowAction, TableRowActionsProps };

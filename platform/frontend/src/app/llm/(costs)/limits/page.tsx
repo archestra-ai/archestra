@@ -1,10 +1,12 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import { type archestraApiTypes, DocsPage } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  Boxes,
   Building2,
   Edit,
+  Info,
   Key,
   Network,
   Plus,
@@ -13,10 +15,12 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EnvironmentScopeSelect } from "@/components/environment-scope-select";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
 import {
   CLEANUP_INTERVAL_LABELS,
@@ -27,6 +31,7 @@ import {
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -58,10 +63,15 @@ import {
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
 import { useProfiles } from "@/lib/agent.query";
+import { useDefaultUserLimits } from "@/lib/default-user-limit.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useEnvironments } from "@/lib/environment.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useCreateLimit,
   useDeleteLimit,
+  useLimit,
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
@@ -105,21 +115,26 @@ const MAX_VISIBLE_MODEL_BADGES = 3;
 const ENTITY_TYPE_ITEMS: Array<{
   value: LimitFormEntityType;
   label: string;
+  description: string;
   icon: React.ReactNode;
 }> = [
   {
     value: "organization",
     label: "Organization",
+    description: "A shared budget across all LLM spend in your organization.",
     icon: <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />,
   },
   {
     value: "team",
     label: "Team",
+    description:
+      "Caps the combined spend of every agent and LLM proxy in a team.",
     icon: <Users className="h-4 w-4 shrink-0 text-muted-foreground" />,
   },
   {
     value: "agent",
     label: "Agent",
+    description: "Caps spend for a single agent.",
     icon: (
       <AgentIcon
         icon={null}
@@ -131,17 +146,28 @@ const ENTITY_TYPE_ITEMS: Array<{
   {
     value: "llm_proxy",
     label: "LLM Proxy",
+    description: "Caps spend for a single LLM proxy.",
     icon: <Network className="h-4 w-4 shrink-0 text-muted-foreground" />,
   },
   {
     value: "user",
     label: "User",
+    description: "Caps one user's spend across the whole organization.",
     icon: <User className="h-4 w-4 shrink-0 text-muted-foreground" />,
   },
   {
     value: "virtual_key",
     label: "Virtual Key",
+    description:
+      "Caps spend for requests made with a specific virtual API key.",
     icon: <Key className="h-4 w-4 shrink-0 text-muted-foreground" />,
+  },
+  {
+    value: "environment",
+    label: "Environment",
+    description:
+      "Caps the combined spend of all users in a deployment environment (e.g. production).",
+    icon: <Boxes className="h-4 w-4 shrink-0 text-muted-foreground" />,
   },
 ];
 
@@ -160,10 +186,16 @@ function formatNumericInput(value: string) {
 
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
-  const { data: limits = [], isPending } = useLimits();
+  const {
+    data: limits = [],
+    isPending,
+    isLoadingError: isLimitsLoadError,
+    refetch: refetchLimits,
+  } = useLimits();
   const { data: teams = [] } = useTeams();
   const { data: organization } = useOrganization();
   const { data: members = [] } = useOrganizationMembers();
+  const { data: defaultUserLimits = [] } = useDefaultUserLimits();
   const { data: virtualKeysData } = useAllVirtualApiKeys({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
   });
@@ -171,9 +203,11 @@ export default function LimitsPage() {
   const { data: agents = [] } = useProfiles({
     filters: { agentTypes: ["agent"] },
   });
-  const { data: llmProxies = [] } = useProfiles({
+  const { data: llmProxies = [], isPending: llmProxiesPending } = useProfiles({
     filters: { agentTypes: ["llm_proxy"] },
   });
+  const { data: environmentsData } = useEnvironments();
+  const environments = environmentsData?.environments ?? [];
   const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
@@ -183,11 +217,21 @@ export default function LimitsPage() {
   const statusFilter = searchParams.get("status") || "all";
   const appliedToFilter = searchParams.get("appliedTo") || "all";
   const modelFilter = searchParams.get("model") || "all";
-  const [editingLimit, setEditingLimit] = useState<LimitData | null>(null);
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [formState, setFormState] =
     useState<LimitFormState>(DEFAULT_FORM_STATE);
+
+  const editId = searchParams.get("edit");
+  const { data: limitFromUrl } = useLimit(editId ?? undefined);
+  const {
+    entity: editingLimit,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<LimitData>({
+    paramName: "edit",
+    entityFromUrl: limitFromUrl ?? null,
+  });
 
   const llmLimits = useMemo(
     () => limits.filter((limit) => limit.limitType === "token_cost"),
@@ -207,10 +251,10 @@ export default function LimitsPage() {
   );
 
   const handleCreateOpen = useCallback(() => {
-    setEditingLimit(null);
+    closeEditDialog();
     setFormState(DEFAULT_FORM_STATE);
-    setIsDialogOpen(true);
-  }, []);
+    setIsCreateDialogOpen(true);
+  }, [closeEditDialog]);
 
   useEffect(() => {
     setActionButton(
@@ -226,9 +270,8 @@ export default function LimitsPage() {
     return () => setActionButton(null);
   }, [handleCreateOpen, setActionButton]);
 
-  const handleEditOpen = useCallback(
-    (limit: LimitData) => {
-      setEditingLimit(limit);
+  const buildEditFormState = useCallback(
+    (limit: LimitData): LimitFormState => {
       const models = getLimitModels(limit);
       const isAllModels =
         models.length === 0 && limit.limitType === "token_cost";
@@ -243,7 +286,7 @@ export default function LimitsPage() {
         }
       }
 
-      setFormState({
+      return {
         entityType,
         entityId: limit.entityType === "organization" ? "" : limit.entityId,
         limitValue: String(limit.limitValue),
@@ -251,11 +294,33 @@ export default function LimitsPage() {
           limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
         models: isAllModels ? [] : models,
         isAllModels,
-      });
-      setIsDialogOpen(true);
+      };
     },
     [llmProxies],
   );
+
+  // Seed the edit form exactly once per opened limit — row clicks and deep
+  // links share this path. Keyed on the opened id rather than
+  // buildEditFormState, whose llmProxies dep changes on refetch and would
+  // otherwise wipe in-progress edits.
+  const seededEditIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!editingLimit) {
+      seededEditIdRef.current = null;
+      return;
+    }
+    if (seededEditIdRef.current === editingLimit.id) {
+      return;
+    }
+    // Classifying an agent-typed limit as agent vs llm_proxy needs llmProxies.
+    // Seeding (and locking the ref) before they load would misclassify an
+    // llm_proxy limit as "agent" and never reseed once they arrive.
+    if (editingLimit.entityType === "agent" && llmProxiesPending) {
+      return;
+    }
+    seededEditIdRef.current = editingLimit.id;
+    setFormState(buildEditFormState(editingLimit));
+  }, [editingLimit, buildEditFormState, llmProxiesPending]);
 
   const getEntityLabel = useCallback(
     (limit: LimitData) => {
@@ -290,9 +355,15 @@ export default function LimitsPage() {
         );
         return proxy?.name ?? "Unknown LLM proxy";
       }
+      if (limit.entityType === "environment") {
+        const environment = environments.find(
+          (candidate) => candidate.id === limit.entityId,
+        );
+        return environment?.name ?? "Unknown environment";
+      }
       return "Unknown";
     },
-    [teams, members, virtualKeys, agents, llmProxies],
+    [teams, members, virtualKeys, agents, llmProxies, environments],
   );
 
   const getEntityIcon = useCallback(
@@ -309,6 +380,9 @@ export default function LimitsPage() {
       }
       if (limit.entityType === "virtual_key") {
         return <Key className={iconClassName} />;
+      }
+      if (limit.entityType === "environment") {
+        return <Boxes className={iconClassName} />;
       }
       if (
         limit.entityType === "agent" &&
@@ -493,7 +567,17 @@ export default function LimitsPage() {
           const cleanupInterval =
             (row.original.cleanupInterval as LimitCleanupInterval | null) ??
             DEFAULT_LIMIT_CLEANUP_INTERVAL;
-          return CLEANUP_INTERVAL_LABELS[cleanupInterval];
+          return (
+            <div className="space-y-0.5">
+              <div>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</div>
+              <div className="text-xs text-muted-foreground">
+                {formatNextLimitReset(
+                  row.original.lastCleanup,
+                  cleanupInterval,
+                )}
+              </div>
+            </div>
+          );
         },
       },
       {
@@ -533,7 +617,7 @@ export default function LimitsPage() {
               {
                 icon: <Edit className="h-4 w-4" />,
                 label: "Edit limit",
-                onClick: () => handleEditOpen(row.original),
+                onClick: () => openEditDialog(row.original),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
@@ -546,7 +630,7 @@ export default function LimitsPage() {
         ),
       },
     ],
-    [getEntityIcon, getEntityLabel, getUsageStatus, handleEditOpen],
+    [getEntityIcon, getEntityLabel, getUsageStatus, openEditDialog],
   );
 
   const hasActiveFilters =
@@ -554,7 +638,19 @@ export default function LimitsPage() {
     appliedToFilter !== "all" ||
     modelFilter !== "all";
   const shouldShowDefaultUserLimitNotice =
-    formState.entityType === "user" && !!organization?.defaultUserLimitValue;
+    formState.entityType === "user" && defaultUserLimits.length > 0;
+  const limitsDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformCostsAndLimits,
+    "usage-limits",
+  );
+
+  function closeDialog() {
+    if (editingLimit) {
+      closeEditDialog();
+    } else {
+      setIsCreateDialogOpen(false);
+    }
+  }
 
   async function handleSubmit() {
     const entityType =
@@ -577,15 +673,14 @@ export default function LimitsPage() {
         ...body,
       });
       if (result) {
-        setIsDialogOpen(false);
-        setEditingLimit(null);
+        closeEditDialog();
       }
       return;
     }
 
     const result = await createLimit.mutateAsync(body);
     if (result) {
-      setIsDialogOpen(false);
+      setIsCreateDialogOpen(false);
     }
   }
 
@@ -600,28 +695,41 @@ export default function LimitsPage() {
     (formState.isAllModels || formState.models.length > 0) &&
     (formState.entityType === "organization" || formState.entityId.length > 0);
 
+  // Gate the page on the limits list itself. The entity selectors (teams,
+  // members, virtual keys, agents, environments, models) degrade locally if
+  // their own fetch fails, so a secondary failure doesn't blank the page.
+  if (isLimitsLoadError) {
+    return (
+      <div className="space-y-4">
+        <QueryLoadError
+          title="Couldn't load usage limits"
+          onRetry={() => refetchLimits()}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {organization?.defaultUserLimitValue && (
-        <WithPermissions
-          permissions={{ llmSettings: ["read"] }}
-          noPermissionHandle="hide"
-        >
-          <Alert variant="info">
-            <AlertDescription className="block">
-              A default user limit applies to every user. Custom per-user limits
-              override it. Configure it in{" "}
-              <Link
-                href="/settings/llm"
-                className="font-medium underline underline-offset-4"
-              >
-                LLM settings
-              </Link>
-              .
-            </AlertDescription>
-          </Alert>
-        </WithPermissions>
-      )}
+      <WithPermissions
+        permissions={{ llmLimit: ["read"] }}
+        noPermissionHandle="hide"
+      >
+        <Alert variant="info">
+          <AlertDescription className="block">
+            {defaultUserLimits.length > 0
+              ? "A default user limit applies to every user. Custom per-user limits override it. Configure it in "
+              : "No default user limit is set — users are only capped by the custom limits below. Set a default for every user in "}
+            <Link
+              href="/settings/llm"
+              className="font-medium underline underline-offset-4"
+            >
+              LLM settings
+            </Link>
+            .
+          </AlertDescription>
+        </Alert>
+      </WithPermissions>
 
       <div className="flex flex-wrap gap-3">
         <Select
@@ -658,6 +766,7 @@ export default function LimitsPage() {
             <SelectItem value="llm_proxy">LLM Proxy</SelectItem>
             <SelectItem value="user">User</SelectItem>
             <SelectItem value="virtual_key">Virtual Key</SelectItem>
+            <SelectItem value="environment">Environment</SelectItem>
           </SelectContent>
         </Select>
 
@@ -692,11 +801,11 @@ export default function LimitsPage() {
       </LoadingWrapper>
 
       <FormDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
+        open={isCreateDialogOpen || !!editingLimit}
+        onOpenChange={(open) => !open && closeDialog()}
         title={editingLimit ? "Edit limit" : "Create limit"}
         description="Configure scoped LLM token-cost limits."
-        size="small"
+        size="medium"
       >
         <DialogForm
           className="flex min-h-0 flex-1 flex-col"
@@ -706,6 +815,29 @@ export default function LimitsPage() {
           }}
         >
           <DialogBody className="space-y-4">
+            <Alert variant="info">
+              <Info className="h-4 w-4" />
+              <AlertDescription className="block">
+                A limit caps token-cost spend for the selected scope over a
+                recurring window. Limits stack: when more than one applies to a
+                request, every matching limit is checked and the request is
+                blocked if any is exceeded.
+                {limitsDocsUrl && (
+                  <>
+                    {" "}
+                    <ExternalDocsLink
+                      href={limitsDocsUrl}
+                      className="text-inherit underline underline-offset-4"
+                      showIcon={false}
+                    >
+                      Learn how limits are evaluated
+                    </ExternalDocsLink>
+                    .
+                  </>
+                )}
+              </AlertDescription>
+            </Alert>
+
             {shouldShowDefaultUserLimitNotice && (
               <Alert variant="info">
                 <AlertDescription>
@@ -731,10 +863,16 @@ export default function LimitsPage() {
                   items={ENTITY_TYPE_ITEMS.map((item) => ({
                     value: item.value,
                     label: item.label,
+                    searchText: `${item.label} ${item.description}`,
                     content: (
-                      <span className="flex items-center gap-2">
-                        {item.icon}
-                        {item.label}
+                      <span className="flex flex-col gap-0.5">
+                        <span className="flex items-center gap-2">
+                          {item.icon}
+                          {item.label}
+                        </span>
+                        <span className="pl-6 text-xs text-muted-foreground">
+                          {item.description}
+                        </span>
                       </span>
                     ),
                     selectedContent: (
@@ -838,6 +976,20 @@ export default function LimitsPage() {
                     className="w-full sm:flex-1"
                   />
                 )}
+
+                {formState.entityType === "environment" && (
+                  <EnvironmentScopeSelect
+                    value={formState.entityId}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
+                    environments={environments}
+                    className="w-full sm:flex-1"
+                  />
+                )}
               </div>
             </div>
 
@@ -864,6 +1016,7 @@ export default function LimitsPage() {
             <div className="space-y-2">
               <Label>Limit value ($)</Label>
               <Input
+                aria-label="Limit value"
                 value={formatNumericInput(formState.limitValue)}
                 onChange={(event) =>
                   setFormState((current) => ({
@@ -877,7 +1030,26 @@ export default function LimitsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Cleanup interval</Label>
+              <div className="flex items-center gap-1.5">
+                <Label>Cleanup interval</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                      aria-label="Cleanup interval help"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="start" className="max-w-72">
+                    Rolling resets after elapsed time. Calendar resets at the
+                    next day, week, or month boundary.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <LimitCleanupIntervalSelect
                 value={formState.cleanupInterval}
                 onValueChange={(value) =>
@@ -890,11 +1062,7 @@ export default function LimitsPage() {
             </div>
           </DialogBody>
           <DialogStickyFooter className="mt-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsDialogOpen(false)}
-            >
+            <Button type="button" variant="outline" onClick={closeDialog}>
               Cancel
             </Button>
             <Button
@@ -927,4 +1095,109 @@ export function getLimitModels(limit: LimitData): string[] {
   return Array.isArray(limit.model)
     ? limit.model.filter((model): model is string => typeof model === "string")
     : [];
+}
+
+function formatNextLimitReset(
+  lastCleanup: LimitData["lastCleanup"],
+  cleanupInterval: LimitCleanupInterval,
+): string {
+  if (isCalendarCleanupInterval(cleanupInterval)) {
+    return formatResetDate(
+      getNextCalendarResetDate(new Date(), cleanupInterval),
+    );
+  }
+
+  if (!lastCleanup) {
+    return "Resets on next check";
+  }
+
+  const nextReset = addCleanupInterval(new Date(lastCleanup), cleanupInterval);
+  if (Number.isNaN(nextReset.getTime())) {
+    return "Reset schedule unavailable";
+  }
+
+  return formatResetDate(nextReset);
+}
+
+function formatResetDate(date: Date): string {
+  return `Resets ${date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year:
+      date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  })}`;
+}
+
+function addCleanupInterval(
+  date: Date,
+  cleanupInterval: LimitCleanupInterval,
+): Date {
+  const next = new Date(date);
+  switch (cleanupInterval) {
+    case "1h":
+      next.setHours(next.getHours() + 1);
+      return next;
+    case "12h":
+      next.setHours(next.getHours() + 12);
+      return next;
+    case "24h":
+      next.setDate(next.getDate() + 1);
+      return next;
+    case "1w":
+      next.setDate(next.getDate() + 7);
+      return next;
+    case "1m":
+      next.setMonth(next.getMonth() + 1);
+      return next;
+    case "calendar_day":
+    case "calendar_week_sunday":
+    case "calendar_week_monday":
+    case "calendar_month":
+      return getNextCalendarResetDate(next, cleanupInterval);
+  }
+}
+
+function isCalendarCleanupInterval(
+  cleanupInterval: LimitCleanupInterval,
+): cleanupInterval is Extract<
+  LimitCleanupInterval,
+  | "calendar_day"
+  | "calendar_week_sunday"
+  | "calendar_week_monday"
+  | "calendar_month"
+> {
+  return cleanupInterval.startsWith("calendar_");
+}
+
+function getNextCalendarResetDate(
+  date: Date,
+  cleanupInterval: Extract<
+    LimitCleanupInterval,
+    | "calendar_day"
+    | "calendar_week_sunday"
+    | "calendar_week_monday"
+    | "calendar_month"
+  >,
+): Date {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+
+  switch (cleanupInterval) {
+    case "calendar_day":
+      next.setDate(next.getDate() + 1);
+      return next;
+    case "calendar_week_sunday": {
+      const daysUntilSunday = (7 - next.getDay()) % 7 || 7;
+      next.setDate(next.getDate() + daysUntilSunday);
+      return next;
+    }
+    case "calendar_week_monday": {
+      const daysUntilMonday = (8 - next.getDay()) % 7 || 7;
+      next.setDate(next.getDate() + daysUntilMonday);
+      return next;
+    }
+    case "calendar_month":
+      next.setMonth(next.getMonth() + 1, 1);
+      return next;
+  }
 }

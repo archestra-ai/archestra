@@ -1,0 +1,97 @@
+{
+  "name": "r-huijts__ns-mcp-server",
+  "display_name": "ns-mcp-server",
+  "description": "A Model Context Protocol (MCP) server that provides access to NS (Dutch Railways) travel information through Claude AI. This server enables Claude to fetch real-time train travel information and disruptions using the official Dutch NS API.",
+  "author": {
+    "name": "r-huijts"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "ns-mcp-server"],
+    "env": {
+      "NS_API_KEY": "${user_config.ns_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ns_api_key": {
+      "type": "string",
+      "title": "NS API Key",
+      "description": "Your NS API key",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/r-huijts-ns-mcp-server-badge.png)](https://mseep.ai/app/r-huijts-ns-mcp-server)\n\n| <img src=\"https://upload.wikimedia.org/wikipedia/commons/b/b7/Nederlandse_Spoorwegen_logo.svg\" alt=\"NS Logo\" width=\"380\"/> | <img src=\"https://glama.ai/mcp/servers/tzd5oz5tov/badge\" alt=\"NS Travel Information Server MCP server\" width=\"380\"/> |\n|:---:|:---:|\n\n# NS Travel Information MCP Server\n\n[![smithery badge](https://smithery.ai/badge/ns-server)](https://smithery.ai/server/ns-server)\n[![npm version](https://badge.fury.io/js/ns-mcp-server.svg)](https://www.npmjs.com/package/ns-mcp-server)\n\nTransform your AI assistant into a Dutch railways expert! This MCP server connects Claude to real-time NS (Nederlandse Spoorwegen) travel information, making it your perfect companion for navigating the Netherlands by train.\n\n## Installation\n\nYou can install this server in three ways:\n\n### 1. Using Claude Desktop with NPM Package\n\nUpdate your Claude configuration file (`~/Library/Application Support/Claude/claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"ns-server\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"ns-mcp-server\"\n      ],\n      \"env\": {\n        \"NS_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\nYou can get an API key from [NS API Portal](https://apiportal.ns.nl/)\n\n### 2. Using Smithery\n\nTo install NS Travel Information Server automatically via [Smithery](https://smithery.ai/server/ns-server):\n\n```bash\nnpx -y @smithery/cli install ns-server --client claude\n```\n\n### 3. From Source\n\n1. Clone this repository\n2. Install dependencies:\n   ```bash\n   npm install\n   ```\n3. Copy the example environment file:\n   ```bash\n   cp .env.example .env\n   ```\n4. Add your NS API key to the `.env` file:\n   ```\n   NS_API_KEY=your_api_key_here\n   ```\n\nThen update your Claude configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"ns-server\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/ns-server/build/index.js\"\n      ],\n      \"env\": {\n        \"NS_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\nMake sure to:\n1. Replace `/path/to/ns-server` with the actual path to your installation\n2. Add your NS API key in the `env` section. It can be obtained from here [https://apiportal.ns.nl/product#product=NsApp](https://apiportal.ns.nl/product#product=NsApp)\n\nAfter updating the configuration, restart Claude Desktop for the changes to take effect.\n\n## Real-World Use Cases\n\n- \"Is my usual 8:15 train from Almere to Amsterdam running on time?\"\n- \"Are there any delays on the Rotterdam-Den Haag route today?\"\n- \"What's the best alternative route to Utrecht if there's maintenance on the direct line?\"\n- \"Which train should I take to arrive at my office in Amsterdam Zuid before 9 AM?\"\n- \"Which route to Amsterdam has the fewest transfers with a stroller?\"\n- \"What's the earliest train I can take to make my 10 AM meeting in The Hague?\"\n- \"When's the last train back to Groningen after a night out in Amsterdam?\"\n- \"Are there any weekend engineering works that might affect my Monday morning class?\"\n- \"Are there OV-fiets bikes available at Utrecht Centraal for my afternoon meeting?\"\n- \"Is Eindhoven Strijp-S station wheelchair accessible and what platforms does it have?\"\n- \"What trains are arriving at Utrecht Centraal in the next hour?\"\n- \"Has the train from Venlo to Schiphol Airport arrived on time?\"\n- \"How much does a first-class ticket from Amsterdam to Rotterdam cost?\"\n- \"What's the price for 2 adults and 1 child traveling to Den Haag?\"\n\n## 🔑 Environment Variables\n\n| Variable | Description |\n|----------|-------------|\n| NS_API_KEY | Your NS API key (required) |\n\n## 🌟 Features\n\nThis MCP server provides comprehensive access to NS train information through the following endpoints:\n\n### Real-time Train Information\n- **Departures**: Get real-time departure information including platform numbers, delays, and travel notes\n- **Arrivals**: Access upcoming train arrivals with origin stations, platform changes, and status updates\n- **Journey Planning**: Find optimal travel routes with transfers and real-time updates\n- **Service Updates**: Check for disruptions, maintenance work, and engineering activities\n\n### Pricing Information\n- **Ticket Prices**: Get accurate pricing for single and return journeys\n- **Travel Classes**: Compare prices for first and second class travel\n- **Group Pricing**: Calculate fares for adults and children\n- **Discount Options**: Check joint journey discounts and special offers\n- **Validity Details**: View ticket validity periods and travel conditions\n\n### Station Information\n- **Station Details**: Access comprehensive station information including:\n  - Facilities and accessibility features\n  - Platform layouts and track information\n  - OV-fiets (bike rental) availability\n  - Location and approach details\n\n### Additional Features\n- **Multi-language Support**: Information available in Dutch and English\n- **Flexible Queries**: Search by station name, code, or UIC identifier\n- **Time Zones**: Proper handling of time zones for international stations\n- **Status Updates**: Track changes, delays, and cancellations in real-time\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details\n",
+  "category": "Travel",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ns-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "ns-mcp-server"],
+        "env": {
+          "NS_API_KEY": "your_api_key_here"
+        }
+      },
+      "ns-mcp-server-local": {
+        "command": "node",
+        "args": ["/path/to/ns-server/build/index.js"],
+        "env": {
+          "NS_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "r-huijts",
+    "repo": "ns-mcp-server",
+    "url": "https://github.com/r-huijts/ns-mcp-server",
+    "name": "ns-mcp-server",
+    "path": null,
+    "stars": 39,
+    "contributors": 3,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f654572ec8ecfca9af62c5bbdd279eaccb492273"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:39.706Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"ns-mcp-server\",\n  \"version\": \"0.1.6\",\n  \"description\": \"Transform your AI assistant into a Dutch railways expert! This MCP server connects Claude to real-time NS (Nederlandse Spoorwegen) travel information, making it your perfect companion for navigating the Netherlands by train.\",\n  \"private\": false,\n  \"type\": \"module\",\n  \"bin\": {\n    \"ns-mcp-server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.6.0\",\n    \"dotenv\": \"^16.4.7\",\n    \"axios\": \"^1.7.9\",\n    \"typescript\": \"^5.7.2\"\n  },\n  \"devDependencies\": {\n    \"@types/dotenv\": \"^6.1.1\",\n    \"@types/node\": \"^20.11.24\",\n    \"axios\": \"^1.7.9\",\n    \"dotenv\": \"^16.4.7\",\n    \"typescript\": \"^5.7.2\"\n  }\n}\n"
+}

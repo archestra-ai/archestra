@@ -1,0 +1,133 @@
+{
+  "name": "kukapay__raydium-launchlab-mcp",
+  "display_name": "raydium-launchlab-mcp",
+  "description": "An MCP server that enables AI agents to launch, buy, and sell tokens on the Raydium Launchpad(aka LaunchLab).",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {
+      "RPC_URL": "${user_config.rpc_url}",
+      "PRIVATE_KEY": "${user_config.private_key}",
+      "PINATA_JWT": "${user_config.pinata_jwt}",
+      "PINATA_GATEWAY": "${user_config.pinata_gateway}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "rpc_url": {
+      "type": "string",
+      "title": "Solana RPC URL",
+      "description": "Your Solana RPC URL for transactions.",
+      "required": true,
+      "sensitive": false
+    },
+    "private_key": {
+      "type": "string",
+      "title": "Solana Wallet Private Key",
+      "description": "Your Solana wallet's private key as an integer array (e.g., [1,2,3,...]).",
+      "required": true,
+      "sensitive": true
+    },
+    "pinata_jwt": {
+      "type": "string",
+      "title": "Pinata JWT",
+      "description": "Your Pinata JWT for IPFS storage.",
+      "required": true,
+      "sensitive": true
+    },
+    "pinata_gateway": {
+      "type": "string",
+      "title": "Pinata Gateway URL",
+      "description": "Your Pinata gateway URL for IPFS storage.",
+      "required": true,
+      "sensitive": false
+    }
+  },
+  "readme": "# Raydium LaunchLab MCP\n\nAn MCP server that enables AI agents to launch, buy, and sell tokens on the Raydium Launchpad(also know as [LaunchLab](https://raydium.io/launchpad/)).\n\n![License](https://img.shields.io/badge/license-MIT-blue.svg)\n![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Mint Token**: Create a bonding-curve-based token with customizable parameters (name, symbol, decimals, total supply, fundraising target, etc.) and upload metadata to IPFS.\n- **Buy Token**: Purchase tokens from a Raydium Launchpad pool using SOL.\n- **Sell Token**: Sell tokens back to a Raydium Launchpad pool.\n- **IPFS Integration**: Uploads token images and metadata to IPFS for decentralized storage.\n\n## Prerequisites\n\n- **Node.js**: Version 18.x or higher.\n- **Solana Wallet**: A private key with sufficient SOL for transactions.\n- **Pinata Account**: API credentials for IPFS storage (JWT and gateway).\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/raydium-launchlab-mcp.git\n   cd raydium-launchlab-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   npm install\n   ```\n   \n3. **Configure MCP Client**:\n    ```json\n    {\n      \"mcpServers\": {\n        \"raydium-launchlab\": {\n          \"command\": \"node\",\n          \"args\": [\"/path/to/raydium-launchlab-mcp/index.js\"],\n          \"env\": {\n             \"RPC_URL\": \"your-solana-rpc-url\",\n             \"PRIVATE_KEY\": \"your-private-key-as-integer-array\",\n             \"PINATA_JWT\": \"your-pinata-jwt\",\n             \"PINATA_GATEWAY\": \"your-pinata-gateway\"\n          }\n        }\n      }\n    }\n    ```\n   - Replace `/path/to/raydium-launchlab-mcp` with your actual installation path.  \n   - Replace `your-solana-rpc-url` with your own Solana rpc url.\n   - Replace `your-private-key-as-integer-array` with your Solana wallet's private key (e.g., `[1,2,3,...]`).\n   - Obtain `PINATA_JWT` and `PINATA_GATEWAY` from your Pinata account.\n   \n\n## Tools\n\nThe MCP server exposes three tools for interacting with Raydium Launchpad:\n\n### 1. `mint_token`\nCreates a bonding-curve-based token on Raydium Launchpad with metadata uploaded to Pinata IPFS.\n\n**Parameters**:\n- `name` (string, 1-32 chars): Token name (e.g., \"My Token\").\n- `symbol` (string, 1-10 chars): Token symbol (e.g., \"MTK\").\n- `imagePath` (string): Path to the token logo (e.g., \"/assets/logo.png\").\n- `decimals` (integer, 0-18, default: 6): Number of decimal places.\n- `fundRaisingTarget` (number, positive, default: 85): Target SOL amount to raise.\n- `totalSupply` (number, default: 1,000,000,000): Total token supply.\n- `totalSellPercent` (number, default: 0.75): Percentage of supply for fundraising.\n- `createOnly` (boolean, default: true): If `true`, skips initial buy.\n- `initialBuyAmount` (number, non-negative, default: 0.1): SOL amount for initial buy (if `createOnly` is `false`).\n- `slippage` (number, 0-1.0, default: 0.01): Acceptable price slippage percentage (e.g., 0.01 for 1%).\n\n**Example Prompt**:\n> Create a new token on Raydium Launchpad named 'My Token' with symbol 'MTK', using the logo at '/assets/logo.png', a fundraising target of 35 SOL.\n\n\n**Example Response**:\n> Successfully created token (mint: <mint_address>, name: My Token, symbol: MTK). Transaction signatures: <tx_id>\n\n### 2. `buy_token`\nPurchases tokens from a Raydium Launchpad pool using SOL.\n\n**Parameters**:\n- `mintAddress` (string): Token mint address.\n- `inAmount` (number, positive): Amount of SOL to spend.\n- `slippage` (number, 0-1.0, default: 0.01): Acceptable price slippage percentage.\n\n**Example Prompt**:\n> Buy tokens from a Raydium Launchpad pool with mint address '<mint_address>' using 0.5 SOL and a slippage of 1%.\n\n**Example Response**:\n> Successfully purchased tokens (mint: <mint_address>). Transaction signature: <tx_id>\n\n### 3. `sell_token`\nSells tokens back to a Raydium Launchpad pool.\n\n**Parameters**:\n- `mintAddress` (string): Token mint address.\n- `inAmount` (number, positive): Amount of tokens to sell.\n- `slippage` (number, 0-1.0, default: 0.01): Acceptable price slippage percentage.\n\n**Example Prompt**:\n> Sell 1,000,000 tokens from a Raydium Launchpad pool with mint address '<mint_address>' and a slippage of 1%.\n\n**Example Response**:\n> Successfully sold tokens (mint: <mint_address>). Transaction signature: <tx_id>\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Finance",
+  "quality_score": 37,
+  "archestra_config": {
+    "client_config_permutations": {
+      "raydium-launchlab": {
+        "command": "node",
+        "args": ["/path/to/raydium-launchlab-mcp/index.js"],
+        "env": {
+          "RPC_URL": "your-solana-rpc-url",
+          "PRIVATE_KEY": "your-private-key-as-integer-array",
+          "PINATA_JWT": "your-pinata-jwt",
+          "PINATA_GATEWAY": "your-pinata-gateway"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "raydium-launchlab-mcp",
+    "url": "https://github.com/kukapay/raydium-launchlab-mcp",
+    "name": "raydium-launchlab-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ae52b96a7eaf332cccc44fd53363f7a677b11f33"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:14.356Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@raydium-io/raydium-sdk-v2",
+      "importance": 9
+    },
+    {
+      "name": "@solana/spl-token",
+      "importance": 8
+    },
+    {
+      "name": "@solana/web3.js",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "https-proxy-agent",
+      "importance": 4
+    },
+    {
+      "name": "pinata",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.11.4\",\n    \"@raydium-io/raydium-sdk-v2\": \"^0.1.135-alpha\",\n    \"@solana/spl-token\": \"^0.4.13\",\n    \"@solana/web3.js\": \"^1.98.2\",\n    \"dotenv\": \"^16.5.0\",\n    \"https-proxy-agent\": \"^7.0.6\",\n    \"pinata\": \"^2.3.0\"\n  }\n}\n"
+}

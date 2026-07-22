@@ -1,0 +1,94 @@
+{
+  "name": "keturiosakys__bluesky-context-server",
+  "display_name": "bluesky-context-server",
+  "description": "Bluesky MCP server",
+  "author": {
+    "name": "keturiosakys"
+  },
+  "server": {
+    "command": "bun",
+    "args": ["${__dirname}/index.ts"],
+    "env": {
+      "BLUESKY_APP_KEY": "${user_config.bluesky_app_key}",
+      "BLUESKY_IDENTIFIER": "${user_config.bluesky_identifier}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bluesky_app_key": {
+      "type": "string",
+      "title": "Bluesky App Key",
+      "description": "Your Bluesky application password (app key) for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "bluesky_identifier": {
+      "type": "string",
+      "title": "Bluesky Identifier",
+      "description": "Your Bluesky handle or email address for authentication.",
+      "required": true
+    }
+  },
+  "readme": "# Bluesky Context Server\n[![smithery badge](https://smithery.ai/badge/bluesky-context-server)](https://smithery.ai/server/bluesky-context-server)\n\nA Model Context Protocol (MCP) server that enables MCP clients like Claude Desktop to interact with Bluesky. Query your profile, search posts, get your timeline, and more directly from your AI assistant.\n\n## Prerequisites\n\n- **Runtime**: Either [Bun](https://bun.sh/) or [Node.js](https://nodejs.org/) v22.6.0+\n- A Bluesky account\n\n## Setup\n\n### 1. Get Your Bluesky Credentials\n\nYou'll need two pieces of information from your Bluesky account:\n\n#### BLUESKY_IDENTIFIER\nThis is your Bluesky handle (username). It can be in either format:\n- `username.bsky.social` (e.g., `alice.bsky.social`)\n- `@username.bsky.social` (e.g., `@alice.bsky.social`)\n\n#### BLUESKY_APP_KEY\nThis is an App Password, which is different from your regular Bluesky password. To create one:\n\n1. Go to [Bluesky Settings](https://bsky.app/settings)\n2. Navigate to \"Privacy and Security\" → \"App Passwords\"\n3. Click \"Add App Password\"\n4. Give it a name (e.g., \"MCP Server\")\n5. Copy the generated password (it looks like `xxxx-xxxx-xxxx-xxxx`)\n\n⚠️ **Important**: Use the App Password, not your regular account password!\n\n### 2. Installation\n\n#### Option A: Installing via Smithery (Recommended)\n\nTo install Bluesky Context Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@laulauland/bluesky-context-server):\n\n```bash\nnpx -y @smithery/cli install @laulauland/bluesky-context-server --client claude\n```\n\nThen add your credentials to the generated configuration.\n\n#### Option B: Manual Installation\n\n1. Clone or download this repository\n2. Configure your Claude Desktop app to use the MCP server:\n\n**Using Bun:**\n```json\n// ~/Library/Application Support/Claude/config.json (macOS)\n// %APPDATA%/Claude/config.json (Windows)\n{\n\t\"mcpServers\": {\n\t\t\"bluesky\": {\n\t\t\t\"command\": \"/Users/your-username/.bun/bin/bun\",\n\t\t\t\"args\": [\n\t\t\t\t\"/path/to/bluesky-context-server/packages/server/bin/index.ts\"\n\t\t\t],\n\t\t\t\"env\": {\n\t\t\t\t\"BLUESKY_APP_KEY\": \"your-app-password-here\",\n\t\t\t\t\"BLUESKY_IDENTIFIER\": \"your-handle.bsky.social\"\n\t\t\t}\n\t\t}\n\t}\n}\n```\n\n**Using Node.js:**\n```json\n// ~/Library/Application Support/Claude/config.json (macOS)\n// %APPDATA%/Claude/config.json (Windows)\n{\n\t\"mcpServers\": {\n\t\t\"bluesky\": {\n\t\t\t\"command\": \"node\",\n\t\t\t\"args\": [\n\t\t\t\t\"--experimental-strip-types\",\n\t\t\t\t\"/path/to/bluesky-context-server/packages/server/bin/index.ts\"\n\t\t\t],\n\t\t\t\"env\": {\n\t\t\t\t\"BLUESKY_APP_KEY\": \"your-app-password-here\",\n\t\t\t\t\"BLUESKY_IDENTIFIER\": \"your-handle.bsky.social\"\n\t\t\t}\n\t\t}\n\t}\n}\n```\n\n3. Restart Claude Desktop\n\n### 3. Testing the Connection\n\nAfter setup, you can test the connection by asking Claude something like:\n- \"Can you get my Bluesky profile?\"\n- \"Show me my recent posts on Bluesky\"\n- \"Search for posts about AI on Bluesky\"\n\n## Available MCP Tools\n\nThis server provides the following tools that Claude can use:\n\n### Profile & Account Tools\n\n#### `bluesky_get_profile`\nGet your Bluesky profile information including display name, bio, follower count, etc.\n- **Parameters**: None\n- **Returns**: Complete profile data\n\n#### `bluesky_get_follows`\nGet a list of accounts you follow.\n- **Parameters**: \n  - `limit` (optional): Max items to return (default 50, max 100)\n  - `cursor` (optional): Pagination cursor for next page\n- **Returns**: List of followed accounts with profile info\n\n#### `bluesky_get_followers`\nGet a list of accounts following you.\n- **Parameters**: \n  - `limit` (optional): Max items to return (default 50, max 100)\n  - `cursor` (optional): Pagination cursor for next page\n- **Returns**: List of followers with profile info\n\n### Post & Feed Tools\n\n#### `bluesky_get_posts`\nGet your recent posts.\n- **Parameters**: \n  - `limit` (optional): Max items to return (default 50, max 100)\n  - `cursor` (optional): Pagination cursor for next page\n- **Returns**: Your recent posts with engagement data\n\n#### `bluesky_get_personal_feed`\nGet your personalized Bluesky timeline/feed.\n- **Parameters**: \n  - `limit` (optional): Max items to return (default 50, max 100)\n  - `cursor` (optional): Pagination cursor for next page\n- **Returns**: Posts from your personalized feed\n\n#### `bluesky_get_liked_posts`\nGet posts you've liked.\n- **Parameters**: \n  - `limit` (optional): Max items to return (default 50, max 100)\n  - `cursor` (optional): Pagination cursor for next page\n- **Returns**: Posts you've liked\n\n### Search Tools\n\n#### `bluesky_search_posts`\nSearch for posts across Bluesky.\n- **Parameters**: \n  - `query` (required): Search query string\n  - `limit` (optional): Max items to return (default 50, max 100)\n  - `cursor` (optional): Pagination cursor for next page\n- **Returns**: Posts matching your search query\n\n#### `bluesky_search_profiles`\nSearch for Bluesky user profiles.\n- **Parameters**: \n  - `query` (required): Search query string\n  - `limit` (optional): Max items to return (default 50, max 100)\n  - `cursor` (optional): Pagination cursor for next page\n- **Returns**: User profiles matching your search query\n\n## Example Usage\n\nOnce configured, you can ask Claude things like:\n\n- \"What's in my Bluesky feed today?\"\n- \"Search for posts about TypeScript on Bluesky\"\n- \"Who are my most recent followers?\"\n- \"Show me posts I've liked recently\"\n- \"Find Bluesky users interested in AI\"\n\n## Troubleshooting\n\n### Common Issues\n\n1. **\"Authentication failed\"**: Double-check your `BLUESKY_APP_KEY` and `BLUESKY_IDENTIFIER`\n2. **\"Server not responding\"**: Ensure Bun is installed and the path to the server is correct\n3. **\"Permission denied\"**: Make sure the server file has execute permissions\n\n### Getting Help\n\nIf you encounter issues:\n1. Check that your Bluesky credentials are correct\n2. Verify Bun is installed: `bun --version`\n3. Test the server manually: `cd packages/server && bun start`\n4. Check Claude Desktop's logs for error messages\n",
+  "category": "Social Media",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "laulauland-bluesky-context-server": {
+        "command": "/Users/laurynas-fp/.bun/bin/bun",
+        "args": ["<path_to_this_directory>/bluesky-context-server/index.ts"],
+        "env": {
+          "BLUESKY_APP_KEY": "",
+          "BLUESKY_IDENTIFIER": ""
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "keturiosakys",
+    "repo": "bluesky-context-server",
+    "url": "https://github.com/keturiosakys/bluesky-context-server",
+    "name": "keturiosakys__bluesky-context-server",
+    "path": null,
+    "stars": 27,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "3fd7fa826a953666845949e77a02bd580d4728c4"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:24.140Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@atproto/api",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"bluesky-context-monorepo\",\n\t\"version\": \"1.0.0\",\n\t\"private\": true,\n\t\"workspaces\": [\"packages/*\"],\n\t\"devDependencies\": {\n\t\t\"@biomejs/biome\": \"^2.1.4\"\n\t},\n\t\"scripts\": {\n\t\t\"preinstall\": \"npx only-allow bun\"\n\t}\n}\n"
+}

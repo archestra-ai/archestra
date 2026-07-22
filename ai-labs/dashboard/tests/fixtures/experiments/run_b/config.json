@@ -1,0 +1,5 @@
+{
+  "run_id": "run_b",
+  "environments": [{ "id": "basic", "tasks": ["solo"] }],
+  "lanes": [{ "name": "kimi", "provider": "anthropic", "model": "kimi-for-coding" }]
+}

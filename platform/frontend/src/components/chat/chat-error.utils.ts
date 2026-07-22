@@ -4,7 +4,7 @@ import {
   type ChatErrorResponse,
   isChatErrorResponse,
   RetryableErrorCodes,
-} from "@shared";
+} from "@archestra/shared";
 
 /**
  * AI SDK internal error type names that aren't useful to show users

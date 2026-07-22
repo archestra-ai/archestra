@@ -2,7 +2,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   type PaginationQuery,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import {
   and,
   asc,
@@ -20,7 +20,8 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -151,6 +152,7 @@ class AgentToolModel {
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           isNotNull(schema.toolsTable.delegateToAgentId),
+          notDeleted(schema.agentsTable),
         ),
       );
 
@@ -239,6 +241,8 @@ class AgentToolModel {
         and(
           isNotNull(schema.toolsTable.delegateToAgentId),
           eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
+          notDeleted(targetAgentsAlias),
         ),
       )
       .$dynamic();
@@ -461,6 +465,66 @@ class AgentToolModel {
     return [...new Set(results.map((r) => r.toolId))];
   }
 
+  /**
+   * Get the distinct agents that have tools explicitly assigned from each of
+   * the given MCP servers, in one query to avoid N+1.
+   *
+   * An assignment counts toward a server when it is statically pinned to that
+   * server (`agent_tools.mcp_server_id`), or when it is unpinned (dynamic
+   * credential resolution) and the tool belongs to the server's catalog — a
+   * dynamic assignment can resolve to any install of the catalog at call time.
+   */
+  static async getAssignedAgentDetailsForMcpServers(
+    mcpServerIds: string[],
+  ): Promise<Map<string, Array<{ id: string; name: string }>>> {
+    const agentsMap = new Map<string, Array<{ id: string; name: string }>>();
+    for (const mcpServerId of mcpServerIds) {
+      agentsMap.set(mcpServerId, []);
+    }
+    if (mcpServerIds.length === 0) {
+      return agentsMap;
+    }
+
+    const assignments = await db
+      .selectDistinct({
+        mcpServerId: schema.mcpServersTable.id,
+        agentId: schema.agentsTable.id,
+        agentName: schema.agentsTable.name,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.mcpServersTable,
+        or(
+          eq(schema.agentToolsTable.mcpServerId, schema.mcpServersTable.id),
+          and(
+            isNull(schema.agentToolsTable.mcpServerId),
+            eq(schema.toolsTable.catalogId, schema.mcpServersTable.catalogId),
+          ),
+        ),
+      )
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, mcpServerIds),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.name), asc(schema.agentsTable.id));
+
+    for (const { mcpServerId, agentId, agentName } of assignments) {
+      agentsMap.get(mcpServerId)?.push({ id: agentId, name: agentName });
+    }
+
+    return agentsMap;
+  }
+
   static async getToolsForAgent(agentId: string) {
     const results = await db
       .select({ tool: schema.toolsTable })
@@ -551,8 +615,10 @@ class AgentToolModel {
     options?: Partial<
       Pick<InsertAgentTool, "mcpServerId" | "credentialResolutionMode">
     >,
+    tx?: Transaction,
   ): Promise<void> {
     if (agentIds.length === 0 || toolIds.length === 0) return;
+    const dbx = tx ?? db;
 
     // Build all possible combinations
     const assignments: Array<{
@@ -576,7 +642,7 @@ class AgentToolModel {
     }
 
     // Check which assignments already exist
-    const existingAssignments = await db
+    const existingAssignments = await dbx
       .select({
         agentId: schema.agentToolsTable.agentId,
         toolId: schema.agentToolsTable.toolId,
@@ -599,7 +665,7 @@ class AgentToolModel {
     );
 
     if (newAssignments.length > 0) {
-      await db
+      await dbx
         .insert(schema.agentToolsTable)
         .values(newAssignments)
         .onConflictDoNothing();
@@ -609,7 +675,7 @@ class AgentToolModel {
       (options?.mcpServerId || options?.credentialResolutionMode) &&
       existingAssignments.length > 0
     ) {
-      await db
+      await dbx
         .update(schema.agentToolsTable)
         .set({
           ...(options.mcpServerId ? { mcpServerId: options.mcpServerId } : {}),
@@ -624,63 +690,6 @@ class AgentToolModel {
             inArray(schema.agentToolsTable.toolId, toolIds),
           ),
         );
-    }
-  }
-
-  static async syncAgentToolsFromLabels(agentId: string): Promise<void> {
-    // Get the agent and verify it's eligible for automatic tool assignment based on labels
-    const { default: AgentModel } = await import("./agent");
-    const agent = await AgentModel.findById(agentId);
-
-    if (!agent) return;
-    if (!isAutomaticToolAssignmentSupported(agent.agentType)) return;
-    if (agent.toolAssignmentMode !== "automatic") return;
-
-    // Fetch the agent's labels and determine which tools should be assigned based on those labels
-    const { default: AgentLabelModel } = await import("./agent-label");
-    const labels = await AgentLabelModel.getLabelsForAgent(agentId);
-
-    // For each label, find catalog items that match the label, then find tools associated with those catalog items, and build a set of desired tool IDs to be assigned to the agent
-    const desiredToolIdsSet = new Set<string>();
-    if (labels.length > 0) {
-      const { default: McpCatalogLabelModel } = await import(
-        "./mcp-catalog-label"
-      );
-      const catalogIds =
-        await McpCatalogLabelModel.getCatalogIdsByLabels(labels);
-
-      if (catalogIds.length > 0) {
-        const { default: ToolModel } = await import("./tool");
-        const toolIds = await ToolModel.getToolIdsByCatalogIds(catalogIds);
-        for (const toolId of toolIds) {
-          desiredToolIdsSet.add(toolId);
-        }
-      }
-    }
-
-    // Fetch the agent's assigned tool IDs and determine which tools to add/remove
-    const currentToolIds =
-      await AgentToolModel.findCatalogToolIdsByAgent(agentId);
-    const currentToolIdsSet = new Set(currentToolIds);
-
-    const desiredToolIds = Array.from(desiredToolIdsSet);
-    const toInsert = desiredToolIds.filter((id) => !currentToolIdsSet.has(id));
-    const toDelete = currentToolIds.filter((id) => !desiredToolIdsSet.has(id));
-
-    // Assign new tools that are not currently assigned to the agent.
-    if (toInsert.length > 0) {
-      const entries = toInsert.map((toolId) => ({
-        agentId,
-        toolId,
-        credentialResolutionMode: "dynamic" as CredentialResolutionMode, // default to dynamic for automatically assigned tools
-      }));
-
-      await AgentToolModel.bulkCreate(entries);
-    }
-
-    // Remove tools that are currently assigned but not in the desired set.
-    if (toDelete.length > 0) {
-      await AgentToolModel.bulkDelete(agentId, toDelete);
     }
   }
 
@@ -911,7 +920,9 @@ class AgentToolModel {
         schema.toolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
-      .where(eq(schema.agentToolsTable.id, id))
+      .where(
+        and(eq(schema.agentToolsTable.id, id), notDeleted(schema.agentsTable)),
+      )
       .limit(1);
     return row;
   }
@@ -942,7 +953,7 @@ class AgentToolModel {
       skipPagination = false,
     } = params;
     // Build WHERE conditions
-    const whereConditions: SQL[] = [];
+    const whereConditions: SQL[] = [notDeleted(schema.agentsTable)];
 
     // Apply access control filtering for users that are not agent admins
     if (userId && !isAgentAdmin) {
@@ -1138,27 +1149,6 @@ class AgentToolModel {
   }
 
   /**
-   * Delete all static agent-tool assignments that use a specific MCP server.
-   */
-  static async deleteByExecutionSourceMcpServerId(
-    mcpServerId: string,
-  ): Promise<number> {
-    const result = await db
-      .delete(schema.agentToolsTable)
-      .where(eq(schema.agentToolsTable.mcpServerId, mcpServerId));
-    return result.rowCount ?? 0;
-  }
-
-  /**
-   * Delete all static agent-tool assignments that use a specific MCP server.
-   */
-  static async deleteByCredentialSourceMcpServerId(
-    mcpServerId: string,
-  ): Promise<number> {
-    return AgentToolModel.deleteByExecutionSourceMcpServerId(mcpServerId);
-  }
-
-  /**
    * Clean up invalid static MCP server assignments when a user is removed from a team.
    * Sets mcpServerId to null for agent-tools where:
    * - The assigned MCP server is owned by the removed user
@@ -1222,13 +1212,125 @@ class AgentToolModel {
 
     return cleanedCount;
   }
+
+  /** Count of agent↔tool links for agents in the organization (audit footprint). */
+  static async countAssignmentsForOrganization(
+    organizationId: string,
+  ): Promise<Record<string, unknown>> {
+    const [row] = await db
+      .select({ c: count() })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .where(eq(schema.agentsTable.organizationId, organizationId));
+    return { agentToolAssignmentCount: Number(row?.c ?? 0) };
+  }
+
+  static async findByIdForAudit(
+    assignmentId: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [scoped] = await db
+      .select({
+        assignmentId: schema.agentToolsTable.id,
+        agentId: schema.agentToolsTable.agentId,
+        agentName: schema.agentsTable.name,
+        toolId: schema.toolsTable.id,
+        toolName: schema.toolsTable.name,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+        updatedAt: schema.agentToolsTable.updatedAt,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.id, assignmentId),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!scoped) return null;
+
+    return AgentToolModel.toAuditSnapshot(scoped);
+  }
+
+  /** Used by `/api/agents/:agentId/tools/:toolId` where `resourceId` is the tool id. */
+  static async findByAgentAndToolForAudit(
+    agentId: string,
+    toolId: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [scoped] = await db
+      .select({
+        assignmentId: schema.agentToolsTable.id,
+        agentId: schema.agentToolsTable.agentId,
+        agentName: schema.agentsTable.name,
+        toolId: schema.toolsTable.id,
+        toolName: schema.toolsTable.name,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+        updatedAt: schema.agentToolsTable.updatedAt,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          eq(schema.agentToolsTable.toolId, toolId),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!scoped) return null;
+
+    return AgentToolModel.toAuditSnapshot(scoped);
+  }
+
+  private static toAuditSnapshot(scoped: {
+    assignmentId: string;
+    agentId: string;
+    agentName: string;
+    toolId: string;
+    toolName: string;
+    mcpServerId: string | null;
+    credentialResolutionMode: string;
+    updatedAt: Date;
+  }): Record<string, unknown> {
+    return {
+      id: scoped.assignmentId,
+      agentId: scoped.agentId,
+      agentName: scoped.agentName,
+      toolId: scoped.toolId,
+      toolName: scoped.toolName,
+      mcpServerId: scoped.mcpServerId ?? null,
+      credentialResolutionMode: scoped.credentialResolutionMode,
+      updatedAt: scoped.updatedAt.toISOString(),
+    };
+  }
 }
 
 export default AgentToolModel;
-
-function isAutomaticToolAssignmentSupported(agentType: string): boolean {
-  return agentType === "agent" || agentType === "mcp_gateway";
-}
 
 function normalizeCredentialResolutionMode(params: {
   resolveAtCallTime?: boolean;

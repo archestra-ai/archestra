@@ -1,0 +1,178 @@
+{
+  "name": "akramiot__mcp_ai_soc_sher",
+  "display_name": "MCP_AI_SOC_Sher",
+  "description": "AI SOC  Security Threat analysis using  MCP Server ",
+  "author": {
+    "name": "akramIOT"
+  },
+  "server": {
+    "command": "mcp-ai-soc",
+    "args": ["--type", "local"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "MCP_DB_URI": "${user_config.mcp_db_uri}",
+      "MCP_SECURITY_ENABLE_THREAT_ANALYSIS": "${user_config.mcp_security_enable_threat_analysis}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key for accessing the AI models.",
+      "sensitive": true,
+      "required": true
+    },
+    "mcp_db_uri": {
+      "type": "string",
+      "title": "MCP Database URI",
+      "description": "Connection URI for the database (e.g., sqlite:///your_database.db).",
+      "sensitive": false,
+      "required": false
+    },
+    "mcp_security_enable_threat_analysis": {
+      "type": "boolean",
+      "title": "Enable Security Threat Analysis",
+      "description": "Enable or disable built-in SQL query security analysis.",
+      "sensitive": false,
+      "required": false,
+      "default": true
+    }
+  },
+  "readme": "# MCP AI SOC Sher\n\nA powerful AI-driven Security Operations Center (SOC) Text2SQL framework  based  MCP Server (Local and Remote) for converting natural language Prompts  to SQL queries dynamically, with integrated security threat analysis and monitoring.\n\n## Features\n\n- **Text2SQL Conversion**: Convert natural language queries to optimized SQL\n- **Multiple Interfaces**: Support for STDIO, SSE, and REST API\n- **Security Threat Analysis**: Built-in SQL query security analysis\n- **Multiple Database Support**: Connect to SQLite or Snowflake databases\n- **Streaming Responses**: Real-time query processing feedback\n- **SOC Monitoring**: Security Operations Center monitoring capabilities\n\n## Installation\n\n```bash\npip install mcp-ai-soc-sher\n```\n\n## Quick Start\n\n```python\n# Set your OpenAI API key\nimport os\nos.environ[\"OPENAI_API_KEY\"] = \"your-api-key-here\"\n\n# Use as local server\nfrom mcp_ai_soc_sher.local import LocalMCPServer\n\nserver = LocalMCPServer()\nserver.start()\n\n# Or run from command line\n# mcp-ai-soc --type local --stdio --sse\n```\n\n## Command Line Usage\n\n```bash\n# Run local server with STDIO interface\nmcp-ai-soc --type local --stdio\n\n# Run local server with SSE interface\nmcp-ai-soc --type local --sse\n\n# Run remote server with REST API\nmcp-ai-soc --type remote\n```\n\n## Configuration\n\nCreate a `.env` file with your configuration:\n\n```\nOPENAI_API_KEY=your_openai_api_key_here\nMCP_DB_URI=sqlite:///your_database.db\nMCP_SECURITY_ENABLE_THREAT_ANALYSIS=true\n```\n\nSee the [documentation](docs/configuration.md) for all configuration options.\n\n## Example\n\n```python\nimport json\nimport requests\n\n# Query the server\nresponse = requests.post(\n    \"http://localhost:8000/api/sql\",\n    headers={\"Content-Type\": \"application/json\", \"X-API-Key\": \"your-api-key\"},\n    json={\n        \"query\": \"Find all suspicious login attempts in the last 24 hours\",\n        \"optimize\": True,\n        \"execute\": True\n    }\n)\n\n# Process the response\nresult = response.json()\nprint(f\"SQL Query: {result['sql']}\")\nif result['results']:\n    print(\"Results:\")\n    for row in result['results']:\n        print(row)\n```\n\n## Security Features\n\n- Rule-based and AI-powered SQL query security analysis\n- Detection of potential SQL injection attacks\n- Sensitive table access monitoring\n- Configurable security levels and actions\n\n## License\n\nMIT License with Additional Conditions. Copyright (c) 2025 Akram Sheriff.\n\nSee [LICENSE](LICENSE) for details.\n\n## Contributing\n\nContributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.\n",
+  "category": "Security",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-ai-soc-sher-local-python": {
+        "command": "python",
+        "args": [
+          "-c",
+          "import os; os.environ[\"OPENAI_API_KEY\"] = \"your-api-key-here\"; from mcp_ai_soc_sher.local import LocalMCPServer; server = LocalMCPServer(); server.start()"
+        ],
+        "env": {
+          "OPENAI_API_KEY": "your-api-key-here"
+        }
+      },
+      "mcp-ai-soc-local-stdio-sse": {
+        "command": "mcp-ai-soc",
+        "args": ["--type", "local", "--stdio", "--sse"],
+        "env": {}
+      },
+      "mcp-ai-soc-local-stdio": {
+        "command": "mcp-ai-soc",
+        "args": ["--type", "local", "--stdio"],
+        "env": {}
+      },
+      "mcp-ai-soc-local-sse": {
+        "command": "mcp-ai-soc",
+        "args": ["--type", "local", "--sse"],
+        "env": {}
+      },
+      "mcp-ai-soc-remote": {
+        "command": "mcp-ai-soc",
+        "args": ["--type", "remote"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "akramIOT",
+    "repo": "MCP_AI_SOC_Sher",
+    "url": "https://github.com/akramIOT/MCP_AI_SOC_Sher",
+    "name": "akramiot__mcp_ai_soc_sher",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "e23ecc6ee6fb9ee0a93c9c904d7dd8e537455ebf"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:34.650Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "langchain",
+      "importance": 10
+    },
+    {
+      "name": "langchain-openai",
+      "importance": 9
+    },
+    {
+      "name": "langchain-community",
+      "importance": 9
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 7
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    },
+    {
+      "name": "faiss-cpu",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "pandas",
+      "importance": 7
+    },
+    {
+      "name": "sqlalchemy",
+      "importance": 9
+    },
+    {
+      "name": "importlib-resources",
+      "importance": 3
+    },
+    {
+      "name": "typing-extensions",
+      "importance": 3
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=42\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"mcp-ai-soc-sher\"\nversion = \"0.1.0\"\ndescription = \"An AI-powered SOC Text2SQL MCP Server for converting natural language to SQL queries\"\nreadme = \"README.md\"\nauthors = [\n    {name = \"Akram Sheriff\", email = \"YOUR_EMAIL@example.com\"}\n]\nlicense = {text = \"MIT License with Additional Conditions\"}\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.8\",\n    \"Programming Language :: Python :: 3.9\",\n    \"Programming Language :: Python :: 3.10\",\n]\nrequires-python = \">=3.8\"\n\n[project.urls]\n\"Homepage\" = \"https://github.com/akramsheriff/mcp-ai-soc-sher\"\n\"Bug Tracker\" = \"https://github.com/akramsheriff/mcp-ai-soc-sher/issues\"\n\n[project.scripts]\nmcp-ai-soc-local = \"mcp_ai_soc_sher.local.server:main\"\nmcp-ai-soc-remote = \"mcp_ai_soc_sher.remote.server:main\"\nmcp-ai-soc = \"mcp_ai_soc_sher.__main__:main\"\n\n=== requirements.txt ===\n# Core dependencies\nlangchain>=0.1.0\nlangchain-openai>=0.0.5\nlangchain-community>=0.0.10\nfastapi>=0.104.0\nuvicorn>=0.23.2\nsse-starlette>=1.6.1\nopenai>=1.3.0\nfaiss-cpu>=1.7.4\npython-dotenv>=1.0.0\npydantic>=2.4.2\npandas>=2.0.0\nsqlalchemy>=2.0.0\nimportlib-resources>=5.12.0\ntyping-extensions>=4.7.0\nrequests>=2.31.0\n\n# Optional dependencies\n# For Snowflake support, uncomment the line below\n# snowflake-connector-python>=3.5.0\n\n=== setup.py ===\nfrom setuptools import setup, find_packages\n\nwith open(\"README.md\", \"r\", encoding=\"utf-8\") as fh:\n    long_description = fh.read()\n\nwith open(\"requirements.txt\", \"r\", encoding=\"utf-8\") as fh:\n    requirements = fh.read().splitlines()\n\nsetup(\n    name=\"mcp-ai-soc-sher\",\n    version=\"0.1.0\",\n    author=\"Akram Sheriff\",\n    author_email=\"YOUR_EMAIL@example.com\",  # Replace with actual contact email\n    description=\"An AI-powered SOC Text2SQL MCP Server for converting natural language to SQL queries\",\n    long_description=long_description,\n    long_description_content_type=\"text/markdown\",\n    url=\"https://github.com/akramsheriff/mcp-ai-soc-sher\",  # Replace with actual repo URL\n    packages=find_packages(),\n    classifiers=[\n        \"Development Status :: 4 - Beta\",\n        \"Intended Audience :: Developers\",\n        \"License :: OSI Approved :: MIT License\",\n        \"Programming Language :: Python :: 3\",\n        \"Programming Language :: Python :: 3.8\",\n        \"Programming Language :: Python :: 3.9\",\n        \"Programming Language :: Python :: 3.10\",\n    ],\n    python_requires=\">=3.8\",\n    install_requires=requirements,\n    entry_points={\n        \"console_scripts\": [\n            \"mcp-ai-soc-local=mcp_ai_soc_sher.local.server:main\",\n            \"mcp-ai-soc-remote=mcp_ai_soc_sher.remote.server:main\",\n            \"mcp-ai-soc=mcp_ai_soc_sher.__main__:main\",\n        ],\n    },\n    include_package_data=True,\n)"
+}

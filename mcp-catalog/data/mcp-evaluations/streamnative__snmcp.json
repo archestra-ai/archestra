@@ -1,0 +1,71 @@
+{
+  "name": "streamnative__snmcp",
+  "display_name": "snmcp",
+  "description": "StreamNative MCP server for interacting with StreamNative services.",
+  "author": {
+    "name": "StreamNative"
+  },
+  "server": {
+    "command": "/server/snmcp",
+    "args": ["stdio", "--key-file", "/secrets/key_file.json"],
+    "docker_image": "streamnative/snmcp:v0.1.14",
+    "env": {
+      "SNMCP_ORGANIZATION": "${user_config.snmcp_organization}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": ["streamnative"],
+  "user_config": {
+    "key_file.json": {
+      "type": "string",
+      "title": "Key File",
+      "description": "StreamNative service account key file. Creates secret at /secrets/key_file.json path.",
+      "required": true,
+      "sensitive": true,
+      "mounted": true
+    },
+    "snmcp_organization": {
+      "type": "string",
+      "title": "SNMCP_ORGANIZATION",
+      "description": "",
+      "default": "",
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "readme": "",
+  "category": "Cloud",
+  "quality_score": 0,
+  "github_info": {
+    "owner": "streamnative",
+    "repo": "snmcp",
+    "url": "https://github.com/streamnative/snmcp",
+    "name": "streamnative__snmcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": null,
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [],
+  "raw_dependencies": ""
+}

@@ -1,10 +1,14 @@
 "use client";
 
-import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
+import {
+  type archestraApiTypes,
+  getConnectorNamePlaceholder,
+} from "@archestra/shared";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -23,18 +27,23 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import {
+  AdminApiKeyDescription,
   ConnectorAdvancedConfigFields,
   ConnectorInlineConfigFields,
   connectorNeedsEmail,
+  connectorSupportsAdminApiKey,
+  connectorSupportsAutoSync,
   getConnectorCredentialConfig,
   getConnectorDocsUrl,
   getConnectorTypeLabel,
   getConnectorUrlConfig,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
@@ -48,7 +57,9 @@ type ConnectorItem = Pick<
   | "connectorType"
   | "config"
   | "schedule"
+  | "permissionSyncIntervalSeconds"
   | "enabled"
+  | "environmentId"
 >;
 
 type EditConnectorFormValues = {
@@ -58,7 +69,10 @@ type EditConnectorFormValues = {
   config: Record<string, unknown>;
   email: string;
   apiToken: string;
+  adminApiKey: string;
   schedule: string;
+  permissionSyncIntervalSeconds: number;
+  environmentId: string | null;
 };
 
 export function EditConnectorDialog({
@@ -82,7 +96,10 @@ export function EditConnectorDialog({
       config: connector.config,
       email: "",
       apiToken: "",
+      adminApiKey: "",
       schedule: connector.schedule,
+      permissionSyncIntervalSeconds: connector.permissionSyncIntervalSeconds,
+      environmentId: connector.environmentId ?? null,
     },
   });
 
@@ -97,28 +114,48 @@ export function EditConnectorDialog({
         config: connector.config,
         email: "",
         apiToken: "",
+        adminApiKey: "",
         schedule: connector.schedule,
+        permissionSyncIntervalSeconds: connector.permissionSyncIntervalSeconds,
+        environmentId: connector.environmentId ?? null,
       });
     }
   }, [open, connector, form]);
 
   const connectorType = connector.connectorType;
   const typeLabel = getConnectorTypeLabel(connectorType);
-  const urlConfig = getConnectorUrlConfig(connectorType);
   const connectorDocsUrl = getConnectorDocsUrl(connectorType);
 
   const needsEmail = connectorNeedsEmail(connectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
+  const authMethod = form.watch("config.authMethod") as string | undefined;
+  // App-auth GitHub connectors inherit their host from the App config, so the
+  // connector's own URL field is hidden to avoid a misleading second host
+  const usesGithubApp =
+    connectorType === "github" && authMethod === "github_app";
+  const urlConfig = usesGithubApp ? null : getConnectorUrlConfig(connectorType);
   const emailRequired = needsEmail && isCloud !== false;
-  const { apiTokenHelpText, apiTokenLabel, apiTokenPlaceholder } =
-    getConnectorCredentialConfig({
-      type: connectorType,
-      emailRequired,
-      mode: "edit",
-    });
+  const {
+    apiTokenHelpText,
+    apiTokenLabel,
+    apiTokenMultiline,
+    apiTokenPlaceholder,
+  } = getConnectorCredentialConfig({
+    type: connectorType,
+    emailRequired,
+    mode: "edit",
+    authMethod,
+  });
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
-    const hasCredentials = values.apiToken.length > 0;
+    // Any single credential field can be updated alone — the backend merges
+    // the submitted fields over the stored secret, so pasting only the admin
+    // API key (or correcting only the email) must not be dropped just because
+    // the token field is left empty to keep the existing token.
+    const hasCredentials =
+      values.email.length > 0 ||
+      values.apiToken.length > 0 ||
+      values.adminApiKey.length > 0;
     const result = await updateConnector.mutateAsync({
       id: connector.id,
       body: {
@@ -130,11 +167,16 @@ export function EditConnectorDialog({
         config: transformConfigArrayFields(
           values.config,
         ) as archestraApiTypes.CreateConnectorData["body"]["config"],
+        environmentId: values.environmentId,
         schedule: values.schedule,
+        ...(visibility === "auto-sync-permissions" && {
+          permissionSyncIntervalSeconds: values.permissionSyncIntervalSeconds,
+        }),
         ...(hasCredentials && {
           credentials: {
             ...(values.email && { email: values.email }),
-            apiToken: values.apiToken,
+            ...(values.apiToken && { apiToken: values.apiToken }),
+            ...(values.adminApiKey && { adminApiKey: values.adminApiKey }),
           },
         }),
       },
@@ -250,13 +292,30 @@ export function EditConnectorDialog({
             )}
           />
 
+          <FormField
+            control={form.control}
+            name="environmentId"
+            render={({ field }) => (
+              <EnvironmentSelector
+                value={field.value ?? null}
+                onChange={field.onChange}
+                resource="knowledgeSource"
+                helpText="The environment this connector belongs to, controlling which gateways and agents can use its knowledge."
+              />
+            )}
+          />
+
           <KnowledgeSourceVisibilitySelector
             visibility={visibility}
             onVisibilityChange={setVisibility}
             teamIds={teamIds}
             onTeamIdsChange={setTeamIds}
             showTeamRequired
+            supportsAutoSync={connectorSupportsAutoSync(connectorType)}
+            autoSyncPermissionAction="update"
           />
+
+          <div className="border-t" />
 
           {urlConfig && (
             <FormField
@@ -288,48 +347,85 @@ export function EditConnectorDialog({
           />
 
           {Boolean(apiTokenLabel) && (
-            <>
+            <FormField
+              control={form.control}
+              name="apiToken"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{apiTokenLabel}</FormLabel>
+                  <FormControl>
+                    {apiTokenMultiline ? (
+                      <SecretTextarea
+                        placeholder={apiTokenPlaceholder}
+                        rows={5}
+                        {...field}
+                      />
+                    ) : (
+                      <SecretInput
+                        placeholder={apiTokenPlaceholder}
+                        {...field}
+                      />
+                    )}
+                  </FormControl>
+                  <FormDescription>
+                    Leave empty to keep existing credentials unchanged.
+                  </FormDescription>
+                  {apiTokenHelpText}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          {visibility === "auto-sync-permissions" &&
+            connectorSupportsAdminApiKey(connectorType) && (
               <FormField
                 control={form.control}
-                name="apiToken"
+                name="adminApiKey"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{apiTokenLabel}</FormLabel>
+                    <FormLabel>Organization admin API key (optional)</FormLabel>
                     <FormControl>
-                      <Input
-                        type="password"
-                        placeholder={apiTokenPlaceholder}
-                        autoComplete="new-password"
-                        data-1p-ignore
-                        data-lpignore="true"
+                      <SecretInput
+                        placeholder="Atlassian organization admin API key"
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      Leave empty to keep existing credentials unchanged.
+                      <AdminApiKeyDescription type={connectorType} /> Leave
+                      empty to keep the existing key.
                     </FormDescription>
-                    {apiTokenHelpText}
                     <FormMessage />
                   </FormItem>
                 )}
               />
+            )}
 
-              <Collapsible>
-                <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
-                  <span className="text-sm font-medium">Advanced</span>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-4 space-y-4">
-                  <SchedulePicker form={form} name="schedule" />
-                  <ConnectorAdvancedConfigFields
-                    connectorType={connectorType}
-                    form={form}
-                    mode="edit"
-                  />
-                </CollapsibleContent>
-              </Collapsible>
-            </>
-          )}
+          <Collapsible>
+            <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+              <span className="text-sm font-medium">Advanced</span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-4 space-y-4">
+              <SchedulePicker
+                form={form}
+                name="schedule"
+                connectorTypeLabel={typeLabel}
+              />
+              {visibility === "auto-sync-permissions" && (
+                <PermissionSyncIntervalPicker
+                  form={form}
+                  name="permissionSyncIntervalSeconds"
+                  connectorTypeLabel={typeLabel}
+                />
+              )}
+              <ConnectorAdvancedConfigFields
+                connectorType={connectorType}
+                form={form}
+                mode="edit"
+              />
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       </Form>
     </StandardFormDialog>

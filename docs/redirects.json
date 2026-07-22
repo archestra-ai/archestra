@@ -1,0 +1,19 @@
+{
+  "$comment": "Redirects for renamed/deleted docs pages (URL = /docs/<file-name>), merged into the archestra-website redirect table at build. On rename/delete, append { source, destination, permanent: true } pointing at the final slug (no chains); if there's no equivalent, let it 404.",
+  "redirects": [
+    { "source": "/docs/platfrom-quickstart", "destination": "/docs/platform-quickstart", "permanent": true },
+    { "source": "/docs/platfrom-developer-quickstart", "destination": "/docs/platform-developer-quickstart", "permanent": true },
+    { "source": "/docs/developer-quickstart", "destination": "/docs/platform-developer-quickstart", "permanent": true },
+    { "source": "/platform-knowledge-connectors", "destination": "/docs/platform-knowledge", "permanent": true },
+    { "source": "/docs/platform-single-sign-on", "destination": "/docs/platform-identity-providers", "permanent": true },
+    { "source": "/docs/platform-knowledge-sync-internals", "destination": "/docs/platform-knowledge", "permanent": true },
+    { "source": "/docs/platform-lethal-trifecta", "destination": "/docs/platform-ai-tool-guardrails#the-lethal-trifecta", "permanent": true },
+    { "source": "/docs/platform-dual-llm", "destination": "/docs/platform-built-in-subagents#dual-llm-agent", "permanent": true },
+    { "source": "/docs/platform-built-in-agents-policy-config", "destination": "/docs/platform-built-in-subagents#policy-configuration-subagent", "permanent": true },
+    { "source": "/docs/platform-security-concepts", "destination": "/docs/platform-ai-tool-guardrails", "permanent": true },
+    { "source": "/docs/platform-knowledge-architecture", "destination": "/docs/platform-knowledge", "permanent": true },
+    { "source": "/docs/platform-knowledge-bases", "destination": "/docs/platform-knowledge", "permanent": true },
+    { "source": "/docs/platform-knowledge-connectors", "destination": "/docs/platform-knowledge", "permanent": true },
+    { "source": "/docs/platform-migration-kit", "destination": "/docs/platform-migrate-from-claude-openclaw-hermes", "permanent": true }
+  ]
+}

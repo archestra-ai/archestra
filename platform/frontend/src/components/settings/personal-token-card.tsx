@@ -1,8 +1,10 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { Key } from "lucide-react";
-import { useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";
 import { PlatformTokenCard } from "@/components/tokens/platform-token-card";
 import { Button } from "@/components/ui/button";
@@ -12,12 +14,33 @@ export function PersonalTokenCard() {
   const { data: token, isLoading, error } = useUserToken();
   const rotateMutation = useRotateUserToken();
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const highlight = searchParams.get("highlight");
+  const tokenExists = !!token;
+
+  // Deep link from connection instructions ("Manage your personal token"):
+  // ?highlight=personal-token opens the token dialog once the token loads.
+  useEffect(() => {
+    if (highlight === "personal-token" && tokenExists) {
+      setTokenDialogOpen(true);
+    }
+  }, [highlight, tokenExists]);
 
   return (
     <>
       <PlatformTokenCard
         title="MCP Gateway/A2A Gateway Token"
-        description="Your personal token to authenticate with Agents / MCP Gateways."
+        description={
+          <>
+            Your personal token for calling Agents through MCP Gateways and A2A
+            — used by the{" "}
+            <Link href="/connection" className="underline underline-offset-4">
+              Connect
+            </Link>{" "}
+            page setup snippets and by chat when it executes tools as you. It
+            does not grant access to the platform API.
+          </>
+        }
         isLoading={isLoading}
         error={error}
         tokenExists={!!token}
@@ -39,7 +62,7 @@ export function PersonalTokenCard() {
           token={token}
           open={tokenDialogOpen}
           onOpenChange={setTokenDialogOpen}
-          description="Personal token for Agents / MCP Gateways you can access."
+          description="Your personal token for calling Agents you can access through MCP Gateways and A2A."
           fetchTokenValue={async () => {
             const response = await archestraApiSdk.getUserTokenValue();
             return (

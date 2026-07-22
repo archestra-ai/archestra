@@ -1,0 +1,191 @@
+{
+  "name": "thingsboard__thingsboard-mcp",
+  "display_name": "thingsboard-mcp",
+  "description": "MCP server from thingsboard/thingsboard-mcp",
+  "author": {
+    "name": "thingsboard"
+  },
+  "server": {
+    "command": "java",
+    "args": ["-jar", "${__dirname}/thingsboard-mcp-server-1.0.0.jar"],
+    "env": {
+      "THINGSBOARD_URL": "${user_config.thingsboard_url}",
+      "THINGSBOARD_USERNAME": "${user_config.thingsboard_username}",
+      "THINGSBOARD_PASSWORD": "${user_config.thingsboard_password}",
+      "SPRING_AI_MCP_SERVER_STDIO": "${user_config.spring_ai_mcp_server_stdio}",
+      "SPRING_WEB_APPLICATION_TYPE": "${user_config.spring_web_application_type}"
+    },
+    "type": "local"
+  },
+  "readme": "# ThingsBoard MCP Server\n\n[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/thingsboard/mcp-server/blob/master/README.md) [![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/thingsboard/thingsboard-mcp)](https://archestra.ai/mcp-catalog/thingsboard__thingsboard-mcp)\n\n## Table of Contents\n\n- [Overview](#overview)\n- [Requirements](#requirements)\n- [Features](#features)\n  - [Entity Operations](#entity-operations)\n  - [Telemetry Management](#telemetry-management)\n  - [Relations](#relations)\n  - [Alarms](#alarms)\n  - [Administration](#administration)\n- [Quick Start Guide](#quick-start-guide)\n- [Installation](#installation)\n  - [Docker Image](#docker-image)\n  - [Build from Sources](#build-from-sources)\n- [Client Configuration](#client-configuration)\n  - [Binary Configuration](#binary-configuration)\n  - [Docker Configuration](#docker-configuration)\n- [Environment Variables](#environment-variables)\n- [Available Tools](#available-tools)\n  - [Device Tools](#device-tools)\n  - [Asset Tools](#asset-tools)\n  - [Customer Tools](#customer-tools)\n  - [User Tools](#user-tools)\n  - [Alarm Tools](#alarm-tools)\n  - [Entity Group Tools](#entity-group-tools)\n  - [Relation Tools](#relation-tools)\n  - [Telemetry Tools](#telemetry-tools)\n  - [Admin Tools](#admin-tools)\n\n## Overview\n\nThe ThingsBoard MCP Server provides a **natural language interface** for LLMs and AI agents to interact with your ThingsBoard IoT platform. \n\nYou can ask questions such as “Get my devices of type 'Air Quality Sensor'” and receive structured results:\n\n![Get My Devices Example](images/get_my_devices_example.png)\n\nYou can request to simulate or save time-series data in ThingsBoard:\n\n![Generate Sample Data Example](images/generate_sample_data_example.png)\n\n![Generated Data In ThingsBoard](images/generated_data_in_tb_example.png)\n\nOr, you can ask it to analyze your time-series data to find anomalies, spikes, or data gaps:\n\n![Analyze Data Example](images/analyze_data_example.png)\n\n![Analyze Data Result](images/analyze_result_example.png)\n\nThis server implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro), which enables AI systems to access and manipulate data in ThingsBoard through natural language commands. With this integration, you can:\n\n- Query entities (device, asset, customer, etc.) data and telemetry using conversational language\n- Manage entities through AI assistants\n- Analyze IoT data and create reports using AI tools\n- Automate ThingsBoard operations through AI-powered workflows\n\nThe server integrates seamlessly with MCP clients such as Claude Desktop, Cursor, and other AI applications that support the MCP protocol.\n\n## Requirements\n\nBefore you begin, ensure you have the following:\n\n- **ThingsBoard instance** - A running ThingsBoard instance that the MCP server can connect to. You can use any of the following options:\n  - **Local/On-premise Community Edition**: Self-hosted installation on your own [infrastructure](https://thingsboard.io/docs/user-guide/install/installation-options/), or\n  - **Local/On-premise Professional Edition**: Self-hosted installation on your own [infrastructure](https://thingsboard.io/docs/user-guide/install/pe/installation-options/), or\n  - **ThingsBoard Demo**: Free shared instance at [demo.thingsboard.io](https://demo.thingsboard.io), or\n  - **ThingsBoard Cloud**: Fully managed cloud service at [thingsboard.cloud](https://thingsboard.cloud), or\n  - **EU ThingsBoard Cloud**: Fully managed cloud service at [eu.thingsboard.cloud](https://eu.thingsboard.cloud), or\n  - **ThingsBoard Edge instance** [up and running](https://thingsboard.io/docs/user-guide/install/edge/installation-options/)\n- **Authentication credentials** - Valid username and password with appropriate permissions on the ThingsBoard instance\n\n## Quick Start Guide\n\n1. **Configure your MCP client**: Add the ThingsBoard MCP server to your client configuration (see [Client Configuration](#client-configuration))\n2. **Start using natural language**: Begin interacting with your ThingsBoard instance through your MCP client\n\n## Features\n\n### Entity Operations\n\n- **Devices**: View device details, credentials, profiles, and manage device relationships\n- **Assets**: View and manage assets, asset profiles, and asset relationships\n- **Customers**: Access customer information, titles, and manage customer relationships\n- **Users**: Manage users, tokens, activation links, and user assignments\n\n### Telemetry Management\n\n- **Attribute Access**: Retrieve attribute keys and values by scope for any entity\n- **Time-series Access**: Get time-series data with various aggregation options\n- **Telemetry Insert/Update**: Save attributes or time-series data with optional TTL settings\n\n### Relations\n\nDiscover and navigate relationships between entities with direction-based queries.\n\n### Alarms\n\nFetch alarms, alarm types, and severity information for specific entities.\n\n### Administration\n\n- **System Settings**: Access and manage administration settings\n- **Security Settings**: View security policies and JWT configuration\n- **Version Control**: Manage repository and auto-commit settings\n- **System Information**: Check for updates and retrieve usage statistics\n\n## Installation\n\nThis MCP server works with ThingsBoard IoT Platform or ThingsBoard Edge. You'll need your ThingsBoard instance or Edge URL and valid credentials for the installation.\n\n### ThingsBoard Account\n\nBefore installing the MCP server, ensure you have:\n1. Access to a ThingsBoard or Edge instance\n2. A user account with sufficient permissions\n3. The username and password for this account\n\n### Docker Image\n\nThe easiest way to get started is with the pre-built Docker image from Docker Hub.\n\n#### Server Modes\n\nThe ThingsBoard MCP Server can run in two different modes:\n\n- **STDIO Mode (Standard Input/Output)**: The server communicates directly through standard input/output streams\n- **SSE Mode (Server-Sent Events)**: The server runs as an HTTP server that clients connect to\n\n#### Running in STDIO Mode (Default)\n\nFor STDIO Mode, you must include the `-i` flag to keep stdin open:\n\n```bash\ndocker pull thingsboard/mcp\ndocker run --rm -i -e THINGSBOARD_URL=<your_thingsboard_url> -e THINGSBOARD_USERNAME=<your_username> -e THINGSBOARD_PASSWORD=<your_password> thingsboard/mcp\n```\n\n#### Running in SSE Mode\n\nIn SSE Mode, you must expose port 8000 using the `-p` flag and explicitly override the default settings :\n\n```bash\ndocker pull thingsboard/mcp\ndocker run --rm -p 8000:8000 -e THINGSBOARD_URL=<your_thingsboard_url> -e THINGSBOARD_USERNAME=<your_username> -e THINGSBOARD_PASSWORD=<your_password> -e SPRING_AI_MCP_SERVER_STDIO=false -e SPRING_WEB_APPLICATION_TYPE=servlet thingsboard/mcp\n```\n\n### Download release binary\n\nAlternatively, you can download the release binary (JAR file) and use it with the LLM Agent.\nRun the following command to download the binary to your PC:\n\n```bash\nwget https://github.com/thingsboard/thingsboard-mcp/releases/download/v1.0.0/thingsboard-mcp-server-1.0.0.jar\n```\n\n### Build from Sources\n\nYou can also build the JAR file from sources and run the ThingsBoard MCP Server directly.\n\n#### Prerequisites\n\n- Java 17 or later\n- Maven 3.6 or later\n\n#### Build Steps\n\n1. Clone this repository\n2. Build the project:\n\n```bash\nmvn clean install -DskipTests\n```\n\n3. The JAR file will be available in the target folder:\n\n```bash\n./target/thingsboard-mcp-server-1.0.0.jar\n```\n\n4. Run the server using the JAR file:\n\n```bash\n# For STDIO Mode\njava -jar ./target/thingsboard-mcp-server-1.0.0.jar\n```\n\n```bash\n# For SSE Mode\njava -Dspring.ai.mcp.server.stdio=false Dspring.main.web-application-type=servlet -jar ./target/thingsboard-mcp-server-1.0.0.jar\n```\n\n## Client Configuration\n\nTo launch the server as a container when your MCP client starts (e.g., Claude Desktop), you need to add the appropriate configuration to your client's settings.\n\n### Docker Configuration\n\nIf you're using the Docker image, use this configuration in your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"thingsboard\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"THINGSBOARD_URL\",\n        \"-e\",\n        \"THINGSBOARD_USERNAME\",\n        \"-e\",\n        \"THINGSBOARD_PASSWORD\",\n        \"-e\",\n        \"LOGGING_PATTERN_CONSOLE\",\n        \"thingsboard/mcp\"\n      ],\n      \"env\": {\n        \"THINGSBOARD_URL\": \"<thingsboard_url>\",\n        \"THINGSBOARD_USERNAME\": \"<thingsboard_username>\",\n        \"THINGSBOARD_PASSWORD\": \"<thingsboard_password>\",\n        \"LOGGING_PATTERN_CONSOLE\": \"\"\n      }\n    }\n  }\n}\n```\n\n### Binary Configuration\n\nIf you've built the JAR file from sources, use this configuration in your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"thingsboard\": {\n      \"command\": \"java\",\n      \"args\": [\n        \"-jar\",\n        \"/absolute/path/to/thingsboard-mcp-server-1.0.0.jar\"\n      ],\n      \"env\": {\n        \"THINGSBOARD_URL\": \"<thingsboard_url>\",\n        \"THINGSBOARD_USERNAME\": \"<thingsboard_username>\",\n        \"THINGSBOARD_PASSWORD\": \"<thingsboard_password>\",\n        \"LOGGING_PATTERN_CONSOLE\": \"\"\n      }\n    }\n  }\n}\n```\n\n## Environment Variables\n\nThe MCP server requires the following environment variables to connect to your ThingsBoard instance:\n\n| Variable | Description                                    | Default |\n|----------|------------------------------------------------|---------|\n| `THINGSBOARD_URL` | The base URL of your ThingsBoard instance      | |\n| `THINGSBOARD_USERNAME` | Username used to authenticate with ThingsBoard | |\n| `THINGSBOARD_PASSWORD` | Password used to authenticate with ThingsBoard | |\n| `THINGSBOARD_LOGIN_INTERVAL_SECONDS` | Login session refresh interval in seconds      | 1800 |\n| `SPRING_WEB_APPLICATION_TYPE` | Spring application type (none or servlet)     | none |\n| `SPRING_AI_MCP_SERVER_STDIO` | Enable/disable standard I/O communication      | true |\n| `SPRING_AI_MCP_SERVER_SSE_ENDPOINT` | Server-Sent Events (SSE) endpoint URL          | /sse |\n| `SPRING_AI_MCP_SERVER_SSE_MESSAGE_ENDPOINT` | Server-Sent Events message endpoint URL        | /mcp/message |\n| `LOGGING_PATTERN_CONSOLE` | Logback console log pattern |  |\n| `SERVER_PORT` | HTTP server port number                        | 8080 |\n\nThese variables can be set either:\n- Directly via Docker command line using the `-e` flag\n- Or through the `env` configuration block in your MCP client setup\n\n## Available Tools\n\nThe ThingsBoard MCP Server provides a wide range of tools that can be used through natural language commands. These tools are organized by category.\n\n### Device Tools\n\n| Tool | Description |\n|------|-------------|\n| `getDeviceById` | Fetch the Device object based on the provided Device Id. |\n| `getDeviceCredentialsByDeviceId` | Get device credentials by device id. If during device creation there wasn't specified any credentials, platform generates random 'ACCESS_TOKEN' credentials. |\n| `getTenantDevices` | Returns a page of devices owned by tenant. |\n| `getTenantDevice` | Get tenant device by name. Device name is a unique property of device. |\n| `getCustomerDevices` | Returns a page of devices objects assigned to customer. |\n| `getUserDevices` | Returns a page of device objects available for the current user. |\n| `getDevicesByIds` | Get Devices By Ids. Requested devices must be owned by tenant or assigned to customer. |\n| `getDevicesByEntityGroupId` | Returns a page of device objects that belongs to specified Entity Group Id. |\n\n### Asset Tools\n\n| Tool | Description |\n|------|-------------|\n| `getAssetById` | Get the Asset object based on the provided Asset Id. |\n| `getTenantAssets` | Returns a page of assets owned by tenant. |\n| `getTenantAsset` | Get tenant asset by name. Asset name is a unique property of asset. |\n| `getCustomerAssets` | Returns a page of assets objects assigned to customer. |\n| `getUserAssets` | Returns a page of assets objects available for the current user. |\n| `getAssetsByIds` | Get Assets By Ids. Requested assets must be owned by tenant or assigned to customer. |\n| `getAssetsByEntityGroupId` | Returns a page of asset objects that belongs to specified Entity Group Id. |\n\n### Customer Tools\n\n| Tool | Description |\n|------|-------------|\n| `getCustomerById` | Get the Customer object based on the provided Customer Id. |\n| `getCustomers` | Returns a page of customers owned by tenant. |\n| `getTenantCustomer` | Get the Customer using Customer Title. |\n| `getUserCustomers` | Returns a page of customers available for the user. |\n| `getCustomersByEntityGroupId` | Returns a page of Customer objects that belongs to specified Entity Group Id. |\n\n### User Tools\n\n| Tool | Description |\n|------|-------------|\n| `getUserById` | Fetch the User object based on the provided User Id. |\n| `getUsers` | Returns a page of users owned by tenant or customer. |\n| `getTenantAdmins` | Returns a page of tenant administrator users assigned to the specified tenant. |\n| `getCustomerUsers` | Returns a page of users assigned to the specified customer. |\n| `getAllCustomerUsers` | Returns a page of users for the current tenant with authority 'CUSTOMER_USER'. |\n| `getUsersForAssign` | Returns page of user data objects that can be assigned to provided alarmId. |\n| `getUsersByEntityGroupId` | Returns a page of user objects that belongs to specified Entity Group Id. |\n\n### Alarm Tools\n\n| Tool | Description |\n|------|-------------|\n| `getAlarmById` | Get the Alarm object based on the provided alarm id. |\n| `getAlarmInfoById` | Get the Alarm info object based on the provided alarm id. |\n| `getAlarms` | Get a page of alarms for the selected entity. |\n| `getAllAlarms` | Get a page of alarms that belongs to the current user owner. |\n| `getHighestAlarmSeverity` | Get highest alarm severity by originator and optional status filters. |\n| `getAlarmTypes` | Get a set of unique alarm types based on alarms that are either owned by tenant or assigned to the customer. |\n\n### Entity Group Tools\n\n| Tool | Description |\n|------|-------------|\n| `getEntityGroupById` | Fetch the Entity Group object based on the provided Entity Group Id. |\n| `getEntityGroupsByType` | Fetch the list of Entity Group Info objects based on the provided Entity Type. |\n| `getEntityGroupByOwnerAndNameAndType` | Fetch the Entity Group object based on the provided owner, type and name. |\n| `getEntityGroupsByOwnerAndType` | Fetch the list of Entity Group Info objects based on the provided Owner Id and Entity Type. |\n| `getEntityGroupsForEntity` | Returns a list of groups that contain the specified Entity Id. |\n| `getEntityGroupsByIds` | Fetch the list of Entity Group Info objects based on the provided entity group ids list. |\n\n### Relation Tools\n\n| Tool | Description |\n|------|-------------|\n| `getRelation` | Returns relation object between two specified entities if present. |\n| `findByFrom` | Returns list of relation objects for the specified entity by the 'from' direction. |\n| `findByFromWithRelationType` | Returns list of relation objects for the specified entity by the 'from' direction and relation type. |\n| `findInfoByFrom` | Returns list of relation info objects for the specified entity by the 'from' direction. |\n| `findByTo` | Returns list of relation objects for the specified entity by the 'to' direction. |\n| `findByToWithRelationType` | Returns list of relation objects for the specified entity by the 'to' direction and relation type. |\n| `findInfoByTo` | Returns list of relation info objects for the specified entity by the 'to' direction. |\n\n### Telemetry Tools\n\n| Tool | Description |\n|------|-------------|\n| `getAttributeKeys` | Get all attribute keys for the specified entity. |\n| `getAttributeKeysByScope` | Get all attribute keys for the specified entity and scope. |\n| `getAttributes` | Get attributes for the specified entity. |\n| `getAttributesByScope` | Get attributes for the specified entity and scope. |\n| `getTimeseriesKeys` | Get all time-series keys for the specified entity. |\n| `getLatestTimeseries` | Get the latest time-series values for the specified entity and keys. |\n| `getTimeseries` | Get time-series data for the specified entity, keys, and time range. |\n| `saveDeviceAttributes` | Save device attributes. |\n| `saveEntityAttributesV1` | Save entity attributes (version 1). |\n| `saveEntityAttributesV2` | Save entity attributes (version 2). |\n| `saveEntityTelemetry` | Save entity telemetry data. |\n| `saveEntityTelemetryWithTTL` | Save entity telemetry data with time-to-live (TTL). |\n\n### Admin Tools\n\n| Tool | Description |\n|------|-------------|\n| `getAdminSettings` | Get the Administration Settings object using specified string key. |\n| `getSecuritySettings` | Get the Security settings object that contains password policy, lockout limits, etc. |\n| `getSystemInfo` | Get main information about system. |\n| `getUsageInfo` | Retrieves usage statistics for the current tenant. |\n",
+  "category": "AI Tools",
+  "quality_score": 31,
+  "programming_language": "Java",
+  "framework": null,
+  "github_info": {
+    "owner": "thingsboard",
+    "repo": "thingsboard-mcp",
+    "url": "https://github.com/thingsboard/thingsboard-mcp",
+    "name": "thingsboard__thingsboard-mcp",
+    "path": null,
+    "stars": 66,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "adac2d247c408487ef1f99ebb65f8889792dc632"
+  },
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "spring-ai-starter-mcp-server-webmvc",
+      "importance": 10
+    },
+    {
+      "name": "spring-web",
+      "importance": 9
+    },
+    {
+      "name": "data",
+      "importance": 9
+    },
+    {
+      "name": "util",
+      "importance": 8
+    },
+    {
+      "name": "hibernate-validator",
+      "importance": 7
+    },
+    {
+      "name": "lombok",
+      "importance": 4
+    },
+    {
+      "name": "java-jwt",
+      "importance": 8
+    }
+  ],
+  "user_config": {
+    "thingsboard_url": {
+      "type": "string",
+      "title": "ThingsBoard URL",
+      "description": "URL of your ThingsBoard instance (e.g., https://demo.thingsboard.io)",
+      "required": true,
+      "sensitive": false
+    },
+    "thingsboard_username": {
+      "type": "string",
+      "title": "ThingsBoard Username",
+      "description": "Username for your ThingsBoard account",
+      "required": true,
+      "sensitive": false
+    },
+    "thingsboard_password": {
+      "type": "string",
+      "title": "ThingsBoard Password",
+      "description": "Password for your ThingsBoard account",
+      "required": true,
+      "sensitive": true
+    },
+    "spring_ai_mcp_server_stdio": {
+      "type": "boolean",
+      "title": "Run in STDIO Mode",
+      "description": "Set to false to run in SSE (HTTP) mode. Default is true (STDIO).",
+      "required": false,
+      "default": true
+    },
+    "spring_web_application_type": {
+      "type": "string",
+      "title": "Spring Web Application Type",
+      "description": "Specifies the web application type (e.g., 'servlet' for SSE mode). Only relevant if not running in STDIO mode.",
+      "required": false
+    }
+  },
+  "archestra_config": {
+    "client_config_permutations": {
+      "thingsboard-mcp-docker-stdio": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "-e",
+          "THINGSBOARD_URL=<your_thingsboard_url>",
+          "-e",
+          "THINGSBOARD_USERNAME=<your_username>",
+          "-e",
+          "THINGSBOARD_PASSWORD=<your_password>",
+          "thingsboard/mcp"
+        ],
+        "env": {
+          "THINGSBOARD_URL": "<your_thingsboard_url>",
+          "THINGSBOARD_USERNAME": "<your_username>",
+          "THINGSBOARD_PASSWORD": "<your_password>"
+        },
+        "docker_image": "thingsboard/mcp"
+      },
+      "thingsboard-mcp-docker-sse": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-p",
+          "8000:8000",
+          "-e",
+          "THINGSBOARD_URL=<your_thingsboard_url>",
+          "-e",
+          "THINGSBOARD_USERNAME=<your_username>",
+          "-e",
+          "THINGSBOARD_PASSWORD=<your_password>",
+          "-e",
+          "SPRING_AI_MCP_SERVER_STDIO=false",
+          "-e",
+          "SPRING_WEB_APPLICATION_TYPE=servlet",
+          "thingsboard/mcp"
+        ],
+        "env": {
+          "THINGSBOARD_URL": "<your_thingsboard_url>",
+          "THINGSBOARD_USERNAME": "<your_username>",
+          "THINGSBOARD_PASSWORD": "<your_password>",
+          "SPRING_AI_MCP_SERVER_STDIO": "false",
+          "SPRING_WEB_APPLICATION_TYPE": "servlet"
+        },
+        "docker_image": "thingsboard/mcp"
+      },
+      "thingsboard-mcp-server-jar-stdio": {
+        "command": "java",
+        "args": ["-jar", "./target/thingsboard-mcp-server-1.0.0.jar"],
+        "env": {}
+      },
+      "thingsboard-mcp-server-jar-sse": {
+        "command": "java",
+        "args": [
+          "-Dspring.ai.mcp.server.stdio=false",
+          "-Dspring.main.web-application-type=servlet",
+          "-jar",
+          "./target/thingsboard-mcp-server-1.0.0.jar"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-flash",
+  "raw_dependencies": "=== pom.xml ===\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\"\n         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n    <modelVersion>4.0.0</modelVersion>\n\n    <groupId>org.thingsboard</groupId>\n    <artifactId>thingsboard-mcp-server</artifactId>\n    <version>1.0.0</version>\n    <name>ThingsBoard MCP server</name>\n    <description>MCP server for ThingsBoard platform</description>\n\n    <properties>\n        <spring-boot.version>3.4.8</spring-boot.version>\n        <spring.ai.version>1.0.1</spring.ai.version>\n        <thingsboard.version>4.0.0PE</thingsboard.version>\n        <lombok.version>1.18.32</lombok.version>\n        <auth0-jwt.version>4.4.0</auth0-jwt.version>\n        <surefire.version>3.2.5</surefire.version>\n    </properties>\n\n    <dependencyManagement>\n        <dependencies>\n            <dependency>\n                <groupId>org.springframework.boot</groupId>\n                <artifactId>spring-boot-dependencies</artifactId>\n                <version>${spring-boot.version}</version>\n                <type>pom</type>\n                <scope>import</scope>\n            </dependency>\n            <dependency>\n                <groupId>org.springframework.ai</groupId>\n                <artifactId>spring-ai-bom</artifactId>\n                <version>${spring.ai.version}</version>\n                <type>pom</type>\n                <scope>import</scope>\n            </dependency>\n            <dependency>\n                <groupId>org.thingsboard.common</groupId>\n                <artifactId>data</artifactId>\n                <version>${thingsboard.version}</version>\n            </dependency>\n            <dependency>\n                <groupId>org.thingsboard.common</groupId>\n                <artifactId>util</artifactId>\n                <version>${thingsboard.version}</version>\n            </dependency>\n            <dependency>\n                <groupId>org.projectlombok</groupId>\n                <artifactId>lombok</artifactId>\n                <version>${lombok.version}</version>\n            </dependency>\n            <dependency>\n                <groupId>com.auth0</groupId>\n                <artifactId>java-jwt</artifactId>\n                <version>${auth0-jwt.version}</version>\n            </dependency>\n            <dependency>\n                <groupId>org.springframework.boot</groupId>\n                <artifactId>spring-boot-starter-test</artifactId>\n                <version>${spring-boot.version}</version>\n                <scope>test</scope>\n                <exclusions>\n                    <exclusion>\n                        <groupId>com.vaadin.external.google</groupId>\n                        <artifactId>android-json</artifactId>\n                    </exclusion>\n                </exclusions>\n            </dependency>\n        </dependencies>\n    </dependencyManagement>\n\n    <dependencies>\n        <dependency>\n            <groupId>org.springframework.ai</groupId>\n            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>org.springframework</groupId>\n            <artifactId>spring-web</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>org.springframework.boot</groupId>\n            <artifactId>spring-boot-starter-test</artifactId>\n            <scope>test</scope>\n        </dependency>\n        <dependency>\n            <groupId>org.thingsboard.common</groupId>\n            <artifactId>data</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>org.thingsboard.common</groupId>\n            <artifactId>util</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>org.hibernate.validator</groupId>\n            <artifactId>hibernate-validator</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>org.projectlombok</groupId>\n            <artifactId>lombok</artifactId>\n            <scope>provided</scope>\n        </dependency>\n        <dependency>\n            <groupId>com.auth0</groupId>\n            <artifactId>java-jwt</artifactId>\n        </dependency>\n    </dependencies>\n\n    <build>\n        <plugins>\n            <plugin>\n                <groupId>org.apache.maven.plugins</groupId>\n                <artifactId>maven-compiler-plugin</artifactId>\n                <version>3.11.0</version>\n                <configuration>\n                    <release>17</release>\n                    <compilerArgs>\n                        <arg>-Xlint:deprecation</arg>\n                        <arg>-Xlint:removal</arg>\n                        <arg>-Xlint:unchecked</arg>\n                        <arg>-parameters</arg>\n                    </compilerArgs>\n                    <annotationProcessorPaths>\n                        <path>\n                            <groupId>org.projectlombok</groupId>\n                            <artifactId>lombok</artifactId>\n                            <version>${lombok.version}</version>\n                        </path>\n                        <path>\n                            <groupId>org.springframework.boot</groupId>\n                            <artifactId>spring-boot-configuration-processor</artifactId>\n                            <version>${spring-boot.version}</version>\n                        </path>\n                    </annotationProcessorPaths>\n                </configuration>\n            </plugin>\n            <plugin>\n                <groupId>org.apache.maven.plugins</groupId>\n                <artifactId>maven-surefire-plugin</artifactId>\n                <version>${surefire.version}</version>\n                <configuration>\n                    <argLine>\n                        -XX:+UseStringDeduplication -XX:MaxGCPauseMillis=20\n                        --add-opens java.base/java.lang.reflect=ALL-UNNAMED\n                    </argLine>\n                </configuration>\n            </plugin>\n            <plugin>\n                <groupId>org.springframework.boot</groupId>\n                <artifactId>spring-boot-maven-plugin</artifactId>\n                <version>${spring-boot.version}</version>\n                <configuration>\n                    <mainClass>org.thingsboard.ai.mcp.server.McpServerApplication</mainClass>\n                </configuration>\n                <executions>\n                    <execution>\n                        <id>repackage</id>\n                        <phase>package</phase>\n                        <goals>\n                            <goal>repackage</goal>\n                        </goals>\n                    </execution>\n                </executions>\n            </plugin>\n        </plugins>\n    </build>\n\n    <repositories>\n        <repository>\n            <id>spring-milestones</id>\n            <name>Spring Milestones</name>\n            <url>https://repo.spring.io/milestone</url>\n            <snapshots>\n                <enabled>false</enabled>\n            </snapshots>\n        </repository>\n        <repository>\n            <id>spring-snapshots</id>\n            <name>Spring Snapshots</name>\n            <url>https://repo.spring.io/snapshot</url>\n            <releases>\n                <enabled>false</enabled>\n            </releases>\n            <snapshots>\n                <enabled>true</enabled>\n            </snapshots>\n        </repository>\n        <repository>\n            <id>central-portal-snapshots</id>\n            <name>Central Portal Snapshots</name>\n            <url>https://central.sonatype.com/repository/maven-snapshots/</url>\n            <releases>\n                <enabled>false</enabled>\n            </releases>\n            <snapshots>\n                <enabled>true</enabled>\n            </snapshots>\n        </repository>\n        <repository>\n            <id>thingsboard</id>\n            <url>https://repo.thingsboard.io/artifactory/libs-release-public</url>\n        </repository>\n    </repositories>\n\n</project>\n",
+  "last_scraped_at": "2025-09-09T13:06:54.420Z"
+}

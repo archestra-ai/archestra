@@ -4,7 +4,9 @@
  * Unit tests for shared helper functions extracted from llm-proxy-handler.ts.
  */
 
+import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
+import type { FastifyReply } from "fastify";
 import { vi } from "vitest";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import { describe, expect, test } from "@/test";
@@ -33,6 +35,18 @@ const mockCalculateCost =
       provider: string,
     ) => Promise<number | undefined>
   >();
+const mockCalculateCacheCost =
+  vi.fn<
+    (
+      model: string,
+      provider: string,
+      readTokens: number,
+      writeTokens: number,
+    ) => Promise<
+      | { cacheCost: number; cacheSavings: number; cacheReadSavings: number }
+      | undefined
+    >
+  >();
 vi.mock("@/routes/proxy/utils/cost-optimization", async (importOriginal) => {
   const original =
     await importOriginal<
@@ -42,6 +56,8 @@ vi.mock("@/routes/proxy/utils/cost-optimization", async (importOriginal) => {
     ...original,
     calculateCost: (...args: Parameters<typeof mockCalculateCost>) =>
       mockCalculateCost(...args),
+    calculateCacheCost: (...args: Parameters<typeof mockCalculateCacheCost>) =>
+      mockCalculateCacheCost(...args),
   };
 });
 
@@ -58,28 +74,17 @@ vi.mock("@/observability/tracing", async (importOriginal) => {
 });
 
 // Mock metrics
-const mockReportBlockedTools = vi.fn();
-vi.mock("@/observability", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/observability")>();
-  return {
-    ...original,
-    metrics: {
-      ...original.metrics,
-      llm: {
-        ...original.metrics.llm,
-        reportBlockedTools: (...args: unknown[]) =>
-          mockReportBlockedTools(...args),
-      },
-    },
-  };
-});
+vi.mock("@/observability");
 
 // Import after mocks
+import { metrics } from "@/observability";
 import {
   buildInteractionRecord,
   calculateInteractionCosts,
+  handleError,
   normalizeToolCallsForPolicy,
   recordBlockedToolCallMetrics,
+  shouldForwardAnthropicBeta,
   toSpanUserInfo,
   withSessionContext,
 } from "./llm-proxy-helpers";
@@ -97,12 +102,8 @@ describe("toSpanUserInfo", () => {
     });
   });
 
-  test("returns null for null input", () => {
-    expect(toSpanUserInfo(null)).toBeNull();
-  });
-
-  test("returns null for undefined input", () => {
-    expect(toSpanUserInfo(undefined)).toBeNull();
+  test.each([null, undefined])("returns null for %s input", (input) => {
+    expect(toSpanUserInfo(input)).toBeNull();
   });
 });
 
@@ -169,6 +170,11 @@ describe("calculateInteractionCosts", () => {
     mockCalculateCost
       .mockResolvedValueOnce(0.001) // baseline
       .mockResolvedValueOnce(0.0005); // actual
+    mockCalculateCacheCost.mockResolvedValue({
+      cacheCost: 0.0001,
+      cacheSavings: 0.0009,
+      cacheReadSavings: 0.001,
+    });
 
     const result = await calculateInteractionCosts({
       baselineModel: "gpt-4",
@@ -177,14 +183,28 @@ describe("calculateInteractionCosts", () => {
       providerName: "openai",
     });
 
-    expect(result).toEqual({ baselineCost: 0.001, actualCost: 0.0005 });
+    expect(result).toEqual({
+      baselineCost: 0.001,
+      actualCost: 0.0005,
+      cacheCost: 0.0001,
+      cacheSavings: 0.0009,
+      cacheReadSavings: 0.001,
+    });
     expect(mockCalculateCost).toHaveBeenCalledTimes(2);
-    expect(mockCalculateCost).toHaveBeenCalledWith("gpt-4", 100, 50, "openai");
+    const cacheTokens = { readTokens: 0, writeTokens: 0, write1hTokens: 0 };
+    expect(mockCalculateCost).toHaveBeenCalledWith(
+      "gpt-4",
+      100,
+      50,
+      "openai",
+      cacheTokens,
+    );
     expect(mockCalculateCost).toHaveBeenCalledWith(
       "gpt-3.5-turbo",
       100,
       50,
       "openai",
+      cacheTokens,
     );
   });
 
@@ -204,6 +224,7 @@ describe("calculateInteractionCosts", () => {
 
   test("handles undefined costs (model not found)", async () => {
     mockCalculateCost.mockResolvedValue(undefined);
+    mockCalculateCacheCost.mockResolvedValue(undefined);
 
     const result = await calculateInteractionCosts({
       baselineModel: "unknown-model",
@@ -215,6 +236,9 @@ describe("calculateInteractionCosts", () => {
     expect(result).toEqual({
       baselineCost: undefined,
       actualCost: undefined,
+      cacheCost: undefined,
+      cacheSavings: undefined,
+      cacheReadSavings: undefined,
     });
   });
 });
@@ -236,8 +260,18 @@ describe("buildInteractionRecord", () => {
     response: { id: "resp-1" },
     actualModel: "gpt-3.5-turbo",
     baselineModel: "gpt-4",
-    usage: { inputTokens: 100, outputTokens: 50 },
-    costs: { baselineCost: 0.001, actualCost: 0.0005 },
+    usage: {
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheReadTokens: 80,
+      cacheWriteTokens: 20,
+    },
+    costs: {
+      baselineCost: 0.001,
+      actualCost: 0.0005,
+      cacheCost: 0.0002,
+      cacheSavings: 0.0018,
+    },
     toonStats: {
       tokensBefore: 500,
       tokensAfter: 300,
@@ -247,6 +281,7 @@ describe("buildInteractionRecord", () => {
     } satisfies ToolCompressionStats,
     toonSkipReason: null,
     dualLlmAnalyses: [],
+    billingMode: "metered" as const,
   };
 
   test("builds correct record with all fields", () => {
@@ -272,6 +307,7 @@ describe("buildInteractionRecord", () => {
     expect(record.response).toEqual({ id: "resp-1" });
     expect(record.model).toBe("gpt-3.5-turbo");
     expect(record.baselineModel).toBe("gpt-4");
+    expect(record.billingMode).toBe("metered");
     expect(record.inputTokens).toBe(100);
     expect(record.outputTokens).toBe(50);
     expect(record.toonTokensBefore).toBe(500);
@@ -285,21 +321,44 @@ describe("buildInteractionRecord", () => {
     });
   });
 
+  test("carries a subscription billing mode through to the record", () => {
+    const record = buildInteractionRecord({
+      ...baseParams,
+      billingMode: "subscription",
+    });
+
+    expect(record.billingMode).toBe("subscription");
+    // `cost` is unchanged — it remains the list-price estimate; billed spend is
+    // derived downstream from billingMode, not by zeroing cost at write time.
+    expect(record.cost).toBe("0.0005000000");
+  });
+
   test("formats costs to 10 decimal places", () => {
     const record = buildInteractionRecord(baseParams);
 
     expect(record.cost).toBe("0.0005000000");
     expect(record.baselineCost).toBe("0.0010000000");
+    expect(record.cacheCost).toBe("0.0002000000");
+    expect(record.cacheSavings).toBe("0.0018000000");
+    expect(record.cacheReadTokens).toBe(80);
+    expect(record.cacheWriteTokens).toBe(20);
   });
 
   test("handles null costs → null strings", () => {
     const record = buildInteractionRecord({
       ...baseParams,
-      costs: { baselineCost: undefined, actualCost: undefined },
+      costs: {
+        baselineCost: undefined,
+        actualCost: undefined,
+        cacheCost: undefined,
+        cacheSavings: undefined,
+      },
     });
 
     expect(record.cost).toBeNull();
     expect(record.baselineCost).toBeNull();
+    expect(record.cacheCost).toBeNull();
+    expect(record.cacheSavings).toBeNull();
   });
 
   test("handles null toonCostSavings", () => {
@@ -320,17 +379,11 @@ describe("buildInteractionRecord", () => {
     expect(record.toonCostSavings).toBe("0.0001200000");
   });
 
-  test("includes source when provided", () => {
-    const record = buildInteractionRecord({
-      ...baseParams,
-      source: "chatops:slack",
-    });
-    expect(record.source).toBe("chatops:slack");
-  });
-
-  test("source is undefined when not provided", () => {
-    const record = buildInteractionRecord(baseParams);
-    expect(record.source).toBeUndefined();
+  test("passes source through when provided, undefined otherwise", () => {
+    expect(
+      buildInteractionRecord({ ...baseParams, source: "chatops:slack" }).source,
+    ).toBe("chatops:slack");
+    expect(buildInteractionRecord(baseParams).source).toBeUndefined();
   });
 });
 
@@ -355,7 +408,6 @@ describe("recordBlockedToolCallMetrics", () => {
       toolCallCount: 2,
       actualModel: "gpt-4",
       source: "api",
-      externalAgentId: "ext-1",
     });
 
     expect(mockRecordBlockedToolSpans).toHaveBeenCalledWith({
@@ -381,16 +433,14 @@ describe("recordBlockedToolCallMetrics", () => {
       toolCallCount: 1,
       actualModel: "claude-3-opus",
       source: "api",
-      externalAgentId: "ext-2",
     });
 
-    expect(mockReportBlockedTools).toHaveBeenCalledWith(
+    expect(vi.mocked(metrics.llm.reportBlockedTools)).toHaveBeenCalledWith(
       "anthropic",
       agent,
       1,
       "claude-3-opus",
       "api",
-      "ext-2",
     );
   });
 
@@ -452,5 +502,285 @@ describe("withSessionContext", () => {
     expect(withSpy).not.toHaveBeenCalled();
 
     withSpy.mockRestore();
+  });
+});
+
+describe("shouldForwardAnthropicBeta", () => {
+  test("forwards to real Anthropic (no base-URL override)", () => {
+    expect(shouldForwardAnthropicBeta("claude-opus-4-8", false)).toBe(true);
+  });
+
+  test("forwards to Claude proxied behind a custom base URL", () => {
+    expect(shouldForwardAnthropicBeta("claude-3-5-sonnet", true)).toBe(true);
+  });
+
+  test("strips for a non-Claude model on a custom base URL", () => {
+    expect(shouldForwardAnthropicBeta("kimi-k2", true)).toBe(false);
+  });
+
+  test("keeps forwarding a non-Claude model with no override (canonical endpoint)", () => {
+    expect(shouldForwardAnthropicBeta("kimi-k2", false)).toBe(true);
+  });
+});
+
+describe("handleError", () => {
+  function makeReply(headersSent: boolean) {
+    const writes: string[] = [];
+    const headers: Record<string, string> = {};
+    const reply = {
+      header: (name: string, value: string) => {
+        headers[name] = value;
+        return reply;
+      },
+      raw: {
+        headersSent,
+        write: (chunk: string) => {
+          writes.push(chunk);
+          return true;
+        },
+        end: () => {},
+      },
+    } as unknown as FastifyReply;
+    return { reply, writes, headers };
+  }
+
+  const extractMessage = (error: unknown) =>
+    error instanceof Error ? error.message : "Internal server error";
+
+  test("preserves the internal code carried by a thrown ApiError", () => {
+    const { reply } = makeReply(false);
+    const upstreamError = new ApiError(
+      503,
+      "empty upstream response",
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+
+    let thrown: unknown;
+    try {
+      handleError(upstreamError, reply, extractMessage, true, () => undefined);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ApiError);
+    expect((thrown as ApiError).statusCode).toBe(503);
+    expect((thrown as ApiError).internalCode).toBe(
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+  });
+
+  test("prefers the adapter's classification over the ApiError's own code", () => {
+    const { reply } = makeReply(false);
+    const upstreamError = new ApiError(
+      400,
+      "context too long",
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+
+    let thrown: unknown;
+    try {
+      handleError(
+        upstreamError,
+        reply,
+        extractMessage,
+        false,
+        () => ArchestraInternalErrorCode.ContextLengthExceeded,
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect((thrown as ApiError).internalCode).toBe(
+      ArchestraInternalErrorCode.ContextLengthExceeded,
+    );
+  });
+
+  test("surfaces the internal code in the mid-stream SSE error event", () => {
+    const { reply, writes } = makeReply(true);
+    const upstreamError = new ApiError(
+      503,
+      "empty upstream response",
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+
+    handleError(upstreamError, reply, extractMessage, true, () => undefined);
+
+    expect(writes).toHaveLength(1);
+    const payload = JSON.parse(writes[0].replace(/^event: error\ndata: /, ""));
+    expect(payload.error.internal_code).toBe(
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+    expect(payload.error.message).toBe("empty upstream response");
+  });
+
+  // Transient upstream connection failures carry no HTTP status, so they used to
+  // fall through as a generic 500 and get captured as a server exception. They're
+  // reclassified to 502/504 so the central handler keeps them out of error
+  // tracking (it already excludes 502/504) while the client still sees a 5xx.
+  function throwStatusFor(error: unknown): number | undefined {
+    const { reply } = makeReply(false);
+    try {
+      handleError(error, reply, extractMessage, false, () => undefined);
+    } catch (thrown) {
+      return (thrown as ApiError).statusCode;
+    }
+    return undefined;
+  }
+
+  test("classifies an SDK connection error as 502", () => {
+    // OpenAI/Anthropic SDK APIConnectionError message, no HTTP status.
+    expect(throwStatusFor(new Error("Connection error."))).toBe(502);
+  });
+
+  test("classifies an SDK request timeout as 504", () => {
+    // OpenAI/Anthropic SDK APIConnectionTimeoutError message, no HTTP status.
+    expect(throwStatusFor(new Error("Request timed out."))).toBe(504);
+  });
+
+  test("classifies a wrapped network errno cause as an upstream gateway error", () => {
+    const connReset = Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("read ECONNRESET"), {
+        code: "ECONNRESET",
+      }),
+    });
+    expect(throwStatusFor(connReset)).toBe(502);
+
+    const timedOut = Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("connect ETIMEDOUT"), {
+        code: "ETIMEDOUT",
+      }),
+    });
+    expect(throwStatusFor(timedOut)).toBe(504);
+  });
+
+  test("leaves an error that carries an explicit HTTP status untouched", () => {
+    // A real upstream 500 response must not be reclassified away from capture.
+    expect(throwStatusFor(new ApiError(500, "Connection error."))).toBe(500);
+    expect(
+      throwStatusFor(Object.assign(new Error("boom"), { status: 500 })),
+    ).toBe(500);
+  });
+
+  test("leaves a generic internal error as a 500", () => {
+    // No connection/timeout signal → stays a 500 and remains captured.
+    expect(throwStatusFor(new TypeError("cannot read x of undefined"))).toBe(
+      500,
+    );
+  });
+
+  function makeStreamedOverloadError(headers?: Headers) {
+    const body = {
+      type: "error",
+      error: { type: "overloaded_error", message: "Overloaded" },
+    };
+    return Object.assign(new Error(JSON.stringify(body)), {
+      error: body,
+      headers,
+    });
+  }
+
+  function throwErrorFor(error: unknown, reply: FastifyReply): ApiError {
+    try {
+      handleError(error, reply, extractMessage, true, () => undefined);
+    } catch (thrown) {
+      return thrown as ApiError;
+    }
+    throw new Error("handleError did not throw");
+  }
+
+  test("classifies a streamed Anthropic overload as 529 with the normalized code", () => {
+    const { reply } = makeReply(false);
+    const thrown = throwErrorFor(makeStreamedOverloadError(), reply);
+
+    expect(thrown.statusCode).toBe(529);
+    expect(thrown.internalCode).toBe(
+      ArchestraInternalErrorCode.ProviderOverloaded,
+    );
+  });
+
+  test("classifies generic overload wording without a status as 503", () => {
+    const thrown = throwErrorFor(
+      Object.assign(
+        new Error("The server is currently overloaded, please retry"),
+        { error: { message: "Overloaded" } },
+      ),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(503);
+    expect(thrown.internalCode).toBe(
+      ArchestraInternalErrorCode.ProviderOverloaded,
+    );
+  });
+
+  test("does not reclassify an internal error containing overload wording", () => {
+    const thrown = throwErrorFor(
+      new Error("Internal worker overloaded"),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.internalCode).toBeUndefined();
+  });
+
+  test("keeps an explicit upstream 529 and tags it as overloaded", () => {
+    const thrown = throwErrorFor(
+      Object.assign(new Error("Overloaded"), { status: 529 }),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(529);
+    expect(thrown.internalCode).toBe(
+      ArchestraInternalErrorCode.ProviderOverloaded,
+    );
+  });
+
+  test("does not tag an explicit 503 without overload wording", () => {
+    const thrown = throwErrorFor(
+      Object.assign(new Error("Service Unavailable"), { status: 503 }),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(503);
+    expect(thrown.internalCode).toBeUndefined();
+  });
+
+  test("forwards the upstream Retry-After header before headers commit", () => {
+    const { reply, headers } = makeReply(false);
+    const error = makeStreamedOverloadError(
+      new Headers({ "retry-after": "30" }),
+    );
+
+    expect(throwErrorFor(error, reply).statusCode).toBe(529);
+    expect(headers["retry-after"]).toBe("30");
+  });
+
+  test("drops a Retry-After value that is neither seconds nor a date", () => {
+    const { reply, headers } = makeReply(false);
+    const error = Object.assign(new Error("rate limited"), {
+      status: 429,
+      headers: { "retry-after": "soon\u0000ish" },
+    });
+
+    expect(throwErrorFor(error, reply).statusCode).toBe(429);
+    expect(headers["retry-after"]).toBeUndefined();
+  });
+
+  test("surfaces the overload code in the mid-stream SSE error event", () => {
+    const { reply, writes } = makeReply(true);
+
+    handleError(
+      makeStreamedOverloadError(),
+      reply,
+      extractMessage,
+      true,
+      () => undefined,
+    );
+
+    expect(writes).toHaveLength(1);
+    const payload = JSON.parse(writes[0].replace(/^event: error\ndata: /, ""));
+    expect(payload.error.internal_code).toBe(
+      ArchestraInternalErrorCode.ProviderOverloaded,
+    );
   });
 });

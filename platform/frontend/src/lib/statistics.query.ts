@@ -4,8 +4,9 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   type StatisticsTimeFrame,
-} from "@shared";
+} from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
+import { throwOnApiError } from "@/lib/utils";
 
 const {
   getTeamStatistics,
@@ -18,19 +19,23 @@ const {
 export function useTeamStatistics({
   timeframe = "24h",
   initialData,
+  enabled = true,
 }: {
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetTeamStatisticsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: ["statistics", "teams", timeframe],
     queryFn: async () => {
-      const response = await getTeamStatistics({
+      const { data, error } = await getTeamStatistics({
         query: { timeframe },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     initialData,
+    enabled,
     refetchInterval: 30_000, // Refresh every 30 seconds
   });
 }
@@ -38,19 +43,23 @@ export function useTeamStatistics({
 export function useProfileStatistics({
   timeframe = "24h",
   initialData,
+  enabled = true,
 }: {
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetAgentStatisticsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: ["statistics", "agents", timeframe],
     queryFn: async () => {
-      const response = await getAgentStatistics({
+      const { data, error } = await getAgentStatistics({
         query: { timeframe },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     initialData,
+    enabled,
     refetchInterval: 30_000, // Refresh every 30 seconds
   });
 }
@@ -58,19 +67,23 @@ export function useProfileStatistics({
 export function useModelStatistics({
   timeframe = "24h",
   initialData,
+  enabled = true,
 }: {
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetModelStatisticsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: ["statistics", "models", timeframe],
     queryFn: async () => {
-      const response = await getModelStatistics({
+      const { data, error } = await getModelStatistics({
         query: { timeframe },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     initialData,
+    enabled,
     refetchInterval: 30_000, // Refresh every 30 seconds
   });
 }
@@ -85,10 +98,11 @@ export function useOverviewStatistics({
   return useQuery({
     queryKey: ["statistics", "overview", timeframe],
     queryFn: async () => {
-      const response = await getOverviewStatistics({
+      const { data, error } = await getOverviewStatistics({
         query: { timeframe },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     initialData,
     refetchInterval: 30_000, // Refresh every 30 seconds
@@ -98,19 +112,23 @@ export function useOverviewStatistics({
 export function useCostSavingsStatistics({
   timeframe = "24h",
   initialData,
+  enabled = true,
 }: {
   timeframe?: StatisticsTimeFrame;
   initialData?: archestraApiTypes.GetCostSavingsStatisticsResponses["200"];
+  enabled?: boolean;
 } = {}) {
   return useQuery({
     queryKey: ["statistics", "cost-savings", timeframe],
     queryFn: async () => {
-      const response = await getCostSavingsStatistics({
+      const { data, error } = await getCostSavingsStatistics({
         query: { timeframe },
       });
-      return response.data;
+      throwOnApiError(error, { toastOnError: false });
+      return data;
     },
     initialData,
+    enabled,
     refetchInterval: 30_000, // Refresh every 30 seconds
   });
 }

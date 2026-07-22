@@ -1,0 +1,103 @@
+{
+  "name": "xmemory__remote-mcp",
+  "display_name": "xmemory",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODE4IiBoZWlnaHQ9IjgxOCIgdmlld0JveD0iMCAwIDgxOCA4MTgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCAxOTApIj4KICAgIDxyZWN0IHg9IjMwOCIgeT0iMzE2IiB3aWR0aD0iMTIyIiBoZWlnaHQ9IjEyMiIgcng9IjIwIiBmaWxsPSIjNjZCRjQ1Ii8+CiAgICA8cmVjdCB4PSIxNTQiIHk9IjMxNiIgd2lkdGg9IjEyMiIgaGVpZ2h0PSIxMjIiIHJ4PSIyMCIgZmlsbD0iIzY2QkY0NSIvPgogICAgPHJlY3QgeT0iMzE2IiB3aWR0aD0iMTIyIiBoZWlnaHQ9IjEyMiIgcng9IjIwIiBmaWxsPSIjNjZCRjQ1Ii8+CiAgICA8cmVjdCB4PSIxNTQiIHk9IjE1OCIgd2lkdGg9IjEyMiIgaGVpZ2h0PSIxMjIiIHJ4PSIyMCIgZmlsbD0iIzY2QkY0NSIvPgogICAgPHJlY3QgeD0iMzA4IiB5PSIxNTgiIHdpZHRoPSIxMjIiIGhlaWdodD0iMTIyIiByeD0iMjAiIGZpbGw9IiM2NkJGNDUiLz4KICAgIDxyZWN0IHg9IjMwOCIgd2lkdGg9IjEyMiIgaGVpZ2h0PSIxMjIiIHJ4PSIyMCIgZmlsbD0iIzY2QkY0NSIvPgogICAgPHBhdGggZD0iTTQ4MiAzMTZINjk4LjkxNEM3MTUuMjI0IDMxNiA3MjQuNjc2IDMzNC40NzIgNzE1LjEzNCAzNDcuN0w2NTUuOTg3IDQyOS43QzY1Mi4yMjcgNDM0LjkxMiA2NDYuMTkzIDQzOCA2MzkuNzY2IDQzOEg0ODJDNDcwLjk1NCA0MzggNDYyIDQyOS4wNDYgNDYyIDQxOFYzMzZDNDYyIDMyNC45NTQgNDcwLjk1NCAzMTYgNDgyIDMxNloiIGZpbGw9IiM2NkJGNDUiLz4KICAgIDxwYXRoIGQ9Ik00ODIgMTU4SDc3Mi4zMzFDNzc4LjcyMSAxNTggNzg0LjcyNiAxNjEuMDUzIDc4OC40OTEgMTY2LjIxN0w4MDguOTQ0IDE5NC4yNjdDODE0LjA0NyAyMDEuMjY0IDgxNC4wNjYgMjEwLjc1IDgwOC45OTIgMjE3Ljc2OEw3NjkuOTg4IDI3MS43MThDNzY2LjIyNyAyNzYuOTE5IDc2MC4xOTkgMjgwIDc1My43OCAyODBINDgyQzQ3MC45NTQgMjgwIDQ2MiAyNzEuMDQ2IDQ2MiAyNjBWMTc4QzQ2MiAxNjYuOTU0IDQ3MC45NTQgMTU4IDQ4MiAxNThaIiBmaWxsPSIjNjZCRjQ1Ii8+CiAgICA8cGF0aCBkPSJNNDgyIDBINjU2LjY5NkM2NjMuMDc5IDAgNjY5LjA3OCAzLjA0NjU5IDY3Mi44NDQgOC4yMDAxOEw3MzIuNzYzIDkwLjIwMDJDNzQyLjQxOSAxMDMuNDE1IDczMi45ODEgMTIyIDcxNi42MTUgMTIySDQ4MkM0NzAuOTU0IDEyMiA0NjIgMTEzLjA0NiA0NjIgMTAyVjIwQzQ2MiA4Ljk1NDMgNDcwLjk1NCAwIDQ4MiAwWiIgZmlsbD0iIzY2QkY0NSIvPgogIDwvZz4KPC9zdmc+Cg==",
+  "description": "Persistent structured memory for AI agents — save, recall, and update facts, decisions, people, and projects across sessions. xmemory is a first-party memory store: it holds the data you explicitly save to your xmemory instance, in xmemory's own backend. It does NOT read the assistant's built-in memory, your past chat history, or your files, email, or cloud drives — it only stores and returns what is written to this instance.",
+  "homepage": "https://xmemory.ai",
+  "author": {
+    "name": "xmemory",
+    "url": "https://xmemory.ai"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.xmemory.ai",
+    "docs_url": "https://xmemory.ai/mcp"
+  },
+  "oauth_config": {
+    "name": "xmemory MCP",
+    "server_url": "https://mcp.xmemory.ai",
+    "client_id": "",
+    "redirect_uris": [
+      "http://localhost:8080/oauth/callback"
+    ],
+    "scopes": [
+      "read",
+      "write"
+    ],
+    "default_scopes": [
+      "read",
+      "write"
+    ],
+    "supports_resource_metadata": true,
+    "description": "xmemory MCP server (OAuth 2.1 + PKCE, dynamic client registration)"
+  },
+  "tools": [
+    {
+      "name": "write_async",
+      "description": "Preferred write path — save create/update/delete intent in natural language; returns immediately"
+    },
+    {
+      "name": "write",
+      "description": "Synchronous write; use only when you must read the same data back in the same turn"
+    },
+    {
+      "name": "write_status",
+      "description": "Diagnostic only — check once whether a specific async write landed"
+    },
+    {
+      "name": "read",
+      "description": "Query the instance in natural language (lookups, aggregations, listings, traversals)"
+    },
+    {
+      "name": "get_instance_id",
+      "description": "Return the instance ID for the current session"
+    },
+    {
+      "name": "get_instance_schema",
+      "description": "Return the instance's object/field/relation schema"
+    },
+    {
+      "name": "review_suggestions",
+      "description": "See schema improvements proposed from your read/write traffic"
+    },
+    {
+      "name": "decide_suggestions",
+      "description": "Accept / reject / defer schema improvements proposals (bulk)"
+    },
+    {
+      "name": "apply_pending_decisions",
+      "description": "Commit accepted proposals as a migration"
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "memory",
+    "persistent-memory",
+    "agent-memory",
+    "structured-memory",
+    "recall",
+    "context",
+    "knowledge",
+    "schema",
+    "personalization",
+    "oauth"
+  ],
+  "user_config": {},
+  "category": "Knowledge",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "github_info": null,
+  "programming_language": null,
+  "framework": null,
+  "readme": null,
+  "quality_score": 80,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null
+}

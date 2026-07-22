@@ -1,22 +1,26 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
-import config from "@/lib/config/config";
+import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
+import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 
-const { IdentityProvidersSettingsContent } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional ee component with identity providers
-    await import("./_parts/identity-providers-page.ee")
-  : {
-      IdentityProvidersSettingsContent: () => (
-        <EnterpriseLicenseRequired featureName="Identity Providers" />
-      ),
-    };
+const IdentityProvidersSettingsContent = dynamic(() =>
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed at request time
+  import("./_parts/identity-providers-page.ee").then((m) => ({
+    default: m.IdentityProvidersSettingsContent,
+  })),
+);
 
 export default function IdentityProvidersSettingsPage() {
+  const enterpriseCoreActive = useEnterpriseFeature("core");
   return (
     <ErrorBoundary>
-      <IdentityProvidersSettingsContent />
+      <SmallTeamTierBanner featureName="SSO" />
+      <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
+        <IdentityProvidersSettingsContent />
+      </DisabledEnterpriseSection>
     </ErrorBoundary>
   );
 }

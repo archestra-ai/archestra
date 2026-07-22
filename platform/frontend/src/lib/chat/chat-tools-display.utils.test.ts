@@ -21,7 +21,7 @@ describe("getDefaultEnabledToolIds", () => {
   it("includes archestra tools (they are not filtered out)", () => {
     const tools = [
       { id: "a1", name: "archestra__web_search" },
-      { id: "a2", name: "archestra__artifact_write" },
+      { id: "a2", name: "archestra__todo_write" },
       { id: "a3", name: "archestra__some_custom_tool" },
       { id: "m1", name: "other_server__some_tool" },
     ];
@@ -321,5 +321,17 @@ describe("tool display helpers", () => {
         toolResultPart: null,
       }),
     ).toBe("completed");
+
+    // A declined approval is terminal: it must map to "denied" (orange dot), not
+    // fall through to "running" (a blue pulsing dot that never resolves).
+    expect(
+      getCompactToolState({
+        part: {
+          type: "tool-github__create_issue",
+          state: "output-denied",
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe("denied");
   });
 });

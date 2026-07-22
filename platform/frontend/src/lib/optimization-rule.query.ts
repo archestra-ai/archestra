@@ -1,12 +1,13 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "./utils";
+import { handleApiError, throwOnApiError } from "./utils";
 
 const {
   getOptimizationRules,
+  getOptimizationRule,
   createOptimizationRule,
   updateOptimizationRule,
   deleteOptimizationRule,
@@ -29,11 +30,27 @@ export function useOptimizationRules() {
     queryKey: ["optimization-rules"],
     queryFn: async () => {
       const response = await getOptimizationRules();
-      if (response.error) {
-        handleApiError(response.error);
-      }
+      // Screen renders its own QueryLoadError panel; don't also toast.
+      throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? [];
     },
+  });
+}
+
+// Get a single optimization rule by ID
+export function useOptimizationRule(id: string | undefined) {
+  return useQuery({
+    queryKey: ["optimization-rules", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const response = await getOptimizationRule({ path: { id } });
+      throwOnApiError(response.error, {
+        allowNotFound: true,
+        toastOnError: false,
+      });
+      return response.data ?? null;
+    },
+    enabled: !!id,
   });
 }
 

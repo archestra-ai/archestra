@@ -6,9 +6,9 @@ description: Developer guide for implementing new Knowledge Base connectors in A
 lastUpdated: 2026-05-05
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
+<!--
 This is a development guide for adding new Knowledge Base connectors to Archestra.
 -->
 
@@ -20,7 +20,7 @@ This guide covers how to add a new Knowledge Connector to Archestra Platform. Co
 2. **Connector class** extending `BaseConnector` with `validateConfig`, `testConnection`, and `sync`
 3. **Registry entry** so the runtime can instantiate the connector by type string
 4. **Frontend config fields** component for the creation dialog
-5. **User-facing docs update** in `docs/pages/platform-knowledge-connectors.md`
+5. **User-facing docs update** in `docs/pages/platform-knowledge.md`
 
 When the external service provides an official SDK, prefer it over building a client from scratch with raw `fetch` calls. Use a hand-rolled client only when there is no suitable official SDK or the official SDK is clearly incompatible with the connector's requirements. Official SDKs usually handle pagination, authentication, rate limiting, and type safety out of the box. For example, the GitHub connector uses [`@octokit/rest`](https://www.npmjs.com/package/@octokit/rest) and the GitLab connector uses [`@gitbeaker/rest`](https://www.npmjs.com/package/@gitbeaker/rest).
 
@@ -259,6 +259,7 @@ Key points:
 - Include `failures: this.flushFailures()` when using `safeItemFetch(...)`
 - Include `skipped: this.flushSkipped()` when the connector intentionally skips source items
 - The checkpoint is opaque to the runtime; only your connector reads it
+- Because the checkpoint is persisted after every batch and time-boxed runs resume from it, a connector that derives its work list once per sync (rather than per item) should keep in-flight sweep state in the checkpoint — a pinned cursor plus an offset into a deterministically ordered work list — and only advance its committed cursor on the final batch. See the Perforce connector (`targetChangelist` + `filesOffset`) for an example; without this, a sync that repeatedly hits the time budget restarts from scratch and may never finish
 
 ## Connector Registry
 
@@ -278,7 +279,7 @@ The `Record<ConnectorType, ...>` type ensures TypeScript will error if you add a
 
 ## Frontend Config Fields
 
-Create `frontend/src/app/knowledge-bases/_parts/github-config-fields.tsx`. This component renders form fields for the connector-specific config. It receives a `react-hook-form` `UseFormReturn` and an optional field name prefix (defaults to `"config"`).
+Create `frontend/src/app/knowledge/knowledge-bases/_parts/github-config-fields.tsx`. This component renders form fields for the connector-specific config. It receives a `react-hook-form` `UseFormReturn` and an optional field name prefix (defaults to `"config"`).
 
 ```tsx
 "use client";
@@ -330,7 +331,7 @@ export function GithubConfigFields({
 
 ### Wire into the create connector dialog
 
-In `frontend/src/app/knowledge-bases/_parts/create-connector-dialog.tsx`:
+In `frontend/src/app/knowledge/knowledge-bases/_parts/create-connector-dialog.tsx`:
 
 1. Import the new config fields component.
 2. Add a `<SelectItem>` for the new connector type.
@@ -360,7 +361,7 @@ Implement the `FolderTraversalAdapter` interface with a `listDirectSubfolders` m
 
 ## User-Facing Docs
 
-When you add a new connector, you must also add or update the matching section in `docs/pages/platform-knowledge-connectors.md`.
+When you add a new connector, you must also add or update the matching section in `docs/pages/platform-knowledge.md`.
 
 That section should cover the actual setup and operating model for users, not just raw config fields:
 

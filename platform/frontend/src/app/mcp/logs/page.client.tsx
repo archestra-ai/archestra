@@ -1,11 +1,12 @@
 "use client";
 
-import { type archestraApiTypes, parseFullToolName } from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProfileFilterOption } from "@/components/log-filter-option";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableFilters } from "@/components/table-filters";
 import { TruncatedText } from "@/components/truncated-text";
@@ -51,7 +52,7 @@ function SortIcon({
     return downArrow;
   }
   return (
-    <div className="text-muted-foreground/50 flex flex-col items-center">
+    <div className="text-muted-foreground flex flex-col items-center">
       {upArrow}
       <span className="mt-[-4px]">{downArrow}</span>
     </div>
@@ -165,7 +166,12 @@ function McpToolCallsTable({
         ? "createdAt"
         : undefined;
 
-  const { data: mcpToolCallsResponse, isFetching } = useMcpToolCalls({
+  const {
+    data: mcpToolCallsResponse,
+    isFetching,
+    isLoadingError: isMcpToolCallsLoadError,
+    refetch: refetchMcpToolCalls,
+  } = useMcpToolCalls({
     agentId: profileFilter !== "all" ? profileFilter : undefined,
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
@@ -243,28 +249,21 @@ function McpToolCallsTable({
     },
     {
       id: "agent",
-      accessorFn: (row) => {
-        const agent = agents?.find((a) => a.id === row.agentId);
-        return (
-          agent?.name ??
-          (row.agentId === null ? "Deleted MCP Gateway" : "Unknown")
-        );
-      },
+      accessorFn: (row) => getGatewayDisplayName(row, agents),
       header: "MCP Gateway",
-      cell: ({ row }) => {
-        const agent = agents?.find((a) => a.id === row.original.agentId);
-        return (
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1.5">
           <TruncatedText
-            message={
-              agent?.name ??
-              (row.original.agentId === null
-                ? "Deleted MCP Gateway"
-                : "Unknown")
-            }
+            message={getGatewayDisplayName(row.original, agents)}
             maxLength={30}
           />
-        );
-      },
+          {row.original.ownerType === "app" && (
+            <Badge variant="outline" className="text-xs whitespace-nowrap">
+              App
+            </Badge>
+          )}
+        </div>
+      ),
     },
     {
       id: "user",
@@ -425,6 +424,17 @@ function McpToolCallsTable({
     />
   );
 
+  if (isMcpToolCallsLoadError) {
+    return (
+      <div className="space-y-4">
+        <QueryLoadError
+          title="Couldn't load logs"
+          onRetry={() => refetchMcpToolCalls()}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <TableFilters>
@@ -477,5 +487,20 @@ function McpToolCallsTable({
         }}
       />
     </div>
+  );
+}
+
+function getGatewayDisplayName(
+  row: Pick<McpToolCallData, "ownerType" | "agentId" | "appName">,
+  agents: archestraApiTypes.GetAllAgentsResponses["200"] | undefined,
+) {
+  // App-owned calls have no agent by design — attribute them to the app
+  // instead of falling through to the deleted-gateway label.
+  if (row.ownerType === "app") {
+    return row.appName ?? "Deleted App";
+  }
+  const agent = agents?.find((a) => a.id === row.agentId);
+  return (
+    agent?.name ?? (row.agentId === null ? "Deleted MCP Gateway" : "Unknown")
   );
 }

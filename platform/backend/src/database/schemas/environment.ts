@@ -1,0 +1,76 @@
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
+import type { NetworkPolicy, TrustedImageRegistries } from "@/types";
+import organizationsTable from "./organization";
+
+/**
+ * Org-level list of deployment environments (e.g. "sandbox", "staging",
+ * "production"). A catalog item may be assigned to exactly one environment via
+ * internal_mcp_catalog.environment_id (nullable). Each environment carries a
+ * Kubernetes namespace its MCP server pods are deployed into. Assignment to a
+ * `restricted` environment is gated by per-resource `deploy-to-restricted` permissions.
+ */
+const environmentsTable = pgTable(
+  "environments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Optional human-readable description, shown in the environment selector. */
+    description: text("description"),
+    /**
+     * Kubernetes namespace MCP server pods in this environment are deployed
+     * into. NULL falls back to the orchestrator's own namespace.
+     */
+    namespace: text("namespace"),
+    networkPolicy: jsonb("network_policy").$type<NetworkPolicy>(),
+    /**
+     * ALLOWLIST regex (JS source, no delimiters/flags) applied to user-supplied
+     * config field values when a catalog item bound to this environment is
+     * installed. A value is allowed only if it MATCHES. NULL disables. Block a
+     * substring (e.g. "prod" in staging) with a negative lookahead.
+     */
+    validationRegex: text("validation_regex"),
+    /**
+     * ALLOWLIST of trusted container image registries (normalized
+     * `host/repository` prefixes) for PERSONAL local catalog items assigned to
+     * this environment. A personal local catalog item's custom image must match
+     * an entry, otherwise its install is held for admin approval. NULL/empty
+     * disables the check. Mirrors `validation_regex` for the image-registry
+     * policy.
+     */
+    trustedImageRegistries: jsonb(
+      "trusted_image_registries",
+    ).$type<TrustedImageRegistries>(),
+    /**
+     * When true, assigning a catalog item to this environment requires the
+     * resource-specific `deploy-to-restricted` permission. Unrestricted environments (and the
+     * org-default/null environment) are open to anyone who can create catalog
+     * items. Flipped via PATCH /api/environments/:id.
+     */
+    restricted: boolean("restricted").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    unique("environments_org_name_unique").on(table.organizationId, table.name),
+    index("environments_org_idx").on(table.organizationId),
+  ],
+);
+
+export default environmentsTable;

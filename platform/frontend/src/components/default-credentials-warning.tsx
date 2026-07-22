@@ -5,7 +5,7 @@ import {
   DEFAULT_ADMIN_PASSWORD,
   DocsPage,
   getDocsUrl,
-} from "@shared";
+} from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -110,7 +110,7 @@ export function DefaultCredentialsWarning({
               {" "}
               or{" "}
               <a
-                href="/settings/account?highlight=change-password"
+                href="/account?highlight=change-password"
                 className="inline-flex items-center underline"
               >
                 Change

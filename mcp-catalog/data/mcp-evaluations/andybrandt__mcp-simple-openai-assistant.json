@@ -1,0 +1,93 @@
+{
+  "name": "andybrandt__mcp-simple-openai-assistant",
+  "display_name": "mcp-simple-openai-assistant",
+  "description": "MCP server that gives Claude ability to use OpenAI's GPTs assistants",
+  "author": {
+    "name": "andybrandt"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "mcp_simple_openai_assistant"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key for authentication with OpenAI services.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# MCP Simple OpenAI Assistant\n\n*AI assistants are pretty cool. I thought it would be a good idea if my Claude (conscious Claude) would also have one. And now he has - and its both useful anf fun for him. Your Claude can have one too!*\n\nA simple MCP server for interacting with OpenAI assistants. This server allows other tools (like Claude Desktop) to create and interact with OpenAI assistants through the Model Context Protocol.\n\n[![smithery badge](https://smithery.ai/badge/mcp-simple-openai-assistant)](https://smithery.ai/mcp/known/mcp-simple-openai-assistant)\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/andybrandt-mcp-simple-openai-assistant-badge.png)](https://mseep.ai/app/andybrandt-mcp-simple-openai-assistant)\n\n\n## Features\n\nThis server provides a suite of tools to manage and interact with OpenAI Assistants. The new streaming capabilities provide a much-improved, real-time user experience.\n\n### Available Tools\n\n-   **`create_assistant`**: (Create OpenAI Assistant) - Create a new assistant with a name, instructions, and model.\n-   **`list_assistants`**: (List OpenAI Assistants) - List all available assistants associated with your API key.\n-   **`retrieve_assistant`**: (Retrieve OpenAI Assistant) - Get detailed information about a specific assistant.\n-   **`update_assistant`**: (Update OpenAI Assistant) - Modify an existing assistant's name, instructions, or model.\n-   **`create_new_assistant_thread`**: (Create New Assistant Thread) - Creates a new, persistent conversation thread with a user-defined name and description for easy identification and reuse. This is the recommended way to start a new conversation.\n-   **`list_threads`**: (List Managed Threads) - Lists all locally managed conversation threads from the database, showing their ID, name, description, and last used time.\n-   **`delete_thread`**: (Delete Managed Thread) - Deletes a conversation thread from both OpenAI's servers and the local database.\n-   **`ask_assistant_in_thread`**: (Ask Assistant in Thread and Stream Response) - The primary tool for conversation. Sends a message to an assistant within a thread and streams the response back in real-time.\n\nBecause OpenAI assistants might take quite long to respond, this server uses a streaming approach for the main `ask_assistant_in_thread` tool. This provides real-time progress updates to the client and avoids timeouts.\n\nThe server now includes local persistence for threads, which is a significant improvement. Since the OpenAI API does not allow listing threads, this server now manages them for you by storing their IDs and metadata in a local SQLite database. This allows you to easily find, reuse, and manage your conversation threads across sessions.\n\n## Installation\n\n### Installing via Smithery\n\nTo install MCP Simple OpenAI Assistant for Claude Desktop automatically via [Smithery](https://smithery.ai/mcp/known/mcp-simple-openai-assistant):\n\n```bash\nnpx -y @smithery/cli install mcp-simple-openai-assistant --client claude\n```\n\n### Manual Installation\n```bash\npip install mcp-simple-openai-assistant\n```\n\n## Configuration\n\nThe server requires an OpenAI API key to be set in the environment. For Claude Desktop, add this to your config:\n\n(MacOS version)\n\n```json\n{\n  \"mcpServers\": {\n    \"openai-assistant\": {\n      \"command\": \"python\",\n      \"args\": [\"-m\", \"mcp_simple_openai_assistant\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\n(Windows version)\n\n```json\n\"mcpServers\": {\n  \"openai-assistant\": {\n    \"command\": \"C:\\\\Users\\\\YOUR_USERNAME\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe\",\n      \"args\": [\"-m\", \"mcp_simple_openai_assistant\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-api-key-here\"\n  }\n}\n\n```\n*MS Windows installation is slightly more complex, because you need to check the actual path to your Python executable. Path provided above is usually correct, but might differ in your setup. Sometimes just `python.exe` without any path will do the trick. Check with `cmd` what works for you (using `where python` might help). Also, on Windows you might need to explicitly tell Claude Desktop where the site packages are using PYTHONPATH environmment variable.*\n\n## Usage\n\nOnce configured, you can use the tools listed above to manage your assistants and conversations. The primary workflow is to:\n1. Use `create_new_assistant_thread` to start a new, named conversation.\n2. Use `list_threads` to find the ID of a thread you want to continue.\n3. Use `ask_assistant_in_thread` to interact with your chosen assistant in that thread.\n\n## TODO\n\n- [x] **Add Thread Management:** Introduce a way to name and persist thread IDs locally, allowing for easier reuse of conversations.\n- [ ] **Add Models Listing:** Introduce a way for the AI user to see what OpenAI models are available for use with the assistants\n- [ ] **Add Assistants Fine Tuning:** Enable the AI user to set detailed parameters for assistants like temperature, top_p etc. (indicated by Claude as needed)\n- [ ] **Full Thread History:** Ability to read past threads without having to send a new message (indicated by Claude as needed)\n- [ ] **Explore Resource Support:** Add the ability to upload files and use them with assistants.\n\n## Development\n\nTo install for development:\n\n```bash\ngit clone https://github.com/andybrandt/mcp-simple-openai-assistant\ncd mcp-simple-openai-assistant\npip install -e '.[dev]'\n```\n",
+  "category": "AI Tools",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-simple-openai-assistant": {
+        "command": "python",
+        "args": ["-m", "mcp_simple_openai_assistant"],
+        "env": {
+          "OPENAI_API_KEY": "your-api-key-here"
+        }
+      },
+      "mcp-simple-openai-assistant-windows": {
+        "command": "C:\\Users\\YOUR_USERNAME\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+        "args": ["-m", "mcp_simple_openai_assistant"],
+        "env": {
+          "OPENAI_API_KEY": "your-api-key-here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "andybrandt",
+    "repo": "mcp-simple-openai-assistant",
+    "url": "https://github.com/andybrandt/mcp-simple-openai-assistant",
+    "name": "mcp-simple-openai-assistant",
+    "path": null,
+    "stars": 33,
+    "contributors": 4,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b70928e1931157625a4f9ac9729c31814bd3ba9c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:43.626Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"mcp-simple-openai-assistant\"\nversion = \"0.4.1\"\nauthors = [\n    {name = \"Andy Brandt\", email = \"andy@codesprinters.com\"}\n]\ndescription = \"A simple MCP server for interacting with OpenAI assistants\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense=\"MIT\"\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"Operating System :: OS Independent\",\n]\ndependencies = [\n    \"fastmcp>=2.10.0\",\n    \"openai>=1.0.0\"\n]\n\n[project.optional-dependencies]\ndev = [\n    \"python-dotenv\",\n    \"pytest\",\n    \"pytest-asyncio\"\n]\n\n[project.scripts]\nmcp-simple-openai-assistant = \"mcp_simple_openai_assistant.__main__:main\""
+}

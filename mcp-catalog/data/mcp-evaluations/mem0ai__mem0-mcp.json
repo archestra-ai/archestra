@@ -1,0 +1,109 @@
+{
+  "name": "mem0ai__mem0-mcp",
+  "display_name": "mem0-mcp",
+  "description": "MCP server from mem0ai/mem0-mcp",
+  "author": {
+    "name": "mem0ai"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "main.py", "--host", "${user_config.host}", "--port", "${user_config.port}"],
+    "env": {
+      "MEM0_API_KEY": "${user_config.mem0_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mem0_api_key": {
+      "type": "string",
+      "title": "Mem0 API Key",
+      "description": "Your API key for mem0.ai, required for managing coding preferences.",
+      "sensitive": true,
+      "required": true
+    },
+    "host": {
+      "type": "string",
+      "title": "Server Host",
+      "description": "The host address for the MCP server.",
+      "default": "0.0.0.0",
+      "required": false
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port number for the MCP server.",
+      "default": 8080,
+      "required": false,
+      "min": 1,
+      "max": 65535
+    }
+  },
+  "readme": "# MCP Server with Mem0 for Managing Coding Preferences\n\nThis demonstrates a structured approach for using an [MCP](https://modelcontextprotocol.io/introduction) server with [mem0](https://mem0.ai) to manage coding preferences efficiently. The server can be used with Cursor and provides essential tools for storing, retrieving, and searching coding preferences.\n\n## Installation\n\n1. Clone this repository\n2. Initialize the `uv` environment:\n\n```bash\nuv venv\n```\n\n3. Activate the virtual environment:\n\n```bash\nsource .venv/bin/activate\n```\n\n4. Install the dependencies using `uv`:\n\n```bash\n# Install in editable mode from pyproject.toml\nuv pip install -e .\n```\n\n5. Update `.env` file in the root directory with your mem0 API key:\n\n```bash\nMEM0_API_KEY=your_api_key_here\n```\n\n## Usage\n\n1. Start the MCP server:\n\n```bash\nuv run main.py\n```\n\n2. In Cursor, connect to the SSE endpoint, follow this [doc](https://docs.cursor.com/context/model-context-protocol) for reference:\n\n```\nhttp://0.0.0.0:8080/sse\n```\n\n3. Open the Composer in Cursor and switch to `Agent` mode.\n\n## Demo with Cursor\n\nhttps://github.com/user-attachments/assets/56670550-fb11-4850-9905-692d3496231c\n\n## Features\n\nThe server provides three main tools for managing code preferences:\n\n1. `add_coding_preference`: Store code snippets, implementation details, and coding patterns with comprehensive context including:\n   - Complete code with dependencies\n   - Language/framework versions\n   - Setup instructions\n   - Documentation and comments\n   - Example usage\n   - Best practices\n\n2. `get_all_coding_preferences`: Retrieve all stored coding preferences to analyze patterns, review implementations, and ensure no relevant information is missed.\n\n3. `search_coding_preferences`: Semantically search through stored coding preferences to find relevant:\n   - Code implementations\n   - Programming solutions\n   - Best practices\n   - Setup guides\n   - Technical documentation\n\n## Why?\n\nThis implementation allows for a persistent coding preferences system that can be accessed via MCP. The SSE-based server can run as a process that agents connect to, use, and disconnect from whenever needed. This pattern fits well with \"cloud-native\" use cases where the server and clients can be decoupled processes on different nodes.\n\n### Server\n\nBy default, the server runs on 0.0.0.0:8080 but is configurable with command line arguments like:\n\n```\nuv run main.py --host <your host> --port <your port>\n```\n\nThe server exposes an SSE endpoint at `/sse` that MCP clients can connect to for accessing the coding preferences management tools.\n\n",
+  "category": "Development",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-mem0": {
+        "command": "uv",
+        "args": ["run", "main.py"],
+        "env": {}
+      },
+      "mcp-server-mem0-configured": {
+        "command": "uv",
+        "args": ["run", "main.py", "--host", "<your host>", "--port", "<your port>"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mem0ai",
+    "repo": "mem0-mcp",
+    "url": "https://github.com/mem0ai/mem0-mcp",
+    "name": "mem0-mcp",
+    "path": null,
+    "stars": 415,
+    "contributors": 4,
+    "issues": 11,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "fce38b39e4a0cb25a48ee28e06f39f49d04dfa2a"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:20.239Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "mem0ai",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mem0-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.3.0\",\n    \"mem0ai>=0.1.55\",\n]\n"
+}

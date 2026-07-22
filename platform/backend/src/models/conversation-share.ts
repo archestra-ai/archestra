@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type {
   Conversation,
   ConversationShare,
@@ -96,7 +96,7 @@ class ConversationShareModel {
     // Caller must verify the requesting user owns the conversation before
     // updating share state for it. This model only enforces org/conversation
     // identity, not conversation ownership.
-    const shareId = await db.transaction(async (tx) => {
+    const shareId = await withDbTransaction(async (tx) => {
       const [existing] = await tx
         .select()
         .from(schema.conversationSharesTable)
@@ -234,7 +234,7 @@ class ConversationShareModel {
         eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
       )
       .where(eq(schema.conversationsTable.id, share.conversationId))
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     if (rows.length === 0) return null;
 

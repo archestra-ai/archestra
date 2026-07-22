@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 class OAuthAccessTokenModel {
@@ -18,6 +18,8 @@ class OAuthAccessTokenModel {
     expiresAt: Date;
     scopes: string[];
     referenceId?: string | null;
+    sessionId?: string | null;
+    refreshId?: string | null;
   }) {
     const [accessToken] = await db
       .insert(schema.oauthAccessTokensTable)
@@ -29,11 +31,28 @@ class OAuthAccessTokenModel {
         expiresAt: params.expiresAt,
         scopes: params.scopes,
         referenceId: params.referenceId ?? null,
+        sessionId: params.sessionId ?? null,
+        refreshId: params.refreshId ?? null,
         createdAt: new Date(),
       })
       .returning();
 
     return accessToken;
+  }
+
+  /**
+   * Delete access tokens minted for the given refresh token rows. Returns the
+   * number of rows removed.
+   */
+  static async deleteByRefreshIds(refreshIds: string[]): Promise<number> {
+    if (refreshIds.length === 0) {
+      return 0;
+    }
+    const rows = await db
+      .delete(schema.oauthAccessTokensTable)
+      .where(inArray(schema.oauthAccessTokensTable.refreshId, refreshIds))
+      .returning({ id: schema.oauthAccessTokensTable.id });
+    return rows.length;
   }
 
   static async createClientCredentialsToken(params: {
@@ -107,6 +126,32 @@ class OAuthAccessTokenModel {
       .update(schema.oauthAccessTokensTable)
       .set({ expiresAt: params.expiresAt })
       .where(eq(schema.oauthAccessTokensTable.token, params.tokenHash))
+      .returning();
+
+    return accessToken ?? null;
+  }
+
+  /**
+   * Bind a freshly minted token to a resource audience, only while it is still
+   * unbound. better-auth issues opaque tokens with a null `referenceId`; the
+   * shareable-App connector mint stamps the audience here. The `IS NULL` guard
+   * makes this a one-shot write so it can never clobber a binding another issuer
+   * (e.g. the enterprise-managed `mcp-resource:` path) already set. Returns the
+   * updated row, or null when the token was absent or already bound.
+   */
+  static async bindReferenceIdByTokenHashWhenUnbound(params: {
+    tokenHash: string;
+    referenceId: string;
+  }) {
+    const [accessToken] = await db
+      .update(schema.oauthAccessTokensTable)
+      .set({ referenceId: params.referenceId })
+      .where(
+        and(
+          eq(schema.oauthAccessTokensTable.token, params.tokenHash),
+          isNull(schema.oauthAccessTokensTable.referenceId),
+        ),
+      )
       .returning();
 
     return accessToken ?? null;

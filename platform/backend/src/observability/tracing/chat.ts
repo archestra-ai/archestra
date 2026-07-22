@@ -8,17 +8,19 @@ import {
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { AgentType } from "@/types";
 import {
+  ATTR_ARCHESTRA_AGENT_LABEL_PREFIX,
   ATTR_ARCHESTRA_AGENT_TYPE,
-  ATTR_ARCHESTRA_LABEL_PREFIX,
   ATTR_ARCHESTRA_TRIGGER_SOURCE,
   ATTR_GENAI_AGENT_ID,
   ATTR_GENAI_AGENT_NAME,
   ATTR_GENAI_OPERATION_NAME,
   ATTR_ROUTE_CATEGORY,
   RouteCategory,
+  type SpanTeamInfo,
   type SpanUserInfo,
   setSessionId,
   setSpanError,
+  setTeamAttributes,
   setUserAttributes,
 } from "./attributes";
 
@@ -33,6 +35,8 @@ import {
  * @param params.agentType - The agent type (optional)
  * @param params.sessionId - Conversation/session ID (optional)
  * @param params.labels - Agent labels (optional)
+ * @param params.teams - The agent's teams with labels (optional)
+ * @param params.userTeams - The requesting user's teams with labels (optional)
  * @param params.routeCategory - The route category (defaults to RouteCategory.CHAT)
  * @param params.triggerSource - The invocation trigger (e.g. "ms-teams", "slack", "email", "mcp-tool")
  * @param params.callback - The callback function to execute within the span context
@@ -44,6 +48,8 @@ export async function startActiveChatSpan<T>(params: {
   agentType?: AgentType;
   sessionId?: string;
   labels?: { key: string; value: string }[];
+  teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
   routeCategory?: RouteCategory;
   triggerSource?: string;
   user?: SpanUserInfo | null;
@@ -86,11 +92,14 @@ export async function startActiveChatSpan<T>(params: {
       if (params.labels && params.labels.length > 0) {
         for (const label of params.labels) {
           span.setAttribute(
-            `${ATTR_ARCHESTRA_LABEL_PREFIX}${label.key}`,
+            `${ATTR_ARCHESTRA_AGENT_LABEL_PREFIX}${label.key}`,
             label.value,
           );
         }
       }
+
+      setTeamAttributes(span, params.teams, "agent");
+      setTeamAttributes(span, params.userTeams, "user");
 
       try {
         const result = await params.callback(span);

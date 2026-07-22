@@ -14,6 +14,19 @@ export interface ParsedSkill {
   content: string;
   license: string | null;
   compatibility: string | null;
+  /**
+   * Space-separated `allowed-tools` list, normalized from either a string or a
+   * YAML sequence. `null` when the field is absent or empty.
+   */
+  allowedTools: string | null;
+  /**
+   * Optional `agent` field: the name of the agent the skill runs in. When set,
+   * activation delegates the skill to that agent instead of loading the
+   * instructions into the caller's context.
+   */
+  agentName: string | null;
+  /** When true, the body is rendered through Handlebars at activation. */
+  templated: boolean;
   metadata: Record<string, string>;
 }
 
@@ -35,7 +48,11 @@ export const SKILL_MANIFEST_FILENAME = "SKILL.md";
  * the required `name`/`description` fields.
  */
 export function parseSkillManifest(raw: string): ParsedSkill {
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/);
+  // A SKILL.md authored on Windows can carry a leading UTF-8 BOM, which
+  // github-import preserves (it decodes with ignoreBOM). Strip it so the
+  // frontmatter block, anchored at the start of the string, still matches.
+  const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/);
   if (!match) {
     throw new SkillParseError(
       "SKILL.md must start with a YAML frontmatter block delimited by ---",
@@ -71,11 +88,28 @@ export function parseSkillManifest(raw: string): ParsedSkill {
   return {
     name,
     description,
-    content: raw.slice(match[0].length).trim(),
+    content: text.slice(match[0].length).trim(),
     license: readString(fields.license) || null,
     compatibility: readString(fields.compatibility) || null,
+    allowedTools: readAllowedTools(fields["allowed-tools"]),
+    agentName: readString(fields.agent) || null,
+    templated: readBoolean(fields.templated),
     metadata: readStringMap(fields.metadata),
   };
+}
+
+/**
+ * Normalize an `allowed-tools` list into the stored space-separated string.
+ * The spec defines the field as space-separated, but YAML authors often write
+ * a sequence and API callers send arrays; accept any mix of space-separated
+ * strings. Returns `null` when nothing usable remains.
+ */
+export function normalizeAllowedTools(tools: string[]): string | null {
+  const normalized = tools
+    .flatMap((tool) => tool.split(/\s+/))
+    .map((tool) => tool.trim())
+    .filter(Boolean);
+  return normalized.length > 0 ? normalized.join(" ") : null;
 }
 
 /**
@@ -94,6 +128,22 @@ export function deriveSkillFileKind(path: string): SkillFileKind {
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readAllowedTools(value: unknown): string | null {
+  const tools = Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : typeof value === "string"
+      ? [value]
+      : [];
+  return normalizeAllowedTools(tools);
+}
+
+/** Coerce a YAML scalar into a boolean, accepting `true` or the string "true". */
+function readBoolean(value: unknown): boolean {
+  return (
+    value === true || (typeof value === "string" && value.trim() === "true")
+  );
 }
 
 /** Coerce a YAML mapping into a flat `Record<string, string>`. */

@@ -1,5 +1,5 @@
+import { TimeInMs } from "@archestra/shared";
 import KeyvPostgres from "@keyv/postgres";
-import { TimeInMs } from "@shared";
 import { sql } from "drizzle-orm";
 import Keyv from "keyv";
 import QuickLRU from "quick-lru";
@@ -32,16 +32,56 @@ export const CacheKey = {
   ChatStop: "chat-stop",
   /** Maps a conversation to the id of its currently-running chat stream */
   ChatActiveStream: "chat-active-stream",
+  /** Pending MCP elicitation responses from the chat UI */
+  ChatMcpElicitation: "chat-mcp-elicitation",
   /** Channel discovery TTL per workspace */
   ChannelDiscovery: "channel-discovery",
   /** Slack user ID → email mapping */
   SlackUserEmail: "slack-user-email",
   /** Virtual API key brute-force rate limiting per IP */
   VirtualKeyRateLimit: "virtual-key-rate-limit",
+  /** Connection-setup script token brute-force rate limiting per IP */
+  ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
+  ConnectionHealthRateLimit: "connection-health-rate-limit",
+  /** GitHub Copilot device-flow sign-in rate limiting per user */
+  GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
+  /** App Gallery share (GitHub device-flow) sign-in rate limiting per user */
+  AppGalleryDeviceAuthRateLimit: "app-gallery-device-auth-rate-limit",
+  /** Microsoft 365 Copilot device-flow sign-in rate limiting per user */
+  Microsoft365CopilotDeviceAuthRateLimit:
+    "microsoft-365-copilot-device-auth-rate-limit",
+  /** ChatGPT/Codex subscription device-flow sign-in rate limiting per user */
+  OpenaiCodexDeviceAuthRateLimit: "openai-codex-device-auth-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
+  /** Per-user group-token resolution for auto-sync-permissions KB connectors */
+  KbGroupTokens: "kb-group-tokens",
+  /** Cross-pass upstream identity lookups (account id → email/profile) for KB permission sync */
+  KbConnectorIdentity: "kb-connector-identity",
+  /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
+  TeamsThreadActive: "teams-thread-active",
+  /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */
+  SlackThreadActive: "slack-thread-active",
+  /** MS Teams channel threads that already got the one-time "you can mute me" hint */
+  TeamsThreadMuteHint: "teams-thread-mute-hint",
+  /** Slack channel threads that already got the one-time "you can mute me" hint */
+  SlackThreadMuteHint: "slack-thread-mute-hint",
+  /** Latest mute token per MS Teams channel thread (cross-pod in-flight reply suppression) */
+  TeamsThreadMuteMarker: "teams-thread-mute-marker",
+  /** Latest mute token per Slack channel thread (cross-pod in-flight reply suppression) */
+  SlackThreadMuteMarker: "slack-thread-mute-marker",
+  /** MS Teams channel threads muted while the channel answers all messages */
+  TeamsThreadMuted: "teams-thread-muted",
+  /** Slack channel threads muted while the channel answers all messages */
+  SlackThreadMuted: "slack-thread-muted",
+  /** Per-channel "answer all messages" flag, briefly cached to spare the gate a DB read per message */
+  ChatOpsChannelAnswerAll: "chatops-channel-answer-all",
+  /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
+  TelegramApprovalCallback: "chatops-telegram-approval",
+  /** One-shot codes linking a Telegram chat to a signed-in user */
+  TelegramLinkCode: "chatops-telegram-link",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
@@ -287,24 +327,6 @@ class CacheManager {
   }
 
   /**
-   * Wrap a function with caching. If the key exists and hasn't expired,
-   * return the cached value. Otherwise, call the function and cache the result.
-   */
-  async wrap<T>(
-    key: AllowedCacheKey,
-    fnc: () => Promise<T>,
-    { ttl }: { ttl?: number; refreshThreshold?: number } = {},
-  ): Promise<T> {
-    const cached = await this.get<T>(key);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const result = await fnc();
-    await this.set(key, result, ttl);
-    return result;
-  }
-
-  /**
    * Stop the cache manager and close connections.
    * Should be called during graceful shutdown.
    */
@@ -423,7 +445,9 @@ export class LRUCacheManager<T = unknown> {
    * Check if a key exists in the cache (and is not expired).
    */
   has(key: string): boolean {
-    const entry = this.lruStore.get(key);
+    // peek, not get: a pure existence check must not promote the entry's
+    // recency, or has()-only keys outlive keys that are actually read.
+    const entry = this.lruStore.peek(key);
     if (!entry) {
       return false;
     }

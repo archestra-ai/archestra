@@ -1,4 +1,4 @@
-import { addNomicTaskPrefix } from "@shared";
+import { addNomicTaskPrefix } from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
@@ -6,6 +6,10 @@ import type { VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
 import { callEmbedding, getEmbeddingDiscriminator } from "./embedding-clients";
+import {
+  EmbeddingDimensionMismatchError,
+  normalizeEmbeddingError,
+} from "./errors";
 import {
   buildEmbeddingInteraction,
   withKbObservability,
@@ -27,6 +31,7 @@ interface ChunkResult {
     title: string;
     sourceUrl: string | null;
     documentId: string;
+    sourceId: string | null;
     connectorType: string | null;
   };
 }
@@ -38,6 +43,12 @@ class QueryService {
     queryText: string;
     userAcl: AclEntry[];
     bypassAcl?: boolean;
+    /**
+     * Defense-in-depth environment isolation. When provided (incl. `null` =
+     * Default), the chunk search also requires the chunk's connector to be in
+     * this environment, so a stray cross-env connectorId cannot leak results.
+     */
+    environmentId?: string | null;
     limit?: number;
   }): Promise<ChunkResult[]> {
     const {
@@ -45,6 +56,7 @@ class QueryService {
       organizationId,
       queryText,
       bypassAcl = false,
+      environmentId,
       limit = 10,
     } = params;
     if (connectorIds.length === 0) return [];
@@ -74,6 +86,7 @@ class QueryService {
           limit: overFetchLimit,
           userAcl: params.userAcl,
           bypassAcl,
+          environmentId,
           type: eq.type,
           hybridEnabled,
         }),
@@ -88,6 +101,27 @@ class QueryService {
       weights,
       k: 50,
     });
+
+    // Empty results can mean "no matching documents" (normal) OR that the
+    // documents were ingested at a different embedding dimension than the one now
+    // configured — in which case the search targeted an empty per-dimension column
+    // and silently found nothing. Distinguish them so the latter surfaces as an
+    // actionable error instead of a puzzling empty result.
+    if (merged.length === 0) {
+      const populated =
+        await KbChunkModel.getPopulatedEmbeddingDimensions(connectorIds);
+      const mismatch = findEmbeddingDimensionMismatch(
+        populated,
+        embeddingConfig.dimensions,
+      );
+      if (mismatch) {
+        throw new EmbeddingDimensionMismatchError(
+          embeddingConfig.model,
+          embeddingConfig.dimensions,
+          mismatch,
+        );
+      }
+    }
 
     let topResults = merged.slice(0, overFetchLimit);
 
@@ -131,6 +165,7 @@ class QueryService {
     limit: number;
     userAcl: AclEntry[];
     bypassAcl: boolean;
+    environmentId?: string | null;
     type: "semantic" | "keyword";
     hybridEnabled: boolean;
   }): Promise<VectorSearchResult[]> {
@@ -141,6 +176,7 @@ class QueryService {
       limit,
       userAcl,
       bypassAcl,
+      environmentId,
       type,
       hybridEnabled,
     } = params;
@@ -150,37 +186,47 @@ class QueryService {
       "[QueryService] Searching expanded query",
     );
 
-    const embeddingResponse = await withKbObservability({
-      operationName: "embedding",
-      provider: embeddingConfig.provider,
-      model: embeddingConfig.model,
-      source: "knowledge:embedding",
-      type: getEmbeddingDiscriminator(embeddingConfig.provider),
-      callback: () =>
-        callEmbedding({
-          inputs: [
-            addNomicTaskPrefix(
-              embeddingConfig.model,
-              queryText,
-              "search_query",
-            ),
-          ],
-          model: embeddingConfig.model,
-          apiKey: embeddingConfig.apiKey,
-          baseUrl: embeddingConfig.baseUrl,
-          dimensions: embeddingConfig.dimensions,
-          provider: embeddingConfig.provider,
-        }),
-      buildInteraction: (
-        response: Parameters<typeof buildEmbeddingInteraction>[0]["response"],
-      ) =>
-        buildEmbeddingInteraction({
-          model: embeddingConfig.model,
-          input: queryText,
-          dimensions: embeddingConfig.dimensions,
-          response,
-        }),
-    });
+    let embeddingResponse: Awaited<ReturnType<typeof callEmbedding>>;
+    try {
+      embeddingResponse = await withKbObservability({
+        operationName: "embedding",
+        provider: embeddingConfig.provider,
+        model: embeddingConfig.model,
+        source: "knowledge:embedding",
+        type: getEmbeddingDiscriminator(embeddingConfig.provider),
+        callback: () =>
+          callEmbedding({
+            inputs: [
+              addNomicTaskPrefix(
+                embeddingConfig.model,
+                queryText,
+                "search_query",
+              ),
+            ],
+            model: embeddingConfig.model,
+            apiKey: embeddingConfig.apiKey,
+            baseUrl: embeddingConfig.baseUrl,
+            dimensions: embeddingConfig.dimensions,
+            provider: embeddingConfig.provider,
+          }),
+        buildInteraction: (
+          response: Parameters<typeof buildEmbeddingInteraction>[0]["response"],
+        ) =>
+          buildEmbeddingInteraction({
+            model: embeddingConfig.model,
+            input: queryText,
+            dimensions: embeddingConfig.dimensions,
+            response,
+          }),
+      });
+    } catch (error) {
+      // Map the raw provider/network failure into a typed KB error naming the
+      // provider/model, so the query handler can present an actionable message.
+      throw normalizeEmbeddingError(error, {
+        provider: embeddingConfig.provider,
+        model: embeddingConfig.model,
+      });
+    }
 
     if (!embeddingResponse.data[0]?.embedding) {
       logger.warn(
@@ -198,6 +244,7 @@ class QueryService {
           limit,
           userAcl,
           bypassAcl,
+          environmentId,
         })
       : Promise.resolve([] as VectorSearchResult[]);
 
@@ -209,6 +256,7 @@ class QueryService {
         limit,
         userAcl,
         bypassAcl,
+        environmentId,
       }),
       fullTextPromise,
     ]);
@@ -251,6 +299,7 @@ class QueryService {
         title: row.title,
         sourceUrl: row.sourceUrl,
         documentId: row.documentId,
+        sourceId: row.sourceId ?? null,
         connectorType: row.connectorType,
       },
     }));
@@ -258,3 +307,28 @@ class QueryService {
 }
 
 export const queryService = new QueryService();
+
+/**
+ * Decide whether an empty search result reflects a dimension mismatch rather than
+ * a genuine no-match. Returns the ingested dimensions when NONE match the
+ * configured one, or `null` when there is no conflict — either because no
+ * documents are ingested (a legitimate empty result) or because documents exist
+ * at the configured dimension (also a legitimate no-match).
+ *
+ * This runs only when the search returned nothing, so it catches the whole-corpus
+ * mismatch (everything ingested at another dimension). A mixed corpus where some
+ * connectors match the configured dimension and others don't is NOT fully covered
+ * — those results suppress this check — but that requires connectors ingested at
+ * different dimensions, which the embedding-config lock normally prevents.
+ *
+ * @public — pure decision helper extracted for unit testing (pgvector column
+ * behavior is not exercisable in the PGlite test DB); called within this module.
+ */
+export function findEmbeddingDimensionMismatch(
+  populatedDimensions: Set<number>,
+  configuredDimension: number,
+): number[] | null {
+  if (populatedDimensions.size === 0) return null;
+  if (populatedDimensions.has(configuredDimension)) return null;
+  return [...populatedDimensions];
+}

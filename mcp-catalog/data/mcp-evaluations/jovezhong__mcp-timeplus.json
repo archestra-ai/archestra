@@ -1,0 +1,208 @@
+{
+  "name": "jovezhong__mcp-timeplus",
+  "display_name": "mcp-timeplus",
+  "description": "Execute SQL queries and manage databases seamlessly with Timeplus. Leverage powerful tools to interact with your data, Kafka topics, and Iceberg tables efficiently. Enhance your data workflows with a user-friendly interface and robust backend capabilities.",
+  "author": {
+    "name": "jovezhong"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-timeplus"],
+    "env": {
+      "TIMEPLUS_HOST": "${user_config.timeplus_host}",
+      "TIMEPLUS_PORT": "${user_config.timeplus_port}",
+      "TIMEPLUS_USER": "${user_config.timeplus_user}",
+      "TIMEPLUS_PASSWORD": "${user_config.timeplus_password}",
+      "TIMEPLUS_SECURE": "${user_config.timeplus_secure}",
+      "TIMEPLUS_VERIFY": "${user_config.timeplus_verify}",
+      "TIMEPLUS_CONNECT_TIMEOUT": "${user_config.timeplus_connect_timeout}",
+      "TIMEPLUS_SEND_RECEIVE_TIMEOUT": "${user_config.timeplus_send_receive_timeout}",
+      "TIMEPLUS_DATABASE": "${user_config.timeplus_database}",
+      "TIMEPLUS_READ_ONLY": "${user_config.timeplus_read_only}",
+      "TIMEPLUS_KAFKA_CONFIG": "${user_config.timeplus_kafka_config}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "timeplus_host": {
+      "type": "string",
+      "title": "Timeplus Host",
+      "description": "The hostname of your Timeplus server",
+      "required": true
+    },
+    "timeplus_user": {
+      "type": "string",
+      "title": "Timeplus User",
+      "description": "The username for authentication",
+      "required": true
+    },
+    "timeplus_password": {
+      "type": "string",
+      "title": "Timeplus Password",
+      "description": "The password for authentication",
+      "sensitive": true,
+      "required": true
+    },
+    "timeplus_port": {
+      "type": "string",
+      "title": "Timeplus Port",
+      "description": "The port number of your Timeplus server. Default: 8443 if HTTPS is enabled, 8123 if disabled.",
+      "required": false,
+      "default": "8123"
+    },
+    "timeplus_secure": {
+      "type": "boolean",
+      "title": "Timeplus Secure Connection",
+      "description": "Enable/disable HTTPS connection. Set to 'true' for secure connections.",
+      "required": false,
+      "default": false
+    },
+    "timeplus_verify": {
+      "type": "boolean",
+      "title": "Timeplus Verify SSL Certificate",
+      "description": "Enable/disable SSL certificate verification. Set to 'false' to disable certificate verification (not recommended for production).",
+      "required": false,
+      "default": true
+    },
+    "timeplus_connect_timeout": {
+      "type": "number",
+      "title": "Timeplus Connection Timeout (seconds)",
+      "description": "Connection timeout in seconds. Increase this value if you experience connection timeouts.",
+      "required": false,
+      "default": 30,
+      "min": 1
+    },
+    "timeplus_send_receive_timeout": {
+      "type": "number",
+      "title": "Timeplus Send/Receive Timeout (seconds)",
+      "description": "Send/receive timeout in seconds. Increase this value for long-running queries.",
+      "required": false,
+      "default": 300,
+      "min": 1
+    },
+    "timeplus_database": {
+      "type": "string",
+      "title": "Timeplus Default Database",
+      "description": "Default database to use. Set this to automatically connect to a specific database.",
+      "required": false,
+      "default": ""
+    },
+    "timeplus_read_only": {
+      "type": "boolean",
+      "title": "Timeplus Read-Only Mode",
+      "description": "Enable/disable read-only mode. Set to 'false' to enable DDL/DML.",
+      "required": false,
+      "default": true
+    },
+    "timeplus_kafka_config": {
+      "type": "string",
+      "title": "Timeplus Kafka Configuration (JSON)",
+      "description": "A JSON string for the Kafka configuration. Please refer to librdkafka configuration or take the above example as a reference.",
+      "sensitive": true,
+      "required": false,
+      "default": "{\"bootstrap.servers\":\"a.aivencloud.com:28864\", \"sasl.mechanism\":\"SCRAM-SHA-256\",\"sasl.username\":\"avnadmin\", \"sasl.password\":\"thePassword\",\"security.protocol\":\"SASL_SSL\",\"enable.ssl.certificate.verification\":\"false\"}"
+    }
+  },
+  "readme": "# Timeplus MCP Server\n[![PyPI - Version](https://img.shields.io/pypi/v/mcp-timeplus)](https://pypi.org/project/mcp-timeplus)\n\nAn MCP server for Timeplus.\n\n<a href=\"https://glama.ai/mcp/servers/9aleefsq9s\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/9aleefsq9s/badge\" alt=\"mcp-timeplus MCP server\" /></a>\n\n## Features\n\n### Prompts\n\n* `generate_sql` to give LLM more knowledge about how to query Timeplus via SQL\n\n### Tools\n\n* `run_sql`\n  - Execute SQL queries on your Timeplus cluster.\n  - Input: `sql` (string): The SQL query to execute.\n  - By default, all Timeplus queries are run with `readonly = 1` to ensure they are safe. If you want to run DDL or DML queries, you can set the environment variable `TIMEPLUS_READ_ONLY` to `false`.\n\n* `list_databases`\n  - List all databases on your Timeplus cluster.\n\n* `list_tables`\n  - List all tables in a database.\n  - Input: `database` (string): The name of the database.\n\n* `list_kafka_topics`\n  - List all topics in a Kafka cluster\n\n* `explore_kafka_topic`\n  - Show some messages in the Kafka topic\n  - Input: `topic` (string): The name of the topic. `message_count` (int): The number of messages to show, default to 1.\n\n* `create_kafka_stream`\n  - Setup a streaming ETL in Timeplus to save the Kafka messages locally\n  - Input: `topic` (string): The name of the topic.\n\n* `connect_to_apache_iceberg`\n  - Connect to a database based on Apache Iceberg. Currently this is only available via Timeplus Enterprise and it's planned to make it available for Timeplus Proton soon.\n  - Input: `iceberg_db` (string): The name of the Iceberg database. `aws_account_id` (int): The AWS account ID (12 digits). `s3_bucket` (string): The S3 bucket name. `aws_region` (string): The AWS region, default to \"us-west-2\". `is_s3_table_bucket` (bool): Whether the S3 bucket is a S3 table bucket, default to False.\n\n## Configuration\n\nFirst, ensure you have the `uv` executable installed. If not, you can install it by following the instructions [here](https://docs.astral.sh/uv/).\n\n1. Open the Claude Desktop configuration file located at:\n   - On macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - On Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n2. Add the following:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-timeplus\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-timeplus\"],\n      \"env\": {\n        \"TIMEPLUS_HOST\": \"<timeplus-host>\",\n        \"TIMEPLUS_PORT\": \"<timeplus-port>\",\n        \"TIMEPLUS_USER\": \"<timeplus-user>\",\n        \"TIMEPLUS_PASSWORD\": \"<timeplus-password>\",\n        \"TIMEPLUS_SECURE\": \"false\",\n        \"TIMEPLUS_VERIFY\": \"true\",\n        \"TIMEPLUS_CONNECT_TIMEOUT\": \"30\",\n        \"TIMEPLUS_SEND_RECEIVE_TIMEOUT\": \"30\",\n        \"TIMEPLUS_READ_ONLY\": \"false\",\n        \"TIMEPLUS_KAFKA_CONFIG\": \"{\\\"bootstrap.servers\\\":\\\"a.aivencloud.com:28864\\\", \\\"sasl.mechanism\\\":\\\"SCRAM-SHA-256\\\",\\\"sasl.username\\\":\\\"avnadmin\\\", \\\"sasl.password\\\":\\\"thePassword\\\",\\\"security.protocol\\\":\\\"SASL_SSL\\\",\\\"enable.ssl.certificate.verification\\\":\\\"false\\\"}\"\n      }\n    }\n  }\n}\n```\n\nUpdate the environment variables to point to your own Timeplus service.\n\n3. Restart Claude Desktop to apply the changes.\n\nYou can also try this MCP server with other MCP clients, such as [5ire](https://github.com/nanbingxyz/5ire).\n\n## Development\n\n1. In `test-services` directory run `docker compose up -d` to start a Timeplus Proton server. You can also download it via `curl https://install.timeplus.com/oss | sh`, then start with `./proton server`.\n\n2. Add the following variables to a `.env` file in the root of the repository.\n\n```\nTIMEPLUS_HOST=localhost\nTIMEPLUS_PORT=8123\nTIMEPLUS_USER=default\nTIMEPLUS_PASSWORD=\nTIMEPLUS_SECURE=false\nTIMEPLUS_VERIFY=true\nTIMEPLUS_CONNECT_TIMEOUT=30\nTIMEPLUS_SEND_RECEIVE_TIMEOUT=30\nTIMEPLUS_READ_ONLY=false\nTIMEPLUS_KAFKA_CONFIG={\"bootstrap.servers\":\"a.aivencloud.com:28864\", \"sasl.mechanism\":\"SCRAM-SHA-256\",\"sasl.username\":\"avnadmin\", \"sasl.password\":\"thePassword\",\"security.protocol\":\"SASL_SSL\",\"enable.ssl.certificate.verification\":\"false\"}\n```\n\n3. Run `uv sync` to install the dependencies. Then do `source .venv/bin/activate`.\n\n4. For easy testing, you can run `mcp dev mcp_timeplus/mcp_server.py` to start the MCP server. Click the \"Connect\" button to connect the UI with the MCP server, then switch to the \"Tools\" tab to run the available tools.\n\n5. To build the Docker image, run `docker build -t mcp_timeplus .`.\n\n### Environment Variables\n\nThe following environment variables are used to configure the Timeplus connection:\n\n#### Required Variables\n* `TIMEPLUS_HOST`: The hostname of your Timeplus server\n* `TIMEPLUS_USER`: The username for authentication\n* `TIMEPLUS_PASSWORD`: The password for authentication\n\n#### Optional Variables\n* `TIMEPLUS_PORT`: The port number of your Timeplus server\n  - Default: `8443` if HTTPS is enabled, `8123` if disabled\n  - Usually doesn't need to be set unless using a non-standard port\n* `TIMEPLUS_SECURE`: Enable/disable HTTPS connection\n  - Default: `\"false\"`\n  - Set to `\"true\"` for secure connections\n* `TIMEPLUS_VERIFY`: Enable/disable SSL certificate verification\n  - Default: `\"true\"`\n  - Set to `\"false\"` to disable certificate verification (not recommended for production)\n* `TIMEPLUS_CONNECT_TIMEOUT`: Connection timeout in seconds\n  - Default: `\"30\"`\n  - Increase this value if you experience connection timeouts\n* `TIMEPLUS_SEND_RECEIVE_TIMEOUT`: Send/receive timeout in seconds\n  - Default: `\"300\"`\n  - Increase this value for long-running queries\n* `TIMEPLUS_DATABASE`: Default database to use\n  - Default: None (uses server default)\n  - Set this to automatically connect to a specific database\n* `TIMEPLUS_READ_ONLY`: Enable/disable read-only mode\n  - Default: `\"true\"`\n  - Set to `\"false\"` to enable DDL/DML\n* `TIMEPLUS_KAFKA_CONFIG`: A JSON string for the Kafka configuration. Please refer to [librdkafka configuration](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md) or take the above example as a reference.\n",
+  "category": "Data",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-timeplus": {
+        "command": "uvx",
+        "args": ["mcp-timeplus"],
+        "env": {
+          "TIMEPLUS_HOST": "<timeplus-host>",
+          "TIMEPLUS_PORT": "<timeplus-port>",
+          "TIMEPLUS_USER": "<timeplus-user>",
+          "TIMEPLUS_PASSWORD": "<timeplus-password>",
+          "TIMEPLUS_SECURE": "false",
+          "TIMEPLUS_VERIFY": "true",
+          "TIMEPLUS_CONNECT_TIMEOUT": "30",
+          "TIMEPLUS_SEND_RECEIVE_TIMEOUT": "30",
+          "TIMEPLUS_READ_ONLY": "false",
+          "TIMEPLUS_KAFKA_CONFIG": "{\"bootstrap.servers\":\"a.aivencloud.com:28864\", \"sasl.mechanism\":\"SCRAM-SHA-256\",\"sasl.username\":\"avnadmin\", \"sasl.password\":\"thePassword\",\"security.protocol\":\"SASL_SSL\",\"enable.ssl.certificate.verification\":\"false\"}"
+        }
+      },
+      "mcp-timeplus-dev": {
+        "command": "mcp",
+        "args": ["dev", "mcp_timeplus/mcp_server.py"],
+        "env": {
+          "TIMEPLUS_HOST": "localhost",
+          "TIMEPLUS_PORT": "8123",
+          "TIMEPLUS_USER": "default",
+          "TIMEPLUS_PASSWORD": "",
+          "TIMEPLUS_SECURE": "false",
+          "TIMEPLUS_VERIFY": "true",
+          "TIMEPLUS_CONNECT_TIMEOUT": "30",
+          "TIMEPLUS_SEND_RECEIVE_TIMEOUT": "30",
+          "TIMEPLUS_READ_ONLY": "false",
+          "TIMEPLUS_KAFKA_CONFIG": "{\"bootstrap.servers\":\"a.aivencloud.com:28864\", \"sasl.mechanism\":\"SCRAM-SHA-256\",\"sasl.username\":\"avnadmin\", \"sasl.password\":\"thePassword\",\"security.protocol\":\"SASL_SSL\",\"enable.ssl.certificate.verification\":\"false\"}"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jovezhong",
+    "repo": "mcp-timeplus",
+    "url": "https://github.com/jovezhong/mcp-timeplus",
+    "name": "jovezhong__mcp-timeplus",
+    "path": null,
+    "stars": 10,
+    "contributors": 7,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "20c52f41b6b530152aa3458f4702fe2f30efd000"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:30.336Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "timeplus-connect",
+      "importance": 9
+    },
+    {
+      "name": "confluent-kafka",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "pip-system-certs",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-timeplus\"\nversion = \"0.1.6\"\ndescription = \"An MCP server for Timeplus.\"\nreadme = \"README.md\"\nlicense = \"Apache-2.0\"\nlicense-files = [\"LICENSE\"]\nrequires-python = \">=3.13\"\ndependencies = [\n    \"mcp>=1.3.0\",\n    \"mcp[cli]>=1.3.0\",\n    \"python-dotenv>=1.0.1\",\n    \"uvicorn>=0.34.0\",\n    \"timeplus-connect>=0.8.16\",\n    \"confluent-kafka\",\n    \"pip-system-certs>=4.0\",\n]\n\n[project.scripts]\nmcp-timeplus = \"mcp_timeplus.main:main\"\n\n[project.urls]\nHome = \"https://github.com/jovezhong/mcp-timeplus\"\n\n[project.optional-dependencies]\ndev = [\"ruff\", \"pytest\"]\n\n[tool.hatch.build.targets.wheel]\npackages = [\"mcp_timeplus\"]\n\n[tool.ruff]\nline-length = 100\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n"
+}

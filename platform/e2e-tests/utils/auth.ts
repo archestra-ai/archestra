@@ -1,5 +1,5 @@
+import { E2eTestId } from "@archestra/shared";
 import { expect, type Locator, type Page } from "@playwright/test";
-import { E2eTestId } from "@shared";
 import { UI_BASE_URL } from "../consts";
 
 export async function expectAuthenticated(
@@ -22,7 +22,7 @@ export async function expectAuthenticated(
   await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout });
 }
 
-export async function expandSidebar(page: Page): Promise<void> {
+async function expandSidebar(page: Page): Promise<void> {
   const sidebar = page.locator("[data-slot=sidebar]");
   if (!(await sidebar.isVisible({ timeout: 2_000 }).catch(() => false))) {
     return;
@@ -78,27 +78,10 @@ export async function loginViaUi(
   page: Page,
   email: string,
   password: string,
-  options: { skipDefaultPasswordPrompt?: boolean } = {},
 ): Promise<void> {
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(password);
   await page.getByTestId(E2eTestId.SignInSubmitButton).click();
-  if (options.skipDefaultPasswordPrompt !== false) {
-    await skipDefaultPasswordChangePromptIfVisible(page);
-  }
-}
-
-async function skipDefaultPasswordChangePromptIfVisible(
-  page: Page,
-): Promise<void> {
-  const promptVisible = await page
-    .getByTestId(E2eTestId.DefaultPasswordChangePrompt)
-    .waitFor({ state: "visible", timeout: 10_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (promptVisible) {
-    await page.getByTestId(E2eTestId.DefaultPasswordChangeSkipButton).click();
-  }
 }
 
 export async function navigateAndVerifyAuth(params: {

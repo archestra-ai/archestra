@@ -115,12 +115,12 @@ Import from the shared workspace in both frontend and backend:
 
 ```typescript
 // In frontend (Next.js)
-import { Agent, CreateAgentRequest } from '@shared/types/agent.types';
-import { createAgentSchema } from '@shared/validation/agent.schema';
+import { Agent, CreateAgentRequest } from '@archestra/shared/types/agent.types';
+import { createAgentSchema } from '@archestra/shared/validation/agent.schema';
 
 // In backend (Fastify)
-import { Agent, CreateAgentRequest } from '@shared/types/agent.types';
-import { createAgentSchema } from '@shared/validation/agent.schema';
+import { Agent, CreateAgentRequest } from '@archestra/shared/types/agent.types';
+import { createAgentSchema } from '@archestra/shared/validation/agent.schema';
 ```
 
 ## Key Practices

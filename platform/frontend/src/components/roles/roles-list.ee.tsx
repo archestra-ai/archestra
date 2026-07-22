@@ -5,8 +5,8 @@ import {
   type Permissions,
   type PredefinedRoleName,
   roleDescriptions,
-} from "@shared";
-import { allAvailableActions } from "@shared/access-control";
+} from "@archestra/shared";
+import { allAvailableActions } from "@archestra/shared/access-control";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Copy, Download, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { RoleTypeIcon } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -32,9 +33,11 @@ import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useCreateRole,
   useDeleteRole,
+  useRole,
   useRolesPaginated,
   useUpdateRole,
 } from "@/lib/role.query";
@@ -58,7 +61,12 @@ export function RolesList() {
     updateQueryParams,
   } = useDataTableQueryParams();
   const nameFilter = searchParams.get("name") || undefined;
-  const { data: rolesResponse, isLoading } = useRolesPaginated({
+  const {
+    data: rolesResponse,
+    isLoading,
+    isLoadingError,
+    refetch,
+  } = useRolesPaginated({
     limit: pageSize,
     offset,
     name: nameFilter,
@@ -68,26 +76,58 @@ export function RolesList() {
   const deleteMutation = useDeleteRole();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [viewPermissionsDialogOpen, setViewPermissionsDialogOpen] =
-    useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-  const [viewPermissionsRole, setViewPermissionsRole] = useState<Role | null>(
-    null,
-  );
+  const editRoleId = searchParams.get("edit");
+  const { data: editRoleFromUrl } = useRole(editRoleId ?? undefined);
+  const {
+    entity: selectedRole,
+    open: openEditRole,
+    close: closeEditDialog,
+  } = useDialogUrlParam<Role>({
+    paramName: "edit",
+    entityFromUrl: editRoleFromUrl ?? null,
+  });
+
+  const viewRoleId = searchParams.get("view");
+  const { data: viewRoleFromUrl } = useRole(viewRoleId ?? undefined);
+  const {
+    entity: viewPermissionsRole,
+    open: openViewPermissionsDialog,
+    close: closeViewPermissionsDialog,
+  } = useDialogUrlParam<Role>({
+    paramName: "view",
+    entityFromUrl: viewRoleFromUrl ?? null,
+  });
+
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
 
   const [roleName, setRoleName] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
   const [permission, setPermission] = useState<Permissions>({});
 
+  // Seed the edit form whenever a role's edit dialog opens, whether from a
+  // row click or a deep-linked URL.
+  useEffect(() => {
+    if (selectedRole) {
+      setRoleName(selectedRole.name);
+      setRoleDescription(selectedRole.description ?? "");
+      setPermission(selectedRole.permission);
+    }
+  }, [selectedRole]);
+
+  // Cancel any pending `?edit=<id>` deep link before opening create, or the
+  // by-id fetch could land and overwrite the shared create form state.
+  const handleCreateOpen = useCallback(() => {
+    closeEditDialog();
+    setCreateDialogOpen(true);
+  }, [closeEditDialog]);
+
   useEffect(() => {
     setActionButton(
       <PermissionButton
         permissions={{ ac: ["create"] }}
-        onClick={() => setCreateDialogOpen(true)}
+        onClick={handleCreateOpen}
       >
         <Plus className="h-4 w-4" />
         Create Custom Role
@@ -95,7 +135,7 @@ export function RolesList() {
     );
 
     return () => setActionButton(null);
-  }, [setActionButton]);
+  }, [setActionButton, handleCreateOpen]);
 
   const handleCreateRole = useCallback(() => {
     if (!roleName.trim()) {
@@ -155,8 +195,7 @@ export function RolesList() {
       } as Parameters<typeof updateMutation.mutate>[0],
       {
         onSuccess: () => {
-          setEditDialogOpen(false);
-          setSelectedRole(null);
+          closeEditDialog();
           setRoleName("");
           setRoleDescription("");
           setPermission({});
@@ -167,7 +206,14 @@ export function RolesList() {
         },
       },
     );
-  }, [selectedRole, roleDescription, roleName, permission, updateMutation]);
+  }, [
+    selectedRole,
+    roleDescription,
+    roleName,
+    permission,
+    updateMutation,
+    closeEditDialog,
+  ]);
 
   const handleDeleteRole = useCallback(() => {
     if (roleToDelete) {
@@ -184,29 +230,27 @@ export function RolesList() {
     }
   }, [roleToDelete, deleteMutation]);
 
-  const openEditDialog = useCallback((role: Role) => {
-    setSelectedRole(role);
-    setRoleName(role.name);
-    setRoleDescription(role.description ?? "");
-    setPermission(role.permission);
-    setEditDialogOpen(true);
-  }, []);
-
-  const openDuplicateDialog = useCallback((role: Role) => {
-    // Role names must be lowercase letters, numbers, and underscores only
-    // (validated by better-auth at create time). Make sure the suggested
-    // copy name follows the same rule.
-    const sanitized = role.name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
-    setRoleName(`${sanitized}_copy`);
-    setRoleDescription(
-      role.description ??
-        (role.predefined
-          ? (roleDescriptions[role.name as PredefinedRoleName] ?? "")
-          : ""),
-    );
-    setPermission(role.permission);
-    setCreateDialogOpen(true);
-  }, []);
+  const openDuplicateDialog = useCallback(
+    (role: Role) => {
+      // Cancel a pending deep-linked edit so its by-id fetch can't overwrite
+      // the duplicate form state once it resolves.
+      closeEditDialog();
+      // Role names must be lowercase letters, numbers, and underscores only
+      // (validated by better-auth at create time). Make sure the suggested
+      // copy name follows the same rule.
+      const sanitized = role.name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+      setRoleName(`${sanitized}_copy`);
+      setRoleDescription(
+        role.description ??
+          (role.predefined
+            ? (roleDescriptions[role.name as PredefinedRoleName] ?? "")
+            : ""),
+      );
+      setPermission(role.permission);
+      setCreateDialogOpen(true);
+    },
+    [closeEditDialog],
+  );
 
   // Sort: predefined first, then custom
   const allRoles = [...(rolesResponse?.data ?? [])].sort((a, b) => {
@@ -262,10 +306,7 @@ export function RolesList() {
             {
               icon: <Eye className="h-4 w-4" />,
               label: "View permissions",
-              onClick: () => {
-                setViewPermissionsRole(role);
-                setViewPermissionsDialogOpen(true);
-              },
+              onClick: () => openViewPermissionsDialog(role),
             },
             {
               icon: <Download className="h-4 w-4" />,
@@ -287,7 +328,7 @@ export function RolesList() {
             icon: <Pencil className="h-4 w-4" />,
             label: "Edit role",
             permissions: { ac: ["update"] },
-            onClick: () => openEditDialog(role),
+            onClick: () => openEditRole(role),
           },
           {
             icon: <Download className="h-4 w-4" />,
@@ -325,27 +366,34 @@ export function RolesList() {
           paramName="name"
         />
 
-        <DataTable
-          columns={columns}
-          data={allRoles}
-          isLoading={isLoading}
-          manualPagination
-          pagination={{
-            pageIndex,
-            pageSize,
-            total,
-          }}
-          onPaginationChange={setPagination}
-          hasActiveFilters={Boolean(nameFilter)}
-          onClearFilters={() =>
-            updateQueryParams({
-              name: null,
-              page: "1",
-            })
-          }
-          emptyMessage="No roles found"
-          hideSelectedCount
-        />
+        {isLoadingError ? (
+          <QueryLoadError
+            title="Couldn't load your roles"
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={allRoles}
+            isLoading={isLoading}
+            manualPagination
+            pagination={{
+              pageIndex,
+              pageSize,
+              total,
+            }}
+            onPaginationChange={setPagination}
+            hasActiveFilters={Boolean(nameFilter)}
+            onClearFilters={() =>
+              updateQueryParams({
+                name: null,
+                page: "1",
+              })
+            }
+            emptyMessage="No roles found"
+            hideSelectedCount
+          />
+        )}
       </div>
 
       {/* Create Role Dialog */}
@@ -410,8 +458,12 @@ export function RolesList() {
 
       {/* Edit Role Dialog */}
       <FormDialog
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
+        open={!!selectedRole}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeEditDialog();
+          }
+        }}
         title="Edit Role"
         description="Modify the role name and permissions. Changes will affect all users with this role."
         size="large"
@@ -453,8 +505,7 @@ export function RolesList() {
               type="button"
               variant="outline"
               onClick={() => {
-                setEditDialogOpen(false);
-                setSelectedRole(null);
+                closeEditDialog();
                 setRoleName("");
                 setRoleDescription("");
                 setPermission({});
@@ -470,11 +521,10 @@ export function RolesList() {
       </FormDialog>
 
       <FormDialog
-        open={viewPermissionsDialogOpen}
+        open={!!viewPermissionsRole}
         onOpenChange={(open) => {
-          setViewPermissionsDialogOpen(open);
           if (!open) {
-            setViewPermissionsRole(null);
+            closeViewPermissionsDialog();
           }
         }}
         title="View Predefined Role"
@@ -522,10 +572,7 @@ export function RolesList() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => {
-              setViewPermissionsDialogOpen(false);
-              setViewPermissionsRole(null);
-            }}
+            onClick={closeViewPermissionsDialog}
           >
             Close
           </Button>

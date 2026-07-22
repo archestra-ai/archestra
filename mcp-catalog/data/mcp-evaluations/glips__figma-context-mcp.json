@@ -1,0 +1,140 @@
+{
+  "name": "glips__figma-context-mcp",
+  "display_name": "Figma",
+  "description": "MCP server to provide Figma layout information to AI coding agents like Cursor",
+  "author": {
+    "name": "GLips"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "figma-developer-mcp", "--stdio"],
+    "env": {
+      "FIGMA_API_KEY": "${user_config.figma_api_key}",
+      "PORT": "${user_config.port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "figma_api_key": {
+      "type": "string",
+      "title": "Figma API Key",
+      "description": "Your personal access token for the Figma API. Instructions on how to create a Figma API access token can be found here: https://help.figma.com/hc/en-us/articles/8085703771159-Manage-personal-access-tokens",
+      "sensitive": true,
+      "required": true
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port on which the MCP server will listen. If not set, the server will use its default port.",
+      "required": false
+    }
+  },
+  "readme": "<a href=\"https://www.framelink.ai/?utm_source=github&utm_medium=referral&utm_campaign=readme\" target=\"_blank\" rel=\"noopener\">\n  <picture>\n    <source media=\"(prefers-color-scheme: dark)\" srcset=\"https://www.framelink.ai/github/HeaderDark.png\" />\n    <img alt=\"Framelink\" src=\"https://www.framelink.ai/github/HeaderLight.png\" />\n  </picture>\n</a>\n\n<div align=\"center\">\n  <h1>Framelink Figma MCP Server</h1>\n  <p>\n    🌐 Available in:\n    <a href=\"README.ko.md\">한국어 (Korean)</a> |\n    <a href=\"README.ja.md\">日本語 (Japanese)</a> |\n    <a href=\"README.zh-cn.md\">简体中文 (Simplified Chinese)</a> |\n    <a href=\"README.zh-tw.md\">繁體中文 (Traditional Chinese)</a>\n  </p>\n  <h3>Give your coding agent access to your Figma data.<br/>Implement designs in any framework in one-shot.</h3>\n  <a href=\"https://npmcharts.com/compare/figma-developer-mcp?interval=30\">\n    <img alt=\"weekly downloads\" src=\"https://img.shields.io/npm/dm/figma-developer-mcp.svg\">\n  </a>\n  <a href=\"https://github.com/GLips/Figma-Context-MCP/blob/main/LICENSE\">\n    <img alt=\"MIT License\" src=\"https://img.shields.io/github/license/GLips/Figma-Context-MCP\" />\n  </a>\n  <a href=\"https://framelink.ai/discord\">\n    <img alt=\"Discord\" src=\"https://img.shields.io/discord/1352337336913887343?color=7389D8&label&logo=discord&logoColor=ffffff\" />\n  </a>\n  <br />\n  <a href=\"https://twitter.com/glipsman\">\n    <img alt=\"Twitter\" src=\"https://img.shields.io/twitter/url?url=https%3A%2F%2Fx.com%2Fglipsman&label=%40glipsman\" />\n  </a>\n</div>\n\n<br/>\n\nGive [Cursor](https://cursor.sh/) and other AI-powered coding tools access to your Figma files with this [Model Context Protocol](https://modelcontextprotocol.io/introduction) server.\n\nWhen Cursor has access to Figma design data, it's **way** better at one-shotting designs accurately than alternative approaches like pasting screenshots.\n\n<h3><a href=\"https://www.framelink.ai/docs/quickstart?utm_source=github&utm_medium=referral&utm_campaign=readme\">See quickstart instructions →</a></h3>\n\n## Demo\n\n[Watch a demo of building a UI in Cursor with Figma design data](https://youtu.be/6G9yb-LrEqg)\n\n[![Watch the video](https://img.youtube.com/vi/6G9yb-LrEqg/maxresdefault.jpg)](https://youtu.be/6G9yb-LrEqg)\n\n## How it works\n\n1. Open your IDE's chat (e.g. agent mode in Cursor).\n2. Paste a link to a Figma file, frame, or group.\n3. Ask Cursor to do something with the Figma file—e.g. implement the design.\n4. Cursor will fetch the relevant metadata from Figma and use it to write your code.\n\nThis MCP server is specifically designed for use with Cursor. Before responding with context from the [Figma API](https://www.figma.com/developers/api), it simplifies and translates the response so only the most relevant layout and styling information is provided to the model.\n\nReducing the amount of context provided to the model helps make the AI more accurate and the responses more relevant.\n\n## Getting Started\n\nMany code editors and other AI clients use a configuration file to manage MCP servers.\n\nThe `figma-developer-mcp` server can be configured by adding the following to your configuration file.\n\n> NOTE: You will need to create a Figma access token to use this server. Instructions on how to create a Figma API access token can be found [here](https://help.figma.com/hc/en-us/articles/8085703771159-Manage-personal-access-tokens).\n\n### MacOS / Linux\n\n```json\n{\n  \"mcpServers\": {\n    \"Framelink Figma MCP\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"figma-developer-mcp\", \"--figma-api-key=YOUR-KEY\", \"--stdio\"]\n    }\n  }\n}\n```\n\n### Windows\n\n```json\n{\n  \"mcpServers\": {\n    \"Framelink Figma MCP\": {\n      \"command\": \"cmd\",\n      \"args\": [\"/c\", \"npx\", \"-y\", \"figma-developer-mcp\", \"--figma-api-key=YOUR-KEY\", \"--stdio\"]\n    }\n  }\n}\n```\n\nOr you can set `FIGMA_API_KEY` and `PORT` in the `env` field.\n\nIf you need more information on how to configure the Framelink Figma MCP server, see the [Framelink docs](https://www.framelink.ai/docs/quickstart?utm_source=github&utm_medium=referral&utm_campaign=readme).\n\n## Star History\n\n<a href=\"https://star-history.com/#GLips/Figma-Context-MCP\"><img src=\"https://api.star-history.com/svg?repos=GLips/Figma-Context-MCP&type=Date\" alt=\"Star History Chart\" width=\"600\" /></a>\n\n## Learn More\n\nThe Framelink Figma MCP server is simple but powerful. Get the most out of it by learning more at the [Framelink](https://framelink.ai?utm_source=github&utm_medium=referral&utm_campaign=readme) site.\n",
+  "category": "Development",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "figma-developer-mcp-stdio-with-config": {
+        "command": "npx",
+        "args": ["-y", "figma-developer-mcp", "--figma-api-key=YOUR-KEY", "--stdio"],
+        "env": {}
+      },
+      "figma-developer-mcp-stdio-with-config-windows": {
+        "command": "cmd",
+        "args": ["/c", "npx", "-y", "figma-developer-mcp", "--figma-api-key=YOUR-KEY", "--stdio"],
+        "env": {}
+      },
+      "figma-developer-mcp-stdio-with-env": {
+        "command": "npx",
+        "args": ["-y", "figma-developer-mcp", "--stdio"],
+        "env": {
+          "FIGMA_API_KEY": "YOUR-KEY",
+          "PORT": "YOUR-PORT"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "GLips",
+    "repo": "Figma-Context-MCP",
+    "url": "https://github.com/GLips/Figma-Context-MCP",
+    "name": "glips__figma-context-mcp",
+    "path": null,
+    "stars": 10530,
+    "contributors": 20,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "79e1e5c73044a90a7617a4723bdc9288f0ce768a"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.972Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@figma/rest-api-spec",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@types/yargs",
+      "importance": 2
+    },
+    {
+      "name": "cross-env",
+      "importance": 4
+    },
+    {
+      "name": "dotenv",
+      "importance": 6
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "js-yaml",
+      "importance": 6
+    },
+    {
+      "name": "remeda",
+      "importance": 5
+    },
+    {
+      "name": "sharp",
+      "importance": 8
+    },
+    {
+      "name": "yargs",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"figma-developer-mcp\",\n  \"version\": \"0.5.2\",\n  \"description\": \"Model Context Protocol server for Figma integration\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"figma-developer-mcp\": \"dist/cli.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsup --dts\",\n    \"type-check\": \"tsc --noEmit\",\n    \"test\": \"jest\",\n    \"start\": \"node dist/cli.js\",\n    \"start:cli\": \"cross-env NODE_ENV=cli node dist/cli.js\",\n    \"start:http\": \"node dist/cli.js\",\n    \"dev\": \"cross-env NODE_ENV=development tsup --watch\",\n    \"dev:cli\": \"cross-env NODE_ENV=development tsup --watch -- --stdio\",\n    \"lint\": \"eslint .\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\"\",\n    \"inspect\": \"pnpx @modelcontextprotocol/inspector\",\n    \"prepack\": \"pnpm build\",\n    \"changeset\": \"changeset add\",\n    \"version\": \"changeset version && git add -A\",\n    \"beta:start\": \"changeset pre enter beta\",\n    \"beta:end\": \"changeset pre exit\",\n    \"beta:version\": \"changeset version && pnpm install --lockfile-only\",\n    \"beta:publish\": \"changeset publish\",\n    \"prerelease\": \"pnpm build\",\n    \"release\": \"changeset publish && git push --follow-tags\",\n    \"pub:release\": \"pnpm build && npm publish\",\n    \"pub:release:beta\": \"pnpm build && npm publish --tag beta\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"packageManager\": \"pnpm@10.10.0\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/GLips/Figma-Context-MCP.git\"\n  },\n  \"homepage\": \"https://www.framelink.ai\",\n  \"keywords\": [\n    \"figma\",\n    \"mcp\",\n    \"typescript\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@figma/rest-api-spec\": \"^0.33.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.10.2\",\n    \"@types/yargs\": \"^17.0.33\",\n    \"cross-env\": \"^7.0.3\",\n    \"dotenv\": \"^16.4.7\",\n    \"express\": \"^4.21.2\",\n    \"js-yaml\": \"^4.1.0\",\n    \"remeda\": \"^2.20.1\",\n    \"sharp\": \"^0.34.3\",\n    \"yargs\": \"^17.7.2\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@changesets/changelog-github\": \"^0.5.1\",\n    \"@changesets/cli\": \"^2.29.2\",\n    \"@eslint/js\": \"^9.33.0\",\n    \"@types/express\": \"^5.0.0\",\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/js-yaml\": \"^4.0.9\",\n    \"@types/node\": \"^20.17.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.24.0\",\n    \"@typescript-eslint/parser\": \"^8.24.0\",\n    \"eslint\": \"^9.20.1\",\n    \"eslint-config-prettier\": \"^10.0.1\",\n    \"jest\": \"^29.7.0\",\n    \"prettier\": \"^3.5.0\",\n    \"ts-jest\": \"^29.2.5\",\n    \"tsup\": \"^8.4.0\",\n    \"tsx\": \"^4.19.2\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n"
+}

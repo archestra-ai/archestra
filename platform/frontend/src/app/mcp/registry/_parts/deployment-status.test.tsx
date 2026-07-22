@@ -277,6 +277,170 @@ describe("computeDeploymentStatusSummary", () => {
       overallState: "running",
     });
   });
+
+  it("dedupes two entries that share a podName into one", () => {
+    const statuses = {
+      "server-1": {
+        state: "running" as const,
+        message: "Running",
+        error: null,
+        podName: "shared-pod",
+      },
+      "server-2": {
+        state: "running" as const,
+        message: "Running",
+        error: null,
+        podName: "shared-pod",
+      },
+    };
+    const result = computeDeploymentStatusSummary(
+      ["server-1", "server-2"],
+      statuses,
+    );
+    expect(result).toEqual({
+      total: 1,
+      running: 1,
+      pending: 0,
+      failed: 0,
+      overallState: "running",
+    });
+  });
+
+  it("counts two entries with distinct podNames separately", () => {
+    const statuses = {
+      "server-1": {
+        state: "running" as const,
+        message: "Running",
+        error: null,
+        podName: "pod-a",
+      },
+      "server-2": {
+        state: "running" as const,
+        message: "Running",
+        error: null,
+        podName: "pod-b",
+      },
+    };
+    const result = computeDeploymentStatusSummary(
+      ["server-1", "server-2"],
+      statuses,
+    );
+    expect(result).toEqual({
+      total: 2,
+      running: 2,
+      pending: 0,
+      failed: 0,
+      overallState: "running",
+    });
+  });
+
+  it("reports pending overallState when the only deployment is pending", () => {
+    const statuses = {
+      "server-1": {
+        state: "pending" as const,
+        message: "Starting",
+        error: null,
+      },
+    };
+    const result = computeDeploymentStatusSummary(["server-1"], statuses);
+    expect(result).toEqual({
+      total: 1,
+      running: 0,
+      pending: 1,
+      failed: 0,
+      overallState: "pending",
+    });
+  });
+
+  it("dedupes multi-tenant rows by deploymentName even before a podName resolves", () => {
+    // Fresh-install bug: server-2's pod has not scheduled yet (podName null),
+    // but both rows share one deployment, so the count must stay 1.
+    const statuses = {
+      "server-1": {
+        state: "running" as const,
+        message: "Running",
+        error: null,
+        podName: "pod-x",
+        deploymentName: "mcp-mt-shared",
+      },
+      "server-2": {
+        state: "pending" as const,
+        message: "Starting",
+        error: null,
+        deploymentName: "mcp-mt-shared",
+      },
+    };
+    const result = computeDeploymentStatusSummary(
+      ["server-1", "server-2"],
+      statuses,
+    );
+    expect(result).toEqual({
+      total: 1,
+      running: 1,
+      pending: 0,
+      failed: 0,
+      overallState: "running",
+    });
+  });
+
+  it("surfaces a failed alias when collapsing rows that share a deploymentName", () => {
+    const statuses = {
+      "server-1": {
+        state: "running" as const,
+        message: "Running",
+        error: null,
+        podName: "pod-x",
+        deploymentName: "mcp-mt-shared",
+      },
+      "server-2": {
+        state: "failed" as const,
+        message: "Error",
+        error: "crash",
+        deploymentName: "mcp-mt-shared",
+      },
+    };
+    const result = computeDeploymentStatusSummary(
+      ["server-1", "server-2"],
+      statuses,
+    );
+    expect(result).toEqual({
+      total: 1,
+      running: 0,
+      pending: 0,
+      failed: 1,
+      overallState: "failed",
+    });
+  });
+
+  it("counts entries with distinct deploymentNames separately (single-tenant)", () => {
+    const statuses = {
+      "server-1": {
+        state: "running" as const,
+        message: "Running",
+        error: null,
+        podName: "pod-1",
+        deploymentName: "mcp-server-1",
+      },
+      "server-2": {
+        state: "running" as const,
+        message: "Running",
+        error: null,
+        podName: "pod-2",
+        deploymentName: "mcp-server-2",
+      },
+    };
+    const result = computeDeploymentStatusSummary(
+      ["server-1", "server-2"],
+      statuses,
+    );
+    expect(result).toEqual({
+      total: 2,
+      running: 2,
+      pending: 0,
+      failed: 0,
+      overallState: "running",
+    });
+  });
 });
 
 describe("DeploymentStatusIndicator", () => {

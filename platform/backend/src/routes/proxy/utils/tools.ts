@@ -1,7 +1,8 @@
-import { isAgentTool } from "@shared";
-import { getArchestraMcpTools } from "@/archestra-mcp-server";
+import { isAgentTool } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import { ToolModel } from "@/models";
+import type { ToolInvocation, TrustedData } from "@/types";
 
 /**
  * Persist tools if present in the request
@@ -17,6 +18,11 @@ export const persistTools = async (
     toolDescription?: string;
   }>,
   agentId: string,
+  /** Org-configured defaults applied to each newly discovered tool's policies. */
+  defaults?: {
+    invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
+    resultAction?: TrustedData.TrustedDataPolicyAction;
+  },
 ) => {
   logger.debug(
     { agentId, toolCount: tools.length },
@@ -38,23 +44,24 @@ export const persistTools = async (
     "[tools] persistTools: fetched existing tools globally",
   );
 
-  // Get Archestra built-in tool names
-  const archestraTools = getArchestraMcpTools();
-  const archestraToolNamesSet = new Set(
-    archestraTools.map((tool) => tool.name),
-  );
-  logger.debug(
-    { archestraToolCount: archestraTools.length },
-    "[tools] persistTools: fetched Archestra built-in tools",
-  );
-
-  // Filter out tools that already exist in the database, are Archestra built-in tools,
-  // or are agent delegation tools (agent__*). Also deduplicate by tool name to avoid constraint violations
+  // Filter out tools that already exist in the database, are Archestra built-in
+  // tools, or are agent delegation tools (agent__*). Also deduplicate by tool name
+  // to avoid constraint violations.
+  //
+  // Built-ins are matched with `archestraMcpBranding.isLikelyToolName`, the loose
+  // discovery-only recognizer. It recognizes BOTH the default `archestra__` prefix
+  // and the org's branded prefix (e.g. `archestra_staging__`), AND the same
+  // built-in when a client decorates it with its own label between the server name
+  // and the short name (e.g. `archestra_staging__my_mcp_gateway_1234567__run_tool`).
+  // A client (including chat routed through this proxy) can hand us a built-in under
+  // any of these shapes; matching only the strict prefix would auto-discover the
+  // twin, and seeding would later promote it into the catalog as a duplicate
+  // built-in.
   const seenToolNames = new Set<string>();
   const toolsToAutoDiscover = tools.filter(({ toolName }) => {
     if (
       existingToolNamesSet.has(toolName) ||
-      archestraToolNamesSet.has(toolName) ||
+      archestraMcpBranding.isLikelyToolName(toolName) ||
       isAgentTool(toolName) ||
       seenToolNames.has(toolName)
     ) {
@@ -73,7 +80,7 @@ export const persistTools = async (
         existingToolNamesSet.has(t.toolName),
       ).length,
       skippedArchestraTools: tools.filter((t) =>
-        archestraToolNamesSet.has(t.toolName),
+        archestraMcpBranding.isLikelyToolName(t.toolName),
       ).length,
       skippedAgentTools: tools.filter((t) => isAgentTool(t.toolName)).length,
     },
@@ -102,6 +109,7 @@ export const persistTools = async (
       }),
     ),
     agentId,
+    defaults,
   );
 
   logger.debug(

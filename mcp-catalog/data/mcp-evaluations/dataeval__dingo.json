@@ -1,0 +1,158 @@
+{
+  "name": "dataeval__dingo",
+  "display_name": "dingo",
+  "description": "Dingo: A Comprehensive AI Data Quality Evaluation Tool",
+  "author": {
+    "name": "DataEval"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/mcp_server.py"],
+    "env": {
+      "DINGO_LLM_API_KEY": "${user_config.llm_api_key}",
+      "DINGO_LLM_API_URL": "${user_config.llm_api_url}",
+      "DINGO_LLM_MODEL": "${user_config.llm_model}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "llm_api_key": {
+      "type": "string",
+      "title": "LLM API Key",
+      "description": "Your API key for the Large Language Model (e.g., OpenAI API Key) used by Dingo for evaluations.",
+      "sensitive": true,
+      "required": true
+    },
+    "llm_api_url": {
+      "type": "string",
+      "title": "LLM API Base URL",
+      "description": "The base URL for LLM API requests (e.g., OpenAI API endpoint) used by Dingo.",
+      "default": "https://api.openai.com/v1/chat/completions",
+      "required": false
+    },
+    "llm_model": {
+      "type": "string",
+      "title": "LLM Model Name",
+      "description": "The name of the LLM model to use for Dingo evaluations (e.g., gpt-4o).",
+      "default": "gpt-4o",
+      "required": false
+    }
+  },
+  "readme": "<div align=\"center\" xmlns=\"http://www.w3.org/1999/html\">\n<!-- logo -->\n<p align=\"center\">\n  <img src=\"docs/assets/dingo-logo.png\" width=\"300px\" style=\"vertical-align:middle;\">\n</p>\n\n<!-- badges -->\n<p align=\"center\">\n  <a href=\"https://github.com/pre-commit/pre-commit\"><img src=\"https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white\" alt=\"pre-commit\"></a>\n  <a href=\"https://pypi.org/project/dingo-python/\"><img src=\"https://img.shields.io/pypi/v/dingo-python.svg\" alt=\"PyPI version\"></a>\n  <a href=\"https://pypi.org/project/dingo-python/\"><img src=\"https://img.shields.io/pypi/pyversions/dingo-python.svg\" alt=\"Python versions\"></a>\n  <a href=\"https://github.com/DataEval/dingo/blob/main/LICENSE\"><img src=\"https://img.shields.io/github/license/DataEval/dingo\" alt=\"License\"></a>\n  <a href=\"https://github.com/DataEval/dingo/stargazers\"><img src=\"https://img.shields.io/github/stars/DataEval/dingo\" alt=\"GitHub stars\"></a>\n  <a href=\"https://github.com/DataEval/dingo/network/members\"><img src=\"https://img.shields.io/github/forks/DataEval/dingo\" alt=\"GitHub forks\"></a>\n  <a href=\"https://github.com/DataEval/dingo/issues\"><img src=\"https://img.shields.io/github/issues/DataEval/dingo\" alt=\"GitHub issues\"></a>\n  <a href=\"https://mseep.ai/app/dataeval-dingo\"><img src=\"https://mseep.net/pr/dataeval-dingo-badge.png\" alt=\"MseeP.ai Security Assessment Badge\" height=\"20\"></a>\n  <a href=\"https://deepwiki.com/MigoXLab/dingo\"><img src=\"https://deepwiki.com/badge.svg\" alt=\"Ask DeepWiki\"></a>\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/DataEval/dingo)](https://archestra.ai/mcp-catalog/dataeval__dingo)\n</p>\n\n</div>\n\n\n<div align=\"center\">\n\n[English](README.md) · [简体中文](README_zh-CN.md) · [日本語](README_ja.md)\n\n</div>\n\n\n<!-- join us -->\n\n<p align=\"center\">\n    👋 join us on <a href=\"https://discord.gg/Jhgb2eKWh8\" target=\"_blank\">Discord</a> and <a href=\"./docs/assets/wechat.jpg\" target=\"_blank\">WeChat</a>\n</p>\n\n\n<p align=\"center\">\n  If you like Dingo, please give us a ⭐ on GitHub!\n  <br/>\n  <a href=\"https://github.com/DataEval/dingo/stargazers\" target=\"_blank\">\n    <img src=\"docs/assets/clickstar_2.gif\" alt=\"Click Star\" width=\"480\">\n  </a>\n</p>\n\n\n# Introduction\n\nDingo is a data quality evaluation tool that helps you automatically detect data quality issues in your datasets. Dingo provides a variety of built-in rules and model evaluation methods, and also supports custom evaluation methods. Dingo supports commonly used text datasets and multimodal datasets, including pre-training datasets, fine-tuning datasets, and evaluation datasets. In addition, Dingo supports multiple usage methods, including local CLI and SDK, making it easy to integrate into various evaluation platforms, such as [OpenCompass](https://github.com/open-compass/opencompass).\n\n## Architecture Diagram\n\n![Architecture of dingo](./docs/assets/architeture.png)\n\n# Quick Start\n\n## Installation\n\n```shell\npip install dingo-python\n```\n\n## Example Use Cases\n\n### 1. Evaluate LLM chat data\n\n```python\nfrom dingo.config.input_args import EvaluatorLLMArgs\nfrom dingo.io.input import Data\nfrom dingo.model.llm.llm_text_quality_model_base import LLMTextQualityModelBase\nfrom dingo.model.rule.rule_common import RuleEnterAndSpace\n\ndata = Data(\n    data_id='123',\n    prompt=\"hello, introduce the world\",\n    content=\"Hello! The world is a vast and diverse place, full of wonders, cultures, and incredible natural beauty.\"\n)\n\n\ndef llm():\n    LLMTextQualityModelBase.dynamic_config = EvaluatorLLMArgs(\n        key='YOUR_API_KEY',\n        api_url='https://api.openai.com/v1/chat/completions',\n        model='gpt-4o',\n    )\n    res = LLMTextQualityModelBase.eval(data)\n    print(res)\n\n\ndef rule():\n    res = RuleEnterAndSpace().eval(data)\n    print(res)\n```\n\n### 2. Evaluate Dataset\n\n```python\nfrom dingo.config import InputArgs\nfrom dingo.exec import Executor\n\n# Evaluate a dataset from Hugging Face\ninput_data = {\n    \"input_path\": \"tatsu-lab/alpaca\",  # Dataset from Hugging Face\n    \"dataset\": {\n        \"source\": \"hugging_face\",\n        \"format\": \"plaintext\"  # Format: plaintext\n    },\n    \"executor\": {\n        \"eval_group\": \"sft\",  # Rule set for SFT data\n        \"result_save\": {\n            \"bad\": True  # Save evaluation results\n        }\n    }\n}\n\ninput_args = InputArgs(**input_data)\nexecutor = Executor.exec_map[\"local\"](input_args)\nresult = executor.execute()\nprint(result)\n```\n\n## Command Line Interface\n\n### Evaluate with Rule Sets\n\n```shell\npython -m dingo.run.cli --input test/env/local_plaintext.json\n```\n\n### Evaluate with LLM (e.g., GPT-4o)\n\n```shell\npython -m dingo.run.cli --input test/env/local_json.json\n```\n\n## GUI Visualization\n\nAfter evaluation (with `result_save.bad=True`), a frontend page will be automatically generated. To manually start the frontend:\n\n```shell\npython -m dingo.run.vsl --input output_directory\n```\n\nWhere `output_directory` contains the evaluation results with a `summary.json` file.\n\n![GUI output](docs/assets/dingo_gui.png)\n\n## Online Demo\nTry Dingo on our online demo: [(Hugging Face)🤗](https://huggingface.co/spaces/DataEval/dingo)\n\n## Local Demo\nTry Dingo in local:\n\n```shell\ncd app_gradio\npython app.py\n```\n\n![Gradio demo](docs/assets/gradio_demo.png)\n\n\n## Google Colab Demo\nExperience Dingo interactively with Google Colab notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DataEval/dingo/blob/dev/examples/colab/dingo_colab_demo.ipynb)\n\n\n\n# MCP Server\n\nDingo includes an experimental Model Context Protocol (MCP) server. For details on running the server and integrating it with clients like Cursor, please see the dedicated documentation:\n\n[English](README_mcp.md) · [简体中文](README_mcp_zh-CN.md) · [日本語](README_mcp_ja.md)\n\n## Video Demonstration\n\nTo help you get started quickly with Dingo MCP, we've created a video walkthrough:\n\nhttps://github.com/user-attachments/assets/aca26f4c-3f2e-445e-9ef9-9331c4d7a37b\n\nThis video demonstrates step-by-step how to use Dingo MCP server with Cursor.\n\n\n# Data Quality Metrics\n\nDingo provides comprehensive data quality assessment through both rule-based and prompt-based evaluation metrics. These metrics cover multiple quality dimensions including effectiveness, completeness, similarity, security, and more.\n\n📊 **[View Complete Metrics Documentation →](docs/metrics.md)**\n\nOur evaluation system includes:\n- **Text Quality Assessment Metrics**: Pre-training data quality evaluation using DataMan methodology and enhanced multi-dimensional assessment\n- **SFT Data Assessment Metrics**: Honest, Helpful, Harmless evaluation for supervised fine-tuning data\n- **Classification Metrics**: Topic categorization and content classification\n- **Multimodality Assessment Metrics**: Image classification and relevance evaluation\n- **Rule-Based Quality Metrics**: Automated quality checks using heuristic rules for effectiveness and similarity detection\n- **Factuality Assessment Metrics**: Two-stage factuality evaluation based on GPT-5 System Card\n- etc\n\nMost metrics are backed by academic sources to ensure objectivity and scientific rigor.\n\n### Using LLM Assessment in Evaluation\n\nTo use these assessment prompts in your evaluations, specify them in your configuration:\n\n```python\ninput_data = {\n    # Other parameters...\n    \"executor\": {\n        \"prompt_list\": [\"QUALITY_BAD_SIMILARITY\"],  # Specific prompt to use\n    },\n    \"evaluator\": {\n        \"llm_config\": {\n            \"LLMTextQualityPromptBase\": {  # LLM model to use\n                \"model\": \"gpt-4o\",\n                \"key\": \"YOUR_API_KEY\",\n                \"api_url\": \"https://api.openai.com/v1/chat/completions\"\n            }\n        }\n    }\n}\n```\n\nYou can customize these prompts to focus on specific quality dimensions or to adapt to particular domain requirements. When combined with appropriate LLM models, these prompts enable comprehensive evaluation of data quality across multiple dimensions.\n\n### Hallucination Detection & RAG System Evaluation\n\nFor detailed guidance on using Dingo's hallucination detection capabilities, including HHEM-2.1-Open local inference and LLM-based evaluation:\n\n📖 **[View Hallucination Detection Guide →](docs/hallucination_guide.md)**\n\n### Factuality Assessment\n\nFor comprehensive guidance on using Dingo's two-stage factuality evaluation system:\n\n📖 **[View Factuality Assessment Guide →](docs/factcheck_guide.md)**\n\n# Rule Groups\n\nDingo provides pre-configured rule groups for different types of datasets:\n\n| Group | Use Case | Example Rules |\n|-------|----------|---------------|\n| `default` | General text quality | `RuleColonEnd`, `RuleContentNull`, `RuleDocRepeat`, etc. |\n| `sft` | Fine-tuning datasets | Rules from `default` plus `RuleHallucinationHHEM` for hallucination detection |\n| `rag` | RAG system evaluation | `RuleHallucinationHHEM`, `PromptHallucination` for response consistency |\n| `hallucination` | Hallucination detection | `PromptHallucination` with LLM-based evaluation |\n| `pretrain` | Pre-training datasets | Comprehensive set of 20+ rules including `RuleAlphaWords`, `RuleCapitalWords`, etc. |\n\nTo use a specific rule group:\n\n```python\ninput_data = {\n    \"executor\": {\n        \"eval_group\": \"sft\",  # Use \"default\", \"sft\", \"rag\", \"hallucination\", or \"pretrain\"\n    }\n    # other parameters...\n}\n```\n\n# Feature Highlights\n\n## Multi-source & Multi-modal Support\n\n- **Data Sources**: Local files, Hugging Face datasets, S3 storage\n- **Data Types**: Pre-training, fine-tuning, and evaluation datasets\n- **Data Modalities**: Text and image\n\n## Rule-based & Model-based Evaluation\n\n- **Built-in Rules**: 20+ general heuristic evaluation rules\n- **LLM Integration**: OpenAI, Kimi, and local models (e.g., Llama3)\n- **Hallucination Detection**: HHEM-2.1-Open local model and GPT-based evaluation\n- **RAG System Evaluation**: Response consistency and context alignment assessment\n- **Custom Rules**: Easily extend with your own rules and models\n- **Security Evaluation**: Perspective API integration\n\n## Flexible Usage\n\n- **Interfaces**: CLI and SDK options\n- **Integration**: Easy integration with other platforms\n- **Execution Engines**: Local and Spark\n\n## Comprehensive Reporting\n\n- **Quality Metrics**: 7-dimensional quality assessment\n- **Traceability**: Detailed reports for anomaly tracking\n\n# User Guide\n\n## Custom Rules, Prompts, and Models\n\nIf the built-in rules don't meet your requirements, you can create custom ones:\n\n### Custom Rule Example\n\n```python\nfrom dingo.model import Model\nfrom dingo.model.rule.base import BaseRule\nfrom dingo.config.input_args import EvaluatorRuleArgs\nfrom dingo.io import Data\nfrom dingo.model.modelres import ModelRes\n\n@Model.rule_register('QUALITY_BAD_RELEVANCE', ['default'])\nclass MyCustomRule(BaseRule):\n    \"\"\"Check for custom pattern in text\"\"\"\n\n    dynamic_config = EvaluatorRuleArgs(pattern=r'your_pattern_here')\n\n    @classmethod\n    def eval(cls, input_data: Data) -> ModelRes:\n        res = ModelRes()\n        # Your rule implementation here\n        return res\n```\n\n### Custom LLM Integration\n\n```python\nfrom dingo.model import Model\nfrom dingo.model.llm.base_openai import BaseOpenAI\n\n@Model.llm_register('my_custom_model')\nclass MyCustomModel(BaseOpenAI):\n    # Custom implementation here\n    pass\n```\n\nSee more examples in:\n- [Register Rules](examples/register/sdk_register_rule.py)\n- [Register Prompts](examples/register/sdk_register_prompt.py)\n- [Register Models](examples/register/sdk_register_llm.py)\n\n## Execution Engines\n\n### Local Execution\n\n```python\nfrom dingo.config import InputArgs\nfrom dingo.exec import Executor\n\ninput_args = InputArgs(**input_data)\nexecutor = Executor.exec_map[\"local\"](input_args)\nresult = executor.execute()\n\n# Get results\nsummary = executor.get_summary()        # Overall evaluation summary\nbad_data = executor.get_bad_info_list() # List of problematic data\ngood_data = executor.get_good_info_list() # List of high-quality data\n```\n\n### Spark Execution\n\n```python\nfrom dingo.config import InputArgs\nfrom dingo.exec import Executor\nfrom pyspark.sql import SparkSession\n\n# Initialize Spark\nspark = SparkSession.builder.appName(\"Dingo\").getOrCreate()\nspark_rdd = spark.sparkContext.parallelize([...])  # Your data as Data objects\n\ninput_data = {\n    \"executor\": {\n        \"eval_group\": \"default\",\n        \"result_save\": {\"bad\": True}\n    }\n}\ninput_args = InputArgs(**input_data)\nexecutor = Executor.exec_map[\"spark\"](input_args, spark_session=spark, spark_rdd=spark_rdd)\nresult = executor.execute()\n```\n\n## Evaluation Reports\n\nAfter evaluation, Dingo generates:\n\n1. **Summary Report** (`summary.json`): Overall metrics and scores\n2. **Detailed Reports**: Specific issues for each rule violation\n\nReport Description:\n1. **score**: `num_good` / `total`\n2. **type_ratio**: The count of type / total, such as: `QUALITY_BAD_COMPLETENESS` / `total`\n3. **name_ratio**: The count of name / total, such as: `QUALITY_BAD_COMPLETENESS-RuleColonEnd` / `total`\n\nExample summary:\n```json\n{\n    \"task_id\": \"d6c922ec-981c-11ef-b723-7c10c9512fac\",\n    \"task_name\": \"dingo\",\n    \"eval_group\": \"default\",\n    \"input_path\": \"test/data/test_local_jsonl.jsonl\",\n    \"output_path\": \"outputs/d6c921ac-981c-11ef-b723-7c10c9512fac\",\n    \"create_time\": \"20241101_144510\",\n    \"score\": 50.0,\n    \"num_good\": 1,\n    \"num_bad\": 1,\n    \"total\": 2,\n    \"type_ratio\": {\n        \"QUALITY_BAD_COMPLETENESS\": 0.5,\n        \"QUALITY_BAD_RELEVANCE\": 0.5\n    },\n    \"name_ratio\": {\n        \"QUALITY_BAD_COMPLETENESS-RuleColonEnd\": 0.5,\n        \"QUALITY_BAD_RELEVANCE-RuleSpecialCharacter\": 0.5\n    }\n}\n```\n\n# Future Plans\n\n- [ ] Richer graphic and text evaluation indicators\n- [ ] Audio and video data modality evaluation\n- [ ] Small model evaluation (fasttext, Qurating)\n- [ ] Data diversity evaluation\n\n# Limitations\n\nThe current built-in detection rules and model methods focus on common data quality problems. For specialized evaluation needs, we recommend customizing detection rules.\n\n# Acknowledgments\n\n- [RedPajama-Data](https://github.com/togethercomputer/RedPajama-Data)\n- [mlflow](https://github.com/mlflow/mlflow)\n- [deepeval](https://github.com/confident-ai/deepeval)\n\n# Contribution\n\nWe appreciate all the contributors for their efforts to improve and enhance `Dingo`. Please refer to the [Contribution Guide](docs/en/CONTRIBUTING.md) for guidance on contributing to the project.\n\n# License\n\nThis project uses the [Apache 2.0 Open Source License](LICENSE).\n\nThis project uses fasttext for some functionality including language detection. fasttext is licensed under the MIT License, which is compatible with our Apache 2.0 license and provides flexibility for various usage scenarios.\n\n# Citation\n\nIf you find this project useful, please consider citing our tool:\n\n```\n@misc{dingo,\n  title={Dingo: A Comprehensive Data Quality Evaluation Tool for Large Models},\n  author={Dingo Contributors},\n  howpublished={\\url{https://github.com/DataEval/dingo}},\n  year={2024}\n}\n```\n",
+  "category": "AI Tools",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "DataEval",
+    "repo": "dingo",
+    "url": "https://github.com/DataEval/dingo",
+    "name": "dataeval__dingo",
+    "path": null,
+    "stars": 439,
+    "contributors": 15,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "098af6d9f8e15062fc624523bf22f1235b3e8cc8"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:05.646Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@ant-design/charts",
+      "importance": 7
+    },
+    {
+      "name": "@ant-design/icons",
+      "importance": 6
+    },
+    {
+      "name": "@ant-design/plots",
+      "importance": 7
+    },
+    {
+      "name": "@electron-toolkit/preload",
+      "importance": 8
+    },
+    {
+      "name": "@electron-toolkit/utils",
+      "importance": 8
+    },
+    {
+      "name": "ahooks",
+      "importance": 8
+    },
+    {
+      "name": "antd",
+      "importance": 9
+    },
+    {
+      "name": "classnames",
+      "importance": 3
+    },
+    {
+      "name": "copy-to-clipboard",
+      "importance": 3
+    },
+    {
+      "name": "echarts-for-react",
+      "importance": 7
+    },
+    {
+      "name": "electron-updater",
+      "importance": 8
+    },
+    {
+      "name": "fs-extra",
+      "importance": 6
+    },
+    {
+      "name": "idb-keyval",
+      "importance": 5
+    },
+    {
+      "name": "lodash",
+      "importance": 5
+    },
+    {
+      "name": "minimist",
+      "importance": 4
+    },
+    {
+      "name": "react-intl",
+      "importance": 6
+    },
+    {
+      "name": "react-router-dom",
+      "importance": 9
+    },
+    {
+      "name": "zustand",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\n-r ./requirements/runtime.txt\n-r ./requirements/web.txt\n-r ./requirements/optional.txt\n-r ./requirements/docs.txt\n\n\n=== setup.py ===\nimport os\n\nfrom setuptools import find_packages, setup\n\nwith open(\"README.md\", \"r\", encoding='utf-8') as fh:\n    long_description = fh.read()\n\nwith open(\"./requirements/runtime.txt\", \"r\", encoding='utf-8') as f:\n    requirements = f.readlines()\n\nwith open(\"./requirements/web.txt\", \"r\", encoding='utf-8') as f:\n    requirements.extend(f.readlines())\n\n\n# 获取 app 和 web-static 目录下的所有文件\ndef get_data_files(directory):\n    paths = []\n    for (path, directories, filenames) in os.walk(directory):\n        for filename in filenames:\n            paths.append(os.path.join('..', path, filename))\n    return paths\n\n\napp_files = get_data_files('app')\nweb_static_files = get_data_files('web-static')\n\nsetup(\n    name=\"dingo-python\",\n    version=\"1.9\",\n    author=\"Dingo\",\n    description=\"A Comprehensive AI Data Quality Evaluation Tool for Large Models\",\n    long_description=long_description,\n    long_description_content_type=\"text/markdown\",\n    url=\"https://github.com/MigoXLab/dingo\",\n    packages=find_packages(),\n    package_data={\n        '': app_files + web_static_files,\n    },\n    include_package_data=True,\n    classifiers=[\n        \"Programming Language :: Python :: 3\",\n        \"Operating System :: OS Independent\",\n    ],\n    install_requires=[i.strip() for i in requirements],\n    python_requires='>=3.10',\n)\n\n\n=== app/package.json ===\n{\n  \"name\": \"dingo\",\n  \"version\": \"1.0.0\",\n  \"description\": \"An Electron application with React and TypeScript\",\n  \"main\": \"./out/main/index.js\",\n  \"author\": \"example.com\",\n  \"homepage\": \"https://electron-vite.org\",\n  \"files\": [\n    \"dist\",\n    \"src\",\n    \"electron\",\n    \"index.html\",\n    \"package.json\",\n    \"yarn.lock\",\n    \"README.md\"\n  ],\n  \"scripts\": {\n    \"format\": \"prettier --write .\",\n    \"lint\": \"eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix\",\n    \"typecheck:node\": \"tsc --noEmit -p tsconfig.node.json --composite false\",\n    \"typecheck:web\": \"tsc --noEmit -p tsconfig.web.json --composite false\",\n    \"typecheck\": \"npm run typecheck:node && npm run typecheck:web\",\n    \"start\": \"electron-vite preview\",\n    \"dev\": \"electron-vite dev --\",\n    \"start-npx\": \"npx electron-vite dev\",\n    \"build\": \"electron-vite build\",\n    \"postinstall\": \"electron-builder install-app-deps\",\n    \"build:unpack\": \"npm run build && electron-builder --dir\",\n    \"build:win\": \"npm run build && electron-builder --win\",\n    \"build:mac\": \"electron-vite build && electron-builder --mac\",\n    \"build:mac-x64\": \"electron-vite build  && electron-builder --mac --x64\",\n    \"build:win-x86\": \"npm run build && electron-builder --win --ia32\",\n    \"build:web\": \"electron-vite build --config electron.vite.config.ts --mode web\",\n    \"build:mac-debug\": \"cross-env DEBUG_PROD=true electron-vite build && electron-builder --mac\",\n    \"serve:web\": \"vite preview --config electron.vite.config.ts --mode web\",\n    \"build:linux\": \"electron-vite build && electron-builder --linux\"\n  },\n  \"dependencies\": {\n    \"@ant-design/charts\": \"^2.2.3\",\n    \"@ant-design/icons\": \"^5.5.1\",\n    \"@ant-design/plots\": \"^2.3.2\",\n    \"@electron-toolkit/preload\": \"^3.0.1\",\n    \"@electron-toolkit/utils\": \"^3.0.0\",\n    \"ahooks\": \"^3.8.1\",\n    \"antd\": \"^5.21.1\",\n    \"classnames\": \"^2.5.1\",\n    \"copy-to-clipboard\": \"^3.3.3\",\n    \"echarts-for-react\": \"^3.0.2\",\n    \"electron-updater\": \"^6.1.7\",\n    \"fs-extra\": \"^11.2.0\",\n    \"idb-keyval\": \"^6.2.1\",\n    \"lodash\": \"^4.17.21\",\n    \"minimist\": \"^1.2.8\",\n    \"react-intl\": \"^6.7.0\",\n    \"react-router-dom\": \"^6.26.2\",\n    \"zustand\": \"^5.0.0-rc.2\"\n  },\n  \"devDependencies\": {\n    \"@electron-toolkit/eslint-config-prettier\": \"^2.0.0\",\n    \"@electron-toolkit/eslint-config-ts\": \"^2.0.0\",\n    \"@electron-toolkit/tsconfig\": \"^1.0.1\",\n    \"@tailwindcss/line-clamp\": \"^0.4.4\",\n    \"@types/node\": \"^20.14.8\",\n    \"@types/react\": \"^18.3.3\",\n    \"@types/react-dom\": \"^18.3.0\",\n    \"@vitejs/plugin-react\": \"^4.3.1\",\n    \"autoprefixer\": \"^10.4.20\",\n    \"cross-env\": \"^7.0.3\",\n    \"electron\": \"^31.0.2\",\n    \"electron-builder\": \"^24.13.3\",\n    \"electron-vite\": \"^2.3.0\",\n    \"eslint\": \"^8.57.0\",\n    \"eslint-plugin-react\": \"^7.34.3\",\n    \"postcss\": \"^8.4.47\",\n    \"prettier\": \"^3.3.2\",\n    \"react\": \"^18.3.1\",\n    \"react-dom\": \"^18.3.1\",\n    \"sass-embedded\": \"^1.79.4\",\n    \"tailwindcss\": \"^3.4.13\",\n    \"typescript\": \"^5.5.2\",\n    \"vite\": \"^5.3.1\"\n  }\n}\n"
+}

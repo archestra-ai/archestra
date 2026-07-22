@@ -4,11 +4,7 @@ category: Archestra Platform
 order: 3
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 The Archestra Platform can be deployed using Docker for development and testing, or Helm for production environments. Both deployment methods provide access to the Admin UI on port 3000 and the API on port 9000.
 
@@ -28,7 +24,7 @@ Run the platform with a single command:
 
 ```bash
 docker pull archestra/platform:latest;
-docker run -p 9000:9000 -p 3000:3000\
+docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000\
    -e ARCHESTRA_QUICKSTART=true \
    -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
@@ -40,7 +36,7 @@ docker run -p 9000:9000 -p 3000:3000\
 
 ```powershell
 docker pull archestra/platform:latest;
-docker run -p 9000:9000 -p 3000:3000`
+docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000`
    -e ARCHESTRA_QUICKSTART=true `
    -v /var/run/docker.sock:/var/run/docker.sock `
    -v archestra-postgres-data:/var/lib/postgresql/data `
@@ -57,12 +53,14 @@ This will start the platform with:
 
 **Note**: The `-v /var/run/docker.sock:/var/run/docker.sock` mount enables the embedded Kubernetes cluster for MCP server execution. This is required for the quick-start Docker deployment. For production, use the Helm deployment with an external Kubernetes cluster instead.
 
-> **Accessing from another device on your network?** In quickstart mode, private network IPs (e.g., `192.168.x.x`, `10.x.x.x`) are automatically trusted, so authentication works without extra configuration.
+> **Need access from another device on your network?** Replace `127.0.0.1:9000:9000` and `127.0.0.1:3000:3000` with `0.0.0.0:9000:9000` and `0.0.0.0:3000:3000` in the Docker command.
+>
+> This exposes the Admin UI and API to your local network. In quickstart mode, private network IPs (e.g., `192.168.x.x`, `10.x.x.x`) are automatically trusted, so authentication works without extra configuration.
 
 If you have Kubernetes installed locally, you can use it for the MCP orchestrator. Make sure `kubectl` points to the right cluster and run the container without the socket and without `ARCHESTRA_QUICKSTART`. The orchestrator will create a cluster in the current context. See [Development with Standalone Kubernetes](./platform-orchestrator#local-development-with-docker-and-standalone-kubernetes)
 
 ```diff
-docker run -p 9000:9000 -p 3000:3000\
+docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000\
 -  -e ARCHESTRA_QUICKSTART=true \
 -  -v /var/run/docker.sock:/var/run/docker.sock \
    -v archestra-postgres-data:/var/lib/postgresql/data \
@@ -74,16 +72,16 @@ Running the platform without Kubernetes (or its alternatives) is also possible. 
 
 ### Using External PostgreSQL
 
-To use an external PostgreSQL database, pass the `DATABASE_URL` environment variable:
+To use an external PostgreSQL database, pass the `ARCHESTRA_DATABASE_URL` environment variable. `DATABASE_URL` is still accepted as a fallback.
 
 ```bash
 docker pull archestra/platform:latest;
-docker run -p 9000:9000 -p 3000:3000 \
-  -e DATABASE_URL=postgresql://user:password@host:5432/database \
+docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
+  -e ARCHESTRA_DATABASE_URL=postgresql://user:password@host:5432/database \
   archestra/platform
 ```
 
-⚠️ **Important**: If you don't specify `DATABASE_URL`, PostgreSQL will run inside the container for you. This approach is meant for **development and tinkering purposes only** and is **not intended for production**, as the data is not persisted when the container stops.
+⚠️ **Important**: If you don't specify `ARCHESTRA_DATABASE_URL` or `DATABASE_URL`, PostgreSQL will run inside the container for you. This approach is meant for **development and tinkering purposes only** and is **not intended for production**, as the data is not persisted when the container stops.
 
 ## Helm Deployment
 
@@ -212,6 +210,12 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 **Orchestrator Settings**:
 
 - `archestra.orchestrator.baseImage` - Base Docker image for MCP server containers (defaults to official Archestra MCP server base image)
+- `archestra.orchestrator.mcpServerResources.requests.cpu` - CPU request for generated MCP server containers (default: `50m`)
+- `archestra.orchestrator.mcpServerResources.requests.memory` - Memory request for generated MCP server containers (default: `128Mi`)
+- `archestra.orchestrator.mcpServerResources.requests.ephemeralStorage` - Ephemeral-storage request for generated MCP server containers (default: `256Mi`)
+- `archestra.orchestrator.mcpServerResources.limits.memory` - Memory limit for generated MCP server containers (default: `512Mi`)
+- `archestra.orchestrator.mcpServerResources.limits.ephemeralStorage` - Ephemeral-storage limit for generated MCP server containers (default: `1Gi`)
+- `archestra.orchestrator.failedPodReapIntervalSeconds` - How often Failed or Evicted MCP server pods are garbage-collected (default: `600`, `0` disables)
 
 **Kubernetes Settings**:
 
@@ -225,10 +229,10 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 - `archestra.orchestrator.kubernetes.serviceAccount.annotations` - Annotations for cloud integrations (e.g., [GKE Workload Identity](/docs/platform-supported-llm-providers#gke-with-workload-identity-recommended), AWS IRSA)
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
-- `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
-- `archestra.orchestrator.kubernetes.networkPolicy.create` - Create a `NetworkPolicy` for SSRF protection on MCP server pods (default: false). Blocks egress to private/internal IP ranges (RFC 1918, link-local, loopback) while allowing DNS and public internet access. Requires a CNI plugin that supports `NetworkPolicies` (e.g., Calico, Cilium). See [SSRF Protection](#ssrf-protection-for-mcp-server-pods) for details.
-- `archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs` - Additional CIDR ranges to block beyond the defaults
-- `archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules` - Additional egress rules to allow MCP server pods to reach specific internal services that would otherwise be blocked
+- `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources for MCP workload management, including pods, services, secrets, deployments, and generated `NetworkPolicy` objects (default: true)
+
+Environment network policies require the chart's default MCP manager RBAC so Archestra can create Kubernetes `NetworkPolicy` objects and any detected FQDN policy objects. See [Network Policies](/docs/platform-private-registry#network-policies).
+
 - `archestra.orchestrator.kubernetes.mcpServerRbac.create` - Create MCP server RBAC resources (ServiceAccount, Role, RoleBinding) for Kubernetes MCP server (default: true)
 - `archestra.orchestrator.kubernetes.mcpServerRbac.additionalClusterRoleBindings` - Additional ClusterRoleBindings to attach to the MCP K8s operator service account for cluster-wide permissions
 - `archestra.orchestrator.kubernetes.mcpServerRbac.additionalRoleBindings` - Additional RoleBindings to attach to the MCP K8s operator service account for namespace-scoped permissions
@@ -247,6 +251,10 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 - `archestra.worker.replicaCount` - Manual replica count for the separate worker Deployment
 - `archestra.worker.resources` - Resource requests/limits for worker pods (default: 2 vCPU request, 1Gi memory request, 2Gi memory limit)
 - `archestra.worker.deploymentStrategy` - Rolling update strategy for worker pods (default: `maxUnavailable: 25%`, `maxSurge: 25%`)
+- `archestra.migrationJob.enabled` - Run database migrations in a pre-upgrade Job before rolling web and worker pods (default: true)
+- `archestra.migrationJob.resources` - CPU and memory requests/limits for the migration container (default: 500m CPU request, 512Mi memory request, 2Gi memory limit)
+- `archestra.migrationJob.lockTimeout` - PostgreSQL `lock_timeout` for the migration session (default: `5s`). Migrations fail fast instead of blocking live traffic behind a table lock. Set to `null` to disable.
+- `archestra.migrationJob.envFromSecrets` - Optional hook-only secret values, usually only needed when `ARCHESTRA_DATABASE_URL` uses Kubernetes `$(VAR)` expansion
 
 #### HorizontalPodAutoscaler
 
@@ -454,92 +462,55 @@ helm upgrade archestra-platform \
   --install \
   --namespace archestra \
   --create-namespace \
+  --set postgresql.enabled=false \
   --set postgresql.external_database_url=postgresql://user:password@host:5432/database \
   --wait
 ```
 
 If you don't specify `postgresql.external_database_url`, the chart will deploy a managed PostgreSQL instance using the Bitnami PostgreSQL chart. For PostgreSQL-specific configuration options, see the [Bitnami PostgreSQL Helm chart documentation](https://artifacthub.io/packages/helm/bitnami/postgresql?modal=values-schema).
 
-#### SSRF Protection for MCP Server Pods
+The bundled PostgreSQL image is pinned by digest, so the database version only changes when the chart updates `postgresql.image.digest`. The bundled instance runs a single replica — it restarts during some upgrades, so use an external database where downtime matters.
 
-The Helm chart includes an optional Kubernetes `NetworkPolicy` that prevents MCP server pods from performing Server-Side Request Forgery (SSRF) attacks. When enabled, it blocks outbound connections to private/internal IP ranges while allowing DNS resolution and public internet access.
+During Helm upgrades, the chart runs `pnpm db:migrate` in a pre-upgrade Job before rolling the web and worker Deployments. The Job runs with a PostgreSQL `lock_timeout` (`archestra.migrationJob.lockTimeout`, default `5s`) — a migration that cannot get a table lock fails and retries instead of blocking live traffic. Disable `archestra.migrationJob.enabled` only if your deployment pipeline applies migrations out of band.
 
-This policy is **disabled by default** to avoid breaking MCP servers that connect to internal Kubernetes services (e.g., `grafana.monitoring.svc.cluster.local`). If your MCP servers only need public internet access, enabling this policy is recommended.
+For external Postgres, the simplest setup is a complete `postgresql.external_database_url`; the chart stores it in a Kubernetes Secret and passes it to the migration Job automatically.
 
-To enable the policy:
+If your deployment intentionally keeps the password in a separate Secret and uses `ARCHESTRA_DATABASE_URL=postgresql://user:$(PGPASSWORD)@host:5432/database`, provide `PGPASSWORD` to the migration Job through chart values:
 
 ```yaml
 archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        create: true
+  migrationJob:
+    envFromSecrets:
+      - name: PGPASSWORD
+        secretName: my-db-secret
+        secretKey: password
 ```
 
-**Blocked IPv4 ranges** (when enabled):
+#### SSRF Protection for MCP Server Pods
+
+Archestra protects every MCP server pod from Server-Side Request Forgery (SSRF) automatically — there is no Helm toggle to turn on. The backend applies an egress policy to each pod, so a server cannot reach cloud metadata endpoints or private cluster ranges unless its environment network policy explicitly allows it.
+
+Each pod gets one policy, chosen by its environment's egress mode:
+
+- **Unrestricted** (the default) — a reserved-range floor: DNS and the public internet are allowed; private, link-local, and metadata ranges are blocked.
+- **Restricted** — only the CIDRs and domains the environment allow-lists, plus DNS.
+- **Off** — all egress is denied.
+
+A namespace-wide default-deny baseline also selects every MCP pod, so a pod that is still starting up is denied by default rather than left open.
+
+**Blocked reserved ranges** (the unrestricted floor):
 
 - `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
 - `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
+- `168.63.129.16/32` - Azure platform metadata (a public IP outside the private ranges)
 - `100.64.0.0/10` - Carrier-grade NAT (RFC 6598)
-- `127.0.0.0/8` - Loopback
-- `0.0.0.0/32` - Treated as localhost by some HTTP libraries
+- `127.0.0.0/8`, `0.0.0.0/8` - Loopback and unspecified addresses
+- `::1/128`, `fc00::/7`, `fe80::/10` - The IPv6 equivalents
+- `64:ff9b::/96` - NAT64 (blocks reaching the IPv4 ranges via IPv6; IPv4-mapped IPv6 is already covered by the IPv4 rules)
 
-**Blocked IPv6 ranges** (for dual-stack clusters):
+**Prerequisite**: your cluster must use a CNI that enforces network policies. Calico, Cilium, and GKE Dataplane V2 enforce standard `NetworkPolicy` objects; on EKS Auto Mode, where `ApplicationNetworkPolicy` is the enforcement mechanism, the policy is emitted as an `ApplicationNetworkPolicy` instead. Where no enforcing dataplane is present, the policies are created but not enforced.
 
-- `::1/128` - IPv6 loopback
-- `fc00::/7` - Unique local addresses (equivalent to RFC 1918)
-- `fe80::/10` - Link-local
-
-**Prerequisite**: Your cluster must use a CNI plugin that enforces `NetworkPolicies` (e.g., Calico, Cilium). The default GKE CNI (kubenet) does **not** enforce `NetworkPolicies` unless Dataplane V2 or Calico is enabled.
-
-MCP servers that need to connect to internal Kubernetes services will be blocked when this policy is enabled because ClusterIPs fall within the denied private ranges. Use `additionalEgressRules` to whitelist specific internal services.
-
-By pod/namespace labels (recommended — survives IP changes):
-
-```yaml
-archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        additionalEgressRules:
-          - to:
-              - namespaceSelector:
-                  matchLabels:
-                    kubernetes.io/metadata.name: monitoring
-                podSelector:
-                  matchLabels:
-                    app: grafana
-            ports:
-              - protocol: TCP
-                port: 3000
-```
-
-By IP CIDR:
-
-```yaml
-archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        additionalEgressRules:
-          - to:
-              - ipBlock:
-                  cidr: 10.0.50.0/24
-            ports:
-              - protocol: TCP
-                port: 443
-```
-
-To block additional CIDR ranges beyond the defaults:
-
-```yaml
-archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        additionalDeniedCidrs:
-          - 198.51.100.0/24
-```
+To let a server reach a specific internal service — a Grafana instance in the `monitoring` namespace, for example — set its environment's network policy to `restricted` and add that CIDR or domain to the allow-list. See [Network Policies](/docs/platform-private-registry#network-policies).
 
 ### Accessing the Platform
 
@@ -571,7 +542,7 @@ To use an external database, specify the connection string via the `ARCHESTRA_DA
 
 ##### pgvector Extension (Knowledge Base Feature)
 
-The [Knowledge Base](/docs/platform-knowledge-bases) enterprise feature requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension for vector similarity search. The database user specified in `ARCHESTRA_DATABASE_URL` must have permission to run `CREATE EXTENSION vector`, which typically requires **superuser** privileges.
+The [Knowledge Base](/docs/platform-knowledge) enterprise feature requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension for vector similarity search. The database user specified in `ARCHESTRA_DATABASE_URL` must have permission to run `CREATE EXTENSION vector`, which typically requires **superuser** privileges.
 
 **Cloud-managed databases:**
 
@@ -585,15 +556,15 @@ If pgvector is not installed or the database user lacks permissions, the Knowled
 
 #### SSRF Protection
 
-Enable the SSRF protection `NetworkPolicy` to prevent MCP server pods from accessing private/internal networks. This is especially important when MCP servers execute untrusted code or connect to external services. See [SSRF Protection for MCP Server Pods](#ssrf-protection-for-mcp-server-pods) for configuration details.
+MCP server pods are protected from SSRF automatically: each pod's egress is confined to DNS and the public internet, with private and cloud-metadata ranges blocked. This matters most when MCP servers run untrusted code. To tighten a server to a specific allow-list — or deny its egress entirely — set its environment's network policy. See [SSRF Protection for MCP Server Pods](#ssrf-protection-for-mcp-server-pods).
 
 ## Infrastructure as Code
 
+Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one in the API Keys section on Your Account (click your name in the sidebar) (see [API Reference](/docs/platform-api-reference#authentication)).
+
 ### Terraform
 
-For managing Archestra Platform resources, you can use our official Terraform provider to manage Archestra Platform declaratively.
-
-**Provider Configuration**:
+**1. Configure the provider.** Read credentials from the environment (`export ARCHESTRA_API_KEY=...` and `export ARCHESTRA_BASE_URL=...`) or pass them inline.
 
 ```terraform
 terraform {
@@ -604,28 +575,113 @@ terraform {
   }
 }
 
-provider "archestra" {
-  base_url = "http://localhost:9000" # Your Archestra API URL
-  api_key  = "your-api-key-here"     # Can also use ARCHESTRA_API_KEY env var
+provider "archestra" {}
+```
+
+**2. Define a resource.** Register an MCP server in the catalog, then install it.
+
+```terraform
+resource "archestra_mcp_registry_catalog_item" "memory" {
+  name        = "memory"
+  description = "In-memory key-value store"
+
+  local_config = {
+    command   = "npx"
+    arguments = ["-y", "@modelcontextprotocol/server-memory"]
+  }
+}
+
+resource "archestra_mcp_server_installation" "memory" {
+  name       = "memory"
+  catalog_id = archestra_mcp_registry_catalog_item.memory.id
 }
 ```
 
-**Obtaining an API Key**: See the [API Reference](/docs/platform-api-reference#authentication) documentation for instructions on creating an API key.
-
-You can also set these values via environment variables instead of hardcoding them:
+**3. Apply.**
 
 ```bash
-export ARCHESTRA_API_KEY="your-api-key-here"
-export ARCHESTRA_BASE_URL="https://api.archestra.example.com"
+terraform init
+terraform apply
 ```
 
-For complete documentation, examples, and resource reference, visit the [Archestra Terraform Provider Documentation](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
+Full resource reference: [Terraform provider docs](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
+
+### Crossplane
+
+The same resources are also available as a Crossplane v1/v2 provider for teams that prefer GitOps-style reconciliation on Kubernetes. The xpkg is [upjet](https://github.com/crossplane/upjet)-generated from the Terraform provider's schema and published from the same release tag, so the two stay version-locked. Crossplane v1 or v2 must already be installed in the target cluster.
+
+**1. Install the provider.** Pin the latest tag from [GitHub Releases](https://github.com/archestra-ai/terraform-provider-archestra/releases).
+
+```yaml
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-archestra
+spec:
+  package: xpkg.upbound.io/archestra/provider-archestra:v1.1.4
+```
+
+**2. Configure credentials.**
+
+```bash
+kubectl create secret generic archestra-creds \
+  -n crossplane-system \
+  --from-literal=credentials='{"api_key":"arch_...","base_url":"https://api.archestra.example.com"}'
+```
+
+```yaml
+apiVersion: archestra.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: archestra-creds
+      key: credentials
+```
+
+**3. Create a resource.** Mirror of the Terraform example above.
+
+```yaml
+apiVersion: mcp.archestra.crossplane.io/v1alpha1
+kind: RegistryCatalogItem
+metadata:
+  name: memory
+spec:
+  forProvider:
+    name: memory
+    description: In-memory key-value store
+    localConfig:
+      command: npx
+      arguments:
+        - "-y"
+        - "@modelcontextprotocol/server-memory"
+  providerConfigRef:
+    name: default
+---
+apiVersion: mcp.archestra.crossplane.io/v1alpha1
+kind: ServerInstallation
+metadata:
+  name: memory
+spec:
+  forProvider:
+    name: memory
+    catalogIdRef:
+      name: memory
+  providerConfigRef:
+    name: default
+```
+
+Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
 
 ## Environment Variables
 
 The following environment variables can be used to configure Archestra Platform.
 
-### Application & API Configuration
+### Database
 
 - **`ARCHESTRA_DATABASE_URL`** - PostgreSQL connection string for the database.
   - Format: `postgresql://user:password@host:5432/database`
@@ -637,6 +693,13 @@ The following environment variables can be used to configure Archestra Platform.
   - Range: `1`–`500`
   - Tune this when you have many concurrent users or long-running chat streams. The backend opens at most `ARCHESTRA_DATABASE_POOL_MAX` connections per pod, so coordinate with PostgreSQL `max_connections` to ensure `pods × ARCHESTRA_DATABASE_POOL_MAX < max_connections` with headroom for admin sessions. On managed Postgres (e.g. AWS RDS, Cloud SQL) the server limit is typically several thousand and rarely the binding constraint.
 
+- **`ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`** - Per-connection PostgreSQL `statement_timeout` (in milliseconds) applied to every pooled connection.
+  - Default: `30000` (30s)
+  - Set to `0` to disable the timeout entirely.
+  - Defense-in-depth against pathological queries: any statement running longer than this is cancelled by PostgreSQL so a single slow query can't hold a connection open indefinitely. Raise it if you have legitimate long-running analytical queries.
+
+### Application & API Configuration
+
 - **`ARCHESTRA_API_BASE_URL`** - Archestra API Base URL(s) for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway.
 
   This URL is displayed in the UI connection instructions to help users configure their agents. It doesn\'t affect internal routing (Archestra frontend communicates with backend via `http://localhost:9000`).
@@ -645,6 +708,13 @@ The following environment variables can be used to configure Archestra Platform.
   - Single URL example: `https://api.archestra.com`
   - Multiple URLs example: `http://archestra.default.svc:9000,https://api.archestra.example.com`
   - Use case: Set this when your external access URL differs from the internal service URL (common in Kubernetes with ingress/load balancers)
+
+- **`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`** - Dedicated TCP port for the publicly-exposable endpoints — currently the MS Teams incoming webhook (`/api/webhooks/chatops/ms-teams`).
+  - Default: Not set (these endpoints are served on the main API port only)
+  - When set, a second listener serves these endpoints on this port. The main API port keeps serving them too — the dedicated port is an alias.
+  - Use case: expose only these endpoints to the Internet in a firewall or load balancer, without exposing the whole API
+  - Must be an integer between `1` and `65535`; invalid values disable the listener with a warning
+  - Helm: set `archestra.publicEndpointsPort` to inject this variable and expose the port on the Service
 
 - **`ARCHESTRA_TRUST_PROXY`** - Set this when Archestra runs behind a TLS-terminating reverse proxy (e.g. AWS ALB, nginx, Cloudflare) so that generated OAuth metadata and auth URLs use the external `https://` scheme rather than the internal `http://` scheme seen by the backend.
   - Default: `false` (no proxy trust)
@@ -666,19 +736,100 @@ The following environment variables can be used to configure Archestra Platform.
   - Requires wildcard DNS (`*.mcp.example.com`) and wildcard TLS certificate pointing to the backend
   - See [MCP Apps Sandbox](#mcp-apps-sandbox) for setup instructions
 
-- **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
-  - Default: `permissive`
-  - Values: `permissive` or `restrictive`
-  - `permissive`: Tools are allowed, unless a specific policy is set for them.
-  - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
-
-- **`ARCHESTRA_AGENTS_SKILLS_ENABLED`** - Enables Agent Skills — reusable `SKILL.md` instruction sets that agents load on demand. When off, the Skills page and its sidebar link are hidden and the feature cannot be enabled for an organization.
+- **`ARCHESTRA_BETA`** - Fallback for per-feature `ARCHESTRA_*_ENABLED` gates (see `betaFeatureEnabled`).
   - Default: `false`
   - Values: `true`, `false`
 
+### Code Sandbox
+
+By default the Helm chart runs a managed Dagger Engine. `archestra.codeRuntime.enabled` and `archestra.codeRuntime.dagger.managed.enabled` are both on, so the chart deploys the engine as a StatefulSet (`dagger-runtime-engine`) in the release namespace. That pod runs privileged, adds all Linux capabilities, runs as root, and needs a 50Gi `ReadWriteOnce` PVC for its cache. It schedules only on nodes whose pod-security policy allows those settings and where the PVC can bind.
+
+The bundled engine is a convenience, not a requirement. The sandbox reaches its engine over `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, a `tcp://` or `kube-pod://` address. Run the engine however you like — the companion `platform/helm/dagger-runtime` chart, a Docker container, a standalone binary, or a separate cluster — as long as it is a reachable Dagger Engine. See Dagger's [custom runner](https://docs.dagger.io/reference/configuration/custom-runner) and [deployment](https://docs.dagger.io/reference/#deployment) references for the runner host schemes and engine requirements.
+
+If your nodes can't host the managed pod, you have two options:
+
+- Run the engine elsewhere. Set `archestra.codeRuntime.dagger.managed.enabled=false` and point `archestra.codeRuntime.dagger.runnerHost` (or `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`) at it.
+- Turn the sandbox off. Set both `archestra.codeRuntime.enabled=false` and `archestra.codeRuntime.dagger.managed.enabled=false` in Helm. The second key is what stops the engine pod. For the Docker quickstart, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false`.
+
+- **`ARCHESTRA_CODE_RUNTIME_ENABLED`** - Deployment toggle for the code runtime — the per-conversation [code sandbox](./platform-code-sandbox) where agents run shell commands and Python, execute skill scripts, and run agent hooks. In the quickstart Docker image it deploys the bundled Dagger engine and wires its runner host. The backend enables the sandbox whenever a Dagger runner host (below) is reachable, so a deployment that points at an external engine stays on regardless of this flag. Set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker (or `archestra.codeRuntime.enabled=false` in Helm) to skip deploying the engine.
+  - Default: `false`
+  - Values: `true`, `false`
+
+- **`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`** - Address of the Dagger engine that materializes sandboxes, for example `tcp://dagger-engine:8080` or a `kube-pod://` URL. A reachable host is what enables the backend sandbox; unset it to turn the sandbox off.
+  - Default: unset
+  - Values: a `tcp://` or `kube-pod://` URL
+
+- **`ARCHESTRA_DAGGER_RUNTIME_IMAGE`** - Base image for Dagger sandboxes. Leave unset to use the default `ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim` image.
+  - Default: unset
+  - Use this to point at a custom Debian-based image or a pre-baked sandbox base.
+
+- **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Set `true` only when `ARCHESTRA_DAGGER_RUNTIME_IMAGE` points at a pre-baked sandbox base image that already contains the apt toolbelt, the `uv` virtualenv, and the default Python dependencies. The runtime then skips the per-sandbox apt/`uv` build steps and instead verifies a provenance marker on the image — failing loudly if the image isn't the baked base — so an engine with restricted egress no longer needs to reach `ghcr.io`, the Debian mirrors, or PyPI when it materializes a sandbox; only the registry hosting the base image. Leave `false` (the default) to build the base from the stock runtime image on first use.
+  - Default: `false`
+  - Values: `true`, `false`
+
+- **`ARCHESTRA_SKILLS_SANDBOX_CPU_LIMIT_SECONDS`** - CPU-time cap for a single sandbox command.
+  - Default: `30`
+- **`ARCHESTRA_SKILLS_SANDBOX_MEMORY_LIMIT_BYTES`** - Memory cap for the sandbox container.
+  - Default: `1073741824` (1 GiB)
+- **`ARCHESTRA_SKILLS_SANDBOX_WALL_CLOCK_SECONDS`** - Wall-clock cap for a single command; a caller-supplied timeout is clamped to this.
+  - Default: `120`
+- **`ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT`** - Maximum captured stdout/stderr per command; output beyond this is truncated.
+  - Default: `262144` (256 KiB)
+- **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel.
+  - Default: `16777216` (16 MiB)
+- **`ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`** - Sandbox commands the shared Dagger session runs at once, deployment-wide. Raise it with the engine's CPU and memory.
+  - Default: `10`
+- **`ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH`** - Sandbox commands allowed to wait for a free slot. Past this, a command fails with a runtime-at-capacity error instead of queueing.
+  - Default: `50`
+
+### Skills Marketplace
+
+- **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
+  - Default: `git`
+
+- **`ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR`** - Directory holding materialized marketplace git repos. The cache is a derived view of the `skill_share_link_revision` history — replays are byte-identical, so wiping is safe but triggers a full rebuild on next clone. In prod, point this at a persistent volume to avoid the rebuild on container restarts.
+  - Default: `~/.archestra/skill-marketplace-cache`
+
+### My Files Storage
+
+My Files is the persistent byte-storage layer used by Projects and the `search_files` / `save_result` tools. The active provider is selected at write time and stamped per row, so switching providers affects only new writes — existing files remain readable from their original backend.
+
+- **`ARCHESTRA_FILE_STORAGE_PROVIDER`** - Storage backend for My Files.
+  - Default: `db`
+  - Options: `db` (Postgres bytea), `filesystem` (mounted volume / PVC), `s3` (S3-compatible object store)
+
+- **`ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT`** - Absolute path to the root directory for the `filesystem` provider (e.g. a PVC mount).
+  - Required when: `ARCHESTRA_FILE_STORAGE_PROVIDER=filesystem`
+  - Example: `/var/archestra/files`
+
+- **`ARCHESTRA_FILE_STORAGE_S3_BUCKET`** - S3 bucket name for the `s3` provider.
+  - Required when: `ARCHESTRA_FILE_STORAGE_PROVIDER=s3`
+  - Example: `my-archestra-files`
+
+- **`ARCHESTRA_FILE_STORAGE_S3_REGION`** - AWS region for the S3 bucket.
+  - Default: `us-east-1`
+  - Example: `eu-west-1`
+
+- **`ARCHESTRA_FILE_STORAGE_S3_ENDPOINT`** - Custom endpoint URL for S3-compatible stores such as MinIO or Cloudflare R2.
+  - Optional: Leave blank for standard AWS S3
+  - Example: `http://minio:9000` (MinIO), `https://<account-id>.r2.cloudflarestorage.com` (R2)
+
+- **`ARCHESTRA_FILE_STORAGE_S3_FORCE_PATH_STYLE`** - Use path-style addressing instead of virtual-hosted-style.
+  - Required for MinIO: set to `true`
+  - Default: `false` (virtual-hosted style, correct for AWS S3 and most S3-compatible stores)
+
+- **`ARCHESTRA_FILE_STORAGE_S3_ACCESS_KEY_ID`** and **`ARCHESTRA_FILE_STORAGE_S3_SECRET_ACCESS_KEY`** - Static AWS credentials for the S3 provider.
+  - Optional: When both are omitted, the AWS default credential chain is used (environment variables, `~/.aws/credentials`, IAM instance profile, IRSA, etc.)
+  - Use static credentials for self-hosted stores (MinIO) or when running outside AWS without IRSA
+
+- **`ARCHESTRA_FILE_STORAGE_S3_KEY_PREFIX`** - Optional object key prefix (folder) within the bucket.
+  - Optional: Leave blank to write objects at the bucket root
+  - Useful for sharing one bucket across multiple Archestra instances (e.g. `staging/` vs `production/`)
+  - Example: `archestra-prod/`
+
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
-  - Default: `enabled`
-  - Set to `disabled` to opt-out of analytics
+  - Default: `enabled` in production builds (`NODE_ENV=production`, which includes the released Docker images); disabled in development/test environments
+  - Set to `disabled` to opt-out of analytics, or `enabled` to force it on regardless of environment
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key used when analytics is enabled.
   - Default: Archestra's hosted PostHog project key
@@ -692,24 +843,44 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `info`
   - Supported values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
 
+- **`ARCHESTRA_LOGGING_FORMAT`** - Console log format written to stdout. The OTLP log exporter is unaffected and always receives structured records.
+  - Default: `json`
+  - Supported values: `json` (machine-readable, single-line JSON), `pretty` (human-readable, colorized)
+  - The docker quickstart sets this to `pretty` by default; export `ARCHESTRA_LOGGING_FORMAT=json` to override.
+
 ### Authentication & Security
 
 - **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens, encrypting secrets stored in the database, and encrypting JWKS private keys.
   - Auto-generated once on first run. Set manually if you need to control the secret value. Must be at least 32 characters long.
   - Example: `something-really-really-secret-12345`
   - **Warning:** Do not change this value after deployment. Rotating this secret will invalidate all user sessions (forcing re-login), make existing encrypted secrets unreadable, break JWT signing (JWKS private keys are encrypted with this secret), and break two-factor authentication for enrolled users.
+  - Startup verifies this key against previously encrypted secrets and aborts on a mismatch. See `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY` to accept a deliberate rotation.
 
 - **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
-  - Default: `admin@localhost.ai`
+  - Default: `admin@example.com`
 
 - **`ARCHESTRA_AUTH_ADMIN_PASSWORD`** - Password for the default Archestra Admin user. Set once on first-run.
   - Default: `password`
   - Note: Change this to a secure password for production deployments
 
-- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
-  - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
-  - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
-  - Required when using different domains or subdomains for frontend and backend
+- **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Developer-only convenience that skips the login screen by minting a real session for the user with this email when the app loads unauthenticated.
+  - Default: None (disabled)
+  - Ignored in production (`NODE_ENV=production` or `prod`); only takes effect in development builds
+  - The session is an ordinary one for that user — role-based access control is unchanged
+  - Example: `admin@example.com`
+
+- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Scopes the session cookie to a domain so the frontend and backend can share it.
+  - Default: None. The cookie stays host-only, bound to the exact frontend host.
+  - Set this only when your frontend and backend are on different subdomains. Use the narrowest domain that covers both. For a frontend at `https://frontend.example.com` and a backend at `https://backend.example.com`, set `example.com`.
+  - The browser then sends the cookie to _every_ subdomain of that domain, not just those two. So `example.com` also reaches `other.example.com`.
+  - Warning: this is how one instance breaks another. If a second Archestra runs on a sibling subdomain (`staging.example.com`) and both use the default cookie prefix, their session cookies share a name and collide. The browser sends both, the server reads the wrong one, and login silently bounces back to the sign-in page.
+  - To run more than one instance under the same domain, give each a unique `ARCHESTRA_AUTH_COOKIE_PREFIX` (below). Do this even when only one instance sets a cookie domain — the shared cookie still leaks to the others.
+
+- **`ARCHESTRA_AUTH_COOKIE_PREFIX`** - Prefix for auth cookie names (`<prefix>.session_token`, etc.).
+  - Default: `archestra`
+  - Give each instance that shares a host or domain with another a unique prefix, so their session cookies have distinct names and never collide.
+  - Two cases need this. Instances on different ports of one host: browsers ignore the port, so the cookies overwrite each other. Instances on sibling subdomains where one sets `ARCHESTRA_AUTH_COOKIE_DOMAIN`: that cookie leaks across the whole domain (see above).
+  - A single, isolated deployment can leave the default.
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
   - Default: `false`
@@ -722,6 +893,17 @@ The following environment variables can be used to configure Archestra Platform.
   - When enabled, administrators cannot create new invitations, and the invitation management UI is hidden
   - Useful for environments where user provisioning is handled externally (e.g., via SSO with automatic provisioning)
 
+- **`ARCHESTRA_AUTH_DCR_ENABLED`** - Controls OAuth Dynamic Client Registration (DCR, RFC 7591) and CIMD auto-registration.
+  - Default: `true`
+  - Set to `false` to allow only pre-registered OAuth clients to run OAuth flows. Runtime self-registration (`POST /api/auth/oauth2/register`) returns `403`, CIMD auto-registration is skipped, and the well-known metadata stops advertising the registration endpoint
+  - Pair with manually registered [MCP OAuth clients](/docs/mcp-authentication) (both `client_credentials` and `authorization_code`) when you want to restrict gateway access to a known set of applications
+
+- **`ARCHESTRA_AUTH_REFRESH_TOKEN_REUSE_GRACE_SECONDS`** - Grace window for the OAuth refresh-token replay shield, in seconds.
+  - Default: `60`
+  - Refresh tokens are single-use and rotated. When a client replays an already-rotated refresh token within this window, it is treated as a benign rotation race (e.g. a token-exchange response lost when the backend restarted, then retried by the client) and a fresh token pair is re-issued, rather than triggering reuse invalidation. A replay after the window is treated as reuse and invalidates that grant
+  - Set to `0` to disable the grace window and treat every replay as reuse immediately
+  - Raising it widens the window in which a replayed token is re-issued rather than rejected; lowering it tightens reuse detection at the cost of recovering fewer benign races
+
 - **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Extra trusted origins for CORS and authentication, in addition to `ARCHESTRA_FRONTEND_URL`. Setting this variable (even without `ARCHESTRA_FRONTEND_URL`) enables origin validation.
   - Default: None (origin validation is off when neither this nor `ARCHESTRA_FRONTEND_URL` is set)
   - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)
@@ -732,6 +914,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `DB` (database storage)
   - Options: `DB`, `VAULT`, or `READONLY_VAULT`
   - Note: When set to `VAULT` or `READONLY_VAULT`, requires `ARCHESTRA_HASHICORP_VAULT_ADDR` and the credentials for the selected auth method. See [Secrets Management](/docs/platform-secrets-management) for the full configuration reference (KV version, secret path prefix, auth methods).
+
+- **`ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`** - One-boot escape hatch after a deliberate `ARCHESTRA_AUTH_SECRET` change.
+  - Default: `false`
+  - Startup aborts when the current auth secret cannot decrypt previously stored secrets. Set to `true` for one boot to accept the new key, then unset it.
+  - Secrets encrypted with the previous key stay unreadable — re-enter them after the change.
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
   - Required when: `ARCHESTRA_SECRETS_MANAGER=VAULT` or `READONLY_VAULT`
@@ -766,11 +953,20 @@ The following environment variables can be used to configure Archestra Platform.
 
 ### LLM Provider Configuration
 
-These environment variables set the default base URL for each LLM provider. Per-key base URLs configured in **Settings > LLM API Keys** take precedence over these defaults. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) for details on per-key base URLs and virtual API keys.
+These environment variables set the default base URL for each LLM provider. Per-key base URLs configured in **Model Providers** take precedence over these defaults. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) for details on per-key base URLs and virtual API keys.
 
-- **`ARCHESTRA_AI_BASE_URL`** - Override the OpenAI API base URL.
+- **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
   - Default: `https://api.openai.com/v1`
   - Use this to point to your own proxy, an OpenAI-compatible API, or other custom endpoints
+
+- **`ARCHESTRA_OPENAI_CODEX_API_BASE_URL`** - Codex backend serving the ChatGPT-subscription Responses API.
+  - Default: `https://chatgpt.com/backend-api/codex`
+- **`ARCHESTRA_OPENAI_CODEX_ISSUER`** - OAuth issuer hosting the ChatGPT authorize, token, and device endpoints.
+  - Default: `https://auth.openai.com`
+- **`ARCHESTRA_OPENAI_CODEX_CLIENT_ID`** - Public OAuth client id for the ChatGPT/Codex sign-in.
+  - Default: the Codex CLI client id
+- **`ARCHESTRA_OPENAI_CODEX_ORIGINATOR`** - `originator` header the Codex backend attributes traffic by. Override to `codex_cli_rs` if OpenAI ever restricts unknown originators.
+  - Default: `archestra`
 
 - **`ARCHESTRA_ANTHROPIC_BASE_URL`** - Override the Anthropic API base URL.
   - Default: `https://api.anthropic.com`
@@ -781,6 +977,20 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set `ARCHESTRA_ANTHROPIC_BASE_URL=https://<resource-name>.services.ai.azure.com/anthropic`
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
   - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
+
+- **`ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID`**, **`ARCHESTRA_ANTHROPIC_ORGANIZATION_ID`**, **`ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID`** - Enable keyless Anthropic authentication via [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation).
+  - All three are required, plus one identity token source (below). A partial configuration logs a warning at startup and disables WIF.
+  - Values come from the federation rule (`fdrl_...`), organization ID, and service account (`svac_...`) created in the Claude Console under **Settings → Workload identity**.
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE`** - Path to the OIDC identity token file issued by your identity provider (e.g. a Kubernetes projected service-account token).
+  - Example: `/var/run/secrets/anthropic.com/token`
+  - Re-read on every token exchange, so rotated tokens are picked up automatically. Prefer this over the inline variant in production.
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN`** - Inline OIDC identity token; alternative to `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE`.
+  - Identity tokens are short-lived, so this is mainly useful for testing. The file variant takes precedence when both are set.
+
+- **`ARCHESTRA_ANTHROPIC_WORKSPACE_ID`** - Anthropic workspace ID (`wrkspc_...`) for Workload Identity Federation.
+  - Optional; required only when the federation rule covers more than one workspace.
 
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`
@@ -813,9 +1023,44 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.deepseek.com`
   - Use this to point to your own proxy or other custom endpoints
 
+- **`ARCHESTRA_ARCHESTRA_BASE_URL`** - Global upstream base URL for the Archestra provider (another Archestra instance's LLM proxy).
+  - No default; normally set per key in the UI
+  - A global value only enables raw passthrough at the `/v1/archestra` proxy prefix
+  - See: [Archestra provider setup](/docs/platform-supported-llm-providers#archestra)
+
 - **`ARCHESTRA_MINIMAX_BASE_URL`** - Override the MiniMax API base URL.
   - Default: `https://api.minimax.io/v1`
   - Use this to point to your own proxy or other custom endpoints
+
+- **`ARCHESTRA_GITHUB_COPILOT_BASE_URL`** - Override the GitHub Copilot API base URL.
+  - Default: `https://api.githubcopilot.com`
+  - For GitHub Enterprise, use `https://copilot-api.<ghe-domain>`
+
+- **`ARCHESTRA_GITHUB_COPILOT_TOKEN_EXCHANGE_URL`** - Endpoint that exchanges a user's GitHub OAuth token for a short-lived Copilot API bearer.
+  - Default: `https://api.github.com/copilot_internal/v2/token`
+  - Copilot has no static API keys: provider keys store the user's long-lived GitHub OAuth token, and the proxy performs this exchange (with caching) on every request
+
+- **`ARCHESTRA_GITHUB_COPILOT_DEVICE_AUTH_BASE_URL`** - GitHub host serving the OAuth device-flow endpoints (`/login/device/code`, `/login/oauth/access_token`) used by the "Sign in with GitHub" flow and the connection-page setup script.
+  - Default: `https://github.com`
+
+- **`ARCHESTRA_GITHUB_COPILOT_CLIENT_ID`** - GitHub App client id used for the Copilot device flow.
+  - Default: `Iv1.b507a08c87ecfe98` (the community-standard VS Code client id accepted by the Copilot token exchange)
+  - Override this if your organization registers its own GitHub App with Copilot API access
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID`** - Application (client) ID of your Entra app registration for the Microsoft 365 Copilot device flow.
+  - No default. The "Sign in with Microsoft" flow is unavailable until this is set.
+  - The registration needs public client flows enabled and admin-consented delegated Graph scopes (see [Supported LLM Providers](/docs/platform-supported-llm-providers))
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID`** - Entra tenant segment of the OAuth endpoints used for Microsoft 365 Copilot sign-in and token redemption.
+  - Default: `organizations` (any work or school account)
+  - Pin your tenant id to restrict sign-in to one directory
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_BASE_URL`** - Override the Microsoft Graph base URL serving the Microsoft 365 Copilot Chat API.
+  - Default: `https://graph.microsoft.com/beta`
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_AUTH_BASE_URL`** - Entra ID host serving the OAuth device-flow and token endpoints.
+  - Default: `https://login.microsoftonline.com`
+  - Microsoft 365 Copilot has no static API keys: provider keys store the user's long-lived Entra refresh token, and the proxy redeems it (with caching) on every request
 
 - **`ARCHESTRA_AZURE_OPENAI_BASE_URL`** - Azure AI Foundry deployment endpoint URL.
   - Deployment URL format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`
@@ -844,6 +1089,17 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `2592000` (30 days)
   - Set to `0` to create virtual keys that never expire by default
   - Users can override this per-key when creating virtual keys via the UI
+
+- **`ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS`** - Headers/body timeout (milliseconds) for LLM-call fetches, applied as a custom undici dispatcher on both the chat→proxy and proxy→upstream hops.
+  - Default: unset, i.e. undici's defaults (5 minutes for both headers and body timeout)
+  - Opt-in: set a larger value (e.g. `600000` for 10 minutes) when an upstream's time-to-first-token can exceed 5 minutes — typically a slow CPU-only Ollama or vLLM model — which otherwise fails with `Headers Timeout Error`
+  - Keep it finite so genuinely-dead upstreams still surface as errors
+
+- **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Automatically classify subscription credentials as subscription usage.
+  - Default: `true`
+  - When on, traffic fulfilled by a subscription credential — detected from the credential format, e.g. Anthropic `sk-ant-oat…` OAuth tokens from a Claude Max/Pro login — is recorded as `subscription` billing mode and reported as $0 billed spend, keeping its list-price estimate for comparison
+  - Set to `false` to treat all traffic as metered
+  - See: [Costs and Limits](/docs/platform-costs-and-limits#subscription-vs-metered-cost)
 
 - **`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED`** - Enable AWS IAM authentication for Bedrock.
   - Default: `false`
@@ -887,9 +1143,10 @@ These environment variables set the default base URL for each LLM provider. Per-
   - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
 
 - **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
-  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
+  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `ARCHESTRA`, `GITHUB_COPILOT`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
+  - Note: `ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY` holds a GitHub OAuth token (`gho_...`) of an account with a Copilot subscription, not a static API key
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 
 - **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Default LLM provider for Chat and A2A features.
@@ -897,17 +1154,51 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Options: `anthropic`, `openai`, `gemini`
   - Used when no profile-specific provider is configured
 
+Active chat run wake-ups use Postgres `LISTEN/NOTIFY` by default. This gives fast reconnect replay and Stop handling without waiting for the fallback poll interval. Poll intervals still exist in this mode as a safety net, so missed notifications or broken listener connections do not block progress forever.
+
+Enable polling compatibility only when your database endpoint cannot keep session-stable listener connections, such as PgBouncer transaction pooling or some managed/serverless database proxies. In that mode, active run replay and Stop handling rely on periodic database reads. Lower intervals react faster but create more reads; higher intervals reduce database load but make replay and Stop slower.
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - Fallback/poll interval for replaying active chat runs after reconnect.
+  - Default: `500`
+  - Load model: roughly one replay-check read per reconnecting client per interval while waiting for new events
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Interval for checking whether a running chat stream has been explicitly stopped.
+  - With Postgres `LISTEN/NOTIFY`, Stop requests normally wake streams immediately; this interval is only a safety fallback if notification wake-up is missed
+  - With polling compatibility enabled, this is the primary polling interval
+  - Default: `30000` with Postgres `LISTEN/NOTIFY`, `500` when polling compatibility is enabled
+  - Load model: roughly one stop-check read per running chat stream per interval
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Uses polling only instead of the default Postgres `LISTEN/NOTIFY` wake-ups for active chat run replay and stop detection.
+  - Default: `false`
+  - Keep disabled when direct Postgres or session pooling is available
+
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL`** - Optional Postgres connection string for active chat run `LISTEN/NOTIFY`.
+  - Default: Uses `ARCHESTRA_DATABASE_URL`
+  - Set this when regular database traffic goes through PgBouncer transaction pooling but notifications can use a direct or session-pooled connection
+
+- **`ARCHESTRA_CHAT_SECRET_SCAN_ENABLED`** - Enables client-side pre-send scanning of chat messages for secrets and high-entropy tokens.
+  - Default: `true`
+  - When enabled, the chat composer intercepts sends and shows a confirmation dialog when the message appears to contain credentials (API keys, tokens, passwords, JWTs, PEM keys, or high-entropy strings). Set to `false` to disable.
+  - This is a client-side convenience nudge, not a data-loss-prevention control: it runs in the browser and can be bypassed with "Send anyway".
+  - Detection runs entirely in the browser — no message content is sent to the backend for scanning. The flag is read from the backend at runtime via `/api/config`, so toggling it does not require a frontend rebuild.
+  - Values: `true`, `false`
+
+- **`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`** - Upper bound on the output tokens an agent turn (interactive chat and A2A/headless) may generate.
+  - Default: `32768`
+  - Each turn already requests the model's real output ceiling instead of the provider/SDK default that truncated large tool-call payloads and final submission turns. This variable caps that request for cost control: the turn uses `min(this value, the model's real output ceiling)`, and unsynced models fall back to `8192`.
+  - Lower it to constrain spend; raise it for models whose useful outputs exceed 32768 tokens.
+
 ### MCP Apps Sandbox
 
 MCP Apps run inside sandboxed iframes with cross-origin isolation, CSP enforcement, and a double-iframe architecture. The sandbox proxy is served from the main backend under `/_sandbox/` — no separate port or service is needed.
 
 #### How It Works by Environment
 
-| Environment | Isolation method | Config needed | MCP App capabilities |
-|---|---|---|---|
-| **Local dev / Quickstart** (`localhost`) | `localhost` ↔ `127.0.0.1` origin swap (same port, different origin) | None | Full (localStorage, CORS, etc.) |
-| **Production with sandbox domain** | Dedicated subdomain per MCP server | `ARCHESTRA_MCP_SANDBOX_DOMAIN` + wildcard DNS/TLS | Full |
-| **Production without sandbox domain** | Opaque origin (iframe `sandbox` attribute) | None | Limited (no localStorage, no origin-restricted CORS) |
+| Environment                              | Isolation method                                                    | Config needed                                     | MCP App capabilities                                 |
+| ---------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
+| **Local dev / Quickstart** (`localhost`) | `localhost` ↔ `127.0.0.1` origin swap (same port, different origin) | None                                              | Full (localStorage, CORS, etc.)                      |
+| **Production with sandbox domain**       | Dedicated subdomain per MCP server                                  | `ARCHESTRA_MCP_SANDBOX_DOMAIN` + wildcard DNS/TLS | Full                                                 |
+| **Production without sandbox domain**    | Opaque origin (iframe `sandbox` attribute)                          | None                                              | Limited (no localStorage, no origin-restricted CORS) |
 
 **Local development and Quickstart** work out of the box with no configuration. The platform automatically swaps `localhost` to `127.0.0.1` (or vice versa) to create a different origin on the same port. This gives MCP Apps full browser API access while maintaining security isolation.
 
@@ -920,6 +1211,7 @@ Set `ARCHESTRA_MCP_SANDBOX_DOMAIN` when MCP Apps need persistent state or origin
 1. Choose a subdomain for the sandbox (e.g., `mcp.example.com`)
 
 2. Create a **wildcard DNS record**:
+
    ```
    *.mcp.example.com → <backend IP or load balancer>
    ```
@@ -929,6 +1221,7 @@ Set `ARCHESTRA_MCP_SANDBOX_DOMAIN` when MCP Apps need persistent state or origin
 4. Configure the reverse proxy (nginx, Caddy, etc.) to route `*.mcp.example.com` to the backend (port 9000), applying the wildcard certificate
 
 5. Set the environment variable:
+
    ```yaml
    ARCHESTRA_MCP_SANDBOX_DOMAIN: mcp.example.com
    ```
@@ -939,15 +1232,51 @@ Each MCP server automatically gets a unique hash-based subdomain (e.g., `a1b2c3d
 
 The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS` (the same variables that control CORS). When set, only those origins can embed the sandbox iframe. When neither is set (local dev), all origins are accepted.
 
+### MCP Gateway
+
+- **`ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS`** - Per-request timeout, in milliseconds, for an upstream MCP tool call made through the gateway.
+  - Default: `60000` (60 seconds)
+  - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
+
+### MCP Servers
+
+- **`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`** - Opt-in periodic re-discovery of installed MCP servers' tools. Every N minutes, each installed server's stored tool list is re-synced from the live server — new tools are added, changed descriptions and input schemas are updated, and removed tools are dropped. No restart or reinstall happens. Tool assignments and policies are preserved.
+  - Default: unset (disabled). Set to `0` to disable explicitly.
+  - Example: `30`
+  - Tools can also be refreshed on demand: from the server's Inspector tab in the MCP Registry, or via `POST /api/mcp_server/:id/reload-tools`.
+
 ### MCP Server Orchestrator
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.
   - Default: Helm release namespace (if relevant) or `default`
   - Example: `archestra-mcp` or `production`
 
+- **`ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES`** - Comma-separated namespaces the platform ServiceAccount is granted RBAC in (mirrors the Helm chart's `archestra.orchestrator.kubernetes.rbac.environmentNamespaces`, which is injected automatically). Surfaced to the UI so the environment editor offers a namespace dropdown instead of free text; leave empty to keep free-text entry.
+  - Default: empty
+  - Example: `staging,production`
+
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base Docker image for MCP servers.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`
   - Can be overridden per individual MCP server.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST`** - CPU request for generated MCP server containers, as a Kubernetes quantity.
+  - Default: `50m`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST`** - Memory request for generated MCP server containers.
+  - Default: `128Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT`** - Memory limit for generated MCP server containers.
+  - Default: `512Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST`** - Ephemeral-storage request for generated MCP server containers. Keeps the Kubernetes scheduler aware of disk usage so nodes are not over-packed into DiskPressure evictions.
+  - Default: `256Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT`** - Ephemeral-storage limit for generated MCP server containers.
+  - Default: `1Gi`
+
+- **`ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS`** - How often the platform deletes Failed or Evicted MCP server pods left behind by node-pressure evictions.
+  - Default: `600`
+  - Set to `0` to disable.
 
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Use in-cluster config when running inside Kubernetes.
   - Default: `true`
@@ -1051,7 +1380,7 @@ These environment variables configure the ChatOps feature, which allows users to
   - Example: `88888dd-d6a1-4fd6-8783-b2f4931be17b`
   - This is the Application (client) ID from your Azure Bot registration
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD`** - Azure Bot App Password (Client Secret).
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET`** - Azure Bot App Secret (Client Secret).
   - Required when: `ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true`
   - Note: Keep this value secure; do not commit to version control
   - This is the client secret from your Azure Bot registration
@@ -1073,6 +1402,18 @@ These environment variables configure the ChatOps feature, which allows users to
 - **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Azure AD application client secret for Graph API.
   - Optional: Only required if you want to fetch conversation history for context
   - Note: Keep this value secure; do not commit to version control
+
+To expose the MS Teams incoming webhook on a dedicated port instead of the main API port, see [`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`](#application--api-configuration).
+
+#### Public URL (ngrok)
+
+Inbound chatops webhooks (MS Teams, Slack webhook mode) require this instance to be reachable from the Internet. When `ARCHESTRA_NGROK_AUTH_TOKEN` is set, the backend opens an [ngrok](https://ngrok.com) tunnel in-process on startup — no separate ngrok process or CLI binary is needed.
+
+- **`ARCHESTRA_NGROK_AUTH_TOKEN`** - ngrok auth token. When set, the backend tunnels the API port so webhooks are reachable.
+  - Get one at [dashboard.ngrok.com](https://dashboard.ngrok.com/get-started/your-authtoken)
+- **`ARCHESTRA_NGROK_DOMAIN`** - Reserved ngrok domain for a stable public URL.
+  - Optional: without it ngrok assigns an ephemeral domain that rotates on each restart
+  - Recommended for MS Teams, whose messaging endpoint is registered statically in Azure
 
 #### Slack
 
@@ -1106,32 +1447,83 @@ See [Slack](/docs/platform-slack) for setup instructions.
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
 
+#### Telegram
+
+See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses long polling — no public URL, webhook, or ngrok needed.
+
+- **`ARCHESTRA_CHATOPS_TELEGRAM_ENABLED`** - Opt-out switch for the Telegram integration.
+  - Default: `true` (the channel is available on every deployment)
+  - `false` hides the Telegram channel and the provider never starts
+
+- **`ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN`** - Bot token issued by [@BotFather](https://t.me/BotFather).
+  - Optional: the token can also be saved from the Telegram channel page
+  - Format: `123456789:ABC...`
+
+#### Attachment processing
+
+- **`ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS`** - Per-process cap on concurrent chatops attachment downloads and image shrinking.
+  - Default: `4`
+  - Bounds the transient memory a burst of attachment-heavy messages can hold; lower it on memory-constrained deployments
+  - Currently applies to Slack downloads only; MS Teams has no image-shrink path and enforces a flat 10 MB per-file cap instead
+
 ### Knowledge Base Configuration
 
-These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.
+These environment variables configure the [Knowledge Base](/docs/platform-knowledge). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.
 
-- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Configuration](/docs/platform-knowledge-bases#embedding-configuration) and [Reranking Configuration](/docs/platform-knowledge-bases#reranking-configuration) for how to pick the key and model.
+- **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Configuration](/docs/platform-knowledge#embedding-configuration) and [Reranking Configuration](/docs/platform-knowledge#reranking-configuration) for how to pick the key and model.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Maximum duration for a single connector sync run before it stops and triggers a continuation.
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Max wall-clock time a single connector sync run works before it checkpoints and yields.
   - Default: `3300` (55 minutes)
-  - Only applies to K8s CronJob runs. When a sync exceeds 90% of this budget, it stops and creates a continuation Job to resume from the last checkpoint.
-  - Set to `0` to disable time-bounded runs.
+  - Bounds how long one run holds a worker and chunks large syncs into resumable pieces. When a run exceeds ~90% of this budget it stops, is marked `partial`, and enqueues a continuation that resumes from the last checkpoint. Set to `0` to disable (a run then goes to completion in a single pass). Liveness is enforced separately by the lease/heartbeat below, not by this budget.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_LEASE_TTL_SECONDS`** - Liveness-lease window for a connector sync run.
+  - Default: `300` (5 minutes)
+  - The worker running a sync renews the run's lease throughout its life (ingest and embedding drain). A run whose lease is not renewed within this window is treated as crashed/hung and reclaimed — its status becomes `partial` and it resumes from its checkpoint. Keep this several times the heartbeat interval so a single missed renewal (GC pause, slow batch) does not falsely expire a healthy run.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_HEARTBEAT_INTERVAL_SECONDS`** - How often the owning worker renews a run's lease.
+  - Default: `90` (seconds)
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS`** - How long a document may sit un-embedded before the recovery sweep re-enqueues it.
+  - Default: `900` (15 minutes)
+  - An embedding job that fails permanently leaves its documents stuck. This window is the worst-case wait before the sweep re-embeds them. It bounds recovery from a stalled or failed embedding. Keep it above an embedding job's full retry span, about 8 minutes. Otherwise a slow-but-live job is reset while it still runs, which repeats work. Lower it to recover faster; raise it to be more conservative.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
+Permission sync for connectors using [auto-sync permissions](/docs/platform-knowledge#auto-sync-permissions) runs in its own worker lane, independent of content sync. Its cadence is not an environment variable: each connector's permission sync interval is set in the connector form, and a pass also runs automatically after a content sync ingests new documents or when triggered manually.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED`** - Beta gate for the whole auto-sync-permissions feature: the connector visibility option, its permission passes, and the Users and Groups tabs.
+  - Default: `false`
+  - A blank value falls back to the `ARCHESTRA_BETA` master switch. Existing auto-sync connectors go dormant while it is off — no passes run and the Permissions APIs return 403.
+- **`ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT`** - Concurrency cap for the runtime-isolated permission-sync worker lane.
+  - Default: `1`
+  - This lane is separate from the content lane's `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`, so permission sync never competes with content sync for slots.
+
+### Audit Log Configuration
+
+The audit log records administrative actions (mutations via `/api/*` and auth events) across your organization. Automatic retention is **disabled by default** - audit rows are kept indefinitely unless an org admin opts in by setting a positive retention window.
+
+- **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Number of days to retain audit log records before they are automatically deleted by the daily retention sweep.
+  - Default: `0` (disabled — audit rows are never auto-deleted).
+  - Set to a positive integer (e.g. `90`, `180`) to opt in to automatic purging after that many days.
+  - Must be a non-negative integer; invalid values fall back to the default (disabled).
+  - When enabled, the sweep runs once every 24 hours as a background task.
+
+### Maintenance Mode
+
+- **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.
+  - Default: Not set (maintenance mode disabled)
+  - When set, all users are shown a full-screen maintenance overlay with the message instead of the normal application interface.
+
+### Site Notification Banner
+
+- **`ARCHESTRA_SITE_NOTIFICATION_MESSAGE`** - Displays an instance-wide banner at the top of the UI, including the login screen.
+  - Default: Not set (no banner)
+  - Supports markdown. Users can dismiss the banner; a changed message reappears for everyone.
+  - Unlike maintenance mode, the platform stays fully functional. Useful for labeling non-production instances or announcing upcoming maintenance.
+  - Shown alongside (above) any organization-level site notification configured in Settings → Organization.
+
 ### Enterprise Licensing
 
-To learn more about enterprise licensing, please reach out to [sales@archestra.ai](mailto:sales@archestra.ai).
-
-- **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates enterprise features in Archestra.
-  - Set to `true` to enable the enterprise license
-  - Required as a prerequisite for all other enterprise feature flags
-
-- **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Enables advanced access-control on knowledge connectors. Without this flag, Knowledge Base connectors are limited to org-wide visibility.
-  - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
-
-- **`ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING`** - Enables full white-labeling (removes "Powered by Archestra" attribution).
-  - Set to `true` to enable
-  - Requires the core enterprise license (`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`)
+To learn more about enterprise licensing, see the [pricing model](/docs/platform-pricing-model).

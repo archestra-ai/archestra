@@ -1,5 +1,5 @@
-import { E2eTestId } from "@shared";
-import { Pencil, Plug, Trash2 } from "lucide-react";
+import { E2eTestId } from "@archestra/shared";
+import { Copy, Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
 import type { useProfilesPaginated } from "@/lib/agent.query";
@@ -15,6 +15,8 @@ type LlmProxyActionsProps = {
   onConnect: (agent: Pick<Proxy, "id" | "name" | "agentType">) => void;
   onEdit: (agent: Proxy) => void;
   onDelete: (agentId: string) => void;
+  onRestore: (agentId: string) => void;
+  onClone: (agent: Proxy) => void;
 };
 
 export function LlmProxyActions({
@@ -23,7 +25,29 @@ export function LlmProxyActions({
   onConnect,
   onEdit,
   onDelete,
+  onRestore,
+  onClone,
 }: LlmProxyActionsProps) {
+  if (agent.deletedAt) {
+    return (
+      <ButtonGroup>
+        <PermissionButton
+          permissions={{ llmProxy: ["delete"] }}
+          aria-label="Restore"
+          variant="outline"
+          size="icon-sm"
+          disabled={!canModify}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRestore(agent.id);
+          }}
+        >
+          <RotateCcw className="h-4 w-4" />
+        </PermissionButton>
+      </ButtonGroup>
+    );
+  }
+
   return (
     <ButtonGroup>
       <PermissionButton
@@ -52,6 +76,19 @@ export function LlmProxyActions({
         }}
       >
         <Pencil className="h-4 w-4" />
+      </PermissionButton>
+      <PermissionButton
+        permissions={{ llmProxy: ["create"] }}
+        aria-label="Clone"
+        variant="outline"
+        size="icon-sm"
+        data-testid={`${E2eTestId.CloneAgentButton}-${agent.name}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClone(agent);
+        }}
+      >
+        <Copy className="h-4 w-4" />
       </PermissionButton>
       <PermissionButton
         permissions={{ llmProxy: ["delete"] }}

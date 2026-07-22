@@ -1,8 +1,10 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, eq, inArray } from "drizzle-orm";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
-import type { AgentAccessContext } from "@/types";
+import type { AgentAccessContext, AgentLabelWithDetails } from "@/types";
+import AgentModel from "./agent";
 import { findAgentAccessContextById } from "./agent-access-context";
+import TeamLabelModel from "./team-label";
 
 class AgentTeamModel {
   /**
@@ -22,31 +24,17 @@ class AgentTeamModel {
     );
     // Agent admins have access to all agents
     if (isAgentAdmin) {
-      const allAgents = await db
-        .select({ id: schema.agentsTable.id })
-        .from(schema.agentsTable);
+      const accessibleAgentIds = await AgentModel.findAllIds();
 
       logger.debug(
-        { userId, count: allAgents.length },
+        { userId, count: accessibleAgentIds.length },
         "AgentTeamModel.getUserAccessibleAgentIds: admin access to all agents",
       );
-      return allAgents.map((agent) => agent.id);
+      return accessibleAgentIds;
     }
 
-    // Single query: UNION of org-scoped, author's own, and team-scoped agents
-    const result = await db.execute<{ id: string }>(sql`
-      SELECT id FROM agents WHERE scope = 'org'
-      UNION
-      SELECT id FROM agents WHERE author_id = ${userId} AND scope = 'personal'
-      UNION
-      SELECT at.agent_id AS id
-        FROM agent_team at
-        INNER JOIN agents a ON at.agent_id = a.id
-        INNER JOIN team_member tm ON at.team_id = tm.team_id
-        WHERE tm.user_id = ${userId} AND a.scope = 'team'
-    `);
-
-    const accessibleAgentIds = result.rows.map((r) => r.id);
+    const accessibleAgentIds =
+      await AgentModel.findAccessibleIdsForUser(userId);
 
     logger.debug(
       { userId, agentCount: accessibleAgentIds.length },
@@ -169,6 +157,33 @@ class AgentTeamModel {
   }
 
   /**
+   * Get team details with labels for a specific agent, shaped for trace span
+   * attributes. Combines team id/name with each team's labels.
+   */
+  static async getTeamLabelInfoForAgent(agentId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      labels: AgentLabelWithDetails[];
+    }>
+  > {
+    const teams = await AgentTeamModel.getTeamDetailsForAgent(agentId);
+    if (teams.length === 0) {
+      return [];
+    }
+
+    const labelsByTeam = await TeamLabelModel.getLabelsForTeams(
+      teams.map((team) => team.id),
+    );
+
+    return teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      labels: labelsByTeam.get(team.id) ?? [],
+    }));
+  }
+
+  /**
    * Get team details (id and name) for a specific agent
    */
   static async getTeamDetailsForAgent(
@@ -212,7 +227,7 @@ class AgentTeamModel {
       { agentId, teamCount: teamIds.length },
       "AgentTeamModel.syncAgentTeams: syncing teams",
     );
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       // Delete all existing team assignments
       await tx
         .delete(schema.agentTeamsTable)

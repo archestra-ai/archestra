@@ -1,14 +1,16 @@
+// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 "use client";
 
 import Image from "next/image";
 import { useTheme } from "next-themes";
 import config from "@/lib/config/config";
-import { DEFAULT_APP_LOGO } from "@/lib/hooks/use-app-name";
+import { DEFAULT_APP_LOGO, useAppName } from "@/lib/hooks/use-app-name";
 import { useOrgTheme } from "@/lib/theme.hook";
 
 const APP_DISPLAY_NAME = "Archestra.AI";
 
 export function AppLogo() {
+  const appName = useAppName();
   const { logo, logoDark, isLoadingAppearance } = useOrgTheme() ?? {};
   const { resolvedTheme } = useTheme();
   const effectiveLogo = resolvedTheme === "dark" && logoDark ? logoDark : logo;
@@ -24,16 +26,20 @@ export function AppLogo() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={effectiveLogo}
-            alt="Organization logo"
+            alt={`${appName} logo`}
             width={200}
             height={60}
             className="object-contain max-w-full max-h-12 w-auto h-auto"
           />
+          {/* SPDX-SnippetBegin */}
+          {/* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */}
+          {/* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
           {!config.enterpriseFeatures.fullWhiteLabeling && (
             <p className="text-[10px] text-muted-foreground">
               Powered by {APP_DISPLAY_NAME}
             </p>
           )}
+          {/* SPDX-SnippetEnd */}
         </div>
       </div>
     );
@@ -42,9 +48,10 @@ export function AppLogo() {
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="flex items-center gap-2">
+        {/* Decorative: the app name is rendered as visible text right beside it. */}
         <Image
           src={DEFAULT_APP_LOGO}
-          alt="Logo"
+          alt=""
           width={28}
           height={28}
           className="size-7 shrink-0"

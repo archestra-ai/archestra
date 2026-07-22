@@ -1,8 +1,9 @@
 import * as Sentry from "@sentry/nextjs";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { usePublicConfig } from "@/lib/config/config.query";
 import { WithAuthCheck } from "./with-auth-check";
 
 // Mock Sentry
@@ -11,19 +12,35 @@ vi.mock("@sentry/nextjs", () => ({
 }));
 
 // Mock Next.js router and navigation
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
-  usePathname: vi.fn(),
-}));
+vi.mock("next/navigation");
 
 // Mock auth query
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: vi.fn(),
-  useSession: vi.fn(),
+vi.mock("@/lib/auth/auth.query");
+
+// Mock public config query (dev auto-login disabled by default in tests)
+vi.mock("@/lib/config/config.query", () => ({
+  usePublicConfig: vi.fn(() => ({
+    data: { devAutoLoginEnabled: false },
+    isLoading: false,
+  })),
 }));
 
+// Provide a QueryClient stand-in so useQueryClient() doesn't require a provider
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  return {
+    ...actual,
+    useQueryClient: vi.fn(() => ({ invalidateQueries: vi.fn() })),
+  };
+});
+
 // Mock shared module
-vi.mock("@shared", () => ({
+// Partial: the gate reads real shared constants (the render route it lets
+// through) alongside the permissions map this suite substitutes. Replacing the
+// whole module drops every other export, so it breaks the moment the component
+// imports one more of them.
+vi.mock("@archestra/shared", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared")>()),
   requiredPagePermissionsMap: {
     "/protected": { "organization:read": ["read"] },
     "/admin": { "organization:write": ["write"] },
@@ -219,24 +236,6 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).toHaveBeenCalledWith("/llm/logs");
     });
 
-    it("should keep sign-in visible while default password change is pending", () => {
-      vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
-      setWindowLocation("/auth/sign-in", "?redirectTo=%2Fchat");
-      window.sessionStorage.setItem(
-        "archestra.defaultPasswordChangePending",
-        "true",
-      );
-
-      render(
-        <WithAuthCheck>
-          <MockChild />
-        </WithAuthCheck>,
-      );
-
-      expect(mockRouterPush).not.toHaveBeenCalled();
-      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
-    });
-
     it("should ignore malicious redirectTo param and redirect to home", () => {
       vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
       const maliciousUrl = encodeURIComponent("https://evil.com/phishing");
@@ -339,6 +338,23 @@ describe("WithAuthCheck", () => {
       expect(screen.getByTestId("protected-content")).toBeInTheDocument();
     });
 
+    it("should allow access to /auth/recover-account when not authenticated (backup-code sign-in)", () => {
+      vi.mocked(useSession).mockReturnValue({
+        data: null,
+        isPending: false,
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(usePathname).mockReturnValue("/auth/recover-account");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
+
     it("should allow access to /auth/two-factor sub-paths", () => {
       vi.mocked(useSession).mockReturnValue({
         data: null,
@@ -358,7 +374,7 @@ describe("WithAuthCheck", () => {
   });
 
   describe("Sentry user context", () => {
-    it("should set Sentry user context when user is authenticated", () => {
+    it("should set Sentry user context when user is authenticated", async () => {
       const mockUser = {
         id: "user123",
         email: "test@example.com",
@@ -381,14 +397,16 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(Sentry.setUser).toHaveBeenCalledWith({
-        id: "user123",
-        email: "test@example.com",
-        username: "Test User",
+      await waitFor(() => {
+        expect(Sentry.setUser).toHaveBeenCalledWith({
+          id: "user123",
+          email: "test@example.com",
+          username: "Test User",
+        });
       });
     });
 
-    it("should use email as username when name is not available", () => {
+    it("should use email as username when name is not available", async () => {
       const mockUser = {
         id: "user456",
         email: "another@example.com",
@@ -410,14 +428,16 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(Sentry.setUser).toHaveBeenCalledWith({
-        id: "user456",
-        email: "another@example.com",
-        username: "another@example.com",
+      await waitFor(() => {
+        expect(Sentry.setUser).toHaveBeenCalledWith({
+          id: "user456",
+          email: "another@example.com",
+          username: "another@example.com",
+        });
       });
     });
 
-    it("should clear Sentry user context when user is not authenticated", () => {
+    it("should clear Sentry user context when user is not authenticated", async () => {
       vi.mocked(useSession).mockReturnValue({
         data: null,
         isPending: false,
@@ -431,7 +451,9 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(Sentry.setUser).toHaveBeenCalledWith(null);
+      await waitFor(() => {
+        expect(Sentry.setUser).toHaveBeenCalledWith(null);
+      });
     });
 
     it("should handle Sentry errors silently", () => {
@@ -457,6 +479,73 @@ describe("WithAuthCheck", () => {
           </WithAuthCheck>,
         );
       }).not.toThrow();
+    });
+  });
+
+  describe("developer auto-login", () => {
+    beforeEach(() => {
+      vi.mocked(useSession).mockReturnValue({
+        data: null,
+        isPending: false,
+      } as unknown as ReturnType<typeof useSession>);
+    });
+
+    afterEach(() => {
+      // Restore the default (disabled) so other suites are unaffected.
+      vi.mocked(usePublicConfig).mockReturnValue({
+        data: { devAutoLoginEnabled: false },
+        isLoading: false,
+      } as unknown as ReturnType<typeof usePublicConfig>);
+      vi.unstubAllGlobals();
+    });
+
+    it("calls the dev-auto-login endpoint when enabled and unauthenticated", async () => {
+      vi.mocked(usePublicConfig).mockReturnValue({
+        data: { devAutoLoginEnabled: true },
+        isLoading: false,
+      } as unknown as ReturnType<typeof usePublicConfig>);
+      vi.mocked(usePathname).mockReturnValue("/dashboard");
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith("/api/auth/dev-auto-login", {
+          method: "POST",
+        });
+      });
+      // Endpoint is hit exactly once (guarded by a ref) rather than the login
+      // form being shown.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("falls back to the sign-in redirect when auto-login fails", async () => {
+      vi.mocked(usePublicConfig).mockReturnValue({
+        data: { devAutoLoginEnabled: true },
+        isLoading: false,
+      } as unknown as ReturnType<typeof usePublicConfig>);
+      vi.mocked(usePathname).mockReturnValue("/dashboard");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: false, status: 500 }),
+      );
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      await waitFor(() => {
+        expect(mockRouterPush).toHaveBeenCalledWith(
+          "/auth/sign-in?redirectTo=%2Fdashboard",
+        );
+      });
     });
   });
 });

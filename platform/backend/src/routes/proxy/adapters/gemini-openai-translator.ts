@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { Gemini, OpenAi } from "@/types";
+import { sanitizeGeminiToolSchema } from "./gemini-schema";
 import {
+  type NormalizedContentPart,
+  normalizeOpenAiContentParts,
+  parseDataUrl,
   parseJsonObject,
   stringifyTextContent,
 } from "./openai-translator-utils";
@@ -51,9 +55,12 @@ export function openaiToGemini(req: OpenAiRequest): {
     }
 
     if (message.role === "user") {
+      const parts = userContentToGeminiParts(message.content);
       contents.push({
+        // Gemini rejects a content entry with no parts; keep an empty text
+        // part for messages that carried no convertible content.
         role: "user",
-        parts: [{ text: stringifyTextContent(message.content) }],
+        parts: parts.length > 0 ? parts : [{ text: "" }],
       });
       continue;
     }
@@ -81,6 +88,10 @@ export function openaiToGemini(req: OpenAiRequest): {
     }
 
     if (message.role === "tool") {
+      // Gemini carries tool results as a JSON functionResponse payload. Media in
+      // a tool result must be nested inside `functionResponse.parts` with
+      // displayName/$ref references (Gemini 3 only), which our schema does not
+      // model, so tool-result content is forwarded as text.
       contents.push({
         role: "user",
         parts: [
@@ -139,7 +150,11 @@ export function openaiToGemini(req: OpenAiRequest): {
           .map((tool) => ({
             name: tool.function.name,
             description: tool.function.description ?? "",
-            parameters: tool.function.parameters,
+            // Gemini rejects non-string enums; same sanitizer the native Gemini
+            // adapter applies, shared so this OpenAI-compatible path can't 400.
+            parameters: sanitizeGeminiToolSchema(
+              tool.function.parameters,
+            ) as typeof tool.function.parameters,
           })),
       },
     ];
@@ -248,4 +263,49 @@ function toGeminiToolChoice(
   if (toolChoice === "required") return "ANY";
   if (toolChoice === "none") return "NONE";
   return "AUTO";
+}
+
+// Converts an OpenAI user-message `content` into Gemini parts, preserving
+// images/files/audio instead of dropping every non-text part.
+function userContentToGeminiParts(
+  content: unknown,
+): Gemini.Types.MessagePart[] {
+  const parts: Gemini.Types.MessagePart[] = [];
+  for (const part of normalizeOpenAiContentParts(content)) {
+    const geminiPart = normalizedPartToGeminiPart(part);
+    if (geminiPart) parts.push(geminiPart);
+  }
+  return parts;
+}
+
+// Maps one normalized content part to a Gemini part. Only inline base64 data
+// URLs are forwarded (as `inlineData`). Returns null for parts Gemini can't
+// represent — notably http(s) image URLs: Gemini's `fileData.fileUri` accepts
+// only Files API / gs:// URIs, not arbitrary web URLs, and we don't fetch and
+// re-encode external content server-side, so such images are dropped.
+function normalizedPartToGeminiPart(
+  part: NormalizedContentPart,
+): Gemini.Types.MessagePart | null {
+  switch (part.kind) {
+    case "text":
+      return { text: part.text };
+    case "image": {
+      const inline = parseDataUrl(part.url);
+      if (inline) {
+        return { inlineData: { mimeType: inline.mimeType, data: inline.data } };
+      }
+      return null;
+    }
+    case "audio":
+      return {
+        inlineData: { mimeType: `audio/${part.format}`, data: part.data },
+      };
+    case "file": {
+      const inline = parseDataUrl(part.fileData);
+      if (inline) {
+        return { inlineData: { mimeType: inline.mimeType, data: inline.data } };
+      }
+      return null;
+    }
+  }
 }

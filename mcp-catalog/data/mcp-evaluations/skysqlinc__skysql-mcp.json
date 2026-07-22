@@ -1,0 +1,122 @@
+{
+  "name": "skysqlinc__skysql-mcp",
+  "display_name": "skysql-mcp",
+  "description": "SkySQL MCP server and client repository.",
+  "author": {
+    "name": "skysqlinc"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/src/mcp-server/server.py"],
+    "env": {
+      "SKYSQL_API_KEY": "${user_config.skysql_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "skysql_api_key": {
+      "type": "string",
+      "title": "SkySQL API Key",
+      "description": "Your SkySQL API key, obtained by signing up on SkySQL.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# SkySQL MCP Server\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/skysqlinc/skysql-mcp)](https://archestra.ai/mcp-catalog/skysqlinc__skysql-mcp)\n[![smithery badge](https://smithery.ai/badge/@skysqlinc/skysql-mcp)](https://smithery.ai/server/@skysqlinc/skysql-mcp)\n\nThis package contains everything needed to set up the SkySQL MCP (Model Context Protocol) server, which provides a powerful interface for managing SkySQL (MySQL/MariaDB) database instances and interacting with SkyAI Agents.\n\n## Features\n\n- Launch and manage serverless MariaDB database instances\n- Interact with AI-powered database agents\n- Execute SQL queries directly on SkySQL (MySQL/MariaDB) instances\n- Manage database credentials and IP allowlists\n- List and monitor database services\n\n## Installation\n\n#### Prerequisites\n- Python 3.10 or higher\n- A SkySQL API key\n\n### Option 1: Run locally\n\n#### Installation steps\n\n1. Clone the repository:\n   ```bash\n   git clone git@github.com:skysqlinc/skysql-mcp.git\n   cd skysql-mcp\n   ```\n\n2. Run the installation script:\n   ```bash\n   chmod +x install.sh\n   ./install.sh\n   ```\n\n3. Create a `.env` file in the root directory of the cloned git repository with your SkySQL API key. Obtain API key by signing up for free on [SkySQL](https://app.skysql.com).\n\n   ```\n   SKYSQL_API_KEY=<your_skysql_api_key_here>\n   ```\n\n4. Use [MCP CLI tool](https://github.com/wong2/mcp-cli) to test the server interactively.\n   ```\n   npx @wong2/mcp-cli uv run python src/mcp-server/server.py\n   ```\n\n5. Configure in `Cursor.sh` manually\n\n   For Mac/Linux:\n   ```bash\n   chmod +x launch.sh\n   ```\nUpdate `mcp.json`:\n- command `\"<full-path-to>/skysql-mcp/launch.sh\"` for Mac/Linux and `\"<full-path-to>\\\\skysql-mcp\\\\launch.bat\"` for Windows.\n- `SKYSQL_API_KEY` with your SkySQL API key\n\nCopy the `mcp.json` included in the repo to Cursor MCP Settings\n\n### Option 2: Installing via `Smithery.ai`\n\nYou can use Smithery.ai to test the MCP server via their UI. Follow the installation instructions from [smithery.ai](https://smithery.ai/server/@skysqlinc/skysql-mcp) \n\nFor example, use the following command to install it in Cursor.sh IDE: \n   ```bash\n   npx -y @smithery/cli@latest install @skysqlinc/skysql-mcp --client cursor --profile <your-smithery-profile> --key <your-smithery-kay>\n   ```\nFor Windsurf:\n\n   ```bash\n   npx -y @smithery/cli@latest install @skysqlinc/skysql-mcp --client windsurf --profile <your-smithery-profile> --key <your-smithery-key>\n   ```\n",
+  "category": "Cloud",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "wong2-mcp-cli": {
+        "command": "npx",
+        "args": ["@wong2/mcp-cli", "uv", "run", "python", "src/mcp-server/server.py"],
+        "env": {}
+      },
+      "skysql-mcp-launch-sh-configured": {
+        "command": "<full-path-to>/skysql-mcp/launch.sh",
+        "args": [],
+        "env": {
+          "SKYSQL_API_KEY": "<your_skysql_api_key_here>"
+        }
+      },
+      "skysql-mcp-launch-bat-configured": {
+        "command": "<full-path-to>\\skysql-mcp\\launch.bat",
+        "args": [],
+        "env": {
+          "SKYSQL_API_KEY": "<your_skysql_api_key_here>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "skysqlinc",
+    "repo": "skysql-mcp",
+    "url": "https://github.com/skysqlinc/skysql-mcp",
+    "name": "skysqlinc__skysql-mcp",
+    "path": null,
+    "stars": 1,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f8f4f76410fd88b57b051d9a2992673d7a0bea5f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:32.066Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "PyMySQL",
+      "importance": 9
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "asyncio",
+      "importance": 7
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    },
+    {
+      "name": "logging",
+      "importance": 5
+    },
+    {
+      "name": "typing-extensions",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"skysql-mcp\"\nversion = \"0.1.0\"\ndescription = \"SkySQL MCP Server\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"fastmcp>=0.1.0\",\n    \"pydantic>=2.11.4\",\n    \"python-dotenv>=1.0.1\",\n    \"typing-extensions>=4.12.2\",\n    \"PyMySQL==1.1.0\",\n    \"asyncio==3.4.3\"\n]\n\n\n=== requirements.txt ===\n# Core dependencies\nhttpx>=0.27.0           # Async HTTP client used for API calls\nfastmcp>=0.1.0          # FastMCP framework\npydantic>=2.0.0         # Data validation using BaseModel\npython-dotenv>=1.0.0    # For loading environment variables from .env file\nlogging>=0.4.9.6        # Enhanced logging capabilities\ntyping-extensions>=4.5.0 # For advanced type hints\nasyncio==3.4.3\nPyMySQL==1.1.0 "
+}

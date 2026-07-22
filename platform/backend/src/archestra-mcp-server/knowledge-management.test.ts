@@ -3,16 +3,20 @@
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+  TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
+  TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
+} from "@archestra/shared";
 import { vi } from "vitest";
+import config from "@/config";
 import {
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
 import { KbChunkModel, KbDocumentModel, TeamModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { archestraMcpBranding } from "./branding";
 
 const t = (name: string) =>
   `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${name}`;
@@ -61,6 +65,47 @@ describe("knowledge-management tool execution", () => {
       expect((result.content[0] as any).text).toContain(
         "No knowledge base or connector assigned",
       );
+    });
+
+    test("queries all user-visible connectors when the agent allows dynamic access", async ({
+      makeAgent,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      // agent has NO assigned knowledge sources — only the dynamic flag
+      const dynamicAgent = await makeAgent({
+        name: "Dynamic Knowledge Agent",
+        organizationId: org.id,
+        accessAllTools: true,
+      });
+
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockResolvedValueOnce([] as any);
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "anything" },
+        {
+          agent: { id: dynamicAgent.id, name: dynamicAgent.name },
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(querySpy).toHaveBeenCalledOnce();
+      expect(querySpy.mock.calls[0][0].connectorIds).toContain(connector.id);
+
+      querySpy.mockRestore();
     });
 
     test("calls queryService with correct params when KB is assigned", async ({
@@ -581,6 +626,12 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("not found");
+      expect((result.content[0] as any).text).toContain(
+        archestraMcpBranding.getToolName(TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME),
+      );
+      expect((result._meta as any)?.archestraError?.code).toBe(
+        "unknown_knowledge_base",
+      );
     });
 
     test("update_knowledge_base returns error when no fields provided", async () => {
@@ -747,6 +798,14 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("not found");
+      expect((result.content[0] as any).text).toContain(
+        archestraMcpBranding.getToolName(
+          TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
+        ),
+      );
+      expect((result._meta as any)?.archestraError?.code).toBe(
+        "unknown_knowledge_connector",
+      );
     });
 
     test("update_knowledge_connector returns error when no fields", async () => {
@@ -1149,6 +1208,179 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("not assigned");
+    });
+  });
+
+  // --- Auto-sync-permissions admin gating ---
+
+  describe("auto-sync-permissions admin gating", () => {
+    let org: { id: string };
+    let memberContext: ArchestraContext;
+    let kb: KnowledgeBase;
+    let autoSyncConnector: KnowledgeBaseConnector;
+    let originalAutoSyncFlag: boolean;
+
+    beforeEach(
+      async ({
+        makeAgent,
+        makeCustomRole,
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        originalAutoSyncFlag = config.kb.autoSyncPermissionsEnabled;
+        config.kb.autoSyncPermissionsEnabled = true;
+        org = await makeOrganization();
+        const member = await makeUser();
+        // Full knowledgeSource WRITE access but no knowledgeSourceAutoSync
+        // grants — proves the auto-sync gates bind on the dedicated
+        // permission, not on the generic write permissions.
+        const role = await makeCustomRole(org.id, {
+          permission: {
+            knowledgeSource: ["read", "create", "update", "delete", "query"],
+          },
+        });
+        await makeMember(member.id, org.id, { role: role.role });
+        const agent = await makeAgent({
+          name: "Member Agent",
+          organizationId: org.id,
+        });
+        memberContext = {
+          agent: { id: agent.id, name: agent.name },
+          organizationId: org.id,
+          userId: member.id,
+        };
+        kb = await makeKnowledgeBase(org.id);
+        autoSyncConnector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+          connectorType: "github",
+          visibility: "auto-sync-permissions",
+        });
+      },
+    );
+
+    afterEach(() => {
+      config.kb.autoSyncPermissionsEnabled = originalAutoSyncFlag;
+    });
+
+    test("members cannot see auto-sync connectors in the list or get tools", async () => {
+      const listResult = await executeArchestraTool(
+        t("get_knowledge_connectors"),
+        {},
+        memberContext,
+      );
+      expect(listResult.isError).toBeFalsy();
+      expect((listResult.content[0] as any).text).not.toContain(
+        autoSyncConnector.id,
+      );
+
+      const getResult = await executeArchestraTool(
+        t("get_knowledge_connector"),
+        { id: autoSyncConnector.id },
+        memberContext,
+      );
+      expect(getResult.isError).toBe(true);
+      expect((getResult.content[0] as any).text).toContain(
+        "Knowledge connector not found",
+      );
+    });
+
+    test("members cannot update, delete, or assign an auto-sync connector", async () => {
+      const updateResult = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        { id: autoSyncConnector.id, name: "renamed" },
+        memberContext,
+      );
+      expect(updateResult.isError).toBe(true);
+      expect((updateResult.content[0] as any).text).toContain(
+        "Knowledge connector not found",
+      );
+
+      const assignResult = await executeArchestraTool(
+        t("assign_knowledge_connector_to_knowledge_base"),
+        { connector_id: autoSyncConnector.id, knowledge_base_id: kb.id },
+        memberContext,
+      );
+      expect(assignResult.isError).toBe(true);
+      expect((assignResult.content[0] as any).text).toContain(
+        "Knowledge connector not found",
+      );
+
+      const deleteResult = await executeArchestraTool(
+        t("delete_knowledge_connector"),
+        { id: autoSyncConnector.id },
+        memberContext,
+      );
+      expect(deleteResult.isError).toBe(true);
+      expect((deleteResult.content[0] as any).text).toContain(
+        "Knowledge connector not found",
+      );
+    });
+
+    test("members cannot create an auto-sync connector or switch one into auto-sync", async ({
+      makeKnowledgeBaseConnector,
+    }) => {
+      const createResult = await executeArchestraTool(
+        t("create_knowledge_connector"),
+        {
+          name: "Member Auto-sync",
+          connector_type: "github",
+          visibility: "auto-sync-permissions",
+          config: {
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "pat",
+          },
+        },
+        memberContext,
+      );
+      expect(createResult.isError).toBe(true);
+      expect((createResult.content[0] as any).text).toContain(
+        '"create" permission for auto-sync-permissions connectors',
+      );
+
+      const orgWide = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        connectorType: "github",
+      });
+      const updateResult = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        { id: orgWide.id, visibility: "auto-sync-permissions" },
+        memberContext,
+      );
+      expect(updateResult.isError).toBe(true);
+      expect((updateResult.content[0] as any).text).toContain(
+        '"update" permission for auto-sync-permissions connectors',
+      );
+    });
+
+    test("members still query auto-sync connectors via dynamic access", async ({
+      makeAgent,
+    }) => {
+      const dynamicAgent = await makeAgent({
+        name: "Dynamic Member Agent",
+        organizationId: org.id,
+        accessAllTools: true,
+      });
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockResolvedValueOnce([] as any);
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "anything" },
+        { ...memberContext, agent: { id: dynamicAgent.id, name: "d" } },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(querySpy).toHaveBeenCalledOnce();
+      expect(querySpy.mock.calls[0][0].connectorIds).toContain(
+        autoSyncConnector.id,
+      );
+      // The per-chunk ACL — not admin bypass — is what filters the results.
+      expect(querySpy.mock.calls[0][0].bypassAcl).toBe(false);
+
+      querySpy.mockRestore();
     });
   });
 

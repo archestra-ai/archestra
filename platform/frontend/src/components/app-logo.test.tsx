@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 const { mockUseOrgTheme, mockUseTheme } = vi.hoisted(() => ({
   mockUseOrgTheme: vi.fn(),
@@ -26,9 +27,15 @@ vi.mock("@/lib/theme.hook", () => ({
   useOrgTheme: () => mockUseOrgTheme(),
 }));
 
+vi.mock("@/lib/hooks/use-app-name");
+
 import { AppLogo } from "./app-logo";
 
 describe("AppLogo", () => {
+  beforeEach(() => {
+    vi.mocked(useAppName).mockReturnValue("Acme");
+  });
+
   it("does not render fallback branding while appearance is still loading", () => {
     mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
     mockUseOrgTheme.mockReturnValue({
@@ -40,10 +47,10 @@ describe("AppLogo", () => {
     render(<AppLogo />);
 
     expect(screen.queryByText("Archestra.AI")).not.toBeInTheDocument();
-    expect(screen.queryByAltText("Organization logo")).not.toBeInTheDocument();
+    expect(screen.queryByAltText("Acme logo")).not.toBeInTheDocument();
   });
 
-  it("renders the organization logo after appearance loads", () => {
+  it("renders the organization logo with the app name as alt text", () => {
     mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
     mockUseOrgTheme.mockReturnValue({
       isLoadingAppearance: false,
@@ -53,14 +60,14 @@ describe("AppLogo", () => {
 
     render(<AppLogo />);
 
-    expect(screen.getByAltText("Organization logo")).toHaveAttribute(
+    expect(screen.getByAltText("Acme logo")).toHaveAttribute(
       "src",
       "data:image/png;base64,custom",
     );
     expect(screen.queryByText("Archestra.AI")).not.toBeInTheDocument();
   });
 
-  it("uses stable dimensions for the default logo", () => {
+  it("uses stable dimensions for the default logo and marks it decorative", () => {
     mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
     mockUseOrgTheme.mockReturnValue({
       isLoadingAppearance: false,
@@ -68,8 +75,12 @@ describe("AppLogo", () => {
       logoDark: null,
     });
 
-    render(<AppLogo />);
+    const { container } = render(<AppLogo />);
 
-    expect(screen.getByAltText("Logo")).toHaveClass("size-7", "shrink-0");
+    // Decorative (alt="") because the app name is visible text beside it
+    const img = container.querySelector("img");
+    expect(img).toHaveAttribute("alt", "");
+    expect(img).toHaveClass("size-7", "shrink-0");
+    expect(screen.getByText("Archestra.AI")).toBeInTheDocument();
   });
 });

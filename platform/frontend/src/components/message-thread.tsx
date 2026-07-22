@@ -1,14 +1,12 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  type BlockedToolPart,
-  type DualLlmPart,
-  type PartialUIMessage,
-  type PolicyDeniedPart,
-  TOOL_SWAP_AGENT_SHORT_NAME,
-  TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
-} from "@shared";
+import type {
+  archestraApiTypes,
+  BlockedToolPart,
+  DualLlmPart,
+  PartialUIMessage,
+  PolicyDeniedPart,
+} from "@archestra/shared";
 import type { ChatStatus } from "ai";
 import {
   Check,
@@ -44,6 +42,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { isBlankReasoningPart } from "@/components/chat/chat-messages.utils";
 import { InlineChatError } from "@/components/chat/inline-chat-error";
 import {
   hasKnowledgeBaseToolCall,
@@ -58,16 +57,11 @@ import {
   UnsafeContextStartsHereDivider,
 } from "@/components/chat/message-boundary-divider";
 import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
-import { SwapAgentBoundaryDivider } from "@/components/chat/swap-agent-boundary";
 import { UserMessageText } from "@/components/chat/user-message-text";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
 import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
 import { parsePolicyDenied } from "@/lib/chat/mcp-error-ui";
-import {
-  getRenderedToolName,
-  getSwapToolShortName,
-} from "@/lib/chat/swap-agent.utils";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 
@@ -162,7 +156,7 @@ const MessageThread = ({
   return (
     <div
       className={cn(
-        "mx-auto relative size-full h-[calc(100vh-3rem)]",
+        "mx-auto relative size-full h-[calc(100dvh-3rem)]",
         containerClassName,
       )}
     >
@@ -265,6 +259,12 @@ const MessageThread = ({
 
                         switch (part.type) {
                           case "text": {
+                            // Some models emit whitespace-only text alongside
+                            // tool calls (e.g. a lone " "); rendering it would
+                            // produce an empty message bubble
+                            if (!part.text.trim()) {
+                              return null;
+                            }
                             const policyDenied = parsePolicyDenied(part.text);
                             const shouldRenderUnsafeContextDivider =
                               message.role === "assistant" &&
@@ -411,17 +411,6 @@ const MessageThread = ({
                               part.type === "dynamic-tool"
                                 ? part.toolName
                                 : part.toolCallId;
-                            const swapToolShortName = getSwapToolShortName({
-                              toolName,
-                            });
-                            if (
-                              swapToolShortName ===
-                                TOOL_SWAP_AGENT_SHORT_NAME ||
-                              swapToolShortName ===
-                                TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
-                            ) {
-                              return null;
-                            }
                             const isDanger = [
                               "gather_sensitive_data",
                               "send_email",
@@ -547,6 +536,12 @@ const MessageThread = ({
                             );
                           }
                           case "reasoning":
+                            // Empty reasoning parts (redacted/signature-only
+                            // thinking, kept for provider replay) must not render
+                            // as empty "Thinking…" accordions.
+                            if (isBlankReasoningPart(part)) {
+                              return null;
+                            }
                             return (
                               <Reasoning
                                 key={partKey}
@@ -606,18 +601,6 @@ const MessageThread = ({
 
                             // Handle tool-* prefixed parts (persisted tool calls from DB)
                             if (_isToolPrefixedPart(part)) {
-                              const toolName = getRenderedToolName(part);
-                              const swapToolShortName = toolName
-                                ? getSwapToolShortName({ toolName })
-                                : null;
-                              if (
-                                swapToolShortName ===
-                                  TOOL_SWAP_AGENT_SHORT_NAME ||
-                                swapToolShortName ===
-                                  TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
-                              ) {
-                                return null;
-                              }
                               // Look ahead for tool result and dual LLM analysis
                               let toolResultPart = null;
                               let dualLlmPart: DualLlmPart | null = null;
@@ -753,12 +736,6 @@ const MessageThread = ({
                     }) && (
                       <UnsafeContextStartsHereDivider
                         dividerRef={unsafeBoundaryRef}
-                      />
-                    )}
-                    {message.role === "assistant" && (
-                      <SwapAgentBoundaryDivider
-                        parts={message.parts ?? []}
-                        hasToolError={hasSwapToolErrorInMessageThread}
                       />
                     )}
                   </div>
@@ -1029,27 +1006,6 @@ function toolPartMatchesUnsafeContextBoundary(
 
   const partToolName = getToolNameFromPart(part);
   return partToolName === boundary.toolName;
-}
-
-function hasSwapToolErrorInMessageThread(
-  part: { toolCallId?: string; errorText?: string },
-  allParts: Array<{ toolCallId?: string; errorText?: string }>,
-): boolean {
-  if (typeof part.errorText === "string" && part.errorText.length > 0) {
-    return true;
-  }
-
-  if (!part.toolCallId) {
-    return false;
-  }
-
-  return allParts.some(
-    (candidate) =>
-      candidate !== part &&
-      candidate.toolCallId === part.toolCallId &&
-      typeof candidate.errorText === "string" &&
-      candidate.errorText.length > 0,
-  );
 }
 
 function getPartKey(

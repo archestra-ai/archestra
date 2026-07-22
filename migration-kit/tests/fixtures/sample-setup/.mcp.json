@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/data"],
+      "env": { "FS_ROOT": "/data" }
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "ghp_examplesecrettoken0000000000000000" }
+    },
+    "weather": {
+      "url": "https://mcp.example.com/weather"
+    }
+  }
+}

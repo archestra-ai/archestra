@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@daveyplate/better-auth-ui/css";
 /* Streamdown animation keyframes (sd-fadeIn, sd-blurIn, sd-slideUp) and the
    [data-sd-animate] rule. Required for the word-by-word fade-in animation
    during chat streaming (animated={{ animation: "fadeIn", sep: "word" }}).
@@ -108,15 +107,25 @@
   --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);
   --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);
   --tracking-normal: 0em;
+  --scrollbar-thumb: color-mix(in oklab, var(--muted-foreground) 20%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  /* The app shell is viewport-locked; without this, mobile browsers
+     rubber-band the whole document when an inner scroller hits its edge.
+     Set on both html and body — iOS Safari only honors it reliably when the
+     root carries it too. */
+  html {
+    overscroll-behavior-y: none;
+  }
   body {
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
+    overscroll-behavior-y: none;
   }
   /* Fix Shiki syntax highlighting in dark mode - apply dark theme colors from CSS variables */
   .dark [data-streamdown="code-block-body"] span[style*="--shiki-dark"] {
@@ -162,9 +171,27 @@
   [data-streamdown="inline-code"] {
     background-color: var(--accent) !important;
   }
+  /* Keep table action dropdowns above Streamdown's sticky table headers.
+     This covers both inline tables and the fullscreen portal. */
+  :is(
+    [data-streamdown="table-wrapper"],
+    [data-streamdown="table-fullscreen"]
+  )
+    .relative
+    > .absolute {
+    z-index: 20 !important;
+  }
   /* Override Tailwind's font-sans to use our dynamic CSS variable */
   .font-sans {
     font-family: var(--font-sans) !important;
+  }
+  /* App-secret fields (SecretInput): render the value as dots via a disc-glyph
+     font instead of type="password" / -webkit-text-security, both of which
+     summon browser password managers (iCloud AutoFill, Chrome save/generate).
+     :not(:placeholder-shown) keeps placeholders in the field's real font.
+     !important so it beats font-mono/font-sans utilities on the same element. */
+  .secret-masked:not(:placeholder-shown) {
+    font-family: var(--font-secret-mask) !important;
   }
   /* Streamdown streaming caret - the library sets --streamdown-caret inline style
      and expects Tailwind to generate *:last:after:content-[var(--streamdown-caret)].
@@ -201,7 +228,9 @@
   }
 }
 
-button, div[role="menuitem"] {
+/* Menu items get cursor-pointer in ui/dropdown-menu.tsx itself, which also
+   covers asChild items that render as anchors instead of divs. */
+button {
   cursor: pointer;
 }
 button:disabled {
@@ -221,21 +250,255 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
   color: var(--muted-foreground) !important;
 }
 
-/* Thin scrollbar for sidebar */
-[data-sidebar="sidebar"] {
+/* Viewport-locked app shell height. Tracks the *visual* viewport published by
+   VisualViewportHeight so the shell shrinks when the mobile on-screen keyboard
+   opens (iOS never resizes the layout viewport for it and instead pans the
+   whole page); falls back to the dynamic viewport before the script runs.
+   Use these instead of h-screen/min-h-svh for full-height app chrome. */
+@utility h-app-viewport {
+  height: var(--visual-viewport-height, 100dvh);
+}
+@utility min-h-app-viewport {
+  min-height: var(--visual-viewport-height, 100svh);
+}
+
+/* Freezes every CSS animation in a subtree, itself included. A paused replay
+   must look paused: enter animations caught mid-flight, blinking carets, and
+   pulsing activity dots all hold their current frame and resume from it,
+   because animation-play-state does not inherit and cannot be set inline. */
+@utility animations-paused {
+  &,
+  & * {
+    animation-play-state: paused !important;
+  }
+}
+
+/* Thin scrollbar for sidebar scroll regions */
+@utility scrollbar-sidebar {
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--sidebar-accent)) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  padding-inline-end: 2px;
+
+  &::-webkit-scrollbar {
+    width: 2px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 9999px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
 }
-[data-sidebar="sidebar"] ::-webkit-scrollbar {
+
+/* ── Aceternity-style effects (MCP registry wizard & detail dashboard) ──
+   CSS-only ports of Aceternity UI patterns (spotlight, shimmer, meteors,
+   dot hero, animated gradient border). All colors derive from theme tokens
+   so white-label themes and dark mode are respected. */
+
+@keyframes aceternity-shimmer {
+  to {
+    background-position: -220% 0;
+  }
+}
+
+.aceternity-shimmer {
+  background-image: linear-gradient(
+    110deg,
+    var(--primary) 42%,
+    color-mix(in oklab, var(--primary), white 30%) 50%,
+    var(--primary) 58%
+  );
+  background-size: 220% 100%;
+  animation: aceternity-shimmer 2.8s linear infinite;
+}
+
+.aceternity-dots {
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--primary) 35%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 18px 18px;
+  mask-image: radial-gradient(
+    ellipse 70% 90% at 50% 0%,
+    black 20%,
+    transparent 72%
+  );
+}
+
+@keyframes aceternity-meteor {
+  0% {
+    transform: rotate(215deg) translateX(0);
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: rotate(215deg) translateX(-320px);
+    opacity: 0;
+  }
+}
+
+.aceternity-meteor {
+  position: absolute;
+  height: 2px;
   width: 2px;
-}
-[data-sidebar="sidebar"] ::-webkit-scrollbar-track {
-  background: transparent;
-}
-[data-sidebar="sidebar"] ::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--sidebar-accent));
   border-radius: 9999px;
+  background: color-mix(in oklab, var(--primary) 80%, white);
+  transform: rotate(215deg);
+  animation: aceternity-meteor linear infinite;
 }
-[data-sidebar="sidebar"] ::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(var(--sidebar-accent-foreground) / 0.3);
+
+.aceternity-meteor::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 56px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--primary) 60%, transparent),
+    transparent
+  );
+}
+
+@property --aceternity-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes aceternity-border-spin {
+  to {
+    --aceternity-angle: 360deg;
+  }
+}
+
+.aceternity-gradient-border {
+  position: relative;
+}
+
+.aceternity-gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--aceternity-angle),
+    transparent 0%,
+    color-mix(in oklab, var(--primary) 80%, transparent) 12%,
+    transparent 28%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: aceternity-border-spin 3.5s linear infinite;
+  pointer-events: none;
+}
+
+
+/* ── Feedback pop-up ──
+   Friendly greeting: the hand waves twice when the pop-up opens, then rests. */
+
+@keyframes feedback-wave {
+  0%,
+  60%,
+  100% {
+    transform: rotate(0deg);
+  }
+  10%,
+  30% {
+    transform: rotate(16deg);
+  }
+  20%,
+  40% {
+    transform: rotate(-8deg);
+  }
+}
+
+.feedback-wave {
+  display: inline-block;
+  transform-origin: 70% 75%;
+  animation: feedback-wave 1.8s ease-in-out 0.4s 2;
+}
+
+/* === Chat new-chat → conversation view transition ===
+   Drives the React <ViewTransition> boundaries in app/chat/page.tsx and
+   components/chat/new-chat-composer.tsx. The composer is a shared element
+   (name "chat-composer") that morphs from the centered splash (or a project
+   page) to the conversation's bottom anchor; the splash decoration leaves
+   fast, the message thread eases in slightly later. Timing is asymmetric on
+   purpose: old content leaves quickly, new content arrives gently. */
+
+:root {
+  /* Damped-spring position curve (zeta 0.72), ~4% overshoot then settle —
+     gives the morph a soft physical landing instead of a linear glide. */
+  --chat-transition-spring: linear(
+    0, 0.065, 0.211, 0.387, 0.559, 0.708, 0.827, 0.914, 0.974, 1.011, 1.03,
+    1.038, 1.038, 1.033, 1.027, 1.02, 1.014, 1.008, 1.005, 1.002, 1, 0.999,
+    0.999, 0.999, 1
+  );
+  /* Luxurious decelerating glide (easeOutExpo-ish) for fades. */
+  --chat-transition-glide: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+::view-transition-group(.chat-composer-morph) {
+  animation-duration: 500ms;
+  animation-timing-function: var(--chat-transition-spring);
+}
+::view-transition-image-pair(.chat-composer-morph) {
+  animation-name: chat-composer-blur;
+}
+/* A touch of mid-flight blur hides pixel interpolation artifacts while the
+   composer snapshot is stretched between its two sizes. */
+@keyframes chat-composer-blur {
+  30% {
+    filter: blur(1.5px);
+  }
+}
+
+::view-transition-old(.chat-splash-exit) {
+  animation: 160ms ease-out both chat-transition-fade reverse;
+}
+::view-transition-new(.chat-thread-enter) {
+  animation:
+    300ms var(--chat-transition-glide) 90ms both chat-transition-fade,
+    460ms var(--chat-transition-spring) both chat-transition-rise;
+}
+
+@keyframes chat-transition-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes chat-transition-rise {
+  from {
+    transform: translateY(16px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* Motion sensitivity: collapse every view transition to an instant swap (the
+   browser's non-animated default). */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-image-pair(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
 }

@@ -3,19 +3,21 @@ title: "Team Sync"
 category: Administration
 subcategory: Identity Providers
 description: "Automatically add and remove users from Archestra teams based on IdP group membership"
-order: 6
+order: 7
 lastUpdated: 2026-05-05
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
+<!--
 Provider-agnostic page covering team synchronization for any OIDC or SAML SSO
 provider. Linked from per-provider pages (Entra, Okta, etc.) and from the parent
 Identity Providers index.
 -->
 
 Archestra supports automatic team membership synchronization based on user group memberships from your identity provider. When users log in via SSO, they are automatically added to or removed from Archestra teams based on their IdP groups.
+
+> **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
 
 ## How team sync works
 
@@ -107,13 +109,18 @@ After configuring how groups are extracted:
 
 1. Navigate to **Settings > Teams**
 2. Create a team or select an existing one
-3. Click the **link icon** (Configure SSO Team Sync) button next to the team
-4. In the dialog, enter the external group identifier(s) to link:
+3. Click **Edit** next to the team
+4. Select **External Group Sync**
+5. Enter the external group identifier(s) to link:
    - The group name as extracted by your Handlebars template or default extraction
    - For LDAP-style groups: the full DN (for example `cn=admins,ou=groups,dc=example,dc=com`)
    - For Microsoft Entra ID: the group object ID or display name
-5. Click **Add** to create the mapping
-6. Repeat for additional groups if needed
+6. Click **Add** to create the mapping
+7. Repeat for additional groups if needed
+
+Users with organization-level team management can configure any team. Team members
+with the **Admin** role can manage members, roles, and external group mappings for
+their own team without access to identity provider settings.
 
 ### Group identifier matching
 

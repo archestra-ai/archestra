@@ -14,6 +14,9 @@ interface K8sClients {
   coreApi: k8s.CoreV1Api;
   appsApi: k8s.AppsV1Api;
   batchApi: k8s.BatchV1Api;
+  authApi: k8s.AuthorizationV1Api;
+  networkingApi: k8s.NetworkingV1Api;
+  customObjectsApi: k8s.CustomObjectsApi;
   attach: k8s.Attach;
   exec: k8s.Exec;
   log: k8s.Log;
@@ -112,6 +115,9 @@ export function createK8sClients(
     coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api),
     appsApi: kubeConfig.makeApiClient(k8s.AppsV1Api),
     batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api),
+    authApi: kubeConfig.makeApiClient(k8s.AuthorizationV1Api),
+    networkingApi: kubeConfig.makeApiClient(k8s.NetworkingV1Api),
+    customObjectsApi: kubeConfig.makeApiClient(k8s.CustomObjectsApi),
     attach: new k8s.Attach(kubeConfig),
     exec: new k8s.Exec(kubeConfig),
     log: new k8s.Log(kubeConfig),
@@ -137,6 +143,32 @@ export function isK8sConfigured(): boolean {
  */
 export function getK8sNamespace(): string {
   return namespace || "default";
+}
+
+/**
+ * Type guard to check if an error is a Kubernetes 409 (Conflict) error —
+ * e.g. a create that raced another writer; retry as a replace/patch.
+ * K8s client errors can have `statusCode`, `code`, or `response.statusCode` set.
+ */
+export function isK8sConflictError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+
+  if ("statusCode" in error && error.statusCode === 409) {
+    return true;
+  }
+
+  if ("code" in error && error.code === 409) {
+    return true;
+  }
+
+  if (
+    "response" in error &&
+    (error as { response: { statusCode: number } }).response?.statusCode === 409
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -187,6 +219,54 @@ export function ensureStringIsRfc1123Compliant(input: string): string {
 }
 
 /**
+ * Frozen K8s deployment name for a NEW local (single-tenant) MCP server
+ * install: `mcp-<slug40>-<id8>`. The id suffix makes new names structurally
+ * unique (no collision handling needed); the slug keeps `kubectl` output
+ * readable. Max 53 chars, so the derived `<name>-service` Service still fits
+ * the 63-char RFC 1123 label limit. Computed once at creation, stored on the
+ * `mcp_server` row, and never recomputed — deployment identity must not
+ * follow the mutable display name, or renames orphan the running deployment.
+ */
+export function constructFrozenMcpDeploymentName(
+  name: string,
+  id: string,
+): string {
+  const slug =
+    ensureStringIsRfc1123Compliant(name)
+      .slice(0, 40)
+      .replace(/[^a-z0-9]+$/, "") || "server";
+  return `mcp-${slug}-${id.slice(0, 8)}`;
+}
+
+/**
+ * Legacy single-tenant deployment name (`mcp-<slug>`), historically
+ * recomputed from the mutable server name on every deploy. Kept only for
+ * rows created before `deployment_name` existed: the startup adopt pass and
+ * the rename cascade's freeze-fallback use it to freeze a byte-identical
+ * value, and the runtime falls back to it while a row is still unfrozen.
+ * New installs use {@link constructFrozenMcpDeploymentName} instead.
+ */
+export function constructLegacyMcpDeploymentName(name: string): string {
+  return `mcp-${ensureStringIsRfc1123Compliant(name)}`.substring(0, 253);
+}
+
+/**
+ * Shared-deployment name for a multitenant catalog:
+ * `mcp-mt-<catalogId8>-<slug>`. New multitenant catalogs freeze exactly this
+ * shape at creation — byte-identical to what the runtime historically
+ * recomputed from the mutable catalog name — so existing deployments never
+ * churn. The runtime also uses it as the recompute fallback for rows the
+ * startup adopt pass hasn't frozen yet.
+ */
+export function constructLegacyMultitenantMcpDeploymentName(
+  catalogId: string,
+  name: string,
+): string {
+  const slugified = ensureStringIsRfc1123Compliant(name);
+  return `mcp-mt-${catalogId.slice(0, 8)}-${slugified}`.substring(0, 253);
+}
+
+/**
  * Sanitizes a single label value to ensure it's RFC 1123 compliant,
  * no longer than 63 characters, and ends with an alphanumeric character.
  */
@@ -194,6 +274,62 @@ export function sanitizeLabelValue(value: string): string {
   return ensureStringIsRfc1123Compliant(value)
     .substring(0, 63)
     .replace(/[^a-z0-9]+$/, "");
+}
+
+type NamespaceAccessReason = "forbidden" | "unavailable";
+
+type NamespaceAccessResult =
+  | { ok: true }
+  | { ok: false; reason: NamespaceAccessReason };
+
+/**
+ * Checks whether the platform's service account can deploy MCP server workloads
+ * into a namespace, via a SelfSubjectAccessReview for `create deployments`.
+ *
+ * This deliberately does NOT read the namespace object: `get namespaces` is a
+ * cluster-scoped permission, and the chart's least-privilege design grants the
+ * platform SA only namespaced Roles (pods/deployments/services/secrets). So
+ * reading the namespace would 403 even when the SA can fully deploy there. The
+ * access review checks exactly the permission the runtime needs — the same thing
+ * `kubectl auth can-i create deployments -n <ns>` answers — and requires no extra
+ * RBAC (a SelfSubjectAccessReview is always allowed for one's own permissions).
+ */
+export async function checkNamespaceDeployAccess(
+  namespaceName: string,
+  authApi: k8s.AuthorizationV1Api,
+): Promise<NamespaceAccessResult> {
+  try {
+    const review = await authApi.createSelfSubjectAccessReview({
+      body: {
+        spec: {
+          resourceAttributes: {
+            namespace: namespaceName,
+            verb: "create",
+            group: "apps",
+            resource: "deployments",
+          },
+        },
+      },
+    });
+    return review.status?.allowed
+      ? { ok: true }
+      : { ok: false, reason: "forbidden" };
+  } catch {
+    return { ok: false, reason: "unavailable" };
+  }
+}
+
+/**
+ * User-facing message for a namespace the platform SA cannot deploy into.
+ * Shared by the create/update guard and the "Test" probe so both read the same.
+ */
+export function namespaceAccessMessage(
+  namespaceName: string,
+  reason: NamespaceAccessReason,
+): string {
+  return reason === "forbidden"
+    ? `No access to namespace "${namespaceName}" — the platform's Kubernetes service account cannot deploy there. Grant it via the Helm chart (orchestrator.kubernetes.rbac.environmentNamespaces) and redeploy.`
+    : "Could not reach the Kubernetes cluster.";
 }
 
 /**

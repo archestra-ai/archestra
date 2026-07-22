@@ -1,0 +1,171 @@
+{
+  "name": "khan2a__telephony-mcp-server",
+  "display_name": "telephony-mcp-server",
+  "description": "A very simple no-fuss minimalist MCP Server with telephony tools like voice call and sms. This MCP Server can be integrated with LLM applications. Vonage API is used for calls, SMS, Speech-to-Text and Speech Recognition.",
+  "author": {
+    "name": "khan2a"
+  },
+  "server": {
+    "command": "python",
+    "args": ["telephony_server.py"],
+    "env": {
+      "VONAGE_API_KEY": "${user_config.vonage_api_key}",
+      "VONAGE_API_SECRET": "${user_config.vonage_api_secret}",
+      "VONAGE_APPLICATION_ID": "${user_config.vonage_application_id}",
+      "VONAGE_PRIVATE_KEY_PATH": "${user_config.vonage_private_key_path}",
+      "VONAGE_LVN": "${user_config.vonage_lvn}",
+      "VONAGE_API_URL": "${user_config.vonage_api_url}",
+      "VONAGE_SMS_URL": "${user_config.vonage_sms_url}",
+      "CALLBACK_SERVER_URL": "${user_config.callback_server_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "vonage_api_key": {
+      "type": "string",
+      "title": "Vonage API Key",
+      "description": "Your Vonage API key",
+      "sensitive": true,
+      "required": true
+    },
+    "vonage_api_secret": {
+      "type": "string",
+      "title": "Vonage API Secret",
+      "description": "Your Vonage API secret",
+      "sensitive": true,
+      "required": true
+    },
+    "vonage_application_id": {
+      "type": "string",
+      "title": "Vonage Application ID",
+      "description": "Your Vonage application ID",
+      "sensitive": true,
+      "required": true
+    },
+    "vonage_private_key_path": {
+      "type": "file",
+      "title": "Vonage Private Key Path",
+      "description": "Path to your Vonage private key file",
+      "sensitive": true,
+      "required": true
+    },
+    "vonage_lvn": {
+      "type": "string",
+      "title": "Vonage Virtual Number (LVN)",
+      "description": "Your Vonage virtual number",
+      "sensitive": false,
+      "required": true
+    },
+    "vonage_api_url": {
+      "type": "string",
+      "title": "Vonage API URL",
+      "description": "The base URL for Vonage Voice API calls",
+      "default": "https://api.nexmo.com/v1/calls",
+      "sensitive": false,
+      "required": false
+    },
+    "vonage_sms_url": {
+      "type": "string",
+      "title": "Vonage SMS URL",
+      "description": "The base URL for Vonage SMS API requests",
+      "default": "https://rest.nexmo.com/sms/json",
+      "sensitive": false,
+      "required": false
+    },
+    "callback_server_url": {
+      "type": "string",
+      "title": "Callback Server URL",
+      "description": "Public URL for Vonage event callbacks",
+      "default": "http://localhost:8080",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "![Black](https://github.com/khan2a/telephony-mcp-server/actions/workflows/01-black.yml/badge.svg)\n![Ruff](https://github.com/khan2a/telephony-mcp-server/actions/workflows/02-ruff.yml/badge.svg)\n\n 📖 **Blog Post**: Learn more about this project in the detailed blog post: [Telephony MCP Server for Agentic AI and Language Models](https://developer.vonage.com/en/blog/telephony-mcp-server-for-agentic-ai-and-language-models)\n\n# Telephony MCP Server\n\n## Demo Using Claude Desktop\n### Agentic Telephony Conversation with Speech Recognition\n<img src=\"./resources/demo-claude-agentic-call-speech-recognition.gif\" alt=\"Agentic Telephony Conversation with Speech Recognition\" style=\"border: 4px solid white; border-radius: 8px;\"/>\n\n### <span style=\"color: yellow;\">Use SMS during mid-conversation</span>\n<img src=\"./resources/demo-claude-desktop.gif\" alt=\"Telephony MCP Server Demo\" style=\"border: 4px solid yellow; border-radius: 8px; display: block; margin-left: 0;\"/>\n\n### <span style=\"color: #b5651d;\">SMS Enquiry (Send and Receive)</span>\n<img src=\"./resources/demo-claude-sms-enquiry.png\" alt=\"SMS Enquiry\" style=\"border: 4px solid #b5651d; border-radius: 8px; display: block; margin-left: 0;\" width=\"800\"/>\n\n## <span style=\"color: green;\">Demo Using GitHub Copilot</span>\n<img src=\"./resources/demo-copilot.gif\" alt=\"Telephony MCP Server Demo\" style=\"border: 4px solid green; border-radius: 8px; display: block; margin-left: 0;\"/>\n\n## Introduction\n\nThis directory contains MCP (Model Context Protocol) Server tools for telephony operations, such as making voice calls and sending SMS messages using the Vonage API. These tools are designed to be integrated with Large Language Model (LLM) applications, enabling LLMs to perform real-world actions beyond simple text generation.\n\n## LLMs and Tool Integration\n\nLLMs (Large Language Models) are advanced token generators—they can generate text, images, or even video based on input prompts. However, their core capability is limited to generating content; they cannot access external data or perform actions in the real world on their own.\n\nTo extend their functionality, LLMs can be connected to external tools. For example, when a user asks, \"What's the weather today?\" the LLM can invoke a backend API tool like `get_weather(city)` via a system prompt, parse the response, and return the result to the user. This tool-calling mechanism transforms a basic LLM into a powerful LLM Application.\n\n## Tool Calling with MCP and LangChain\n\n- **LangChain** is a popular framework for developing applications powered by LLMs. It provides a collection of pre-built tools (called a Toolkit) that LLMs can use to interact with external systems.\n- **MCP** (Model Context Protocol) follows the same concept: it offers a collection of pre-built tools and a framework for writing new tools and handling function calling.\n- Both frameworks allow LLMs to invoke tools, parse their outputs, and integrate the results into their responses.\n\n## How This Works\n\n1. **Tool Definition**: In this project, tools like `voice_call` and `send_sms` are defined using the MCP framework. Each tool is a function that can be called by an LLM application.\n2. **LLM Application**: When integrated with an LLM (such as OpenAI's GPT, Anthropic's Claude, etc.), the LLM can decide to call these tools based on user prompts.\n3. **Execution Flow**:\n    - The LLM receives a prompt (e.g., \"Call Alice and say hello\").\n    - The LLM determines that a tool invocation is needed and calls the appropriate MCP tool (e.g., `voice_call`).\n    - The tool executes (e.g., initiates a phone call via Vonage) and returns the result.\n    - The LLM parses the response and presents it to the user.\n\n## Running the MCP Tools\n\n### Prerequisites\n\n- Python 3.13+\n- MCP CLI (`mcp[cli]`), FastAPI, httpx, pyjwt, python-dotenv, uvicorn, pydantic (see `pyproject.toml` for details)\n- Vonage API credentials (API key, secret, application ID, private key)\n- Public URL for callback server (for production use)\n\n### Setup\n\n1. **Install dependencies**:\n    ```bash\n    pip install -r requirements.txt\n    ```\n    Or, if using Poetry:\n    ```bash\n    poetry install\n    ```\n\n2. **Configure environment variables**:\n    - Create a `.env` file with your Vonage credentials:\n      ```\n      VONAGE_API_KEY=your_api_key\n      VONAGE_API_SECRET=your_api_secret\n      VONAGE_APPLICATION_ID=your_app_id\n      VONAGE_PRIVATE_KEY_PATH=path/to/private.key\n      VONAGE_LVN=your_virtual_number\n      VONAGE_API_URL=https://api.nexmo.com/v1/calls\n      VONAGE_SMS_URL=https://rest.nexmo.com/sms/json\n      CALLBACK_SERVER_URL=https://your-public-url  # URL for Vonage event callbacks\n      ```\n      \n      For the `CALLBACK_SERVER_URL`:\n      - In development: You can use `http://localhost:8080` (default if not specified)\n      - In production: Use a public URL (such as an ngrok URL or your deployed server)\n\n3. **Run the MCP server**:\n    ```bash\n    python telephony_server.py\n    ```\n    The server will start and expose the defined tools for LLM applications.\n\n### Running with Docker\n\nYou can also run the telephony MCP server using Docker:\n\n1. **Build and start the Docker container**:\n    ```bash\n    docker compose up --build\n    ```\n    Or to run in the background:\n    ```bash\n    docker compose up --build -d\n    ```\n\n2. **Stop the Docker container**:\n    ```bash\n    docker compose down\n    ```\n\n3. **View logs from the Docker container**:\n    ```bash\n    docker compose logs -f\n    ```\n\n### Using with LLM Applications\n\n- **Direct Integration**: Connect your LLM application (e.g., using LangChain via Adapter or a custom MCP client) to the running MCP server. The LLM can now invoke telephony tools as needed.\n- **Example**: When the LLM receives a prompt like \"Dial this number +123 and read latest news from today\", it will call the `voice_call` tool, passing the required parameters.\n- **Example**: When the LLM receives a prompt like \"Call this number using a British accent\", it will call the `voice_call` tool with specific language and style parameters.\n- **Example**: When the LLM receives a prompt like \"Text the news instead\", it will call the `send_sms` tool, passing the required parameters.\n\n### Using with Claude Desktop or other MCP clients\n\nTo configure an MCP client (like Claude Desktop) to use your telephony MCP server:\n\n1. **Update your MCP client configuration file** (e.g., `claude_desktop_config.json`):\n    ```json\n    {\n      \"mcpServers\": {\n        \"telephony\": {\n          \"command\": \"docker\",\n          \"args\": [\"run\", \"-i\", \"--rm\", \"--init\", \"-e\", \"DOCKER_CONTAINER=true\", \"telephony-mcp-server\"]\n        }\n      }\n    }\n    ```\n\n2. **Build the Docker image** (if not using docker compose):\n    ```bash\n    docker build -t telephony-mcp-server .\n    ```\n\n3. Restart your MCP client to apply the changes.\n- \n## Key Concepts\n\n- **LLMs are content generators**: They generate text, images, or video, but need external tools for actions like web search, telephony, or database access.\n- **Tool calling**: LLMs can invoke backend APIs (tools) to fetch data or perform actions, then parse and present the results.\n- **Frameworks**: Both LangChain and MCP provide a structure for defining, registering, and invoking tools from LLMs.\n- **MCP**: Helps you write new tools and manage function calling, making it easy to extend LLM applications with custom capabilities.\n\n## Callback Server for Vonage Events\n\nThe Telephony MCP Server also includes a Vonage Callback Server that listens on port 8080. This server is used to receive event notifications from Vonage Voice API, which are sent when voice calls are initiated, completed, or encounter errors.\n\n### Features\n- Receives and stores Vonage event callbacks\n- Provides endpoints to view and manage stored events\n- Runs as a separate service within the same application\n\n### Endpoints\n- `GET /` - Health check endpoint\n- `POST /event` - Main endpoint for receiving Vonage callbacks\n- `GET /events` - List all stored events (with pagination)\n- `GET /events/{event_id}` - Get a specific event by ID\n- `DELETE /events` - Clear all stored events\n\n### Configuration\nTo use the callback server with Vonage Voice API, you need to set the `CALLBACK_SERVER_URL` environment variable to your server's public URL. This URL will be used as the `event_url` parameter in Vonage API calls.\n\n```bash\nexport CALLBACK_SERVER_URL=\"https://your-public-url\"\n```\n\nFor local development, you can use a service like ngrok to expose your local server to the internet:\n\n```bash\nngrok http 8080\n```\n\nThen set the `CALLBACK_SERVER_URL` to the ngrok URL.\n",
+  "category": "Communication",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "telephony-mcp-server-python": {
+        "command": "python",
+        "args": ["telephony_server.py"],
+        "env": {}
+      },
+      "telephony-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "--init", "-e", "DOCKER_CONTAINER=true", "telephony-mcp-server"],
+        "env": {
+          "DOCKER_CONTAINER": "true"
+        },
+        "docker_image": "telephony-mcp-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "khan2a",
+    "repo": "telephony-mcp-server",
+    "url": "https://github.com/khan2a/telephony-mcp-server",
+    "name": "khan2a__telephony-mcp-server",
+    "path": null,
+    "stars": 6,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4c7b618408ac5ab58b94ad4163b4dafbbd317cc8"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:23.899Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "pyjwt",
+      "importance": 8
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"telephony-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"mcp[cli]>=1.9.4\",\n    \"httpx>=0.27.0\",\n    \"pyjwt[crypto]>=2.8.0\",\n    \"fastapi>=0.110.0\",\n    \"python-dotenv>=1.0.0\",\n    \"uvicorn>=0.27.0\",\n    \"pydantic>=2.6.0\",\n]\n"
+}

@@ -1,0 +1,86 @@
+{
+  "name": "sequa-ai__sequa-mcp",
+  "display_name": "sequa-mcp",
+  "description": "MCP server from sequa-ai/sequa-mcp",
+  "author": {
+    "name": "sequa-ai"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@sequa-ai/sequa-mcp@latest", "${user_config.sequa_mcp_url}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "sequa_mcp_url": {
+      "type": "string",
+      "title": "Sequa MCP URL",
+      "description": "The URL for your Sequa MCP endpoint. This can be found in your Sequa project settings under 'MCP Setup URLs'.",
+      "required": true,
+      "default": "https://mcp.sequa.ai/v1/setup-code-assistant"
+    }
+  },
+  "readme": "# Sequa MCP\n\nThis repository is the **entry point for using Sequa via the Model Context Protocol (MCP)**. If you arrived here looking to \"add Sequa as an MCP server\" to Cursor, Claude, Windsurf, VSCode, Cline, Highlight, Augment, or any other MCP‑capable client — you are in the right place.\n\nIt gives you a **single drop‑in command** that bridges *STDIO/command* MCP transports used by many IDEs today with Sequa’s **native streamable HTTP MCP** endpoint.\n\n---\n\n## 🧱 Prerequisites (Read First!)\n\nBefore you configure *any* AI agent:\n\n1. **Create / sign in to your Sequa account** at **[https://app.sequa.ai/login](https://app.sequa.ai/login?ref=sequa-mcp)**.\n2. **Setup a Project** inside the Sequa app.\n3. Inside that project, locate the **MCP Setup URLs** and select the transport your AI agent supports.\n4. **Copy the URL or configuration** and install it in your client.\n\n> ❗ *If you skip project creation the MCP server will refuse connections — the proxy can launch but you will receive auth / project errors.*\n\n---\n\n## 🤔 What is Sequa?\n\nSequa is a **Contextual Knowledge Engine** that unifies code, documentation and more across *multiple* repositories and continuously streams that context to any LLM‑powered agent. By injecting deep, current project knowledge, Sequa enables assistants to:\n\n* Execute architecture aware & cross‑repo tasks\n* Understand project goals and state\n* Generate more accurate production ready code\n* Centralize AI coding rules and best practices\n\n---\n\n## 🚀 Quick Start (Proxy Launch)\n\n### NPX (most common)\n\n```bash\nnpx -y @sequa-ai/sequa-mcp@latest https://mcp.sequa.ai/v1/setup-code-assistant\n```\n\n> Replace the URL if you use an endpoint from the specific project\n\n---\n\n## 🔌 IDE / Tool Configuration\n\n### Cursor (`~/.cursor/mcp.json`)\n\n```json\n{\n  \"mcpServers\": {\n    \"sequa\": {\n      \"url\": \"https://mcp.sequa.ai/v1/setup-code-assistant\"\n    }\n  }\n}\n```\n\n### Claude Desktop (Settings → Developer → *Edit Config*)\n\n```json\n{\n  \"mcpServers\": {\n    \"sequa\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@sequa-ai/sequa-mcp@latest\",\n        \"https://mcp.sequa.ai/v1/setup-code-assistant\"\n      ]\n    }\n  }\n}\n```\n\n### Windsurf (`~/.codeium/windsurf/mcp_config.json`)\n\n```json\n{\n  \"mcpServers\": {\n    \"sequa\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@sequa-ai/sequa-mcp@latest\",\n        \"https://mcp.sequa.ai/v1/setup-code-assistant\"\n      ]\n    }\n  }\n}\n```\n\n### VS Code (`.vscode/mcp.json`)\n\n```json\n{\n  \"servers\": {\n    \"sequa\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@sequa-ai/sequa-mcp@latest\",\n        \"https://mcp.sequa.ai/v1/setup-code-assistant\"\n      ]\n    }\n  }\n}\n```\n\n### Cline / Claude Dev Tools (`cline_mcp_settings.json`)\n\n```json\n{\n  \"mcpServers\": {\n    \"sequa\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@sequa-ai/sequa-mcp@latest\",\n        \"https://mcp.sequa.ai/v1/setup-code-assistant\"\n      ],\n      \"disabled\": false,\n      \"autoApprove\": []\n    }\n  }\n}\n```\n\n### Highlight AI (GUI → Plugins → Custom Plugin → *Add using a command*)\n\n```bash\nnpx -y @sequa-ai/sequa-mcp@latest https://mcp.sequa.ai/v1/setup-code-assistant\n```\n\n### Augment Code\n\n```bash\nnpx -y @sequa-ai/sequa-mcp@latest https://mcp.sequa.ai/v1/setup-code-assistant\n```\n\nOr `augment_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"sequa\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@sequa-ai/sequa-mcp@latest\",\n        \"https://mcp.sequa.ai/v1/setup-code-assistant\"\n      ]\n    }\n  }\n}\n```\n\n",
+  "category": "AI Tools",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "sequa-ai-sequa-mcp": {
+        "command": "npx",
+        "args": ["-y", "@sequa-ai/sequa-mcp@latest", "https://mcp.sequa.ai/v1/setup-code-assistant"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sequa-ai",
+    "repo": "sequa-mcp",
+    "url": "https://github.com/sequa-ai/sequa-mcp",
+    "name": "sequa-ai__sequa-mcp",
+    "path": null,
+    "stars": 6,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "aa343a5013d274c88eca48be703531ea8d621195"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:43.423Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "open",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@sequa-ai/sequa-mcp\",\n  \"version\": \"1.0.13\",\n  \"description\": \"A proxy for the Model Context Protocol (MCP) that connects local STDIO with remote MCP servers\",\n  \"keywords\": [\"mcp\", \"model-context-protocol\", \"proxy\", \"ai\", \"sequa\"],\n  \"author\": \"Sequa AI GmbH\",\n  \"license\": \"MIT\",\n  \"private\": false,\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/sequa-ai/sequa-mcp\"\n  },\n  \"homepage\": \"https://github.com/sequa-ai/sequa-mcp#readme\",\n  \"bugs\": {\n    \"url\": \"https://github.com/sequa-ai/sequa-mcp/issues\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"type\": \"module\",\n  \"files\": [\n    \"dist/**/*\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"sequa-mcp\": \"dist/index.js\"\n  },\n  \"scripts\": {\n    \"start\": \"DEBUG=true node dist/index.js\",\n    \"build\": \"tsc\",\n    \"clean\": \"rm -rf dist\",\n    \"lint\": \"eslint \\\"src/**/*.ts\\\" --fix\",\n    \"prebuild\": \"npm run clean\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.15.0\",\n    \"express\": \"^5.1.0\",\n    \"open\": \"^10.1.0\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"^5.0.3\",\n    \"@types/node\": \"^24.0.10\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.36.0\",\n    \"@typescript-eslint/parser\": \"^8.36.0\",\n    \"eslint\": \"^8.57.1\",\n    \"eslint-config-prettier\": \"^10.1.5\",\n    \"eslint-plugin-prettier\": \"^5.5.1\",\n    \"eslint-plugin-simple-import-sort\": \"^12.1.1\",\n    \"eslint-plugin-unused-imports\": \"^4.1.4\",\n    \"prettier\": \"^3.6.2\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

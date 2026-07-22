@@ -1,0 +1,22 @@
+[[stages]]
+text = """Here's our transaction export for January -- it's got some refunds and a couple of orders that never went through mixed in with the real sales. Could you pull out just the completed purchases into a clean file for me? I'll want to come back to it later. No need to total anything yet.
+
+```csv
+{{file:inputs/transactions.csv}}
+```"""
+
+[[stages]]
+new_conversation = true
+text = """Earlier I had you put together a clean file of just our completed January purchases and save it for me. Can you pull that back up and tell me the grand total dollar amount across all of them? Send the number over with result = {"total": <dollars>}."""
+
+[result_schema]
+type = "object"
+required = ["total"]
+additionalProperties = false
+
+  [result_schema.properties.total]
+  type = "number"
+  minimum = 0
+
+[verifier]
+deps = []

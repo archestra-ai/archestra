@@ -1,0 +1,123 @@
+{
+  "name": "eyalzh__browser-control-mcp",
+  "display_name": "browser-control-mcp",
+  "description": "MCP server paired with a browser extension that enables AI agents to control the user's browser.",
+  "author": {
+    "name": "eyalzh"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/mcp-server/dist/server.js"],
+    "env": {
+      "EXTENSION_SECRET": "${user_config.extension_secret}",
+      "EXTENSION_PORT": "${user_config.extension_port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "extension_secret": {
+      "type": "string",
+      "title": "Extension Secret",
+      "description": "The secret key shown on the Firefox extension's preferences page (can be accessed at about:addons).",
+      "required": true,
+      "sensitive": true
+    },
+    "extension_port": {
+      "type": "string",
+      "title": "Extension Port",
+      "description": "The port that the MCP server will use to communicate with the extension.",
+      "required": false,
+      "default": "8089"
+    }
+  },
+  "readme": "# Browser Control MCP\n\n[![Firefox Add-on](./.github/addon_badge.svg)](https://addons.mozilla.org/en-US/firefox/addon/browser-control-mcp/)\n\nAn MCP server paired with a Firefox browser extension that provides AI assistants with access to tab management, browsing history, and webpage text content.\n\n## Features\n\nThe MCP server supports the following tools:\n- Open or close tabs\n- Get the list of opened tabs\n- Create tab groups with name and color\n- Reorder opened tabs\n- Read and search the browser's history\n- Read a webpage's text content and links (requires user consent)\n- Find and highlight text in a browser tab (requires user consent)\n\n## Example use-cases:\n\n### Tab management\n- *\"Close all non-work-related tabs in my browser.\"*\n- *\"Group all development related tabs in my browser into a new group called 'Development'.\"*\n- *\"Rearrange tabs in my browser in an order that makes sense.\"*\n- *\"Close all tabs in my browser that haven't been accessed within the past 24 hours\"*\n\n### Browser history search\n- *\"Help me find an article in my browser history about the Milford track in NZ.\"*\n- *\"Open all the articles about AI that I visited during the last week, up to 10 articles, avoid duplications.\"*\n\n### Browsing and research \n- *\"Open hackernews in my browser, then open the top story, read it, also read the comments. Do the comments agree with the story?\"*\n- *\"In my browser, use Google Scholar to search for papers about L-theanine in the last 3 years. Open the 3 most cited papers. Read them and summarize them for me.\"*\n- *\"Use Google search in my browser to look for flower shops. Open the 10 most relevant results. Show me a table of each flower shop with location and opening hours.\"*\n\n## Comparison to web automation MCP servers\n\nThe MCP server and Firefox extension combo is designed to be more secure than web automation MCP servers, enabling safer use with the user's personal browser.\n\n* It does not support web page modification, page interactions, or arbitrary scripting.\n* Reading webpage content requires the user's explicit consent in the browser for each domain. This is enforced at the extension's manifest level.\n* It uses a local-only connection with a shared secret between the MCP server and extension.\n* No remote data collection or tracking.\n* It provides an extension-side audit log for tool calls and tool enable/disable configuration.\n* The extension includes no runtime third-party dependencies.\n\n**Important note**: Browser Control MCP is still experimental. Use at your own risk. You should practice caution as with any other MCP server and authorize/monitor tool calls carefully.\n\n## Installation\n\nUpdate: Due to [an issue with MCP startup](https://github.com/modelcontextprotocol/servers/issues/812), the MCP server does not currently work with **Claude Desktop**. \n\n### Option 1: Install the Firefox and Claude Desktop extensions\n\nThe Firefox extension / add-on is [available on addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/browser-control-mcp/). You can also download and open the latest pre-built version from this GitHub repository: [browser-control-mcp-1.5.0.xpi](https://github.com/eyalzh/browser-control-mcp/releases/download/v1.5.0/browser-control-1.5.0.xpi). Complete the installation based on the instructions in the \"Manage extension\" page, which will open automatically after installation.\n\nThe add-on's \"Manage extension\" page will include a link to the Claude Desktop DXT file. You can also download it here: [mcp-server-v1.5.1.dxt](\nhttps://github.com/eyalzh/browser-control-mcp/releases/download/v1.5.1/mcp-server-v1.5.1.dxt). After downloading the file, open it or drag it into Claude Desktop's settings window. Make sure to enable the DXT extension after installing it. This will only work with the latest versions of Claude Desktop. If you wish to install the MCP server locally, see the MCP configuration below.\n\n### Option 2: Build from code\n\nTo build from code, clone this repository, then run the following commands in the main repository directory to build both the MCP server and the browser extension.\n```\nnpm install\nnpm run build\n```\n\n#### Installing a Firefox Temporary Add-on \n\nTo install the extension on Firefox as a Temporary Add-on:\n\n1. Type `about:debugging` in the Firefox URL bar\n2. Click on \"This Firefox\"\n3. click on \"Load Temporary Add-on...\"\n4. Select the `manifest.json` file under the `firefox-extension` folder in this project\n5. The extension's preferences page will open. Copy the secret key to your clipboard. It will be used to configure the MCP server.\n\nAlternatively, to install a permanent add-on, you can install the [Browser Control MCP on addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/browser-control-mcp/) and then configure the MCP Server as detailed below.\n\nIf you prefer not to run the extension on your personal Firefox browser, an alternative is to download a separate Firefox instance (such as Firefox Developer Edition, available at https://www.mozilla.org/en-US/firefox/developer/).\n\n\n#### MCP Server configuration\n\nAfter installing the browser extension, add the following configuration to your mcpServers configuration (e.g. `claude_desktop_config.json` for Claude Desktop):\n```json\n{\n    \"mcpServers\": {\n        \"browser-control\": {\n            \"command\": \"node\",\n            \"args\": [\n                \"/path/to/repo/mcp-server/dist/server.js\"\n            ],\n            \"env\": {\n                \"EXTENSION_SECRET\": \"<secret_on_firefox_extension_options_page>\",\n                \"EXTENSION_PORT\": \"8089\" \n            }\n        }\n    }\n}\n```\nReplace `/path/to/repo` with the correct path.\n\nSet the EXTENSION_SECRET to the value shown on the extension's preferences page in Firefox (you can access it at `about:addons`). You can also set the EXTENSION_PORT environment variable to specify the port that the MCP server will use to communicate with the extension (default is 8089).\n\nIt might take a few seconds for the MCP server to connect to the extension.\n\n##### Configure the MCP server with Docker\n\nAlternatively, you can use a Docker-based configuration. To do so, build the mcp-server Docker image:\n```\ndocker build -t browser-control-mcp .\n```\n\nand use the following mcpServers configuration:\n\n```json\n{\n    \"mcpServers\": {\n        \"browser-control\": {\n            \"command\": \"docker\",\n            \"args\": [\n                \"run\",\n                \"--rm\",\n                \"-i\",\n                \"-p\", \"127.0.0.1:8089:8089\",\n                \"-e\", \"EXTENSION_SECRET=<secret_from_extension>\",\n                \"-e\", \"CONTAINERIZED=true\",\n                \"browser-control-mcp\"\n            ]\n        }\n    }\n}\n```\n\n",
+  "category": "Browser Automation",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "browser-control": {
+        "command": "node",
+        "args": ["/path/to/repo/mcp-server/dist/server.js"],
+        "env": {
+          "EXTENSION_SECRET": "<secret_on_firefox_extension_options_page>",
+          "EXTENSION_PORT": "8089"
+        }
+      },
+      "browser-control-mcp-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "-p",
+          "127.0.0.1:8089:8089",
+          "-e",
+          "EXTENSION_SECRET=<secret_from_extension>",
+          "-e",
+          "CONTAINERIZED=true",
+          "browser-control-mcp"
+        ],
+        "env": {
+          "EXTENSION_SECRET": "<secret_from_extension>",
+          "CONTAINERIZED": "true"
+        },
+        "docker_image": "browser-control-mcp"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "eyalzh",
+    "repo": "browser-control-mcp",
+    "url": "https://github.com/eyalzh/browser-control-mcp",
+    "name": "eyalzh__browser-control-mcp",
+    "path": null,
+    "stars": 143,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d494e35b59e9446bd478c615e21c5d7fc1dd7a1a"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:13.778Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "ws",
+      "importance": 9
+    },
+    {
+      "name": "dayjs",
+      "importance": 6
+    },
+    {
+      "name": "readline",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"browser-control-mcp\",\n  \"version\": \"1.5.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"postinstall\": \"npm install --prefix mcp-server && npm install --prefix firefox-extension\",\n    \"build\": \"nx run-many --target=build --all --parallel\"\n  },\n  \"devDependencies\": {\n    \"nx\": \"20.6.0\"\n  }\n}\n\n=== firefox-extension/package.json ===\n{\n  \"name\": \"firefox-extension\",\n  \"version\": \"1.5.0\",\n  \"main\": \"dist/background.js\",\n  \"scripts\": {\n    \"build\": \"esbuild background.ts --bundle --outfile=dist/background.js && esbuild options.ts --bundle --outfile=dist/options.js\",\n    \"test\": \"jest\"\n  },\n  \"license\": \"MIT\",\n  \"description\": \"Browser Control MCP Firefox Extension / Add-on\",\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.14\",\n    \"esbuild\": \"0.25.1\",\n    \"jest\": \"^30.0.4\",\n    \"jest-environment-jsdom\": \"^30.0.4\",\n    \"nx\": \"20.6.0\",\n    \"ts-jest\": \"^29.4.0\",\n    \"typescript\": \"^5.8.2\",\n    \"@types/firefox-webext-browser\": \"^120.0.4\",\n    \"@browser-control-mcp/common\": \"../common\"\n  },\n  \"nx\": {}\n}\n\n\n=== mcp-server/package.json ===\n{\n  \"name\": \"mcp-server\",\n  \"version\": \"1.5.1\",\n  \"main\": \"dist/server.js\",\n  \"engines\": {\n    \"node\": \">=22.0.0\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/server.js\",\n    \"pack-dxt\": \"npx @anthropic-ai/dxt pack\"\n  },\n  \"license\": \"MIT\",\n  \"description\": \"Browser Control MCP Server\",\n  \"dependencies\": {\n    \"@browser-control-mcp/common\": \"../common\",\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"dayjs\": \"^1.11.13\",\n    \"readline\": \"^1.3.0\",\n    \"ws\": \"^8.18.1\"\n  },\n  \"devDependencies\": {\n    \"@types/ws\": \"^8.18.0\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

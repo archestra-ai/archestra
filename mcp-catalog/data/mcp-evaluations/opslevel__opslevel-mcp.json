@@ -1,0 +1,134 @@
+{
+  "name": "opslevel__opslevel-mcp",
+  "display_name": "opslevel-mcp",
+  "description": "Model Context Protocol (MCP) server for OpsLevel",
+  "author": {
+    "name": "opslevel"
+  },
+  "server": {
+    "command": "opslevel-mcp",
+    "args": [],
+    "env": {
+      "OPSLEVEL_API_TOKEN": "${user_config.opslevel_api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "opslevel_api_token": {
+      "type": "string",
+      "title": "OpsLevel API Token",
+      "description": "Your OpsLevel API Token to authorize the MCP Server to talk to your account.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "<p align=\"center\">\n    <a href=\"https://github.com/OpsLevel/opslevel-mcp/blob/main/LICENSE\">\n        <img src=\"https://img.shields.io/github/license/OpsLevel/opslevel-mcp.svg\" alt=\"License\" /></a>\n    <a href=\"https://GitHub.com/OpsLevel/opslevel-mcp/releases/\">\n        <img src=\"https://img.shields.io/github/v/release/OpsLevel/opslevel-mcp\" alt=\"Release\" /></a>\n    <a href=\"https://masterminds.github.io/stability/active.html\">\n        <img src=\"https://masterminds.github.io/stability/active.svg\" alt=\"Stability: Active\" /></a>\n    <a href=\"https://github.com/OpsLevel/opslevel-mcp/graphs/contributors\">\n        <img src=\"https://img.shields.io/github/contributors/OpsLevel/opslevel-mcp\" alt=\"Contributors\" /></a>\n    <a href=\"https://github.com/OpsLevel/opslevel-mcp/pulse\">\n        <img src=\"https://img.shields.io/github/commit-activity/m/OpsLevel/opslevel-mcp\" alt=\"Activity\" /></a>\n    <a href=\"https://github.com/OpsLevel/opslevel-mcp/releases\">\n        <img src=\"https://img.shields.io/github/downloads/OpsLevel/opslevel-mcp/total\" alt=\"Downloads\" /></a>\n    <a href=\"https://app.opslevel.com/services/opslevel_mcp/maturity-report\">\n        <img src=\"https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fapp.opslevel.com%2Fapi%2Fservice_level%2Fdlmj6PlFjehv6iLE6IQtEGXi_uz3LF9rA5nxb35wiY8\" alt=\"Overall\" /></a>\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/opslevel/opslevel-mcp)](https://archestra.ai/mcp-catalog/opslevel__opslevel-mcp)\n</p>\n\n<p align=\"center\">\n  <a href=\"https://glama.ai/mcp/servers/@OpsLevel/opslevel-mcp\">\n    <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@OpsLevel/opslevel-mcp/badge\" />\n  </a>\n</p>\n\n\n# OpsLevel MCP Server\n\nThis MCP ([Model Context Protocol](https://modelcontextprotocol.io/introduction)) server provides AIs with tools to interact with your OpsLevel account.\n\n![mcp_image](https://github.com/user-attachments/assets/dd936eef-80c2-42a5-8d04-9ca9c2de8e76)\n\n# Features\n\nCurrently, the MCP server only uses read-only access to your OpsLevel account and can read data from the following resources:\n\n- Actions\n- Campaigns\n- Checks\n- Components\n- Documentation (API & Tech Docs)\n- Domains\n- Filters\n- Infrastructure\n- Repositories\n- Systems\n- Teams\n- Users\n\n# Setup\n\n1. Install the MCP Server\n   1. Homebrew - `brew install opslevel/tap/opslevel-mcp`\n   2. Docker - `docker pull public.ecr.aws/opslevel/mcp:latest`  \n      You can also used a pinned version [check out the gallery for the available tags](https://gallery.ecr.aws/opslevel/mcp) \n   3. Manual - Visit our [GitHub releases page](https://github.com/OpsLevel/opslevel-mcp/releases) and download the binary for your operating system.\n2. You will need an [API Token](https://app.opslevel.com/api_tokens) to authorize the MCP Server to talk to your account via an environment variable.\n3. Setup MCP configuration for the AI tool of your choice.\n\n## Claude\n\n[Claude Desktop](https://modelcontextprotocol.io/quickstart/user)\n\n1. Edit the file at the specified path based on the Claude Desktop docs\n   1. Mac OS - `${HOME}/Library/Application\\ Support/Claude/claude_desktop_config.json`\n   2. Windows - `%APPDATA%\\Claude\\claude_desktop_config.json`\n2. Start (or restart) Claude Desktop\n\n```json\n{\n    \"mcpServers\": {\n        \"opslevel\": {\n            \"command\": \"opslevel-mcp\",\n            \"env\": {\n                \"OPSLEVEL_API_TOKEN\": \"XXXXXXX\"\n            }\n        }\n    }\n}\n```\n\n## VS Code\n\n[VS Code User Settings](https://code.visualstudio.com/docs/copilot/chat/mcp-servers#_finding-mcp-servers)\n\n1. Open the Settings menu (Command + Comma) and select the correct tab atop the page for your use case\n   1. Workspace - configures the server in the context of your workspace\n   2. User - configures the server in the context of your user\n2. Select Features → Chat\n3. Ensure that \"Mcp\" is Enabled\n   1. You may need to have your Github administrator enable \"preview\" features in the CoPilot settings for the organization.\n4. Click \"Edit in settings.json\" under \"Mcp > Discovery\" to have the below config\n   1. Can also edit the file directly\n      1. (Mac OS)  `${HOME}/Library/Application\\\\ Support/Code/User/settings.json`\n5. Start (or restart) VS Code\n\n```json\n{\n    \"chat.agent.enabled\": true,\n    \"chat.mcp.discovery.enabled\": true,\n    \"mcp\": {\n        \"inputs\": [\n          {\n            \"type\": \"promptString\",\n            \"id\": \"opslevel_token\",\n            \"description\": \"OpsLevel API Token\",\n            \"password\": true\n          }\n        ],\n        \"servers\": {\n            \"opslevel\": {\n                \"type\": \"stdio\",\n                \"command\": \"opslevel-mcp\",\n                \"env\": {\n                    \"OPSLEVEL_API_TOKEN\": \"${input:opslevel_token}\"\n                }\n            }\n        }\n    }\n}\n```\n\n## Cursor\n\n[Cursor Docs](https://docs.cursor.com/context/model-context-protocol)\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.png)](cursor://anysphere.cursor-deeplink/mcp/install?name=opslevel&config=eyJjb21tYW5kIjoib3BzbGV2ZWwtbWNwIiwiZW52Ijp7Ik9QU0xFVkVMX0FQSV9UT0tFTiI6IlhYWFhYWCJ9fQ==)\n\n1. Open the Cursor menu and select Settings → Cursor Settings → MCP\n2. Click \"Add new global MCP server\"\n3. Add the config below\n\n```json\n{\n  \"mcpServers\": {\n    \"opslevel\": {\n      \"command\": \"opslevel-mcp\",  \n      \"env\": {\n        \"OPSLEVEL_API_TOKEN\": \"XXXXXX\"\n      }\n    }\n  }\n}\n```\n\n## Warp\n\n[Warp](https://www.warp.dev/)\n\n1. Access your MCP settings under Settings > AI > Manage MCP Servers. Warp provides [instructions for other ways to access this list.](https://docs.warp.dev/knowledge-and-collaboration/mcp#how-to-access-mcp-server-settings)\n2. Press the add button\n3. Add the config below\n\n```json\n{\n  \"opslevel\": {\n    \"command\": \"opslevel-mcp\",\n    \"args\": [],\n    \"env\": {\n      \"OPSLEVEL_API_TOKEN\": \"XXXXXX\"\n    },\n    \"start_on_launch\": true\n  }\n}\n```\n\n## Windsurf\n\n[Windsurf](https://windsurf.com/editor)\n\n1. Navigate to Windsurf - Settings > Advanced Settings\n2. Scroll down to the Cascade section and you will find the option to add a new server\n3. Edit the [mpc_config.json](https://docs.windsurf.com/windsurf/mcp#mcp-config-json) with the below configuration\n4. Restart Windsurf\n\n```json\n{\n  \"mcpServers\": {\n    \"opslevel\": {\n      \"command\": \"opslevel-mcp\",  \n      \"env\": {\n        \"OPSLEVEL_API_TOKEN\": \"XXXXXX\"\n      }\n    }\n  }\n}\n```\n\n### Docker\n\nIf you didn't install the binary directly and instead pulled the docker image you'll need to adjust the above MCP configurations to support running the server via docker\n\n```\n        \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"-i\",\n          \"--rm\",\n          \"-e\",\n          \"OPSLEVEL_API_TOKEN\",\n          \"public.ecr.aws/opslevel/mcp:latest\"\n        ],\n```\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "opslevel": {
+        "command": "opslevel-mcp",
+        "args": [],
+        "env": {
+          "OPSLEVEL_API_TOKEN": "XXXXXX"
+        }
+      },
+      "public-ecr-aws-opslevel-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "OPSLEVEL_API_TOKEN", "public.ecr.aws/opslevel/mcp:latest"],
+        "env": {
+          "OPSLEVEL_API_TOKEN": "XXXXXX"
+        },
+        "docker_image": "public.ecr.aws/opslevel/mcp:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "opslevel",
+    "repo": "opslevel-mcp",
+    "url": "https://github.com/opslevel/opslevel-mcp",
+    "name": "opslevel__opslevel-mcp",
+    "path": null,
+    "stars": 8,
+    "contributors": 11,
+    "issues": 5,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d8287e50d9723d712fbf95a38d81a373472814d3"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:41.224Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@anthropic-ai/sdk",
+      "importance": 7
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "commander",
+      "importance": 4
+    },
+    {
+      "name": "dotenv",
+      "importance": 3
+    },
+    {
+      "name": "handlebars",
+      "importance": 5
+    },
+    {
+      "name": "marked",
+      "importance": 5
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "opslevel/opslevel-go",
+      "importance": 8
+    },
+    {
+      "name": "relvacode/iso8601",
+      "importance": 3
+    },
+    {
+      "name": "rs/zerolog",
+      "importance": 4
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 5
+    },
+    {
+      "name": "spf13/viper",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== mcp-eval/package.json ===\n{\n  \"name\": \"mcp-eval\",\n  \"version\": \"0.0.1\",\n  \"description\": \"Framework for evaluating ops level mcp server\",\n  \"main\": \"src/index.js\",\n  \"author\": \"OpsLevel\",\n  \"license\": \"UNLICENSED\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"eval\": \"node ./src/eval_cli.js\",\n    \"eval-debug\": \"node inspect ./src/eval_cli.js\",\n    \"report\": \"node ./src/report_cli.js\",\n    \"test\": \"node --experimental-vm-modules node_modules/jest/bin/jest.js\",\n    \"lint\": \"prettier --write .\"\n  },\n  \"dependencies\": {\n    \"@anthropic-ai/sdk\": \"^0.39.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.10.0\",\n    \"commander\": \"^13.1.0\",\n    \"dotenv\": \"^16.5.0\",\n    \"handlebars\": \"^4.7.8\",\n    \"marked\": \"^15.0.9\"\n  },\n  \"devDependencies\": {\n    \"jest\": \"^29.7.0\",\n    \"prettier\": \"^3.5.3\"\n  }\n}\n\n\n=== src/go.mod ===\nmodule github.com/opslevel/opslevel-mcp\n\ngo 1.24\n\ntoolchain go1.24.2\n\nrequire (\n\tgithub.com/mark3labs/mcp-go v0.34.0\n\tgithub.com/opslevel/opslevel-go/v2025 v2025.7.28\n\tgithub.com/relvacode/iso8601 v1.6.0\n\tgithub.com/rs/zerolog v1.34.0\n\tgithub.com/spf13/cobra v1.9.1\n\tgithub.com/spf13/viper v1.20.1\n)\n\nrequire (\n\tgithub.com/coder/websocket v1.8.13 // indirect\n\tgithub.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect\n\tgithub.com/fsnotify/fsnotify v1.8.0 // indirect\n\tgithub.com/gabriel-vasile/mimetype v1.4.9 // indirect\n\tgithub.com/go-playground/locales v0.14.1 // indirect\n\tgithub.com/go-playground/universal-translator v0.18.1 // indirect\n\tgithub.com/go-playground/validator/v10 v10.27.0 // indirect\n\tgithub.com/go-resty/resty/v2 v2.16.5 // indirect\n\tgithub.com/go-viper/mapstructure/v2 v2.3.0 // indirect\n\tgithub.com/google/go-cmp v0.7.0 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/gosimple/slug v1.15.0 // indirect\n\tgithub.com/gosimple/unidecode v1.0.1 // indirect\n\tgithub.com/hashicorp/go-cleanhttp v0.5.2 // indirect\n\tgithub.com/hashicorp/go-retryablehttp v0.7.8 // indirect\n\tgithub.com/hasura/go-graphql-client v0.14.4 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/leodido/go-urn v1.4.0 // indirect\n\tgithub.com/mattn/go-colorable v0.1.14 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/mitchellh/mapstructure v1.5.0 // indirect\n\tgithub.com/opslevel/moredefaults v0.0.0-20240529152742-17d1318a3c12 // indirect\n\tgithub.com/pelletier/go-toml/v2 v2.2.3 // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/rogpeppe/go-internal v1.14.1 // indirect\n\tgithub.com/sagikazarmark/locafero v0.7.0 // indirect\n\tgithub.com/sourcegraph/conc v0.3.0 // indirect\n\tgithub.com/spf13/afero v1.12.0 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/spf13/pflag v1.0.6 // indirect\n\tgithub.com/subosito/gotenv v1.6.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.uber.org/multierr v1.11.0 // indirect\n\tgolang.org/x/crypto v0.40.0 // indirect\n\tgolang.org/x/net v0.42.0 // indirect\n\tgolang.org/x/sys v0.34.0 // indirect\n\tgolang.org/x/text v0.27.0 // indirect\n\tgopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n\n// replace github.com/opslevel/opslevel-go/v2025 => ./submodules/opslevel-go\n"
+}

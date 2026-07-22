@@ -1,0 +1,82 @@
+{
+  "name": "xixianliang__harmonyos-mcp-server",
+  "display_name": "HarmonyOS-mcp-server",
+  "description": "MCP server for manipulating HarmonyOS next devices.",
+  "author": {
+    "name": "XixianLiang"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<div align=\"center\">\n<h1>HarmonyOS MCP Server</h1>\n\n <a href='LICENSE'><img src='https://img.shields.io/badge/License-MIT-orange'></a> &nbsp;&nbsp;&nbsp;\n <a><img src='https://img.shields.io/badge/python-3.13-blue'></a>\n</div>\n\n<div align=\"center\">\n    <img style=\"max-width: 500px; width: 60%;\" width=\"1111\" alt=\"image\" src=\"https://github.com/user-attachments/assets/7c2e6879-f583-48d7-b467-c4c6d99c5fab\" />\n</div>\n\n## Intro\n\nThis is a MCP server for manipulating harmonyOS Device.\n\n\nhttps://github.com/user-attachments/assets/7af7f5af-e8c6-4845-8d92-cd0ab30bfe17\n\n\n## Quick Start\n\n### Installation\n\n1. Clone this repo\n   \n```bash\ngit clone https://github.com/XixianLiang/HarmonyOS-mcp-server.git\ncd HarmonyOS-mcp-server\n```\n\n2. Setup the envirnment.\n\n```bash\nuv python install 3.13\nuv sync\n```\n\n### Usage\n\n\n#### 1.Claude Desktop\n\nYou can use [Claude Desktop](https://modelcontextprotocol.io/quickstart/user) to try our tool.\n\n#### 2.Openai SDK\nYou can also use [openai-agents SDK](https://openai.github.io/openai-agents-python/mcp/) to try the mcp server. Here's an example\n\n```python\n\"\"\"\nExample: Use Openai-agents SDK to call HarmonyOS-mcp-server\n\"\"\"\nimport asyncio\nimport os\n\nfrom agents import Agent, Runner, gen_trace_id, trace\nfrom agents.mcp import MCPServerStdio, MCPServer\n\nasync def run(mcp_server: MCPServer):\n    agent = Agent(\n        name=\"Assistant\",\n        instructions=\"Use the tools to manipulate the HarmonyOS device and finish the task.\",\n        mcp_servers=[mcp_server],\n    )\n\n    message = \"Launch the app `settings` on the phone\"\n    print(f\"Running: {message}\")\n    result = await Runner.run(starting_agent=agent, input=message)\n    print(result.final_output)\n\n\nasync def main():\n\n    # Use async context manager to initialize the server\n    async with MCPServerStdio(\n        params={\n            \"command\": \"<...>/bin/uv\",\n            \"args\": [\n                \"--directory\",\n                \"<...>/harmonyos-mcp-server\",\n                \"run\",\n                \"server.py\"\n            ]\n        }\n    ) as server:\n        trace_id = gen_trace_id()\n        with trace(workflow_name=\"MCP HarmonyOS\", trace_id=trace_id):\n            print(f\"View trace: https://platform.openai.com/traces/trace?trace_id={trace_id}\\n\")\n            await run(server)\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n```\n\n#### 3.Langchain\nYou can use [LangGraph](https://langchain-ai.github.io/langgraph/concepts/why-langgraph/), a flexible LLM agent framework to design your workflows. Here's an example\n\n```python\n\"\"\"\nlanggraph_mcp.py\n\"\"\"\n\nserver_params = StdioServerParameters(\n    command=\"/home/chad/.local/bin/uv\",\n    args=[\"--directory\",\n          \".\",\n          \"run\",\n          \"server.py\"],\n    \n)\n\n\n#This fucntion would use langgraph to build your own agent workflow\nasync def create_graph(session):\n    llm = ChatOllama(model=\"qwen2.5:7b\", temperature=0)\n    #!!!load_mcp_tools is a langchain package function that integrates the mcp into langchain.\n    #!!!bind_tools fuction enable your llm to access your mcp tools\n    tools = await load_mcp_tools(session)\n    llm_with_tool = llm.bind_tools(tools)\n\n    \n    system_prompt = await load_mcp_prompt(session, \"system_prompt\")\n    prompt_template = ChatPromptTemplate.from_messages([\n        (\"system\", system_prompt[0].content),\n        MessagesPlaceholder(\"messages\")\n    ])\n    chat_llm = prompt_template | llm_with_tool\n\n    # State Management\n    class State(TypedDict):\n        messages: Annotated[List[AnyMessage], add_messages]\n\n    # Nodes\n    def chat_node(state: State) -> State:\n        state[\"messages\"] = chat_llm.invoke({\"messages\": state[\"messages\"]})\n        return state\n\n    # Building the graph\n    # graph is like a workflow of your agent.\n    #If you want to know more langgraph basic,reference this link (https://langchain-ai.github.io/langgraph/tutorials/get-started/1-build-basic-chatbot/#3-add-a-node)\n    graph_builder = StateGraph(State)\n    graph_builder.add_node(\"chat_node\", chat_node)\n    graph_builder.add_node(\"tool_node\", ToolNode(tools=tools))\n    graph_builder.add_edge(START, \"chat_node\")\n    graph_builder.add_conditional_edges(\"chat_node\", tools_condition, {\"tools\": \"tool_node\", \"__end__\": END})\n    graph_builder.add_edge(\"tool_node\", \"chat_node\")\n    graph = graph_builder.compile(checkpointer=MemorySaver())\n    return graph\n\n\n\n\n\nasync def main():\n    async with stdio_client(server_params) as (read, write):\n        async with ClientSession(read, write) as session:\n            await session.initialize()\n\n            config = RunnableConfig(thread_id=1234,recursion_limit=15)\n            # Use the MCP Server in the graph\n            agent = await create_graph(session)\n\n            while True:\n                message = input(\"User: \")\n                try:\n                    response = await agent.ainvoke({\"messages\": message}, config=config)\n                    print(\"AI: \"+response[\"messages\"][-1].content)\n                except RecursionError:\n                    result = None\n                    logging.error(\"Graph recursion limit reached.\")\n\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n```\n\nWrite the system prompt in `server.py`\n\n```python\n\"\"\"\nserver.py\n\"\"\"\n@mcp.prompt()\ndef system_prompt() -> str:\n    \"\"\"System prompt description\"\"\"\n    return \"\"\"\n    You are an AI assistant use the tools if needed.\n    \"\"\"\n```\nUse `load_mcp_prompt` function to get your prompt from mcp server.\n```python\n\"\"\"\nlanggraph_mcp.py\n\"\"\"\nprompts = await load_mcp_prompt(session, \"system_prompt\")\n```\n",
+  "category": "AI Tools",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "harmonyos-mcp-server-stdio": {
+        "command": "uv",
+        "args": ["--directory", "harmonyos-mcp-server", "run", "server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "XixianLiang",
+    "repo": "HarmonyOS-mcp-server",
+    "url": "https://github.com/XixianLiang/HarmonyOS-mcp-server",
+    "name": "xixianliang__harmonyos-mcp-server",
+    "path": null,
+    "stars": 20,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "919425d6b170286aed1003a900057d7957f160c1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:44.331Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "openai-agents",
+      "importance": 9
+    },
+    {
+      "name": "pillow",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"harmonyos-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"fastmcp>=2.1.2\",\n    \"langchain>=0.3.27\",\n    \"langchain-mcp-adapters>=0.1.9\",\n    \"langchain-ollama>=0.3.6\",\n    \"langgraph>=0.6.4\",\n    \"langsmith>=0.4.13\",\n    \"mcp[cli]>=1.6.0\",\n    \"openai-agents>=0.0.10\",\n    \"pillow>=11.2.1\",\n]\n"
+}

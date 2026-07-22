@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -10,6 +10,7 @@ import { SetupDialog } from "@/components/setup-dialog";
 import { StepCard } from "@/components/step-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretInput } from "@/components/ui/secret-input";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/config/config.query";
@@ -309,8 +310,8 @@ function StepInstall({
                 xoxb-
               </code>
               )
-              <Input
-                type="password"
+              <SecretInput
+                masked={false}
                 value={botToken}
                 onChange={(e) => onBotTokenChange(e.target.value)}
                 placeholder="Paste your Bot User OAuth Token"
@@ -390,8 +391,8 @@ function StepAppLevelToken({
                 xapp-
               </code>
               )
-              <Input
-                type="password"
+              <SecretInput
+                masked={false}
                 value={appLevelToken}
                 onChange={(e) => onAppLevelTokenChange(e.target.value)}
                 placeholder="Paste your App-Level Token"
@@ -501,6 +502,7 @@ function StepManifestWebhook({
               From <strong>Basic Information &rarr; App Credentials</strong>,
               copy the <strong>App ID</strong>
               <Input
+                aria-label="Slack App ID"
                 value={appId}
                 onChange={(e) => onAppIdChange(e.target.value)}
                 placeholder="Paste your App ID"
@@ -515,8 +517,8 @@ function StepManifestWebhook({
             <span className="pt-0.5 flex-1">
               From <strong>Basic Information &rarr; App Credentials</strong>,
               copy the <strong>Signing Secret</strong>
-              <Input
-                type="password"
+              <SecretInput
+                masked={false}
                 value={signingSecret}
                 onChange={(e) => onSigningSecretChange(e.target.value)}
                 placeholder="Paste your Signing Secret"
@@ -619,6 +621,7 @@ function StepManifestSocket({
               From <strong>Basic Information &rarr; App Credentials</strong>,
               copy the <strong>App ID</strong>
               <Input
+                aria-label="Slack App ID"
                 value={appId}
                 onChange={(e) => onAppIdChange(e.target.value)}
                 placeholder="Paste your App ID"

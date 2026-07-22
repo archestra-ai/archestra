@@ -1,0 +1,140 @@
+{
+  "name": "openlinksoftware__mcp-jdbc-server",
+  "display_name": "mcp-jdbc-server",
+  "description": "Java based Model Context Procotol (MCP) Server for JDBC",
+  "author": {
+    "name": "OpenLinkSoftware"
+  },
+  "server": {
+    "command": "java",
+    "args": ["-jar", "${__dirname}/MCPServer-1.0.0-runner.jar"],
+    "env": {
+      "jdbc.url": "${user_config.jdbc_url}",
+      "jdbc.user": "${user_config.jdbc_user}",
+      "jdbc.password": "${user_config.jdbc_password}",
+      "jdbc.api_key": "${user_config.jdbc_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "jdbc_url": {
+      "type": "string",
+      "title": "JDBC URL",
+      "description": "JDBC URL connection string for the database.",
+      "default": "jdbc:virtuoso://localhost:1111",
+      "required": true
+    },
+    "jdbc_user": {
+      "type": "string",
+      "title": "JDBC Username",
+      "description": "Username for JDBC database connection.",
+      "default": "dba",
+      "required": true
+    },
+    "jdbc_password": {
+      "type": "string",
+      "title": "JDBC Password",
+      "description": "Password for JDBC database connection.",
+      "sensitive": true,
+      "default": "dba",
+      "required": true
+    },
+    "jdbc_api_key": {
+      "type": "string",
+      "title": "JDBC API Key",
+      "description": "API key for JDBC database connection.",
+      "sensitive": true,
+      "default": "xxx",
+      "required": false
+    }
+  },
+  "readme": "---\n# OpenLink MCP Server for JDBC\n\nA lightweight Java-based MCP (Model Context Protocol) server for JDBC built with **Quakrus**. \nThis server is compatible with Virtuoso DBMS and any other DBMS backend that has a JDBC driver.\n\n![mcp-client-and-servers|648x499](https://www.openlinksw.com/data/gifs/mcp-client-and-servers-opal-tools-with-jdbc.gif)\n\n---\n\n## Features\n\n- **Get Schemas**: Fetch and list all schema names from the connected database.\n- **Get Tables**: Retrieve table information for specific schemas or all schemas.\n- **Describe Table**: Generate a detailed description of table structures, including:\n  - Column names and data types\n  - Nullable attributes\n  - Primary and foreign keys\n- **Search Tables**: Filter and retrieve tables based on name substrings.\n- **Execute Stored Procedures**: _A Virtuoso-specific feature!_ Execute stored procedures and retrieve results.\n- **Execute Queries**:\n  - JSONL result format: Optimized for structured responses.\n  - Markdown table format: Ideal for reporting and visualization.\n\n---\n\n## Prerequisites\n\nMCP server requires Java 21 or above.\n\n---\n\n## Installation\n\nClone this repository:\n```bash\ngit clone https://github.com/OpenLinkSoftware/mcp-jdbc-server.git  \ncd mcp-jdbc-server\n```\n\n## Environment Variables \n\nUpdate your `.env` by overriding these defaults to match your preferences:\n```\njdbc.url=jdbc:virtuoso://localhost:1111\njdbc.user=dba\njdbc.password=dba\njdbc.api_key=xxx\n```\n\n---\n\n## Configuration\n\nFor **Claude Desktop** users using Virtuoso and its JDBC driver:\n\nAdd the following to `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"my_database\": {\n      \"command\": \"java\",\n      \"args\": [\"-jar\", \"/path/to/mcp-jdbc-server/MCPServer-1.0.0-runner.jar\"],\n      \"env\": {\n        \"jdbc.url\": \"jdbc:virtuoso://localhost:1111\",\n        \"jdbc.user\": \"username\",\n        \"jdbc.password\": \"password\",\n        \"jdbc.api_key\": \"sk-xxx\"\n      }\n    }\n  }\n}\n```\n\nFor **Claude Desktop** users using another JDBC driver or a combination of drivers:\n\nAdd the following, edited to suit your local environment, to `claude_desktop_config.json`:\n\n```json\n    \"jdbc\": {\n      \"command\": \"java\",\n      \"args\": [\n        \"-cp\",\n        \"/path/to/mcp-jdbc-server/MCPServer-1.0.0-runner.jar:/path/to/jdbc_driver1.jar:/path/to/jdbc_driverN.jar\",\n        \"io.quarkus.runner.GeneratedMain\"\n      ],\n      \"env\": {\n        \"jdbc.url\": \"jdbc:virtuoso://localhost:1111\",\n        \"jdbc.user\": \"dba\",\n        \"jdbc.password\": \"dba\"\n      }\n    }\n```\n\n---\n\n## Use\n\n### Tools Provided\n\nAfter successful installation, the following tools will be available to MCP client applications.\n\n#### Overview\n\n| name                     | description |\n|:---                      |:---|\n|`jdbc_get_schemas`        | List database schemas accessible to connected database management system (DBMS). |\n|`jdbc_get_tables`         | List tables associated with a selected database schema. |\n|`jdbc_describe_table`     | Provide the description of a table associated with a designated database schema. This includes information about column names, data types, nulls handling, autoincrement, primary key, and foreign keys. |\n|`jdbc_filter_table_names` | List tables, based on a substring pattern from the `q` input field, associated with a selected database schema. |\n|`jdbc_query_database`     | Execute a SQL query and return results in JSONL format. |\n|`jdbc_execute_query`      | Execute a SQL query and return results in JSONL format. |\n|`jdbc_execute_query_md`   | Execute a SQL query and return results in Markdown table format. |\n|`jdbc_spasql_query`       | _A Virtuoso-specific feature!_ Execute a SPASQL query and return results. |\n|`jdbc_sparql_query`       | _A Virtuoso-specific feature!_ Execute a SPARQL query and return results. |\n|`jdbc_virtuoso_support_ai`| _A Virtuoso-specific feature!_ Interact with LLMs through the Virtuoso Support Assistant/Agent. |\n\n#### Detailed Description\n\n- **`jdbc_get_schemas`**\n  - Retrieve and return a list of all schema names from the connected database.\n  - Input parameters:\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `url` (string, optional): JDBC URL connection string.\n  - Returns a JSON string array of schema names.\n\n- **`jdbc_get_tables`**\n  - Retrieve and return a list containing information about tables in a specified schema. If no schema is provided, uses the connection's default schema.\n  - Input parameters:\n    - `schema` (string, optional): Database schema to filter tables. Defaults to connection default.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `url` (string, optional): JDBC URL connection string.\n  - Returns a JSON string containing table information (e.g., `TABLE_CAT`, `TABLE_SCHEM`, `TABLE_NAME`, `TABLE_TYPE`).\n\n- **`jdbc_filter_table_names`**\n  - Filters and returns information about tables whose names contain a specific substring.\n  - Input parameters:\n    - `q` (string, required): The substring to search for within table names.\n    - `schema` (string, optional): Database schema to filter tables. Defaults to connection default.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `url` (string, optional): JDBC URL connection string.\n  - Returns a JSON string containing information for matching tables.\n\n- **`jdbc_describe_table`**\n  - Retrieve and return detailed information about the columns of a specific table.\n  - Input parameters:\n    - `schema` (string, required): The database schema name containing the table.\n    - `table` (string, required): The name of the table to describe.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `url` (string, optional): JDBC URL connection string.\n  - Returns a JSON string describing the table's columns (e.g., `COLUMN_NAME`, `TYPE_NAME`, `COLUMN_SIZE`, `IS_NULLABLE`).\n\n- **`jdbc_query_database`**\n  - Execute a standard SQL query and return the results in JSON format.\n  - Input parameters:\n    - `query` (string, required): The SQL query string to execute.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `url` (string, optional): JDBC URL connection string.\n  - Returns query results as a JSON string.\n\n- **`jdbc_query_database_md`**\n  - Execute a standard SQL query and return the results formatted as a Markdown table.\n  - Input parameters:\n    - `query` (string, required): The SQL query string to execute.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `url` (string, optional): JDBC URL connection string.\n  - Returns query results as a Markdown table string.\n\n- **`jdbc_query_database_jsonl`**\n  - Execute a standard SQL query and return the results in JSON Lines (JSONL) format (one JSON object per line).\n  - Input parameters:\n    - `query` (string, required): The SQL query string to execute.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `url` (string, optional): JDBC URL connection string.\n  - Returns query results as a JSONL string.\n\n- **`jdbc_spasql_query`**\n  - _A Virtuoso-specific feature!_\n  - Execute a SPASQL (SQL/SPARQL hybrid) query return results.\n  - Input parameters:\n    - `query` (string, required): The SPASQL query string.\n    - `max_rows` (number, optional): Maximum number of rows to return. Defaults to `20`.\n    - `timeout` (number, optional): Query timeout in milliseconds. Defaults to `30000` (i.e., 30 seconds).\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `url` (string, optional): JDBC URL connection string.\n  - Returns the result from the underlying stored procedure call (e.g., `Demo.demo.execute_spasql_query`).\n\n- **`jdbc_sparql_query`**\n  - _A Virtuoso-specific feature!_\n  - Execute a SPARQL query and return results.\n  - Input parameters:\n    - `query` (string, required): The SPARQL query string.\n    - `format` (string, optional): Desired result format. Defaults to `'json'`.\n    - `timeout` (number, optional): Query timeout in milliseconds. Defaults to `30000` (i.e., 30 seconds).\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `url` (string, optional): JDBC URL connection string.\n  - Returns the result from the underlying function call (e.g., `\"UB\".dba.\"sparqlQuery\"`).\n\n- **`jdbc_virtuoso_support_ai`**\n  - _A Virtuoso-specific feature!_\n  - Utilizes a Virtuoso-specific AI Assistant function, passing a prompt and optional API key.\n  - Input parameters:\n    - `prompt` (string, required): The prompt text for the AI function.\n    - `api_key` (string, optional): API key for the AI service. Defaults to `\"none\"`.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `url` (string, optional): JDBC URL connection string.\n  - Returns the result from the AI Support Assistant function call (e.g., `DEMO.DBA.OAI_VIRTUOSO_SUPPORT_AI`).\n\n---\n\n### Basic Use & Troubleshooting\n\n#### MCP Inspector Connecting to Virtuoso's ODBC Driver\n\nFor basic MCP client use and troubleshooting, use the MCP Inspector as follows:\n\n1. Install the MCP Inspector:\n\n   ```bash\n   npm install -g @modelcontextprotocol/inspector\n   ```\n\n2. Start the inspector:\n\n   ```bash\n   npx @modelcontextprotocol/inspector java -jar /path/to/mcp-jdbc-server/MCPServer-1.0.0-runner.jar\n   ```\n\nAccess the URL returned by the inspector to troubleshoot MCP server interactions.\n\n#### MCP Inspector Connecting to additional Drivers\n\nFor basic MCP client use and troubleshooting, use the MCP Inspector as follows:\n\n1. Install the JDBC Driver(s), ensuring their JAR files are registered with the host operating system's Java Virtual Machine (JVM) via `$CLASSPATH`. For instance:\n\n    ```bash\n    export CLASSPATH=$CLASSPATH:/path/to/driver1.jar:/path/to/driver2.jar:/path/to/driverN.jar\n    ```\n\n2. Start the inspector using the following command-line arguments:\n\n   ```bash\n   npx @modelcontextprotocol/inspector java -cp MCPServer-1.0.0-runner.jar:/path/to/driver1.jar:/path/to/driver2.jar:/path/to/driverN.jar io.quarkus.runner.GeneratedMain\n   ```\n\n#### Use Example based on Oracle and Informix Drivers\n\n0. Assuming the following JDBC Driver information:\n\n   - **Oracle JDBC Driver URL Template**\n\n     ```bash\n     jdbc:oracle:thin:@<hostname>:[port]:<SERVICEID>\n     ```\n\n   - **Informix JDBC Driver URL Template**\n\n     ```bash\n     jdbc:informix-sqli://<hostname>:<port>/<database></database>:<INFORMIXSERVER>=<SERVICEID>\n     ```\n\n1. Install the Oracle (`ojdbc17.jar`) and/or Informix (`jdbc-15.0.0.1.1.jar`) JDBC Drivers, and ensure their JAR files are registered with the host operating system's Java Virtual Machine (JVM) via `$CLASSPATH`. For instance:\n\n   ```bash\n    export CLASSPATH=$CLASSPATH:/path/to/Java/Extensions/jdbc-15.0.0.1.1.jar\n    export CLASSPATH=$CLASSPATH:/path/to/Java/Extensions/ojdbc17.jar\n   ```\n\n2. Start the inspector using the following command-line arguments:\n\n   ```bash\n   npx @modelcontextprotocol/inspector java -cp MCPServer-1.0.0-runner.jar:/path/to/Java/Extensions/ojdbc17.jar:/path/to/Java/Extensions/jdbc-15.0.0.1.1.jar io.quarkus.runner.GeneratedMain\n   ```\n\n3. Access the URL returned by the inspector and then use the `jdbc_execute_query` operation to query the target database, by providing actual values for the following input field templates:\n\n   - JDBC URL \n   - User\n   - Password\n   - Query \n",
+  "category": "Development",
+  "quality_score": 32,
+  "archestra_config": {
+    "client_config_permutations": {
+      "MCPServer-1.0.0-runner-configured": {
+        "command": "java",
+        "args": ["-jar", "/path/to/mcp-jdbc-server/MCPServer-1.0.0-runner.jar"],
+        "env": {
+          "jdbc.url": "jdbc:virtuoso://localhost:1111",
+          "jdbc.user": "username",
+          "jdbc.password": "password",
+          "jdbc.api_key": "sk-xxx"
+        }
+      },
+      "MCPServer-1.0.0-runner-classpath-configured": {
+        "command": "java",
+        "args": [
+          "-cp",
+          "/path/to/mcp-jdbc-server/MCPServer-1.0.0-runner.jar:/path/to/jdbc_driver1.jar:/path/to/jdbc_driverN.jar",
+          "io.quarkus.runner.GeneratedMain"
+        ],
+        "env": {
+          "jdbc.url": "jdbc:virtuoso://localhost:1111",
+          "jdbc.user": "dba",
+          "jdbc.password": "dba"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "OpenLinkSoftware",
+    "repo": "mcp-jdbc-server",
+    "url": "https://github.com/OpenLinkSoftware/mcp-jdbc-server",
+    "name": "openlinksoftware__mcp-jdbc-server",
+    "path": null,
+    "stars": 9,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "3df8fa15bf3f8c9d8caa3b27cc17c32ebb6f6e3a"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.206Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "Quarkus",
+      "importance": 10
+    },
+    {
+      "name": "quarkus-mcp-server-stdio",
+      "importance": 9
+    },
+    {
+      "name": "virtjdbc4_3",
+      "importance": 9
+    },
+    {
+      "name": "quarkus-rest-client-jackson",
+      "importance": 7
+    },
+    {
+      "name": "quarkus-qute",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== build.gradle ===\nplugins {\r\n    id 'java'\r\n    id 'io.quarkus' version '3.20.0'\r\n}\r\n\r\ngroup = 'openlink.mcp.server.jdbc'\r\nversion = '1.0.0'\r\n\r\njava {\r\n    sourceCompatibility = JavaVersion.VERSION_21\r\n    targetCompatibility = JavaVersion.VERSION_21\r\n    toolchain {\r\n        languageVersion = JavaLanguageVersion.of(21)\r\n    }\r\n}\r\n\r\nrepositories {\r\n    mavenCentral()\r\n}\r\n\r\ndependencies {\r\n    implementation enforcedPlatform(\"io.quarkus.platform:quarkus-bom:3.20.0\")\r\n    implementation 'io.quarkus:quarkus-rest-client-jackson'\r\n    implementation 'io.quarkus:quarkus-qute'\r\n    implementation 'io.quarkiverse.mcp:quarkus-mcp-server-stdio:1.0.0.Beta4'\r\n\r\n    implementation 'com.openlinksw:virtjdbc4_3:3.123'\r\n\r\n    testImplementation 'io.quarkus:quarkus-junit5'\r\n}\r\n\r\ntest {\r\n    useJUnitPlatform()\r\n    systemProperty 'java.util.logging.manager', 'org.jboss.logmanager.LogManager'\r\n    systemProperty 'maven.home', System.getenv('MAVEN_HOME') ?: ''\r\n}\r\n\r\ntask integrationTest(type: Test) {\r\n    useJUnitPlatform()\r\n    description = 'Runs integration tests'\r\n    group = 'verification'\r\n    shouldRunAfter test\r\n    systemProperty 'java.util.logging.manager', 'org.jboss.logmanager.LogManager'\r\n    systemProperty 'maven.home', System.getenv('MAVEN_HOME') ?: ''\r\n    systemProperty 'native.image.path', \"${buildDir}/MCPServer-runner\"\r\n    testClassesDirs = sourceSets.test.output.classesDirs\r\n    classpath = sourceSets.test.runtimeClasspath\r\n}\r\n\r\nconfigurations.all {\r\n    resolutionStrategy.failOnVersionConflict()\r\n}\r\n\r\ntask copyLibs {\r\n   doLast{  \r\n      println('------COPY JARS----------')\r\n      copy {\r\n        from './build'\r\n        include '*.jar'\r\n        into projectDir\r\n      }\r\n   }\r\n}\r\n\r\n\r\n// Ensure copyLibs runs after quarkusBuild\r\ntasks.named('quarkusBuild') {\r\n    finalizedBy(copyLibs)\r\n}\r\n\r\ncopyLibs.dependsOn(quarkusBuild)\r\n\r\n"
+}

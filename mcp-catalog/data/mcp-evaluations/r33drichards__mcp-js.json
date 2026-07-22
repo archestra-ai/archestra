@@ -1,0 +1,144 @@
+{
+  "name": "r33drichards__mcp-js",
+  "display_name": "mcp-js",
+  "description": "A Rust-based Model Context Protocol (MCP) server that exposes a V8 JavaScript runtime as a tool for AI agents like Claude and Cursor. Supports persistent heap snapshots via S3 or local filesystem, and is ready for integration with modern AI development environments.",
+  "author": {
+    "name": "r33drichards"
+  },
+  "server": {
+    "command": "/usr/local/bin/mcp-v8",
+    "args": ["--s3-bucket", "${user_config.s3_bucket_name}", "--directory-path", "${user_config.directory_path}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "s3_bucket_name": {
+      "type": "string",
+      "title": "S3 Bucket Name",
+      "description": "Specify the AWS S3 bucket name for heap snapshots. This option conflicts with 'Local Directory Path'. If neither is provided, the server defaults to 'test-mcp-js-bucket'.",
+      "required": false
+    },
+    "directory_path": {
+      "type": "directory",
+      "title": "Local Directory Path",
+      "description": "Specify a local directory for heap snapshots. This option conflicts with 'S3 Bucket Name'.",
+      "required": false
+    }
+  },
+  "readme": "# mcp-v8: V8 JavaScript MCP Server\n\nA Rust-based Model Context Protocol (MCP) server that exposes a V8 JavaScript runtime as a tool for AI agents like Claude and Cursor. Supports persistent heap snapshots via S3 or local filesystem, and is ready for integration with modern AI development environments.\n\n## Features\n\n- **V8 JavaScript Execution**: Run arbitrary JavaScript code in a secure, isolated V8 engine.\n- **Heap Snapshots**: Persist and restore V8 heap state between runs, supporting both S3 and local file storage.\n- **MCP Protocol**: Implements the Model Context Protocol for seamless tool integration with Claude, Cursor, and other MCP clients.\n- **Configurable Storage**: Choose between S3 or local directory for heap storage at runtime.\n\n## Installation\n\nInstall `mcp-v8` using the provided install script:\n\n```bash\ncurl -fsSL https://raw.githubusercontent.com/r33drichards/mcp-js/main/install.sh | sudo bash\n```\n\nThis will automatically download and install the latest release for your platform to `/usr/local/bin/mcp-v8` (you may be prompted for your password).\n\n---\n\n*Advanced users: If you prefer to build from source, see the [Build from Source](#build-from-source) section at the end of this document.*\n\n## Command Line Arguments\n\n`mcp-v8` supports the following command line arguments:\n\n- `--s3-bucket <bucket>`: Use AWS S3 for heap snapshots. Specify the S3 bucket name. (Conflicts with `--directory-path`)\n- `--directory-path <path>`: Use a local directory for heap snapshots. Specify the directory path. (Conflicts with `--s3-bucket`)\n\n**Note:** You must specify either `--s3-bucket` or `--directory-path`. If neither is provided, the server defaults to S3 with the bucket name `test-mcp-js-bucket`.\n\n## Quick Start\n\nAfter installation, you can run the server directly. Choose one of the following options:\n\n```bash\n# Use S3 for heap storage (recommended for cloud/persistent use)\nmcp-v8 --s3-bucket my-bucket-name\n\n# Use local filesystem directory for heap storage (recommended for local development)\nmcp-v8 --directory-path /tmp/mcp-v8-heaps\n```\n\n## Integration\n\n### Claude for Desktop\n\n1. Install the server as above.\n2. Open Claude Desktop → Settings → Developer → Edit Config.\n3. Add your server to `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"js\": {\n      \"command\": \"/usr/local/bin/mcp-v8 --s3-bucket my-bucket-name\"\n    }\n  }\n}\n```\n\n4. Restart Claude Desktop. The new tools will appear under the hammer icon.\n\n### Cursor\n\n1. Install the server as above.\n2. Create or edit `.cursor/mcp.json` in your project root:\n\n```json\n{\n  \"mcpServers\": {\n    \"js\": {\n      \"command\": \"/usr/local/bin/mcp-v8 --directory-path /tmp/mcp-v8-heaps\"\n    }\n  }\n}\n```\n\n3. Restart Cursor. The MCP tools will be available in the UI.\n\n## Example Usage\n\n- Ask Claude or Cursor: \"Run this JavaScript: `1 + 2`\"\n- Use heap snapshots to persist state between runs.\n\n## Heap Storage Options\n\nYou can configure heap storage using the following command line arguments:\n\n- **S3**: `--s3-bucket <bucket>`\n  - Example: `mcp-v8 --s3-bucket my-bucket-name`\n  - Requires AWS credentials in your environment.\n- **Filesystem**: `--directory-path <path>`\n  - Example: `mcp-v8 --directory-path /tmp/mcp-v8-heaps`\n\n**Note:** Only one storage backend can be used at a time. If both are provided, the server will return an error.\n\n## Limitations\n\nWhile `mcp-v8` provides a powerful and persistent JavaScript execution environment, there are limitations to its runtime. \n\n- **No `async`/`await` or Promises**: Asynchronous JavaScript is not supported. All code must be synchronous.\n- **No `fetch` or network access**: There is no built-in way to make HTTP requests or access the network.\n- **No `console.log` or standard output**: Output from `console.log` or similar functions will not appear. To return results, ensure the value you want is the last line of your code.\n- **No file system access**: The runtime does not provide access to the local file system or environment variables.\n- **No `npm install` or external packages**: You cannot install or import npm packages. Only standard JavaScript (ECMAScript) built-ins are available.\n- **No timers**: Functions like `setTimeout` and `setInterval` are not available.\n- **No DOM or browser APIs**: This is not a browser environment; there is no access to `window`, `document`, or other browser-specific objects.\n\n---\n\n## Build from Source (Advanced)\n\nIf you prefer to build from source instead of using the install script:\n\n### Prerequisites\n- Rust (nightly toolchain recommended)\n- (Optional) AWS credentials for S3 storage\n\n### Build the Server\n\n```bash\ncd server\ncargo build --release\n```\n\nThe built binary will be located at `server/target/release/server`. You can use this path in the integration steps above instead of `/usr/local/bin/mcp-v8` if desired.\n",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-v8-s3": {
+        "command": "/usr/local/bin/mcp-v8",
+        "args": ["--s3-bucket", "my-bucket-name"],
+        "env": {}
+      },
+      "mcp-v8-directory": {
+        "command": "/usr/local/bin/mcp-v8",
+        "args": ["--directory-path", "/tmp/mcp-v8-heaps"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "r33drichards",
+    "repo": "mcp-js",
+    "url": "https://github.com/r33drichards/mcp-js",
+    "name": "r33drichards__mcp-js",
+    "path": null,
+    "stars": 18,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "6ef27e91ad0afa3c8bc0d35955adf1c7de43e3bf"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:19.617Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "axum",
+      "importance": 10
+    },
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "v8",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "aws-sdk-s3",
+      "importance": 8
+    },
+    {
+      "name": "clap",
+      "importance": 8
+    },
+    {
+      "name": "serde",
+      "importance": 7
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "aws-config",
+      "importance": 6
+    },
+    {
+      "name": "anyhow",
+      "importance": 5
+    },
+    {
+      "name": "tracing",
+      "importance": 5
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 5
+    },
+    {
+      "name": "async-trait",
+      "importance": 4
+    },
+    {
+      "name": "env_logger",
+      "importance": 3
+    },
+    {
+      "name": "log",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== server/Cargo.toml ===\n[package]\nname = \"server\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nanyhow = \"1.0.98\"\naxum = \"0.8.4\"\nrmcp = { git = \"https://github.com/modelcontextprotocol/rust-sdk\", branch = \"main\", features = [\"transport-io\"] }\n\n# rmcp = { version = \"0.1.5\", }\nserde = \"1.0.219\"\nserde_json = \"1.0.140\"\ntokio = { version = \"1.45.0\", features = [\"rt-multi-thread\"] }\ntracing = \"0.1.41\"\ntracing-subscriber = \"0.3.19\"\nv8 = \"136.0.0\"\naws-config = \"0.0.26-alpha\"\naws-sdk-s3 = \"0.0.26-alpha\"\nasync-trait = \"0.1\"\nclap = { version = \"4.5\", features = [\"derive\"] }\n\n=== snapshot/Cargo.toml ===\n[package]\nname = \"snapshot\"\nversion = \"0.1.0\"\nedition = \"2021\"\ndescription = \"\"\n\n[dependencies]\n\nenv_logger = \"0.10\"\nlog = \"0.4\"\nv8 = \"136.0.0\"\n"
+}

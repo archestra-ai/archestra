@@ -6,6 +6,11 @@ on:
       - opened
       - synchronize
       - reopened
+      # labeled: adding the "run-unit-tests" label triggers a run immediately
+      # (see the merge-queue-only guard comment below). The per-PR concurrency
+      # group cancels the superseded run, so the label-event re-run of the
+      # lint/policy jobs is cheap noise, not a duplicate.
+      - labeled
   # Required checks must also run on merge_group when merge queue is enabled,
   # otherwise the queue waits for PR-only statuses that never appear on the
   # temporary merge-group SHA.
@@ -63,7 +68,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -93,7 +98,7 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -109,20 +114,20 @@ jobs:
       - name: Generate full license report (on failure)
         if: failure()
         run: |
-          echo "## License Compliance Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "❌ License check failed. See details below:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          pnpm license-check 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY || true
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## License Compliance Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "❌ License check failed. See details below:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          pnpm license-check 2>&1 | head -100 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Add success summary
         if: success()
         run: |
-          echo "## ✅ License Compliance Check Passed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "No GPL/AGPL/Unknown licenses found in dependencies." >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ License Compliance Check Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "No GPL/AGPL/Unknown licenses found in dependencies." >> "$GITHUB_STEP_SUMMARY"
 
   supply-chain-policy:
     name: Supply Chain Policy
@@ -131,13 +136,15 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Enforce image pinning and download verification policy
-        run: python3 .github/scripts/check-supply-chain-policy.py
+        run: |
+          python3 -m unittest discover -s .github/scripts -p "test_*.py"
+          python3 .github/scripts/check-supply-chain-policy.py
 
   docs-image-policy:
     name: Docs Image Policy
@@ -146,7 +153,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -154,28 +161,67 @@ jobs:
       - name: Enforce docs asset format and size policy
         run: python3 .github/scripts/check-docs-image-policy.py
 
+  docs-links:
+    name: Docs Link Check
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Check internal doc links and asset embeds resolve
+        run: python3 .github/scripts/check-docs-links.py
+
+  migration-kit-checks:
+    name: Migration Kit Checks
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
+      # the shipped scripts are zero-dependency; this gates the contributor tooling
+      # (pytest + the ty / ruff / zero-dependency gates), pinned to the supported python floor.
+      - name: Run migration-kit gates
+        run: uv run --python 3.10 --frozen --directory migration-kit --group dev pytest -q
+
   dependency-review:
     name: Dependency Review
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
-      contents: read # Required to checkout the repository and diff dependency manifests.
+      contents: read # Required for dependency-review-action to read the PR dependency graph via the API.
       pull-requests: write # Required for dependency-review-action PR comments.
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
+      # No checkout: dependency-review-action reads the PR diff via the GitHub
+      # API and references no local config file, so the (fetch-depth: 0) checkout
+      # was ~74s of the job's ~89s for nothing.
       - name: Dependency review
-        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           # NOTE: disable license check here because we are already doing it in the license-compliance-check job
           # allow-licenses: MIT
           license-check: "false"
           comment-summary-in-pr: on-failure
+          # GHSA-82j2-j2ch-gfr8 (rustls-webpki <0.103.13 CRL-parsing DoS) is a
+          # transitive dep of dagger-sdk, which pins reqwest 0.11 + rustls-tls
+          # (rustls 0.21 caps rustls-webpki at <0.102) — no patched version is
+          # reachable. The Dagger client only does TLS against a trusted local
+          # engine session, so attacker-controlled CRL parsing is not reachable.
+          # Revisit once dagger-sdk moves to reqwest 0.12 / rustls 0.23.
+          allow-ghsas: GHSA-82j2-j2ch-gfr8
 
   dependency-review-merge-group:
     name: Dependency Review
@@ -186,12 +232,49 @@ jobs:
       - name: Skip dependency review for merge queue
         run: echo "Dependency Review only has PR diff context; PR run already validated dependencies before merge queue."
 
-  # Fast feedback on every PR push: lint + typecheck + unit tests.
-  # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
-  # or on-demand via the "run-e2e" PR label.
+  # Fast feedback on every PR push: lint + typecheck + codegen validation
+  # (platform-lint-and-unit-tests). The heavy test suites — backend unit test
+  # shards, frontend integration tests, and both Rust checks — are
+  # merge-queue-only, mirroring the E2E model in platform-e2e-tests.yml
+  # (which runs on merge queue or on-demand via the "run-e2e" PR label).
+  #
+  # merge-queue-only guard: the heavy test jobs below carry
+  #   github.event_name != 'pull_request' ||
+  #     contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
+  # On plain PR pushes the jobs skip UNDER THEIR OWN NAMES — GitHub treats a
+  # skipped check run as satisfying a required status check (see the
+  # required-check note in platform-e2e-tests.yml), so the "Backend Unit
+  # Tests" / "Platform Rust Checks" required contexts stay green without
+  # running. NEVER add same-named placeholder twin jobs: a skipped twin also
+  # reports on merge_group and would satisfy the required check even when the
+  # real job FAILS. On merge_group, github.event_name != 'pull_request' is
+  # true, so the queue always validates for real — a red shard blocks the
+  # merge. Add the "run-unit-tests" label to a PR to run the suites on its
+  # pushes (the `labeled` trigger above picks the label up immediately).
+  #
+  # This guard subsumes the old bot-pr-guard on these jobs: bot PRs
+  # (release-please / contributor-onboarding) never carry the label, so they
+  # skip like every other unlabeled PR.
+  #
+  # EXCEPTION: platform-lint-and-unit-tests stays on every PR push for fast
+  # typecheck/codegen signal, and must still run on release-please PRs — it
+  # auto-commits the regenerated docs/openapi.json version bump onto the
+  # release branch ("chore: update docs/openapi.json version for release").
+  # Without that commit the merge_group codegen check fails and the release
+  # cannot merge, so that job only skips the contributor-onboarding bot
+  # (archestra-contributor-pr-bot[bot]), whose one-line auto-merged docs PRs
+  # cannot surface real failures.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
+    # bot guard (see the EXCEPTION note above): contributor bot only —
+    # release-please PRs need this job's codegen auto-commit.
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'
     runs-on: blacksmith-16vcpu-ubuntu-2404
+    # Backstop: every check here finishes in well under 10m, but leaked
+    # test-runner processes (vitest fork workers / esbuild) occasionally orphan
+    # and hold the step's log pipe open, leaving a *finished* job hanging until
+    # GitHub's 6h default. Fail fast instead.
+    timeout-minutes: 20
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.
     defaults:
@@ -216,15 +299,7 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
 
       - name: Checkout project
-        if: ${{ steps.check-release-please.outputs.is-release-please != 'true' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Checkout project for release-please PR
-        if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -241,7 +316,7 @@ jobs:
 
       - name: Update checkout credentials for release-please PR
         if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: true # zizmor: ignore[artipacked] release-please PRs need push credentials for generated updates.
           ref: ${{ github.head_ref }}
@@ -258,8 +333,28 @@ jobs:
       - name: Verify no immature dependencies
         run: pnpm install --fix-lockfile --lockfile-only --ignore-scripts
 
+      # Fork PRs run without turbo remote caching (secrets are withheld), so
+      # the Rust NAPI crate builds below actually invoke cargo. Sync the
+      # pinned toolchain (rust-toolchain.toml) serially first — otherwise
+      # turbo's parallel crate builds each trigger a concurrent rustup
+      # download of the same components, which races and fails with
+      # "could not rename downloaded file".
+      - name: Setup Rust
+        run: rustup show
+
+      # Backend unit tests run in the parallel sharded "Backend Unit Tests"
+      # jobs below; here the backend runs check:commit (same checks minus
+      # vitest) so this job stops being serialized behind the largest suite.
       - name: Type checking, linting, formatting, unit tests
-        run: pnpm check:ci
+        run: |
+          pnpm exec turbo check:ci --filter=!@backend
+          pnpm exec turbo check:commit --filter=@backend
+
+      # Validates the production build (turbo build: next build + backend build +
+      # Rust NAPI) compiles on every push. This replaces the per-push Docker image
+      # build's only unique signal; turbo remote caching makes it seconds on hit.
+      - name: Production build
+        run: pnpm build
 
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
         env:
@@ -332,9 +427,204 @@ jobs:
 
           echo "✅ All validation checks passed"
 
+  # mac-mini routing: both Rust checks and the frontend integration tests run
+  # on the self-hosted mac-mini-1 runners instead of Blacksmith when BOTH hold:
+  #   - the event is merge_group (only maintainer-queued code ever reaches the
+  #     self-hosted machine; label-triggered PR runs stay on Blacksmith), and
+  #   - the MAC_MINI_CI repository variable is "on" — the kill switch. Flip it
+  #     off (gh variable set MAC_MINI_CI --body off) to instantly route
+  #     everything back to Blacksmith with no workflow change; unset/missing
+  #     also means Blacksmith.
+  # The mac-mini-watchdog job below auto-flips the switch off and cancels the
+  # run if the machine stops taking jobs, so a dead mini ejects the PR from
+  # the merge queue in minutes instead of blocking it for hours.
+  #
+  # The backend unit test shards deliberately stay on Blacksmith: the merge
+  # queue runs several stacked groups concurrently, and 4 shards per group
+  # oversubscribe the machine's 3 runner slots — queued-behind-saturation is
+  # indistinguishable from dead for the jobs involved and adds minutes of
+  # merge latency per group.
+  #
+  # Rust toolchain checks, split out of the lint job so cargo work runs in
+  # parallel with the pnpm work instead of serializing ~1.5-2 min ahead of it.
+  # Needs no pnpm/setup-env: the Dagger sync script is pure shell and cargo
+  # operates on the committed lockfile.
+  platform-rust-checks:
+    name: Platform Rust Checks
+    # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-4vcpu-ubuntu-2404' }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./platform
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Rust
+        run: |
+          rustup show
+          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
+      - name: Install Rust musl toolchain dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Verify Dagger version sync
+        run: ./scripts/check-dagger-version-sync.sh
+
+      - name: Rust musl checks
+        working-directory: ./platform/archestra-rs
+        env:
+          # The mac-mini runners have the messense x86_64-linux-musl cross
+          # toolchain preinstalled (no musl-gcc there).
+          CC_x86_64_unknown_linux_musl: ${{ runner.os == 'Linux' && 'musl-gcc' || 'x86_64-unknown-linux-musl-gcc' }}
+        run: |
+          cargo check --workspace --locked --target x86_64-unknown-linux-musl
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --version 0.20.2 --locked
+
+      - name: Rust dependency policy
+        working-directory: ./platform/archestra-rs
+        run: cargo deny --config deny.toml check advisories bans licenses sources
+
+  ai-labs-rust-checks:
+    name: AI Labs Rust Checks
+    # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
+    # mac-mini routing (see comment above platform-rust-checks)
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-4vcpu-ubuntu-2404' }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./ai-labs
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Rust
+        run: rustup show
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
+      - name: Rust formatting
+        run: cargo fmt --all --check
+
+      - name: Rust check
+        run: cargo check --workspace --locked
+
+      - name: Rust lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Rust tests
+        run: cargo test --workspace --locked
+
+  # Backend unit tests, sharded across parallel runners. Vitest's --shard
+  # slices the file list deterministically (SHA1 of each path), so the four
+  # jobs partition the suite exactly once. Splitting this out of the lint job
+  # takes the suite off the workflow's critical path.
+  backend-unit-tests:
+    name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
+    # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # A full local suite run is ~4 min on comparable hardware; a shard is a
+    # quarter of that plus setup. 15 minutes means something is hung.
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    strategy:
+      # A failing shard must not cancel its siblings; we want the full
+      # failure picture in one pass.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      # Tests load the Rust NAPI bindings (@archestra/app-runtime-rs etc.),
+      # which `turbo check:ci` builds implicitly via the task graph. Running
+      # vitest directly skips that, so build backend's workspace deps here —
+      # turbo remote caching makes this seconds on a cache hit, and on a hit
+      # no cargo runs, so the pinned Rust toolchain isn't needed at all
+      # (an unconditional `rustup show` cost ~10s per shard). On a miss
+      # (fork PRs run without cache secrets, so cargo really builds), turbo's
+      # parallel crate builds each trigger a concurrent rustup download of
+      # the same toolchain, which races and fails with "could not rename
+      # downloaded file" — so on failure, sync the toolchain serially and
+      # retry once.
+      - name: Build backend workspace dependencies
+        run: |
+          pnpm exec turbo build --filter="@backend^..." || {
+            echo "Build failed — syncing pinned Rust toolchain and retrying once..."
+            rustup show
+            pnpm exec turbo build --filter="@backend^..."
+          }
+
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 4)
+        working-directory: ./platform/backend
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: pnpm exec vitest run --shard="${SHARD}/4"
+
+  # Stable-named gate over the shard matrix so branch protection / merge queue
+  # can require a single check ("Backend Unit Tests") regardless of shard count.
+  backend-unit-tests-gate:
+    name: Backend Unit Tests
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    # always() so the gate still runs (and turns red) when a shard fails,
+    # ANDed with the merge-queue-only guard (see comment above
+    # platform-lint-and-unit-tests): when the shards skip on an unlabeled PR
+    # push, the gate must skip too — with plain always() it would run and
+    # fail on the shards' "skipped" result.
+    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests'))
+    needs: [backend-unit-tests]
+    permissions: {}
+    steps:
+      - name: Check shard results
+        env:
+          SHARDS_RESULT: ${{ needs.backend-unit-tests.result }}
+        run: |
+          if [ "$SHARDS_RESULT" != "success" ]; then
+            echo "::error::One or more backend unit test shards failed (result: $SHARDS_RESULT)."
+            exit 1
+          fi
+          echo "✅ All backend unit test shards passed."
+
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
+    # mac-mini routing (see comment above platform-rust-checks)
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-4vcpu-ubuntu-2404' }}
     permissions:
       contents: read
     defaults:
@@ -345,7 +635,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout project
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -365,6 +655,9 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
+        # useblacksmith/cache only works on Blacksmith runners; the mac mini
+        # keeps its browser cache on the persistent disk instead.
+        if: runner.os == 'Linux'
         id: playwright-cache
         uses: ./.github/actions/github-cache
         with:
@@ -372,12 +665,18 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
 
       - name: Install Chromium for Playwright
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @frontend exec playwright install --with-deps chromium
 
       - name: Install Chromium system dependencies
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm --filter @frontend exec playwright install-deps chromium
+
+      - name: Install Chromium (macOS)
+        # No system deps to install on macOS; a version already present in
+        # ~/Library/Caches/ms-playwright makes this a fast no-op.
+        if: runner.os == 'macOS'
+        run: pnpm --filter @frontend exec playwright install chromium
 
       - name: Run integration tests
         run: pnpm test:integration
@@ -398,65 +697,83 @@ jobs:
           path: platform/frontend/test-results/
           retention-days: "7"
 
-  docker-image-builds:
-    name: Docker Image Builds (${{ matrix.name }})
-    runs-on: ${{ matrix.runner }}
+  # Fallback for the mac-mini routing above: GitHub has no queue timeout for
+  # self-hosted runners, so if mac-mini-1 dies, its jobs would sit queued (and
+  # block the merge queue) for up to 24h. This watchdog polls this run's own
+  # jobs; if no mac-mini job has made ANY progress within the grace window it
+  # flips the MAC_MINI_CI kill switch off (routing every subsequent run back
+  # to Blacksmith) and cancels this run so the merge queue ejects the PR
+  # immediately — re-queueing then runs fully on Blacksmith. Re-enable with:
+  # gh variable set MAC_MINI_CI --body on
+  mac-mini-watchdog:
+    name: Mac Mini Watchdog
+    if: github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 12
     permissions:
-      contents: read # Required to checkout the repository and read Docker build inputs.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Platform
-            runner: blacksmith-16vcpu-ubuntu-2404
-            context: ./platform
-            dockerfile: ./platform/Dockerfile
-            local-tag-prefix: archestra-platform
-            use-build-action: true
-          - name: MCP Server Base
-            runner: blacksmith-4vcpu-ubuntu-2404
-            context: ./platform/mcp_server_docker_image
-            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
-            local-tag-prefix: mcp-server-base
-            use-build-action: false
+      actions: write # Required to cancel this workflow run on failover.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Setup environment
-        if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/setup-env
+      # The kill switch is a repo Actions variable; GITHUB_TOKEN cannot write
+      # variables, so borrow the app already used for the RELEASE_FREEZE
+      # variable (it has actions_variables:write).
+      - name: Generate token for the kill switch
+        id: generate-token
+        uses: ./.github/actions/github-app-token
         with:
-          working-directory: ./platform
+          app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Build Platform image
-        if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/build-docker-image
-        with:
-          context: ${{ matrix.context }}
-          dockerfile: ${{ matrix.dockerfile }}
-          load: "true"
-          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      - name: Setup Blacksmith Builder
-        if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/setup-blacksmith-builder
-
-      - name: Build MCP server base image
-        if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/blacksmith-build-push
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+      - name: Fail over to Blacksmith if mac-mini-1 shows no progress
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VAR_TOKEN: ${{ steps.generate-token.outputs.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Grace window: a healthy, idle machine picks queued jobs up within
+          # seconds, and "picked up" (in_progress) already counts as progress.
+          # The merge queue runs several stacked groups concurrently and every
+          # group carries this watchdog, so before declaring the machine dead
+          # we must rule out "alive but busy with another group's jobs":
+          # a mini job executing in ANY in-progress run of this workflow means
+          # the machine is fine and this run's jobs are just queued behind it.
+          deadline=$((SECONDS + 360))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            jobs=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" \
+              --jq '[.jobs[] | select((.labels // []) | index("mac-mini-1"))]')
+            total=$(echo "$jobs" | jq 'length')
+            progressed=$(echo "$jobs" | jq '[.[] | select(.status != "queued")] | length')
+            if [ "$total" -eq 0 ] || [ "$progressed" -gt 0 ]; then
+              echo "mac-mini-1 is alive ($progressed/$total routed jobs progressed)."
+              exit 0
+            fi
+            busy_elsewhere=$(gh api "repos/$REPO/actions/workflows/on-pull-requests.yml/runs?status=in_progress&per_page=10" \
+              --jq '.workflow_runs[].id' 2>/dev/null | while read -r rid; do
+                [ "$rid" = "$RUN_ID" ] && continue
+                gh api "repos/$REPO/actions/runs/$rid/jobs?per_page=100" \
+                  --jq '.jobs[] | select(.status == "in_progress") | select((.runner_name // "") | startswith("mac-mini")) | .id' 2>/dev/null
+              done | wc -l | tr -d ' ')
+            if [ "${busy_elsewhere:-0}" -gt 0 ]; then
+              echo "mac-mini-1 is alive: executing $busy_elsewhere job(s) for other runs; ours are queued behind them."
+              exit 0
+            fi
+            echo "Waiting: $total mac-mini jobs queued, none progressed, machine idle elsewhere..."
+            sleep 20
+          done
+          echo "::error::mac-mini-1 accepted no jobs within the grace window and is executing nothing anywhere. Disabling MAC_MINI_CI and cancelling this run — re-queue to run on Blacksmith. Re-enable with: gh variable set MAC_MINI_CI --body on"
+          GH_TOKEN="$VAR_TOKEN" gh variable set MAC_MINI_CI --body off --repo "$REPO" \
+            || echo "::warning::Could not flip MAC_MINI_CI — flip it manually before re-queueing."
+          gh run cancel "$RUN_ID" --repo "$REPO"
+          # Give the cancellation time to land; exit 1 is only reached if it
+          # didn't, so the run still turns red instead of hanging.
+          sleep 120
+          exit 1
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
@@ -468,7 +785,7 @@ jobs:
         working-directory: ./platform/helm/archestra
     steps:
       - name: Checkout project
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           fetch-depth: 1

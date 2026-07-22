@@ -1,0 +1,154 @@
+{
+  "name": "kiliczsh__mcp-mongo-server",
+  "display_name": "mcp-mongo-server",
+  "description": "A Model Context Protocol Server for MongoDB",
+  "author": {
+    "name": "kiliczsh"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-mongo-server"],
+    "env": {
+      "MCP_MONGODB_URI": "${user_config.mcp_mongodb_uri}",
+      "MCP_MONGODB_READONLY": "${user_config.mcp_mongodb_readonly}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mcp_mongodb_uri": {
+      "type": "string",
+      "title": "MongoDB Connection URI",
+      "description": "MongoDB connection URI, e.g., mongodb://user:pass@host:port/database",
+      "sensitive": true,
+      "required": true
+    },
+    "mcp_mongodb_readonly": {
+      "type": "boolean",
+      "title": "Enable Read-Only Mode",
+      "description": "Enable read-only mode when set to 'true' to protect against write operations.",
+      "sensitive": false,
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "# MCP MongoDB Server\n---\n\n![NPM Version](https://img.shields.io/npm/v/mcp-mongo-server)\n![NPM Downloads](https://img.shields.io/npm/dm/mcp-mongo-server)\n![NPM License](https://img.shields.io/npm/l/mcp-mongo-server)\n[![smithery badge](https://smithery.ai/badge/mcp-mongo-server)](https://smithery.ai/server/mcp-mongo-server)\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/e274a3dd-7fe6-4440-8c43-043bae668251)\n\nA Model Context Protocol server that enables LLMs to interact with MongoDB databases. This server provides capabilities for inspecting collection schemas and executing MongoDB operations through a standardized interface.\n\n## Demo\n\n[![MCP MongoDB Server Demo | Claude Desktop](https://img.youtube.com/vi/FI-oE_voCpA/0.jpg)](https://www.youtube.com/watch?v=FI-oE_voCpA)\n\n## Key Features\n\n### Smart ObjectId Handling\n- Intelligent conversion between string IDs and MongoDB ObjectId\n- Configurable with `objectIdMode` parameter:\n  - `\"auto\"`: Convert based on field names (default)\n  - `\"none\"`: No conversion\n  - `\"force\"`: Force all string ID fields to ObjectId\n\n### Flexible Configuration\n- **Environment Variables**:\n  - `MCP_MONGODB_URI`: MongoDB connection URI\n  - `MCP_MONGODB_READONLY`: Enable read-only mode when set to \"true\"\n- **Command-line Options**:\n  - `--read-only` or `-r`: Connect in read-only mode\n\n### Read-Only Mode\n- Protection against write operations (update, insert, createIndex)\n- Uses MongoDB's secondary read preference for optimal performance\n- Ideal for safely connecting to production databases\n\n### MongoDB Operations\n- **Read Operations**:\n  - Query documents with optional execution plan analysis\n  - Execute aggregation pipelines\n  - Count documents matching criteria\n  - Get collection schema information\n- **Write Operations** (when not in read-only mode):\n  - Update documents\n  - Insert new documents\n  - Create indexes\n\n### LLM Integration\n- Collection completions for enhanced LLM interaction\n- Schema inference for improved context understanding\n- Collection analysis for data insights\n\n## Installation\n\n### Global Installation\n\n```bash\nnpm install -g mcp-mongo-server\n```\n\n### For Development\n\n```bash\n# Clone repository\ngit clone https://github.com/kiliczsh/mcp-mongo-server.git\ncd mcp-mongo-server\n\n# Install dependencies\nnpm install\n\n# Build\nnpm run build\n\n# Development with auto-rebuild\nnpm run watch\n```\n\n## Usage\n\n### Basic Usage\n\n```bash\n# Start server with MongoDB URI\nnpx -y mcp-mongo-server mongodb://muhammed:kilic@localhost:27017/database\n\n# Connect in read-only mode\nnpx -y mcp-mongo-server mongodb://muhammed:kilic@localhost:27017/database --read-only\n```\n\n### Environment Variables\n\nYou can configure the server using environment variables, which is particularly useful for CI/CD pipelines, Docker containers, or when you don't want to expose connection details in command arguments:\n\n```bash\n# Set MongoDB connection URI\nexport MCP_MONGODB_URI=\"mongodb://muhammed:kilic@localhost:27017/database\"\n\n# Enable read-only mode\nexport MCP_MONGODB_READONLY=\"true\"\n\n# Run server (will use environment variables if no URI is provided)\nnpx -y mcp-mongo-server\n```\n\nUsing environment variables in Claude Desktop configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"mongodb-env\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-mongo-server\"\n      ],\n      \"env\": {\n        \"MCP_MONGODB_URI\": \"mongodb://muhammed:kilic@localhost:27017/database\",\n        \"MCP_MONGODB_READONLY\": \"true\"\n      }\n    }\n  }\n}\n```\n\nUsing environment variables with Docker:\n\n```bash\n# Build\ndocker build -t mcp-mongo-server .\n\n# Run\ndocker run -it -d -e MCP_MONGODB_URI=\"mongodb://muhammed:kilic@localhost:27017/database\" -e MCP_MONGODB_READONLY=\"true\" mcp-mongo-server\n\n# or edit docker-compose.yml and run\ndocker-compose up -d\n```\n\n## Integration with Claude Desktop\n\n### Manual Configuration\n\nAdd the server configuration to Claude Desktop's config file:\n\n**MacOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`\n\n#### Command-line Arguments Approach:\n\n```json\n{\n  \"mcpServers\": {\n    \"mongodb\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-mongo-server\",\n        \"mongodb://muhammed:kilic@localhost:27017/database\"\n      ]\n    },\n    \"mongodb-readonly\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-mongo-server\",\n        \"mongodb://muhammed:kilic@localhost:27017/database\",\n        \"--read-only\"\n      ]\n    }\n  }\n}\n```\n\n#### Environment Variables Approach:\n\n```json\n{\n  \"mcpServers\": {\n    \"mongodb\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-mongo-server\"\n      ],\n      \"env\": {\n        \"MCP_MONGODB_URI\": \"mongodb://muhammed:kilic@localhost:27017/database\"\n      }\n    },\n    \"mongodb-readonly\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-mongo-server\"\n      ],\n      \"env\": {\n        \"MCP_MONGODB_URI\": \"mongodb://muhammed:kilic@localhost:27017/database\",\n        \"MCP_MONGODB_READONLY\": \"true\"\n      }\n    }\n  }\n}\n```\n\n### GitHub Package Usage:\n\n```json\n{\n  \"mcpServers\": {\n    \"mongodb\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"github:kiliczsh/mcp-mongo-server\",\n        \"mongodb://muhammed:kilic@localhost:27017/database\"\n      ]\n    },\n    \"mongodb-readonly\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"github:kiliczsh/mcp-mongo-server\",\n        \"mongodb://muhammed:kilic@localhost:27017/database\",\n        \"--read-only\"\n      ]\n    }\n  }\n}\n```\n\n## Integration with Windsurf and Cursor\n\nThe MCP MongoDB Server can be used with Windsurf and Cursor in a similar way to Claude Desktop.\n\n### Windsurf Configuration\n\nAdd the server to your Windsurf configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"mongodb\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-mongo-server\",\n        \"mongodb://muhammed:kilic@localhost:27017/database\"\n      ]\n    }\n  }\n}\n```\n\n### Cursor Configuration\n\nFor Cursor, add the server configuration to your settings:\n\n```json\n{\n  \"mcpServers\": {\n    \"mongodb\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-mongo-server\",\n        \"mongodb://muhammed:kilic@localhost:27017/database\"\n      ]\n    }\n  }\n}\n```\n\nYou can also use the environment variables approach with both Windsurf and Cursor, following the same pattern shown in the Claude Desktop configuration.\n\n### Automated Installation\n\n**Using Smithery**:\n```bash\nnpx -y @smithery/cli install mcp-mongo-server --client claude\n```\n\n**Using mcp-get**:\n```bash\nnpx @michaellatman/mcp-get@latest install mcp-mongo-server\n```\n\n## Available Tools\n\n### Query Operations\n\n- **query**: Execute MongoDB queries\n  ```javascript\n  {\n    collection: \"users\",\n    filter: { age: { $gt: 30 } },\n    projection: { name: 1, email: 1 },\n    limit: 20,\n    explain: \"executionStats\"  // Optional\n  }\n  ```\n\n- **aggregate**: Run aggregation pipelines\n  ```javascript\n  {\n    collection: \"orders\",\n    pipeline: [\n      { $match: { status: \"completed\" } },\n      { $group: { _id: \"$customerId\", total: { $sum: \"$amount\" } } }\n    ],\n    explain: \"queryPlanner\"  // Optional\n  }\n  ```\n\n- **count**: Count matching documents\n  ```javascript\n  {\n    collection: \"products\",\n    query: { category: \"electronics\" }\n  }\n  ```\n\n### Write Operations\n\n- **update**: Modify documents\n  ```javascript\n  {\n    collection: \"posts\",\n    filter: { _id: \"60d21b4667d0d8992e610c85\" },\n    update: { $set: { title: \"Updated Title\" } },\n    upsert: false,\n    multi: false\n  }\n  ```\n\n- **insert**: Add new documents\n  ```javascript\n  {\n    collection: \"comments\",\n    documents: [\n      { author: \"user123\", text: \"Great post!\" },\n      { author: \"user456\", text: \"Thanks for sharing\" }\n    ]\n  }\n  ```\n\n- **createIndex**: Create collection indexes\n  ```javascript\n  {\n    collection: \"users\",\n    indexes: [\n      {\n        key: { email: 1 },\n        unique: true,\n        name: \"email_unique_idx\"\n      }\n    ]\n  }\n  ```\n\n### System Operations\n\n- **serverInfo**: Get MongoDB server details\n  ```javascript\n  {\n    includeDebugInfo: true  // Optional\n  }\n  ```\n\n## Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. Use the MCP Inspector for better visibility:\n\n```bash\nnpm run inspector\n```\n\nThis will provide a URL to access the debugging tools in your browser.\n\n## Running evals\n\nThe evals package loads an mcp client that then runs the index.ts file, so there is no need to rebuild between tests. You can load environment variables by prefixing the npx command. Full documentation can be found [here](https://www.mcpevals.io/docs).\n\n```bash\nOPENAI_API_KEY=your-key  npx mcp-eval src/evals/evals.ts src/schemas/tools.ts\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "AI Tools",
+  "quality_score": 68,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-mongo-server": {
+        "command": "npx",
+        "args": ["-y", "mcp-mongo-server", "mongodb://muhammed:kilic@localhost:27017/database"],
+        "env": {}
+      },
+      "mcp-mongo-server-readonly": {
+        "command": "npx",
+        "args": ["-y", "mcp-mongo-server", "mongodb://muhammed:kilic@localhost:27017/database", "--read-only"],
+        "env": {}
+      },
+      "mcp-mongo-server-env-full": {
+        "command": "npx",
+        "args": ["-y", "mcp-mongo-server"],
+        "env": {
+          "MCP_MONGODB_URI": "mongodb://muhammed:kilic@localhost:27017/database",
+          "MCP_MONGODB_READONLY": "true"
+        }
+      },
+      "mcp-mongo-server-env-uri": {
+        "command": "npx",
+        "args": ["-y", "mcp-mongo-server"],
+        "env": {
+          "MCP_MONGODB_URI": "mongodb://muhammed:kilic@localhost:27017/database"
+        }
+      },
+      "mcp-mongo-server-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-it",
+          "-d",
+          "-e",
+          "MCP_MONGODB_URI=mongodb://muhammed:kilic@localhost:27017/database",
+          "-e",
+          "MCP_MONGODB_READONLY=true",
+          "mcp-mongo-server"
+        ],
+        "env": {
+          "MCP_MONGODB_URI": "mongodb://muhammed:kilic@localhost:27017/database",
+          "MCP_MONGODB_READONLY": "true"
+        },
+        "docker_image": "mcp-mongo-server"
+      },
+      "github-kiliczsh-mcp-mongo-server": {
+        "command": "npx",
+        "args": ["-y", "github:kiliczsh/mcp-mongo-server", "mongodb://muhammed:kilic@localhost:27017/database"],
+        "env": {}
+      },
+      "github-kiliczsh-mcp-mongo-server-readonly": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "github:kiliczsh/mcp-mongo-server",
+          "mongodb://muhammed:kilic@localhost:27017/database",
+          "--read-only"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kiliczsh",
+    "repo": "mcp-mongo-server",
+    "url": "https://github.com/kiliczsh/mcp-mongo-server",
+    "name": "kiliczsh__mcp-mongo-server",
+    "path": null,
+    "stars": 262,
+    "contributors": 7,
+    "issues": 16,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "65f577b59a744e03674ebcd7548245bc03207ace"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:29.684Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "mcp-evals",
+      "importance": 9
+    },
+    {
+      "name": "mongodb",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"mcp-mongo-server\",\n    \"version\": \"1.3.0\",\n    \"description\": \"A Model Context Protocol server for MongoDB connections\",\n    \"private\": false,\n    \"type\": \"module\",\n    \"bin\": {\n        \"mongodb\": \"./build/index.js\"\n    },\n    \"files\": [\n        \"build\"\n    ],\n    \"scripts\": {\n        \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n        \"prepare\": \"npm run build\",\n        \"watch\": \"tsc --watch\",\n        \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n    },\n    \"dependencies\": {\n        \"@modelcontextprotocol/sdk\": \"0.6.0\",\n        \"@types/mongodb\": \"^4.0.6\",\n        \"mcp-evals\": \"^1.0.18\",\n        \"mongodb\": \"^6.11.0\",\n        \"zod\": \"^3.23.8\"\n    },\n    \"devDependencies\": {\n        \"@types/node\": \"^20.11.24\",\n        \"typescript\": \"^5.3.3\"\n    },\n    \"publishConfig\": {\n        \"access\": \"public\"\n    },\n    \"keywords\": [\n        \"claude\",\n        \"claude-desktop\",\n        \"mcp\",\n        \"mongo\",\n        \"mongodb\",\n        \"model-context-protocol\",\n        \"llm\",\n        \"mcp-server\",\n        \"mcp-protocol\",\n        \"mcp-connector\",\n        \"mcp-connector-mongodb\"\n    ],\n    \"author\": \"Muhammed Kilic <kiliczsh>\",\n    \"license\": \"MIT\",\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"https://github.com/kiliczsh/mcp-mongo-server\"\n    },\n    \"homepage\": \"https://github.com/kiliczsh/mcp-mongo-server\"\n}\n"
+}

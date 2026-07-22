@@ -4,7 +4,7 @@ ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903
 # Go toolchain is sourced from the official golang:alpine image because Alpine's
 # community repo lags upstream Go patch releases. Stays binary-compatible since
 # both images share the Alpine base.
-ARG GOLANG_IMAGE=golang:1.25.10-alpine@sha256:8d22e29d960bc50cd025d93d5b7c7d220b1ee9aa7a239b3c8f55a57e987e8d45
+ARG GOLANG_IMAGE=golang:1.25.11-alpine@sha256:c05ba4b73604069d376c4f41346b05374335b5ca0c46fb6dfede5a59f5196931
 
 FROM ${GOLANG_IMAGE} AS go-bin
 
@@ -42,17 +42,13 @@ RUN uv pip sync \
 # Node.js stage
 FROM ${NODE_IMAGE} AS node-builder
 
-# Upgrade npm to a version whose bundled dependencies already include the tar/minimatch fixes
-# Upgrade bundled picomatch to patch CVE-2026-33671 (ReDoS) after installing npm.
-# npm ships tinyglobby with picomatch 4.0.3 pinned in its bundle; overwriting with
-# 4.0.4 is safe since the API is compatible.
-RUN npm install -g npm@11.12.1 && \
-    cd /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules && \
-    rm -rf picomatch && \
-    npm pack picomatch@4.0.4 && \
-    tar -xzf picomatch-4.0.4.tgz && \
-    mv package picomatch && \
-    rm picomatch-4.0.4.tgz
+# Upgrade npm to a version whose bundled dependencies already include the fixes for
+# tar CVE-2026-59873/CVE-2026-59874 (bundle ships tar 7.5.19), brace-expansion
+# CVE-2026-13149 (bundle ships 5.0.7 via minimatch 10.2.5), picomatch
+# CVE-2026-33671, sigstore CVE-2026-48815, and undici CVE-2026-12151 (bundle
+# ships 6.27.0, which previously required a manual bundle swap on 11.17.0).
+# npm 11.18.0 was published 2026-06-29 and has cleared the 7-day release-age practice.
+RUN npm install -g npm@11.18.0
 
 WORKDIR /opt/node-deps
 
@@ -94,10 +90,13 @@ RUN apk add --no-cache \
    # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
    # CVE-2026-32767: expat XML parser vulnerability
    # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest
-   # Go runtime is copied from the golang:1.25.10-alpine image below to pick up the
-   # Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811) that
-   # Alpine's apk index has not yet shipped as go-1.25.10-r0.
-   apk upgrade --no-cache nodejs bind openssl zlib expat
+   # CVE-2026-6276, CVE-2026-5773: curl/libcurl vulnerabilities (HIGH) fixed in 8.20.0-r0.
+   # The base image ships 8.19.0-r0; the explicit `apk add curl` above installs it, so
+   # curl/libcurl must be listed here to be upgraded to the fixed version.
+   # Go runtime is copied from the golang:1.25.11-alpine image below to pick up the
+   # Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811) and
+   # 1.25.11 (CVE-2026-42504) that Alpine's apk index has not yet shipped.
+   apk upgrade --no-cache nodejs bind openssl zlib expat curl libcurl
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

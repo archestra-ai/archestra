@@ -5,7 +5,12 @@ import {
   getBedrockRegion,
 } from "@/clients/bedrock-credentials";
 import config from "@/config";
+import {
+  BEDROCK_EMBEDDING_MODELS,
+  findBedrockEmbeddingModel,
+} from "@/knowledge-base/embedding-clients/bedrock-models";
 import logger from "@/logging";
+import { joinBaseUrl } from "@/utils/base-url";
 import type { ModelInfo } from "./types";
 
 export async function fetchBedrockModels(
@@ -30,7 +35,7 @@ export async function fetchBedrockModels(
       extraHeaders ?? {},
       { region, creds: sigV4 },
     );
-    return mapInferenceProfilesToModels(profiles);
+    return mergeStaticEmbeddingModels(mapInferenceProfilesToModels(profiles));
   }
 
   const profiles = await fetchAllBedrockInferenceProfiles(controlPlaneUrl, {
@@ -38,7 +43,7 @@ export async function fetchBedrockModels(
     Authorization: `Bearer ${apiKey}`,
   });
 
-  return mapInferenceProfilesToModels(profiles);
+  return mergeStaticEmbeddingModels(mapInferenceProfilesToModels(profiles));
 }
 
 export async function fetchBedrockModelsViaIam(): Promise<ModelInfo[]> {
@@ -58,13 +63,20 @@ export async function fetchBedrockModelsViaIam(): Promise<ModelInfo[]> {
     { region, creds },
   );
 
-  return mapInferenceProfilesToModels(profiles);
+  return mergeStaticEmbeddingModels(mapInferenceProfilesToModels(profiles));
 }
 
 interface BedrockInferenceProfile {
   inferenceProfileId?: string;
   inferenceProfileName?: string;
   status?: string;
+  /**
+   * The underlying foundation model(s) the profile routes to. AWS returns the
+   * ARN(s) here; the foundation-model id is the authoritative canonical model
+   * (the inference-profile id only encodes it for system/cross-region profiles,
+   * not application inference profiles whose id is an opaque ARN).
+   */
+  models?: { modelArn?: string }[];
 }
 
 interface BedrockIamSigningParams {
@@ -89,7 +101,10 @@ async function fetchAllBedrockInferenceProfiles(
     if (nextToken) {
       params.set("nextToken", nextToken);
     }
-    const url = `${controlPlaneUrl}/inference-profiles?${params.toString()}`;
+    const url = joinBaseUrl(
+      controlPlaneUrl,
+      `/inference-profiles?${params.toString()}`,
+    );
 
     let response: Response;
     if (iamParams) {
@@ -162,13 +177,47 @@ function mapInferenceProfilesToModels(
         return withoutRegion.startsWith(`${provider}.`);
       });
     })
-    .map((profile) => ({
-      id: profile.inferenceProfileId || "",
-      displayName:
-        profile.inferenceProfileName || profile.inferenceProfileId || "Unknown",
-      provider: "bedrock" as const,
-    }))
-    .filter((model) => model.id);
+    .map((profile) => {
+      const underlyingModelName = foundationModelIdFromArn(
+        profile.models?.[0]?.modelArn,
+      );
+      const base = {
+        id: profile.inferenceProfileId || "",
+        displayName:
+          profile.inferenceProfileName ||
+          profile.inferenceProfileId ||
+          "Unknown",
+        provider: "bedrock" as const,
+        // Authoritative underlying model for pricing — more robust than parsing
+        // the inference-profile id (and the only signal for application profiles).
+        ...(underlyingModelName ? { underlyingModelName } : {}),
+      };
+
+      // Classify supported embedding models instead of dropping them: tag with
+      // their dimension so they flow to the embedding picker (and out of chat via
+      // supportsTextChat). This surfaces profile-backed embedding models (Cohere)
+      // region-accurately from the call we already make.
+      const embedding =
+        findBedrockEmbeddingModel(underlyingModelName ?? base.id) ??
+        findBedrockEmbeddingModel(base.id);
+      if (embedding) {
+        return {
+          ...base,
+          capabilities: { embeddingDimensions: embedding.dimensions },
+        };
+      }
+
+      return base;
+    })
+    .filter((model) => model.id)
+    // Keep tagged embedding models; drop other non-chat models (rerankers, image/
+    // video generators, and unsupported embedding models).
+    .filter(
+      (model) =>
+        ("capabilities" in model &&
+          model.capabilities?.embeddingDimensions != null) ||
+        !isNonChatBedrockModel(model.id, model.underlyingModelName),
+    );
 
   logger.info(
     {
@@ -185,4 +234,81 @@ function mapInferenceProfilesToModels(
   );
 
   return models;
+}
+
+// Bedrock foundation-model families whose output is not chat text — embeddings,
+// rerankers, and image/video generators. They can't serve chat completions, so
+// listing one in the chat model picker lets a user select it and break every
+// message. The inference-profiles endpoint this fetcher uses carries no
+// modality (AWS ListFoundationModels holds the authoritative outputModalities
+// but would cost a second control-plane call per sync), so classify by the
+// stable model id / underlying foundation-model name. Fails open: an id that
+// matches no pattern is kept, so a new chat family is never hidden.
+const NON_CHAT_BEDROCK_MODEL_PATTERNS: RegExp[] = [
+  /embed/i, // cohere.embed, amazon.titan-embed, twelvelabs.marengo-embed
+  /rerank/i, // cohere.rerank
+  /stable-image|stable-diffusion|sdxl|stability\./i, // Stability image models
+  /titan-image|nova-canvas/i, // Amazon image generators
+  /nova-reel|luma\./i, // video generators
+];
+
+function isNonChatBedrockModel(
+  id: string,
+  underlyingModelName?: string | null,
+): boolean {
+  // Match both the profile id and the underlying model name: application
+  // inference profiles have opaque ids, so only the underlying name reveals the
+  // family; system/cross-region profiles encode it in the id.
+  const identifier = `${id} ${underlyingModelName ?? ""}`;
+  return NON_CHAT_BEDROCK_MODEL_PATTERNS.some((pattern) =>
+    pattern.test(identifier),
+  );
+}
+
+/**
+ * Extract the foundation-model id from a Bedrock model ARN, e.g.
+ * `arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0`
+ * → `anthropic.claude-3-5-sonnet-20240620-v1:0`. Returns null for ARNs that
+ * don't reference a foundation model (e.g. imported/custom models).
+ */
+function foundationModelIdFromArn(arn: string | undefined): string | null {
+  if (!arn) {
+    return null;
+  }
+  const marker = "foundation-model/";
+  const index = arn.indexOf(marker);
+  return index === -1 ? null : arn.slice(index + marker.length);
+}
+
+/**
+ * Add the embedding models that have no inference profile (Amazon Titan) to the
+ * discovered list. These are on-demand-only, so `/inference-profiles` never
+ * returns them — they must be injected. Deduped by id so a model that ever does
+ * gain a profile isn't listed twice. Honors the operator's Bedrock provider
+ * allowlist.
+ */
+function mergeStaticEmbeddingModels(discovered: ModelInfo[]): ModelInfo[] {
+  const seen = new Set(discovered.map((model) => model.id));
+  const injected = bedrockStaticEmbeddingModels().filter(
+    (model) => !seen.has(model.id),
+  );
+  return injected.length > 0 ? [...discovered, ...injected] : discovered;
+}
+
+function bedrockStaticEmbeddingModels(): ModelInfo[] {
+  const allowedProviders = config.llm.bedrock.allowedProviders;
+  return BEDROCK_EMBEDDING_MODELS.filter((model) => model.staticInject)
+    .filter((model) => {
+      if (allowedProviders.length === 0) return true;
+      // Model ids are "<vendor>.<name>" (e.g. "amazon.titan-embed-text-v2:0").
+      return allowedProviders.some((provider) =>
+        model.modelId.startsWith(`${provider}.`),
+      );
+    })
+    .map((model) => ({
+      id: model.modelId,
+      displayName: model.displayName,
+      provider: "bedrock" as const,
+      capabilities: { embeddingDimensions: model.dimensions },
+    }));
 }

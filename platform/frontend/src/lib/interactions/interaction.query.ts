@@ -3,11 +3,12 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  type ClientFilter,
   type InteractionSource,
-} from "@shared";
+} from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { handleApiError } from "@/lib/utils";
+import { throwOnApiError } from "@/lib/utils";
 
 const {
   getInteraction,
@@ -17,8 +18,13 @@ const {
   getUniqueUserIds,
 } = archestraApiSdk;
 
-const isSessionId = (value: string): boolean => {
-  // Either <UUID>, or scheduled-<UUID>
+/**
+ * True when `value` is a full session ID — either a bare `<UUID>` or a
+ * `scheduled-<UUID>`. The logs search box only supports session-ID lookup
+ * (free-text content search was removed), so callers use this to decide
+ * whether a typed term should filter or be ignored.
+ */
+export const isSessionId = (value: string): boolean => {
   const sessionIdRegex =
     /^(scheduled-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return sessionIdRegex.test(value);
@@ -97,10 +103,7 @@ export function useInteractions({
           hasPrev: false,
         },
       };
-      if (response.error) {
-        handleApiError(response.error);
-        return emptyResponse;
-      }
+      throwOnApiError(response.error);
       return response.data ?? emptyResponse;
     },
     enabled,
@@ -135,10 +138,7 @@ export function useInteraction({
     queryKey: ["interactions", interactionId],
     queryFn: async () => {
       const response = await getInteraction({ path: { interactionId } });
-      if (response.error) {
-        handleApiError(response.error);
-        return null;
-      }
+      throwOnApiError(response.error, { allowNotFound: true });
       return response.data ?? null;
     },
     initialData,
@@ -151,10 +151,7 @@ export function useUniqueExternalAgentIds() {
     queryKey: ["interactions", "externalAgentIds"],
     queryFn: async () => {
       const response = await getUniqueExternalAgentIds();
-      if (response.error) {
-        handleApiError(response.error);
-        return [];
-      }
+      throwOnApiError(response.error);
       return response.data ?? [];
     },
   });
@@ -165,10 +162,7 @@ export function useUniqueUserIds() {
     queryKey: ["interactions", "userIds"],
     queryFn: async () => {
       const response = await getUniqueUserIds();
-      if (response.error) {
-        handleApiError(response.error);
-        return [];
-      }
+      throwOnApiError(response.error);
       return response.data ?? [];
     },
   });
@@ -178,31 +172,27 @@ export function useInteractionSessions({
   profileId,
   userId,
   source,
+  client,
   sessionId,
   startDate,
   endDate,
-  search,
   limit = DEFAULT_TABLE_LIMIT,
   offset = 0,
   initialData,
+  toastOnError,
 }: {
   profileId?: string;
   userId?: string;
   source?: InteractionSource;
+  client?: ClientFilter;
   sessionId?: string;
   startDate?: string;
   endDate?: string;
-  search?: string;
   limit?: number;
   offset?: number;
   initialData?: archestraApiTypes.GetInteractionSessionsResponses["200"];
+  toastOnError?: boolean;
 } = {}) {
-  // If the search value is a sessionId, we want to treat it as a sessionId search instead
-  const isSessionIdSearch = search ? isSessionId(search) : false;
-  const effectiveSessionId =
-    sessionId ?? (isSessionIdSearch ? search : undefined);
-  const effectiveSearch = isSessionIdSearch ? undefined : search;
-
   return useQuery({
     queryKey: [
       "interactions",
@@ -210,10 +200,10 @@ export function useInteractionSessions({
       profileId,
       userId,
       source,
-      effectiveSessionId,
+      client,
+      sessionId,
       startDate,
       endDate,
-      effectiveSearch,
       limit,
       offset,
     ],
@@ -223,10 +213,10 @@ export function useInteractionSessions({
           ...(profileId ? { profileId } : {}),
           ...(userId ? { userId } : {}),
           ...(source ? { source } : {}),
-          ...(effectiveSessionId ? { sessionId: effectiveSessionId } : {}),
+          ...(client ? { client } : {}),
+          ...(sessionId ? { sessionId } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
-          ...(effectiveSearch ? { search: effectiveSearch } : {}),
           limit,
           offset,
         },
@@ -243,10 +233,7 @@ export function useInteractionSessions({
         },
       };
 
-      if (response.error) {
-        handleApiError(response.error);
-        return emptyResponse;
-      }
+      throwOnApiError(response.error, { toastOnError });
       return response.data ?? emptyResponse;
     },
     initialData:
@@ -255,10 +242,10 @@ export function useInteractionSessions({
       !profileId &&
       !userId &&
       !source &&
-      !effectiveSessionId &&
+      !client &&
+      !sessionId &&
       !startDate &&
-      !endDate &&
-      !effectiveSearch
+      !endDate
         ? initialData
         : undefined,
   });

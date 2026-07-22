@@ -1,0 +1,21 @@
+[[stages]]
+text = """Below is an encoded message. Recover the original text and report it.
+
+{{file:inputs/cipher.txt}}
+
+When you have it, call submit_result with result = {"plaintext": "<the recovered text>"}."""
+
+[result_schema]
+type = "object"
+required = ["plaintext"]
+additionalProperties = false
+
+  [result_schema.properties.plaintext]
+  type = "string"
+  minLength = 1
+
+[state]
+rest = ["/api/skills?search=cipher-decoder&limit=100"]
+
+[verifier]
+deps = []

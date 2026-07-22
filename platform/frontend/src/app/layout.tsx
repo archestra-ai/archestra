@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { PublicEnvScript } from "next-runtime-env";
 import { AppShell } from "./_parts/app-shell";
@@ -6,15 +6,15 @@ import { MswInit } from "./_parts/msw-init";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { ThemeProvider } from "./_parts/theme-provider";
+import { VisualViewportHeight } from "./_parts/visual-viewport-height";
 import "./globals.css";
-import { DEFAULT_APP_DESCRIPTION } from "@shared";
+import { DEFAULT_APP_DESCRIPTION } from "@archestra/shared";
 import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { WithPagePermissions } from "./_parts/with-page-permissions";
-import { AuthProvider } from "./auth/auth-provider";
 
 // Register theme fonts for white-labeling without preloading every file.
 // The active theme decides which CSS variable is used after appearance settings
@@ -156,8 +156,32 @@ const libreBaskervilleFont = localFont({
   preload: false,
 });
 
+// Disc-glyph font that renders every character as a dot — visual masking for
+// app-secret fields (.secret-masked in globals.css) without type="password",
+// which would summon browser password managers. Source: text-security@3.2.1
+// (https://github.com/noppa/text-security), SIL OFL 1.1 — same license family
+// as the theme fonts above. display "block" + no fallback so the secret is
+// never flashed in a real-glyph font while loading.
+const secretMaskFont = localFont({
+  src: "../fonts/TextSecurityDisc.woff2",
+  variable: "--font-secret-mask",
+  display: "block",
+  fallback: [],
+  adjustFontFallback: false,
+  preload: false,
+});
+
 export const metadata: Metadata = {
   description: DEFAULT_APP_DESCRIPTION,
+};
+
+// interactive-widget makes the Android on-screen keyboard resize the layout
+// viewport instead of overlaying it, so the viewport-locked shell keeps its
+// input visible. iOS ignores the property; VisualViewportHeight covers it.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({
@@ -169,36 +193,35 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable}`}
+      className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} ${secretMaskFont.variable}`}
     >
       <head>
         <PublicEnvScript />
         <link rel="icon" href="/favicon.ico" />
       </head>
       <body className="font-sans antialiased">
+        <VisualViewportHeight />
         <MswInit>
           <ArchestraQueryClientProvider>
-            <AuthProvider>
-              <ChatProvider>
-                <ThemeProvider
-                  attribute="class"
-                  defaultTheme="light"
-                  enableSystem
-                  disableTransitionOnChange
-                >
-                  <PostHogProviderWrapper>
-                    <OrgThemeLoader />
-                    <DynamicHead />
-                    <WithAuthCheck>
-                      <WebsocketInitializer />
-                      <AppShell>
-                        <WithPagePermissions>{children}</WithPagePermissions>
-                      </AppShell>
-                    </WithAuthCheck>
-                  </PostHogProviderWrapper>
-                </ThemeProvider>
-              </ChatProvider>
-            </AuthProvider>
+            <ChatProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                <PostHogProviderWrapper>
+                  <OrgThemeLoader />
+                  <DynamicHead />
+                  <WithAuthCheck>
+                    <WebsocketInitializer />
+                    <AppShell>
+                      <WithPagePermissions>{children}</WithPagePermissions>
+                    </AppShell>
+                  </WithAuthCheck>
+                </PostHogProviderWrapper>
+              </ThemeProvider>
+            </ChatProvider>
           </ArchestraQueryClientProvider>
         </MswInit>
       </body>

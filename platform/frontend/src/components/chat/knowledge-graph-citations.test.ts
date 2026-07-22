@@ -98,12 +98,14 @@ describe("extractCitations", () => {
       sourceUrl: "https://example.com/doc",
       connectorType: "confluence",
       documentId: "doc-1",
+      sourceId: null,
     });
     expect(citations[1]).toEqual({
       title: "Another Doc",
       sourceUrl: null,
       connectorType: null,
       documentId: "doc-2",
+      sourceId: null,
     });
   });
 
@@ -265,6 +267,7 @@ describe("extractCitations", () => {
       sourceUrl: "https://example.com/wrapped",
       connectorType: "jira",
       documentId: "doc-wrapped",
+      sourceId: null,
     });
   });
 

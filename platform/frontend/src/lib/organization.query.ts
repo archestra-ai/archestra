@@ -2,14 +2,21 @@ import {
   type AnyRoleName,
   archestraApiSdk,
   type archestraApiTypes,
-} from "@shared";
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { handleApiError } from "./utils";
+import { environmentKeys } from "./environment.query";
+import {
+  getApiErrorInternalCode,
+  handleApiError,
+  throwOnApiError,
+  toApiError,
+} from "./utils";
 
 export const appearanceKeys = {
   all: ["appearance"] as const,
@@ -20,20 +27,16 @@ export const appearanceKeys = {
  * Hook to fetch public appearance settings.
  * Used on login/auth pages where the user is not yet authenticated.
  * Returns theme, customFont, and logo without requiring authentication.
- * On API failure, returns null so React Query has a defined cache value while
- * callers keep using local fallback appearance values.
+ * On API failure the query enters its error state (no toast, since this is a
+ * pre-auth surface); callers keep using their local fallback appearance values.
  */
 export function useAppearanceSettings(enabled = true) {
   return useQuery({
     queryKey: appearanceKeys.public(),
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getAppearanceSettings();
-
-      if (error || !data) {
-        return null;
-      }
-
-      return data;
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
     },
     enabled,
     staleTime: 5 * 60 * 1000,
@@ -259,16 +262,17 @@ export function useOrganization(enabled = true) {
   return useQuery({
     queryKey: organizationKeys.details(),
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getOrganization();
+      const { data, error } = await archestraApiSdk.getOrganization();
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
     // Only fetch when user is authenticated to prevent 403 errors during initial auth check
     enabled: enabled && !!session.data?.user,
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
-    // Org settings (theme, app name, preset entity name, etc.) change rarely
-    // and all mutations imperatively setQueryData() this key, so a long stale
-    // time keeps re-mounts cheap (every usePresetEntityName caller shares this).
+    // Org settings (theme, app name, etc.) change rarely and all mutations
+    // imperatively setQueryData() this key, so a long stale time keeps
+    // re-mounts cheap.
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -283,14 +287,7 @@ export function useOrganizationOnboardingStatus(enabled: boolean) {
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getOnboardingStatus();
 
-      if (error) {
-        handleApiError(error);
-        return {
-          hasProfilesConfigured: false,
-          hasToolsConfigured: false,
-          isComplete: false,
-        };
-      }
+      throwOnApiError(error);
 
       return (
         data ?? {
@@ -327,7 +324,7 @@ export function useUpdateAppearanceSettings(
 
       return updatedOrganization;
     },
-    onSuccess: (updatedOrganization) => {
+    onSuccess: (updatedOrganization, variables) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
       queryClient.setQueryData(appearanceKeys.public(), {
@@ -347,13 +344,20 @@ export function useUpdateAppearanceSettings(
         slimChatErrorUi: updatedOrganization.slimChatErrorUi,
         animateChatPlaceholders: updatedOrganization.animateChatPlaceholders,
       });
+      // The app name is baked into the built-in skills' and tools' names on the
+      // backend, so a rename re-brands those rows. Drop their cached lists so the
+      // Skills/Tools pages show the new name without a manual page refresh.
+      if (variables.appName !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ["skills"] });
+        queryClient.invalidateQueries({ queryKey: ["tools"] });
+      }
       toast.success(onSuccessMessage);
     },
   });
 }
 
 /**
- * Update security settings (global tool policy, chat file uploads)
+ * Update security settings (default tool guardrails, chat file uploads)
  */
 export function useUpdateSecuritySettings(
   onSuccessMessage: string,
@@ -397,6 +401,66 @@ export function useUpdateLlmSettings(
     ) => {
       const { data: updatedOrganization, error } =
         await archestraApiSdk.updateLlmSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update MCP settings (online catalog availability)
+ */
+export function useUpdateMcpSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateMcpSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateMcpSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
+ * Update Skills settings (online catalog availability)
+ */
+export function useUpdateSkillsSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateSkillsSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateSkillsSettings({ body: data });
 
       if (error) {
         toast.error(onErrorMessage);
@@ -474,20 +538,22 @@ export function useUpdateConnectionSettings(
 }
 
 /**
- * Update the org-wide custom label for catalog presets (internally "preset").
- * Pass both singular and plural together, or both null to reset.
+ * Update the org-wide default environment (the implicit "Default" target that
+ * catalog items use when no environment is assigned). Unlike real environments,
+ * the default has no slug, so both its name and namespace are freely editable.
+ * Pass `name`/`namespace` (or null to reset to the built-in "Default").
  */
-export function useUpdatePresetEntityName(
+export function useUpdateDefaultEnvironment(
   onSuccessMessage: string,
   onErrorMessage: string,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      data: archestraApiTypes.UpdatePresetEntityNameData["body"],
+      data: archestraApiTypes.UpdateDefaultEnvironmentData["body"],
     ) => {
       const { data: updatedOrganization, error } =
-        await archestraApiSdk.updatePresetEntityName({ body: data });
+        await archestraApiSdk.updateDefaultEnvironment({ body: data });
 
       if (error) {
         toast.error(onErrorMessage);
@@ -499,95 +565,35 @@ export function useUpdatePresetEntityName(
     onSuccess: (updatedOrganization) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
       toast.success(onSuccessMessage);
     },
   });
 }
 
 /**
- * Update the org-wide custom label for the implicit "default" preset row.
- * Pass null to reset to the built-in "Default" label.
+ * Returns the org-configured default environment fields. When unconfigured,
+ * `name` falls back to "Default", nullable fields fall back to null, and
+ * `restricted` falls back to false.
  */
-export function useUpdatePresetEntityDefaultLabel(
-  onSuccessMessage: string,
-  onErrorMessage: string,
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      data: archestraApiTypes.UpdatePresetEntityDefaultLabelData["body"],
-    ) => {
-      const { data: updatedOrganization, error } =
-        await archestraApiSdk.updatePresetEntityDefaultLabel({ body: data });
-
-      if (error) {
-        toast.error(onErrorMessage);
-        return null;
-      }
-
-      return updatedOrganization;
-    },
-    onSuccess: (updatedOrganization) => {
-      if (!updatedOrganization) return;
-      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      toast.success(onSuccessMessage);
-    },
-  });
-}
-
-/**
- * Update the validation regex for the implicit "default" preset row. Pass null
- * to disable.
- */
-export function useUpdatePresetEntityDefaultValidationRegex(
-  onSuccessMessage: string,
-  onErrorMessage: string,
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      data: archestraApiTypes.UpdatePresetEntityDefaultValidationRegexData["body"],
-    ) => {
-      const { data: updatedOrganization, error } =
-        await archestraApiSdk.updatePresetEntityDefaultValidationRegex({
-          body: data,
-        });
-
-      if (error) {
-        toast.error(onErrorMessage);
-        return null;
-      }
-
-      return updatedOrganization;
-    },
-    onSuccess: (updatedOrganization) => {
-      if (!updatedOrganization) return;
-      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      toast.success(onSuccessMessage);
-    },
-  });
-}
-
-/**
- * Returns the org-configured display label for catalog presets.
- * When unconfigured, `configured` is false and `singular`/`plural` fall back to
- * "Preset"/"Presets" — callers should use `configured` to gate UI that should
- * stay hidden until an admin has chosen a name. `defaultLabel` falls back to
- * "Default" when admins have not customized it.
- */
-export function usePresetEntityName() {
+export function useDefaultEnvironment() {
   const { data: organization } = useOrganization();
-  const singular = organization?.presetEntityName ?? null;
-  const plural = organization?.presetEntityNamePlural ?? null;
-  const configured = singular !== null && plural !== null;
-  return {
-    configured,
-    singular: configured ? singular : "Preset",
-    plural: configured ? plural : "Presets",
-    defaultLabel: organization?.presetEntityDefaultLabel ?? "Default",
-    defaultValidationRegex:
-      organization?.presetEntityDefaultValidationRegex ?? null,
-  };
+  // Memoized on the query data so the object is reference-stable across renders:
+  // consumers seed a form off it in an effect, and a fresh object each render
+  // would re-run that effect on every background refetch and wipe unsaved edits.
+  return useMemo(
+    () => ({
+      name: organization?.defaultEnvironmentName ?? "Default",
+      namespace: organization?.defaultEnvironmentNamespace ?? null,
+      description: organization?.defaultEnvironmentDescription ?? null,
+      networkPolicy: organization?.defaultNetworkPolicy ?? null,
+      restricted: organization?.defaultEnvironmentRestricted ?? false,
+      validationRegex: organization?.defaultEnvironmentValidationRegex ?? null,
+      trustedImageRegistries:
+        organization?.defaultEnvironmentTrustedImageRegistries ?? null,
+    }),
+    [organization],
+  );
 }
 
 /**
@@ -636,8 +642,17 @@ export function useUpdateKnowledgeSettings(
         await archestraApiSdk.updateKnowledgeSettings({ body: data });
 
       if (error) {
-        toast.error(onErrorMessage);
-        return null;
+        // Field-validation failures carry an `internal_code` (which of
+        // embedding/reranker failed) and are shown inline per-field by the page,
+        // so don't also toast them; every other error toasts generically. The
+        // code is preserved on the thrown error for the page to read.
+        const internalCode = getApiErrorInternalCode(error);
+        if (!internalCode) {
+          toast.error(onErrorMessage);
+        }
+        const apiError = toApiError(error) as Error & { internalCode?: string };
+        apiError.internalCode = internalCode;
+        throw apiError;
       }
 
       return updatedOrganization;
@@ -676,7 +691,9 @@ export function useDropEmbeddingConfig() {
 }
 
 /**
- * Test embedding connection by embedding a sample text
+ * Test the embedding connection by embedding a sample text. Returns the result
+ * (never throws) so the caller can drive a per-section status indicator; a
+ * transport error still toasts.
  */
 export function useTestEmbeddingConnection() {
   return useMutation({
@@ -696,58 +713,42 @@ export function useTestEmbeddingConnection() {
 
       return data ?? { success: false, error: "No response" };
     },
-    onSuccess: (result) => {
-      if (!result) return;
-      if (result.success) {
-        toast.success("Connection test successful");
-      } else {
-        toast.error("Connection test failed", {
-          description: result.error,
-        });
-      }
-    },
   });
 }
 
 /**
- * Complete onboarding
+ * Test the reranker connection with a sample structured-output call. Same
+ * contract as the embedding test — returns the result for a per-section status.
  */
-export function useCompleteOnboarding() {
-  const queryClient = useQueryClient();
+export function useTestRerankerConnection() {
   return useMutation({
-    mutationFn: async () => {
-      const { data: updatedOrganization, error } =
-        await archestraApiSdk.completeOnboarding({
-          body: { onboardingComplete: true },
-        });
+    mutationFn: async (
+      params: NonNullable<archestraApiTypes.TestRerankerConnectionData["body"]>,
+    ) => {
+      const { data, error } = await archestraApiSdk.testRerankerConnection({
+        body: params,
+      });
 
       if (error) {
-        toast.error("Failed to complete onboarding");
-        return null;
+        handleApiError(error);
+        return { success: false, error: "Request failed" };
       }
 
-      return updatedOrganization;
-    },
-    onSuccess: (updatedOrganization) => {
-      if (!updatedOrganization) return;
-      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      toast.success("Onboarding complete");
+      return data ?? { success: false, error: "No response" };
     },
   });
 }
 
 /**
- * Get all members of the organization (for admin filtering)
+ * Users the current caller can see: the full organization roster with
+ * member:read, otherwise only the caller's teammates (may be empty).
  */
 export function useOrganizationMembers(enabled = true) {
   return useQuery({
     queryKey: [...organizationKeys.all, "members"],
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getOrganizationMembers();
-      if (error) {
-        handleApiError(error);
-        return [];
-      }
+      throwOnApiError(error);
       return data ?? [];
     },
     enabled,
@@ -772,9 +773,7 @@ export function useMemberSignupStatus() {
     queryKey: organizationKeys.memberSignupStatus(),
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getMemberSignupStatus();
-      if (error) {
-        return { pendingSignupMembers: [] as PendingSignupMember[] };
-      }
+      throwOnApiError(error, { toastOnError: false });
       return data ?? { pendingSignupMembers: [] as PendingSignupMember[] };
     },
   });

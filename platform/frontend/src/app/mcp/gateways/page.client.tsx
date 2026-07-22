@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@shared";
+import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -12,13 +12,17 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   ActiveFilterBadges,
+  AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
+import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -36,11 +40,14 @@ import {
   useDeleteProfile,
   useProfile,
   useProfilesPaginated,
+  useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useTeams } from "@/lib/teams/team.query";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useMyTeams } from "@/lib/teams/team.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
@@ -78,7 +85,7 @@ function SortIcon({
     return downArrow;
   }
   return (
-    <div className="text-muted-foreground/50 flex flex-col items-center">
+    <div className="text-muted-foreground flex flex-col items-center">
       {upArrow}
       <span className="mt-[-4px]">{downArrow}</span>
     </div>
@@ -107,6 +114,7 @@ function McpGateways({
     | "toolsCount"
     | "subagentsCount"
     | "team"
+    | "lastUsedAt"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
     | "asc"
@@ -122,15 +130,28 @@ function McpGateways({
   const authorIdsFromUrl = searchParams.get("authorIds");
   const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
+  const statusFromUrl = searchParams.get("status") as
+    | "active"
+    | "deleted"
+    | null;
+  const isDeletedView = statusFromUrl === "deleted";
 
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
+  const { data: canDeleteAgents } = useHasPermissions({ agent: ["delete"] });
   const gatewayAgentTypes: Array<"mcp_gateway" | "profile"> = canReadAgents
-    ? ["mcp_gateway", "profile"]
+    ? isDeletedView && !canDeleteAgents
+      ? ["mcp_gateway"]
+      : ["mcp_gateway", "profile"]
     : ["mcp_gateway"];
 
-  const { data: agentsResponse, isPending } = useProfilesPaginated({
+  const {
+    data: agentsResponse,
+    isPending,
+    isLoadingError: isGatewaysLoadError,
+    refetch: refetchGateways,
+  } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -151,11 +172,11 @@ function McpGateways({
         ? true
         : undefined,
     labels: labelsFromUrl || undefined,
+    status: statusFromUrl || undefined,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
-  const { data: userTeams } = useTeams({
-    initialData: initialData?.teams,
+  const { data: userTeams } = useMyTeams({
     enabled: !!canReadTeams,
   });
 
@@ -183,11 +204,11 @@ function McpGateways({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(
     searchParams.get("create") === "true",
   );
-  const editGatewayIdFromUrl = searchParams.get("edit");
+  const [postCreateGateway, setPostCreateGateway] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const openToolsFromUrl = searchParams.get("openTools") === "true";
-  const { data: editGatewayFromUrl } = useProfile(
-    editGatewayIdFromUrl ?? undefined,
-  );
   const navigateToConnection = useCallback(
     (agentId: string) => {
       router.push(
@@ -196,25 +217,19 @@ function McpGateways({
     },
     [router],
   );
-  const [editingGateway, setEditingGateway] = useState<GatewayData | null>(
-    null,
-  );
-  const [autoOpenedEditGatewayId, setAutoOpenedEditGatewayId] = useState<
-    string | null
-  >(null);
-  useEffect(() => {
-    if (
-      editGatewayIdFromUrl &&
-      editGatewayFromUrl &&
-      editGatewayFromUrl.id !== autoOpenedEditGatewayId
-    ) {
-      setEditingGateway(editGatewayFromUrl as unknown as GatewayData);
-      setAutoOpenedEditGatewayId(editGatewayFromUrl.id);
-    }
-  }, [editGatewayIdFromUrl, editGatewayFromUrl, autoOpenedEditGatewayId]);
+  const editId = searchParams.get("edit");
+  const { data: editFromUrl } = useProfile(editId ?? undefined);
+  const editDialog = useDialogUrlParam<GatewayData>({
+    paramName: "edit",
+    entityFromUrl: editFromUrl ?? null,
+  });
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
   );
+  const [cloningGateway, setCloningGateway] = useState<GatewayData | null>(
+    null,
+  );
+  const restoreGateway = useRestoreProfile();
 
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
@@ -285,7 +300,6 @@ function McpGateways({
         return (
           <AgentNameCell
             name={agent.name}
-            scope={agent.scope}
             description={agent.description}
             extraBadges={
               agent.agentType === "profile" ? (
@@ -352,24 +366,48 @@ function McpGateways({
         return <div>{subagentsCount}</div>;
       },
     },
-    ...(isAdmin
-      ? [
-          {
-            id: "team",
-            header: "Accessible to",
-            enableSorting: false,
-            cell: ({ row }: { row: { original: GatewayData } }) => (
-              <ResourceVisibilityBadge
-                scope={row.original.scope}
-                teams={row.original.teams}
-                authorId={row.original.authorId}
-                authorName={row.original.authorName}
-                currentUserId={currentUserId}
-              />
-            ),
-          } satisfies ColumnDef<GatewayData>,
-        ]
-      : []),
+    {
+      id: "lastUsedAt",
+      accessorKey: "lastUsedAt",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Last used
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const lastUsedAt = row.original.lastUsedAt;
+        return (
+          <span
+            className="text-sm text-muted-foreground"
+            title={
+              lastUsedAt ? new Date(lastUsedAt).toLocaleString() : undefined
+            }
+          >
+            {formatRelativeTimeFromNow(lastUsedAt ?? null)}
+          </span>
+        );
+      },
+    },
+    {
+      id: "team",
+      header: "Accessible to",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={row.original.teams}
+          authorId={row.original.authorId}
+          authorName={row.original.authorName}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
+      ),
+    },
     {
       id: "actions",
       header: "Actions",
@@ -394,15 +432,53 @@ function McpGateways({
             agent={agent}
             canModify={canModify}
             onConnect={(a) => navigateToConnection(a.id)}
-            onEdit={(agentData) => {
-              setEditingGateway(agentData);
-            }}
+            onEdit={editDialog.open}
             onDelete={setDeletingGatewayId}
+            onRestore={(agentId) => {
+              restoreGateway.mutate(agentId, {
+                onSuccess: (data) => {
+                  if (!data) return;
+                  toast.success("MCP Gateway restored successfully");
+                },
+              });
+            }}
+            onClone={setCloningGateway}
           />
         );
       },
     },
   ];
+
+  if (isGatewaysLoadError) {
+    return (
+      <PageLayout
+        title="MCP Gateways"
+        description={
+          <p className="text-sm text-muted-foreground">
+            MCP Gateways provide a unified MCP endpoint for your AI agents to
+            access tools and subagents.
+            {docsUrl && (
+              <>
+                {" "}
+                <ExternalDocsLink
+                  href={docsUrl}
+                  className="underline hover:text-foreground"
+                  showIcon={false}
+                >
+                  Read more in the docs
+                </ExternalDocsLink>
+              </>
+            )}
+          </p>
+        }
+      >
+        <QueryLoadError
+          title="Couldn't load your MCP gateways"
+          onRetry={() => refetchGateways()}
+        />
+      </PageLayout>
+    );
+  }
 
   return (
     <LoadingWrapper
@@ -449,7 +525,13 @@ function McpGateways({
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter ownerLabelPlural="MCP gateways" />
+                <AgentScopeFilter
+                  ownerLabelPlural="MCP gateways"
+                  adminPermission={{ mcpGateway: ["admin"] }}
+                />
+                <AgentDeletedStatusFilter
+                  deletePermission={{ mcpGateway: ["delete"] }}
+                />
               </div>
               {!canReadTeams && (
                 <PermissionRequirementHint
@@ -457,7 +539,7 @@ function McpGateways({
                   permissions={[{ resource: "team", action: "read" }]}
                 />
               )}
-              <ActiveFilterBadges />
+              <ActiveFilterBadges adminPermission={{ mcpGateway: ["admin"] }} />
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>
@@ -480,7 +562,8 @@ function McpGateways({
                     teamIdsFromUrl ||
                     authorIdsFromUrl ||
                     excludeAuthorIdsFromUrl ||
-                    labelsFromUrl,
+                    labelsFromUrl ||
+                    isDeletedView,
                 )}
                 onClearFilters={() =>
                   updateQueryParams({
@@ -490,10 +573,20 @@ function McpGateways({
                     authorIds: null,
                     excludeAuthorIds: null,
                     labels: null,
+                    status: null,
                     page: "1",
                   })
                 }
-                emptyMessage="No MCP gateways found"
+                emptyMessage={
+                  isDeletedView
+                    ? "No deleted MCP gateways found"
+                    : "No MCP gateways found"
+                }
+                filteredEmptyMessage={
+                  isDeletedView
+                    ? "No deleted MCP gateways found."
+                    : "No MCP gateways match your filters. Try adjusting your search."
+                }
               />
             </div>
 
@@ -502,20 +595,34 @@ function McpGateways({
               onOpenChange={setIsCreateDialogOpen}
               agentType="mcp_gateway"
               defaultIconType="mcp_gateway"
-              onCreated={() => {
+              onCreated={(created) => {
                 setIsCreateDialogOpen(false);
+                setPostCreateGateway(created);
+              }}
+            />
+
+            <PostCreateConnectDialog
+              created={postCreateGateway}
+              agentType="mcp_gateway"
+              onOpenChange={(open) => {
+                if (!open) setPostCreateGateway(null);
               }}
             />
 
             <AgentDialog
-              open={!!editingGateway}
-              onOpenChange={(open) => !open && setEditingGateway(null)}
-              agent={editingGateway}
-              agentType={editingGateway?.agentType || "mcp_gateway"}
+              open={!!editDialog.entity}
+              onOpenChange={(open) => !open && editDialog.close()}
+              agent={editDialog.entity}
+              agentType={editDialog.entity?.agentType || "mcp_gateway"}
               defaultIconType="mcp_gateway"
               openToolsCombobox={
                 openToolsFromUrl &&
-                editingGateway?.id === autoOpenedEditGatewayId
+                editDialog.openedFromUrl &&
+                // "All" gateways hide the tool editor (there is nothing to
+                // pick), so its search combobox would open inside a
+                // display:none subtree and render unanchored in the corner.
+                // Only auto-open the picker for Custom gateways.
+                !editDialog.entity?.accessAllTools
               }
             />
 
@@ -526,6 +633,17 @@ function McpGateways({
                 onOpenChange={(open) => !open && setDeletingGatewayId(null)}
               />
             )}
+
+            <CloneAgentDialog
+              agent={cloningGateway}
+              onOpenChange={(open) => {
+                if (!open) setCloningGateway(null);
+              }}
+              onCloned={(cloned) => {
+                // Open edit dialog for the clone so user can rename immediately
+                editDialog.open(cloned as GatewayData);
+              }}
+            />
           </div>
         </div>
       </PageLayout>

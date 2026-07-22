@@ -1,9 +1,7 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useIsAuthenticated } from "@/lib/auth/auth.hook";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const { getRoles, createRole, getRole, updateRole, deleteRole } =
   archestraApiSdk;
@@ -18,8 +16,7 @@ export const roleKeys = {
   all: ["roles"] as const,
   lists: () => [...roleKeys.all, "list"] as const,
   details: () => [...roleKeys.all, "detail"] as const,
-  detail: (id: string) => [...roleKeys.details(), id] as const,
-  custom: () => [...roleKeys.all, "custom"] as const,
+  detail: (id: string | undefined) => [...roleKeys.details(), id] as const,
 };
 
 /**
@@ -34,6 +31,7 @@ export function useRoles(params?: {
       const response = await getRoles({
         query: { limit: DEFAULT_TABLE_LIMIT, offset: 0 },
       });
+      throwOnApiError(response.error, { toastOnError: false });
       return response.data?.data ?? [];
     },
     initialData: params?.initialData,
@@ -45,6 +43,7 @@ export function useRolesPaginated(params: RolesPaginatedParams) {
     queryKey: [...roleKeys.lists(), "paginated", params],
     queryFn: async () => {
       const response = await getRoles({ query: params });
+      throwOnApiError(response.error, { toastOnError: false });
       return (
         response.data ?? {
           data: [],
@@ -65,10 +64,18 @@ export function useRolesPaginated(params: RolesPaginatedParams) {
 /**
  * Hook to fetch a specific role by ID
  */
-export function useRole(roleId: string) {
+export function useRole(roleId: string | undefined) {
   return useQuery({
     queryKey: roleKeys.detail(roleId),
-    queryFn: async () => (await getRole({ path: { roleId } })).data ?? null,
+    queryFn: async () => {
+      if (!roleId) return null;
+      const response = await getRole({ path: { roleId } });
+      throwOnApiError(response.error, {
+        allowNotFound: true,
+        toastOnError: false,
+      });
+      return response.data ?? null;
+    },
     enabled: !!roleId,
   });
 }
@@ -90,7 +97,6 @@ export function useCreateRole() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: roleKeys.custom() });
     },
   });
 }
@@ -121,7 +127,6 @@ export function useUpdateRole() {
     onSuccess: (data, variables) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: roleKeys.custom() });
       queryClient.invalidateQueries({
         queryKey: roleKeys.detail(variables.roleId),
       });
@@ -146,31 +151,6 @@ export function useDeleteRole() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: roleKeys.custom() });
     },
-  });
-}
-
-/**
- * Get custom roles for better-auth UI components
- * Filters out predefined roles and returns only custom ones
- */
-export function useCustomRoles() {
-  const userIsAuthenticated = useIsAuthenticated();
-  const { data: canReadRoles } = useHasPermissions({ ac: ["read"] });
-  return useQuery({
-    queryKey: roleKeys.custom(),
-    queryFn: async () => {
-      const { data } = await archestraApiSdk.getRoles({
-        query: { limit: DEFAULT_TABLE_LIMIT, offset: 0 },
-      });
-      const roles = data?.data ?? [];
-
-      // Filter to only custom roles (non-predefined)
-      return roles.filter((role) => !role.predefined);
-    },
-    enabled: userIsAuthenticated && !!canReadRoles,
-    retry: false,
-    throwOnError: false,
   });
 }

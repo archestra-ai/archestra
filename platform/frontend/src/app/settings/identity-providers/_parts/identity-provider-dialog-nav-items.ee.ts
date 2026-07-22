@@ -4,7 +4,15 @@ import type { IdentityProviderDialogSection } from "./identity-provider-dialog-s
 
 export function getIdentityProviderDialogNavItems(
   providerType: "oidc" | "saml",
+  options: { includeTokenDebugger?: boolean } = {},
 ): Array<{ id: IdentityProviderDialogSection; label: string }> {
+  const tokenDebuggerNavItem = options.includeTokenDebugger
+    ? ([{ id: "token-debugger", label: "Token Debugger" }] satisfies Array<{
+        id: IdentityProviderDialogSection;
+        label: string;
+      }>)
+    : [];
+
   if (providerType === "saml") {
     return [
       { id: "general", label: "SAML Settings" },
@@ -12,6 +20,7 @@ export function getIdentityProviderDialogNavItems(
       { id: "attribute-mapping", label: "Attribute Mapping" },
       { id: "role-mapping", label: "Role Mapping" },
       { id: "team-sync", label: "Team Sync" },
+      ...tokenDebuggerNavItem,
     ];
   }
 
@@ -24,5 +33,6 @@ export function getIdentityProviderDialogNavItems(
     },
     { id: "role-mapping", label: "Role Mapping" },
     { id: "team-sync", label: "Team Sync" },
+    ...tokenDebuggerNavItem,
   ];
 }

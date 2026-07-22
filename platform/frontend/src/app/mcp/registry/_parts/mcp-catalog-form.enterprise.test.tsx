@@ -1,21 +1,26 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
+import { useEnvironments } from "@/lib/environment.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDefaultEnvironment } from "@/lib/organization.query";
+import {
+  useAssignableTeams,
+  useMyTeams,
+  useTeams,
+} from "@/lib/teams/team.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
 
-const { useIdentityProvidersMock } = vi.hoisted(() => ({
-  useIdentityProvidersMock: vi.fn(() => ({ data: [] })),
-}));
-
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: vi.fn((feature: string) => {
-    if (feature === "mcpServerBaseImage") return "";
-    if (feature === "orchestratorK8sRuntime") return true;
-    if (feature === "byosEnabled") return false;
-    return undefined;
+const { useIdentityProvidersMock, useK8sImagePullSecretsMock } = vi.hoisted(
+  () => ({
+    useIdentityProvidersMock: vi.fn(() => ({ data: [] })),
+    useK8sImagePullSecretsMock: vi.fn(() => ({ data: [] })),
   }),
-  useEnterpriseFeature: vi.fn(() => false),
-}));
+);
+
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/config/config", () => ({
   default: {
@@ -25,24 +30,24 @@ vi.mock("@/lib/config/config", () => ({
   },
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: vi.fn(() => ({ data: true })),
+vi.mock("@/lib/auth/auth.query");
+
+vi.mock("@/lib/organization.query");
+
+vi.mock("@/lib/environment.query", () => ({
+  useEnvironments: vi.fn(() => ({
+    data: { environments: [], defaultAssignedCatalogCount: 0 },
+  })),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  usePresetEntityName: vi.fn(() => ({ singular: "Preset", plural: "Presets" })),
-}));
-
-vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
+vi.mock("@/lib/auth/identity-provider-read.query", () => ({
   useIdentityProviders: useIdentityProvidersMock,
 }));
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: vi.fn(() => ({ data: [] })),
-}));
+vi.mock("@/lib/teams/team.query");
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
-  useK8sImagePullSecrets: vi.fn(() => ({ data: [] })),
+  useK8sImagePullSecrets: useK8sImagePullSecretsMock,
 }));
 
 vi.mock("@/lib/secrets.query", () => ({
@@ -54,9 +59,7 @@ vi.mock("@/lib/docs/docs", () => ({
   getFrontendDocsUrl: vi.fn(() => "https://docs.example.com/mcp-auth"),
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: vi.fn(() => "Archestra"),
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/components/agent-icon-picker", () => ({
   AgentIconPicker: () => <div data-testid="agent-icon-picker" />,
@@ -85,7 +88,29 @@ describe("McpCatalogForm enterprise gating", () => {
       if (feature === "byosEnabled") return false;
       return undefined;
     });
+    vi.mocked(useEnterpriseFeature).mockReturnValue(false);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useDefaultEnvironment).mockReturnValue({
+      name: "Default",
+      namespace: null,
+      description: null,
+      networkPolicy: null,
+      restricted: false,
+    } as ReturnType<typeof useDefaultEnvironment>);
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
+    vi.mocked(useMyTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useMyTeams>);
+    vi.mocked(useAssignableTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useAssignableTeams>);
+    vi.mocked(useAppName).mockReturnValue("Archestra");
     useIdentityProvidersMock.mockReturnValue({ data: [] });
+    useK8sImagePullSecretsMock.mockReturnValue({ data: [] });
     global.ResizeObserver = class ResizeObserver {
       observe() {}
       unobserve() {}
@@ -239,35 +264,96 @@ describe("McpCatalogForm enterprise gating", () => {
       "autocomplete",
       "off",
     );
-    expect(screen.getByLabelText("Client Secret")).toHaveAttribute(
-      "autocomplete",
-      "new-password",
-    );
+    // SecretInput contract: type="text" (a password type would summon
+    // browser password managers), autofill off, extension opt-outs present
+    const clientSecret = screen.getByLabelText("Client Secret");
+    expect(clientSecret).toHaveAttribute("type", "text");
+    expect(clientSecret).toHaveAttribute("autocomplete", "off");
+    expect(clientSecret).toHaveAttribute("data-1p-ignore");
+    expect(clientSecret).toHaveAttribute("data-lpignore", "true");
+    expect(clientSecret).toHaveAttribute("data-bwignore", "true");
+    expect(clientSecret).toHaveClass("secret-masked");
+    // parity with type="password": the masked value cannot be copied out
+    expect(fireEvent.copy(clientSecret)).toBe(false);
+    expect(fireEvent.cut(clientSecret)).toBe(false);
   });
 
-  it("hides automatic tool assignment label copy when advanced tool features are disabled", () => {
+  it("shows a disabled default environment selector when no custom environments are available", () => {
+    vi.mocked(useEnvironments).mockReturnValue({
+      data: { environments: [], defaultAssignedCatalogCount: 0 },
+    } as never);
+
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
 
+    expect(screen.getByText("Environment")).toBeInTheDocument();
+    expect(screen.getAllByText("Default").length).toBeGreaterThan(0);
     expect(
-      screen.queryByText(
-        /Organize servers and drive automatic tool assignment/,
-      ),
-    ).not.toBeInTheDocument();
+      screen.getByText("Only the default environment is available."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Manage environments" }),
+    ).toHaveAttribute("href", "/settings/environments");
   });
 
-  it("shows automatic tool assignment label copy when advanced tool features are enabled", () => {
-    vi.mocked(useFeature).mockImplementation((feature: string) => {
-      if (feature === "mcpServerBaseImage") return "";
-      if (feature === "orchestratorK8sRuntime") return true;
-      if (feature === "byosEnabled") return false;
-      if (feature === "advancedToolFeaturesEnabled") return true;
-      return undefined;
+  it("labels image pull secret options by registry server", async () => {
+    useK8sImagePullSecretsMock.mockReturnValue({
+      data: [
+        {
+          name: "mcp-server-123-regcred-containerregistry-example-com-user",
+          registryServers: ["containerregistry.example.com/strangepod"],
+        },
+      ] as never,
     });
 
-    render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
+    const { container } = render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={vi.fn()}
+        initialValues={
+          {
+            id: "catalog-1",
+            name: "Local MCP",
+            description: "",
+            icon: null,
+            serverType: "local",
+            serverUrl: "",
+            oauthConfig: null,
+            userConfig: {},
+            enterpriseManagedConfig: null,
+            localConfig: {
+              command: "",
+              arguments: [],
+              environment: [],
+              envFrom: [],
+              dockerImage: "containerregistry.example.com/strangepod/server",
+              transportType: "stdio",
+              httpPort: "",
+              httpPath: "/mcp",
+              imagePullSecrets: [{ source: "existing", name: "" }],
+            },
+            deploymentSpecYaml: null,
+            scope: "personal",
+            teams: [],
+            labels: [],
+          } as never
+        }
+      />,
+    );
+
+    const imagePullSecretSelect = container.querySelector(
+      '[data-slot="popover-trigger"][role="combobox"]',
+    );
+    expect(imagePullSecretSelect).toBeInTheDocument();
+
+    await userEvent.click(imagePullSecretSelect as HTMLElement);
 
     expect(
-      screen.getByText(/Organize servers and drive automatic tool assignment/),
+      screen.getByText("containerregistry.example.com/strangepod"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "mcp-server-123-regcred-containerregistry-example-com-user",
+      ),
     ).toBeInTheDocument();
   });
 });

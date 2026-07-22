@@ -28,6 +28,28 @@ class SkillFileModel {
     return result ?? null;
   }
 
+  /** Fetch all resource files for a set of skills, grouped by skill id. */
+  static async findBySkillIds(
+    skillIds: string[],
+  ): Promise<Map<string, SkillFile[]>> {
+    const map = new Map<string, SkillFile[]>();
+    if (skillIds.length === 0) return map;
+
+    for (const id of skillIds) map.set(id, []);
+
+    const rows = await db
+      .select()
+      .from(schema.skillFilesTable)
+      .where(inArray(schema.skillFilesTable.skillId, skillIds))
+      .orderBy(asc(schema.skillFilesTable.path));
+
+    for (const row of rows) {
+      const list = map.get(row.skillId);
+      if (list) list.push(row);
+    }
+    return map;
+  }
+
   /** Count resource files per skill, keyed by skill id. */
   static async countBySkillIds(
     skillIds: string[],

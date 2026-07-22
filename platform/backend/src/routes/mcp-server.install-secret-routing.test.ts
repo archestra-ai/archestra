@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { hasPermission, userHasPermission } from "@/auth/utils";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -9,16 +10,12 @@ import type { User } from "@/types";
 
 const {
   connectAndGetToolsMock,
-  hasPermissionMock,
-  userHasPermissionMock,
   k8sStartServerMock,
   k8sRestartServerMock,
   k8sStopServerMock,
   k8sGetOrLoadDeploymentMock,
 } = vi.hoisted(() => ({
   connectAndGetToolsMock: vi.fn(),
-  hasPermissionMock: vi.fn(),
-  userHasPermissionMock: vi.fn(),
   k8sStartServerMock: vi.fn(),
   k8sRestartServerMock: vi.fn(),
   k8sStopServerMock: vi.fn(),
@@ -35,10 +32,7 @@ vi.mock("@/clients/mcp-client", () => ({
   },
 }));
 
-vi.mock("@/auth/utils", () => ({
-  hasPermission: hasPermissionMock,
-  userHasPermission: userHasPermissionMock,
-}));
+vi.mock("@/auth/utils");
 
 vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
@@ -49,6 +43,9 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
     getOrLoadDeployment: k8sGetOrLoadDeploymentMock,
   },
 }));
+
+const hasPermissionMock = vi.mocked(hasPermission);
+const userHasPermissionMock = vi.mocked(userHasPermission);
 
 /**
 THESE TESTS ARE COVERING EXISING BEHAVIOUR AND EXISTS TO MAKE SURE WE DON'T BREAK IT ACCIDENTALLY.
@@ -73,7 +70,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
     organizationId = organization.id;
     await makeMember(user.id, organization.id);
 
-    hasPermissionMock.mockResolvedValue({ success: true });
+    hasPermissionMock.mockResolvedValue({ success: true, error: null });
     userHasPermissionMock.mockResolvedValue(true);
     k8sStartServerMock.mockResolvedValue(undefined);
     k8sRestartServerMock.mockResolvedValue(undefined);
@@ -120,6 +117,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-env-secret",
         serverType: "local",
         localConfig: {
@@ -169,6 +167,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-env-plain",
         serverType: "local",
         localConfig: {
@@ -223,6 +222,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       });
 
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-env-mixed",
         serverType: "local",
         localConfigSecretId: catalogSecret.id,
@@ -278,6 +278,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-header-sensitive-local",
         serverType: "local",
         userConfig: {
@@ -320,6 +321,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-header-plain-local",
         serverType: "local",
         userConfig: {
@@ -362,6 +364,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-header-sensitive-remote",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
@@ -397,6 +400,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-header-plain-remote",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",

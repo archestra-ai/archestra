@@ -1,0 +1,93 @@
+{
+  "name": "tinyfish-io__agentql-mcp",
+  "display_name": "agentql-mcp",
+  "description": "Model Context Protocol server that integrates AgentQL's data extraction capabilities.",
+  "author": {
+    "name": "tinyfish-io"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "agentql-mcp"],
+    "env": {
+      "AGENTQL_API_KEY": "${user_config.agentql_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "agentql_api_key": {
+      "type": "string",
+      "title": "AgentQL API Key",
+      "description": "AgentQL API Key",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# AgentQL MCP Server\n\nThis is a Model Context Protocol (MCP) server that integrates [AgentQL](https://agentql.com)'s data extraction capabilities.\n\n## Features\n\n### Tools\n\n- `extract-web-data` - extract structured data from a given 'url', using 'prompt' as a description of actual data and its fields to extract.\n\n## Installation\n\nTo use AgentQL MCP Server to extract data from web pages, you need to install it via npm, get an API key from our [Dev Portal](https://dev.agentql.com), and configure it in your favorite app that supports MCP.\n\n### Install the package\n\n```bash\nnpm install -g agentql-mcp\n```\n\n### Configure Claude\n\n- Open Claude Desktop **Settings** via `⌘`+`,` (don't confuse with Claude Account Settings)\n- Go to **Developer** sidebar section\n- Click **Edit Config** and open `claude_desktop_config.json` file\n- Add `agentql` server inside `mcpServers` dictionary in the config file\n- Restart the app\n\n```json title=\"claude_desktop_config.json\"\n{\n  \"mcpServers\": {\n    \"agentql\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"agentql-mcp\"],\n      \"env\": {\n        \"AGENTQL_API_KEY\": \"YOUR_API_KEY\"\n      }\n    }\n  }\n}\n```\n\nRead more about MCP configuration in Claude [here](https://modelcontextprotocol.io/quickstart/user).\n\n### Configure VS Code\n\nFor one-click installation, click one of the install buttons below:\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=agentql&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22agentql-mcp%22%5D%2C%22env%22%3A%7B%22AGENTQL_API_KEY%22%3A%22%24%7Binput%3AapiKey%7D%22%7D%7D&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22apiKey%22%2C%22description%22%3A%22AgentQL+API+Key%22%2C%22password%22%3Atrue%7D%5D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=agentql&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22agentql-mcp%22%5D%2C%22env%22%3A%7B%22AGENTQL_API_KEY%22%3A%22%24%7Binput%3AapiKey%7D%22%7D%7D&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22apiKey%22%2C%22description%22%3A%22AgentQL+API+Key%22%2C%22password%22%3Atrue%7D%5D&quality=insiders)\n\n#### Manual Installation\n\nClick the install buttons at the top of this section for the quickest installation method. For manual installation, follow these steps:\n\nAdd the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"apiKey\",\n        \"description\": \"AgentQL API Key\",\n        \"password\": true\n      }\n    ],\n    \"servers\": {\n      \"agentql\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"agentql-mcp\"],\n        \"env\": {\n          \"AGENTQL_API_KEY\": \"${input:apiKey}\"\n        }\n      }\n    }\n  }\n}\n```\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n```json\n{\n  \"inputs\": [\n    {\n      \"type\": \"promptString\",\n      \"id\": \"apiKey\",\n      \"description\": \"AgentQL API Key\",\n      \"password\": true\n    }\n  ],\n  \"servers\": {\n    \"agentql\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"agentql-mcp\"],\n      \"env\": {\n        \"AGENTQL_API_KEY\": \"${input:apiKey}\"\n      }\n    }\n  }\n}\n```\n\n### Configure Cursor\n\n- Open **Cursor Settings**\n- Go to **MCP > MCP Servers**\n- Click **+ Add new MCP Server**\n- Enter the following:\n  - Name: \"agentql\" (or your preferred name)\n  - Type: \"command\"\n  - Command: `env AGENTQL_API_KEY=YOUR_API_KEY npx -y agentql-mcp`\n\nRead more about MCP configuration in Cursor [here](https://docs.cursor.com/context/model-context-protocol).\n\n### Configure Windsurf\n\n- Open **Windsurf: MCP Configuration Panel**\n- Click **Add custom server+**\n- Alternatively you can open `~/.codeium/windsurf/mcp_config.json` directly\n- Add `agentql` server inside `mcpServers` dictionary in the config file\n\n```json title=\"mcp_config.json\"\n{\n  \"mcpServers\": {\n    \"agentql\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"agentql-mcp\"],\n      \"env\": {\n        \"AGENTQL_API_KEY\": \"YOUR_API_KEY\"\n      }\n    }\n  }\n}\n```\n\nRead more about MCP configuration in Windsurf [here](https://docs.codeium.com/windsurf/mcp).\n\n### Validate MCP integration\n\nGive your agent a task that will require extracting data from the web. For example:\n\n```text\nExtract the list of videos from the page https://www.youtube.com/results?search_query=agentql, every video should have a title, an author name, a number of views and a url to the video. Make sure to exclude ads items. Format this as a markdown table.\n```\n\n> [!TIP]\n> In case your agent complains that it can't open urls or load content from the web instead of using AgentQL, try adding \"use tools\" or \"use agentql tool\" hint.\n\n## Development\n\nInstall dependencies:\n\n```bash\nnpm install\n```\n\nBuild the server:\n\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n\n```bash\nnpm run watch\n```\n\nIf you want to try out development version, you can use the following config instead of the default one:\n\n```json\n{\n  \"mcpServers\": {\n    \"agentql\": {\n      \"command\": \"/path/to/agentql-mcp/dist/index.js\",\n      \"env\": {\n        \"AGENTQL_API_KEY\": \"YOUR_API_KEY\"\n      }\n    }\n  }\n}\n```\n\n> [!NOTE]\n> Don't forget to remove the default AgentQL MCP server config to not confuse Claude with two similar servers.\n\n## Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nnpm run inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "agentql": {
+        "command": "npx",
+        "args": ["-y", "agentql-mcp"],
+        "env": {
+          "AGENTQL_API_KEY": "YOUR_API_KEY"
+        }
+      },
+      "agentql-dev": {
+        "command": "/path/to/agentql-mcp/dist/index.js",
+        "args": [],
+        "env": {
+          "AGENTQL_API_KEY": "YOUR_API_KEY"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tinyfish-io",
+    "repo": "agentql-mcp",
+    "url": "https://github.com/tinyfish-io/agentql-mcp",
+    "name": "agentql-mcp",
+    "path": null,
+    "stars": 96,
+    "contributors": 5,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "b15931a48e0b174c347ebd280af443384d729ad0"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:32.032Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"agentql-mcp\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Model Context Protocol (MCP) server that integrates AgentQL data extraction capabilities.\",\n  \"license\": \"MIT\",\n  \"repository\": \"https://github.com/tinyfish-io/agentql-mcp.git\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"agentql-mcp\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('dist/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector dist/index.js\",\n    \"lint\": \"eslint src\",\n    \"lint:fix\": \"npm run lint -- --fix\",\n    \"format\": \"prettier --write src\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.6.1\",\n    \"node-fetch\": \"^3.3.2\"\n  },\n  \"devDependencies\": {\n    \"@trivago/prettier-plugin-sort-imports\": \"^4.3.0\",\n    \"@types/node\": \"^20.11.24\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.4.0\",\n    \"eslint\": \"^8.57.0\",\n    \"eslint-config-prettier\": \"^9.1.0\",\n    \"prettier\": \"^3.4.2\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"agentql\",\n    \"data-extraction\",\n    \"web-scraping\",\n    \"content-extraction\"\n  ]\n}\n"
+}

@@ -1,0 +1,209 @@
+{
+  "name": "data-everything__mcp-server-templates",
+  "display_name": "mcp-server-templates",
+  "description": "A flexible platform that provides Docker & Kubernetes backends, a lightweight CLI (mcpt), and client utilities for seamless MCP integration. Spin up servers from templates, route requests through a single endpoint with load balancing, and support both deployed (HTTP) and local (stdio) transports — all with sensible defaults and YAML-based configs.",
+  "author": {
+    "name": "Data-Everything"
+  },
+  "server": {
+    "command": "mcpt",
+    "args": ["deploy", "${user_config.template_name}"],
+    "env": {
+      "GITLAB_TOKEN": "${user_config.gitlab_token}",
+      "API_KEY": "${user_config.api_key}",
+      "ALLOWED_DIRS": "${user_config.allowed_dirs}",
+      "LOG_LEVEL": "${user_config.log_level}",
+      "READ_ONLY": "${user_config.read_only}",
+      "MAX_FILE_SIZE": "${user_config.max_file_size}",
+      "READ_ONLY_MODE": "${user_config.read_only_mode}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "template_name": {
+      "type": "string",
+      "title": "Template Name",
+      "description": "The name of the MCP server template to deploy (e.g., demo, filesystem, gitlab).",
+      "required": true
+    },
+    "gitlab_token": {
+      "type": "string",
+      "title": "GitLab Token",
+      "description": "GitLab personal access token, used by the 'gitlab' template. Corresponds to the GITLAB_TOKEN environment variable.",
+      "sensitive": true,
+      "required": false
+    },
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "A generic API key for templates that require one. Corresponds to the API_KEY environment variable.",
+      "sensitive": true,
+      "required": false
+    },
+    "allowed_dirs": {
+      "type": "directory",
+      "title": "Allowed Directories",
+      "description": "Directories the server can access, used by templates like 'filesystem'.",
+      "multiple": true,
+      "required": false
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "Logging level for the deployed server (e.g., DEBUG, INFO, WARNING).",
+      "default": "INFO",
+      "required": false
+    },
+    "read_only": {
+      "type": "boolean",
+      "title": "Read Only (Filesystem)",
+      "description": "Enable read-only mode for filesystem operations.",
+      "default": false,
+      "required": false
+    },
+    "max_file_size": {
+      "type": "string",
+      "title": "Max File Size",
+      "description": "Maximum file size for operations (e.g., 100MB).",
+      "default": "100MB",
+      "required": false
+    },
+    "read_only_mode": {
+      "type": "boolean",
+      "title": "Read Only Mode (General)",
+      "description": "Enable a general read-only mode, used by templates like 'gitlab'.",
+      "default": true,
+      "required": false
+    }
+  },
+  "readme": "# 🚀 This Project Has Moved!\n\n> ## ⚠️ **IMPORTANT: This repository has been renamed and moved to [MCP Platform](https://github.com/Data-Everything/MCP-Platform)**\n>\n> **What changed:**\n> - **New Repository**: [`Data-Everything/MCP-Platform`](https://github.com/Data-Everything/MCP-Platform)\n> - **New Package**: `pip install mcp-platform` (replaces `mcp-templates`)\n> - **New CLI**: `mcpp` command (replaces `mcpt`)\n> - **Enhanced Features**: Improved architecture and expanded capabilities\n>\n> **Migration is easy:**\n> ```bash\n> # Uninstall old package\n> pip uninstall mcp-templates\n>\n> # Install new package\n> pip install mcp-platform\n>\n> # Use new command (all your configs work the same!)\n> mcpp deploy demo  # instead of mcpt deploy demo\n> ```\n>\n> **📚 [Complete Migration Guide](https://github.com/Data-Everything/MCP-Platform#migration-from-mcp-templates)** | **🆕 [New Documentation](https://data-everything.github.io/MCP-Platform/)**\n\n---\n\n# MCP Server Templates (Legacy)\n\n> **⚠️ This version is in maintenance mode. Please migrate to [MCP Platform](https://github.com/Data-Everything/MCP-Platform) for latest features and updates.**\n\n[![Version](https://img.shields.io/pypi/v/mcp-templates.svg)](https://pypi.org/project/mcp-templates/)\n[![Python Versions](https://img.shields.io/pypi/pyversions/mcp-templates.svg)](https://pypi.org/project/mcp-templates/)\n[![License](https://img.shields.io/badge/License-Elastic%202.0-blue.svg)](LICENSE)\n[![Discord](https://img.shields.io/discord/XXXXX?color=7289da&logo=discord&logoColor=white)](https://discord.gg/55Cfxe9gnr)\n\n<div align=\"center\">\n\n**� [Migrate to MCP Platform](https://github.com/Data-Everything/MCP-Platform)** • **[💬 Discord Community](https://discord.gg/55Cfxe9gnr)** • **[� Legacy Docs](#-quick-start)**\n\n</div>\n\n> **Deploy Model Context Protocol (MCP) servers in seconds, not hours.**\n\nZero-configuration deployment of production-ready MCP servers with Docker containers, comprehensive CLI tools, and intelligent caching. Focus on AI integration, not infrastructure setup.\n\n---\n\n## 🚀 Quick Start\n\n```bash\n# Install MCP Templates\npip install mcp-templates\n\n# List available templates\nmcpt list\n\n# Deploy instantly\nmcpt deploy demo\n\n# View deployment\nmcpt logs demo\n```\n\n**That's it!** Your MCP server is running at `http://localhost:8080`\n\n---\n\n## ⚡ Why MCP Templates?\n\n| Traditional MCP Setup | With MCP Templates |\n|----------------------|-------------------|\n| ❌ Complex configuration | ✅ One-command deployment |\n| ❌ Docker expertise required | ✅ Zero configuration needed |\n| ❌ Manual tool discovery | ✅ Automatic detection |\n| ❌ Environment setup headaches | ✅ Pre-built containers |\n\n**Perfect for:** AI developers, data scientists, DevOps teams building with MCP.\n\n---\n\n## 🌟 Key Features\n\n### 🖱️ **One-Click Deployment**\nDeploy MCP servers instantly with pre-built templates—no Docker knowledge required.\n\n### 🔍 **Smart Tool Discovery**\nAutomatically finds and showcases every tool your server offers.\n\n### 🧠 **Intelligent Caching**\n6-hour template caching with automatic invalidation for lightning-fast operations.\n\n### 💻 **Powerful CLI**\nComprehensive command-line interface for deployment, management, and tool execution.\n\n### 🛠️ **Flexible Configuration**\nConfigure via JSON, YAML, environment variables, CLI options, or override parameters.\n\n### 📦 **Growing Template Library**\nReady-to-use templates for common use cases: filesystem, databases, APIs, and more.\n\n---\n\n## 📚 Installation\n\n### PyPI (Recommended)\n```bash\npip install mcp-templates\n```\n\n### Docker\n```bash\ndocker run --privileged -it dataeverything/mcp-server-templates:latest deploy demo\n```\n\n### From Source\n```bash\ngit clone https://github.com/DataEverything/mcp-server-templates.git\ncd mcp-server-templates\npip install -r requirements.txt\n```\n\n---\n\n## 🎯 Common Use Cases\n\n### Deploy with Custom Configuration\n```bash\n# Basic deployment\nmcpt deploy filesystem --config allowed_dirs=\"/path/to/data\"\n\n# Advanced overrides\nmcpt deploy demo --override metadata__version=2.0 --transport http\n```\n\n### Manage Deployments\n```bash\n# List all deployments\nmcpt list --deployed\n\n# Stop a deployment\nmcpt stop demo\n\n# View logs\nmcpt logs demo --follow\n```\n\n### Template Development\n```bash\n# Create new template\nmcpt create my-template\n\n# Test locally\nmcpt deploy my-template --backend mock\n```\n\n---\n\n## 🏗️ Architecture\n\n```\n┌─────────────┐    ┌───────────────────┐    ┌─────────────────────┐\n│  CLI Tool   │───▶│ DeploymentManager │───▶│ Backend (Docker)    │\n│  (mcpt)     │    │                   │    │                     │\n└─────────────┘    └───────────────────┘    └─────────────────────┘\n       │                      │                        │\n       ▼                      ▼                        ▼\n┌─────────────┐    ┌───────────────────┐    ┌─────────────────────┐\n│ Template    │    │ CacheManager      │    │ Container Instance  │\n│ Discovery   │    │ (6hr TTL)         │    │                     │\n└─────────────┘    └───────────────────┘    └─────────────────────┘\n```\n\n**Configuration Flow:** Template Defaults → Config File → CLI Options → Environment Variables\n\n---\n\n## 📦 Available Templates\n\n| Template | Description | Transport | Use Case |\n|----------|-------------|-----------|----------|\n| **demo** | Hello world MCP server | HTTP, stdio | Testing & learning |\n| **filesystem** | Secure file operations | stdio | File management |\n| **gitlab** | GitLab API integration | stdio | CI/CD workflows |\n| **github** | GitHub API integration | stdio | Development workflows |\n| **zendesk** | Customer support tools | HTTP, stdio | Support automation |\n\n[View all templates →](https://data-everything.github.io/mcp-server-templates/server-templates/)\n\n---\n\n## 🛠️ Configuration Examples\n\n### Basic Configuration\n```bash\nmcpt deploy filesystem --config allowed_dirs=\"/home/user/data\"\n```\n\n### Advanced Configuration\n```bash\nmcpt deploy gitlab \\\n  --config gitlab_token=\"$GITLAB_TOKEN\" \\\n  --config read_only_mode=true \\\n  --override metadata__version=1.2.0 \\\n  --transport stdio\n```\n\n### Configuration File\n```json\n{\n  \"allowed_dirs\": \"/home/user/projects\",\n  \"log_level\": \"DEBUG\",\n  \"security\": {\n    \"read_only\": false,\n    \"max_file_size\": \"100MB\"\n  }\n}\n```\n\n```bash\nmcpt deploy filesystem --config-file myconfig.json\n```\n\n---\n\n## 🔧 Template Development\n\n### Creating Templates\n\n1. **Use the generator**:\n   ```bash\n   mcpt create my-template\n   ```\n\n2. **Define template.json**:\n   ```json\n   {\n     \"name\": \"My Template\",\n     \"description\": \"Custom MCP server\",\n     \"docker_image\": \"my-org/my-mcp-server\",\n     \"transport\": {\n       \"default\": \"stdio\",\n       \"supported\": [\"stdio\", \"http\"]\n     },\n     \"config_schema\": {\n       \"type\": \"object\",\n       \"properties\": {\n         \"api_key\": {\n           \"type\": \"string\",\n           \"env_mapping\": \"API_KEY\",\n           \"sensitive\": true\n         }\n       }\n     }\n   }\n   ```\n\n3. **Test and deploy**:\n   ```bash\n   mcpt deploy my-template --backend mock\n   ```\n\n[Full template development guide →](https://data-everything.github.io/mcp-server-templates/templates/creating/)\n\n---\n\n## � Migration to MCP Platform\n\n**This repository has evolved into MCP Platform with enhanced features and better architecture.**\n\n### Why We Moved\n\n1. **Better Naming**: \"MCP Platform\" better reflects the comprehensive nature of the project\n2. **Enhanced Architecture**: Improved codebase structure and performance\n3. **Expanded Features**: More deployment options, better tooling, enhanced templates\n4. **Future Growth**: Better positioned for upcoming MCP ecosystem developments\n\n### What Stays the Same\n\n- ✅ All your existing configurations work unchanged\n- ✅ Same Docker images and templates\n- ✅ Same deployment workflows\n- ✅ Full backward compatibility during transition\n\n### Migration Steps\n\n1. **Install new package:**\n   ```bash\n   pip uninstall mcp-templates\n   pip install mcp-platform\n   ```\n\n2. **Update commands:**\n   ```bash\n   # Old command\n   mcpt deploy demo\n\n   # New command (everything else identical)\n   mcpp deploy demo\n   ```\n\n3. **Update documentation bookmarks:**\n   - New docs: https://data-everything.github.io/MCP-Platform/\n   - New repository: https://github.com/Data-Everything/MCP-Platform\n\n### Support Timeline\n\n- **Current (Legacy) Package**: Security updates only through 2025\n- **New Platform**: Active development, new features, full support\n- **Migration Support**: Available through Discord and GitHub issues\n\n**🚀 [Start your migration now →](https://github.com/Data-Everything/MCP-Platform)**\n\n---\n\n## �📖 Documentation (Legacy)\n\n- **[Getting Started](https://data-everything.github.io/mcp-server-templates/getting-started/)** - Installation and first deployment\n- **[CLI Reference](https://data-everything.github.io/mcp-server-templates/cli/)** - Complete command documentation\n- **[Template Guide](https://data-everything.github.io/mcp-server-templates/templates/)** - Creating and configuring templates\n- **[User Guide](https://data-everything.github.io/mcp-server-templates/user-guide/)** - Advanced usage and best practices\n\n---\n\n## 🤝 Community\n\n- **[Discord Server](https://discord.gg/55Cfxe9gnr)** - Get help and discuss features\n- **[GitHub Issues](https://github.com/DataEverything/mcp-server-templates/issues)** - Report bugs and request features\n- **[Discussions](https://github.com/DataEverything/mcp-server-templates/discussions)** - Share templates and use cases\n\n---\n\n## 📝 License\n\nThis project is licensed under the [Elastic License 2.0](LICENSE).\n\n---\n\n## 🙏 Acknowledgments\n\nBuilt with ❤️ for the MCP community. Thanks to all contributors and template creators!\n",
+  "category": "Development",
+  "quality_score": 74,
+  "archestra_config": {
+    "client_config_permutations": {
+      "dataeverything-mcp-file-server-docker": {
+        "command": "mcp-template",
+        "args": ["deploy", "file-server"],
+        "env": {}
+      },
+      "dataeverything-mcp-file-server-docker-configured": {
+        "command": "mcp-template",
+        "args": [
+          "deploy",
+          "file-server",
+          "--config",
+          "read_only_mode=true",
+          "--config",
+          "max_file_size=50",
+          "--config",
+          "log_level=debug"
+        ],
+        "env": {
+          "MCP_READ_ONLY": "true",
+          "MCP_LOG_LEVEL": "debug"
+        }
+      },
+      "dataeverything-mcp-file-server-docker-overridden": {
+        "command": "mcp-template",
+        "args": ["deploy", "file-server", "--override", "metadata__description=Custom file server"],
+        "env": {}
+      },
+      "dataeverything-mcp-file-server-docker-env": {
+        "command": "mcp-template",
+        "args": [
+          "deploy",
+          "file-server",
+          "--env",
+          "MCP_READ_ONLY=true",
+          "--env",
+          "MCP_MAX_FILE_SIZE=50",
+          "--env",
+          "MCP_LOG_LEVEL=debug"
+        ],
+        "env": {
+          "MCP_READ_ONLY": "true",
+          "MCP_LOG_LEVEL": "debug"
+        }
+      },
+      "dataeverything-mcp-file-server-docker-with-config-file": {
+        "command": "mcp-template",
+        "args": ["deploy", "file-server", "--config-file", "./config.json"],
+        "env": {}
+      },
+      "dataeverything-mcp-file-server-docker-mixed-config": {
+        "command": "mcp-template",
+        "args": [
+          "deploy",
+          "file-server",
+          "--config-file",
+          "./base-config.json",
+          "--config",
+          "log_level=warning",
+          "--override",
+          "metadata__version=1.5.0",
+          "--env",
+          "MCP_READ_ONLY=true"
+        ],
+        "env": {
+          "MCP_READ_ONLY": "true",
+          "MCP_LOG_LEVEL": "warning"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Data-Everything",
+    "repo": "mcp-server-templates",
+    "url": "https://github.com/Data-Everything/mcp-server-templates",
+    "name": "data-everything__mcp-server-templates",
+    "path": null,
+    "stars": 5,
+    "contributors": 4,
+    "issues": 6,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e32c1ce5adb37b8a90196717a7f816eb6caceea1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:11.288Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "rich",
+      "importance": 7
+    },
+    {
+      "name": "pyyaml",
+      "importance": 8
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\", \"setuptools_scm\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"mcp-templates\"\ndynamic = [\"version\"]\ndescription = \"DEPRECATED: This package has moved to 'mcp-platform'. Please install 'pip install mcp-platform' instead. MCP-Server-Templates: Easy, zero-config deployment for Model Context Protocol servers\"\nreadme = \"README.md\"\nauthors = [\n    { name = \"Sam Arora\", email = \"tooling@dataeverything.com\" },\n]\nlicense = \"Elastic-2.0\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"rich>=13.0.0\",\n    \"pyyaml>=6.0\",\n    \"requests>=2.25.1\",\n    \"cmd2==2.7\",\n    \"aiohttp>=3.8.0\",\n    \"setuptools_scm>=8.3.1\",\n    \"typer>=0.16.0\",\n    \"kubernetes>=33.1.0\",\n]\nkeywords = [\"MCP\", \"Model Context Protocol\", \"AI Tools\", \"Server Templates\", \"Docker\", \"Kubernetes\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"Operating System :: OS Independent\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Programming Language :: Python :: 3.13\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n    \"Topic :: System :: Systems Administration\",\n]\n\n[project.urls]\nBug-Reports = \"https://github.com/Data-Everything/mcp-server-templates/issues\"\nSource = \"https://github.com/Data-Everything/mcp-server-templates\"\nDocumentation = \"https://data-everything.github.io/mcp-server-templates\"\nIssue-Tracker = \"https://github.com/Data-Everything/mcp-server-templates/issues\"\n\n[project.scripts]\nmcp-template = \"mcp_template:main\"\nmcpt = \"mcp_template:main\"\n\n[tool.setuptools]\ninclude-package-data = true\n\n\n[tool.setuptools.packages.find]\nwhere = [\".\"]\nexclude = [\n    \"test\",\n    \"tests\",\n    \"test_*\",\n    \"*/test\",\n    \"*/tests\",\n    \"*/test_*\",\n]\n\n[tool.setuptools.package-data]\n# Include all .yaml, .yml, .json, .py files from mcp_template/template/templates and subdirectories\n\"mcp_template.template.templates\" = [\"**/*.yaml\", \"**/*.yml\", \"**/*.json\", \"**/*.py\"]\n\n[tool.setuptools.dynamic]\n\n[tool.setuptools_scm]\nversion_scheme = \"release-branch-semver\"\nfallback_version = \"0.3.0\"\nlocal_scheme = \"no-local-version\"\ntag_regex = \"^release-pypi-(?P<version>[0-9]+\\\\.[0-9]+\\\\.[0-9]+)$\"\n\n\n=== requirements.txt ===\nrich>=13.0.0\npyyaml\nfastmcp>=2.10.0\nrequests>=2.25.0\ncmd2==2.7\nsetuptools_scm>=8.3.1\naiohttp>=3.8.0\ntyper>=0.16.0\nkubernetes>=33.1.0\ntenacity>=9.1.2\n"
+}

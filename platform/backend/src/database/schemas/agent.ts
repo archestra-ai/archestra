@@ -1,10 +1,9 @@
-import type { IncomingEmailSecurityMode } from "@shared";
+import type { IncomingEmailSecurityMode } from "@archestra/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
   index,
   jsonb,
-  pgTable,
   text,
   timestamp,
   uniqueIndex,
@@ -14,12 +13,13 @@ import type {
   AgentScope,
   AgentType,
   BuiltInAgentConfig,
-  ToolAssignmentMode,
   ToolExposureMode,
 } from "@/types/agent";
+import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
 /**
@@ -41,7 +41,7 @@ import usersTable from "./user";
  *   - Can delegate to other internal agents via delegation tools
  *   - Can be triggered by ChatOps providers
  */
-const agentsTable = pgTable(
+const agentsTable = softDeletablePgTable(
   "agents",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -54,6 +54,7 @@ const agentsTable = pgTable(
     slug: text("slug"),
     isDefault: boolean("is_default").notNull().default(false),
     isPersonalGateway: boolean("is_personal_gateway").notNull().default(false),
+    isPersonalProxy: boolean("is_personal_proxy").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
       .default(false),
@@ -104,6 +105,24 @@ const agentsTable = pgTable(
       { onDelete: "set null" },
     ),
 
+    /**
+     * Optional Environment whose runtime + egress NetworkPolicy this agent's
+     * code sandbox runs under. Null = the shared/default runtime. The agent's
+     * Dagger engine is provisioned per-environment and inherits the
+     * environment's `networkPolicy` (same machinery as MCP server pods).
+     * ON DELETE SET NULL — deleting an environment falls the agent back to the
+     * default runtime rather than orphaning it.
+     *
+     * The FK is referential only; it does NOT encode org ownership, so the write
+     * path that sets `agents.environment_id` validates the environment belongs to
+     * the agent's organization (via `EnvironmentModel.findByIdForOrganization`)
+     * to prevent cross-tenant binding.
+     */
+    environmentId: uuid("environment_id").references(
+      () => environmentsTable.id,
+      { onDelete: "set null" },
+    ),
+
     /** Allowlist of HTTP header names to forward from gateway requests to downstream MCP servers */
     passthroughHeaders: text("passthrough_headers").array(),
 
@@ -113,11 +132,28 @@ const agentsTable = pgTable(
       .notNull()
       .default("full"),
 
-    /** Whether tools are assigned manually by an admin or automatically derived from catalog labels for MCP gateways */
-    toolAssignmentMode: text("tool_assignment_mode")
-      .$type<ToolAssignmentMode>()
+    /**
+     * "Auto" tool mode (vs "Custom"): whether search_tools/run_tool may
+     * dynamically discover and run tools the calling user can access (MCP
+     * catalog tools and knowledge sources) beyond the agent's assigned set.
+     * Nothing is assigned to the agent; the MCP server's default-credential
+     * policy decides which credential each call uses. This per-agent flag is
+     * the sole gate for dynamic tool access.
+     */
+    accessAllTools: boolean("access_all_tools").notNull().default(false),
+
+    /**
+     * "Auto" subagent mode (vs "Custom"): whether this agent may delegate to
+     * any internal agent the *calling user* can access (team/scope visibility),
+     * beyond the explicitly-configured delegation targets. Mirrors
+     * `accessAllTools` for agent-to-agent delegation. When on, delegation
+     * targets are resolved dynamically per caller (minus `agent_excluded_subagents`);
+     * when off, only explicitly-assigned delegation tools are exposed. This
+     * per-agent flag is the sole gate for dynamic subagent access.
+     */
+    accessAllSubagents: boolean("access_all_subagents")
       .notNull()
-      .default("manual"),
+      .default(false),
 
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(
@@ -138,16 +174,22 @@ const agentsTable = pgTable(
   (table) => [
     uniqueIndex("agents_slug_idx")
       .on(table.slug)
-      .where(sql`${table.slug} IS NOT NULL`),
+      .where(sql`${table.slug} IS NOT NULL AND ${table.deletedAt} IS NULL`),
     index("agents_organization_id_idx").on(table.organizationId),
     index("agents_agent_type_idx").on(table.agentType),
     index("agents_identity_provider_id_idx").on(table.identityProviderId),
+    index("agents_environment_id_idx").on(table.environmentId),
     index("agents_author_id_idx").on(table.authorId),
     index("agents_scope_idx").on(table.scope),
     uniqueIndex("agents_personal_gateway_per_member_idx")
       .on(table.organizationId, table.authorId)
       .where(
-        sql`${table.agentType} = 'mcp_gateway' AND ${table.isPersonalGateway} = true`,
+        sql`${table.agentType} = 'mcp_gateway' AND ${table.isPersonalGateway} = true AND ${table.deletedAt} IS NULL`,
+      ),
+    uniqueIndex("agents_personal_proxy_per_member_idx")
+      .on(table.organizationId, table.authorId)
+      .where(
+        sql`${table.agentType} = 'llm_proxy' AND ${table.isPersonalProxy} = true AND ${table.deletedAt} IS NULL`,
       ),
   ],
 );

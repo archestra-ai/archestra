@@ -10,6 +10,7 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretInput } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -18,7 +19,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
-import { usePresetEntityName } from "@/lib/organization.query";
 
 export interface HeaderDraft {
   headerName: string;
@@ -29,12 +29,8 @@ export interface HeaderDraft {
   includeBearerPrefix: boolean;
   /**
    * When true, the value is treated as credential material:
-   *   - Per-preset (`scope === "preset"`): persisted into the catalog row's
-   *     `preset_secret_id` bag instead of the plaintext
-   *     `preset_field_values` jsonb.
    *   - Per-installation (`scope === "installation"`): the value input is
-   *     masked in install dialogs (storage already goes to the install's
-   *     secret bag for either flag value).
+   *     masked in install dialogs (storage goes to the install's secret bag).
    *   - Static: server-side validator rejects `sensitive: true` because the
    *     value lives in `userConfig.default` plaintext.
    */
@@ -50,6 +46,12 @@ interface HeaderDialogProps {
   existingHeaderNames: string[];
   disableInstallation?: boolean;
   disableInstallationReason?: string;
+  /**
+   * Optional validator for a static header value (e.g. an environment's
+   * allowlist regex). Returns an error message to show under the value input
+   * and block confirm, or null when the value is allowed.
+   */
+  validateValue?: (value: string) => string | null;
   onClose: () => void;
   onConfirm: (draft: HeaderDraft) => void;
 }
@@ -71,10 +73,10 @@ export function HeaderDialog({
   existingHeaderNames,
   disableInstallation = false,
   disableInstallationReason,
+  validateValue,
   onClose,
   onConfirm,
 }: HeaderDialogProps) {
-  const { singular } = usePresetEntityName();
   const [draft, setDraft] = useState<HeaderDraft>(initial ?? EMPTY_DRAFT);
 
   useEffect(() => {
@@ -91,9 +93,17 @@ export function HeaderDialog({
   }, [existingHeaderNames, trimmedName]);
 
   const valueRequired = draft.scope === "static";
+  // A static header value persists as userConfig.default plaintext, so apply the
+  // environment's allowlist rule to it. Installation-scope values are entered at
+  // install time (validated there).
+  const valueError =
+    validateValue && draft.scope === "static" && draft.value.length > 0
+      ? validateValue(draft.value)
+      : null;
   const canSubmit =
     trimmedName.length > 0 &&
     !duplicate &&
+    !valueError &&
     (!valueRequired || draft.value.trim().length > 0);
 
   function updateDraft(patch: Partial<HeaderDraft>) {
@@ -184,24 +194,21 @@ export function HeaderDialog({
             }
           />
         )}
-        {draft.scope === "preset" && (
-          <ScopeCallout
-            title={`An admin sets this for each ${singular}`}
-            body={`Each ${singular} that uses this server supplies its own value.`}
-          />
-        )}
         {draft.scope === "static" && (
           <div className="space-y-2">
             <Label htmlFor="header-value">Value</Label>
-            <Input
+            <SecretInput
               id="header-value"
-              type={draft.sensitive ? "password" : "text"}
+              masked={draft.sensitive}
               value={draft.value}
               onChange={(e) => updateDraft({ value: e.target.value })}
               placeholder="header value"
               className="font-mono"
-              autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+              aria-invalid={valueError ? true : undefined}
             />
+            {valueError && (
+              <p className="text-xs text-destructive">{valueError}</p>
+            )}
           </div>
         )}
 
@@ -237,14 +244,14 @@ export function HeaderDialog({
           title="Sensitive value"
           body={
             draft.scope === "static"
-              ? `Only available for Installation and ${singular} headers. Static headers are always non-sensitive.`
+              ? "Only available for Installation headers. Static headers are always non-sensitive."
               : "Store this value securely. Use for API tokens, credentials, and other secrets."
           }
           checked={draft.sensitive}
           onChange={(sensitive) => updateDraft({ sensitive })}
           ariaLabel="Sensitive header value"
           disabled={draft.scope === "static"}
-          disabledReason={`Static headers are always non-sensitive. Use Installation or ${singular} scope for secrets.`}
+          disabledReason="Static headers are always non-sensitive. Use Installation scope for secrets."
         />
 
         <div className="space-y-2">

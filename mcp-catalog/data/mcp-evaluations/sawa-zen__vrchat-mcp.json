@@ -1,0 +1,123 @@
+{
+  "name": "sawa-zen__vrchat-mcp",
+  "display_name": "vrchat-mcp",
+  "description": "This project is a Model Context Protocol (MCP) server for interacting with the VRChat API.",
+  "author": {
+    "name": "sawa-zen"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["vrchat-mcp"],
+    "env": {
+      "VRCHAT_USERNAME": "${user_config.vrchat_username}",
+      "VRCHAT_AUTH_TOKEN": "${user_config.vrchat_auth_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "vrchat_username": {
+      "type": "string",
+      "title": "VRChat Username",
+      "description": "Your VRChat account username.",
+      "sensitive": false,
+      "required": true
+    },
+    "vrchat_auth_token": {
+      "type": "string",
+      "title": "VRChat Auth Token",
+      "description": "Your VRChat authentication token. Please handle it with care as it has a very long lifetime.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "![VRChat MCP](./eyecatch.jpg)\n\n[![npm version](https://badge.fury.io/js/vrchat-mcp.svg)](https://badge.fury.io/js/vrchat-mcp) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\n[日本語](./README.ja.md) | [한국어](./README.ko.md)\n\nThis project is a Model Context Protocol (MCP) server for interacting with the VRChat API. It allows you to retrieve various information from VRChat using a standardized protocol.\n\n<a href=\"https://youtu.be/0MRxhzlFCkw\">\n  <img width=\"300\" src=\"https://github.com/user-attachments/assets/85c00cc4-46b3-4f66-ab36-bf2891fdb283\" alt=\"YouTube\" />\n</a>\n\n<a href=\"https://glama.ai/mcp/servers/u763zoyi5a\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/u763zoyi5a/badge\" />\n</a>\n\n## Overview\n\nThe VRChat MCP server provides a way to access VRChat's API endpoints in a structured manner. It supports a wide range of functionalities, including user authentication, retrieving user and friend information, accessing avatar and world data, and more.\n\n## Usage\n\nTo start the server, ensure you have the necessary environment variables set:\n\n```bash\nexport VRCHAT_USERNAME=your_username\nexport VRCHAT_AUTH_TOKEN=your_auth_token\n```\n\n> [!NOTE]\n> #### How to obtain AUTH TOKEN\n>\n> You can use the following command to login and obtain an auth token:\n> ```\n> $ npx vrchat-auth-token-checker\n>\n> VRChat Username: your-username\n> Password: ********\n>\n> # If 2FA is enabled\n> 2FA Code: 123456\n>\n> # Success output\n> Auth Token: authcookie-xxxxx\n> ```\n> [Command source code](https://github.com/sawa-zen/vrchat-auth-token-checker)\n>\n> **Please handle the obtained token with care as it has a very long lifetime**\n\nThen, run the following command:\n\n```bash\nnpx vrchat-mcp\n```\n\nThis will launch the MCP server, allowing you to interact with the VRChat API through the defined tools.\n\n## Usage with Claude Desktop\n\nTo use this MCP server with Claude Desktop, you do not need to run `npx vrchat-mcp` manually. Instead, add the following configuration to your Claude Desktop config file:\n\n- MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"vrchat-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"vrchat-mcp\"],\n      \"env\": {\n        \"VRCHAT_USERNAME\": \"your-username\",\n        \"VRCHAT_AUTH_TOKEN\": \"your-auth-token\"\n      }\n    }\n  }\n}\n```\n\nThen, start Claude Desktop as usual. If you have to use nodenv or nvm, you may need to specify the full path to the `npx` command.\n\n## Available Tools\n\nThis Model Context Protocol server provides the following VRChat-related tools:\n\n### User Related\n- vrchat_get_friends_list: Get a list of friends\n- vrchat_send_friend_request: Send a friend request\n\n### Avatar Related\n- vrchat_search_avatars: Search for avatars\n- vrchat_select_avatar: Select and switch to a specific avatar\n\n### World Related\n- vrchat_search_worlds: Search for worlds\n- vrchat_list_favorited_worlds: Get a list of favorited worlds\n\n### Instance Related\n- vrchat_create_instance: Create a new instance\n- vrchat_get_instance: Get information about a specific instance\n\n### Group Related\n- vrchat_search_groups: Search for groups\n- vrchat_join_group: Join a group\n\n### Favorites Related\n- vrchat_list_favorites: Get a list of favorites\n- vrchat_add_favorite: Add a new favorite\n- vrchat_list_favorite_groups: Get a list of favorite groups\n\n### Invite Related\n- vrchat_list_invite_messages: Get a list of invite messages\n- vrchat_request_invite: Request an invite\n- vrchat_get_invite_message: Get a specific invite message\n\n### Notification Related\n- vrchat_get_notifications: Get a list of notifications\n\n## Debugging\n\nFirst, build the project:\n\n```bash\nnpm install\nnpm run build\n```\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging experience, we strongly recommend using the MCP Inspector.\n\nYou can launch the MCP Inspector via npm with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector \"./dist/main.js\"\n```\n\nBe sure that environment variables are properly configured.\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n\n## Publishing\n\nTo publish a new version of the package, follow these steps:\n\n1. Pull the latest code from the main branch\n   ```bash\n   git checkout main\n   git pull origin main\n   ```\n\n2. Build the package\n   ```bash\n   npm run build\n   ```\n\n4. Publish to npm\n   ```bash\n   npm publish\n   ```\n\n5. Push changes to the remote repository\n   ```bash\n   git push origin main --tags\n   ```\n\n## Contributing\n\nContributions are welcome! Please fork the repository and submit a pull request for any improvements or bug fixes.\n\n## License\n\nThis project is licensed under the MIT License. See the LICENSE file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "vrchat-mcp": {
+        "command": "npx",
+        "args": ["vrchat-mcp"],
+        "env": {
+          "VRCHAT_USERNAME": "your_username",
+          "VRCHAT_AUTH_TOKEN": "your_auth_token"
+        }
+      },
+      "vrchat-mcp-configured": {
+        "command": "npx",
+        "args": ["vrchat-mcp"],
+        "env": {
+          "VRCHAT_USERNAME": "your-username",
+          "VRCHAT_AUTH_TOKEN": "your-auth-token"
+        }
+      },
+      "vrchat-mcp-stdio": {
+        "command": "node",
+        "args": ["./dist/main.js"],
+        "env": {
+          "VRCHAT_USERNAME": "your_username",
+          "VRCHAT_AUTH_TOKEN": "your_auth_token"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sawa-zen",
+    "repo": "vrchat-mcp",
+    "url": "https://github.com/sawa-zen/vrchat-mcp",
+    "name": "sawa-zen__vrchat-mcp",
+    "path": null,
+    "stars": 43,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "d520aa5776e50e650800037bcf8cd2c3e4425e87"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:23.768Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "otplib",
+      "importance": 8
+    },
+    {
+      "name": "vrchat",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"vrchat-mcp\",\n  \"version\": \"0.15.0\",\n  \"description\": \"VRChat MCP Server - Access VRChat API through Model Context Protocol\",\n  \"type\": \"module\",\n  \"main\": \"dist/main.js\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/sawa-zen/vrchat-mcp.git\"\n  },\n  \"homepage\": \"https://github.com/sawa-zen/vrchat-mcp#readme\",\n  \"bugs\": {\n    \"url\": \"https://github.com/sawa-zen/vrchat-mcp/issues\"\n  },\n  \"keywords\": [\n    \"vrchat\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"api\",\n    \"claude\"\n  ],\n  \"author\": \"sawa-zen\",\n  \"license\": \"MIT\",\n  \"files\": [\n    \"dist\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"bin\": {\n    \"vrchat-mcp\": \"dist/main.js\"\n  },\n  \"scripts\": {\n    \"prepare\": \"npm run build\",\n    \"build\": \"tsc && chmod +x dist/main.js\",\n    \"start\": \"node dist/main.js\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector node dist/main.js\",\n    \"dev\": \"tsc -w\",\n    \"lint\": \"eslint .\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"dotenv\": \"^16.0.3\",\n    \"otplib\": \"^12.0.1\",\n    \"vrchat\": \"^1.10.1\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.22.0\",\n    \"@types/node\": \"^18.15.11\",\n    \"eslint\": \"^9.22.0\",\n    \"typescript\": \"^5.8.2\",\n    \"typescript-eslint\": \"^8.26.1\"\n  }\n}\n"
+}

@@ -1,0 +1,117 @@
+{
+  "name": "jinzcdev__markmap-mcp-server",
+  "display_name": "markmap-mcp-server",
+  "description": "An MCP server for converting Markdown to interactive mind maps with export support (PNG/JPG/SVG).",
+  "author": {
+    "name": "jinzcdev"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@jinzcdev/markmap-mcp-server"],
+    "env": {
+      "MARKMAP_DIR": "${user_config.markmap_dir}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "markmap_dir": {
+      "type": "directory",
+      "title": "Markmap Output Directory",
+      "description": "Specify the directory where generated mind maps will be saved. If not set, the server defaults to the system's temporary directory.",
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "readme": "# Markmap MCP Server\n\n![Sample Mindmap](./docs/markmap.svg)\n\n[![NPM Version](https://img.shields.io/npm/v/@jinzcdev/markmap-mcp-server.svg)](https://www.npmjs.com/package/@jinzcdev/markmap-mcp-server)\n[![GitHub License](https://img.shields.io/github/license/jinzcdev/markmap-mcp-server.svg)](LICENSE)\n[![Smithery Badge](https://smithery.ai/badge/@jinzcdev/markmap-mcp-server)](https://smithery.ai/server/@jinzcdev/markmap-mcp-server)\n[![中文文档](https://img.shields.io/badge/中文文档-点击查看-blue)](README_zh-CN.md)\n[![Stars](https://img.shields.io/github/stars/jinzcdev/markmap-mcp-server)](https://github.com/jinzcdev/markmap-mcp-server)\n\nMarkmap MCP Server is based on the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) that allows one-click conversion of Markdown text to interactive mind maps, built on the open source project [markmap](https://github.com/markmap/markmap). The generated mind maps support rich interactive operations and can be exported in various image formats.\n\n> 🎉 **Explore More Mind Mapping Tools**\n>\n> Try [MarkXMind](https://github.com/jinzcdev/markxmind) - An online editor that creates complex mind maps using simple XMindMark syntax. It supports real-time preview, multi-format export (.xmind/.svg/.png), importing existing XMind files. [Try it now](https://markxmind.js.org/)!\n\n## Features\n\n- 🌠 **Markdown to Mind Map**: Convert Markdown text to interactive mind maps\n- 🖼️ **Multi-format Export**: Support for exporting as PNG, JPG, and SVG images\n- 🔄 **Interactive Operations**: Support for zooming, expanding/collapsing nodes, and other interactive features\n- 📋 **Markdown Copy**: One-click copy of the original Markdown content\n- 🌐 **Automatic Browser Preview**: Option to automatically open generated mind maps in the browser\n\n## Prerequisites\n\n1. Node.js (v20 or above)\n\n## Installation\n\n### Installing via Smithery\n\nTo install Markmap MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@jinzcdev/markmap-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @jinzcdev/markmap-mcp-server --client claude\n```\n\n### Manual Installation\n\n```bash\n# Install from npm\nnpm install @jinzcdev/markmap-mcp-server -g\n\n# Basic run\nnpx -y @jinzcdev/markmap-mcp-server\n\n# Specify output directory\nnpx -y @jinzcdev/markmap-mcp-server --output /path/to/output/directory\n```\n\nAlternatively, you can clone the repository and run locally:\n\n```bash\n# Clone the repository\ngit clone https://github.com/jinzcdev/markmap-mcp-server.git\n\n# Navigate to the project directory\ncd markmap-mcp-server\n\n# Build project\nnpm install && npm run build\n\n# Run the server\nnode build/index.js\n```\n\n## Usage\n\nAdd the following configuration to your MCP client configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"markmap\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@jinzcdev/markmap-mcp-server\"],\n      \"env\": {\n        \"MARKMAP_DIR\": \"/path/to/output/directory\"\n      }\n    }\n  }\n}\n```\n\n> [!TIP]\n>\n> The service supports the following environment variables:\n>\n> - `MARKMAP_DIR`: Specify the output directory for mind maps (optional, defaults to system temp directory)\n>\n> **Priority Note**:\n>\n> When both the `--output` command line argument and the `MARKMAP_DIR` environment variable are specified, the command line argument takes precedence.\n\n## Available Tools\n\n### markdown-to-mindmap\n\nConvert Markdown text into an interactive mind map.\n\n**Parameters:**\n\n- `markdown`: The Markdown content to convert (required string)\n- `open`: Whether to automatically open the generated mind map in the browser (optional boolean, default is false)\n\n**Return Value:**\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"JSON_DATA_OF_MINDMAP_FILEPATH\"\n    }\n  ]\n}\n```\n\n## License\n\nThis project is licensed under the [MIT](./LICENSE) License.\n",
+  "category": "Development",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "jinzcdev-markmap-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "@jinzcdev/markmap-mcp-server"],
+        "env": {}
+      },
+      "jinzcdev-markmap-mcp-server-with-output": {
+        "command": "npx",
+        "args": ["-y", "@jinzcdev/markmap-mcp-server", "--output", "/path/to/output/directory"],
+        "env": {}
+      },
+      "jinzcdev-markmap-mcp-server-stdio": {
+        "command": "npx",
+        "args": ["-y", "@jinzcdev/markmap-mcp-server"],
+        "env": {
+          "MARKMAP_DIR": "/path/to/output/directory"
+        }
+      },
+      "jinzcdev-markmap-mcp-server-local": {
+        "command": "node",
+        "args": ["build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jinzcdev",
+    "repo": "markmap-mcp-server",
+    "url": "https://github.com/jinzcdev/markmap-mcp-server",
+    "name": "markmap-mcp-server",
+    "path": null,
+    "stars": 84,
+    "contributors": 2,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "a207b68744badc677fe2695470019e6e54452069"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:19.873Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "minimist",
+      "importance": 4
+    },
+    {
+      "name": "markmap-cli",
+      "importance": 9
+    },
+    {
+      "name": "pino",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "open",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"@jinzcdev/markmap-mcp-server\",\n    \"description\": \"MCP server for converting Markdown to interactive mind maps with export support (PNG/JPG/SVG)\",\n    \"version\": \"0.1.1\",\n    \"author\": \"jinzcdev\",\n    \"main\": \"./build/index.js\",\n    \"keywords\": [\n        \"markmap\",\n        \"mindmap\",\n        \"mindnode\",\n        \"xmind\",\n        \"mcp\"\n    ],\n    \"scripts\": {\n        \"test\": \"vitest run | pino-pretty\",\n        \"test:watch\": \"vitest watch\",\n        \"build\": \"tsc && chmod u+x build/index.js\",\n        \"start\": \"node build/index.js\",\n        \"dev\": \"tsc-watch --onSuccess \\\"node build/index.js\\\" | pino-pretty\",\n        \"format\": \"prettier --write . --ignore-path .gitignore\",\n        \"prepare\": \"husky\"\n    },\n    \"bin\": {\n        \"markmap-mcp-server\": \"build/index.js\"\n    },\n    \"type\": \"module\",\n    \"files\": [\n        \"build\"\n    ],\n    \"license\": \"MIT\",\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"git+https://github.com/jinzcdev/markmap-mcp-server.git\"\n    },\n    \"lint-staged\": {\n        \"*.{js,ts,jsx,tsx}\": [\n            \"prettier --write\",\n            \"eslint --fix\"\n        ],\n        \"*.{md,json,yml,yaml,html,css}\": [\n            \"prettier --write\"\n        ]\n    },\n    \"dependencies\": {\n        \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n        \"minimist\": \"^1.2.8\",\n        \"markmap-cli\": \"^0.18.11\",\n        \"pino\": \"^9.6.0\",\n        \"zod\": \"^3.24.2\",\n        \"open\": \"^10.1.0\"\n    },\n    \"devDependencies\": {\n        \"@eslint/js\": \"^9.24.0\",\n        \"@types/minimist\": \"^1.2.5\",\n        \"@types/node\": \"^22.14.0\",\n        \"esbuild\": \"^0.25.2\",\n        \"eslint\": \"^9.24.0\",\n        \"eslint-config-prettier\": \"^10.1.2\",\n        \"eslint-plugin-prettier\": \"^5.2.6\",\n        \"globals\": \"^16.0.0\",\n        \"husky\": \"^9.1.7\",\n        \"lint-staged\": \"^15.5.1\",\n        \"pino-pretty\": \"^13.0.0\",\n        \"prettier\": \"^3.5.3\",\n        \"prettier-plugin-organize-imports\": \"^4.1.0\",\n        \"tsc-watch\": \"6.2.1\",\n        \"typescript\": \"^5.8.3\",\n        \"typescript-eslint\": \"^8.29.1\",\n        \"vitest\": \"^3.1.3\",\n        \"vite\": \"^6.3.5\"\n    },\n    \"optionalDependencies\": {\n        \"@rollup/rollup-linux-x64-gnu\": \"^4.40.1\"\n    }\n}\n"
+}

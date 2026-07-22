@@ -1,0 +1,108 @@
+{
+  "name": "bright-l01__networkx-mcp-server",
+  "display_name": "networkx-mcp-server",
+  "description": "🕸️ First NetworkX MCP server for graph analysis in AI conversations | Community & Enterprise editions | Graph algorithms • Network analysis • MCP integration",
+  "author": {
+    "name": "Bright-L01"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "networkx_mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# NetworkX MCP Server\n\nA comprehensive Model Context Protocol (MCP) server providing advanced graph analysis capabilities using NetworkX.\n\n## 🚀 Features\n\n- **Complete MCP Implementation**: Full Model Context Protocol support with Tools, Resources, and Prompts\n- **Modular Architecture**: Clean, maintainable codebase with 35+ focused modules\n- **Advanced Graph Analysis**: Comprehensive suite of graph algorithms and analytics\n- **Production Ready**: Enterprise-grade security, monitoring, and scalability features\n- **Developer Friendly**: Extensive documentation, testing, and development tools\n\n## 🏗️ Architecture\n\nThe server follows a clean modular architecture:\n\n```\n├── Core Layer          # Basic graph operations and MCP server\n├── Handler Layer       # Function organization and re-exports\n├── Advanced Layer      # Specialized algorithms and features\n└── Supporting Layer    # Monitoring, security, and infrastructure\n```\n\nSee [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architectural documentation.\n\n## 📦 Quick Start\n\n### Installation\n\n```bash\ngit clone https://github.com/username/networkx-mcp-server.git\ncd networkx-mcp-server\npip install -e .\n```\n\n### Basic Usage\n\n```python\nfrom networkx_mcp.server import create_graph, add_nodes, add_edges\n\n# Create a graph\nresult = create_graph(\"my_graph\", \"undirected\")\n\n# Add nodes and edges\nadd_nodes(\"my_graph\", [\"A\", \"B\", \"C\"])\nadd_edges(\"my_graph\", [(\"A\", \"B\"), (\"B\", \"C\")])\n```\n\n### Running the Server\n\n```bash\n# Start the MCP server\npython -m networkx_mcp\n\n# Or use the development script\n./run_tests.sh\n```\n\n## 🧪 Testing\n\nThe project maintains 80%+ test coverage with comprehensive test suites:\n\n```bash\n# Run all tests\npytest\n\n# Run with coverage\npytest --cov=src/networkx_mcp --cov-report=html\n\n# Run specific test categories\npytest tests/unit/          # Unit tests\npytest tests/integration/   # Integration tests\npytest tests/performance/   # Performance tests\n```\n\n## 📖 Documentation\n\n- [Architecture Overview](ARCHITECTURE.md) - Complete system architecture\n- [Module Structure](docs/MODULE_STRUCTURE.md) - Detailed module organization\n- [Development Guide](docs/DEVELOPMENT_GUIDE.md) - Developer handbook\n- [API Documentation](docs/api/) - Detailed API reference\n\n## 🤝 Contributing\n\nWe welcome contributions! Please see our [Development Guide](docs/DEVELOPMENT_GUIDE.md) for:\n\n- Setting up the development environment\n- Code standards and conventions\n- Testing requirements\n- Submission guidelines\n\n### Quick Development Setup\n\n```bash\n# Install development dependencies\npip install -e \".[dev]\"\n\n# Install pre-commit hooks\npre-commit install\n\n# Run the test suite\npytest\n```\n\n## 🏆 Quality Standards\n\nThis project maintains high quality standards:\n\n- **Code Quality**: Automated formatting with ruff, black, and isort\n- **Type Safety**: Comprehensive type hints with mypy validation\n- **Security**: Bandit security scanning and vulnerability checks\n- **Testing**: 80%+ test coverage with multiple test categories\n- **Documentation**: Comprehensive documentation and examples\n\n## 📋 Requirements\n\n- Python 3.11+\n- NetworkX 3.0+\n- FastMCP (or compatible MCP implementation)\n\nSee [pyproject.toml](pyproject.toml) for complete dependency list.\n\n## 🚀 Deployment\n\n### Docker\n\n```bash\n# Build and run with Docker\ndocker build -t networkx-mcp-server .\ndocker run -p 8000:8000 networkx-mcp-server\n```\n\n### Kubernetes\n\n```bash\n# Deploy to Kubernetes\nkubectl apply -f k8s/\n```\n\nSee [deployment documentation](docs/deployment/) for production deployment guides.\n\n## 📊 Performance\n\nThe server is optimized for performance:\n\n- **Modular Design**: Efficient memory usage and fast load times\n- **Algorithm Optimization**: Optimized implementations for large graphs\n- **Monitoring**: Built-in performance metrics and health checks\n- **Scalability**: Stateless design supporting horizontal scaling\n\n## 🔒 Security\n\nSecurity is a top priority:\n\n- **Input Validation**: Comprehensive input sanitization and validation\n- **Access Control**: Authentication and authorization layers\n- **Audit Logging**: Complete audit trail for security events\n- **Vulnerability Scanning**: Automated dependency vulnerability checks\n\n## 📈 Monitoring\n\nBuilt-in observability features:\n\n- **Health Checks**: Comprehensive health monitoring endpoints\n- **Metrics**: Performance and usage metrics collection\n- **Tracing**: Distributed tracing support\n- **Logging**: Structured logging with configurable levels\n\n## 🗂️ Project Structure\n\n```\nnetworkx-mcp-server/\n├── src/networkx_mcp/       # Main source code\n│   ├── core/               # Core graph operations\n│   ├── handlers/           # Function handlers\n│   ├── advanced/           # Advanced algorithms\n│   ├── monitoring/         # Monitoring and observability\n│   └── security/           # Security features\n├── tests/                  # Comprehensive test suite\n├── docs/                   # Documentation\n├── scripts/                # Development and deployment scripts\n└── examples/               # Usage examples\n```\n\n## 📜 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## 🙏 Acknowledgments\n\n- NetworkX team for the excellent graph analysis library\n- FastMCP team for the Model Context Protocol implementation\n- Contributors and users of this project\n\n## 📞 Support\n\n- **Issues**: [GitHub Issues](https://github.com/username/networkx-mcp-server/issues)\n- **Discussions**: [GitHub Discussions](https://github.com/username/networkx-mcp-server/discussions)\n- **Documentation**: [Project Documentation](docs/)\n\n---\n\n**Built with ❤️ for the graph analysis community**\n",
+  "category": "Data Science",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "networkx_mcp": {
+        "command": "python",
+        "args": ["-m", "networkx_mcp"],
+        "env": {}
+      },
+      "networkx-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "-p", "8000:8000", "networkx-mcp-server"],
+        "env": {},
+        "docker_image": "networkx-mcp-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Bright-L01",
+    "repo": "networkx-mcp-server",
+    "url": "https://github.com/Bright-L01/networkx-mcp-server",
+    "name": "bright-l01__networkx-mcp-server",
+    "path": null,
+    "stars": 6,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "43f582e5d16ff54c5cf8443287930c3483e32878"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:06.790Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "networkx",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "numpy",
+      "importance": 9
+    },
+    {
+      "name": "matplotlib",
+      "importance": 8
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "python-dateutil",
+      "importance": 8
+    },
+    {
+      "name": "bibtexparser",
+      "importance": 8
+    },
+    {
+      "name": "psutil",
+      "importance": 7
+    },
+    {
+      "name": "PyYAML",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"networkx-mcp-server\"\nversion = \"3.0.0\"  # Academic specialization complete\ndescription = \"NetworkX MCP Server - Graph analysis in your AI conversations\"\nreadme = \"README.md\"\nlicense = {text = \"MIT\"}\nkeywords = [\"networkx\", \"graph\", \"analysis\", \"mcp\", \"ai\", \"claude\", \"visualization\", \"network\", \"centrality\", \"community\", \"workflow\"]\nauthors = [{name = \"Bright Liu\", email = \"brightliu@college.harvard.edu\"}]\nmaintainers = [{name = \"Bright Liu\", email = \"brightliu@college.harvard.edu\"}]\nclassifiers = [\n    \"Development Status :: 5 - Production/Stable\",\n    \"Intended Audience :: Developers\",\n    \"Intended Audience :: Science/Research\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Topic :: Scientific/Engineering :: Information Analysis\",\n    \"Topic :: Scientific/Engineering :: Visualization\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n    \"Topic :: Internet :: WWW/HTTP :: Dynamic Content\",\n    \"Environment :: Console\",\n    \"Operating System :: OS Independent\",\n]\nrequires-python = \">=3.11\"\ndependencies = [\n    \"networkx>=3.0\",\n    \"numpy>=1.21.0\",  # Required for NetworkX and core algorithms\n    \"scipy>=1.7.0\",  # Required for PageRank and advanced algorithms\n    \"matplotlib>=3.5.0\",  # Required for graph visualization\n    \"requests>=2.28.0\",  # For API calls to CrossRef, ORCID, etc.\n    \"python-dateutil>=2.8.0\",  # For date parsing in academic data\n    \"bibtexparser>=1.4.0\",  # For BibTeX parsing and generation\n    \"mcp>=1.0.0\",  # Official MCP SDK for protocol implementation\n]\n\n[project.optional-dependencies]\n# Development dependencies\ndev = [\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-cov>=4.0.0\",  # For coverage testing\n    \"pytest-benchmark>=4.0.0\",  # For performance benchmarking\n    \"coverage>=7.0.0\",  # For coverage reporting\n    \"black>=24.0.0\",  # Code formatting\n    \"ruff>=0.8.0\",  # Fast linting and formatting\n    \"mypy>=1.13.0\",  # Type checking\n    \"bandit>=1.8.0\",  # Security scanning\n    \"pre-commit>=4.0.0\",  # Git hooks\n    \"uv>=0.5.0\",  # Fast package manager\n    \"psutil>=5.9.0\",  # For memory testing\n    \"hypothesis>=6.0.0\",  # For property-based testing\n    \"pandas>=1.3.0\",  # For IO handler tests\n    \"requests>=2.28.0\",  # For integration tests\n    \"types-requests>=2.28.0\",  # Type stubs for requests\n    \"types-python-dateutil>=2.8.0\",  # Type stubs for dateutil\n]\n\n# I/O format support (adds 35MB!)\nexcel = [\n    \"pandas>=1.3.0\",\n    \"openpyxl>=3.0.0\",\n]\n\n# Scientific computing support (adds 15MB!)\nscipy = [\n    \"scipy>=1.7.0\",\n]\n\n# Monitoring and observability\nmonitoring = [\n    \"aiohttp>=3.8.0\",  # For webhook notifications and dashboard\n    \"sentry-sdk>=1.0.0\",  # For error tracking (optional)\n]\n\n# Full installation with all optional features\nfull = [\n    \"pandas>=1.3.0\",\n    \"scipy>=1.7.0\",\n    \"matplotlib>=3.4.0\",\n    \"openpyxl>=3.0.0\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/Bright-L01/networkx-mcp-server\"\nRepository = \"https://github.com/Bright-L01/networkx-mcp-server\"\nIssues = \"https://github.com/Bright-L01/networkx-mcp-server/issues\"\n\n[project.scripts]\nnetworkx-mcp = \"networkx_mcp.server:main\"  # NetworkX MCP Server\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\ninclude = [\"networkx_mcp*\"]\n\n[tool.ruff]\nline-length = 88\ntarget-version = \"py311\"\n\n[tool.ruff.lint]\nselect = [\n    \"E\",  # pycodestyle errors\n    \"W\",  # pycodestyle warnings\n    \"F\",  # pyflakes\n    \"I\",  # isort\n]\nignore = [\"E501\"]  # line too long\n\n[tool.pytest.ini_options]\nminversion = \"7.0\"\naddopts = [\n    \"--strict-markers\",\n    \"--strict-config\",\n    \"--tb=short\",\n    \"-v\",\n]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_classes = \"Test*\"\npython_functions = \"test_*\"\nasyncio_mode = \"auto\"\n\n[tool.black]\nline-length = 88\ntarget-version = ['py311', 'py312']\ninclude = '\\.pyi?$'\n\n[tool.mypy]\npython_version = \"3.11\"\n# Temporarily disable strict mode to get CI passing\nstrict = false\n# Keep basic type checking\ncheck_untyped_defs = true\nwarn_return_any = false  # Too many false positives\nwarn_unused_configs = true\n# Relax function annotation requirements\ndisallow_untyped_defs = false\ndisallow_incomplete_defs = false\ndisallow_untyped_decorators = false\n# Keep some safety checks\nno_implicit_optional = true\nwarn_redundant_casts = false  # Too noisy\nwarn_unused_ignores = false  # Will have many temporary ignores\nwarn_no_return = true\nwarn_unreachable = false  # Too many false positives\nstrict_equality = false  # Causes issues with isinstance checks\n# Allow missing imports for now\nignore_missing_imports = true\nmypy_path = \"src\"\nnamespace_packages = true\nexplicit_package_bases = true\n# Disable the most problematic error codes\ndisable_error_code = [\n    \"misc\",  # Parameterized generics in isinstance (88 errors)\n    \"attr-defined\",  # Dynamic attribute access (62 errors)\n    \"no-untyped-def\",  # Missing annotations (54 errors)\n    \"unreachable\",  # False positive unreachable code (43 errors)\n    \"no-any-return\",  # Returning Any (36 errors)\n    \"assignment\",  # Type assignment issues (40 errors)\n    \"var-annotated\",  # Missing variable annotations (21 errors)\n    \"union-attr\",  # Union type attribute access (18 errors)\n    \"arg-type\",  # Argument type mismatches (27 errors)\n    \"call-arg\",  # Invalid function call arguments (8 errors)\n    \"return-value\",  # Return type mismatches (8 errors)\n    \"valid-type\",  # Invalid type annotations (5 errors)\n    \"type-abstract\",  # Abstract class instantiation (6 errors)\n    \"abstract\",  # Abstract method issues (2 errors)\n    \"no-redef\",  # Redefinition issues (2 errors)\n    \"safe-super\",  # Super() call issues (2 errors)\n    \"operator\",  # Operator issues (1 error)\n    \"call-overload\",  # Overload matching issues (1 error)\n    \"index\",  # Indexing issues (1 error)\n    \"empty-body\",  # Missing return statement (1 error)\n    \"dict-item\",  # Dict type issues (1 error)\n    \"type-arg\",  # Type argument issues (2 errors)\n    \"import-untyped\",  # Untyped imports\n]\n\n# Per-module options for gradual typing\n[[tool.mypy.overrides]]\nmodule = [\n    \"networkx.*\",\n    \"matplotlib.*\",\n    \"pyvis.*\",\n    \"bibtexparser.*\",\n    \"psutil.*\",\n    \"pandas.*\",\n    \"yaml.*\",\n    \"scipy.*\",\n    \"plotly.*\",\n    \"aioredis.*\",\n]\nignore_missing_imports = true\n\n\n=== requirements.txt ===\n# Core functionality\nnetworkx>=3.0\nnumpy>=1.21.0  # Required for NetworkX and core algorithms\nmcp[cli]>=1.0.0  # Official MCP SDK with CLI support\n\n# Required for academic features\nmatplotlib>=3.5.0  # Graph visualization\nrequests>=2.28.0  # DOI resolution and API calls\npython-dateutil>=2.8.0  # Date parsing in academic data\nbibtexparser>=1.4.0  # BibTeX parsing and generation\n\n# System monitoring and configuration\npsutil>=5.9.0  # System monitoring\nPyYAML>=6.0  # Configuration file parsing\n"
+}

@@ -1,0 +1,119 @@
+{
+  "name": "kopfrechner__gitlab-mr-mcp",
+  "display_name": "gitlab-mr-mcp",
+  "description": "Interact seamlessly with GitLab repositories to manage merge requests and issues. Fetch details, add comments, and streamline your code review process with ease.",
+  "author": {
+    "name": "kopfrechner"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {
+      "MR_MCP_GITLAB_TOKEN": "${user_config.mr_mcp_gitlab_token}",
+      "MR_MCP_GITLAB_HOST": "${user_config.mr_mcp_gitlab_host}",
+      "MR_MCP_MIN_ACCESS_LEVEL": "${user_config.mr_mcp_min_access_level}",
+      "MR_MCP_PROJECT_SEARCH_TERM": "${user_config.mr_mcp_project_search_term}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mr_mcp_gitlab_token": {
+      "type": "string",
+      "title": "GitLab Token",
+      "description": "Your GitLab access token with API access",
+      "sensitive": true,
+      "required": true
+    },
+    "mr_mcp_gitlab_host": {
+      "type": "string",
+      "title": "GitLab Host",
+      "description": "Your GitLab instance host (e.g., gitlab.com)",
+      "sensitive": false,
+      "required": true
+    },
+    "mr_mcp_min_access_level": {
+      "type": "string",
+      "title": "Minimum Access Level",
+      "description": "Optional: Minimum access level to filter projects (e.g., 'guest', 'reporter', 'developer', 'maintainer', 'owner')",
+      "sensitive": false,
+      "required": false
+    },
+    "mr_mcp_project_search_term": {
+      "type": "string",
+      "title": "Project Search Term",
+      "description": "Optional: Search term that should match the project path or name",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/kopfrechner-gitlab-mr-mcp-badge.png)](https://mseep.ai/app/kopfrechner-gitlab-mr-mcp)\n\n[![GitHub stars](https://img.shields.io/github/stars/kopfrechner/gitlab-mr-mcp?style=flat)](https://github.com/kopfrechner/gitlab-mr-mcp/stargazers)\n[![License](https://img.shields.io/github/license/kopfrechner/gitlab-mr-mcp)](LICENSE)\n[![smithery badge](https://smithery.ai/badge/@kopfrechner/gitlab-mr-mcp)](https://smithery.ai/server/@kopfrechner/gitlab-mr-mcp)\n\n# 🚀 GitLab MR MCP\n\nA Model Context Protocol (MCP) server for interacting with GitLab merge requests and issues.\n\n## 📌 Overview\n\nThis project implements a server using the Model Context Protocol (MCP) that allows AI agents to interact with GitLab repositories. It provides tools for:\n\n- Listing available GitLab projects\n- Fetching merge request details and comments\n- Getting merge request diffs\n- Adding comments to merge requests\n- Adding line-specific comments to code in merge request diffs\n- Fetching issue details\n- Setting merge request title and description\n\n## 📦 Installation\n\n### ⚡ Using Smithery\n\nTo install GitLab MR MCP for Claude Desktop automatically via Smithery:\n\n```bash\nnpx -y @smithery/cli@latest install @kopfrechner/gitlab-mr-mcp --client claude --config '\"{\\\"gitlabMrMcpToken\\\":\\\"YOUR_GITLAB_TOKEN\\\", \\\"gitlabMrMcpHost\\\": \\\"YOUR_GITLAB_HOST\\\"}\"'\n```\n\n### 🛠️ Manual Installation\n\n#### 🔧 Prerequisites\n\n- Node.js\n- GitLab access token with API access\n- GitLab project ID(s)\n\n#### 📖 Setup\n\n1. Clone this repository\n2. Install dependencies:\n\n```bash\nnpm install\n```\n\n3. Add the following to your MCP client configuration:\n```json\n{\n  \"mcpServers\": {\n    \"gitlab-mr-mcp\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/gitlab-mr-mcp/index.js\"],\n      \"env\": {\n        \"MR_MCP_GITLAB_TOKEN\": \"your_gitlab_token\",\n        \"MR_MCP_GITLAB_HOST\": \"your_gitlab_host\"\n      }\n    }\n  }\n}\n```\n\n## 🛠️ Available Tools\n\n* `get_projects`\n  Gets a list of GitLab projects accessible with your token.\n\n* `list_open_merge_requests`\n  Lists all open merge requests in the specified project.\n\n* `get_merge_request_details`\n  Gets detailed information about a specific merge request.\n\n* `get_merge_request_comments`\n  Gets comments from a specific merge request, including discussion notes and diff notes.\n\n* `add_merge_request_comment`\n  Adds a general comment to a merge request.\n\n* `add_merge_request_diff_comment`\n  Adds a comment to a specific line in a file within a merge request.\n\n* `get_merge_request_diff`\n  Gets the diff for a merge request.\n\n* `get_issue_details`\n  Gets detailed information about a specific issue.\n\n* `set_merge_request_title`\n  Set the title of a merge request\n\n* `set_merge_request_description`\n  Set the description of a merge request\n\n## 🏗️ Development\n\n### 🔍 Running Inspector\n\nSet up environment variables:\n\n```bash\nexport MR_MCP_GITLAB_TOKEN=your_gitlab_token\nexport MR_MCP_GITLAB_HOST=your_gitlab_host\n\n# Optional evn vars to filter the projects the `get_projects` tool has access to:\n# https://docs.gitlab.com/api/access_requests/#valid-access-levels\nexport MR_MCP_MIN_ACCESS_LEVEL=min_access_level\n# Search term that should match the project path or name \nexport MR_MCP_PROJECT_SEARCH_TERM=term \n```\n\nFor use with MCP clients, you can run:\n\n```bash\nnpx -y @modelcontextprotocol/inspector npm start\n```\n\n## 🛠️ Troubleshooting\n\nIf you encounter permissions issues (403 Forbidden), check:\n\n1. Your GitLab token has the proper scopes (api, read_api)\n2. The token user has proper access to the projects\n3. The project IDs are correct\n\n## 📜 License\n\n[MIT](LICENSE)\n\n## 🤝 Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n",
+  "category": "Development",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gitlab-mr-mcp": {
+        "command": "node",
+        "args": ["/path/to/gitlab-mr-mcp/index.js"],
+        "env": {
+          "MR_MCP_GITLAB_TOKEN": "your_gitlab_token",
+          "MR_MCP_GITLAB_HOST": "your_gitlab_host"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kopfrechner",
+    "repo": "gitlab-mr-mcp",
+    "url": "https://github.com/kopfrechner/gitlab-mr-mcp",
+    "name": "gitlab-mr-mcp",
+    "path": null,
+    "stars": 48,
+    "contributors": 7,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "a92e557dc48d8a6ccf78b3b98b50dac23885e633"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:40.406Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@gitbeaker/rest",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "lodash",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"gitlab-mr-mcp\",\n    \"version\": \"0.1.0\",\n    \"type\": \"module\",\n    \"dependencies\": {\n        \"@gitbeaker/rest\": \"^43.3.0\",\n        \"@modelcontextprotocol/sdk\": \"^1.15.1\",\n        \"lodash\": \"^4.17.21\",\n        \"zod\": \"^4.0.5\"\n    },\n    \"scripts\": {\n        \"start\": \"node index.js\"\n    }\n}\n"
+}

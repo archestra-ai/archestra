@@ -5,10 +5,7 @@ export const E2eTestId = {
   CloneAgentButton: "clone-agent-button",
   DeleteAgentButton: "delete-agent-button",
   OnboardingNextButton: "onboarding-next-button",
-  OnboardingFinishButton: "onboarding-finish-button",
   OnboardingSkipButton: "onboarding-skip-button",
-  DefaultPasswordChangePrompt: "default-password-change-prompt",
-  DefaultPasswordChangeSkipButton: "default-password-change-skip-button",
   SignInSubmitButton: "sign-in-submit-button",
   InviteMemberButton: "invite-member-button",
   InviteEmailInput: "invite-email-input",
@@ -26,6 +23,7 @@ export const E2eTestId = {
   CredentialTeamSelect: "credential-team-select",
   ManageCredentialsButton: "manage-credentials-button",
   ConfigureIdpTeamSyncButton: "configure-idp-team-sync-button",
+  TeamExternalGroupMappingRow: "team-external-group-mapping-row",
   IdentityProviderCard: "identity-provider-card",
   IdentityProviderOpenDialogButton: "identity-provider-open-dialog-button",
   IdentityProviderCreateButton: "identity-provider-create-button",
@@ -41,10 +39,15 @@ export const E2eTestId = {
   McpServerCard: "mcp-server-card",
   McpServerSettingsButton: "mcp-server-settings-button",
   McpServerToolsCount: "mcp-server-tools-count",
+  McpServerAgentsCount: "mcp-server-agents-count",
   McpToolsDialog: "mcp-tools-dialog",
   TokenSelect: "token-select",
   ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
   ConnectAgentButton: "connect-agent-button",
+  PostCreateConnectDialog: "post-create-connect-dialog",
+  PostCreateOpenConnectionGuideButton:
+    "post-create-open-connection-guide-button",
+  PostCreateConnectDoneButton: "post-create-connect-done-button",
   ConnectCatalogItemButton: "connect-catalog-item-button",
   SelectCredentialTypePersonal: "select-credential-type-personal",
   CredentialsCount: "credentials-count",
@@ -52,7 +55,7 @@ export const E2eTestId = {
   SelectCredentialTypeTeamDropdown: "select-credential-type-team-dropdown",
   ProfileTeamBadge: "profile-team-badge",
   EditAgentButton: "edit-agent-button",
-  AgentCapabilitiesSection: "agent-capabilities-section",
+  AgentToolsSection: "agent-tools-section",
   AgentToolsAddButton: "agent-tools-add-button",
   AgentToolCatalogPill: "agent-tool-catalog-pill",
   AssignmentComboboxSearchInput: "assignment-combobox-search-input",
@@ -63,6 +66,7 @@ export const E2eTestId = {
   RevokeCredentialButton: "revoke-credential-button",
   ExternalSecretSelector: "external-secret-selector",
   SelectEnvironmentVariableType: "select-environment-variable-type",
+  SelectEnvironment: "select-environment",
   AddCatalogItemButton: "add-catalog-item-button",
   ConfigureVaultFolderButton: "configure-vault-folder-button",
   ExternalSecretSelectorTeamTrigger: "external-secret-selector-team-trigger",
@@ -76,6 +80,8 @@ export const E2eTestId = {
     "inline-vault-secret-selector-secret-trigger-key",
   McpServerSettingsConnectionsNavButton:
     "mcp-server-settings-connections-nav-button",
+  McpServerSettingsConnectionsContent:
+    "mcp-server-settings-connections-content",
   ManageCredentialsSharedConnectionsSection:
     "manage-credentials-shared-connections-section",
   ManageCredentialsSharedConnectionsEmptyState:
@@ -83,6 +89,10 @@ export const E2eTestId = {
   ManageCredentialsAddToOrgButton: "manage-credentials-add-to-org-button",
   ManageCredentialsAddToTeamButton: "manage-credentials-add-to-team-button",
   ManageCredentialsAddToTeamOption: "manage-credentials-add-to-team-option",
+  ManageCredentialsAddServiceAccountButton:
+    "manage-credentials-add-service-account-button",
+  AddServiceAccountConfirmButton: "add-service-account-confirm-button",
+  ManageServiceAccountsTable: "manage-service-accounts-table",
   ManageMembersButton: "manage-members-button",
   // Chat Settings
   ChatApiKeysTable: "chat-api-keys-table",
@@ -107,12 +117,26 @@ export const E2eTestId = {
   // Chat Prompt Input
   ChatFileUploadButton: "chat-file-upload-button",
   ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
+  ChatContextUsageTrigger: "chat-context-usage-trigger",
+  ChatContextUsagePanel: "chat-context-usage-panel",
   ChatApiKeySelectorTrigger: "chat-api-key-selector-trigger",
   ChatApiKeySelectorSearchInput: "chat-api-key-selector-search-input",
   // Chat Model Selector
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
   ChatPromptTextarea: "chat-prompt-textarea",
+  // Queue of messages composed while a response was in-flight
+  ChatMessageQueue: "chat-message-queue",
+  ChatMessageQueueItem: "chat-message-queue-item",
+  ChatMessageQueueRemoveButton: "chat-message-queue-remove-button",
+  // Chat sidebar item status indicators
+  ChatItemGeneratingIndicator: "chat-item-generating-indicator",
+  ChatItemUnreadIndicator: "chat-item-unread-indicator",
   QuickstartAddApiKeyButton: "quickstart-add-api-key-button",
+  // First-run "set a default model" onboarding nudge (after the first key)
+  OnboardingDefaultModelOpen: "onboarding-default-model-open",
+  OnboardingDefaultModelSkip: "onboarding-default-model-skip",
+  OnboardingDefaultModelSubmit: "onboarding-default-model-submit",
+  ApiKeysLoadErrorRetry: "api-keys-load-error-retry",
   // MCP Logs
   McpLogsDialog: "mcp-logs-dialog",
   McpLogsContent: "mcp-logs-content",
@@ -120,6 +144,9 @@ export const E2eTestId = {
   McpLogsViewButton: "mcp-logs-view-button",
   McpLogsEditConfigButton: "mcp-logs-edit-config-button",
   McpLogsTab: "mcp-logs-tab",
+  // Connectivity / offline status bar
+  ConnectivityStatusBar: "connectivity-status-bar",
+  ConnectivityStatusBarRetry: "connectivity-status-bar-retry",
   // Role debugger / impersonation
   ImpersonationBanner: "impersonation-banner",
   ImpersonationStopButton: "impersonation-stop-button",
@@ -142,6 +169,18 @@ export function getChatApiKeySelectorProviderGroupTestId(
   provider: string,
 ): string {
   return `chat-api-key-selector-provider-${provider}`;
+}
+
+export function getChatItemGeneratingIndicatorTestId(
+  conversationId: string,
+): string {
+  return `${E2eTestId.ChatItemGeneratingIndicator}-${conversationId}`;
+}
+
+export function getChatItemUnreadIndicatorTestId(
+  conversationId: string,
+): string {
+  return `${E2eTestId.ChatItemUnreadIndicator}-${conversationId}`;
 }
 
 export function getChatApiKeySelectorOptionTestId(keyId: string): string {

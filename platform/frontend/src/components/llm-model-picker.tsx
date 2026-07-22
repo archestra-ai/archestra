@@ -1,6 +1,6 @@
 "use client";
 
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
@@ -20,7 +20,6 @@ export type ModelPricing = Array<{
   pricePerMillionInput: string;
   pricePerMillionOutput: string;
   isFree?: boolean;
-  isFastest?: boolean;
   isBest?: boolean;
 }>;
 
@@ -101,7 +100,7 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
           No pricing configured for models.
         </span>{" "}
         <Link
-          href="/llm/providers/models"
+          href="/llm/models"
           className="hover:text-foreground hover:underline"
         >
           Add pricing
@@ -132,7 +131,6 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
     pricePerMillionInput: price.pricePerMillionInput,
     pricePerMillionOutput: price.pricePerMillionOutput,
     isFree: price.isFree,
-    isFastest: price.isFastest,
     isBest: price.isBest,
   }));
 
@@ -165,7 +163,7 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
                   <p className="text-sm">
                     No pricing configured for this model.{" "}
                     <Link
-                      href="/llm/model-providers/models"
+                      href="/llm/models"
                       className="underline hover:text-foreground"
                     >
                       Add pricing
@@ -209,7 +207,7 @@ export function LlmModelPicker(props: LlmModelPickerProps) {
                       <p className="text-sm">
                         No pricing configured for this model.{" "}
                         <Link
-                          href="/llm/providers/models"
+                          href="/llm/models"
                           className="underline hover:text-foreground"
                         >
                           Add pricing

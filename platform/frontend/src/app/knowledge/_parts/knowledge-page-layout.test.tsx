@@ -5,24 +5,25 @@ let mockIsKnowledgeBaseConfigured = false;
 
 let mockConfigStatus = { embedding: false, reranker: false };
 
+vi.mock("@/lib/hooks/use-app-name");
+
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useIsKnowledgeBaseConfigured: () => mockIsKnowledgeBaseConfigured,
   useKnowledgeBaseConfigStatus: () => mockConfigStatus,
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true, isPending: false }),
-  useMissingPermissions: () => [],
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: vi.fn(),
-  }),
-  usePathname: () => "/knowledge/knowledge-bases",
-  useSearchParams: () => new URLSearchParams(),
-}));
+vi.mock("@/lib/config/config.query");
 
+vi.mock("next/navigation");
+
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+import { useSmallTeamTier } from "@/lib/config/config.query";
 import { KnowledgePageLayout } from "./knowledge-page-layout";
 
 function renderLayout(isPending = false) {
@@ -45,6 +46,18 @@ function renderLayout(isPending = false) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+    isPending: false,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useMissingPermissions).mockReturnValue({});
+  vi.mocked(useRouter).mockReturnValue({
+    push: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(usePathname).mockReturnValue("/knowledge/knowledge-bases");
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+  );
   mockIsKnowledgeBaseConfigured = false;
   mockConfigStatus = { embedding: false, reranker: false };
 });
@@ -118,6 +131,44 @@ describe("KnowledgePageLayout", () => {
         name: /Create Knowledge Base/,
       });
       expect(createButton).not.toBeDisabled();
+    });
+  });
+
+  describe("small team tier banner", () => {
+    it("renders the tier banner in the shared layout so every tab shows it", () => {
+      vi.mocked(useSmallTeamTier).mockReturnValue({
+        communicate: true,
+        smallTeam: true,
+        envFlag: false,
+        userCount: 5,
+        threshold: 30,
+      } as ReturnType<typeof useSmallTeamTier>);
+      renderLayout();
+
+      expect(
+        screen.getByText(/within the free tier for teams under 30 users/),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("tabs", () => {
+    it("renders Connectors and Knowledge Bases tabs linking to their routes", () => {
+      renderLayout();
+
+      for (const link of screen.getAllByRole("link", { name: "Connectors" })) {
+        expect(link).toHaveAttribute("href", "/knowledge/connectors");
+      }
+      for (const link of screen.getAllByRole("link", {
+        name: "Knowledge Bases",
+      })) {
+        expect(link).toHaveAttribute("href", "/knowledge/knowledge-bases");
+      }
+      expect(
+        screen.getAllByRole("link", { name: "Connectors" }).length,
+      ).toBeGreaterThan(0);
+      expect(
+        screen.getAllByRole("link", { name: "Knowledge Bases" }).length,
+      ).toBeGreaterThan(0);
     });
   });
 

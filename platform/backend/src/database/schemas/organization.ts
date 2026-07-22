@@ -2,8 +2,8 @@ import type {
   OrganizationCustomFont,
   OrganizationTheme,
   SupportedProvider,
-} from "@shared";
-import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
+} from "@archestra/shared";
+import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@archestra/shared";
 import {
   boolean,
   integer,
@@ -16,11 +16,15 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ConnectionBaseUrl,
-  GlobalToolPolicy,
+  ConnectionDefaultProviderKeys,
   LimitCleanupInterval,
+  NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
+  ToolInvocation,
+  TrustedData,
+  TrustedImageRegistries,
 } from "@/types";
 import modelsTable from "./model";
 
@@ -28,15 +32,23 @@ const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  analyticsInstanceId: uuid("analytics_instance_id").notNull().defaultRandom(),
+  analyticsInstanceStartedAt: timestamp("analytics_instance_started_at"),
+  analyticsInstanceLastHeartbeatAt: timestamp(
+    "analytics_instance_last_heartbeat_at",
+  ),
   logo: text("logo"),
   logoDark: text("logo_dark"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
-  theme: text("theme")
-    .$type<OrganizationTheme>()
-    .notNull()
-    .default("cosmic-night"),
+  /**
+   * When the first-login onboarding survey was submitted (the forward to the
+   * website is best-effort). Null = not yet; the survey keeps reappearing for
+   * admins of an empty, unlicensed instance until submitted once.
+   */
+  onboardingSurveyCompletedAt: timestamp("onboarding_survey_completed_at"),
+  theme: text("theme").$type<OrganizationTheme>().notNull().default("caffeine"),
   customFont: text("custom_font")
     .$type<OrganizationCustomFont>()
     .notNull()
@@ -48,16 +60,72 @@ const organizationsTable = pgTable("organization", {
     .$type<OrganizationCompressionScope>()
     .notNull()
     .default("organization"),
+  onlineMcpCatalogEnabled: boolean("online_mcp_catalog_enabled")
+    .notNull()
+    .default(true),
+  onlineSkillCatalogEnabled: boolean("online_skill_catalog_enabled")
+    .notNull()
+    .default(true),
+  /**
+   * @deprecated The "security engine on/off" toggle (permissive/restrictive) was
+   * removed — the security engine is always enabled now. This column is inert:
+   * no code reads or writes it, and it is omitted from the API schemas. Retained
+   * (not dropped) for rollout safety — dropping a column older app versions may
+   * still read is not deploy-safe. Safe to drop in a future expand/contract
+   * migration once every supported version no longer references it.
+   */
   globalToolPolicy: varchar("global_tool_policy")
-    .$type<GlobalToolPolicy>()
     .notNull()
     .default("permissive"),
+  /**
+   * @deprecated Inert leftover column from the reverted PR #6027 (added by
+   * migration 0316). No code reads or writes it; retained for
+   * backward-compatibility and typed as a plain string so the schema stays
+   * consistent without re-introducing the reverted policy type. Safe to drop in
+   * a future migration.
+   */
+  discoveredToolPolicy: varchar("discovered_tool_policy")
+    .notNull()
+    .default("relaxed"),
+  /**
+   * Admin-configurable default invocation policy applied to every tool the LLM
+   * proxy auto-discovers and persists. Defaults to "allow_when_context_is_untrusted"
+   * ("Allow always") so discovered tools are not blocked by default.
+   */
+  defaultDiscoveredToolInvocationPolicy: varchar(
+    "default_discovered_tool_invocation_policy",
+  )
+    .$type<ToolInvocation.ToolInvocationPolicyAction>()
+    .notNull()
+    .default("allow_when_context_is_untrusted"),
+  /**
+   * Admin-configurable default result policy applied to every tool the LLM proxy
+   * auto-discovers and persists. Defaults to "mark_as_untrusted" ("Mark as
+   * sensitive") so discovered-tool output is treated as untrusted by default.
+   */
+  defaultDiscoveredToolResultPolicy: varchar(
+    "default_discovered_tool_result_policy",
+  )
+    .$type<TrustedData.TrustedDataPolicyAction>()
+    .notNull()
+    .default("mark_as_untrusted"),
   /**
    * Whether file uploads are allowed in chat.
    * Defaults to true. Security policies currently only work on text-based content,
    * so admins may want to disable this until file-based policy support is added.
    */
   allowChatFileUploads: boolean("allow_chat_file_uploads")
+    .notNull()
+    .default(true),
+
+  /**
+   * @deprecated No longer consulted. Dynamic tool access is now gated solely
+   * by the per-agent `access_all_tools` setting. The column is retained (not
+   * dropped) to avoid a backwards-incompatible migration and to keep the
+   * existing API field; any stored value is ignored. Safe to drop in a future
+   * migration once no deployment reads it.
+   */
+  allowToolAutoAssignment: boolean("allow_tool_auto_assignment")
     .notNull()
     .default(true),
 
@@ -115,6 +183,15 @@ const organizationsTable = pgTable("organization", {
   defaultUserLimitCleanupInterval: varchar(
     "default_user_limit_cleanup_interval",
   ).$type<LimitCleanupInterval>(),
+
+  /**
+   * Default role assigned to newly provisioned members who don't get an
+   * explicit role — email/password self-signup and ChatOps auto-provisioning.
+   * NULL falls back to the built-in "member" role. Org-wide mirror of the
+   * per-IdP SSO `roleMapping.defaultRole`. Stores a role slug (a predefined
+   * admin/editor/member role or a custom org role).
+   */
+  defaultMemberRole: text("default_member_role"),
 
   /**
    * Organization-wide default agent ID (fallback when member has no personal default).
@@ -215,43 +292,114 @@ const organizationsTable = pgTable("organization", {
   >(),
 
   /**
-   * Custom label admins choose for the child-configuration entity of every
-   * catalog item (internally still called "preset"). When both singular and
-   * plural are set, the catalog UI exposes the per-item presets section and
-   * replaces "Preset"/"presets" copy. Both must be set together — partial
-   * values are rejected at the API.
+   * Admin-chosen provider API key per provider for auto-provisioned
+   * connection virtual keys (provider → llm_provider_api_keys.id). When a
+   * provider has no entry, provisioning falls back to the user's
+   * personal → team → org key resolution.
+   */
+  connectionDefaultProviderKeys: jsonb(
+    "connection_default_provider_keys",
+  ).$type<ConnectionDefaultProviderKeys>(),
+
+  /**
+   * Legacy preset columns (feature removed) — retained inert (non-destructive,
+   * no migration) and no longer read or written. Held admin-chosen singular/
+   * plural labels that the catalog UI used to override "Preset"/"presets" copy.
    */
   presetEntityName: text("preset_entity_name"),
   presetEntityNamePlural: text("preset_entity_name_plural"),
 
   /**
-   * Custom display label for the implicit "default" preset row (parent catalog
-   * item). NULL falls back to "Default" in the UI.
+   * Legacy preset column (feature removed) — retained inert. Held the custom
+   * display label for the implicit "default" preset row. No longer read or
+   * written.
    */
   presetEntityDefaultLabel: text("preset_entity_default_label"),
 
   /**
-   * When true, the Agent Skill tools (`list_skills`, `activate_skill`,
-   * `read_skill_file`) are assigned to every agent in the org and added to all
-   * new agents. Flipped on
-   * by the "Enable and create a new skill" empty-state button on /agents/skills.
+   * Display name of the implicit "default" environment (the deployment target
+   * referenced by internal_mcp_catalog.environment_id = null). NULL falls back
+   * to "Default" in the UI.
    */
-  skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
+  defaultEnvironmentName: text("default_environment_name"),
 
   /**
-   * When true, the org's skills are exposed in chat as slash commands
-   * (`/skill-name`). Invoking one injects the skill's content directly into the
-   * conversation, independent of `skillToolsEnabled` (which only governs the
-   * model-facing `activate_skill` tool).
+   * Kubernetes namespace MCP server pods of the implicit "default" environment
+   * (internal_mcp_catalog.environment_id = null) are deployed into. NULL falls
+   * back to the orchestrator's own namespace. Mirrors `environment.namespace`
+   * for the default scope.
    */
-  skillSlashCommandsEnabled: boolean("skill_slash_commands_enabled")
+  defaultEnvironmentNamespace: text("default_environment_namespace"),
+
+  /**
+   * Optional human-readable description of the implicit "default" environment,
+   * shown in the environment selector. NULL = unset.
+   */
+  defaultEnvironmentDescription: text("default_environment_description"),
+
+  /**
+   * Optional default network egress policy for the implicit "default"
+   * environment. NULL falls back to built-in unrestricted behavior.
+   */
+  defaultNetworkPolicy: jsonb("default_network_policy").$type<NetworkPolicy>(),
+
+  /**
+   * When true, assigning a catalog item to the implicit "default" environment
+   * (environment_id = null) requires the resource-specific `deploy-to-restricted` permission — i.e.
+   * creating a catalog item without choosing an environment is gated too.
+   * Mirrors the per-environment `environment.restricted` flag for the default.
+   */
+  defaultEnvironmentRestricted: boolean("default_environment_restricted")
     .notNull()
     .default(false),
 
   /**
-   * Validation regex applied to default-scoped field values when installing an
-   * MCP server (mirrors `mcp_preset_entries.validation_regex` for the implicit
-   * default row). Stored without delimiters or flags. NULL disables validation.
+   * ALLOWLIST regex (JS source, no delimiters/flags) for the implicit "default"
+   * environment (internal_mcp_catalog.environment_id = null). User-supplied
+   * config values are allowed only if they MATCH. NULL disables. Mirrors
+   * `environment.validation_regex` for the default scope.
+   */
+  defaultEnvironmentValidationRegex: text(
+    "default_environment_validation_regex",
+  ),
+
+  /**
+   * Trusted image registries for the implicit "default" environment
+   * (internal_mcp_catalog.environment_id = null). Mirrors
+   * `environment.trusted_image_registries` for the default scope. NULL/empty
+   * disables the check.
+   */
+  defaultEnvironmentTrustedImageRegistries: jsonb(
+    "default_environment_trusted_image_registries",
+  ).$type<TrustedImageRegistries>(),
+
+  /**
+   * When true, the Agent Skill tools (`list_skills`, `load_skill`) are assigned
+   * to every agent in the org and added to all new agents. Flipped on
+   * by the "Enable and create a new skill" empty-state button on /skills.
+   */
+  skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
+
+  /**
+   * Whether this organization shows the Apps Hackathon recorder. On by
+   * default, and the way an admin who does not want the promotion turns it and
+   * every part of the feature off without touching deployment configuration.
+   *
+   * It is the middle of three gates: the deployment flag decides whether the
+   * feature exists here at all (and never opens it for a licensed enterprise
+   * deployment), this decides whether the organization wants it, and the
+   * hackathon's closing date overrides both. Enterprise deployments never
+   * reach this column — the flag above them is already off — so it can stay a
+   * plain preference rather than encoding licence rules a second time.
+   */
+  appsHackathonRecorderEnabled: boolean("apps_hackathon_recorder_enabled")
+    .notNull()
+    .default(true),
+
+  /**
+   * Legacy preset column (feature removed) — retained inert. Held a validation
+   * regex (no delimiters/flags) applied to default-scoped field values at
+   * install time. No longer read or written.
    */
   presetEntityDefaultValidationRegex: text(
     "preset_entity_default_validation_regex",

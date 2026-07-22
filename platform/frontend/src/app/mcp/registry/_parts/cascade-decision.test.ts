@@ -13,7 +13,11 @@
  * exactly the kind of bug the contract is designed to prevent.
  */
 
-import { CASCADE_SCENARIOS, CATALOG_SHAPES } from "@shared";
+import {
+  CASCADE_SCENARIOS,
+  CATALOG_SHAPES,
+  SERVER_NAME_PLACEHOLDER,
+} from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import {
   type CascadeSnapshot,
@@ -36,18 +40,173 @@ describe("cascade scenarios — frontend full-outcome sweep", () => {
     // install set; the exact count doesn't influence the decision
     // (it only feeds the bar's copy). All scenarios assume at least
     // one install — there's no point cascading otherwise.
-    //
-    // `labelsChanged` is computed by the form from its labels state.
-    // None of the current scenarios touch labels, so it's always false
-    // here. A future label-only scenario would set this to true.
     const outcome = computeCascadeOutcome(prev, next, {
       affectedServerCount: 1,
-      labelsChanged: false,
     });
 
+    // `frontendBar` is a permanent, by-design divergence from the
+    // backend path; `knownFrontendOverride` is a temporary bug marker.
     const frontendExpected =
-      scenario.knownFrontendOverride?.actual ?? scenario.expected;
-    expect(outcome).toBe(frontendExpected);
+      scenario.frontendBar ??
+      scenario.knownFrontendOverride?.actual ??
+      scenario.expected;
+    expect(outcome.mode).toBe(frontendExpected);
+    // None of the matrix scenarios rename — the rename decisions have
+    // their own describe below.
+    expect(outcome.renamed).toBe(false);
+  });
+});
+
+describe("computeCascadeOutcome — rename decisions", () => {
+  const local = (over: Partial<CascadeSnapshot> = {}): CascadeSnapshot => ({
+    name: "old-name",
+    serverType: "local",
+    localConfig: { command: "node", arguments: ["server.js"], environment: [] },
+    ...over,
+  });
+
+  test("pure rename → 'rename' (DB-only cascade, client-reload warning)", () => {
+    expect(
+      computeCascadeOutcome(local(), local({ name: "new-name" }), {
+        affectedServerCount: 1,
+      }),
+    ).toEqual({ mode: "rename", renamed: true });
+  });
+
+  test("remote rename is no longer 'skip' — remote tools re-slug through the same cascade", () => {
+    const remote = (over: Partial<CascadeSnapshot> = {}): CascadeSnapshot => ({
+      name: "old-name",
+      serverType: "remote",
+      serverUrl: "https://api.example.com",
+      ...over,
+    });
+    expect(
+      computeCascadeOutcome(remote(), remote({ name: "new-name" }), {
+        affectedServerCount: 1,
+      }),
+    ).toEqual({ mode: "rename", renamed: true });
+  });
+
+  test("rename on a catalog whose deploymentSpecYaml uses the serverName placeholder → 'manual'", () => {
+    const withYaml = local({
+      deploymentSpecYaml: `metadata:\n  labels:\n    mcp-server-name: ${SERVER_NAME_PLACEHOLDER}\n`,
+    });
+    expect(
+      computeCascadeOutcome(
+        withYaml,
+        // transformFormToApiData never carries the YAML — prev's value is
+        // authoritative (mirrors the real form submit).
+        { ...local(), name: "new-name", deploymentSpecYaml: undefined },
+        { affectedServerCount: 1 },
+      ),
+    ).toEqual({ mode: "manual", renamed: true });
+  });
+
+  test("rename combined with a breaking command change → 'manual' with the renamed flag riding along", () => {
+    const next = local({
+      name: "new-name",
+      localConfig: {
+        command: "bun",
+        arguments: ["server.js"],
+        environment: [],
+      },
+    });
+    expect(
+      computeCascadeOutcome(local(), next, { affectedServerCount: 1 }),
+    ).toEqual({ mode: "manual", renamed: true });
+  });
+
+  test("rename with zero installs → 'skip' (no connected clients to warn)", () => {
+    expect(
+      computeCascadeOutcome(local(), local({ name: "new-name" }), {
+        affectedServerCount: 0,
+      }),
+    ).toEqual({ mode: "skip", renamed: true });
+  });
+});
+
+describe("computeCascadeOutcome — remote auto path saves without a bar", () => {
+  const remote = (over: Partial<CascadeSnapshot> = {}): CascadeSnapshot => ({
+    name: "linear",
+    serverType: "remote",
+    serverUrl: "https://api.example.com/mcp",
+    oauthConfig: { clientId: "abc", scopes: ["read"] },
+    userConfig: {},
+    ...over,
+  });
+
+  test("serverUrl change → 'skip' (backend re-syncs tools in the background; nothing restarts)", () => {
+    expect(
+      computeCascadeOutcome(
+        remote(),
+        remote({ serverUrl: "https://api.example.com/mcp/v2" }),
+        { affectedServerCount: 3 },
+      ),
+    ).toEqual({ mode: "skip", renamed: false });
+  });
+
+  test("oauthConfig content change (OAuth present on both sides) → 'skip'", () => {
+    expect(
+      computeCascadeOutcome(
+        remote(),
+        remote({
+          oauthConfig: {
+            clientId: "abc",
+            scopes: ["read"],
+            protectedResource: "https://api.example.com",
+          },
+        }),
+        { affectedServerCount: 1 },
+      ),
+    ).toEqual({ mode: "skip", renamed: false });
+  });
+
+  test("breaking change + rename → 'rename' (clients must still reload renamed tools)", () => {
+    expect(
+      computeCascadeOutcome(
+        remote(),
+        remote({
+          name: "linear-v2",
+          serverUrl: "https://api.example.com/mcp/v2",
+        }),
+        { affectedServerCount: 2 },
+      ),
+    ).toEqual({ mode: "rename", renamed: true });
+  });
+});
+
+describe("computeCascadeOutcome — remote manual paths survive the no-bar auto rule", () => {
+  const remote = (over: Partial<CascadeSnapshot> = {}): CascadeSnapshot => ({
+    name: "linear",
+    serverType: "remote",
+    serverUrl: "https://api.example.com/mcp",
+    oauthConfig: null,
+    userConfig: {},
+    ...over,
+  });
+
+  test("OAuth added → 'manual' (auth model flips; installs must re-authenticate)", () => {
+    expect(
+      computeCascadeOutcome(
+        remote(),
+        remote({ oauthConfig: { clientId: "abc" } }),
+        { affectedServerCount: 1 },
+      ).mode,
+    ).toBe("manual");
+  });
+
+  test("required userConfig field added → 'manual' (install must supply a value)", () => {
+    expect(
+      computeCascadeOutcome(
+        remote(),
+        remote({
+          userConfig: {
+            api_key: { type: "string", required: true },
+          },
+        }),
+        { affectedServerCount: 1 },
+      ).mode,
+    ).toBe("manual");
   });
 });
 
@@ -244,8 +403,7 @@ describe("computeCascadeOutcome — `mounted` flip routes to auto, not manual", 
     expect(
       computeCascadeOutcome(base, flipped, {
         affectedServerCount: 1,
-        labelsChanged: false,
-      }),
+      }).mode,
     ).toBe("auto");
   });
 });
@@ -482,22 +640,6 @@ describe("userConfigChangedBreakingly — forward-compat leaf predicate", () => 
       ),
     ).toBe(false);
   });
-  test("preset header `default` value change → false (value lives in the bag, not `default`)", () => {
-    const base = {
-      type: "string",
-      required: false,
-      headerName: "x-region",
-      sensitive: false,
-      promptOnInstallation: false,
-      promptOnPreset: true,
-    };
-    expect(
-      userConfigChangedBreakingly(
-        { h1: { ...base, default: "us-east-1" } },
-        { h1: { ...base, default: "eu-west-1" } },
-      ),
-    ).toBe(false);
-  });
 });
 
 // Regression: `prev` comes from the catalog API (extra fields like id,
@@ -520,10 +662,6 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     requiresAuth: true,
     toolCount: 3,
     teams: [],
-    presetSecretId: null,
-    presetEntryId: null,
-    parentCatalogItemId: null,
-    presetFieldValues: {},
     // Fields the transform output also has:
     name: "Test1",
     description: "old description",
@@ -563,8 +701,7 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     expect(
       computeCascadeOutcome(apiPrev, transformedNext, {
         affectedServerCount: 3,
-        labelsChanged: false,
-      }),
+      }).mode,
     ).toBe("skip");
   });
 
@@ -588,12 +725,11 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     expect(
       computeCascadeOutcome(apiPrev, transformedNext, {
         affectedServerCount: 3,
-        labelsChanged: false,
-      }),
+      }).mode,
     ).toBe("skip");
   });
 
-  test("serverUrl edit still triggers auto (sanity check the projection isn't too loose)", () => {
+  test("serverUrl edit on this remote catalog → 'skip' (breaking diff detected, but remote saves without a bar)", () => {
     const transformedNext: CascadeSnapshot = {
       name: "Test1",
       description: "old description",
@@ -611,8 +747,45 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     expect(
       computeCascadeOutcome(apiPrev, transformedNext, {
         affectedServerCount: 3,
-        labelsChanged: false,
-      }),
+      }).mode,
+    ).toBe("skip");
+  });
+
+  test("envFrom edit on a local catalog still triggers auto (sanity check the projection isn't too loose)", () => {
+    const localPrev = {
+      ...apiPrev,
+      serverType: "local",
+      serverUrl: null,
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        envFrom: [],
+      },
+    } as unknown as CascadeSnapshot;
+    const transformedNext: CascadeSnapshot = {
+      name: "Test1",
+      description: "old description",
+      serverType: "local",
+      multitenant: false,
+      serverUrl: null,
+      authMethod: "none",
+      authHeaderName: "",
+      includeBearerPrefix: false,
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        envFrom: [{ type: "secret", name: "shared-creds" }],
+      },
+      userConfig: {},
+    };
+    expect(
+      computeCascadeOutcome(localPrev, transformedNext, {
+        affectedServerCount: 3,
+      }).mode,
     ).toBe("auto");
   });
 });

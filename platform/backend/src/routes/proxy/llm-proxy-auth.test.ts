@@ -1,16 +1,19 @@
 import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
-import { VirtualApiKeyModel } from "@/models";
+import { AgentLabelModel, AgentModel, VirtualApiKeyModel } from "@/models";
 import { describe, expect, test } from "@/test";
+import { ApiError } from "@/types";
 import {
   assertAuthenticatedForKeylessProvider,
+  assertConsistentUserCredentials,
   attemptJwksAuth,
   resolveAgent,
   VirtualKeyRateLimiter,
+  validatePassthroughVirtualKey,
   validateVirtualApiKey,
 } from "./llm-proxy-auth";
 
@@ -56,6 +59,37 @@ describe("resolveAgent", () => {
       "Please specify an LLMProxy ID in the URL path.",
     );
   });
+
+  // The proxy resolves a lean GatewayAgent (agents row + labels): labels feed
+  // metric/span label values, so they must survive the lean lookup.
+  test("resolved agent carries its labels", async ({ makeAgent }) => {
+    const agent = await makeAgent();
+    await AgentLabelModel.syncAgentLabels(agent.id, [
+      { key: "environment", value: "production", keyId: "", valueId: "" },
+    ]);
+
+    const result = await resolveAgent(agent.id);
+    expect(result.labels).toEqual([
+      expect.objectContaining({ key: "environment", value: "production" }),
+    ]);
+  });
+
+  test("does not resolve a soft-deleted default profile", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const profile = await makeAgent({
+      organizationId: org.id,
+      agentType: "profile",
+      isDefault: true,
+    });
+    await AgentModel.delete(profile.id);
+
+    await expect(resolveAgent(undefined)).rejects.toThrow(
+      "Please specify an LLMProxy ID in the URL path.",
+    );
+  });
 });
 
 // =========================================================================
@@ -70,6 +104,25 @@ describe("validateVirtualApiKey", () => {
         "openai",
       ),
     ).rejects.toThrow("Invalid virtual API key");
+  });
+
+  test("throws 400 when a passthrough key is used in the Authorization header", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+
+    await expect(validateVirtualApiKey(value, "openai")).rejects.toMatchObject({
+      statusCode: 400,
+    });
   });
 
   test("throws 401 for expired key", async ({
@@ -146,6 +199,67 @@ describe("validateVirtualApiKey", () => {
     const result = await validateVirtualApiKey(value, "openai");
     expect(result.apiKey).toBe("sk-real-provider-key");
     expect(result.baseUrl).toBeUndefined();
+  });
+
+  test("per-user provider: allows a personal virtual key self-mapped to the owner's own key", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "gho_owner" } });
+    const copilotKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "github-copilot",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "my-copilot-vk",
+      scope: "personal",
+      authorId: user.id,
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+      ],
+    });
+
+    const result = await validateVirtualApiKey(value, "github-copilot");
+    expect(result.apiKey).toBe("gho_owner");
+  });
+
+  test("per-user provider: rejects an org-scoped (legacy/shared) virtual key at runtime", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "gho_owner" } });
+    const copilotKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "github-copilot",
+      scope: "personal",
+      userId: user.id,
+    });
+
+    // Simulate a virtual key created before enforcement: org scope wrapping a
+    // per-user key. The runtime guard must refuse to hand out the token.
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "legacy-shared-copilot-vk",
+      scope: "org",
+      authorId: user.id,
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: copilotKey.id },
+      ],
+    });
+
+    await expect(
+      validateVirtualApiKey(value, "github-copilot"),
+    ).rejects.toThrow(/per-user/);
   });
 
   test("returns baseUrl when chat API key has one configured", async ({
@@ -667,5 +781,154 @@ describe("VirtualKeyRateLimiter", () => {
     // New failure starts fresh
     await limiter.recordFailure("1.2.3.4");
     await expect(limiter.check("1.2.3.4")).resolves.toBeUndefined();
+  });
+});
+
+// =========================================================================
+// validatePassthroughVirtualKey
+// =========================================================================
+
+describe("validatePassthroughVirtualKey", () => {
+  test("returns owner + key id when the owner can access the proxy", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      scope: "org",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+
+    const result = await validatePassthroughVirtualKey({
+      tokenValue: value,
+      agent: proxy,
+    });
+    expect(result.userId).toBe(owner.id);
+  });
+
+  test("403 when the owner cannot access the proxy", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const otherUser = await makeUser();
+    const personalProxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      scope: "personal",
+      authorId: otherUser.id,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+    });
+
+    await expect(
+      validatePassthroughVirtualKey({
+        tokenValue: value,
+        agent: personalProxy,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("401 for an expired key", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      scope: "org",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: owner.id,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+
+    await expect(
+      validatePassthroughVirtualKey({ tokenValue: value, agent: proxy }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  test("400 when a standard key is sent as a passthrough key", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      scope: "org",
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "std",
+      keyType: "standard",
+      scope: "personal",
+      authorId: owner.id,
+      providerApiKeys: [
+        { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+      ],
+    });
+
+    await expect(
+      validatePassthroughVirtualKey({ tokenValue: value, agent: proxy }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
+// =========================================================================
+// assertConsistentUserCredentials
+// =========================================================================
+
+describe("assertConsistentUserCredentials", () => {
+  test("passes for a single user, repeats, and empties", () => {
+    expect(() => assertConsistentUserCredentials([])).not.toThrow();
+    expect(() =>
+      assertConsistentUserCredentials([undefined, null, "user-a"]),
+    ).not.toThrow();
+    expect(() =>
+      assertConsistentUserCredentials(["user-a", "user-a", undefined]),
+    ).not.toThrow();
+  });
+
+  test("throws 401 when two credentials identify different users", () => {
+    try {
+      assertConsistentUserCredentials(["user-a", "user-b"]);
+      throw new Error("expected a conflict error");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).statusCode).toBe(401);
+    }
   });
 });

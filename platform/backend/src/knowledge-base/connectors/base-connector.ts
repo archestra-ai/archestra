@@ -44,6 +44,15 @@ export const REQUEST_TIMEOUT_MS = 30000;
 export abstract class BaseConnector implements Connector {
   abstract type: ConnectorType;
 
+  /**
+   * Whether this connector implements the permission-sync hooks
+   * (`syncPermissionSnapshot` / `syncGroups`). Default off so existing
+   * connectors are untouched; Jira/Confluence/GitHub (and Stage-2 connectors)
+   * override this `true` and implement the two generators. Nothing else in the
+   * permission-sync core is per-connector.
+   */
+  supportsPermissionSync = false;
+
   protected log: pino.Logger = defaultLogger;
   private rateLimitDelayMs: number;
   private itemFailures: ConnectorItemFailure[] = [];
@@ -122,7 +131,7 @@ export abstract class BaseConnector implements Connector {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
     checkpoint: Record<string, unknown> | null;
-    embeddingInputModalities?: import("@shared").ModelInputModality[];
+    embeddingInputModalities?: import("@archestra/shared").ModelInputModality[];
   }): Promise<number | null> {
     return null;
   }
@@ -302,11 +311,50 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Rewind an ISO timestamp a few minutes before using it as an upstream query
+ * cursor, so clock skew between this server and the upstream service cannot
+ * hide events stamped just before the cursor was taken. Re-reading the overlap
+ * is idempotent (permission probes only set dirty flags off what they read).
+ */
+export function isoCursorWithSkewBuffer(isoDate: string): string {
+  const d = new Date(isoDate);
+  d.setUTCMinutes(d.getUTCMinutes() - CURSOR_SKEW_BUFFER_MINUTES);
+  return d.toISOString();
+}
+
+const CURSOR_SKEW_BUFFER_MINUTES = 5;
+
+/**
+ * The audit cursor a probe stores for its successor. Atlassian audit
+ * pipelines ingest asynchronously — a record can become queryable minutes
+ * after its `created` stamp. A cursor taken at pass wall-clock slides past
+ * records still in flight (each pass, including manual re-triggers, advances
+ * it), permanently losing e.g. an access revocation until the daily full
+ * reconcile. Trailing the cursor keeps any record whose ingestion lag is
+ * under the allowance inside a later query window no matter how frequently
+ * passes run; re-read records only re-flag idempotent dirty bits.
+ */
+export function trailingAuditCursor(nowIso: string): string {
+  const d = new Date(nowIso);
+  d.setUTCMinutes(d.getUTCMinutes() - AUDIT_INGESTION_LAG_ALLOWANCE_MINUTES);
+  return d.toISOString();
+}
+
+const AUDIT_INGESTION_LAG_ALLOWANCE_MINUTES = 15;
+
+/**
  * Extract a meaningful error message from unknown errors.
  * Handles plain objects thrown by libraries like confluence.js,
  * which extract Axios response data instead of wrapping in Error instances.
  */
 export function extractErrorMessage(error: unknown): string {
+  // Google/gaxios errors carry the actionable detail (e.g. reason
+  // "cannotDownloadAbusiveFile" / "insufficientFilePermissions") in the response
+  // body, not in the generic "Request failed with status code 403" message.
+  const googleApiError = extractGoogleApiError(error);
+  if (googleApiError) {
+    return googleApiError;
+  }
   if (error instanceof Error) {
     return error.message;
   }
@@ -325,4 +373,38 @@ export function extractErrorMessage(error: unknown): string {
     }
   }
   return String(error);
+}
+
+/**
+ * Pull the `code`/`reason`/`message` out of a Google API (gaxios) error body,
+ * shaped `{ response: { data: { error: { code, message, errors: [{ reason }] }}}}`.
+ * Returns e.g. "403 cannotDownloadAbusiveFile: <message>", or null if the error
+ * is not that shape.
+ */
+function extractGoogleApiError(error: unknown): string | null {
+  if (error === null || typeof error !== "object") return null;
+  const data = (error as { response?: { data?: unknown } }).response?.data;
+  if (data === null || typeof data !== "object") return null;
+  const apiError = (data as { error?: unknown }).error;
+  if (apiError === null || typeof apiError !== "object") return null;
+
+  const { code, message, errors } = apiError as {
+    code?: unknown;
+    message?: unknown;
+    errors?: unknown;
+  };
+  const firstReason =
+    Array.isArray(errors) && typeof errors[0]?.reason === "string"
+      ? (errors[0].reason as string)
+      : undefined;
+
+  const prefix = [
+    typeof code === "number" ? String(code) : undefined,
+    firstReason,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const detail = typeof message === "string" ? message : "";
+  if (!prefix && !detail) return null;
+  return prefix && detail ? `${prefix}: ${detail}` : prefix || detail;
 }

@@ -1,3 +1,22 @@
+import { createHash, randomUUID } from "node:crypto";
+import {
+  type AssignedCredentialUnavailableMcpToolError,
+  type AuthExpiredMcpToolError,
+  type AuthRequiredMcpToolError,
+  getArchestraAppResourceUri,
+  LINKED_IDP_SSO_MODE,
+  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+  MCP_CATALOG_INSTALL_PATH,
+  MCP_CATALOG_INSTALL_QUERY_PARAM,
+  MCP_CATALOG_REAUTH_QUERY_PARAM,
+  MCP_CATALOG_SERVER_QUERY_PARAM,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  type McpToolError,
+  parseFullToolName,
+  SEEDED_APP_RENDER_META_KEY,
+  TimeInMs,
+} from "@archestra/shared";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
@@ -10,28 +29,16 @@ import type {
   ReadResourceResult,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  type AssignedCredentialUnavailableMcpToolError,
-  type AuthExpiredMcpToolError,
-  type AuthRequiredMcpToolError,
-  LINKED_IDP_SSO_MODE,
-  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
-  MCP_CATALOG_INSTALL_PATH,
-  MCP_CATALOG_INSTALL_QUERY_PARAM,
-  MCP_CATALOG_REAUTH_QUERY_PARAM,
-  MCP_CATALOG_SERVER_QUERY_PARAM,
-  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-  type McpToolError,
-  parseFullToolName,
-  TimeInMs,
-} from "@shared";
 import QuickLRU from "quick-lru";
+import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-recovery-messages";
+import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
+  AgentModel,
+  AppModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
@@ -39,27 +46,52 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
+import {
+  type AgentToolExclusionSets,
+  agentToolExclusionsService,
+  hasAnyExclusions,
+  isToolIdentityExcluded,
+  isToolRowExcluded,
+} from "@/services/agent-tool-exclusions";
+import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
+import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
 import {
   type ResolvedEnterpriseTransportCredential,
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
+import {
+  classifyThrownRefreshError,
+  type OAuthRefreshOutcome,
+  refreshFailureToServerFields,
+} from "@/services/oauth-refresh-classification";
 import type {
+  Tool as CatalogTool,
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
   EnterpriseManagedCredentialConfig,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
+  McpServer,
   McpToolAssignment,
+  ResourceVisibilityScope,
+  ToolOwner,
 } from "@/types";
+import { agentOwner } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
+import {
+  configureMcpElicitation,
+  type McpElicitationHandler,
+  withMcpElicitationCapability,
+} from "./mcp-elicitation";
 
 const MCP_CLIENT_EXTENSION_CAPABILITIES = {
   ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
@@ -84,7 +116,7 @@ export class McpServerConnectionTimeoutError extends Error {
 
 /**
  * Thrown when a stored HTTP session ID is no longer valid (e.g. pod restarted).
- * Caught by executeToolCall to trigger a transparent retry with a fresh session.
+ * Caught by executeToolCallForOwner to trigger a transparent retry with a fresh session.
  */
 class StaleSessionError extends Error {
   constructor(connectionKey: string) {
@@ -201,6 +233,7 @@ type CachedResource = {
 
 type CachedServerState = {
   secretId: string | null;
+  credentialFingerprint: string | null;
 };
 
 class McpClient {
@@ -210,7 +243,6 @@ class McpClient {
   private static readonly ENTERPRISE_CREDENTIAL_CACHE_MAX_ENTRIES = 1_000;
   private static readonly ENTERPRISE_CREDENTIAL_CACHE_FALLBACK_TTL_MS = 30_000;
 
-  private clients = new Map<string, Client>();
   private activeConnections = new LRUCacheManager<Client>({
     maxSize: ACTIVE_CONNECTION_CACHE_MAX_SIZE,
     defaultTtl: ACTIVE_CONNECTION_CACHE_TTL_MS,
@@ -225,6 +257,7 @@ class McpClient {
       this.activeConnectionServerState.delete(key);
       this.toolNameCache.delete(key);
       this.pendingHttpSessionMetadata.delete(key);
+      this.latestTransportCredentialFingerprints.delete(key);
       this.activeConnectionLastValidatedAt.delete(key);
     },
   });
@@ -247,6 +280,7 @@ class McpClient {
     Promise<{
       refreshed: boolean;
       updatedSecret: Record<string, unknown> | null;
+      outcome: OAuthRefreshOutcome;
     }>
   >();
   // Session affinity metadata discovered during transport creation.
@@ -255,6 +289,10 @@ class McpClient {
     string,
     { sessionEndpointUrl: string | null; sessionEndpointPodName: string | null }
   >();
+  // Latest outbound HTTP credential/header fingerprint per connection key.
+  // Retained until connection state is cleared so cached clients are
+  // invalidated when credentials or required upstream headers change.
+  private latestTransportCredentialFingerprints = new Map<string, string>();
   // Cache for resource reads: key is `${agentId}:${uri}`, value is cached result with TTL.
   // Bounded to RESOURCE_CACHE_MAX_SIZE entries (LRU eviction) to prevent unbounded growth
   // in multi-tenant environments with many agents and resources.
@@ -315,15 +353,39 @@ class McpClient {
   }
 
   /**
-   * Execute a single tool call against its assigned MCP server
+   * Execute a single tool call against its assigned MCP server on behalf of a
+   * tool owner (agent or app). The owner selects which assignment table gates
+   * the call, scopes the connection/credential caches, and is recorded on the
+   * audit row; everything else (target resolution, secrets, transport) is
+   * owner-independent.
    */
-  async executeToolCall(
+  async executeToolCallForOwner(
     toolCall: CommonToolCall,
-    agentId: string,
+    owner: ToolOwner,
     tokenAuth?: TokenAuthContext,
     options?: {
       conversationId?: string;
       identityProviderRedirectPath?: string;
+      elicitationHandler?: McpElicitationHandler;
+      /**
+       * Cancels the in-flight upstream request (callTool / listTools /
+       * readResource) when the caller's chat run is stopped. Without it a slow
+       * tool call runs to completion after Stop; see executeToolCall's catch,
+       * which rethrows an aborted call instead of retrying it.
+       */
+      abortSignal?: AbortSignal;
+      /**
+       * Pre-resolved catalog tool row for dynamic tool access: lets run_tool
+       * execute a tool the agent was never assigned. This governs tool ACCESS
+       * only. Whose credential/connection the call uses is still decided by
+       * the MCP server's connection policy (on-behalf-of the caller, or a
+       * pinned service account) — identical to an assigned tool. An
+       * unassigned tool has no assignment row, so it resolves its connection
+       * at call time (it can't carry a static pin). Access authorization
+       * happens at the dispatch layer (archestra-mcp-server/dynamic-tools.ts)
+       * before this is set; the gateway path never sets it.
+       */
+      availableTool?: CatalogTool;
     },
   ): Promise<CommonToolResult> {
     // Derive auth info for logging
@@ -336,7 +398,11 @@ class McpClient {
         : undefined;
 
     // Validate and get tool metadata
-    const validationResult = await this.validateAndGetTool(toolCall, agentId);
+    const validationResult = await this.validateAndGetTool(
+      toolCall,
+      owner,
+      options?.availableTool,
+    );
     if ("error" in validationResult) {
       return validationResult.error;
     }
@@ -344,11 +410,40 @@ class McpClient {
     // Use the resolved name (may have been prefixed by suffix fallback lookup)
     toolCall = resolvedToolCall;
 
+    // App backing servers have no upstream to connect to: the `open` launch tool is
+    // served in-process. Hand the host the app's UI resource pointer (the
+    // resource itself is resolved by the gateway's resources/read path, which
+    // serves it under the platform-pinned CSP). This short-circuits before any
+    // transport resolution, which would have no deployment/URL for serverType
+    // "app".
+    if (catalogItem.serverType === "app") {
+      const resourceUri = (
+        tool.meta as { _meta?: { ui?: { resourceUri?: string } } } | null
+      )?._meta?.ui?.resourceUri;
+      // Audit the launch like any other gateway tool call. The in-process app
+      // path has no upstream/transport, so success is recorded here rather than
+      // after dispatch; the result still carries the ui:// pointer for the host.
+      return await this.createSuccessResult({
+        toolCall,
+        owner,
+        mcpServerName: catalogItem.name,
+        content: [
+          {
+            type: "text",
+            text: `Opening ${escapeAppNameForModelText(catalogItem.name)}.`,
+          },
+        ],
+        isError: false,
+        ...(resourceUri ? { _meta: { ui: { resourceUri } } } : {}),
+        authInfo,
+      });
+    }
+
     const targetMcpServerIdResult =
       await this.determineTargetMcpServerIdForCatalogItem({
         tool,
         toolCall,
-        agentId,
+        owner,
         tokenAuth,
         catalogItem,
       });
@@ -356,7 +451,6 @@ class McpClient {
       return targetMcpServerIdResult.error;
     }
     const { targetMcpServerId, mcpServerName } = targetMcpServerIdResult;
-    const _targetMcpServer = await McpServerModel.findById(targetMcpServerId);
     const effectiveEnterpriseManagedConfig =
       catalogItem.enterpriseManagedConfig ?? null;
     if (
@@ -365,25 +459,29 @@ class McpClient {
     ) {
       return this.createErrorResult(
         toolCall,
-        agentId,
+        owner,
         "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
         mcpServerName,
         authInfo,
       );
     }
-    const enterpriseTransportCredential =
-      tool.credentialResolutionMode === "enterprise_managed"
-        ? await this.resolveCachedEnterpriseTransportCredential({
-            agentId,
-            tokenAuth,
-            enterpriseManagedConfig: effectiveEnterpriseManagedConfig,
-          })
-        : null;
+    // A catalog-level enterprise-managed config is authoritative: assignments
+    // created before enterprise mode existed (or via paths that didn't infer
+    // it) still carry the default "static"/"dynamic" mode, and connecting
+    // with static secrets would hit the protected server without any
+    // credential. Fail closed through the exchange instead.
+    const usesEnterpriseManagedCredential =
+      tool.credentialResolutionMode === "enterprise_managed" ||
+      effectiveEnterpriseManagedConfig !== null;
+    const enterpriseTransportCredential = usesEnterpriseManagedCredential
+      ? await this.resolveCachedEnterpriseTransportCredential({
+          owner,
+          tokenAuth,
+          enterpriseManagedConfig: effectiveEnterpriseManagedConfig,
+        })
+      : null;
 
-    if (
-      tool.credentialResolutionMode === "enterprise_managed" &&
-      !enterpriseTransportCredential
-    ) {
+    if (usesEnterpriseManagedCredential && !enterpriseTransportCredential) {
       const authError =
         await this.buildEnterpriseManagedIdentityProviderAuthMessage(
           catalogItem.name,
@@ -394,7 +492,7 @@ class McpClient {
         );
       return this.createErrorResult(
         toolCall,
-        agentId,
+        owner,
         authError.message,
         mcpServerName,
         authInfo,
@@ -405,7 +503,7 @@ class McpClient {
     const secretsResult = await this.getSecretsForMcpServer({
       targetMcpServerId: targetMcpServerId,
       toolCall,
-      agentId,
+      owner,
     });
     if ("error" in secretsResult) {
       return secretsResult.error;
@@ -413,18 +511,47 @@ class McpClient {
     const { secrets, secretId, serverState } = secretsResult;
 
     // Build connection cache key using the resolved target server ID.
-    // When conversationId is provided, each (agent, conversation) gets its own connection
-    // to enable per-session browser context isolation with streamable-http transport.
-    // When authenticated via external IdP, each user gets their own connection
-    // since the JWT is propagated to the underlying MCP server per-user.
+    // Agents: when conversationId is provided, each (agent, conversation) gets
+    // its own connection for per-session browser context isolation.
+    // Apps: keyed by (app, viewing user, session) so one app's upstream session
+    // never leaks across users or browser sessions.
+    // When authenticated via external IdP, each user additionally gets its own
+    // connection since the JWT is propagated to the underlying server per-user.
     const externalIdpUserId = tokenAuth?.isExternalIdp
       ? tokenAuth.userId
       : undefined;
-    let connectionKey = options?.conversationId
-      ? `${catalogItem.id}:${targetMcpServerId}:${agentId}:${options.conversationId}`
-      : `${catalogItem.id}:${targetMcpServerId}`;
+    let connectionKey: string;
+    if (owner.type === "agent") {
+      connectionKey = options?.conversationId
+        ? `${catalogItem.id}:${targetMcpServerId}:${owner.id}:${options.conversationId}`
+        : `${catalogItem.id}:${targetMcpServerId}`;
+    } else {
+      // An app call must carry the viewing user (session auth). Without one we
+      // must never collapse distinct callers onto a shared literal — that would
+      // let them reuse each other's persisted upstream session. Isolate the call
+      // with a per-request nonce instead, and surface the misuse.
+      let userSegment = tokenAuth?.userId;
+      if (!userSegment) {
+        userSegment = `anon:${randomUUID()}`;
+        logger.warn(
+          { appId: owner.id, catalogId: catalogItem.id },
+          "App tool call has no viewing user; isolating the connection per-request",
+        );
+      }
+      const sessionSegment = options?.conversationId ?? "default";
+      connectionKey = `${catalogItem.id}:${targetMcpServerId}:app:${owner.id}:${userSegment}:${sessionSegment}`;
+    }
     if (externalIdpUserId) {
       connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
+    }
+    if (options?.elicitationHandler) {
+      // Elicitation support is declared during MCP initialize. Keep these
+      // clients separate so a connection opened without the capability is not
+      // reused for a tool call that may receive elicitation/create requests.
+      // This intentionally keeps a second cached client per server/session
+      // when both interactive and non-interactive callers use the same MCP
+      // server.
+      connectionKey = `${connectionKey}:elicitation`;
     }
 
     const executeToolCall = async (
@@ -448,11 +575,12 @@ class McpClient {
             catalogId: catalogItem.id,
             connectionKey,
             toolCall,
-            agentId,
+            owner,
             mcpServerName,
             catalogItem,
             targetMcpServerId,
             tokenAuth,
+            enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
             executeRetry: (nextGetTransport, secrets) =>
@@ -478,33 +606,53 @@ class McpClient {
           transport,
           targetMcpServerId,
           serverState,
+          options?.elicitationHandler,
         );
 
-        // Determine the actual tool name by stripping the server/catalog prefix.
-        // We prioritize the `catalogName` prefix, which is standard for local MCP servers.
-        // If the tool name doesn't match the catalog prefix, we fall back to the resolved `mcpServerName`.
-        let targetToolName = this.stripServerPrefix(
-          toolCall.name,
-          tool.catalogName || "",
-        );
+        // Determine the actual upstream tool name. Prefer the stored raw name
+        // (tools.raw_name): it is exact even when the slug's server-prefix was
+        // truncated to fit the 64-char cap or the raw name itself contains the
+        // `__` separator. Fall back to prefix-stripping the slug for legacy rows
+        // whose raw_name has not been backfilled/re-synced yet.
+        let targetToolName: string;
+        if (tool.rawName) {
+          targetToolName = tool.rawName;
+        } else {
+          // We prioritize the `catalogName` prefix, which is standard for local
+          // MCP servers. If the tool name doesn't match the catalog prefix, we
+          // fall back to the resolved `mcpServerName`.
+          targetToolName = this.stripServerPrefix(
+            toolCall.name,
+            tool.catalogName || "",
+          );
 
-        if (targetToolName === toolCall.name) {
-          // No prefix match with catalogName; attempt to strip using mcpServerName instead.
-          targetToolName = this.stripServerPrefix(toolCall.name, mcpServerName);
-        }
+          if (targetToolName === toolCall.name) {
+            // No prefix match with catalogName; attempt to strip using mcpServerName instead.
+            targetToolName = this.stripServerPrefix(
+              toolCall.name,
+              mcpServerName,
+            );
+          }
 
-        if (targetToolName === toolCall.name) {
-          // Neither prefix matched (e.g. server name contains MCP_SERVER_TOOL_NAME_SEPARATOR separator).
-          // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
-          targetToolName = parseFullToolName(toolCall.name).toolName;
+          if (targetToolName === toolCall.name) {
+            // Neither prefix matched (e.g. server name contains MCP_SERVER_TOOL_NAME_SEPARATOR separator).
+            // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
+            targetToolName = parseFullToolName(toolCall.name).toolName;
+          }
         }
 
         const resourceUri = getSyntheticResourceToolUri(tool.meta);
         if (resourceUri) {
-          const result = await client.readResource({ uri: resourceUri });
+          const result = await client.readResource(
+            { uri: resourceUri },
+            {
+              signal: options?.abortSignal,
+              timeout: config.mcpGateway.toolCallTimeoutMs,
+            },
+          );
           return await this.createSuccessResult({
             toolCall,
-            agentId,
+            owner,
             mcpServerName,
             content: [
               {
@@ -528,12 +676,20 @@ class McpClient {
           client,
           connectionKey,
           targetToolName,
+          options?.abortSignal,
         );
 
-        const result = await client.callTool({
-          name: targetToolName,
-          arguments: toolCall.arguments,
-        });
+        const result = await client.callTool(
+          {
+            name: targetToolName,
+            arguments: toolCall.arguments,
+          },
+          undefined,
+          {
+            signal: options?.abortSignal,
+            timeout: config.mcpGateway.toolCallTimeoutMs,
+          },
+        );
 
         const isOAuthServer = !!catalogItem.oauthConfig;
         const toolResultAuthError = isAuthRelatedToolResult(result);
@@ -549,11 +705,12 @@ class McpClient {
             catalogId: catalogItem.id,
             connectionKey,
             toolCall,
-            agentId,
+            owner,
             mcpServerName,
             catalogItem,
             targetMcpServerId,
             tokenAuth,
+            enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
             executeRetry: (nextGetTransport, secrets) =>
@@ -566,16 +723,16 @@ class McpClient {
         }
 
         if (toolResultAuthError && tool.catalogId && targetMcpServerId) {
-          const catalogDisplayName = tool.catalogName || tool.catalogId;
-          const authError = this.buildExpiredAuthMessage(
+          const catalogDisplayName = tool.catalogName || catalogItem.name;
+          const authError = await this.buildExpiredAuthMessage({
             catalogDisplayName,
-            tool.catalogId,
-            targetMcpServerId,
+            catalogId: tool.catalogId,
+            mcpServerId: targetMcpServerId,
             tokenAuth,
-          );
+          });
           return await this.createErrorResult(
             toolCall,
-            agentId,
+            owner,
             authError.message,
             mcpServerName,
             authInfo,
@@ -586,7 +743,7 @@ class McpClient {
         // Apply template and return
         return await this.createSuccessResult({
           toolCall,
-          agentId,
+          owner,
           mcpServerName,
           content: result.content as ContentBlock[],
           isError: !!result.isError,
@@ -597,6 +754,19 @@ class McpClient {
             | undefined,
         });
       } catch (error) {
+        // A stopped chat run aborts the request; the SDK rejects it as an
+        // McpError(RequestTimeout) — indistinguishable by shape from a real
+        // timeout — so key off the signal, not the error. Rethrow before any
+        // recovery so an aborted call is never retried (token refresh / fresh
+        // session). The aborted call is intentionally not audited from here:
+        // it runs in the AI SDK's abandoned tool-execute promise, so a DB write
+        // at this point is unreliable. Auditing a cancelled (possibly
+        // upstream-committed) call needs a non-abandoned context and is tracked
+        // separately.
+        if (options?.abortSignal?.aborted) {
+          throw error;
+        }
+
         // Handle stale HTTP session.  The MCP SDK skips the `initialize`
         // handshake when `transport.sessionId` is already set (session
         // resumption), so `client.connect()` succeeds without making any
@@ -691,6 +861,8 @@ class McpClient {
         ) {
           await McpServerModel.update(targetMcpServerId, {
             oauthRefreshError: "no_refresh_token",
+            oauthRefreshErrorMessage: "no_refresh_token",
+            oauthRefreshErrorDescription: null,
             oauthRefreshFailedAt: new Date(),
           });
           logger.warn(
@@ -713,11 +885,12 @@ class McpClient {
             catalogId: catalogItem.id,
             connectionKey,
             toolCall,
-            agentId,
+            owner,
             mcpServerName,
             catalogItem,
             targetMcpServerId,
             tokenAuth,
+            enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
             executeRetry: (getTransport, secrets) =>
@@ -762,11 +935,12 @@ class McpClient {
 
         // For auth errors, return an actionable message with re-auth URL
         if (isAuthError && tool.catalogId) {
-          const catalogDisplayName = tool.catalogName || tool.catalogId;
+          const catalogDisplayName = tool.catalogName || catalogItem.name;
           // Credentials exist but failed → "expired/invalid" message with manage link
           if (targetMcpServerId) {
-            const targetServer =
-              await McpServerModel.findById(targetMcpServerId);
+            const [targetServer] = await McpServerModel.findByIdsBasic([
+              targetMcpServerId,
+            ]);
             if (
               targetServer?.ownerId &&
               !targetServer.teamId &&
@@ -779,22 +953,23 @@ class McpClient {
                 );
               return await this.createErrorResult(
                 toolCall,
-                agentId,
+                owner,
                 assignmentError.message,
                 mcpServerName,
                 authInfo,
                 assignmentError,
               );
             }
-            const authError = this.buildExpiredAuthMessage(
+            const authError = await this.buildExpiredAuthMessage({
               catalogDisplayName,
-              tool.catalogId,
-              targetMcpServerId,
+              catalogId: tool.catalogId,
+              mcpServerId: targetMcpServerId,
               tokenAuth,
-            );
+              resolvedServer: targetServer,
+            });
             return await this.createErrorResult(
               toolCall,
-              agentId,
+              owner,
               authError.message,
               mcpServerName,
               authInfo,
@@ -809,7 +984,7 @@ class McpClient {
           );
           return await this.createErrorResult(
             toolCall,
-            agentId,
+            owner,
             authError.message,
             mcpServerName,
             authInfo,
@@ -819,7 +994,7 @@ class McpClient {
 
         return await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           errorMessage,
           mcpServerName,
           authInfo,
@@ -847,7 +1022,12 @@ class McpClient {
       catalogItem,
       targetMcpServerId,
     );
-    const concurrencyLimit = this.getConcurrencyLimit(transportKind);
+    // The MCP SDK stores request handlers on the client by method. Serialize
+    // elicitation-capable calls so a cached client's elicitation handler is
+    // not replaced while another tool call on the same connection is active.
+    const concurrencyLimit = options?.elicitationHandler
+      ? 1
+      : this.getConcurrencyLimit(transportKind);
 
     return this.connectionLimiter.runWithLimit(
       connectionKey,
@@ -887,7 +1067,13 @@ class McpClient {
     transport: Transport,
     targetMcpServerId: string,
     currentServerState: CachedServerState,
+    elicitationHandler?: McpElicitationHandler,
   ): Promise<Client> {
+    const effectiveServerState = this.withLatestCredentialFingerprint(
+      connectionKey,
+      currentServerState,
+    );
+
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(connectionKey);
     if (existingClient) {
@@ -895,16 +1081,16 @@ class McpClient {
         this.activeConnectionServerState.get(connectionKey);
       if (
         !cachedServerState ||
-        !this.hasMatchingServerState(cachedServerState, currentServerState)
+        !this.hasMatchingServerState(cachedServerState, effectiveServerState)
       ) {
         logger.info(
           {
             connectionKey,
             targetMcpServerId,
             cachedSecretId: cachedServerState?.secretId ?? null,
-            currentSecretId: currentServerState.secretId,
+            currentSecretId: effectiveServerState.secretId,
           },
-          "Discarding cached MCP client after MCP server secret changed",
+          "Discarding cached MCP client after MCP server credentials changed",
         );
         try {
           await existingClient.close();
@@ -928,8 +1114,14 @@ class McpClient {
           this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
         }
         logger.debug({ connectionKey }, "Reusing cached MCP client");
+        if (elicitationHandler) {
+          configureMcpElicitation(reusableClient, elicitationHandler);
+        }
         this.activeConnections.set(connectionKey, reusableClient);
-        this.activeConnectionServerState.set(connectionKey, currentServerState);
+        this.activeConnectionServerState.set(
+          connectionKey,
+          effectiveServerState,
+        );
         return reusableClient;
       } catch (error) {
         // Connection is dead, invalidate cache and create fresh client
@@ -956,16 +1148,22 @@ class McpClient {
     }
 
     // Create the client with UI extension capabilities
-    const capabilities: ClientCapabilitiesWithExtensions = {
+    const baseCapabilities: ClientCapabilitiesWithExtensions = {
       roots: { listChanged: true },
       extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
     };
+    const capabilities = elicitationHandler
+      ? withMcpElicitationCapability(baseCapabilities)
+      : baseCapabilities;
 
     // Create new client
     logger.info({ connectionKey }, "Creating new MCP client");
     const client = new Client(buildMcpClientInfo("archestra-platform"), {
       capabilities,
     });
+    if (elicitationHandler) {
+      configureMcpElicitation(client, elicitationHandler);
+    }
 
     // Track whether we're using a stored session ID (for stale session cleanup)
     const usedStoredSession =
@@ -1018,7 +1216,7 @@ class McpClient {
     // This prevents a race where a second request creates a duplicate connection
     // while the upsert is in flight.
     this.activeConnections.set(connectionKey, client);
-    this.activeConnectionServerState.set(connectionKey, currentServerState);
+    this.activeConnectionServerState.set(connectionKey, effectiveServerState);
     this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
 
     // Persist the MCP session ID so other backend pods can reuse it.
@@ -1065,6 +1263,7 @@ class McpClient {
     this.activeConnectionServerState.delete(connectionKey);
     this.toolNameCache.delete(connectionKey);
     this.pendingHttpSessionMetadata.delete(connectionKey);
+    this.latestTransportCredentialFingerprints.delete(connectionKey);
     this.activeConnectionLastValidatedAt.delete(connectionKey);
   }
 
@@ -1073,6 +1272,7 @@ class McpClient {
     this.activeConnectionServerState.clear();
     this.toolNameCache.clear();
     this.pendingHttpSessionMetadata.clear();
+    this.latestTransportCredentialFingerprints.clear();
     this.activeConnectionLastValidatedAt.clear();
   }
 
@@ -1081,7 +1281,8 @@ class McpClient {
    */
   private async validateAndGetTool(
     toolCall: CommonToolCall,
-    agentId: string,
+    owner: ToolOwner,
+    availableTool?: CatalogTool,
   ): Promise<
     | {
         tool: McpToolAssignment;
@@ -1090,11 +1291,11 @@ class McpClient {
       }
     | { error: CommonToolResult }
   > {
-    // Get MCP tool from agent-assigned tools
-    let mcpTools = await ToolModel.getMcpToolsAssignedToAgent(
-      [toolCall.name],
-      agentId,
-    );
+    // Get the MCP tool from the owner's assigned tools (agent_tools or app_tools).
+    let mcpTools =
+      owner.type === "agent"
+        ? await ToolModel.getMcpToolsAssignedToAgent([toolCall.name], owner.id)
+        : await ToolModel.getMcpToolsAssignedToApp([toolCall.name], owner.id);
 
     // Fallback: if the name has no server prefix (no MCP_SERVER_TOOL_NAME_SEPARATOR), try finding a tool
     // that ends with "__<name>". This handles MCP App iframes calling oncalltool
@@ -1104,25 +1305,148 @@ class McpClient {
       mcpTools.length === 0 &&
       !toolCall.name.includes(MCP_SERVER_TOOL_NAME_SEPARATOR)
     ) {
-      mcpTools = await ToolModel.getMcpToolsAssignedToAgentBySuffix(
-        toolCall.name,
-        agentId,
-      );
+      mcpTools =
+        owner.type === "agent"
+          ? await ToolModel.getMcpToolsAssignedToAgentBySuffix(
+              toolCall.name,
+              owner.id,
+            )
+          : await ToolModel.getMcpToolsAssignedToAppBySuffix(
+              toolCall.name,
+              owner.id,
+            );
       if (mcpTools.length > 0) {
         // Use the full prefixed name for downstream execution but don't mutate the caller's object.
         toolCall = { ...toolCall, name: mcpTools[0].toolName };
       }
     }
 
-    const tool = mcpTools[0];
+    let tool: McpToolAssignment | undefined = mcpTools[0];
+
+    const accessAllTools =
+      owner.type === "agent" && (await AgentModel.getAccessAllTools(owner.id));
+
+    // Per-agent exclusions (Auto-tool mode). Loaded once here and reused for
+    // both the precedence resolution just below and the final execution gate
+    // further down, so a single dispatch never queries them twice.
+    const exclusionSets = accessAllTools
+      ? await agentToolExclusionsService.getExclusionSets(owner.id)
+      : null;
+
+    // Assigned rows normally keep precedence over the dispatcher's
+    // dynamically-resolved row. But tool names are unique only per catalog, so a
+    // name can back an assigned row in one catalog AND a discoverable row in
+    // another. When the assigned row is EXCLUDED while the dispatcher resolved a
+    // non-excluded same-named row, letting the assigned row win would refuse a
+    // tool search_tools/run_tool just advertised. Drop the excluded assigned row
+    // so the dynamic row below takes over.
+    if (
+      tool &&
+      exclusionSets &&
+      availableTool &&
+      availableTool.name === toolCall.name &&
+      isToolIdentityExcluded(
+        { catalogId: tool.catalogId, name: tool.toolName },
+        exclusionSets,
+      ) &&
+      !isToolIdentityExcluded(
+        { catalogId: availableTool.catalogId, name: availableTool.name },
+        exclusionSets,
+      )
+    ) {
+      tool = undefined;
+    }
+
+    // Dynamic tool access ("Auto" mode): the dispatcher pre-resolved a
+    // tool the agent has no assignment row for. Shape it like an assignment so
+    // downstream resolution is identical. It has no row to inherit a credential
+    // mode from and can't carry a static pin, so it resolves its connection at
+    // call time — which still defers to the MCP server's connection policy
+    // (on-behalf-of the caller, or a pinned service account). An assigned row
+    // keeps precedence here; in "Auto" mode the override below then routes
+    // even a leftover static assignment through the server's connection policy.
+    if (!tool && availableTool && availableTool.name === toolCall.name) {
+      tool = {
+        toolName: availableTool.name,
+        rawName: availableTool.rawName,
+        mcpServerId: null,
+        credentialResolutionMode: "dynamic",
+        catalogId: availableTool.catalogId,
+        catalogName: null,
+        meta: availableTool.meta ?? null,
+      };
+    }
 
     if (!tool) {
+      const message = unavailableThirdPartyToolMessage(toolCall.name);
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
-          "Tool not found or not assigned to agent",
+          owner,
+          message,
+          "unknown",
+          undefined,
+          {
+            type: "tool_state",
+            code: "unknown_tool",
+            message,
+            toolName: toolCall.name,
+          },
         ),
+      };
+    }
+
+    // Per-agent exclusions (Auto-tool mode) — the deep execution gate backing
+    // every dispatch path (gateway tools/call, run_tool, and chat's CACHED
+    // AI-SDK tool wrappers, which execute here without re-entering the gateway
+    // handler). Checked by resolved tool identity, after suffix recovery and
+    // dynamic-dispatch resolution, so no alias can bypass it. Excluded tools
+    // surface as unavailable, matching the discovery-side refusals.
+    if (
+      exclusionSets &&
+      isToolIdentityExcluded(
+        { catalogId: tool.catalogId, name: tool.toolName },
+        exclusionSets,
+      )
+    ) {
+      const message = unavailableThirdPartyToolMessage(toolCall.name);
+      return {
+        error: await this.createErrorResult(
+          toolCall,
+          owner,
+          message,
+          tool.catalogName || "unknown",
+          undefined,
+          {
+            type: "tool_state",
+            code: "unknown_tool",
+            message,
+            toolName: toolCall.name,
+          },
+        ),
+      };
+    }
+
+    // "Auto" mode overrides a leftover per-tool credential pin. When the
+    // agent has access_all_tools on, credentials follow the MCP server's
+    // connection policy (on-behalf-of the caller, or a pinned service account)
+    // for every tool — a static assignment left over from Custom mode must not
+    // dictate the credential. The assignment row stays in the DB so switching
+    // back to Custom restores it. Only static pins are rewritten; dynamic is
+    // already server-policy and enterprise-managed keeps its own mechanism.
+    if (tool.credentialResolutionMode === "static" && accessAllTools) {
+      logger.info(
+        {
+          toolName: toolCall.name,
+          agentId: owner.id,
+          mcpServerId: tool.mcpServerId,
+        },
+        "Auto tool mode: ignoring static assignment pin, resolving via the MCP server's default-credential policy",
+      );
+      tool = {
+        ...tool,
+        mcpServerId: null,
+        credentialResolutionMode: "dynamic",
       };
     }
 
@@ -1131,7 +1455,7 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           "Tool is missing catalogId",
           tool.catalogName || "unknown",
         ),
@@ -1144,7 +1468,7 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           `No catalog item found for tool catalog ID ${tool.catalogId}`,
           tool.catalogName || "unknown",
         ),
@@ -1159,11 +1483,11 @@ class McpClient {
   private async getSecretsForMcpServer({
     targetMcpServerId,
     toolCall,
-    agentId,
+    owner,
   }: {
     targetMcpServerId: string;
     toolCall: CommonToolCall;
-    agentId: string;
+    owner: ToolOwner;
   }): Promise<
     | {
         secrets: Record<string, unknown>;
@@ -1172,12 +1496,18 @@ class McpClient {
       }
     | { error: CommonToolResult }
   > {
-    const mcpServer = await McpServerModel.findById(targetMcpServerId);
+    // Resolving secrets only needs the base server row (id + secretId).
+    // findById() additionally performs a 4-table join and a per-server
+    // mcp_server_user lookup, which turns into an N+1 when several tool calls
+    // in the same turn target the same server. Use the lightweight lookup.
+    const [mcpServer] = await McpServerModel.findByIdsBasic([
+      targetMcpServerId,
+    ]);
     if (!mcpServer) {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           `MCP server not found when getting secrets for MCP server ${targetMcpServerId}`,
           "unknown",
         ),
@@ -1204,9 +1534,10 @@ class McpClient {
     return result;
   }
 
-  private async fetchSecretsForLoadedMcpServer(
-    mcpServer: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>,
-  ): Promise<{
+  private async fetchSecretsForLoadedMcpServer(mcpServer: {
+    id: string;
+    secretId: string | null;
+  }): Promise<{
     secrets: Record<string, unknown>;
     secretId?: string;
     serverState: CachedServerState;
@@ -1238,12 +1569,12 @@ class McpClient {
     tool,
     tokenAuth,
     toolCall,
-    agentId,
+    owner,
     catalogItem,
   }: {
     tool: McpToolAssignment;
     toolCall: CommonToolCall;
-    agentId: string;
+    owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
   }): Promise<
@@ -1262,16 +1593,38 @@ class McpClient {
     // Static credential case: tool has a bound MCP server credential to use.
     if (tool.credentialResolutionMode === "static") {
       if (!tool.mcpServerId) {
+        // The pinned install was uninstalled but the assignment is retained.
+        // Route through a remaining install for the same catalog (a multi-tenant
+        // sibling, or a reconnect not yet re-pinned), else return the typed
+        // "reconnect" result. catalogItem is the resolved catalog for this tool,
+        // so use its id rather than the assignment's possibly-stale catalogId.
+        const installs = await McpServerModel.findByCatalogId(catalogItem.id);
+        const resolved = await this.pickInstallForCaller(installs, tokenAuth);
+        if (resolved) {
+          return {
+            targetMcpServerId: resolved.id,
+            mcpServerName: resolved.name,
+          };
+        }
+        const reconnectError = this.buildReconnectRequiredMessage(
+          tool.catalogName || catalogItem.name,
+          catalogItem.id,
+        );
         return {
           error: await this.createErrorResult(
             toolCall,
-            agentId,
-            "An MCP server installation is required for statically assigned MCP tools.",
+            owner,
+            reconnectError.message,
             fallbackName,
+            undefined,
+            reconnectError,
           ),
         };
       }
-      const mcpServer = await McpServerModel.findById(tool.mcpServerId);
+      // Only the display name is needed here, so avoid the heavier findById().
+      const [mcpServer] = await McpServerModel.findByIdsBasic([
+        tool.mcpServerId,
+      ]);
       logger.info(
         {
           toolName: toolCall.name,
@@ -1291,9 +1644,9 @@ class McpClient {
     if (tool.credentialResolutionMode === "enterprise_managed") {
       const explicitTargetMcpServerId = tool.mcpServerId;
       if (explicitTargetMcpServerId) {
-        const mcpServer = await McpServerModel.findById(
+        const [mcpServer] = await McpServerModel.findByIdsBasic([
           explicitTargetMcpServerId,
-        );
+        ]);
         return {
           targetMcpServerId: explicitTargetMcpServerId,
           mcpServerName: mcpServer?.name || fallbackName,
@@ -1308,7 +1661,7 @@ class McpClient {
         return {
           error: await this.createErrorResult(
             toolCall,
-            agentId,
+            owner,
             "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
             fallbackName,
           ),
@@ -1327,7 +1680,7 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
           fallbackName,
         ),
@@ -1337,7 +1690,7 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           "Dynamic team credential is enabled but tool has no catalogId.",
           fallbackName,
         ),
@@ -1347,107 +1700,62 @@ class McpClient {
     // Get all servers for this catalog
     const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
 
-    // User token: try user's personal server, then team-owned servers for
-    // teams the user belongs to, then fall back to an org-scoped install.
-    if (tokenAuth.userId) {
-      // Priority 1: Personal credential owned by current user
-      const userServer = allServers.find(
-        (s) => s.ownerId === tokenAuth.userId && !s.teamId && s.scope !== "org",
+    // The catalog item defines how agents connect to it. A pinned connection
+    // ("service account") routes every runtime-resolved call through that one
+    // installation, regardless of the caller. The pin is re-validated against
+    // the catalog's installs on every call (no DB-level FK — see the schema
+    // comment), so a revoked connection degrades to resolve-at-call-time.
+    if (catalogItem.dynamicConnectionMcpServerId) {
+      const pinnedServer = allServers.find(
+        (s) => s.id === catalogItem.dynamicConnectionMcpServerId,
       );
-      if (userServer) {
+      if (pinnedServer) {
         logger.info(
           {
             toolName: toolCall.name,
             catalogId: tool.catalogId,
-            serverId: userServer.id,
-            userId: tokenAuth.userId,
+            serverId: pinnedServer.id,
           },
-          `Dynamic resolution: using user-owned server for tool ${toolCall.name}`,
+          `Connection resolution: using the catalog's pinned service-account connection for tool ${toolCall.name}`,
         );
         return {
-          targetMcpServerId: userServer.id,
-          mcpServerName: userServer.name,
+          targetMcpServerId: pinnedServer.id,
+          mcpServerName: pinnedServer.name,
         };
       }
-
-      // Priority 2: Team-owned server for a team the user is a member of
-      const userTeams = await TeamModel.getUserTeams(tokenAuth.userId);
-      const userTeamIds = new Set(userTeams.map((t) => t.id));
-      const teamServer = allServers.find(
-        (s) => s.teamId && userTeamIds.has(s.teamId),
+      logger.warn(
+        {
+          toolName: toolCall.name,
+          catalogId: tool.catalogId,
+          dynamicConnectionMcpServerId:
+            catalogItem.dynamicConnectionMcpServerId,
+        },
+        "Connection resolution: the catalog's pinned connection no longer exists; resolving at call time",
       );
-      if (teamServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: teamServer.id,
-            teamId: teamServer.teamId,
-            userId: tokenAuth.userId,
-          },
-          `Dynamic resolution: using team-owned server for user ${tokenAuth.userId}`,
-        );
-        return {
-          targetMcpServerId: teamServer.id,
-          mcpServerName: teamServer.name,
-        };
-      }
-
-      // Priority 3: Org-scoped install
-      const orgServer = allServers.find((s) => s.scope === "org");
-      if (orgServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: orgServer.id,
-            userId: tokenAuth.userId,
-          },
-          `Dynamic resolution: using org-scoped server for user ${tokenAuth.userId}`,
-        );
-        return {
-          targetMcpServerId: orgServer.id,
-          mcpServerName: orgServer.name,
-        };
-      }
     }
 
-    // Team token: try team-owned servers for the token's team, then fall back
-    // to an org-scoped install.
-    if (tokenAuth.teamId) {
-      const teamServer = allServers.find((s) => s.teamId === tokenAuth.teamId);
-      if (teamServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: teamServer.id,
-            teamId: tokenAuth.teamId,
-          },
-          `Dynamic resolution: using team-owned server for team ${tokenAuth.teamId}`,
-        );
-        return {
-          targetMcpServerId: teamServer.id,
-          mcpServerName: teamServer.name,
-        };
-      }
-
-      const orgServer = allServers.find((s) => s.scope === "org");
-      if (orgServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: orgServer.id,
-            teamId: tokenAuth.teamId,
-          },
-          `Dynamic resolution: using org-scoped server for team ${tokenAuth.teamId}`,
-        );
-        return {
-          targetMcpServerId: orgServer.id,
-          mcpServerName: orgServer.name,
-        };
-      }
+    // Resolve at call time (no pinned connection). The chatting identity's own
+    // connection takes priority, then falls back to a connection it can access:
+    // user token -> personal, then a team the user belongs to, then org-scoped;
+    // team token -> the team's connection, then org-scoped. Pinning a service
+    // account (above) overrides this to force one connection for every caller.
+    const resolvedServer = await this.pickInstallForCaller(
+      allServers,
+      tokenAuth,
+    );
+    if (resolvedServer) {
+      logger.info(
+        {
+          toolName: toolCall.name,
+          catalogId: tool.catalogId,
+          serverId: resolvedServer.id,
+        },
+        `Dynamic resolution: using scoped install for tool ${toolCall.name}`,
+      );
+      return {
+        targetMcpServerId: resolvedServer.id,
+        mcpServerName: resolvedServer.name,
+      };
     }
 
     // Org-wide token is incompatible with dynamic credential resolution
@@ -1455,47 +1763,109 @@ class McpClient {
       return {
         error: await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
           fallbackName,
         ),
       };
     }
 
-    // Fallback for external IdP users if earlier resolution didn't match
+    // Fallback for external IdP users if earlier resolution didn't match.
+    // Another user's personal install is never eligible — its stored
+    // credentials must not serve other callers; JWKS deployments share
+    // org/team-scoped installs (or ownerless service rows).
     // TODO: works only we are doing end-to-end JWKS pattern.
-    if (tokenAuth.isExternalIdp && allServers.length > 0) {
-      logger.info(
-        {
-          toolName: toolCall.name,
-          catalogId: tool.catalogId,
-          serverId: allServers[0].id,
-        },
-        `Dynamic resolution: using first available server for external IdP user`,
+    if (tokenAuth.isExternalIdp) {
+      const idpFallbackServer = allServers.find(
+        (s) =>
+          !(
+            s.ownerId &&
+            s.ownerId !== tokenAuth.userId &&
+            !s.teamId &&
+            s.scope !== "org"
+          ),
       );
-      return {
-        targetMcpServerId: allServers[0].id,
-        mcpServerName: allServers[0].name,
-      };
+      if (idpFallbackServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: idpFallbackServer.id,
+          },
+          `Dynamic resolution: using first available server for external IdP user`,
+        );
+        return {
+          targetMcpServerId: idpFallbackServer.id,
+          mcpServerName: idpFallbackServer.name,
+        };
+      }
     }
 
-    // No server found - return an actionable error with install link
-    const catalogDisplayName = tool.catalogName || tool.catalogId;
-    const authError = this.buildAuthRequiredMessage(
-      catalogDisplayName,
+    // No server found. Offer a self-service install link only when the caller
+    // can actually reach it; otherwise the catalog item is not shared with them
+    // (e.g. another user's personal-scope server) and the link is a dead end.
+    const catalogDisplayName = tool.catalogName || catalogItem.name;
+    const authError = (await this.callerCanConnectCatalog(
       tool.catalogId,
       tokenAuth,
-    );
+    ))
+      ? this.buildAuthRequiredMessage(
+          catalogDisplayName,
+          tool.catalogId,
+          tokenAuth,
+        )
+      : this.buildConnectionUnavailableMessage(
+          catalogDisplayName,
+          tool.catalogId,
+        );
     return {
       error: await this.createErrorResult(
         toolCall,
-        agentId,
+        owner,
         authError.message,
         fallbackName,
         undefined,
         authError,
       ),
     };
+  }
+
+  // Picks which of a catalog's installs the calling identity routes through, using
+  // the runtime credential-resolution scope priority: a user token prefers its own
+  // personal install, then a team the user belongs to, then an org-scoped install;
+  // a team token prefers the team's install, then org-scoped. Returns undefined when
+  // none match. Shared by dynamic resolution and by a retained static assignment
+  // whose pinned install was uninstalled (its mcpServerId is null).
+  private async pickInstallForCaller(
+    allServers: McpServer[],
+    tokenAuth: TokenAuthContext | undefined,
+  ): Promise<McpServer | undefined> {
+    if (tokenAuth?.userId) {
+      const userServer = allServers.find(
+        (s) => s.ownerId === tokenAuth.userId && !s.teamId && s.scope !== "org",
+      );
+      if (userServer) return userServer;
+
+      const userTeams = await TeamModel.getUserTeams(tokenAuth.userId);
+      const userTeamIds = new Set(userTeams.map((t) => t.id));
+      const teamServer = allServers.find(
+        (s) => s.teamId && userTeamIds.has(s.teamId),
+      );
+      if (teamServer) return teamServer;
+
+      const orgServer = allServers.find((s) => s.scope === "org");
+      if (orgServer) return orgServer;
+    }
+
+    if (tokenAuth?.teamId) {
+      const teamServer = allServers.find((s) => s.teamId === tokenAuth.teamId);
+      if (teamServer) return teamServer;
+
+      const orgServer = allServers.find((s) => s.scope === "org");
+      if (orgServer) return orgServer;
+    }
+
+    return undefined;
   }
 
   /**
@@ -1589,7 +1959,6 @@ class McpClient {
           catalogItem,
           secrets,
         });
-        applyPresetHeaderMappings(localHeaders, catalogItem);
         if (enterpriseTransportCredential) {
           localHeaders[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
@@ -1604,6 +1973,7 @@ class McpClient {
         }
 
         mergePassthroughHeaders(localHeaders, tokenAuth?.passthroughHeaders);
+        this.trackTransportCredentialFingerprint(connectionKey, localHeaders);
 
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
           sessionId,
@@ -1616,11 +1986,31 @@ class McpClient {
           throw new Error("Remote server missing serverUrl");
         }
 
+        // Runtime egress enforcement: refuse the outbound connection when the
+        // server's host is not permitted by its environment's network policy.
+        // This is the actual boundary — it also catches grandfathered servers
+        // and servers whose environment policy was tightened after creation,
+        // which the create/edit-time check does not re-validate. Applies to
+        // both tool calls and tools/list inspection (both build the transport
+        // here). Skipped only when org context can't be resolved.
+        const organizationId =
+          catalogItem.organizationId ?? tokenAuth?.organizationId;
+        if (organizationId) {
+          const verdict = await evaluateRemoteServerUrlAgainstNetworkPolicy({
+            serverType: "remote",
+            serverUrl: catalogItem.serverUrl,
+            environmentId: catalogItem.environmentId,
+            organizationId,
+          });
+          if (!verdict.allowed) {
+            throw new Error(verdict.message);
+          }
+        }
+
         const headers = buildStaticCredentialHeaders({
           catalogItem,
           secrets,
         });
-        applyPresetHeaderMappings(headers, catalogItem);
         if (enterpriseTransportCredential) {
           headers[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
@@ -1635,6 +2025,7 @@ class McpClient {
         }
 
         mergePassthroughHeaders(headers, tokenAuth?.passthroughHeaders);
+        this.trackTransportCredentialFingerprint(connectionKey, headers);
 
         return new StreamableHTTPClientTransport(
           new URL(catalogItem.serverUrl),
@@ -1894,11 +2285,14 @@ class McpClient {
     client: Client,
     connectionKey: string,
     strippedToolName: string,
+    abortSignal?: AbortSignal,
   ): Promise<string> {
     let nameMap = this.toolNameCache.get(connectionKey);
     if (!nameMap) {
       try {
-        const toolsResult = await client.listTools();
+        const toolsResult = await client.listTools(undefined, {
+          signal: abortSignal,
+        });
         nameMap = new Map<string, string>();
         for (const tool of toolsResult.tools) {
           nameMap.set(tool.name.toLowerCase(), tool.name);
@@ -1920,7 +2314,7 @@ class McpClient {
    */
   private async createErrorResult(
     toolCall: CommonToolCall,
-    agentId: string,
+    owner: ToolOwner,
     error: string,
     mcpServerName: string = "unknown",
     authInfo?: {
@@ -1949,7 +2343,7 @@ class McpClient {
     };
 
     await this.persistToolCall(
-      agentId,
+      owner,
       mcpServerName,
       toolCall,
       errorResult,
@@ -1963,7 +2357,7 @@ class McpClient {
    */
   private async createSuccessResult(opts: {
     toolCall: CommonToolCall;
-    agentId: string;
+    owner: ToolOwner;
     mcpServerName: string;
     content: ContentBlock[];
     isError: boolean;
@@ -1973,7 +2367,7 @@ class McpClient {
   }): Promise<CommonToolResult> {
     const {
       toolCall,
-      agentId,
+      owner,
       mcpServerName,
       content,
       isError,
@@ -1982,17 +2376,23 @@ class McpClient {
       structuredContent,
     } = opts;
 
+    // `archestraError` and the seeded-app-render marker are platform-reserved
+    // envelopes: error renderers and the trusted-data guardrail key off them to
+    // identify platform-authored results. Only the platform sets them, so strip
+    // any copy an upstream tool put in its result metadata — otherwise a
+    // hostile server could forge a dispatch error or a seeded-render marker and
+    // slip untrusted output past the injection scan.
     const toolResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
       content,
       isError,
-      _meta,
-      structuredContent,
+      _meta: stripReservedPlatformMeta(_meta),
+      structuredContent: stripReservedPlatformMeta(structuredContent),
     };
 
     await this.persistToolCall(
-      agentId,
+      owner,
       mcpServerName,
       toolCall,
       toolResult,
@@ -2012,11 +2412,12 @@ class McpClient {
     catalogId: string;
     connectionKey: string;
     toolCall: CommonToolCall;
-    agentId: string;
+    owner: ToolOwner;
     mcpServerName: string;
     catalogItem: InternalMcpCatalog;
     targetMcpServerId: string;
     tokenAuth?: TokenAuthContext;
+    enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential | null;
     toolCatalogId: string | null;
     toolCatalogName: string | null;
     executeRetry: (
@@ -2029,11 +2430,12 @@ class McpClient {
       catalogId,
       connectionKey,
       toolCall,
-      agentId,
+      owner,
       mcpServerName,
       catalogItem,
       targetMcpServerId,
       tokenAuth,
+      enterpriseTransportCredential,
       toolCatalogId,
       toolCatalogName,
       executeRetry,
@@ -2055,15 +2457,22 @@ class McpClient {
 
     if (!refreshResult.refreshed) {
       logger.warn(
-        { toolName: toolCall.name, secretId },
+        {
+          toolName: toolCall.name,
+          secretId,
+          classification: refreshResult.outcome.ok
+            ? undefined
+            : refreshResult.outcome.kind,
+        },
         "attemptTokenRefreshAndRetry: token refresh failed",
       );
 
-      // Track the refresh failure in the MCP server record
-      await McpServerModel.update(targetMcpServerId, {
-        oauthRefreshError: "refresh_failed",
-        oauthRefreshFailedAt: new Date(),
-      });
+      // Only a terminal failure changes persisted connection health; a
+      // transient failure persists nothing and is re-attempted next use.
+      const failureFields = refreshFailureToServerFields(refreshResult.outcome);
+      if (failureFields) {
+        await McpServerModel.update(targetMcpServerId, failureFields);
+      }
 
       return null;
     }
@@ -2076,6 +2485,8 @@ class McpClient {
     // Clear any previous refresh error since refresh succeeded
     await McpServerModel.update(targetMcpServerId, {
       oauthRefreshError: null,
+      oauthRefreshErrorMessage: null,
+      oauthRefreshErrorDescription: null,
       oauthRefreshFailedAt: null,
     });
 
@@ -2097,6 +2508,9 @@ class McpClient {
           targetMcpServerId,
           updatedSecret,
           secretId,
+          connectionKey,
+          tokenAuth,
+          enterpriseTransportCredential ?? undefined,
         );
 
       return await executeRetry(getUpdatedTransport, updatedSecret);
@@ -2116,16 +2530,16 @@ class McpClient {
         isAuthRelatedError(retryErrorMsg);
 
       if (isRetryAuthError && toolCatalogId) {
-        const catalogDisplayName = toolCatalogName || toolCatalogId;
-        const authError = this.buildExpiredAuthMessage(
+        const catalogDisplayName = toolCatalogName || catalogItem.name;
+        const authError = await this.buildExpiredAuthMessage({
           catalogDisplayName,
-          toolCatalogId,
-          targetMcpServerId,
+          catalogId: toolCatalogId,
+          mcpServerId: targetMcpServerId,
           tokenAuth,
-        );
+        });
         return await this.createErrorResult(
           toolCall,
-          agentId,
+          owner,
           authError.message,
           mcpServerName,
           undefined,
@@ -2135,7 +2549,7 @@ class McpClient {
 
       return await this.createErrorResult(
         toolCall,
-        agentId,
+        owner,
         retryErrorMsg,
         mcpServerName,
       );
@@ -2150,6 +2564,7 @@ class McpClient {
   }): Promise<{
     refreshed: boolean;
     updatedSecret: Record<string, unknown> | null;
+    outcome: OAuthRefreshOutcome;
   }> {
     const { secretId, catalogId, connectionKey, targetMcpServerId } = params;
     const existingRefresh = this.oauthRefreshLocks.get(secretId);
@@ -2161,7 +2576,11 @@ class McpClient {
       return existingRefresh;
     }
 
-    const refreshPromise = (async () => {
+    const refreshPromise = (async (): Promise<{
+      refreshed: boolean;
+      updatedSecret: Record<string, unknown> | null;
+      outcome: OAuthRefreshOutcome;
+    }> => {
       const existingClient = this.activeConnections.get(connectionKey);
       if (existingClient) {
         try {
@@ -2172,9 +2591,9 @@ class McpClient {
         this.clearConnectionState(connectionKey);
       }
 
-      const refreshed = await refreshOAuthToken(secretId, catalogId);
-      if (!refreshed) {
-        return { refreshed: false, updatedSecret: null };
+      const outcome = await refreshOAuthToken(secretId, catalogId);
+      if (!outcome.ok) {
+        return { refreshed: false, updatedSecret: null, outcome };
       }
 
       const updatedSecret = await secretManager().getSecret(secretId);
@@ -2183,7 +2602,13 @@ class McpClient {
           { secretId, catalogId },
           "OAuth token refresh succeeded but updated secret could not be loaded",
         );
-        return { refreshed: false, updatedSecret: null };
+        // Refresh itself succeeded; the secret-load blip is transient and
+        // must not flip the connection into needs-reauthentication.
+        return {
+          refreshed: false,
+          updatedSecret: null,
+          outcome: { ok: false, kind: "transient", reason: "network" },
+        };
       }
 
       this.secretsCache.set(targetMcpServerId, {
@@ -2191,14 +2616,18 @@ class McpClient {
         secretId,
       });
 
-      return { refreshed: true, updatedSecret: updatedSecret.secret };
+      return { refreshed: true, updatedSecret: updatedSecret.secret, outcome };
     })()
       .catch((error) => {
         logger.error(
           { secretId, catalogId, error },
           "OAuth token refresh lock encountered an unexpected error",
         );
-        return { refreshed: false, updatedSecret: null };
+        return {
+          refreshed: false,
+          updatedSecret: null,
+          outcome: classifyThrownRefreshError(error),
+        };
       })
       .finally(() => {
         this.oauthRefreshLocks.delete(secretId);
@@ -2206,6 +2635,62 @@ class McpClient {
 
     this.oauthRefreshLocks.set(secretId, refreshPromise);
     return refreshPromise;
+  }
+
+  /**
+   * Whether the calling identity could set up its own connection for a catalog
+   * item — i.e. the item is visible and installable to it. A user token that
+   * cannot (another user's personal-scope item, or a team item for a team it is
+   * not in) must not be handed a self-service install link it cannot act on.
+   * Team/org-token callers, callers whose organization is unknown, and any
+   * lookup error fall back to the install-link guidance rather than being
+   * suppressed.
+   */
+  private async callerCanConnectCatalog(
+    catalogId: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<boolean> {
+    if (!tokenAuth?.userId || !tokenAuth.organizationId) {
+      return true;
+    }
+    try {
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: tokenAuth.userId,
+        organizationId: tokenAuth.organizationId,
+      });
+      const accessibleIds =
+        await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+          tokenAuth.userId,
+          checker.isAdmin,
+          tokenAuth.organizationId,
+        );
+      return accessibleIds.includes(catalogId);
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Auth-required error for a caller who cannot set up their own connection to
+   * the catalog item because it is not shared with them. Carries no install
+   * `actionUrl` or `action`, so no client (chat card, non-UI client, or the
+   * model relaying the text) presents a self-service link the caller cannot use;
+   * the message names the remediations open to them.
+   */
+  private buildConnectionUnavailableMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+  ): AuthRequiredMcpToolError {
+    return {
+      type: "auth_required",
+      message:
+        `The tool's MCP server "${catalogDisplayName}" is not shared with you, ` +
+        "so it cannot run for you and you cannot set up your own connection to it. " +
+        "Ask the server's owner or an administrator to share it with your team or organization, " +
+        "to designate a shared connection for it, or to run this tool on your behalf.",
+      catalogId,
+      catalogName: catalogDisplayName,
+    };
   }
 
   /**
@@ -2237,18 +2722,62 @@ class McpClient {
   }
 
   /**
+   * Like buildAuthRequiredMessage but worded for a retained tool whose MCP
+   * connection was uninstalled (no install remains for its catalog). Same typed
+   * shape/action so clients handle it identically; only the human-readable
+   * message is reconnect-framed, matching the search_tools "not installed —
+   * reconnect" wording rather than "no credentials".
+   */
+  private buildReconnectRequiredMessage(
+    catalogDisplayName: string,
+    catalogId: string,
+  ): AuthRequiredMcpToolError {
+    const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
+    return {
+      type: "auth_required",
+      message: formatActionableAuthError({
+        title: `"${catalogDisplayName}" is not connected`,
+        detail: `This tool's MCP connection has been uninstalled. Reconnect "${catalogDisplayName}" to use it.`,
+        actionLabel: "reconnect the connection",
+        url: installUrl,
+        postAction: "Once reconnected, retry this tool call.",
+      }),
+      catalogId,
+      catalogName: catalogDisplayName,
+      action: "install_mcp_credentials",
+      actionUrl: installUrl,
+    };
+  }
+
+  /**
    * Build an actionable error message for expired or invalid credentials,
    * with a deep link to the re-authentication dialog.
    */
-  private buildExpiredAuthMessage(
-    catalogDisplayName: string,
-    catalogId: string,
-    mcpServerId: string,
-    tokenAuth?: TokenAuthContext,
-    detailOverride?: string,
-  ): AuthExpiredMcpToolError {
+  private async buildExpiredAuthMessage(params: {
+    catalogDisplayName: string;
+    catalogId: string;
+    mcpServerId: string;
+    tokenAuth?: TokenAuthContext;
+    detailOverride?: string;
+    // Pass the already-loaded install to avoid a redundant lookup when the
+    // caller has resolved it (otherwise the scope is fetched by id).
+    resolvedServer?: Pick<McpServer, "scope" | "teamId" | "ownerId">;
+  }): Promise<AuthExpiredMcpToolError> {
+    const {
+      catalogDisplayName,
+      catalogId,
+      mcpServerId,
+      tokenAuth,
+      detailOverride,
+      resolvedServer,
+    } = params;
     const context = this.formatAuthContext(tokenAuth);
     const reauthUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`;
+    const scope = await this.describeResolvedCredentialScope(
+      mcpServerId,
+      tokenAuth,
+      resolvedServer,
+    );
     return {
       type: "auth_expired",
       message: formatActionableAuthError({
@@ -2264,7 +2793,64 @@ class McpClient {
       catalogName: catalogDisplayName,
       serverId: mcpServerId,
       reauthUrl,
+      credentialScope: scope?.credentialScope,
+      credentialTeamName: scope?.credentialTeamName,
     };
+  }
+
+  /**
+   * Describe which credential (personal / team / org) a resolved install
+   * represents, plus the owning team's display name for team credentials, so
+   * the re-authentication card can tell the user whose credential expired.
+   * Mirrors the runtime resolution priority in {@link pickInstallForCaller}:
+   * an org-scoped install is org-wide; anything bound to a team is a team
+   * credential; everything else is a personal credential — but a personal
+   * install is only reported as "personal" (the card says "Your personal
+   * credentials …") when the caller actually owns it. Returns null when the
+   * scope can't be attributed to the caller, so the card falls back to neutral
+   * generic copy.
+   */
+  private async describeResolvedCredentialScope(
+    mcpServerId: string,
+    tokenAuth: TokenAuthContext | undefined,
+    preloadedServer?: Pick<McpServer, "scope" | "teamId" | "ownerId">,
+  ): Promise<{
+    credentialScope: ResourceVisibilityScope;
+    credentialTeamName: string | null;
+  } | null> {
+    let server = preloadedServer;
+    if (!server) {
+      const [loaded] = await McpServerModel.findByIdsBasic([mcpServerId]);
+      server = loaded;
+    }
+    if (!server) {
+      return null;
+    }
+
+    if (server.scope === "org") {
+      return { credentialScope: "org", credentialTeamName: null };
+    }
+    if (server.teamId) {
+      const [team] = await TeamModel.findByIds([server.teamId]);
+      return {
+        credentialScope: "team",
+        credentialTeamName: team?.name ?? null,
+      };
+    }
+    // Personal install. Only present it as the caller's own credential when the
+    // caller owns it. A personal install resolved on behalf of another caller —
+    // a catalog pinned to a service-account connection
+    // (dynamicConnectionMcpServerId) or a retained static assignment — must not
+    // be labeled "personal", or the card would falsely claim "Your personal
+    // credentials …" and point the caller at the wrong owner.
+    if (
+      tokenAuth?.userId &&
+      server.ownerId &&
+      tokenAuth.userId === server.ownerId
+    ) {
+      return { credentialScope: "personal", credentialTeamName: null };
+    }
+    return null;
   }
 
   private buildAssignedCredentialUnavailableMessage(
@@ -2371,7 +2957,7 @@ class McpClient {
    * Truncates large tool results to prevent excessive storage.
    */
   private async persistToolCall(
-    agentId: string,
+    owner: ToolOwner,
     mcpServerName: string,
     toolCall: CommonToolCall,
     toolResult: CommonToolResult,
@@ -2388,7 +2974,9 @@ class McpClient {
 
     try {
       const savedToolCall = await McpToolCallModel.create({
-        agentId,
+        ownerType: owner.type,
+        agentId: owner.type === "agent" ? owner.id : null,
+        appId: owner.type === "app" ? owner.id : null,
         mcpServerName,
         method: "tools/call",
         toolCall,
@@ -2468,6 +3056,7 @@ class McpClient {
     let lastError: Error | undefined;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      let client: Client | undefined;
       try {
         // Get the appropriate transport using the existing helper
         const transport = await this.getTransport(
@@ -2483,7 +3072,7 @@ class McpClient {
         };
 
         // Create client with transport
-        const client = new Client(buildMcpClientInfo("archestra-platform"), {
+        client = new Client(buildMcpClientInfo("archestra-platform"), {
           capabilities,
         });
 
@@ -2512,6 +3101,19 @@ class McpClient {
         }));
       } catch (error) {
         lastError = error instanceof Error ? error : new Error("Unknown error");
+
+        // Only the success path closed the client; a failure after connect
+        // (e.g. tool discovery threw) would otherwise leak its transport.
+        if (client) {
+          try {
+            await client.close();
+          } catch (closeError) {
+            logger.warn(
+              { closeError, server: catalogItem.name },
+              "Error closing MCP client after failed tool discovery (non-fatal)",
+            );
+          }
+        }
 
         // If this is not the last attempt, log and retry
         if (attempt < maxRetries) {
@@ -2620,11 +3222,15 @@ class McpClient {
         throw new Error("toolName is required for tools/call");
       }
       return await this.raceWithTimeout(
-        client.callTool({
-          name: params.toolName,
-          arguments: params.toolArguments ?? {},
-        }),
-        60000,
+        client.callTool(
+          {
+            name: params.toolName,
+            arguments: params.toolArguments ?? {},
+          },
+          undefined,
+          { timeout: config.mcpGateway.toolCallTimeoutMs },
+        ),
+        config.mcpGateway.toolCallTimeoutMs,
         "Tool call timeout",
       );
     } finally {
@@ -2633,29 +3239,95 @@ class McpClient {
   }
 
   /**
-   * Disconnect from an MCP server
+   * Connect directly to ONE installed server by id with its own credentials,
+   * run a single operation, then close. Powers the server-scoped Apps run path
+   * (POST /api/mcp/server/:id), which has no agent/owner context — access is
+   * gated by the route (mcpServerInstallation:read) before this is reached. No
+   * OAuth auto-refresh (adequate for UI-providing servers, typically no/PAT
+   * auth); a future catalog-scoped path can add it.
    */
-  async disconnect(clientId: string): Promise<void> {
-    const client = this.clients.get(clientId);
-    if (client) {
-      try {
-        await client.close();
-      } catch (error) {
-        logger.error({ err: error }, `Error closing MCP client ${clientId}:`);
-      }
-      this.clients.delete(clientId);
+  private async withDirectServerClient<T>(
+    mcpServerId: string,
+    run: (client: Client) => Promise<T>,
+  ): Promise<T> {
+    const [server] = await McpServerModel.findByIdsBasic([mcpServerId]);
+    if (!server) {
+      throw new Error(`MCP server not found: ${mcpServerId}`);
     }
+    if (!server.catalogId) {
+      throw new Error(`MCP server ${mcpServerId} has no catalog`);
+    }
+    const catalogItem = await InternalMcpCatalogModel.findById(
+      server.catalogId,
+    );
+    if (!catalogItem) {
+      throw new Error(`Catalog not found for MCP server ${mcpServerId}`);
+    }
+    const { secrets } = await this.fetchSecretsForLoadedMcpServer({
+      id: mcpServerId,
+      secretId: server.secretId,
+    });
+    const transport = await this.getTransport(
+      catalogItem,
+      mcpServerId,
+      secrets,
+      server.secretId ?? undefined,
+    );
+    const client = new Client(buildMcpClientInfo("archestra-app-runner"), {
+      capabilities: {},
+    });
+    try {
+      await this.raceWithTimeout(
+        client.connect(transport),
+        30000,
+        new McpServerConnectionTimeoutError(),
+      );
+      return await run(client);
+    } finally {
+      await client.close().catch(() => {});
+    }
+  }
+
+  /** Read a UI (`ui://`) resource directly from one installed server. */
+  async readResourceForServer(params: {
+    mcpServerId: string;
+    uri: string;
+  }): Promise<unknown> {
+    return this.withDirectServerClient(params.mcpServerId, (client) =>
+      this.raceWithTimeout(
+        client.readResource({ uri: params.uri }),
+        30000,
+        "Read resource timeout",
+      ),
+    );
+  }
+
+  /** Call a tool directly on one installed server (server-scoped run path). */
+  async callToolForServer(params: {
+    mcpServerId: string;
+    name: string;
+    arguments?: Record<string, unknown>;
+  }): Promise<unknown> {
+    return this.withDirectServerClient(params.mcpServerId, (client) =>
+      this.raceWithTimeout(
+        client.callTool(
+          {
+            name: params.name,
+            arguments: params.arguments ?? {},
+          },
+          undefined,
+          { timeout: config.mcpGateway.toolCallTimeoutMs },
+        ),
+        config.mcpGateway.toolCallTimeoutMs,
+        "Tool call timeout",
+      ),
+    );
   }
 
   /**
    * Disconnect from all MCP servers
    */
   async disconnectAll(): Promise<void> {
-    const disconnectPromises = Array.from(this.clients.keys()).map((clientId) =>
-      this.disconnect(clientId),
-    );
-
-    // Also disconnect active connections
     const activeDisconnectPromises = Array.from(
       this.activeConnections.keys(),
     ).map(async (connectionKey) => {
@@ -2671,7 +3343,7 @@ class McpClient {
       }
     });
 
-    await Promise.all([...disconnectPromises, ...activeDisconnectPromises]);
+    await Promise.all(activeDisconnectPromises);
     this.clearAllConnectionState();
   }
 
@@ -2727,6 +3399,78 @@ class McpClient {
     agentId: string,
     tokenAuth?: TokenAuthContext,
   ): Promise<ResourceContents> {
+    // An app resource (ui://archestra-app/<appId>) is served in-process from the
+    // app store — there is no upstream server to read it from. The URI carries
+    // the app id, so authorize against the APP's own visibility (the caller must
+    // be able to view it), not against whether some assigned tool advertises the
+    // URI — a malicious upstream server could otherwise claim a victim app's
+    // ui:// id in its tool _meta and read that app's HTML. An unauthorized or
+    // unknown URI falls through to the normal path, which returns not-found (no
+    // existence leak). Dynamic import avoids a static cycle with
+    // mcp-app-gateway.utils (which imports this client).
+    const appResourcePrefix = getArchestraAppResourceUri("");
+    if (tokenAuth?.userId && tokenAuth.organizationId) {
+      const appId = uri.startsWith(appResourcePrefix)
+        ? uri.slice(appResourcePrefix.length)
+        : "";
+      // A malformed (non-UUID) id would make the UUID-typed lookup below throw
+      // ("invalid input syntax for type uuid") and surface as a 500; treat it as
+      // a normal not-found instead.
+      if (
+        appId &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          appId,
+        )
+      ) {
+        const { callerIsAppAdmin } = await import(
+          "@/services/apps/app-authorization"
+        );
+        const app = await AppModel.findByIdForCaller({
+          id: appId,
+          organizationId: tokenAuth.organizationId,
+          userId: tokenAuth.userId,
+          isAppAdmin: await callerIsAppAdmin(
+            tokenAuth.userId,
+            tokenAuth.organizationId,
+          ),
+        });
+        if (app) {
+          const { buildAppUiResource } = await import(
+            "@/routes/mcp-app-gateway.utils"
+          );
+          return buildAppUiResource(appId, uri, tokenAuth);
+        }
+      }
+    }
+
+    // Per-agent exclusions (Auto-tool mode): when exclusions exist, resolve
+    // the resource's backing tool/server identity BEFORE consulting the cache
+    // — a previously cached resource from a newly excluded catalog must not be
+    // served from cache. The exclusion-filtered resolution returning null
+    // means the resource is unreachable for this agent. Empty exclusions skip
+    // this entirely (zero behavior change).
+    const exclusionSets =
+      await agentToolExclusionsService.getActiveExclusionSets(agentId);
+    let preResolvedServer: {
+      server: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>;
+      catalogItem: NonNullable<
+        Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+      >;
+    } | null = null;
+    if (hasAnyExclusions(exclusionSets)) {
+      preResolvedServer = await this.findMcpServerForResource(
+        uri,
+        agentId,
+        tokenAuth,
+        exclusionSets,
+      );
+      if (!preResolvedServer) {
+        throw new Error(
+          `Resource not found or no server could read it: ${uri}`,
+        );
+      }
+    }
+
     // Include userId in cache key so per-user OAuth sessions are never mixed.
     const userScope = tokenAuth?.userId ?? "anonymous";
     const cacheKey = `${agentId}:${userScope}:${uri}`;
@@ -2760,7 +3504,14 @@ class McpClient {
       "readResource: Starting resource read",
     );
 
-    const mcpServer = await this.findMcpServerForResource(uri, agentId);
+    const mcpServer =
+      preResolvedServer ??
+      (await this.findMcpServerForResource(
+        uri,
+        agentId,
+        tokenAuth,
+        exclusionSets,
+      ));
 
     if (!mcpServer) {
       logger.error(
@@ -2805,26 +3556,112 @@ class McpClient {
     }
   }
 
+  /**
+   * The concrete install (mcp_server id) that serves an MCP App `ui://` resource
+   * for this caller, so the chat MCP-App enrichment can stamp it onto
+   * `_meta.ui.mcpServerId` and bind an agent-driven external-app render's
+   * callbacks to `/api/mcp/server/:id` — matching the seeded open-in-chat path
+   * (buildExternalAppRenderResult), whose absence otherwise misroutes the app's
+   * `callServerTool` to the agent gateway.
+   *
+   * Binds to the same install run_tool executes against, for any number of
+   * installs: a valid service-account pin (`dynamicConnectionMcpServerId`)
+   * routes every caller to one install; otherwise the caller's own→team→org
+   * connection policy resolves it (`findMcpServerForResource`), so a
+   * per-user-credentialed catalog binds each caller to their own install.
+   *
+   * Returns null (render stays unbound, callbacks fail cleanly rather than
+   * misrouting) when the caller has no accessible install for the resource, the
+   * resource is an owned-app backing (`serverType === "app"`, rendered by app id
+   * via render_app), or the catalog is enterprise-managed with more than one
+   * install — enterprise credentials resolve the runtime install by their own
+   * mechanism, which can pick a different install than the own→team→org policy.
+   */
+  async resolveUiAppInstallIdForCaller(
+    resourceUri: string,
+    agentId: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<string | null> {
+    const resolved = await this.findMcpServerForResource(
+      resourceUri,
+      agentId,
+      tokenAuth,
+    );
+    if (!resolved || resolved.catalogItem.serverType === "app") {
+      return null;
+    }
+    const { catalogItem } = resolved;
+    const pinnedId = catalogItem.dynamicConnectionMcpServerId;
+    const enterpriseManaged = catalogItem.enterpriseManagedConfig != null;
+    if (pinnedId || enterpriseManaged) {
+      const installs = await McpServerModel.findByCatalogId(catalogItem.id);
+      // A valid service-account pin routes every caller through one install.
+      if (pinnedId && installs.some((server) => server.id === pinnedId)) {
+        return pinnedId;
+      }
+      // Enterprise-managed credentials resolve the runtime install by their own
+      // mechanism (an explicit pin or the first install), which can diverge from
+      // the own→team→org resolution when the catalog has more than one install —
+      // a single install cannot diverge. Decline rather than bind callbacks to
+      // an install run_tool did not execute against.
+      if (enterpriseManaged && installs.length > 1) {
+        return null;
+      }
+    }
+    return resolved.server.id;
+  }
+
   private async findMcpServerForResource(
     uri: string,
     agentId: string,
+    tokenAuth?: TokenAuthContext,
+    exclusionSets?: AgentToolExclusionSets,
   ): Promise<{
     server: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>;
     catalogItem: NonNullable<
       Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
     >;
   } | null> {
-    const matchingTools = await ToolModel.findToolsByUiResourceUri(
-      agentId,
-      uri,
-    );
+    // Per-agent exclusions (Auto-tool mode): an excluded backing tool must not
+    // resolve the resource to its server. Callers on the read path pass the
+    // sets they already loaded; the background-refresh path loads them here.
+    const effectiveExclusions =
+      exclusionSets ??
+      (await agentToolExclusionsService.getActiveExclusionSets(agentId));
+    const matchingTools = (
+      await ToolModel.findToolsByUiResourceUri(agentId, uri)
+    ).filter((match) => !isToolRowExcluded(match.tool, effectiveExclusions));
+    let catalogId = matchingTools[0]?.catalogId ?? null;
 
-    if (matchingTools.length > 0 && matchingTools[0].catalogId) {
-      const catalogId = matchingTools[0].catalogId;
+    // Assignment miss: a tool the agent reaches only through dynamic access
+    // ("all tools" mode) has no agent_tools row, so its resource is invisible to
+    // the assignment-scoped lookup above. Fall back to the same user-scoped
+    // resolution run_tool uses — otherwise the MCP App fails to load its HTML
+    // even though the tool ran. Dynamic import avoids a static cycle with
+    // archestra-mcp-server (which reaches this client through run_tool).
+    if (!catalogId && tokenAuth?.userId && tokenAuth.organizationId) {
+      const { resolveDynamicToolByUiResource } = await import(
+        "@/archestra-mcp-server/dynamic-tools"
+      );
+      const dynamicTool = await resolveDynamicToolByUiResource({
+        resourceUri: uri,
+        agentId,
+        userId: tokenAuth.userId,
+        organizationId: tokenAuth.organizationId,
+      });
+      catalogId = dynamicTool?.catalogId ?? null;
+    }
+
+    if (catalogId) {
       const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
       if (catalogItem) {
         const servers = await McpServerModel.findByCatalogId(catalogId);
-        const server = servers[0];
+        // Select the install the caller can actually reach (own → team → org),
+        // the same connection policy tool execution uses — never another user's
+        // personal install of a shared catalog, whose secrets this read would
+        // otherwise connect with. Fail closed when the caller has no accessible
+        // install rather than falling back to an arbitrary one.
+        const server = await this.pickInstallForCaller(servers, tokenAuth);
         if (server) {
           logger.info(
             { uri, agentId, serverId: server.id, serverName: catalogItem.name },
@@ -2858,7 +3695,7 @@ class McpClient {
     const secretResult = await this.getSecretsForMcpServer({
       targetMcpServerId: server.id,
       toolCall: { id: "resource-read", name: "read", arguments: {} },
-      agentId,
+      owner: agentOwner(agentId),
     });
 
     if ("error" in secretResult) {
@@ -2894,7 +3731,11 @@ class McpClient {
     _currentResult: ResourceContents,
   ): Promise<void> {
     try {
-      const mcpServer = await this.findMcpServerForResource(uri, agentId);
+      const mcpServer = await this.findMcpServerForResource(
+        uri,
+        agentId,
+        _tokenAuth,
+      );
       if (!mcpServer) {
         logger.debug(
           { uri, agentId },
@@ -2929,45 +3770,107 @@ class McpClient {
    * Get connected MCP SDK clients for all upstream servers of an agent.
    * Returns one client per distinct catalog item (MCP server installation).
    */
-  private async getClientsForAgent(agentId: string): Promise<Client[]> {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
-
-    // Collect distinct catalog IDs (skip Archestra built-in tools which have no upstream server)
-    const catalogIds = [
-      ...new Set(
-        tools.map((t) => t.catalogId).filter((id): id is string => !!id),
-      ),
-    ];
+  private async getClientsForAgent(
+    agentId: string,
+    tokenAuth?: TokenAuthContext,
+    exclusionSets?: AgentToolExclusionSets,
+  ): Promise<Client[]> {
+    // Per-agent exclusions (Auto-tool mode): an excluded catalog/tool must not
+    // make its upstream server reachable via resources/prompts listing. A
+    // catalog stays reachable while it has at least one non-excluded assigned
+    // tool (the list handlers then filter that catalog's listings down to the
+    // excluded tools' resource URIs). Callers pass the sets they already
+    // loaded; loaded here otherwise. Empty (no-op) unless the agent's
+    // accessAllTools setting is on.
+    const { tools, exclusionSets: effectiveExclusions } =
+      await agentToolExclusionsService.getFilteredMcpToolsByAgent(
+        agentId,
+        exclusionSets,
+      );
+    const assignedTools = await ToolModel.getMcpToolsAssignedToAgent(
+      tools.map((tool) => tool.name),
+      agentId,
+    );
+    const toolsByCatalogId = new Map<string, McpToolAssignment>();
+    for (const tool of assignedTools) {
+      if (
+        tool.catalogId &&
+        !toolsByCatalogId.has(tool.catalogId) &&
+        !isToolIdentityExcluded(
+          { catalogId: tool.catalogId, name: tool.toolName },
+          effectiveExclusions,
+        )
+      ) {
+        toolsByCatalogId.set(tool.catalogId, tool);
+      }
+    }
 
     const clients: Client[] = [];
 
-    for (const catalogId of catalogIds) {
+    for (const [catalogId, tool] of toolsByCatalogId) {
       try {
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
         if (!catalogItem) continue;
 
-        const servers = await McpServerModel.findByCatalogId(catalogId);
-        const server = servers[0];
-        if (!server) continue;
+        const targetResult =
+          await this.determineTargetMcpServerIdForCatalogItem({
+            tool,
+            tokenAuth,
+            toolCall: {
+              id: "list-op",
+              name: tool.toolName,
+              arguments: {},
+            },
+            owner: agentOwner(agentId),
+            catalogItem,
+          });
+        if ("error" in targetResult) continue;
+
+        const { targetMcpServerId } = targetResult;
+        // Catalog-level enterprise-managed config is authoritative — see
+        // executeToolCall for why stale assignment modes are overridden.
+        const usesEnterpriseManagedCredential =
+          tool.credentialResolutionMode === "enterprise_managed" ||
+          catalogItem.enterpriseManagedConfig != null;
+        const enterpriseTransportCredential = usesEnterpriseManagedCredential
+          ? await this.resolveCachedEnterpriseTransportCredential({
+              owner: agentOwner(agentId),
+              tokenAuth,
+              enterpriseManagedConfig:
+                catalogItem.enterpriseManagedConfig ?? null,
+            })
+          : null;
+        if (usesEnterpriseManagedCredential && !enterpriseTransportCredential) {
+          continue;
+        }
 
         const secretResult = await this.getSecretsForMcpServer({
-          targetMcpServerId: server.id,
-          toolCall: { id: "list-op", name: "list", arguments: {} },
-          agentId,
+          targetMcpServerId,
+          toolCall: { id: "list-op", name: tool.toolName, arguments: {} },
+          owner: agentOwner(agentId),
         });
         if ("error" in secretResult) continue;
 
+        const externalIdpUserId = tokenAuth?.isExternalIdp
+          ? tokenAuth.userId
+          : undefined;
+        let connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
+        if (externalIdpUserId) {
+          connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
+        }
         const transport = await this.getTransport(
           catalogItem,
-          server.id,
+          targetMcpServerId,
           secretResult.secrets,
           secretResult.secretId,
+          connectionKey,
+          tokenAuth,
+          enterpriseTransportCredential ?? undefined,
         );
-        const connectionKey = `${catalogItem.id}:${server.id}`;
         const client = await this.getOrCreateClient(
           connectionKey,
           transport,
-          server.id,
+          targetMcpServerId,
           secretResult.serverState,
         );
         clients.push(client);
@@ -2987,8 +3890,15 @@ class McpClient {
    */
   async listResources(
     agentId: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<{ resources: Array<Record<string, unknown>> }> {
-    const clients = await this.getClientsForAgent(agentId);
+    const exclusionSets =
+      await agentToolExclusionsService.getActiveExclusionSets(agentId);
+    const clients = await this.getClientsForAgent(
+      agentId,
+      tokenAuth,
+      exclusionSets,
+    );
     const allResources: Array<Record<string, unknown>> = [];
 
     await Promise.all(
@@ -3007,7 +3917,18 @@ class McpClient {
       }),
     );
 
-    return { resources: allResources };
+    // Per-agent exclusions (Auto-tool mode): a catalog can stay reachable
+    // through a non-excluded sibling tool, so drop the resources attributable
+    // to an excluded tool (the same ui-resource-uri ↔ tool attribution
+    // readResource enforces). Resources not attributable to any excluded tool
+    // stay.
+    return {
+      resources: allResources.filter(
+        (resource) =>
+          typeof resource.uri !== "string" ||
+          !exclusionSets.resourceUris.has(resource.uri),
+      ),
+    };
   }
 
   /**
@@ -3015,8 +3936,15 @@ class McpClient {
    */
   async listResourceTemplates(
     agentId: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<{ resourceTemplates: Array<Record<string, unknown>> }> {
-    const clients = await this.getClientsForAgent(agentId);
+    const exclusionSets =
+      await agentToolExclusionsService.getActiveExclusionSets(agentId);
+    const clients = await this.getClientsForAgent(
+      agentId,
+      tokenAuth,
+      exclusionSets,
+    );
     const allTemplates: Array<Record<string, unknown>> = [];
 
     await Promise.all(
@@ -3037,7 +3965,16 @@ class McpClient {
       }),
     );
 
-    return { resourceTemplates: allTemplates };
+    // Same attribution filter as listResources: templates whose uriTemplate
+    // (or uri) matches an excluded tool's declared resource URI are dropped.
+    return {
+      resourceTemplates: allTemplates.filter((template) => {
+        const uris = [template.uriTemplate, template.uri].filter(
+          (value): value is string => typeof value === "string",
+        );
+        return !uris.some((uri) => exclusionSets.resourceUris.has(uri));
+      }),
+    };
   }
 
   /**
@@ -3045,8 +3982,13 @@ class McpClient {
    */
   async listPrompts(
     agentId: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<{ prompts: Array<Record<string, unknown>> }> {
-    const clients = await this.getClientsForAgent(agentId);
+    const clients = await this.getClientsForAgent(agentId, tokenAuth);
+    // Prompts have no per-tool attribution (tool meta declares resource URIs,
+    // not prompt names), so they are only implicitly filtered by which upstream
+    // servers getClientsForAgent connects — a server whose tools are all
+    // excluded is not connected, so its prompts never surface.
     const allPrompts: Array<Record<string, unknown>> = [];
 
     await Promise.all(
@@ -3069,7 +4011,7 @@ class McpClient {
   }
 
   private async resolveCachedEnterpriseTransportCredential(params: {
-    agentId: string;
+    owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
   }): Promise<ResolvedEnterpriseTransportCredential | null> {
@@ -3094,7 +4036,7 @@ class McpClient {
   }
 
   private buildEnterpriseCredentialCacheKey(params: {
-    agentId: string;
+    owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
   }): string | null {
@@ -3103,7 +4045,8 @@ class McpClient {
     }
 
     return JSON.stringify({
-      agentId: params.agentId,
+      ownerType: params.owner.type,
+      ownerId: params.owner.id,
       identityProviderId: params.enterpriseManagedConfig.identityProviderId,
       resourceIdentifier: params.enterpriseManagedConfig.resourceIdentifier,
       requestedIssuer: params.enterpriseManagedConfig.requestedIssuer,
@@ -3137,14 +4080,43 @@ class McpClient {
     left: CachedServerState,
     right: CachedServerState,
   ): boolean {
-    return left.secretId === right.secretId;
+    return (
+      left.secretId === right.secretId &&
+      left.credentialFingerprint === right.credentialFingerprint
+    );
   }
 
-  private toCachedServerState(
-    mcpServer: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>,
-  ): CachedServerState {
+  private toCachedServerState(mcpServer: {
+    secretId: string | null;
+  }): CachedServerState {
     return {
       secretId: mcpServer.secretId ?? null,
+      credentialFingerprint: null,
+    };
+  }
+
+  private trackTransportCredentialFingerprint(
+    connectionKey: string | undefined,
+    headers: Record<string, string>,
+  ): void {
+    if (!connectionKey) {
+      return;
+    }
+
+    this.latestTransportCredentialFingerprints.set(
+      connectionKey,
+      fingerprintHeaders(headers),
+    );
+  }
+
+  private withLatestCredentialFingerprint(
+    connectionKey: string,
+    serverState: CachedServerState,
+  ): CachedServerState {
+    return {
+      ...serverState,
+      credentialFingerprint:
+        this.latestTransportCredentialFingerprints.get(connectionKey) ?? null,
     };
   }
 }
@@ -3173,6 +4145,33 @@ function isAuthRelatedError(errorMessage: string): boolean {
     lower.includes("invalid credentials") ||
     lower.includes("credentials expired")
   );
+}
+
+// Platform-reserved metadata keys: `archestraError` (set only by
+// createErrorResult) and the seeded-app-render marker (set only by the
+// open-in-chat conversation seeding). Renderers and the trusted-data guardrail
+// key off them to identify platform-authored results.
+const RESERVED_PLATFORM_META_KEYS = [
+  "archestraError",
+  SEEDED_APP_RENDER_META_KEY,
+] as const;
+
+// Remove platform-reserved keys from tool-supplied metadata so they can only
+// ever be present when the platform itself authored them — otherwise a hostile
+// server could forge a dispatch error or a seeded-render marker and slip
+// untrusted output past the injection scan. Returns the same reference when
+// nothing was stripped.
+function stripReservedPlatformMeta(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!meta || !RESERVED_PLATFORM_META_KEYS.some((key) => key in meta)) {
+    return meta;
+  }
+  const rest = { ...meta };
+  for (const key of RESERVED_PLATFORM_META_KEYS) {
+    delete rest[key];
+  }
+  return rest;
 }
 
 function isAuthRelatedToolResult(result: {
@@ -3315,42 +4314,6 @@ function formatActionableAuthError(params: {
     "",
     params.postAction,
   ].join("\n");
-}
-
-/**
- * Apply preset-scoped userConfig field values to outgoing headers.
- * For each userConfig field flagged `promptOnPreset` with a `headerName`,
- * resolve `catalogItem.presetFieldValues[key] ?? field.default` and write
- * to the header. Preset values overwrite anything previously written
- * (presets are the authoritative source for these fields). Caller-supplied
- * (`promptOnInstallation`) and static fields are not handled here — they
- * flow through `buildStaticCredentialHeaders` and `mergePassthroughHeaders`.
- *
- * `presetFieldValues` lives on the catalog row itself: parent catalog rows
- * carry the default-preset values, child catalog rows ("presets" in UI)
- * carry their own overlay.
- *
- * @public — exported for testability
- */
-export function applyPresetHeaderMappings(
-  headers: Record<string, string>,
-  catalogItem: InternalMcpCatalog,
-): void {
-  if (!catalogItem.userConfig) return;
-
-  const presetFieldValues = catalogItem.presetFieldValues ?? {};
-
-  for (const [fieldName, field] of Object.entries(catalogItem.userConfig)) {
-    if (!field.promptOnPreset || !field.headerName) continue;
-
-    const raw = presetFieldValues[fieldName] ?? field.default;
-    if (raw === undefined || raw === null) continue;
-
-    const value = Array.isArray(raw) ? raw.join(",") : String(raw);
-    if (value.length === 0) continue;
-
-    headers[field.headerName] = `${field.valuePrefix ?? ""}${value}`;
-  }
 }
 
 /** Merge passthrough headers into target, skipping keys already present (case-insensitive). */
@@ -3556,14 +4519,29 @@ function buildDefaultAuthorizationHeaders(
     (headerName) => headerName.toLowerCase() === "authorization",
   );
 
-  if (typeof secrets.access_token === "string" && !hasAuthorizationHeader) {
+  if (
+    typeof secrets.access_token === "string" &&
+    secrets.access_token.length > 0 &&
+    !hasAuthorizationHeader
+  ) {
     headers.Authorization = `Bearer ${secrets.access_token}`;
   } else if (
     typeof secrets.raw_access_token === "string" &&
+    secrets.raw_access_token.length > 0 &&
     !hasAuthorizationHeader
   ) {
     headers.Authorization = String(secrets.raw_access_token);
   }
 
   return headers;
+}
+
+function fingerprintHeaders(headers: Record<string, string>): string {
+  const canonicalHeaders = Object.entries(headers)
+    .map(([name, value]) => [name.toLowerCase(), value] as const)
+    .sort(([left], [right]) => left.localeCompare(right));
+
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalHeaders))
+    .digest("base64url");
 }

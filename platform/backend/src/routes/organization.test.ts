@@ -1,5 +1,6 @@
 import { vi } from "vitest";
-import type * as originalConfigModule from "@/config";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
@@ -8,24 +9,12 @@ import OrganizationModel from "@/models/organization";
 import ToolModel from "@/models/tool";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 const VALID_PNG_BASE64 =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
-
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-      enterpriseFeatures: {
-        ...actual.default.enterpriseFeatures,
-        fullWhiteLabeling: true,
-      },
-    },
-  };
-});
 
 describe("organization routes", () => {
   let app: FastifyInstanceWithZod;
@@ -53,6 +42,9 @@ describe("organization routes", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    // appearance-settings updates sync the branding singleton; reset it so an
+    // app name never leaks into a later (shuffled) test.
+    archestraMcpBranding.syncFromOrganization(null);
     await app.close();
   });
 
@@ -77,6 +69,40 @@ describe("organization routes", () => {
     });
   });
 
+  test("re-brands the built-in skill rows when appName changes", async () => {
+    vi.spyOn(ToolModel, "syncArchestraBuiltInCatalog").mockResolvedValue();
+    const { syncBuiltInSkillsForOrganization } = await import(
+      "@/database/seed"
+    );
+    const { SkillModel } = await import("@/models");
+    const { BUILT_IN_SKILLS, builtInSkillSourceRef } = await import(
+      "@/skills/built-in-skills"
+    );
+    const [base] = BUILT_IN_SKILLS;
+    const sourceRef = builtInSkillSourceRef(base.builtInSkillId);
+
+    // seed the canonical (un-branded) built-in skill first.
+    await syncBuiltInSkillsForOrganization({
+      id: organizationId,
+      appName: null,
+      iconLogo: null,
+    });
+    const before = await SkillModel.findBuiltIn({ organizationId, sourceRef });
+    expect(before?.name).toBe("Archestra Platform Operations");
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/appearance-settings",
+      payload: { appName: "Acme Copilot" },
+    });
+    expect(response.statusCode).toBe(200);
+
+    // the stored row re-brands immediately — no backend restart needed.
+    const after = await SkillModel.findBuiltIn({ organizationId, sourceRef });
+    expect(after?.name).toBe("Acme Copilot Platform Operations");
+    expect(after?.content).not.toContain("Archestra");
+  });
+
   describe("PATCH /api/organization/agent-settings - model/key pair", () => {
     test("rejects a default model with no API key", async () => {
       const response = await app.inject({
@@ -99,39 +125,205 @@ describe("organization routes", () => {
     });
   });
 
-  describe("PATCH /api/organization/agent-settings - skill slash commands", () => {
-    test("rejects enabling slash commands while skill tools are off", async () => {
+  describe("PATCH /api/organization/auth-settings - default member role", () => {
+    test("persists a valid custom default role", async ({ makeCustomRole }) => {
+      const role = await makeCustomRole(organizationId);
       const response = await app.inject({
         method: "PATCH",
-        url: "/api/organization/agent-settings",
-        payload: { skillSlashCommandsEnabled: true },
+        url: "/api/organization/auth-settings",
+        payload: { defaultMemberRole: role.role },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().defaultMemberRole).toBe(role.role);
+    });
+
+    test("accepts a predefined role", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { defaultMemberRole: "admin" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().defaultMemberRole).toBe("admin");
+    });
+
+    test("rejects a role that does not exist in the org", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { defaultMemberRole: "nonexistent-role" },
       });
 
       expect(response.statusCode).toBe(400);
     });
+  });
 
-    test("allows enabling slash commands once skill tools are on", async () => {
-      await OrganizationModel.patch(organizationId, {
-        skillToolsEnabled: true,
-      });
-
+  describe("PATCH /api/organization/mcp-settings - online catalog", () => {
+    test("defaults onlineMcpCatalogEnabled to true for a new organization", async () => {
       const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/agent-settings",
-        payload: { skillSlashCommandsEnabled: true },
+        method: "GET",
+        url: "/api/organization",
       });
 
       expect(response.statusCode).toBe(200);
+      expect(response.json().onlineMcpCatalogEnabled).toBe(true);
     });
 
-    test("allows disabling slash commands regardless of skill tools", async () => {
-      const response = await app.inject({
+    test("disables the online catalog and persists it", async () => {
+      const disable = await app.inject({
         method: "PATCH",
-        url: "/api/organization/agent-settings",
-        payload: { skillSlashCommandsEnabled: false },
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: false },
+      });
+
+      expect(disable.statusCode).toBe(200);
+      expect(disable.json().onlineMcpCatalogEnabled).toBe(false);
+
+      const afterDisable = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+      expect(afterDisable.json().onlineMcpCatalogEnabled).toBe(false);
+    });
+
+    test("re-enables the online catalog", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: false },
+      });
+
+      const enable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: true },
+      });
+
+      expect(enable.statusCode).toBe(200);
+      expect(enable.json().onlineMcpCatalogEnabled).toBe(true);
+    });
+
+    test("captures the catalog toggle in the audit snapshot", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: false },
+      });
+
+      const snapshot = await OrganizationModel.findByIdForAudit(
+        organizationId,
+        organizationId,
+      );
+      expect(snapshot?.onlineMcpCatalogEnabled).toBe(false);
+    });
+  });
+
+  describe("PATCH /api/organization/skills-settings - online catalog", () => {
+    test("defaults onlineSkillCatalogEnabled to true for a new organization", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/organization",
       });
 
       expect(response.statusCode).toBe(200);
+      expect(response.json().onlineSkillCatalogEnabled).toBe(true);
+    });
+
+    test("disables the online catalog and persists it", async () => {
+      const disable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: false },
+      });
+
+      expect(disable.statusCode).toBe(200);
+      expect(disable.json().onlineSkillCatalogEnabled).toBe(false);
+
+      const afterDisable = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+      expect(afterDisable.json().onlineSkillCatalogEnabled).toBe(false);
+    });
+
+    test("re-enables the online catalog", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: false },
+      });
+
+      const enable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: true },
+      });
+
+      expect(enable.statusCode).toBe(200);
+      expect(enable.json().onlineSkillCatalogEnabled).toBe(true);
+    });
+
+    test("captures the catalog toggle in the audit snapshot", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: false },
+      });
+
+      const snapshot = await OrganizationModel.findByIdForAudit(
+        organizationId,
+        organizationId,
+      );
+      expect(snapshot?.onlineSkillCatalogEnabled).toBe(false);
+    });
+  });
+
+  describe("PATCH /api/organization/connection-settings - default provider keys", () => {
+    test("rejects a per-user provider (GitHub Copilot) as a default key", async () => {
+      const key = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: null,
+        name: "Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+        userId: user.id,
+        teamId: null,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload: {
+          connectionDefaultProviderKeys: { "github-copilot": key.id },
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toMatch(/per-user/);
+    });
+
+    test("accepts a non-per-user provider default key", async () => {
+      const key = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: null,
+        name: "Anthropic",
+        provider: "anthropic",
+        scope: "org",
+        userId: null,
+        teamId: null,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload: {
+          connectionDefaultProviderKeys: { anthropic: key.id },
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
     });
   });
 
@@ -415,19 +607,65 @@ describe("organization routes", () => {
   });
 
   describe("PATCH /api/organization/security-settings", () => {
-    test("updates global tool policy and chat file upload settings", async () => {
+    test("updates chat file upload and tool auto-assignment settings", async () => {
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/security-settings",
         payload: {
-          globalToolPolicy: "restrictive",
+          allowChatFileUploads: false,
+          allowToolAutoAssignment: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        allowChatFileUploads: false,
+        allowToolAutoAssignment: false,
+      });
+    });
+
+    test("stores the Apps Hackathon toggle when the deployment carries it", async () => {
+      config.hackathonRecorder.enabled = true;
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/security-settings",
+        payload: { appsHackathonRecorderEnabled: false },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        appsHackathonRecorderEnabled: false,
+      });
+    });
+
+    test("refuses to store the Apps Hackathon toggle where the feature does not exist", async () => {
+      // An enterprise deployment never carries the hackathon, so it must never
+      // end up recorded as having switched it on — otherwise "never for
+      // enterprise" would hold only for as long as the settings page keeps the
+      // section hidden.
+      config.hackathonRecorder.enabled = true;
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/security-settings",
+        payload: { appsHackathonRecorderEnabled: false },
+      });
+
+      config.hackathonRecorder.enabled = false;
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/security-settings",
+        payload: {
+          appsHackathonRecorderEnabled: true,
           allowChatFileUploads: false,
         },
       });
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
-        globalToolPolicy: "restrictive",
+        // Left where it was, not raised to the value the request asked for...
+        appsHackathonRecorderEnabled: false,
+        // ...while everything else in the same request still applied.
         allowChatFileUploads: false,
       });
     });
@@ -437,8 +675,8 @@ describe("organization routes", () => {
         method: "PATCH",
         url: "/api/organization/security-settings",
         payload: {
-          globalToolPolicy: "permissive",
           allowChatFileUploads: true,
+          allowToolAutoAssignment: true,
         },
       });
 
@@ -449,8 +687,8 @@ describe("organization routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
-        globalToolPolicy: "permissive",
         allowChatFileUploads: true,
+        allowToolAutoAssignment: true,
       });
     });
   });
@@ -472,46 +710,21 @@ describe("organization routes", () => {
         convertToolResultsToToon: true,
       });
     });
-
-    test("allows clearing the default user limit", async () => {
-      const setResponse = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/llm-settings",
-        payload: {
-          defaultUserLimitValue: 100,
-          defaultUserLimitModel: ["gpt-4o"],
-          defaultUserLimitCleanupInterval: "12h",
-        },
-      });
-
-      expect(setResponse.statusCode).toBe(200);
-      expect(setResponse.json()).toMatchObject({
-        defaultUserLimitValue: 100,
-        defaultUserLimitModel: ["gpt-4o"],
-        defaultUserLimitCleanupInterval: "12h",
-      });
-
-      const clearResponse = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/llm-settings",
-        payload: {
-          defaultUserLimitValue: null,
-          defaultUserLimitModel: null,
-          defaultUserLimitCleanupInterval: null,
-        },
-      });
-
-      expect(clearResponse.statusCode).toBe(200);
-      expect(clearResponse.json()).toMatchObject({
-        defaultUserLimitValue: null,
-        defaultUserLimitModel: null,
-        defaultUserLimitCleanupInterval: null,
-      });
-    });
   });
 
   describe("PATCH /api/organization/knowledge-settings", () => {
-    test("allows clearing embedding model with null", async ({
+    beforeEach(() => {
+      // Save-time validation issues a real embedding call; mock the network so
+      // the validation logic runs without a live provider.
+      vi.spyOn(embeddingClients, "callEmbedding").mockResolvedValue({
+        object: "list",
+        data: [{ object: "embedding", embedding: [0.1, 0.2, 0.3], index: 0 }],
+        model: "test",
+        usage: { prompt_tokens: 1, total_tokens: 1 },
+      });
+    });
+
+    test("rejects clearing the embedding model via PATCH once locked (must use Drop)", async ({
       makeSecret,
     }) => {
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
@@ -555,6 +768,8 @@ describe("organization routes", () => {
 
       expect(setResponse.statusCode).toBe(200);
 
+      // Clearing the model on a locked config would leave a key with no model and
+      // orphan the ingested vectors — it must go through the drop-embedding route.
       const clearResponse = await app.inject({
         method: "PATCH",
         url: "/api/organization/knowledge-settings",
@@ -563,8 +778,66 @@ describe("organization routes", () => {
         },
       });
 
-      expect(clearResponse.statusCode).toBe(200);
-      expect(clearResponse.json().embeddingModel).toBeNull();
+      expect(clearResponse.statusCode).toBe(400);
+      expect(clearResponse.json().error.internal_code).toBe(
+        "embedding_validation_failed",
+      );
+    });
+
+    test("rejects a half-configured embedding (key with no model)", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      // A fresh org: selecting a key but no model must not persist a half-config
+      // (the bug: an "empty" embedding configuration could be saved).
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { embeddingChatApiKeyId: apiKey.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "embedding_validation_failed",
+      );
+    });
+
+    test("allows a patch that does not touch embedding fields even when embedding is half-configured", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      // Half-configured pre-existing state (key, no model), seeded directly.
+      await OrganizationModel.patch(organizationId, {
+        embeddingChatApiKeyId: apiKey.id,
+      });
+
+      // An empty patch (what a stripped unrelated-field patch reduces to) must
+      // not be blocked by — or fire a live probe for — state it doesn't change.
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(embeddingClients.callEmbedding).not.toHaveBeenCalled();
     });
 
     test("rejects embedding models that are missing configured dimensions", async ({
@@ -729,7 +1002,123 @@ describe("organization routes", () => {
 
       expect(changeKeyResponse.statusCode).toBe(400);
       expect(changeKeyResponse.json().error.message).toContain(
-        "Embedding API key cannot be changed once configured",
+        "cannot be changed once set",
+      );
+      expect(changeKeyResponse.json().error.internal_code).toBe(
+        "embedding_validation_failed",
+      );
+    });
+
+    test("blocks save when the embedding validation call fails", async ({
+      makeSecret,
+    }) => {
+      vi.spyOn(embeddingClients, "callEmbedding").mockRejectedValue(
+        new Error("provider down"),
+      );
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      const model = await ModelModel.create({
+        externalId: "gemini/gemini-embedding-001",
+        provider: "gemini",
+        modelId: "gemini-embedding-001",
+        description: "Gemini Embedding 001",
+        contextLength: null,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        embeddingDimensions: 3072,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [{ id: model.id, modelId: model.modelId }],
+        "gemini",
+      );
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          embeddingChatApiKeyId: apiKey.id,
+          embeddingModel: model.modelId,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "embedding_validation_failed",
+      );
+    });
+
+    test("validates the reranker on save and blocks an invalid one", async ({
+      makeSecret,
+    }) => {
+      vi.spyOn(
+        knowledgeSettingsService,
+        "validateRerankerConfig",
+      ).mockResolvedValue({
+        ok: false,
+        error: "Reranker could not be reached.",
+      });
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const rerankerKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Reranker Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          rerankerChatApiKeyId: rerankerKey.id,
+          rerankerModel: "gemini-1.5-flash",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "reranker_validation_failed",
+      );
+      expect(response.json().error.message).toContain(
+        "Reranker could not be reached.",
+      );
+    });
+
+    test("rejects a half-configured reranker (key without model)", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const rerankerKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Reranker Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { rerankerChatApiKeyId: rerankerKey.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "reranker_validation_failed",
       );
     });
   });
@@ -781,35 +1170,6 @@ describe("organization routes", () => {
       });
 
       expect(response.statusCode).toBe(400);
-    });
-  });
-
-  describe("PATCH /api/organization/preset-entity-default-validation-regex", () => {
-    test("sets and clears the default validation regex", async () => {
-      const setRes = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/preset-entity-default-validation-regex",
-        payload: { presetEntityDefaultValidationRegex: "^[a-z]+$" },
-      });
-      expect(setRes.statusCode).toBe(200);
-      expect(setRes.json().presetEntityDefaultValidationRegex).toBe("^[a-z]+$");
-
-      const clearRes = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/preset-entity-default-validation-regex",
-        payload: { presetEntityDefaultValidationRegex: null },
-      });
-      expect(clearRes.statusCode).toBe(200);
-      expect(clearRes.json().presetEntityDefaultValidationRegex).toBeNull();
-    });
-
-    test("rejects an invalid regex", async () => {
-      const res = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/preset-entity-default-validation-regex",
-        payload: { presetEntityDefaultValidationRegex: "(" },
-      });
-      expect(res.statusCode).toBe(400);
     });
   });
 
@@ -868,6 +1228,57 @@ describe("organization routes", () => {
           dimensions: 3072,
         }),
       );
+    });
+  });
+
+  describe("POST /api/organization/knowledge-settings/test-reranker", () => {
+    test("returns success and maps the body to the service (scoped to the org)", async () => {
+      const validateSpy = vi
+        .spyOn(knowledgeSettingsService, "validateRerankerConfig")
+        .mockResolvedValue({ ok: true });
+      const keyId = crypto.randomUUID();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-reranker",
+        payload: {
+          rerankerChatApiKeyId: keyId,
+          rerankerModel: "claude-haiku",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+      expect(validateSpy).toHaveBeenCalledWith({
+        keyId,
+        model: "claude-haiku",
+        organizationId,
+      });
+    });
+
+    test("returns the failure reason when the reranker validation fails", async () => {
+      vi.spyOn(
+        knowledgeSettingsService,
+        "validateRerankerConfig",
+      ).mockResolvedValue({
+        ok: false,
+        error: "Reranker could not be reached.",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-reranker",
+        payload: {
+          rerankerChatApiKeyId: crypto.randomUUID(),
+          rerankerModel: "claude-haiku",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        success: false,
+        error: "Reranker could not be reached.",
+      });
     });
   });
 });

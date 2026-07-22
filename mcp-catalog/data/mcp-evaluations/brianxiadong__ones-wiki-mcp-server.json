@@ -1,0 +1,121 @@
+{
+  "name": "brianxiadong__ones-wiki-mcp-server",
+  "display_name": "ones-wiki-mcp-server",
+  "description": "ones-wiki-mcp-server",
+  "author": {
+    "name": "brianxiadong"
+  },
+  "server": {
+    "command": "java",
+    "args": ["-jar", "${__dirname}/ones-wiki-mcp-server-0.0.1-SNAPSHOT.jar"],
+    "env": {
+      "ONES_HOST": "${user_config.ones_host}",
+      "ONES_EMAIL": "${user_config.ones_email}",
+      "ONES_PASSWORD": "${user_config.ones_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ones_host": {
+      "type": "string",
+      "title": "ONES Host",
+      "description": "The hostname of your ONES platform instance (e.g., your-ones-host.com)",
+      "required": true,
+      "sensitive": false
+    },
+    "ones_email": {
+      "type": "string",
+      "title": "ONES Email",
+      "description": "Your email for ONES platform authentication",
+      "required": true,
+      "sensitive": false
+    },
+    "ones_password": {
+      "type": "string",
+      "title": "ONES Password",
+      "description": "Your password for ONES platform authentication",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": "# ONES Wiki MCP Server\n\nA Spring AI MCP-based service for retrieving ONES Wiki content and converting it to AI-friendly text format.\n\n## Features\n\n- 🔐 ONES platform authentication support\n- 🌐 Automatic conversion from Wiki URLs to API endpoints\n- 📄 Extract and format Wiki page content\n- 🤖 AI-friendly text output format\n- ⚙️ Configuration via properties file or command line arguments\n\n## Prerequisites\n\n- Java 17 or higher\n- Maven 3.6 or higher\n- Access to a ONES platform instance\n\n## Quick Start\n\n### 1. Build the Project\n\n```bash\nmvn clean package\n```\n\n### 2. Configure Authentication\n\n#### Option 1: Modify application.properties\n\nEdit `src/main/resources/application.properties`:\n\n```properties\nones.host=your-ones-host.com\nones.email=your-email@example.com\nones.password=your-password\n```\n\n#### Option 2: Use Command Line Arguments\n\n```bash\njava -jar target/ones-wiki-mcp-server-0.0.1-SNAPSHOT.jar \\\n  --ones.host=your-ones-host.com \\\n  --ones.email=your-email@example.com \\\n  --ones.password=your-password\n```\n\n#### Option 3: Use Environment Variables\n\n```bash\nexport ONES_HOST=your-ones-host.com\nexport ONES_EMAIL=your-email@example.com\nexport ONES_PASSWORD=your-password\n./start-mcp-server.sh\n```\n\n### 3. Configure in MCP Client\n\nAdd to Claude Desktop configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"ones-wiki\": {\n      \"command\": \"java\",\n      \"args\": [\n        \"-jar\",\n        \"/path/to/ones-wiki-mcp-server-0.0.1-SNAPSHOT.jar\",\n        \"--ones.host=your-ones-host.com\",\n        \"--ones.email=your-email@example.com\",\n        \"--ones.password=your-password\"\n      ]\n    }\n  }\n}\n```\n\n## Usage\n\n### Get Wiki Content\n\nProvide the complete Wiki page URL when using the tool:\n\n```\nPlease get the content of this Wiki page: https://your-ones-host.com/wiki/#/team/TEAM_UUID/space/SPACE_UUID/page/PAGE_UUID\n```\n\n### URL Format\n\nSupported Wiki URL format:\n```\nhttps://{host}/wiki/#/team/{team_uuid}/space/{space_uuid}/page/{page_uuid}\n```\n\nAutomatically converts to API endpoint:\n```\nhttps://{host}/wiki/api/wiki/team/{team_uuid}/online_page/{page_uuid}/content\n```\n\n## Output Format\n\nThe service converts Wiki page HTML content to structured Markdown format, including:\n\n- ✅ Heading levels (H1-H6)\n- ✅ Paragraph text\n- ✅ Ordered and unordered lists\n- ✅ Table data (key-value format)\n- ✅ Image descriptions\n- ✅ Link information\n- ❌ Strikethrough content (automatically filtered)\n\n## Technical Architecture\n\n- **Spring Boot 3.4.5** - Application framework\n- **Spring AI MCP** - MCP protocol support\n- **Jsoup 1.17.2** - HTML parsing\n- **RestClient** - HTTP client\n\n## Security Notes\n\n- Authentication credentials should be managed via environment variables or configuration files\n- HTTPS connections supported\n- Automatic handling of ONES platform login authentication\n\n## Development\n\n### Project Structure\n\n```\nsrc/main/java/org/springframework/ai/mcp/sample/server/\n├── McpServerApplication.java    # Main application\n└── OnesWikiService.java        # ONES Wiki service\n```\n\n### Running Tests\n\n```bash\nmvn test\n```\n\n### Building from Source\n\n```bash\ngit clone https://github.com/your-username/ones-wiki-mcp-server.git\ncd ones-wiki-mcp-server\nmvn clean package\n```\n\n### Extending Functionality\n\nYou can add more tool methods to `OnesWikiService`, such as:\n- Search Wiki pages\n- Get Wiki directory structure\n- Batch process multiple pages\n\n## Contributing\n\n1. Fork the repository\n2. Create a feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## License\n\nApache License 2.0 ",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ones-wiki-mcp-server-cli-configured": {
+        "command": "java",
+        "args": [
+          "-jar",
+          "target/ones-wiki-mcp-server-0.0.1-SNAPSHOT.jar",
+          "--ones.host=your-ones-host.com",
+          "--ones.email=your-email@example.com",
+          "--ones.password=your-password"
+        ],
+        "env": {}
+      },
+      "ones-wiki-mcp-server-client-config-example": {
+        "command": "java",
+        "args": [
+          "-jar",
+          "/path/to/ones-wiki-mcp-server-0.0.1-SNAPSHOT.jar",
+          "--ones.host=your-ones-host.com",
+          "--ones.email=your-email@example.com",
+          "--ones.password=your-password"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "brianxiadong",
+    "repo": "ones-wiki-mcp-server",
+    "url": "https://github.com/brianxiadong/ones-wiki-mcp-server",
+    "name": "ones-wiki-mcp-server",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "754cbd8158886aef156e546005753f9183bbf4fd"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:45.249Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "spring-ai-starter-mcp-server",
+      "importance": 10
+    },
+    {
+      "name": "spring-web",
+      "importance": 8
+    },
+    {
+      "name": "jsoup",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pom.xml ===\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\"\n    xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n    xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n    <modelVersion>4.0.0</modelVersion>\n    <parent>\n        <groupId>org.springframework.boot</groupId>\n        <artifactId>spring-boot-starter-parent</artifactId>\n        <version>3.4.5</version>\n        <relativePath /> <!-- lookup parent from repository -->\n    </parent>\n\n    <groupId>org.springframework.ai</groupId>\n\n    <artifactId>ones-wiki-mcp-server</artifactId>\n    <version>0.0.1-SNAPSHOT</version>\n\n    <name>ONES Wiki MCP Server</name>\n    <description>Spring Boot MCP server for ONES Wiki content retrieval</description>\n\n\n    <dependencyManagement>\n        <dependencies>\n            <dependency>\n                <groupId>org.springframework.ai</groupId>\n                <artifactId>spring-ai-bom</artifactId>\n                <version>1.1.0-SNAPSHOT</version>\n                <type>pom</type>\n                <scope>import</scope>\n            </dependency>\n        </dependencies>\n    </dependencyManagement>\n\n    <dependencies>\n        <dependency>\n            <groupId>org.springframework.ai</groupId>\n            <artifactId>spring-ai-starter-mcp-server</artifactId>\n        </dependency>\n        \n        <dependency>\n            <groupId>org.springframework</groupId>\n            <artifactId>spring-web</artifactId>\n        </dependency>\n        \n        <dependency>\n            <groupId>org.jsoup</groupId>\n            <artifactId>jsoup</artifactId>\n            <version>1.17.2</version>\n        </dependency>\n        \n        <dependency>\n            <groupId>org.springframework.boot</groupId>\n            <artifactId>spring-boot-starter-test</artifactId>\n            <scope>test</scope>\n        </dependency>\n    </dependencies>\n\n    <build>\n        <plugins>\n            <plugin>\n                <groupId>org.springframework.boot</groupId>\n                <artifactId>spring-boot-maven-plugin</artifactId>\n            </plugin>\n        </plugins>\n    </build>\n\n    <repositories>\n        <repository>\n            <id>spring-milestones</id>\n            <name>Spring Milestones</name>\n            <url>https://repo.spring.io/milestone</url>\n            <snapshots>\n                <enabled>false</enabled>\n            </snapshots>\n        </repository>\n        <repository>\n            <id>spring-snapshots</id>\n            <name>Spring Snapshots</name>\n            <url>https://repo.spring.io/snapshot</url>\n            <releases>\n                <enabled>false</enabled>\n            </releases>\n        </repository>\n        <repository>\n            <id>central-portal-snapshots</id>\n            <name>Central Portal Snapshots</name>\n            <url>https://central.sonatype.com/repository/maven-snapshots/</url>\n            <releases>\n                <enabled>false</enabled>\n            </releases>\n            <snapshots>\n                <enabled>true</enabled>\n            </snapshots>\n        </repository>\n    </repositories>\n\n</project>\n"
+}

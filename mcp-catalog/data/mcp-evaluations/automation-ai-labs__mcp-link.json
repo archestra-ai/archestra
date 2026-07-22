@@ -1,0 +1,109 @@
+{
+  "name": "automation-ai-labs__mcp-link",
+  "display_name": "mcp-link",
+  "description": "Convert Any OpenAPI V3 API to MCP Server",
+  "author": {
+    "name": "automation-ai-labs"
+  },
+  "server": {
+    "command": "go",
+    "args": ["run", "main.go", "serve", "--port", "${user_config.port}", "--host", "${user_config.host}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port on which the MCP Link server will listen.",
+      "default": 8080,
+      "required": false
+    },
+    "host": {
+      "type": "string",
+      "title": "Server Host",
+      "description": "The host address on which the MCP Link server will listen.",
+      "default": "0.0.0.0",
+      "required": false
+    }
+  },
+  "readme": "# MCP Link - Convert Any OpenAPI V3 API to MCP Server\n\n[![Join our Discord](https://img.shields.io/discord/1234567890?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/qkzfbqdSa9)\n\n## 🧩 Architecture\n\n![MCP Link](assets/diagrams.png)\n\n## 🤔 Why MCP Link?\n\nThere is a notable gap in the current AI Agent ecosystem:\n\n- Most MCP Servers are simple wrappers around Web APIs\n- Functionality interfaces may not be complete, depending on developer implementation\n- Manual creation of MCP interfaces is time-consuming and error-prone\n- Lack of standardized conversion processes\n\nMCP Link solves these issues through automation and standardization, allowing any API to easily join the AI-driven application ecosystem.\n\n\n## 🌟 Key Features\n\n- **Automatic Conversion**: Generate complete MCP Servers based on OpenAPI Schema\n- **Seamless Integration**: Make existing RESTful APIs immediately compatible with AI Agent calling standards\n- **Complete Functionality**: Ensure all API endpoints and features are correctly mapped\n- **Zero Code Modification**: Obtain MCP compatibility without modifying the original API implementation\n- **Open Standard**: Follow the MCP specification to ensure compatibility with various AI Agent frameworks\n\n\n## 🌐 Online Version\n\nTry our hosted version at [mcp-link.vercel.app](https://mcp-link.vercel.app) to quickly convert and test your APIs without installation.\n\n\n## 🚀 Quick Start\n\n### Installation\n\n```bash\n# Clone repository\ngit clone https://github.com/automation-ai-labs/mcp-link.git\ncd mcp-openapi-to-mcp-adapter\n\n# Install dependencies\ngo mod download\n```\n\n### Running\n\n```bash\n# Specify port\ngo run main.go serve --port 8080 --host 0.0.0.0\n```\n\n\n### Parameter Description\n\n- `s=` - URL of the OpenAPI specification file\n- `u=` - Base URL of the target API\n- `h=` - Authentication header format, in the format of `header-name:value-prefix`\n- `f=` - Path filter expressions to include or exclude API endpoints. Syntax:\n  - `+/path/**` - Include all endpoints under /path/\n  - `-/path/**` - Exclude all endpoints under /path/\n  - `+/users/*:GET` - Include only GET endpoints for /users/{id}\n  - Multiple filters can be separated by semicolons: `+/**:GET;-/internal/**`\n  - Wildcards: `*` matches any single path segment, `**` matches zero or more segments\n\n### Examples\n| _ | API | MCP Link URL | Authentication Method |\n|------|-----|-------------|---------|\n| ![Brave](https://img.logo.dev/brave.com) | Brave Search | https://mcp-link.vercel.app/links/brave | API Key |\n| ![DuckDuckGo](https://img.logo.dev/duckduckgo.com) | DuckDuckGo | https://mcp-link.vercel.app/links/duckduckgo | None |\n| ![Figma](https://img.logo.dev/figma.com) | Figma | https://mcp-link.vercel.app/links/figma | API Token |\n| ![GitHub](https://img.logo.dev/github.com) | GitHub | https://mcp-link.vercel.app/links/github | Bearer Token |\n| ![Home Assistant](https://img.logo.dev/home-assistant.io) | Home Assistant | https://mcp-link.vercel.app/links/homeassistant | Bearer Token |\n| ![Notion](https://img.logo.dev/notion.so) | Notion | https://mcp-link.vercel.app/links/notion | Bearer Token |\n| ![Slack](https://img.logo.dev/slack.com) | Slack | https://mcp-link.vercel.app/links/slack | Bearer Token |\n| ![Stripe](https://img.logo.dev/stripe.com) | Stripe | https://mcp-link.vercel.app/links/stripe | Bearer Token |\n| ![TMDB](https://img.logo.dev/themoviedb.org) | TMDB | https://mcp-link.vercel.app/links/tmdb | Bearer Token |\n| ![YouTube](https://img.logo.dev/youtube.com) | YouTube | https://mcp-link.vercel.app/links/youtube | Bearer Token |\n\n### Usage in AI Agents\n\n```json\n{\n  \"mcpServers\": {\n    \"@service-name\": {\n      \"url\": \"http://localhost:8080/sse?s=[OpenAPI-Spec-URL]&u=[API-Base-URL]&h=[Auth-Header]:[Value-Prefix]\"\n    }\n  }\n}\n```\n\nThese URLs allow any API with an OpenAPI specification to be immediately converted into an MCP-compatible interface accessible to AI Agents.\n\n## 📋 Future Development\n\n- **MCP Protocol OAuthflow**: Implement OAuth authentication flow support for MCP Protocol\n- **Resources Support**: Add capability to handle resource-based API interactions\n- **MIME Types**: Enhance support for various MIME types in API requests and responses\n",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-openapi-to-mcp-adapter": {
+        "command": "go",
+        "args": ["run", "main.go", "serve", "--port", "8080", "--host", "0.0.0.0"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "automation-ai-labs",
+    "repo": "mcp-link",
+    "url": "https://github.com/automation-ai-labs/mcp-link",
+    "name": "automation-ai-labs__mcp-link",
+    "path": null,
+    "stars": 529,
+    "contributors": 1,
+    "issues": 9,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "552c49ddb55bc6061a868b3a4bf45ec5f15e3c21"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:35.522Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "getkin/kin-openapi",
+      "importance": 9
+    },
+    {
+      "name": "google/uuid",
+      "importance": 4
+    },
+    {
+      "name": "lestrrat-go/jsref",
+      "importance": 7
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "urfave/cli/v2",
+      "importance": 8
+    },
+    {
+      "name": "gopkg.in/yaml.v3",
+      "importance": 7
+    },
+    {
+      "name": "sigs.k8s.io/yaml",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/anyisalin/mcp-openapi-to-mcp-adapter\n\ngo 1.23.0\n\ntoolchain go1.23.7\n\nrequire (\n\tgithub.com/getkin/kin-openapi v0.131.0\n\tgithub.com/google/uuid v1.6.0\n\tgithub.com/lestrrat-go/jsref v0.0.0-20211028120858-c0bcbb5abf20\n\tgithub.com/mark3labs/mcp-go v0.17.0\n\tgithub.com/urfave/cli/v2 v2.27.6\n\tgopkg.in/yaml.v3 v3.0.1\n\tsigs.k8s.io/yaml v1.4.0\n)\n\nrequire (\n\tgithub.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.21.0 // indirect\n\tgithub.com/go-openapi/swag v0.23.0 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/lestrrat-go/jspointer v0.0.0-20181205001929-82fadba7561c // indirect\n\tgithub.com/lestrrat-go/option v1.0.0 // indirect\n\tgithub.com/lestrrat-go/pdebug v0.0.0-20210111095411-35b07dbf089b // indirect\n\tgithub.com/lestrrat-go/structinfo v0.0.0-20210312050401-7f8bd69d6acb // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect\n\tgithub.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037 // indirect\n\tgithub.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 // indirect\n\tgithub.com/perimeterx/marshmallow v1.1.5 // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/russross/blackfriday/v2 v2.1.0 // indirect\n\tgithub.com/stretchr/testify v1.10.0 // indirect\n\tgithub.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n)\n"
+}

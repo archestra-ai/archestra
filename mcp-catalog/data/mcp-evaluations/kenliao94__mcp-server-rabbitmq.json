@@ -1,0 +1,190 @@
+{
+  "name": "kenliao94__mcp-server-rabbitmq",
+  "display_name": "mcp-server-rabbitmq",
+  "description": "MCP server for interacting with RabbitMQ",
+  "author": {
+    "name": "kenliao94"
+  },
+  "server": {
+    "command": "uvx",
+    "args": [
+      "mcp-server-rabbitmq@latest",
+      "--rabbitmq-host",
+      "${user_config.rabbitmq_host}",
+      "--port",
+      "${user_config.port}",
+      "--username",
+      "${user_config.username}",
+      "--password",
+      "${user_config.password}",
+      "--api-port",
+      "${user_config.api_port}",
+      "--use-tls",
+      "${user_config.use_tls}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "rabbitmq_host": {
+      "type": "string",
+      "title": "RabbitMQ Host",
+      "description": "Hostname of the RabbitMQ server (e.g., test.rabbit.com, localhost)",
+      "required": true
+    },
+    "port": {
+      "type": "number",
+      "title": "RabbitMQ Port",
+      "description": "Port number for RabbitMQ connection (e.g., 5672)",
+      "required": true
+    },
+    "username": {
+      "type": "string",
+      "title": "RabbitMQ Username",
+      "description": "Username for RabbitMQ authentication",
+      "sensitive": true,
+      "required": true
+    },
+    "password": {
+      "type": "string",
+      "title": "RabbitMQ Password",
+      "description": "Password for RabbitMQ authentication",
+      "sensitive": true,
+      "required": true
+    },
+    "api_port": {
+      "type": "number",
+      "title": "RabbitMQ API Port",
+      "description": "Port number for the RabbitMQ admin API (defaults to 15671)",
+      "default": 15671,
+      "required": false
+    },
+    "use_tls": {
+      "type": "boolean",
+      "title": "Use TLS",
+      "description": "Set to true if using AMQPS, false otherwise",
+      "required": false
+    }
+  },
+  "readme": "# RabbitMQ MCP Server\n[![smithery badge](https://smithery.ai/badge/@kenliao94/mcp-server-rabbitmq)](https://smithery.ai/server/@kenliao94/mcp-server-rabbitmq)\n\nA [Model Context Protocol](https://www.anthropic.com/news/model-context-protocol) server implementation for RabbitMQ operation.\n\n## Features\n\n### Manage your RabbitMQ message brokers using AI agent\nThis MCP servers wraps admin APIs of a RabbitMQ broker as MCP tools. It also uses Pika to interact with RabbitMQ to operate at the message level. You can also specify a different RabbitMQ broker that you want to connect to mid-conversation (default is configured during server initialization).\n\n### Supports streamable HTTP with FastMCP's `BearerAuthProvider`\nYou can start a remote RabbitMQ MCP server by configuring your own IdP and 3rd party authorization provider.\n\n### Seamless integration with MCP clients\nThe package is available on PyPI, you can use uvx without having to fork and build the MCP server locally first.\n\n\n## Installation\n\n### Smithery\n\nTo install RabbitMQ MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kenliao94/mcp-server-rabbitmq):\n\n```bash\nnpx -y @smithery/cli install @kenliao94/mcp-server-rabbitmq --client claude\n```\n\n### Try it online\nhttps://smithery.ai/server/@kenliao94/mcp-server-rabbitmq\n\n\n### PyPI\n\nhttps://pypi.org/project/mcp-server-rabbitmq/\n\nUse uvx directly in your MCP client config\n\n```json\n{\n    \"mcpServers\": {\n      \"rabbitmq\": {\n        \"command\": \"uvx\",\n        \"args\": [\n            \"mcp-server-rabbitmq@latest\",\n            \"--rabbitmq-host\",\n            \"<hostname ex. test.rabbit.com, localhost>\",\n            \"--port\",\n            \"<port number ex. 5672>\",\n            \"--username\",\n            \"<rabbitmq username>\",\n            \"--password\",\n            \"<rabbitmq password>\",\n            \"--api-port\",\n            \"<port number for the admin API, default to 15671>\"\n            \"--use-tls\",\n            \"<true if uses amqps, false otherwise>\"\n        ]\n      }\n    }\n}\n```\n\n### From source\n1. Clone this repository.\n\n```json\n{\n    \"mcpServers\": {\n      \"rabbitmq\": {\n        \"command\": \"uv\",\n        \"args\": [\n            \"--directory\",\n            \"/path/to/repo/mcp-server-rabbitmq\",\n            \"run\",\n            \"mcp-server-rabbitmq\",\n            \"--rabbitmq-host\",\n            \"<hostname ex. test.rabbit.com, localhost>\",\n            \"--port\",\n            \"<port number ex. 5672>\",\n            \"--username\",\n            \"<rabbitmq username>\",\n            \"--password\",\n            \"<rabbitmq password>\",\n            \"--use-tls\",\n            \"<true if uses amqps, false otherwise>\"\n        ]\n      }\n    }\n}\n```\n\n## Roadmap\n1. Full feature parity with `rabbitmqadmin`\n1. Support RabbitMQ OAuth instead of basic authentication\n\n\n## Development\n\n### Setup Development Environment\n\n```bash\n# Clone the repository\ngit clone https://github.com/kenliao94/mcp-server-rabbitmq.git\ncd mcp-server-rabbitmq\n\n# Install pre-commit hooks\npre-commit install\n```\n\n### Running Tests\n\n```bash\npytest\n```\n\n### Code Quality\n\nThis project uses ruff for linting and formatting:\n\n```bash\n# Run linter\nruff check .\n\n# Run formatter\nruff format .\n```\n\n## License\n\nThis project is licensed under the Apache License 2.0 - see the LICENSE file for details.\n",
+  "category": "Communication",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-rabbitmq-pypi": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-rabbitmq@latest",
+          "--rabbitmq-host",
+          "<hostname ex. test.rabbit.com, localhost>",
+          "--port",
+          "<port number ex. 5672>",
+          "--username",
+          "<rabbitmq username>",
+          "--password",
+          "<rabbitmq password>",
+          "--api-port",
+          "<port number for the admin API, default to 15671>",
+          "--use-tls",
+          "<true if uses amqps, false otherwise>"
+        ],
+        "env": {}
+      },
+      "mcp-server-rabbitmq-from-source": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "/path/to/repo/mcp-server-rabbitmq",
+          "run",
+          "mcp-server-rabbitmq",
+          "--rabbitmq-host",
+          "<hostname ex. test.rabbit.com, localhost>",
+          "--port",
+          "<port number ex. 5672>",
+          "--username",
+          "<rabbitmq username>",
+          "--password",
+          "<rabbitmq password>",
+          "--use-tls",
+          "<true if uses amqps, false otherwise>"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kenliao94",
+    "repo": "mcp-server-rabbitmq",
+    "url": "https://github.com/kenliao94/mcp-server-rabbitmq",
+    "name": "mcp-server-rabbitmq",
+    "path": null,
+    "stars": 35,
+    "contributors": 5,
+    "issues": 5,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "a799c44b64273a19bacbfe8ff2094e00e53cc616"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:48.845Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "markdownify",
+      "importance": 4
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pika",
+      "importance": 9
+    },
+    {
+      "name": "protego",
+      "importance": 4
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "readabilipy",
+      "importance": 4
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "loguru",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-rabbitmq\"\nversion = \"2.2.0\"\ndescription = \"A Model Context Protocol server providing access to RabbitMQ by LLMs\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nauthors = [{ name = \"Ken Liao\" }]\nmaintainers = [{ name = \"Ken Liao\", email = \"kenliao94@gmail.com\" }]\nkeywords = [\"rabbitmq\", \"mcp\", \"llm\", \"automation\"]\nlicense = { text = \"Apache-2.0\" }\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: Apache Software License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n]\ndependencies = [\n    \"markdownify>=0.13.1\",\n    \"mcp>=1.6.0\",\n    \"pika>=1.3.2\",\n    \"protego>=0.3.1\",\n    \"pydantic>=2.0.0\",\n    \"readabilipy>=0.2.0\",\n    \"requests>=2.32.3\",\n    \"fastmcp>=2.7.1\",\n    \"loguru>=0.7.3\",\n]\n\n[project.scripts]\nmcp-server-rabbitmq = \"mcp_server_rabbitmq.server:main\"\n\n[project.urls]\nHomepage = \"https://github.com/kenliao94/mcp-server-rabbitmq\"\nSource = \"https://github.com/kenliao94/mcp-server-rabbitmq\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.metadata]\nallow-direct-references = true\n\n[tool.hatch.build.targets.wheel]\npackages = [\"mcp_server_rabbitmq\"]\n\n[tool.commitizen]\nname = \"cz_conventional_commits\"\nversion = \"0.1.0\"\ntag_format = \"v$version\"\nversion_files = [\n    \"pyproject.toml:version\",\n    \"mcp_server_rabbitmq/__init__.py:__version__\"\n]\nupdate_changelog_on_bump = true\n\n[tool.uv]\ndev-dependencies = [\"pyright>=1.1.389\", \"ruff>=0.7.3\", \"pytest>=8.3.5\"]\n\n[tool.ruff]\nline-length = 99\ntarget-version = \"py310\"\nexclude = [\"uv.lock\"]\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\", \"B\", \"Q\"]\nignore = [\"E203\", \"E501\"]\n\n[tool.ruff.lint.isort]\nknown-first-party = [\"mcp_server_rabbitmq\"]\n\n[tool.ruff.format]\nquote-style = \"double\"\nindent-style = \"space\"\nline-ending = \"auto\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_classes = \"Test*\"\npython_functions = \"test_*\"\n"
+}

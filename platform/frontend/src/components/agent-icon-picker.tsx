@@ -3,6 +3,7 @@
 import { EmojiPicker } from "@ferrucc-io/emoji-picker";
 import {
   Bot,
+  Folder,
   ImageIcon,
   Layers,
   Network,
@@ -34,7 +35,7 @@ interface AgentIconPickerProps {
   className?: string;
   /** Show a "Logos" tab with pre-built service brand logos */
   showLogos?: boolean;
-  fallbackType?: AgentIconVariant | "server";
+  fallbackType?: AgentIconVariant | "server" | "project";
 }
 
 export function AgentIconPicker({
@@ -110,13 +111,16 @@ export function AgentIconPicker({
         ? Route
         : fallbackType === "server"
           ? Server
-          : Bot;
+          : fallbackType === "project"
+            ? Folder
+            : Bot;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
+          aria-label={value ? "Change icon" : "Choose icon"}
           className={cn(
             "relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed hover:border-primary/50 hover:bg-accent transition-colors cursor-pointer",
             value && "border-solid border-border",
@@ -154,8 +158,12 @@ export function AgentIconPicker({
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[352px] p-0" align="start" sideOffset={8}>
-        <Tabs defaultValue={defaultTab}>
+      <PopoverContent
+        className="w-[352px] overflow-hidden rounded-lg p-0"
+        align="start"
+        sideOffset={4}
+      >
+        <Tabs defaultValue={defaultTab} className="gap-0">
           <TabsList className="w-full rounded-none border-b bg-transparent p-0 h-auto">
             {showLogos && (
               <TabsTrigger
@@ -193,20 +201,24 @@ export function AgentIconPicker({
           )}
           <TabsContent
             value="emoji"
-            className="m-0"
+            className="m-0 w-full overflow-hidden rounded-none"
             onWheel={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
           >
             <EmojiPicker
+              className="w-full max-w-full overflow-hidden rounded-none border-0"
               onEmojiSelect={handleEmojiSelect}
               emojisPerRow={8}
               emojiSize={32}
             >
-              <EmojiPicker.Header>
-                <EmojiPicker.Input placeholder="Search emoji..." />
+              <EmojiPicker.Header className="p-2">
+                <EmojiPicker.Input
+                  placeholder="Search emoji..."
+                  className="mb-0"
+                />
               </EmojiPicker.Header>
               <EmojiPicker.Group>
-                <EmojiPicker.List containerHeight={280} />
+                <EmojiPicker.List hideStickyHeader containerHeight={280} />
               </EmojiPicker.Group>
             </EmojiPicker>
           </TabsContent>

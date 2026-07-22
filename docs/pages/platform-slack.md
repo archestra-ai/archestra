@@ -1,10 +1,12 @@
 ---
 title: Slack
 category: Agents
-order: 4
+order: 6
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-02-23
+lastUpdated: 2026-07-22
 ---
+
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Archestra can connect directly to Slack channels. When users mention the bot in a channel, messages are routed to your configured agent and responses appear directly in Slack threads.
 
@@ -47,6 +49,18 @@ When you **first mention the bot** in a channel:
 ```
 
 The bot responds with a list of options to choose which agent will handle messages in this channel. After selection, the bot processes your message and **all future messages** in that channel.
+
+### Replying within a thread
+
+In channels the bot stays silent until it is @mentioned. Once mentioned in a thread, it keeps replying to every message in that thread without further mentions. Starting a new thread needs a fresh mention. Direct messages always get a reply, no mention required.
+
+To stop the bot replying in a thread, send `mute` (you can address it by name with no @mention, e.g. `Archestra mute`), or react to one of its replies with the mute (🔇) or shushing-face (🤫) emoji. It goes quiet until the thread is @mentioned again. Muting also cancels any reply the bot is already working on, so a late answer never lands after you ask for quiet. As a reminder, the bot adds a short hint about this to its first reply in each thread.
+
+### Answering Every Message
+
+By default the bot answers only when @mentioned in a channel. You can switch a single channel to answer every message instead — no mention needed. On the **Agent Triggers** → **Slack** page, set that channel's **Replies to** toggle to **All messages**. Other channels stay mentions-only.
+
+Mute still works per thread: send `mute` in a thread to silence it until you @mention the bot there again. Direct messages already answer every message, so the toggle does not apply to them.
 
 ### Commands
 
@@ -103,13 +117,13 @@ A DM with the bot behaves just like another channel — each user can choose whi
 
 When a user interacts with the bot but hasn't signed up in Archestra yet, they are automatically provisioned with the **Member** role and no teams assigned. The user receives a unique invitation link via Slack DM that they can use to complete sign-up and become a full Archestra user. Until they do, they cannot log in to the Archestra web app.
 
-Admins can view autoprovisioned users on the **Settings → Members** page — from there they can copy the invitation link or delete the user.
+Admins can view autoprovisioned users on the **Settings → Users** page — from there they can copy the invitation link or delete the user.
 
 ![Autoprovisioned Slack Users](/docs/autoprovisioned-users-slack.webp)
 
 ## Attachments
 
-Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Image attachments are included inline in the agent's context; non-image attachments are noted but not processed as inline content.
+Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Files the selected model can read — images, PDFs, and text documents such as CSV, TSV, JSON, XML, YAML, TOML, and Markdown — are included inline in the agent's context. When the agent has a code sandbox, other file types (for example a SQLite database or a ZIP archive) are placed into the sandbox so the agent can open them with its tools. Anything that still cannot be provided is noted by name so the agent can tell the user. A message that contains only a file (no text) is processed too.
 
 **Limits:**
 - Max 20 attachments per message

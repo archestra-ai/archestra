@@ -1,30 +1,28 @@
 import { describe, expect, expectTypeOf, test } from "vitest";
 import { AGENT_TOOL_PREFIX, isAgentTool } from "./agents";
 import {
-  ARCHESTRA_TOOL_SHORT_NAMES,
+  APP_ARCHESTRA_TOOL_SHORT_NAMES,
+  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  getArchestraAppResourceUri,
   getArchestraMcpServerName,
   getArchestraToolFullName,
   getArchestraToolPrefix,
   getArchestraToolShortName,
+  getCreationDefaultArchestraToolShortNames,
+  isAlwaysExposedArchestraToolShortName,
   isArchestraMcpServerTool,
+  isLikelyArchestraToolName,
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  parseArchestraAppResourceUri,
+  SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_CREATE_AGENT_FULL_NAME,
 } from "./archestra-mcp-server";
 
 describe("archestra MCP tool names", () => {
-  test("contains the shared special tool short names", () => {
-    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("create_agent");
-    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("swap_agent");
-    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("artifact_write");
-  });
-
-  test("builds a fully-qualified Archestra tool name", () => {
-    expect(getArchestraToolFullName("create_agent")).toBe(
-      TOOL_CREATE_AGENT_FULL_NAME,
-    );
-  });
-
-  test("preserves literal full-name typing", () => {
+  test("builds a fully-qualified Archestra tool name with literal typing", () => {
     const fullName = getArchestraToolFullName("create_agent");
+    expect(fullName).toBe(TOOL_CREATE_AGENT_FULL_NAME);
     expectTypeOf(fullName).toEqualTypeOf<typeof TOOL_CREATE_AGENT_FULL_NAME>();
   });
 
@@ -80,5 +78,193 @@ describe("archestra MCP tool names", () => {
     expect(isArchestraMcpServerTool("github__list_issues")).toBe(false);
     expect(isAgentTool(`${AGENT_TOOL_PREFIX}delegate_me`)).toBe(true);
     expect(isAgentTool("archestra__whoami")).toBe(false);
+  });
+
+  test("flags the skill, sandbox, and persistent-files path as always-exposed", () => {
+    for (const shortName of [
+      "list_skills",
+      "load_skill",
+      "run_command",
+      "download_file",
+      "upload_file",
+      // persistent-files (Projects) surface — all top-level, including
+      // delete_file (deleting a file is part of the everyday file flow here,
+      // unlike the app tools below).
+      "search_files",
+      "read_file",
+      "save_file",
+      "edit_file",
+      "delete_file",
+    ]) {
+      expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(true);
+    }
+    // The whole app surface is reached through search_tools/run_tool in
+    // search_and_run_only mode.
+    for (const shortName of [
+      "scaffold_app",
+      "refine_app",
+      "edit_app",
+      "validate_app",
+      "publish_app",
+      "read_app",
+      "render_app",
+      "list_apps",
+      "set_app_tools",
+      "delete_app",
+      "preview_app_tool",
+      "get_app_diagnostics",
+    ]) {
+      expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(false);
+    }
+  });
+
+  test("recognizes always-exposed tools through a white-label prefix", () => {
+    const branding = { appName: "Acme Control Plane", fullWhiteLabeling: true };
+    const brandedLoad = getArchestraToolFullName("load_skill", branding);
+    const shortName = getArchestraToolShortName(brandedLoad, branding);
+
+    expect(shortName).toBe("load_skill");
+    expect(
+      shortName !== null && isAlwaysExposedArchestraToolShortName(shortName),
+    ).toBe(true);
+  });
+
+  describe("getCreationDefaultArchestraToolShortNames", () => {
+    const allOff = {
+      skillsEnabled: false,
+      sandboxEnabled: false,
+    };
+
+    test("all flags off yields the always-on defaults plus the app tools", () => {
+      expect(getCreationDefaultArchestraToolShortNames(allOff)).toEqual([
+        ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+      ]);
+    });
+
+    test("skillsEnabled adds the skill tools", () => {
+      expect(
+        getCreationDefaultArchestraToolShortNames({
+          ...allOff,
+          skillsEnabled: true,
+        }),
+      ).toEqual([
+        ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+      ]);
+    });
+
+    test("sandboxEnabled adds the runtime and persistent-files tools", () => {
+      expect(
+        getCreationDefaultArchestraToolShortNames({
+          ...allOff,
+          sandboxEnabled: true,
+        }),
+      ).toEqual([
+        ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+      ]);
+    });
+
+    test("all flags on composes every group in order", () => {
+      expect(
+        getCreationDefaultArchestraToolShortNames({
+          skillsEnabled: true,
+          sandboxEnabled: true,
+        }),
+      ).toEqual([
+        ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+      ]);
+    });
+  });
+
+  test("does not flag skill-authoring or unrelated tools", () => {
+    for (const shortName of [
+      "create_skill",
+      "update_skill",
+      "whoami",
+      "search_tools",
+      "run_tool",
+    ]) {
+      expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(false);
+    }
+  });
+});
+
+describe("isLikelyArchestraToolName (loose auto-discovery matcher)", () => {
+  test("matches the canonical default and branded prefixes", () => {
+    expect(isLikelyArchestraToolName("archestra__run_tool")).toBe(true);
+
+    const branding = { appName: "Acme Copilot", fullWhiteLabeling: true };
+    const branded = getArchestraToolFullName("run_tool", branding);
+    expect(isLikelyArchestraToolName(branded, branding)).toBe(true);
+  });
+
+  test("matches names a client decorated between the server name and short name", () => {
+    // Branded server name slugifies to `archestra_staging`; the client appends
+    // its own MCP-server label before the tool short name.
+    const branding = { appName: "Archestra Staging", fullWhiteLabeling: true };
+    expect(
+      isLikelyArchestraToolName(
+        "archestra_staging__my_mcp_gateway_1234567__run_tool",
+        branding,
+      ),
+    ).toBe(true);
+    // The off-brand default server name is still recognized under decoration.
+    expect(
+      isLikelyArchestraToolName(
+        "archestra__my_mcp_gateway_1234567__search_tools",
+        branding,
+      ),
+    ).toBe(true);
+  });
+
+  test("does NOT match a bare short name with no server segment", () => {
+    expect(isLikelyArchestraToolName("run_tool")).toBe(false);
+  });
+
+  test("does NOT match a known short name behind a foreign server segment", () => {
+    expect(isLikelyArchestraToolName("unrelated_server__run_tool")).toBe(false);
+    // Decorated, but no allowed server name anywhere in the segments.
+    expect(
+      isLikelyArchestraToolName(
+        "custom_client_id__mcp-server-my_mcp_gateway__run_tool",
+      ),
+    ).toBe(false);
+  });
+
+  test("does NOT match a genuinely foreign tool whose tail is not a short name", () => {
+    expect(isLikelyArchestraToolName("archestra__list_issues")).toBe(false);
+    expect(isLikelyArchestraToolName("custom__list_issues")).toBe(false);
+  });
+});
+
+describe("parseArchestraAppResourceUri", () => {
+  test("round-trips an owned-app id", () => {
+    const appId = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+    expect(
+      parseArchestraAppResourceUri(getArchestraAppResourceUri(appId)),
+    ).toBe(appId);
+  });
+
+  test("returns null for a non-app UI URI", () => {
+    expect(parseArchestraAppResourceUri("ui://excalidraw")).toBeNull();
+  });
+
+  test("returns null for the bare prefix (no app id)", () => {
+    expect(parseArchestraAppResourceUri("ui://archestra-app/")).toBeNull();
+  });
+
+  test("returns null when the URI has a path past the app id", () => {
+    expect(
+      parseArchestraAppResourceUri("ui://archestra-app/abc/extra"),
+    ).toBeNull();
   });
 });

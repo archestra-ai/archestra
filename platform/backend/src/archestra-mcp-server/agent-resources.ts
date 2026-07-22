@@ -1,3 +1,4 @@
+import { TOOL_LIST_AGENTS_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
@@ -12,12 +13,7 @@ import {
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
-import type {
-  Agent,
-  AgentScope,
-  ToolAssignmentMode,
-  ToolExposureMode,
-} from "@/types";
+import type { Agent, AgentScope, ToolExposureMode } from "@/types";
 import {
   AgentLabelWithDetailsSchema,
   AgentScopeSchema,
@@ -27,6 +23,7 @@ import {
   ToolExposureModeSchema,
   UuidIdSchema,
 } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   assignSubAgentDelegations,
   assignToolAssignments,
@@ -103,8 +100,20 @@ export const CreateBaseToolArgsSchema = z
       .optional()
       .describe("Team IDs to attach when creating a team-scoped resource."),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
-      "How tools should be exposed to MCP clients and models. Use 'search_and_run_only' to expose only search_tools and run_tool while keeping the full assigned tool set searchable and runnable.",
+      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode.",
     ),
+    accessAllTools: z
+      .boolean()
+      .optional()
+      .describe(
+        "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings.",
+      ),
+    accessAllSubagents: z
+      .boolean()
+      .optional()
+      .describe(
+        "Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false.",
+      ),
   })
   .strict();
 
@@ -150,8 +159,18 @@ export const AgentDetailOutputSchema = z.object({
   icon: z.string().nullable().describe("The emoji icon, if configured."),
   scope: AgentScopeSchema.describe("The visibility scope."),
   toolExposureMode: ToolExposureModeSchema.describe(
-    "How tools are exposed to MCP clients and models.",
+    "How tools are loaded for MCP clients and models.",
   ),
+  accessAllTools: z
+    .boolean()
+    .describe(
+      "Whether search_tools/run_tool may dynamically access every tool the calling user can access.",
+    ),
+  accessAllSubagents: z
+    .boolean()
+    .describe(
+      "Whether the agent may delegate to every internal agent the calling user can access.",
+    ),
   agentType: z
     .enum(["agent", "llm_proxy", "mcp_gateway", "profile"])
     .describe("The resource type."),
@@ -198,7 +217,8 @@ export async function handleCreateResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
-    toolAssignmentMode?: ToolAssignmentMode;
+    accessAllTools?: boolean;
+    accessAllSubagents?: boolean;
   },
 >(params: {
   args: TArgs;
@@ -275,8 +295,11 @@ export async function handleCreateResource<
     if (args.toolExposureMode !== undefined) {
       createParams.toolExposureMode = args.toolExposureMode;
     }
-    if (args.toolAssignmentMode !== undefined) {
-      createParams.toolAssignmentMode = args.toolAssignmentMode;
+    if (args.accessAllTools !== undefined) {
+      createParams.accessAllTools = args.accessAllTools;
+    }
+    if (args.accessAllSubagents !== undefined) {
+      createParams.accessAllSubagents = args.accessAllSubagents;
     }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
@@ -310,10 +333,7 @@ export async function handleCreateResource<
       if (args.icon) createParams.icon = args.icon;
     }
 
-    const created = await AgentModel.create(
-      createParams,
-      scope === "personal" ? context.userId : undefined,
-    );
+    const created = await AgentModel.create(createParams, context.userId);
 
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
@@ -382,9 +402,8 @@ export async function handleGetResource<
     if (args.id) {
       record = await AgentModel.findById(args.id, context.userId, isAdmin);
       // findById doesn't support excludeOtherPersonalAgents, so we guard here.
-      // swap_agent is the primary Archestra MCP use-case and requires only the
-      // caller's own personal agents to be visible, even though admins can see
-      // all personal agents in the UI.
+      // MCP tools only need the caller's own personal agents to be visible,
+      // even though admins can see all personal agents in the UI.
       if (
         record &&
         record.scope === "personal" &&
@@ -400,10 +419,9 @@ export async function handleGetResource<
         {
           name: args.name,
           agentType: expectedType,
-          // Hide other users' personal agents from MCP tools. swap_agent is
-          // the primary Archestra MCP use-case and requires only the caller's
-          // own personal agents to be visible, even though admins can see all
-          // personal agents in the UI.
+          // Hide other users' personal agents from MCP tools. Only the
+          // caller's own personal agents need to be visible, even though
+          // admins can see all personal agents in the UI.
           excludeOtherPersonalAgents: true,
         },
         context.userId,
@@ -416,7 +434,12 @@ export async function handleGetResource<
     }
 
     if (!record) {
-      return errorResult(`${getLabel} not found`);
+      // only agents have a discovery tool; proxies/gateways have no list tool.
+      const steer =
+        expectedType === "agent"
+          ? ` Call ${archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME)} to find the exact id or name.`
+          : "";
+      return errorResult(`${getLabel} not found.${steer}`);
     }
 
     if (record.agentType !== expectedType) {
@@ -447,7 +470,8 @@ export async function handleEditResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
-    toolAssignmentMode?: ToolAssignmentMode;
+    accessAllTools?: boolean;
+    accessAllSubagents?: boolean;
   },
 >(params: {
   args: TArgs;
@@ -505,8 +529,11 @@ export async function handleEditResource<
     if (args.toolExposureMode !== undefined) {
       updateData.toolExposureMode = args.toolExposureMode;
     }
-    if (args.toolAssignmentMode !== undefined) {
-      updateData.toolAssignmentMode = args.toolAssignmentMode;
+    if (args.accessAllTools !== undefined) {
+      updateData.accessAllTools = args.accessAllTools;
+    }
+    if (args.accessAllSubagents !== undefined) {
+      updateData.accessAllSubagents = args.accessAllSubagents;
     }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);

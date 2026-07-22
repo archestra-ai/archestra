@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 // Shape derived from what `WithAuthCheck` and downstream hooks read —
 // Better-Auth's session is not part of the Archestra SDK codegen.
@@ -69,17 +69,19 @@ export function makeUserPermissions(
 ): archestraApiTypes.GetUserPermissionsResponses["200"] {
   const ALL = ["read", "create", "update", "delete", "admin"] as const;
   return {
-    mcpRegistry: [...ALL],
+    mcpRegistry: [...ALL, "deploy-to-restricted"],
     mcpServerInstallation: [...ALL],
     mcpServerInstallationRequest: [...ALL],
-    mcpGateway: [...ALL],
-    agent: [...ALL, "team-admin"],
+    mcpGateway: [...ALL, "deploy-to-restricted"],
+    environment: ["read", "create", "update", "delete"],
+    agent: [...ALL, "team-admin", "deploy-to-restricted"],
     agentTrigger: [...ALL],
+    skill: [...ALL, "team-admin", "deploy-to-restricted"],
     chat: [...ALL],
     team: [...ALL],
     member: [...ALL],
     apiKey: [...ALL],
-    llmProxy: [...ALL],
+    llmProxy: [...ALL, "deploy-to-restricted"],
     llmProviderApiKey: [...ALL],
     llmVirtualKey: [...ALL],
     llmOauthClient: [...ALL],
@@ -89,7 +91,7 @@ export function makeUserPermissions(
     toolPolicy: [...ALL],
     organizationSettings: [...ALL],
     knowledgeSettings: [...ALL],
-    knowledgeSource: [...ALL],
+    knowledgeSource: [...ALL, "deploy-to-restricted"],
     agentSettings: [...ALL],
     llmSettings: [...ALL],
     log: [...ALL],

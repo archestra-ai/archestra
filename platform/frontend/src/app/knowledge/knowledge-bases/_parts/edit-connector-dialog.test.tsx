@@ -54,9 +54,9 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/teams/team.query", () => ({
-  useTeams: () => ({ data: [] }),
-}));
+vi.mock("@/lib/teams/team.query");
+
+import { useTeams } from "@/lib/teams/team.query";
 
 type ConnectorFixture = Parameters<typeof EditConnectorDialog>[0]["connector"];
 
@@ -70,6 +70,7 @@ function makeAsanaConnector(
     visibility: "org-wide",
     teamIds: [],
     connectorType: "asana",
+    environmentId: null,
     config: {
       type: "asana",
       workspaceGid: "1234567890",
@@ -78,6 +79,7 @@ function makeAsanaConnector(
       ...overrides,
     },
     schedule: "0 */6 * * *",
+    permissionSyncIntervalSeconds: 1800,
     enabled: true,
   } as ConnectorFixture;
 }
@@ -104,6 +106,9 @@ function renderDialog(connector: ConnectorFixture = makeAsanaConnector()) {
 describe("EditConnectorDialog - Asana", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
   });
 
   it("submits array fields as arrays when the user does not edit them", async () => {
@@ -165,6 +170,13 @@ describe("EditConnectorDialog - Asana", () => {
     });
   });
 
+  it("does not show the permissions sync frequency picker for a non-auto-sync connector", () => {
+    renderDialog();
+    expect(
+      screen.queryByText("Permissions Sync Frequency"),
+    ).not.toBeInTheDocument();
+  });
+
   it("includes credentials only when a new token is provided", async () => {
     mockMutateAsync.mockResolvedValue({ id: "conn-asana-1" });
     const user = userEvent.setup();
@@ -184,5 +196,136 @@ describe("EditConnectorDialog - Asana", () => {
     expect(call[0].body.credentials).toEqual({ apiToken: "new-pat-xyz" });
     // Asana does not use the email field
     expect(call[0].body.credentials).not.toHaveProperty("email");
+  });
+});
+
+describe("EditConnectorDialog - Jira admin API key", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
+  });
+
+  function makeJiraAutoSyncConnector(): ConnectorFixture {
+    return {
+      id: "conn-jira-1",
+      name: "Engineering Jira",
+      description: "",
+      visibility: "auto-sync-permissions",
+      teamIds: [],
+      connectorType: "jira",
+      environmentId: null,
+      config: {
+        type: "jira",
+        jiraBaseUrl: "https://test.atlassian.net",
+        isCloud: true,
+        projectKey: "TEST",
+      },
+      schedule: "0 */6 * * *",
+      permissionSyncIntervalSeconds: 1800,
+      enabled: true,
+    } as ConnectorFixture;
+  }
+
+  it("submits the admin API key alone, without the API token", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-jira-1" });
+    const user = userEvent.setup();
+    renderDialog(makeJiraAutoSyncConnector());
+
+    fireEvent.change(screen.getByLabelText(/Organization admin API key/), {
+      target: { value: "org-admin-key" },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    const [call] = mockMutateAsync.mock.calls;
+    // The backend merges submitted fields over the stored secret, so the
+    // admin key must survive an empty token field instead of being dropped.
+    expect(call[0].body.credentials).toEqual({ adminApiKey: "org-admin-key" });
+  });
+
+  it("submits a corrected email alone, without re-entering the token", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-jira-1" });
+    const user = userEvent.setup();
+    renderDialog(makeJiraAutoSyncConnector());
+
+    // Correcting a typo'd credential email must not be silently dropped just
+    // because the token field is left empty to keep the existing token.
+    fireEvent.change(screen.getByLabelText(/Email/), {
+      target: { value: "correct@example.com" },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    const [call] = mockMutateAsync.mock.calls;
+    expect(call[0].body.credentials).toEqual({ email: "correct@example.com" });
+  });
+});
+
+describe("EditConnectorDialog - permission sync interval (auto-sync)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
+  });
+
+  function makeAutoSyncGithubConnector(): ConnectorFixture {
+    return {
+      id: "conn-gh-1",
+      name: "Engineering GitHub",
+      description: "",
+      visibility: "auto-sync-permissions",
+      teamIds: [],
+      connectorType: "github",
+      environmentId: null,
+      config: {
+        type: "github",
+        githubUrl: "https://api.github.com",
+        owner: "test-org",
+        authMethod: "pat",
+      },
+      schedule: "0 */6 * * *",
+      permissionSyncIntervalSeconds: 1800,
+      enabled: true,
+    } as ConnectorFixture;
+  }
+
+  it("shows the picker with the connector's saved interval and submits a new one", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-gh-1" });
+    const user = userEvent.setup();
+    renderDialog(makeAutoSyncGithubConnector());
+
+    // The picker lives in the Advanced section, under the content schedule.
+    await user.click(screen.getByRole("button", { name: /Advanced/ }));
+    expect(
+      await screen.findByText("Permissions Sync Frequency"),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("combobox", { name: /Permissions Sync Frequency/ }),
+    );
+    // Saved 1800s marks its preset as the selected option.
+    expect(
+      await screen.findByRole("option", { name: "Every 30 minutes" }),
+    ).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("option", { name: "Every hour" }));
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    const [call] = mockMutateAsync.mock.calls;
+    expect(call[0].body.permissionSyncIntervalSeconds).toBe(3600);
   });
 });

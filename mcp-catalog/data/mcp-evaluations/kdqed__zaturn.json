@@ -1,0 +1,164 @@
+{
+  "name": "kdqed__zaturn",
+  "display_name": "zaturn",
+  "description": "Data Analysis With Vibes",
+  "author": {
+    "name": "kdqed"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<h1>\n  <img src=\"https://github.com/kdqed/zaturn/raw/main/zaturn/studio/static/logo.png\" width=\"24\" height=\"24\">\n  <span>Zaturn: Your Co-Pilot For Data Analytics & Business Insights</span>\n</h1>\n\n<a href=\"https://discord.gg/K8mECeVzpQ\">\n  Join the Discord\n</a>\n\n## Just Chat With Your Data! No SQL, No Python.\n\nZaturn provides tools that enable AI models to run SQL, so you don't have to. It can be used as an MCP or as a web interface similar to Jupyter Notebook.\n\n## Zaturn in Action\n\nhttps://github.com/user-attachments/assets/d42dc433-e5ec-4b3e-bef0-5cfc097396ab\n\n## Features:\n\n### Multiple Data Sources \n\nZaturn can currently connect to the following data sources: \n- SQL Databases: PostgreSQL, SQLite, DuckDB, MySQL, ClickHouse, SQL Server\n- Files: CSV, Parquet\n\nConnectors for more data sources are being added.\n\n### Visualizations\n\nIn addition to providing tabular and textual summaries, Zaturn can also generate the following image visualizations\n\n- Scatter and Line Plots\n- Histograms\n- Strip and Box Plots\n- Bar Plots\n\nMore visualization capabilities are being added.\n\n\n## Installation & Setup\n\nSee [https://zaturn.pro/docs/install](https://zaturn.pro/docs/install)\n\n\n## Roadmap\n\n- Support for more data source types\n- More data visualizations\n- Predictive analysis and forecasting, e.g.:\n```\nBased on the revenue of the last 3 months, forecast next month's revenue.\n```\n- Generate Presentations & PDFs\n```\nManager: \n  I need a presentation to show the boss. Can you do it by EOD?\nAnalyst: \n  EOD?! Are you still in the 2010s? \n  I can get it done right now. Actually, you can do it right now.\n  You know what? The boss can do it right now.\n```\n\n## Help And Feedback\n\n[Raise an issue](https://github.com/kdqed/zaturn/issues) or [join the Discord](https://discord.gg/K8mECeVzpQ).\n\n\n## Support The Project\n\nIf you find Zaturn useful, please support this project by:\n- Starring the Project\n- Spreading the word\n\nYour support will enable me to dedicate more of my time to Zaturn.\n\n## Example Dataset Credits\n\nThe [pokemon dataset compiled by Sarah Taha and PokéAPI](https://www.kaggle.com/datasets/sarahtaha/1025-pokemon) has been included under the [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) license for demonstration purposes.\n\n## Featured on glama.ai\n\n<a href=\"https://glama.ai/mcp/servers/@kdqed/zaturn\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@kdqed/zaturn/badge\" alt=\"Zaturn MCP server\" />\n</a>\n\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=kdqed/zaturn&type=Date)](https://www.star-history.com/#kdqed/zaturn&Date)\n",
+  "category": "Data Science",
+  "quality_score": 39,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kdqed",
+    "repo": "zaturn",
+    "url": "https://github.com/kdqed/zaturn",
+    "name": "kdqed__zaturn",
+    "path": null,
+    "stars": 57,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ef671fd5e274cc0de322f7aa3f1902efb88ed49c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:04.940Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "clickhouse-connect",
+      "importance": 9
+    },
+    {
+      "name": "cryptography",
+      "importance": 6
+    },
+    {
+      "name": "duckdb",
+      "importance": 9
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "flask",
+      "importance": 10
+    },
+    {
+      "name": "function-schema",
+      "importance": 5
+    },
+    {
+      "name": "kaleido",
+      "importance": 7
+    },
+    {
+      "name": "mistune",
+      "importance": 5
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    },
+    {
+      "name": "openai-agents",
+      "importance": 9
+    },
+    {
+      "name": "pandas",
+      "importance": 9
+    },
+    {
+      "name": "pillow",
+      "importance": 7
+    },
+    {
+      "name": "platformdirs",
+      "importance": 4
+    },
+    {
+      "name": "plotly",
+      "importance": 9
+    },
+    {
+      "name": "psycopg2-binary",
+      "importance": 9
+    },
+    {
+      "name": "pyarrow",
+      "importance": 8
+    },
+    {
+      "name": "pymssql",
+      "importance": 9
+    },
+    {
+      "name": "pymysql",
+      "importance": 9
+    },
+    {
+      "name": "python-lsp-server",
+      "importance": 7
+    },
+    {
+      "name": "python-slugify",
+      "importance": 4
+    },
+    {
+      "name": "seaborn",
+      "importance": 8
+    },
+    {
+      "name": "setuptools",
+      "importance": 3
+    },
+    {
+      "name": "sqlalchemy",
+      "importance": 9
+    },
+    {
+      "name": "tabulate",
+      "importance": 5
+    },
+    {
+      "name": "tomli-w",
+      "importance": 4
+    },
+    {
+      "name": "werkzeug",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"zaturn\"\nversion = \"0.3.0\"\ndescription = \"AI Data Analysis MCP & Studio\"\nauthors = [\n  {name = \"Karthik Devan\", email = \"krtdvn@gmail.com\"},\n]\nmaintainers = [\n  {name = \"Karthik Devan\", email = \"krtdvn@gmail.com\"},\n]\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"clickhouse-connect>=0.8.17\",\n    \"cryptography>=44.0.2\",\n    \"duckdb>=1.2.1\",\n    \"fastmcp>=0.4.1\",\n    \"flask[async]>=3.1.1\",\n    \"function-schema>=0.4.5\",\n    \"kaleido==0.2.1\",\n    \"mistune>=3.1.3\",\n    \"openai>=1.82.1\",\n    \"pandas>=2.2.3\",\n    \"pillow>=11.2.1\",\n    \"platformdirs>=4.3.7\",\n    \"plotly[express]>=6.0.1\",\n    \"psycopg2-binary>=2.9.10\",\n    \"pyarrow>=19.0.1\",\n    \"pydantic-ai>=0.8.0\",\n    \"pydantic-core>=2.33.2\",\n    \"pymssql>=2.3.7\",\n    \"pymysql>=1.1.1\",\n    \"python-lsp-server>=1.12.2\",\n    \"python-slugify>=8.0.4\",\n    \"seaborn>=0.13.2\",\n    \"setuptools>=78.1.0\",\n    \"sqlalchemy>=2.0.40\",\n    \"tabulate>=0.9.0\",\n    \"tomli-w>=1.2.0\",\n    \"werkzeug>=3.1.3\",\n]\n\n[project.scripts]\nzaturn_mcp = \"zaturn.mcp:main\"\nzaturn_studio = \"zaturn.studio:main\"\n\n[project.urls]\nHomepage = \"https://github.com/kdqed/zaturn\"\nIssues = \"https://github.com/kdqed/zaturn/issues\"\n\n[build-system]\nrequires = [\n    \"setuptools>=60\",\n    \"setuptools-scm>=8.0\"\n]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.setuptools]\ninclude-package-data = false\n\n[tool.setuptools.packages.find]\nexclude = [\"docs*\", \"brand*\", \"debug*\"]\ninclude = [\"zaturn*\"]\n\n[tool.setuptools.package-data]\n\"*\" = [\"*.*\"]\n\n[dependency-groups]\ndev = []\n"
+}

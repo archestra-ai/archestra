@@ -1,0 +1,82 @@
+{
+  "name": "kukapay__crypto-orderbook-mcp",
+  "display_name": "crypto-orderbook-mcp",
+  "description": "An MCP server that analyzes order book depth and imbalance across major crypto exchanges.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Crypto Orderbook MCP\n\nAn MCP server that analyzes order book depth and imbalance across major crypto exchanges, empowering AI agents and trading systems with real-time market structure insights.\n\n![License](https://img.shields.io/badge/license-MIT-green)\n![Python](https://img.shields.io/badge/python-3.10%2B-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n\n## Features\n\n- **Order Book Metrics**: Calculate bid/ask depth and imbalance for a specified trading pair on a given exchange.\n- **Cross-Exchange Comparison**: Compare order book depth and imbalance across multiple exchanges in a unified Markdown table.\n- **Supported Exchanges**: Binance, Kraken, Coinbase, Bitfinex, Okx, Bybit\n\n## Installation\n\n### Prerequisites\n\n- Python 3.10 or higher\n- [uv](https://github.com/astral-sh/uv) (Python package and project manager)\n\n### Setup\n\n1. **Clone the Repository**\n\n   ```bash\n   git clone https://github.com/kukapay/crypto-orderbook-mcp.git\n   cd crypto-orderbook-mcp\n   ```\n\n2. **Install Dependencies**\n\n   Use `uv` to install the required packages:\n\n   ```bash\n   uv sync\n   ```\n   \n3. **Configure the MCP Client(Claude Desktop)**\n\n    ```\n    \"mcpServers\": { \n      \"crypto-orderbook-mcp\": { \n        \"command\": \"uv\", \n        \"args\": [ \"--directory\", \"/absolute/path/to/crypto-orderbook-mcp\", \"run\", \"main.py\" ]\n      } \n    }\n    ```\n\n## Usage\n\nThe server provides two main tools:\n\n1. **`calculate_orderbook`**: Computes bid depth, ask depth, and imbalance for a trading pair on a specified exchange.\n2. **`compare_orderbook`**: Compares bid depth, ask depth, and imbalance across multiple exchanges, returning a Markdown table.\n\n### Example: Calculate Order Book Metrics\n\n**Prompt**: \"Calculate the order book metrics for BTC/USDT on Binance with a 1% depth range.\"\n\n**Expected Output** (JSON object):\n\n```json\n{\n  \"exchange\": \"binance\",\n  \"symbol\": \"BTC/USDT\",\n  \"bid_depth\": 123.45,\n  \"ask_depth\": 234.56,\n  \"imbalance\": 0.1234,\n  \"mid_price\": 50000.0,\n  \"timestamp\": 1698765432000\n}\n```\n\n### Example: Compare Order Book Across Exchanges\n\n**Prompt**: \"Compare the order book metrics for BTC/USDT across Binance, Kraken, and OKX with a 1% depth range.\"\n\n**Expected Output** (Markdown table):\n\n```markdown\n| exchange | bid_depth | ask_depth | imbalance |\n|----------|-----------|-----------|-----------|\n| binance  |    123.45 |    234.56 |    0.1234 |\n| kraken   |     89.12 |    178.34 |    0.0987 |\n| okx      |    145.67 |    256.78 |    0.1345 |\n```\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Finance",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "crypto-orderbook-mcp": {
+        "command": "uv",
+        "args": ["--directory", "/absolute/path/to/crypto-orderbook-mcp", "run", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-orderbook-mcp",
+    "url": "https://github.com/kukapay/crypto-orderbook-mcp",
+    "name": "crypto-orderbook-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "29a1410482a378e8f49baee289c5a9d3a200074e"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.132Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "ccxt",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pandas",
+      "importance": 8
+    },
+    {
+      "name": "tabulate",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"crypto-orderbook-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"ccxt>=4.4.78\",\n    \"mcp[cli]>=1.7.1\",\n    \"pandas>=2.2.3\",\n    \"tabulate>=0.9.0\",\n]\n"
+}

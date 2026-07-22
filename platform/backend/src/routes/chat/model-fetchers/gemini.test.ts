@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, test } from "@/test";
 import { fetchGeminiModels, fetchGeminiModelsViaVertexAi } from "./gemini";
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+// The shared test setup restores the real fetch after every test, so
+// re-apply the mock before each one.
+vi.stubGlobal("fetch", mockFetch);
+beforeEach(() => {
+  vi.stubGlobal("fetch", mockFetch);
+});
 
 vi.mock("@/clients/gemini-client", () => ({
   createGoogleGenAIClient: vi.fn(),
@@ -21,7 +26,7 @@ describe("gemini model fetchers", () => {
   });
 
   describe("fetchGeminiModels", () => {
-    test("fetches Gemini models that support generateContent or embedContent", async () => {
+    test("keeps usable Gemini-family chat + embedding models and drops the rest", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -33,9 +38,24 @@ describe("gemini model fetchers", () => {
                 supportedGenerationMethods: ["generateContent"],
               },
               {
-                name: "models/gemini-2.5-flash",
-                displayName: "Gemini 2.5 Flash",
-                supportedGenerationMethods: ["generateContent", "countTokens"],
+                name: "models/gemini-1.5-pro",
+                displayName: "Gemini 1.5 Pro",
+                supportedGenerationMethods: ["generateContent"],
+              },
+              {
+                name: "models/gemini-2.5-flash-preview-tts",
+                displayName: "Gemini 2.5 Flash TTS",
+                supportedGenerationMethods: ["generateContent"],
+              },
+              {
+                name: "models/gemma-3-27b-it",
+                displayName: "Gemma 3 27B",
+                supportedGenerationMethods: ["generateContent"],
+              },
+              {
+                name: "models/gemma-2-9b-it",
+                displayName: "Gemma 2 9B",
+                supportedGenerationMethods: ["generateContent"],
               },
               {
                 name: "models/gemini-embedding-001",
@@ -50,6 +70,11 @@ describe("gemini model fetchers", () => {
                 displayName: "AQA",
                 supportedGenerationMethods: ["generateAnswer"],
               },
+              {
+                name: "models/learnlm-2.0-flash-experimental",
+                displayName: "LearnLM 2.0 Flash",
+                supportedGenerationMethods: ["generateContent"],
+              },
             ],
           }),
       });
@@ -63,8 +88,8 @@ describe("gemini model fetchers", () => {
           provider: "gemini",
         },
         {
-          id: "gemini-2.5-flash",
-          displayName: "Gemini 2.5 Flash",
+          id: "gemma-3-27b-it",
+          displayName: "Gemma 3 27B",
           provider: "gemini",
         },
         {
@@ -75,15 +100,15 @@ describe("gemini model fetchers", () => {
       ]);
     });
 
-    test("includes Gemini models that only advertise batchEmbedContents", async () => {
+    test("includes embedding models that only advertise batchEmbedContents", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
           Promise.resolve({
             models: [
               {
-                name: "models/gemini-batch-embedding-only",
-                displayName: "Gemini Batch Embedding Only",
+                name: "models/gemini-embedding-exp-03-07",
+                displayName: "Gemini Embedding Experimental",
                 supportedGenerationMethods: ["batchEmbedContents"],
               },
             ],
@@ -94,8 +119,8 @@ describe("gemini model fetchers", () => {
 
       expect(models).toEqual([
         {
-          id: "gemini-batch-embedding-only",
-          displayName: "Gemini Batch Embedding Only",
+          id: "gemini-embedding-exp-03-07",
+          displayName: "Gemini Embedding Experimental",
           provider: "gemini",
         },
       ]);
@@ -133,6 +158,16 @@ describe("gemini model fetchers", () => {
           tunedModelInfo: {},
         },
         {
+          name: "publishers/google/models/gemma-3-27b-it",
+          version: "default",
+          tunedModelInfo: {},
+        },
+        {
+          name: "publishers/google/models/gemini-1.5-pro-002",
+          version: "002",
+          tunedModelInfo: {},
+        },
+        {
           name: "publishers/google/models/imageclassification-efficientnet",
           version: "001",
           tunedModelInfo: {},
@@ -151,6 +186,7 @@ describe("gemini model fetchers", () => {
         models: {
           list: vi.fn().mockResolvedValue(mockPager),
           get: vi.fn(),
+          countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         },
       } as unknown as GoogleGenAI;
 
@@ -172,6 +208,11 @@ describe("gemini model fetchers", () => {
         {
           id: "gemini-embedding-001",
           displayName: "Gemini Embedding 001",
+          provider: "gemini",
+        },
+        {
+          id: "gemma-3-27b-it",
+          displayName: "Gemma 3 27b It",
           provider: "gemini",
         },
       ]);
@@ -225,6 +266,7 @@ describe("gemini model fetchers", () => {
         models: {
           list: vi.fn().mockResolvedValue(mockPager),
           get: mockGet,
+          countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         },
       } as unknown as GoogleGenAI;
 
@@ -256,7 +298,7 @@ describe("gemini model fetchers", () => {
       ]);
     });
 
-    test("merges fallback models when list only returns live audio Gemini", async () => {
+    test("drops non-text Gemini from the list and merges usable fallback models", async () => {
       const mockPager = {
         [Symbol.asyncIterator]: async function* () {
           yield {
@@ -273,9 +315,7 @@ describe("gemini model fetchers", () => {
           model === "gemini-embedding-2-preview" ||
           model === "gemini-2.5-pro" ||
           model === "gemini-2.5-flash" ||
-          model === "gemini-2.5-flash-lite" ||
-          model === "gemini-2.0-flash-001" ||
-          model === "gemini-2.0-flash-lite-001"
+          model === "gemini-2.5-flash-lite"
         ) {
           return {
             name: `publishers/google/models/${model}`,
@@ -290,6 +330,7 @@ describe("gemini model fetchers", () => {
         models: {
           list: vi.fn().mockResolvedValue(mockPager),
           get: mockGet,
+          countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         },
       } as unknown as GoogleGenAI;
 
@@ -297,12 +338,9 @@ describe("gemini model fetchers", () => {
 
       const models = await fetchGeminiModelsViaVertexAi();
 
+      // The live/audio model is filtered out entirely; only usable fallback
+      // models remain.
       expect(models).toEqual([
-        {
-          id: "gemini-live-2.5-flash-native-audio",
-          displayName: "Gemini Live 2.5 Flash Native Audio",
-          provider: "gemini",
-        },
         {
           id: "gemini-embedding-001",
           displayName: "Gemini Embedding 001",
@@ -328,16 +366,111 @@ describe("gemini model fetchers", () => {
           displayName: "Gemini 2.5 Flash Lite",
           provider: "gemini",
         },
-        {
-          id: "gemini-2.0-flash-001",
-          displayName: "Gemini 2.0 Flash 001",
-          provider: "gemini",
+      ]);
+    });
+
+    test("drops catalog models the project cannot invoke (404 access probe)", async () => {
+      const mockPager = {
+        [Symbol.asyncIterator]: async function* () {
+          for (const id of [
+            "gemini-2.5-pro",
+            "gemini-3.1-pro-preview",
+            "gemini-embedding-001",
+          ]) {
+            yield {
+              name: `publishers/google/models/${id}`,
+              version: "default",
+              tunedModelInfo: {},
+            };
+          }
         },
-        {
-          id: "gemini-2.0-flash-lite-001",
-          displayName: "Gemini 2.0 Flash Lite 001",
-          provider: "gemini",
+      };
+
+      const mockCountTokens = vi.fn(async ({ model }: { model: string }) => {
+        if (model === "gemini-3.1-pro-preview") {
+          // Gated preview: the catalog lists it, but the project is not
+          // allowlisted, so inference-family calls 404.
+          throw Object.assign(
+            new Error(
+              '{"error":{"code":404,"message":"Publisher Model was not found or your project does not have access to it.","status":"NOT_FOUND"}}',
+            ),
+            { status: 404 },
+          );
+        }
+        if (model === "gemini-embedding-001") {
+          // Accessible embedding models reject countTokens with a 400 while
+          // still being fully usable — they must be kept.
+          throw Object.assign(
+            new Error(
+              '{"error":{"code":400,"message":"Should provide instances for text model prediction.","status":"INVALID_ARGUMENT"}}',
+            ),
+            { status: 400 },
+          );
+        }
+        return { totalTokens: 1 };
+      });
+
+      const mockClient = {
+        models: {
+          list: vi.fn().mockResolvedValue(mockPager),
+          get: vi.fn(),
+          countTokens: mockCountTokens,
         },
+      } as unknown as GoogleGenAI;
+
+      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+
+      const models = await fetchGeminiModelsViaVertexAi();
+
+      expect(models.map((model) => model.id)).toEqual([
+        "gemini-2.5-pro",
+        "gemini-embedding-001",
+      ]);
+    });
+
+    test("keeps models when the access probe fails transiently (non-404)", async () => {
+      const mockPager = {
+        [Symbol.asyncIterator]: async function* () {
+          yield {
+            name: "publishers/google/models/gemini-2.5-pro",
+            version: "default",
+            tunedModelInfo: {},
+          };
+          yield {
+            name: "publishers/google/models/gemini-2.5-flash",
+            version: "default",
+            tunedModelInfo: {},
+          };
+          yield {
+            name: "publishers/google/models/gemini-embedding-001",
+            version: "default",
+            tunedModelInfo: {},
+          };
+        },
+      };
+
+      const mockClient = {
+        models: {
+          list: vi.fn().mockResolvedValue(mockPager),
+          get: vi.fn(),
+          countTokens: vi
+            .fn()
+            .mockRejectedValue(
+              Object.assign(new Error("Resource exhausted"), { status: 429 }),
+            ),
+        },
+      } as unknown as GoogleGenAI;
+
+      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+
+      const models = await fetchGeminiModelsViaVertexAi();
+
+      // A rate-limited or otherwise transiently failing probe must not empty
+      // the catalog.
+      expect(models.map((model) => model.id)).toEqual([
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-embedding-001",
       ]);
     });
   });

@@ -1,0 +1,90 @@
+{
+  "name": "vivekvells__mcp-pandoc",
+  "display_name": "mcp-pandoc",
+  "description": "MCP server for document format conversion using pandoc.",
+  "author": {
+    "name": "vivekVells"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-pandoc"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![Downloads](https://img.shields.io/pypi/dm/mcp-pandoc.svg)](https://pypi.python.org/pypi/mcp-pandoc)\n[![CI](https://github.com/vivekVells/mcp-pandoc/actions/workflows/ci.yml/badge.svg)](https://github.com/vivekVells/mcp-pandoc/actions/workflows/ci.yml)\n<a href=\"https://smithery.ai/server/mcp-pandoc\"><img alt=\"Smithery Badge\" src=\"https://smithery.ai/badge/mcp-pandoc\"></a> \n<br />\n\n![image](https://github.com/user-attachments/assets/10f18317-58e7-430e-9aec-b706b60fe2c6)\n\n<!-- [![Downloads](https://static.pepy.tech/badge/mcp-pandoc/month)](https://pepy.tech/project/mcp-pandoc) -->\n<!-- ![PyPI - Downloads](https://img.shields.io/pypi/dm/mcp-pandoc?style=social) -->\n\n<!--\n[![Downloads](https://img.shields.io/pypi/dm/mcp-pandoc.svg)](https://pypi.python.org/pypi/mcp-pandoc)\n[![CI](https://github.com/vivekVells/mcp-pandoc/actions/workflows/ci.yml/badge.svg)](https://github.com/vivekVells/mcp-pandoc/actions/workflows/ci.yml)\n<a href=\"https://smithery.ai/server/mcp-pandoc\"><img alt=\"Smithery Badge\" src=\"https://smithery.ai/badge/mcp-pandoc\"></a> <a href=\"https://glama.ai/mcp/servers/xyzzgaj9bk\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/xyzzgaj9bk/badge\" /></a> \n-->\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/vivekvells-mcp-pandoc-badge.png)](https://mseep.ai/app/vivekvells-mcp-pandoc)\n<a href=\"https://glama.ai/mcp/servers/xyzzgaj9bk\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/xyzzgaj9bk/badge\" />\n\n# mcp-pandoc: A Document Conversion MCP Server\n\n> Officially included in the [Model Context Protocol servers](https://github.com/modelcontextprotocol/servers/blob/main/README.md) open-source project. 🎉\n\n## Overview\n\nA Model Context Protocol server for document format conversion using [pandoc](https://pandoc.org/index.html). This server provides tools to transform content between different document formats while preserving formatting and structure.\n\nPlease note that mcp-pandoc is currently in early development. PDF support is under development, and the functionality and available tools are subject to change and expansion as we continue to improve the server.\n\nCredit: This project uses the [Pandoc Python package](https://pypi.org/project/pandoc/) for document conversion, forming the foundation for this project.\n\n## 📋 Quick Reference\n\n**New to mcp-pandoc?** Check out **[📖 CHEATSHEET.md](CHEATSHEET.md)** for\n\n- ⚡ Copy-paste examples for all formats\n- 🔄 Bidirectional conversion matrix\n- 🎯 Common workflows and pro tips\n- 🌟 Reference document styling guide\n\n_Perfect for quick lookups and getting started fast!_\n\n## Demo\n\n[![mcp-pandoc - v1: Seamless Document Format Conversion for Claude using MCP server](https://img.youtube.com/vi/vN3VOb0rygM/maxresdefault.jpg)](https://youtu.be/vN3VOb0rygM)\n\n> 🎥 [Watch on YouTube](https://youtu.be/vN3VOb0rygM)\n\n<details>\n<summary>Screenshots</summary>\n\n<img width=\"2407\" alt=\"Screenshot 2024-12-26 at 3 33 54 PM\" src=\"https://github.com/user-attachments/assets/ce3f5396-252a-4bba-84aa-65b2a06b859e\" />\n<img width=\"2052\" alt=\"Screenshot 2024-12-26 at 3 38 24 PM\" src=\"https://github.com/user-attachments/assets/8c525ad1-b184-41ca-b068-7dd34b60b85d\" />\n<img width=\"1498\" alt=\"Screenshot 2024-12-26 at 3 40 51 PM\" src=\"https://github.com/user-attachments/assets/a1e0682d-fe44-40b6-9988-bf805627beeb\" />\n<img width=\"760\" alt=\"Screenshot 2024-12-26 at 3 41 20 PM\" src=\"https://github.com/user-attachments/assets/1d7f5998-6d7f-48fa-adcf-fc37d0521213\" />\n<img width=\"1493\" alt=\"Screenshot 2024-12-26 at 3 50 27 PM\" src=\"https://github.com/user-attachments/assets/97992c5d-8efc-40af-a4c3-94c51c392534\" />\n</details>\n\nMore to come...\n\n## Tools\n\n1. `convert-contents`\n   - Transforms content between supported formats\n   - Inputs:\n     - `contents` (string): Source content to convert (required if input_file not provided)\n     - `input_file` (string): Complete path to input file (required if contents not provided)\n     - `input_format` (string): Source format of the content (defaults to markdown)\n     - `output_format` (string): Target format (defaults to markdown)\n     - `output_file` (string): Complete path for output file (required for pdf, docx, rst, latex, epub formats)\n     - `reference_doc` (string): Path to a reference document to use for styling (supported for docx output format)\n     - `defaults_file` (string): Path to a Pandoc defaults file (YAML) containing conversion options\n     - `filters` (array): List of Pandoc filter paths to apply during conversion\n   - Supported input/output formats:\n     - markdown\n     - html\n     - pdf\n     - docx\n     - rst\n     - latex\n     - epub\n     - txt\n     - ipynb\n     - odt\n   - Note: For advanced formats (pdf, docx, rst, latex, epub), an output_file path is required\n\n### 🔧 Advanced Features\n\n#### Defaults Files (YAML Configuration)\n\nUse defaults files to create reusable conversion templates with consistent formatting:\n\n```yaml\n# academic-paper.yaml\nfrom: markdown\nto: pdf\nnumber-sections: true\ntoc: true\nmetadata:\n  title: \"Academic Paper\"\n  author: \"Research Team\"\n```\n\nExample usage: `\"Convert paper.md to PDF using defaults academic-paper.yaml and save as paper.pdf\"`\n\n#### Pandoc Filters\n\nApply custom filters for enhanced processing:\n\nExample usage: `\"Convert docs.md to HTML with filters ['/path/to/mermaid-filter.py'] and save as docs.html\"`\n\n> 💡 **For comprehensive examples and workflows**, see **[CHEATSHEET.md](CHEATSHEET.md)**\n\n## 📊 Supported Formats & Conversions\n\n### Bidirectional Conversion Matrix\n\n| From\\To      | MD  | HTML | TXT | DOCX | PDF | RST | LaTeX | EPUB | IPYNB | ODT |\n| ------------ | --- | ---- | --- | ---- | --- | --- | ----- | ---- | ----- | --- |\n| **Markdown** | ✅  | ✅   | ✅  | ✅   | ✅  | ✅  | ✅    | ✅   | ✅    | ✅  |\n| **HTML**     | ✅  | ✅   | ✅  | ✅   | ✅  | ✅  | ✅    | ✅   | ✅    | ✅  |\n| **TXT**      | ✅  | ✅   | ✅  | ✅   | ✅  | ✅  | ✅    | ✅   | ✅    | ✅  |\n| **DOCX**     | ✅  | ✅   | ✅  | ✅   | ✅  | ✅  | ✅    | ✅   | ✅    | ✅  |\n| **RST**      | ✅  | ✅   | ✅  | ✅   | ✅  | ✅  | ✅    | ✅   | ✅    | ✅  |\n| **LaTeX**    | ✅  | ✅   | ✅  | ✅   | ✅  | ✅  | ✅    | ✅   | ✅    | ✅  |\n| **EPUB**     | ✅  | ✅   | ✅  | ✅   | ✅  | ✅  | ✅    | ✅   | ✅    | ✅  |\n| **IPYNB**    | ✅  | ✅   | ✅  | ✅   | ✅  | ✅  | ✅    | ✅   | ✅    | ✅  |\n| **ODT**      | ✅  | ✅   | ✅  | ✅   | ✅  | ✅  | ✅    | ✅   | ✅    | ✅  |\n\n### A Note on PDF Support\n\nThis tool uses `pandoc` for conversions, which allows for generating PDF files from the formats listed above. However, converting _from_ a PDF to other formats is not supported. Therefore, PDF should be considered an **output-only** format.\n\n### Format Categories\n\n| Category     | Formats                     | Requirements                    |\n| ------------ | --------------------------- | ------------------------------- |\n| **Basic**    | MD, HTML, TXT, IPYNB, ODT   | None                            |\n| **Advanced** | DOCX, PDF, RST, LaTeX, EPUB | Must specify `output_file` path |\n| **Styled**   | DOCX with reference doc     | Custom template support ⭐      |\n\n### Requirements by Format\n\n- **PDF (.pdf)** - requires TeX Live installation\n- **DOCX (.docx)** - supports custom styling via reference documents\n- **All others** - no additional requirements\n\nNote: For advanced formats:\n\n1. Complete file paths with filename and extension are required\n2. **PDF conversion requires TeX Live installation** (see Critical Requirements section -> For macOS: `brew install texlive`)\n3. When no output path is specified:\n   - Basic formats: Displays converted content in the chat\n   - Advanced formats: May save in system temp directory (/tmp/ on Unix systems)\n\n## Usage & configuration\n\n**NOTE: Ensure to complete installing required packages mentioned below under \"Critical Requirements\".**\n\nTo use the published one\n\n```bash\n{\n  \"mcpServers\": {\n    \"mcp-pandoc\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-pandoc\"]\n    }\n  }\n}\n```\n\n**💡 Quick Start**: See **[CHEATSHEET.md](CHEATSHEET.md)** for copy-paste examples and common workflows.\n\n### ⚠️ Important Notes\n\n#### Critical Requirements\n\n1. **Pandoc Installation**\n\n- **Required**: Install `pandoc` - the core document conversion engine\n- Installation:\n\n  ```bash\n  # macOS\n  brew install pandoc\n\n  # Ubuntu/Debian\n  sudo apt-get install pandoc\n\n  # Windows\n  # Download installer from: https://pandoc.org/installing.html\n  ```\n\n- **Verify**: `pandoc --version`\n\n2. **UV package installation**\n\n- **Required**: Install `uv` package (includes `uvx` command)\n- Installation:\n\n  ```bash\n  # macOS\n  brew install uv\n\n  # Windows/Linux\n  pip install uv\n  ```\n\n- **Verify**: `uvx --version`\n\n3. **PDF Conversion Prerequisites:** Only needed if you need to convert & save pdf\n\n- TeX Live must be installed before attempting PDF conversion\n- Installation commands:\n\n  ```bash\n  # Ubuntu/Debian\n  sudo apt-get install texlive-xetex\n\n  # macOS\n  brew install texlive\n\n  # Windows\n  # Install MiKTeX or TeX Live from:\n  # https://miktex.org/ or https://tug.org/texlive/\n  ```\n\n4. **File Path Requirements**\n\n- When saving or converting files, you MUST provide complete file paths including filename and extension\n- The tool does not automatically generate filenames or extensions\n\n#### Examples\n\n✅ Correct Usage:\n\n```bash\n# Converting content to PDF\n\"Convert this text to PDF and save as /path/to/document.pdf\"\n\n# Converting between file formats\n\"Convert /path/to/input.md to PDF and save as /path/to/output.pdf\"\n\n# Converting to DOCX with a reference document template\n\"Convert input.md to DOCX using template.docx as reference and save as output.docx\"\n\n# Step-by-step reference document workflow\n\"First create a reference document: pandoc -o custom-reference.docx --print-default-data-file reference.docx\" or if you already have one, use that\n\"Then convert with custom styling: Convert this text to DOCX using /path/to/custom-reference.docx as reference and save as /path/to/styled-output.docx\"\n```\n\n❌ Incorrect Usage:\n\n```bash\n# Missing filename and extension\n\"Save this as PDF in /documents/\"\n\n# Missing complete path\n\"Convert this to PDF\"\n\n# Missing extension\n\"Save as /documents/story\"\n```\n\n#### Common Issues and Solutions\n\n1. **PDF Conversion Fails**\n\n   - Error: \"xelatex not found\"\n   - Solution: Install TeX Live first (see installation commands above)\n\n2. **File Conversion Fails**\n\n   - Error: \"Invalid file path\"\n   - Solution: Provide complete path including filename and extension\n   - Example: `/path/to/document.pdf` instead of just `/path/to/`\n\n3. **Format Conversion Fails**\n\n   - Error: \"Unsupported format\"\n   - Solution: Use only supported formats:\n     - Basic: txt, html, markdown\n     - Advanced: pdf, docx, rst, latex, epub\n\n4. **Reference Document Issues**\n   - Error: \"Reference document not found\"\n   - Solution: Ensure the reference document path exists and is accessible\n   - Note: Reference documents only work with DOCX output format\n   - How to create: `pandoc -o reference.docx --print-default-data-file reference.docx`\n\n## Quickstart\n\n### Install\n\n#### Option 1: Installing manually via claude_desktop_config.json config file\n\n- On MacOS: `open ~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n- On Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\na) Only for local development & contribution to this repo\n\n<details>\n  <summary>Development/Unpublished Servers Configuration</summary>\n\nℹ️ Replace <DIRECTORY> with your locally cloned project path\n\n```bash\n\"mcpServers\": {\n  \"mcp-pandoc\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"--directory\",\n      \"<DIRECTORY>/mcp-pandoc\",\n      \"run\",\n      \"mcp-pandoc\"\n    ]\n  }\n}\n```\n\n</details>\n\nb) Published Servers Configuration - Consumers should use this config\n\n```bash\n\"mcpServers\": {\n  \"mcp-pandoc\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"mcp-pandoc\"\n    ]\n  }\n}\n```\n\n#### Option 2: To install Published Servers Configuration automatically via Smithery\n\nRun the following bash command to install **published** [mcp-pandoc pypi](https://pypi.org/project/mcp-pandoc) for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-pandoc):\n\n```bash\nnpx -y @smithery/cli install mcp-pandoc --client claude\n```\n\n- If you face any issue, use the \"Published Servers Configuration\" above directly instead of this cli.\n\n**Note**: To use locally configured mcp-pandoc, follow \"Development/Unpublished Servers Configuration\" step above.\n\n## Development\n\n### Testing\n\nTo run the comprehensive test suite and validate all supported bidirectional conversions, use the following command:\n\n```bash\nuv run pytest tests/test_conversions.py\n```\n\nThis ensures backward compatibility and verifies the tool's core functionality.\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n\n```bash\nuv sync\n```\n\n2. Build package distributions:\n\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n3. Publish to PyPI:\n\n```bash\nuv publish\n```\n\nNote: You'll need to set PyPI credentials via environment variables or command flags:\n\n- Token: `--token` or `UV_PUBLISH_TOKEN`\n- Or username/password: `--username`/`UV_PUBLISH_USERNAME` and `--password`/`UV_PUBLISH_PASSWORD`\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory /Users/vivekvells/Desktop/code/ai/mcp-pandoc run mcp-pandoc\n```\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n\n---\n\n## Contributing\n\nWe welcome contributions to enhance mcp-pandoc! Here's how you can get involved:\n\n1. **Report Issues**: Found a bug or have a feature request? Open an issue on our [GitHub Issues](https://github.com/vivekVells/mcp-pandoc/issues) page.\n2. **Submit Pull Requests**: Improve the codebase or add features by creating a pull request.\n\n---\n",
+  "category": "File Management",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-pandoc": {
+        "command": "uvx",
+        "args": ["mcp-pandoc"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "vivekVells",
+    "repo": "mcp-pandoc",
+    "url": "https://github.com/vivekVells/mcp-pandoc",
+    "name": "vivekvells__mcp-pandoc",
+    "path": null,
+    "stars": 396,
+    "contributors": 9,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "c3d9f7ad982e2bbe9ca9f404de6d3c1f932c88b7"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:44.302Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pyyaml",
+      "importance": 6
+    },
+    {
+      "name": "pandoc",
+      "importance": 9
+    },
+    {
+      "name": "pypandoc",
+      "importance": 9
+    },
+    {
+      "name": "pandocfilters",
+      "importance": 8
+    },
+    {
+      "name": "panflute",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-pandoc\"\nversion = \"0.8.1\"\ndescription = \"MCP to interface with pandoc to convert files to different formats with enhanced features like Mermaid diagram conversion and defaults file support.\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n \"mcp>=1.2.1\",\n \"pyyaml>=6.0.2\",\n \"pandoc>=2.4\",\n \"pypandoc>=1.14\",\n \"pandocfilters>=1.5.0\",\n \"panflute>=2.3.1\",\n]\n[[project.authors]]\nname = \"Vivek Vellaiyappan Surulimuthu\"\nemail = \"vivekvellaiyappans@gmail.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[dependency-groups]\ndev = [\n    \"pytest-asyncio>=1.0.0\",\n    \"pytest>=8.4.1\",\n    \"ruff>=0.12.11\",\n    \"jsonschema>=4.25.1\",\n    \"yamllint>=1.37.1\",\n    \"pre-commit>=4.3.0\",\n]\n\n[project.scripts]\nmcp-pandoc = \"mcp_pandoc:main\"\n[tool.ruff]\nline-length = 120\nexclude = [\"tests/*\"]\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\", \"B\", \"UP\", \"D\", \"N\", \"S\"]\nignore = []\n\n[tool.yamllint]\nconfig-file = \".yamllint.yaml\"\n"
+}

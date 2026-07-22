@@ -1,0 +1,94 @@
+{
+  "name": "cyberchitta__llm-context.py",
+  "display_name": "llm-context.py",
+  "description": "Share code with LLMs via Model Context Protocol or clipboard. Rule-based customization enables easy switching between different tasks (like code review and documentation). Includes smart code outlining.",
+  "author": {
+    "name": "cyberchitta"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "llm-context", "lc-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "readme": "# LLM Context\n\n[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)\n[![PyPI version](https://img.shields.io/pypi/v/llm-context.svg)](https://pypi.org/project/llm-context/)\n[![Downloads](https://static.pepy.tech/badge/llm-context/week)](https://pepy.tech/project/llm-context)\n\n**Reduce friction when providing context to LLMs.** Share relevant project files instantly through smart selection and rule-based filtering.\n\n## The Problem\n\nGetting project context into LLM chats is tedious:\n\n- Manually copying/pasting files takes forever\n- Hard to identify which files are relevant\n- Including too much hits context limits, too little misses important details\n- AI requests for additional files require manual fetching\n- Repeating this process for every conversation\n\n## The Solution\n\n```bash\nlc-sel-files    # Smart file selection\nlc-context      # Instant formatted context\n# Paste and work - AI can access additional files seamlessly\n```\n\n**Result**: From \"I need to share my project\" to productive AI collaboration in seconds.\n\n> **Note**: This project was developed in collaboration with several Claude Sonnets (3.5, 3.6, 3.7 and 4.0), as well as Groks (3 and 4), using LLM Context itself to share code during development. All code in the repository is heavily human-curated (by me 😇, @restlessronin).\n\n## Installation\n\n```bash\nuv tool install \"llm-context>=0.4.0\"\n```\n\n## Quick Start\n\n### Basic Usage\n\n```bash\n# One-time setup\ncd your-project\nlc-init\n\n# Daily usage\nlc-sel-files\nlc-context\n```\n\n### MCP Integration (Recommended)\n\n```jsonc\n{\n  \"mcpServers\": {\n    \"llm-context\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"llm-context\", \"lc-mcp\"]\n    }\n  }\n}\n```\n\nWith MCP, AI can access additional files directly during conversations.\n\n### Project Customization\n\n```bash\n# Create project-specific filters\ncat > .llm-context/rules/flt-repo-base.md << 'EOF'\n---\ncompose:\n  filters: [lc/flt-base]\ngitignores:\n  full-files: [\"*.md\", \"/tests\", \"/node_modules\"]\n---\nEOF\n\n# Customize main development rule\ncat > .llm-context/rules/prm-code.md << 'EOF'\n---\ninstructions: [lc/ins-developer, lc/sty-python]\ncompose:\n  filters: [flt-repo-base]\n---\nEOF\n```\n\n## Core Commands\n\n| Command              | Purpose                                   |\n| -------------------- | ----------------------------------------- |\n| `lc-init`            | Initialize project configuration          |\n| `lc-sel-files`       | Select files based on current rule        |\n| `lc-context`         | Generate and copy context                 |\n| `lc-context -nt`     | Generate context for non-MCP environments |\n| `lc-set-rule <name>` | Switch between rules                      |\n| `lc-clip-files`      | Handle file requests (non-MCP)            |\n\n## Rule System\n\nRules use a systematic four-category structure:\n\n- **Prompt Rules (`prm-`)**: Generate project contexts (e.g., `lc/prm-developer`, `lc/prm-rule-create`)\n- **Filter Rules (`flt-`)**: Control file inclusion (e.g., `lc/flt-base`, `lc/flt-no-files`)\n- **Instruction Rules (`ins-`)**: Provide guidelines (e.g., `lc/ins-developer`, `lc/ins-rule-framework`)\n- **Style Rules (`sty-`)**: Enforce coding standards (e.g., `lc/sty-python`, `lc/sty-code`)\n\n### Example Rule\n\n```yaml\n---\ndescription: \"Debug API authentication issues\"\ncompose:\n  filters: [lc/flt-no-files]\nalso-include:\n  full-files: [\"/src/auth/**\", \"/tests/auth/**\"]\n---\nFocus on authentication system and related tests.\n```\n\n## Workflow Patterns\n\n### Daily Development\n\n```bash\nlc-set-rule lc/prm-developer\nlc-sel-files\nlc-context\n# AI can review changes, access additional files as needed\n```\n\n### Focused Tasks\n\n```bash\n# Let AI help create minimal context\nlc-set-rule lc/prm-rule-create\nlc-context -nt\n# Work with AI to create task-specific rule using tmp-prm- prefix\n```\n\n### MCP Benefits\n\n- **Code review**: AI examines your changes for completeness/correctness\n- **Additional files**: AI accesses initially excluded files when needed\n- **Change tracking**: See what's been modified during conversations\n- **Zero friction**: No manual file operations during development discussions\n\n## Key Features\n\n**Smart File Selection**: Rules automatically include/exclude appropriate files\n**Instant Context Generation**: Formatted context copied to clipboard in seconds\n**MCP Integration**: AI can access additional files without manual intervention\n**Systematic Rule Organization**: Four-category system for clear rule composition\n**AI-Assisted Rule Creation**: Let AI help create minimal context for specific tasks\n\n## Learn More\n\n- [User Guide](docs/user-guide.md) - Complete documentation\n- [Design Philosophy](https://www.cyberchitta.cc/articles/llm-ctx-why.html)\n- [Real-world Examples](https://www.cyberchitta.cc/articles/full-context-magic.html)\n\n## License\n\nApache License, Version 2.0. See [LICENSE](LICENSE) for details.\n",
+  "category": "AI Tools",
+  "quality_score": 28,
+  "programming_language": "Python",
+  "framework": null,
+  "github_info": {
+    "owner": "cyberchitta",
+    "repo": "llm-context.py",
+    "url": "https://github.com/cyberchitta/llm-context.py",
+    "name": "cyberchitta__llm-context.py",
+    "path": null,
+    "stars": 266,
+    "contributors": 2,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "16033bfe745f59005484b28a3cccd46c2c86cf08"
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "jinja2",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "packaging",
+      "importance": 4
+    },
+    {
+      "name": "pathspec",
+      "importance": 8
+    },
+    {
+      "name": "pyperclip",
+      "importance": 8
+    },
+    {
+      "name": "pyyaml",
+      "importance": 8
+    },
+    {
+      "name": "tree-sitter",
+      "importance": 9
+    },
+    {
+      "name": "tree-sitter-language-pack",
+      "importance": 9
+    }
+  ],
+  "user_config": {},
+  "archestra_config": {
+    "client_config_permutations": {
+      "llm-context": {
+        "command": "uvx",
+        "args": ["--from", "llm-context", "lc-mcp"]
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-flash",
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"llm-context\"\nversion = \"0.4.1\"\ndescription = \"Share code with LLMs via Model Context Protocol or clipboard. Rule-based customization enables easy switching between different tasks (like code review and documentation). Code outlining support is included as a standard feature.\"\nauthors = [\n  { name = \"restlessronin\", email = \"88921269+restlessronin@users.noreply.github.com\" },\n]\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = \"Apache-2.0\"\nkeywords = [\"llm\", \"ai\", \"context\", \"code\", \"clipboard\", \"chat\"]\nclassifiers = [\n  \"Development Status :: 4 - Beta\",\n  \"Environment :: Console\",\n  \"Intended Audience :: Developers\",\n  \"Intended Audience :: Information Technology\",\n  \"Intended Audience :: Science/Research\",\n  \"Topic :: Software Development :: Code Generators\",\n  \"Topic :: Utilities\",\n  \"Topic :: Communications :: Chat\",\n  \"Topic :: Scientific/Engineering :: Artificial Intelligence\",\n]\n\ndependencies = [\n  \"jinja2>=3.1.6, <4.0\",\n  \"mcp>=1.12.0\",\n  \"packaging>=24.1, <25.0\",\n  \"pathspec>=0.12.1, <0.13.0\",\n  \"pyperclip>=1.9.0, <2.0.0\",\n  \"pyyaml>=6.0.2\",\n  \"tree-sitter>=0.24, <0.25\",\n  \"tree-sitter-language-pack>=0.9.0\",\n]\n\n[project.urls]\nRepository = \"https://github.com/cyberchitta/llm-context.py\"\n\"User Guide\" = \"https://github.com/cyberchitta/llm-context.py/blob/main/docs/user-guide.md\"\n\n[project.scripts]\nlc-context = \"llm_context.cli:context\"\nlc-changed = \"llm_context.cli:changed_files\"\nlc-init = \"llm_context.cli:init_project\"\nlc-clip-files = \"llm_context.cli:files_from_clip\"\nlc-clip-implementations = \"llm_context.cli:implementations_from_clip\"\nlc-focus-help = \"llm_context.cli:focus_help\"\nlc-mcp = \"llm_context.mcp:run_server\"\nlc-outlines = \"llm_context.cli:outlines\"\nlc-prompt = \"llm_context.cli:prompt\"\nlc-sel-files = \"llm_context.cli:select_full_files\"\nlc-sel-outlines = \"llm_context.cli:select_outline_files\"\nlc-set-rule = \"llm_context.cli:set_rule_with_args\"\nlc-version = \"llm_context.cli:show_version\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npythonpath = [\"src\"]\nfilterwarnings = [\"ignore::FutureWarning\"]\n\n[tool.mypy]\npython_version = \"3.10\"\nwarn_return_any = true\nwarn_unused_configs = true\nignore_missing_imports = true\n\n[tool.ruff]\nline-length = 100\ntarget-version = \"py313\"\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\"]\nignore = [\"E203\", \"E266\", \"E501\", \"F403\", \"F401\"]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[dependency-groups]\ndev = [\n  \"git-cliff>=2.6.1, <3.0\",\n  \"isort>=6.0.1, <7.0\",\n  \"mypy>=1.11.2, <2.0\",\n  \"pytest>=8.3.5, <9.0\",\n  \"types-pyyaml>=6.0.12.20241230\",\n  \"ruff>=0.9.10, <1.0\",\n  \"taplo>=0.9.3, <1.0\",\n]\n\n[tool.hatch.build]\ninclude=[\"src/**\"]\n\n[tool.hatch.build.targets.wheel]\nsources = [\"src\"]\n",
+  "last_scraped_at": "2025-09-09T13:06:07.505Z"
+}

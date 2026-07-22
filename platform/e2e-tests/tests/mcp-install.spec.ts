@@ -1,12 +1,12 @@
+import { archestraApiSdk, E2eTestId } from "@archestra/shared";
 import { expect } from "@playwright/test";
-import { archestraApiSdk, E2eTestId } from "@shared";
 import { type Page, test } from "../fixtures";
 import {
   clickButton,
   closeOpenDialogs,
+  goToAddMcpServerPage,
   goToMcpRegistry,
   installMcpServer,
-  openAddMcpServerDialog,
   submitAddServer,
   waitForInstallDialog,
   waitForMcpServerCard,
@@ -36,8 +36,8 @@ test.describe("MCP Install", () => {
 
     await goToMcpRegistry(adminPage);
 
-    // Open "Add MCP Server" dialog
-    await openAddMcpServerDialog(adminPage);
+    // "Add MCP Server" navigates to the routed setup wizard
+    await goToAddMcpServerPage(adminPage);
 
     // Browse online catalog to search for context7
     await adminPage
@@ -58,8 +58,18 @@ test.describe("MCP Install", () => {
     // Submit the pre-filled form to add server to registry
     await submitAddServer(adminPage);
 
-    // Install dialog opens automatically after adding to registry
-    // Wait for the install dialog to be visible
+    // Creating the item continues the setup wizard on its "Test connection"
+    // step — kick off the install from there, which opens the install dialog
+    // to collect the prompted credentials. Wait for the step's exact-named
+    // Install button: until the wizard navigation lands, the create form is
+    // still on screen and its auth/env labels substring-match "Install",
+    // tripping strict mode.
+    const stepInstallButton = adminPage.getByRole("button", {
+      name: "Install",
+      exact: true,
+    });
+    await stepInstallButton.waitFor({ state: "visible", timeout: 30_000 });
+    await stepInstallButton.click();
     await waitForInstallDialog(adminPage, { titlePattern: /Install -/ });
 
     // fill the api key (just fake value)
@@ -71,6 +81,7 @@ test.describe("MCP Install", () => {
     await installMcpServer(adminPage);
 
     // Wait for the card to appear in the registry after installation
+    await goToMcpRegistry(adminPage);
     await waitForMcpServerCard(adminPage, CONTEXT7_CATALOG_ITEM_NAME);
 
     // Check that tools are discovered
@@ -149,8 +160,8 @@ rl.on("line", (line) => {
     // ========================================
     // STEP 1: Create MCP server with bogus image
     // ========================================
-    await clickButton({ page: adminPage, options: { name: "Add MCP Server" } });
-    await adminPage.waitForLoadState("domcontentloaded");
+    await goToAddMcpServerPage(adminPage);
+    await adminPage.getByRole("button", { name: "Start from scratch" }).click();
 
     await adminPage
       .getByRole("button", {
@@ -174,15 +185,21 @@ rl.on("line", (line) => {
     await clickButton({ page: adminPage, options: { name: "Add Server" } });
     await adminPage.waitForLoadState("domcontentloaded");
 
-    // Wait for install dialog and install the server
-    await adminPage
-      .getByRole("dialog")
-      .filter({ hasText: /Install -/ })
-      .waitFor({ state: "visible", timeout: 30000 });
-    await clickButton({ page: adminPage, options: { name: "Install" } });
+    // Creating the item lands on the setup wizard's "Test connection" step.
+    // No credentials are prompted for this server, so "Install" starts the
+    // install directly (no dialog). Exact match + visibility wait: until the
+    // wizard navigation lands, the create form's labels substring-match
+    // "Install" and trip strict mode.
+    const bogusInstallButton = adminPage.getByRole("button", {
+      name: "Install",
+      exact: true,
+    });
+    await bogusInstallButton.waitFor({ state: "visible", timeout: 30_000 });
+    await bogusInstallButton.click();
     await adminPage.waitForLoadState("domcontentloaded");
 
-    // Wait for the server card to appear
+    // Wait for the server card to appear in the registry
+    await goToMcpRegistry(adminPage);
     const serverCard = adminPage.getByTestId(
       `${E2eTestId.McpServerCard}-${CATALOG_ITEM_NAME}`,
     );
@@ -308,12 +325,12 @@ rl.on("line", (line) => {
     // footer transforms into an inline confirm bar when the save would
     // cascade — same surface, no stacked dialog. The CTA matches the
     // backend path: this edit (command + prompted env var) takes the
-    // manual reinstall path, so the button is "Save and mark for
-    // reinstall". An auto-path edit would show "Save and reinstall"
-    // instead — match either to keep the test robust.
+    // manual reinstall path, so the button is "Save change". An
+    // auto-path edit shows "Save and restart" and a pure rename "Save
+    // and rename" — match any to keep the test robust.
     await clickButton({ page: adminPage, options: { name: "Save Changes" } });
     const confirmReinstallButton = settingsDialog.getByRole("button", {
-      name: /Save and (mark for )?reinstall/,
+      name: /Save (change|and (restart|rename))/,
     });
     if (await confirmReinstallButton.isVisible().catch(() => false)) {
       await confirmReinstallButton.click();

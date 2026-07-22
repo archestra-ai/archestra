@@ -1,0 +1,119 @@
+{
+  "name": "posthog__mcp",
+  "display_name": "mcp",
+  "description": "Official PostHog MCP Server 🦔",
+  "author": {
+    "name": "posthog"
+  },
+  "server": {
+    "command": "pnpm",
+    "args": ["run", "dev"],
+    "env": {
+      "POSTHOG_AUTH_HEADER": "Bearer ${user_config.posthog_api_key}",
+      "POSTHOG_BASE_URL": "${user_config.posthog_base_url}",
+      "INKEEP_API_KEY": "${user_config.inkeep_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "posthog_api_key": {
+      "type": "string",
+      "title": "PostHog Personal API Key",
+      "description": "Your personal API key obtained from PostHog settings (e.g., `phx_...`). This key allows the MCP server to access your PostHog instance.",
+      "sensitive": true,
+      "required": true
+    },
+    "posthog_base_url": {
+      "type": "string",
+      "title": "PostHog Instance Base URL",
+      "description": "Base URL for your PostHog instance (e.g., `https://eu.posthog.com` for EU cloud, or your self-hosted URL). Defaults to `https://app.posthog.com`.",
+      "default": "https://app.posthog.com",
+      "required": false
+    },
+    "inkeep_api_key": {
+      "type": "string",
+      "title": "Inkeep API Key",
+      "description": "API key for Inkeep to enable the `docs-search` tool. (Optional)",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# PostHog MCP\n\nDocumentation: https://posthog.com/docs/model-context-protocol\n\n## Use the MCP Server\n\n### Quick install\n\nYou can install the MCP server automatically into Cursor, Claude, Claude Code, VS Code and Zed by running the following command:\n\n```\nnpx @posthog/wizard@latest mcp add\n```\n\n### Manual install\n\n1. Obtain a personal API key using the MCP Server preset [here](https://app.posthog.com/settings/user-api-keys?preset=mcp_server).\n\n2. Add the MCP configuration to your desktop client (e.g. Cursor, Windsurf, Claude Desktop) and add your personal API key\n\n```json\n{\n  \"mcpServers\": {\n    \"posthog\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-remote@latest\",\n        \"https://mcp.posthog.com/mcp\", // You can replace this with https://mcp.posthog.com/sse if your client does not support Streamable HTTP\n        \"--header\",\n        \"Authorization:${POSTHOG_AUTH_HEADER}\"\n      ],\n      \"env\": {\n        \"POSTHOG_AUTH_HEADER\": \"Bearer {INSERT_YOUR_PERSONAL_API_KEY_HERE}\"\n      }\n    }\n  }\n}\n```\n\n### Docker install\n\nIf you prefer to use Docker instead of running npx directly:\n\n1. Build the Docker image:\n```bash\npnpm docker:build\n# or\ndocker build -t posthog-mcp .\n```\n\n2. Configure your MCP client with Docker:\n```json\n{\n  \"mcpServers\": {\n    \"posthog\": {\n      \"type\": \"stdio\",\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"--env\",\n        \"POSTHOG_AUTH_HEADER=${POSTHOG_AUTH_HEADER}\",\n        \"--env\",\n        \"POSTHOG_REMOTE_MCP_URL=${POSTHOG_REMOTE_MCP_URL:-https://mcp.posthog.com/mcp}\",\n        \"posthog-mcp\"\n      ],\n      \"env\": {\n        \"POSTHOG_AUTH_HEADER\": \"Bearer {INSERT_YOUR_PERSONAL_API_KEY_HERE}\",\n        \"POSTHOG_REMOTE_MCP_URL\": \"https://mcp.posthog.com/mcp\"\n      }\n    }\n  }\n}\n```\n\n3. Test Docker with MCP Inspector:\n```bash\npnpm docker:inspector\n# or\nnpx @modelcontextprotocol/inspector docker run -i --rm --env POSTHOG_AUTH_HEADER=${POSTHOG_AUTH_HEADER} posthog-mcp\n```\n\n**Environment Variables:**\n- `POSTHOG_AUTH_HEADER`: Your PostHog API token (required)\n- `POSTHOG_REMOTE_MCP_URL`: The MCP server URL (optional, defaults to `https://mcp.posthog.com/mcp`)\n\nThis approach allows you to use the PostHog MCP server without needing Node.js or npm installed locally.\n\n### Example Prompts\n- What feature flags do I have active?\n- Add a new feature flag for our homepage redesign\n- What are my most common errors?\n- Show me my LLM costs this week\n\n### Feature Filtering\n\nYou can limit which tools are available by adding query parameters to the MCP URL:\n\n```\nhttps://mcp.posthog.com/mcp?features=flags,workspace\n```\n\nAvailable features:\n- `workspace` - Organization and project management\n- `error-tracking` - [Error monitoring and debugging](https://posthog.com/docs/errors)\n- `dashboards` - [Dashboard creation and management](https://posthog.com/docs/product-analytics/dashboards)\n- `insights` - [Analytics insights and SQL queries](https://posthog.com/docs/product-analytics/insights)\n- `experiments` - [A/B testing experiments](https://posthog.com/docs/experiments)\n- `flags` - [Feature flag management](https://posthog.com/docs/feature-flags)\n- `llm-analytics` - [LLM usage and cost tracking](https://posthog.com/docs/llm-analytics)\n- `docs` - PostHog documentation search\n\nTo view which tools are available per feature, see our [documentation](https://posthog.com/docs/model-context-protocol) or alternatively check out `schema/tool-definitions.json`,\n\n### Data processing\n\nThe MCP server is hosted on a Cloudflare worker which can be located outside of the EU / US, for this reason the MCP server does not store any sensitive data outside of your cloud region.\n\n### Using self-hosted instances\n\nIf you're using a self-hosted instance of PostHog, you can specify a custom base URL by adding the `POSTHOG_BASE_URL` [environment variable](https://developers.cloudflare.com/workers/configuration/environment-variables) when running the MCP server locally or on your own infrastructure, e.g. `POSTHOG_BASE_URL=https://posthog.example.com`\n\n# Development\n\nTo run the MCP server locally, run the following command:\n\n```\npnpm run dev\n```\n\nAnd replace `https://mcp.posthog.com/mcp` with `http://localhost:8787/mcp` in the MCP configuration.\n\n## Project Structure\n\nThis repository is organized to support multiple language implementations:\n\n- `typescript/` - TypeScript implementation of the MCP server & tools\n- `schema/` - Shared schema files generated from TypeScript\n\n### Development Commands\n\n- `pnpm run dev` - Start development server\n- `pnpm run schema:build:json` - Generate JSON schema for other language implementations\n- `pnpm run lint && pnpm run format` - Format and lint code\n\n### Adding New Tools\n\nSee the [tools documentation](typescript/src/tools/README.md) for a guide on adding new tools to the MCP server.\n\n### Environment variables\n\n- Create `.dev.vars` in the root\n- Add Inkeep API key to enable `docs-search` tool (see `Inkeep API key - mcp`)\n\n```\nINKEEP_API_KEY=\"...\"\n```\n\n\n### Configuring the Model Context Protocol Inspector\n\nDuring development you can directly inspect the MCP tool call results using the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector).\n\nYou can run it using the following command:\n\n```bash\nnpx @modelcontextprotocol/inspector npx -y mcp-remote@latest http://localhost:8787/mcp --header \"\\\"Authorization: Bearer {INSERT_YOUR_PERSONAL_API_KEY_HERE}\\\"\"\n```\n\nAlternatively, you can use the following configuration in the MCP Inspector:\n\nUse transport type `STDIO`.\n\n**Command:**\n\n```\nnpx\n```\n\n**Arguments:**\n\n```\n-y mcp-remote@latest http://localhost:8787/mcp --header \"Authorization: Bearer {INSERT_YOUR_PERSONAL_API_KEY_HERE}\"\n```\n",
+  "category": "Development",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "posthog-mcp-dev": {
+        "command": "pnpm",
+        "args": ["run", "dev"],
+        "env": {
+          "POSTHOG_BASE_URL": "https://eu.posthog.com",
+          "INKEEP_API_KEY": "..."
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "posthog",
+    "repo": "mcp",
+    "url": "https://github.com/posthog/mcp",
+    "name": "posthog__mcp",
+    "path": null,
+    "stars": 118,
+    "contributors": 9,
+    "issues": 22,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "97c8e2ab06a0f290cb3abd4f4ae66a53a508b2e3"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:41.112Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@types/dotenv",
+      "importance": 2
+    },
+    {
+      "name": "agents",
+      "importance": 8
+    },
+    {
+      "name": "posthog-node",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"posthog-mcp-monorepo\",\n\t\"version\": \"0.0.0\",\n\t\"private\": true,\n\t\"scripts\": {\n\t\t\"prepare\": \"husky\",\n\t\t\"dev\": \"cd typescript && pnpm dev\",\n\t\t\"build\": \"cd typescript && pnpm build\",\n\t\t\"inspector\": \"cd typescript && pnpm inspector\",\n\t\t\"schema:build:json\": \"tsx typescript/scripts/generate-tool-schema.ts\",\n\t\t\"test\": \"cd typescript && pnpm test\",\n\t\t\"schema:build:python\": \"bash python/scripts/generate-pydantic-models.sh\",\n\t\t\"schema:build\": \"pnpm run schema:build:json && pnpm run schema:build:python\",\n\t\t\"format\": \"biome format --write\",\n\t\t\"lint\": \"biome lint --fix\",\n\t\t\"format:python\": \"cd python && uv run ruff format .\",\n\t\t\"lint:python\": \"cd python && uv run ruff check --fix .\",\n\t\t\"test:python\": \"cd python && uv run pytest tests/ -v\",\n\t\t\"typecheck:python\": \"cd python && uvx ty check\",\n\t\t\"docker:build\": \"docker build -t posthog-mcp .\",\n\t\t\"docker:run\": \"docker run -i --rm --env POSTHOG_AUTH_HEADER=${POSTHOG_AUTH_HEADER} --env POSTHOG_REMOTE_MCP_URL=${POSTHOG_REMOTE_MCP_URL:-https://mcp.posthog.com/mcp} posthog-mcp\",\n\t\t\"docker:inspector\": \"npx @modelcontextprotocol/inspector docker run -i --rm --env POSTHOG_AUTH_HEADER=${POSTHOG_AUTH_HEADER} --env POSTHOG_REMOTE_MCP_URL=${POSTHOG_REMOTE_MCP_URL:-https://mcp.posthog.com/mcp} posthog-mcp\"\n\t},\n\t\"devDependencies\": {\n\t\t\"@biomejs/biome\": \"1.9.4\",\n\t\t\"husky\": \"^9.1.7\",\n\t\t\"tsx\": \"^4.20.3\"\n\t},\n\t\"packageManager\": \"pnpm@9.15.5+sha256.8472168c3e1fd0bff287e694b053fccbbf20579a3ff9526b6333beab8df65a8d\"\n}\n\n\n=== python/pyproject.toml ===\n[project]\nname = \"posthog-agent-toolkit\"\nversion = \"0.1.0\"\ndescription = \"PostHog Agent Toolkit for LangChain and other AI frameworks\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\nauthors = [\n    { name = \"PostHog\", email = \"hey@posthog.com\" },\n]\ndependencies = [\n    \"pydantic>=2.5.0\",\n    \"httpx>=0.25.0\",\n    \"typing-extensions>=4.8.0\",\n    \"python-dateutil>=2.8.2\",\n    \"python-dotenv>=1.0.0\",\n    \"langchain-mcp-adapters>=0.1.0\",\n    \"langchain-core>=0.1.0\",\n]\n\n[dependency-groups]\ndev = [\n    \"datamodel-code-generator[http]>=0.25.0\",\n    \"ruff>=0.1.0\", \n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"posthog_agent_toolkit\"]\n\n[tool.ruff]\ntarget-version = \"py311\"\nline-length = 160\nindent-width = 4\nexclude = [\n    \"schema/tool_inputs.py\",  # Auto-generated file\n]\n\n[tool.ruff.lint]\nselect = [\n    \"E\",  # pycodestyle errors\n    \"W\",  # pycodestyle warnings  \n    \"F\",  # pyflakes\n    \"I\",  # isort\n    \"B\",  # flake8-bugbear\n    \"C4\", # flake8-comprehensions\n    \"UP\", # pyupgrade\n]\nignore = [\n    \"E501\", # line too long\n]\n\n[tool.ruff.format]\nquote-style = \"double\"\nindent-style = \"space\"\nskip-magic-trailing-comma = false\nline-ending = \"auto\"\n\n[tool.uv]\ndev-dependencies = []\n\n\n=== typescript/package.json ===\n{\n\t\"name\": \"@posthog/agent-toolkit\",\n\t\"version\": \"0.1.0\",\n\t\"description\": \"PostHog tools for AI agents\",\n\t\"main\": \"dist/index.js\",\n\t\"module\": \"dist/index.mjs\",\n\t\"types\": \"dist/index.d.ts\",\n\t\"exports\": {\n\t\t\".\": {\n\t\t\t\"types\": \"./dist/index.d.ts\",\n\t\t\t\"import\": \"./dist/index.mjs\",\n\t\t\t\"require\": \"./dist/index.js\"\n\t\t},\n\t\t\"./tools\": {\n\t\t\t\"types\": \"./dist/tools.d.ts\",\n\t\t\t\"import\": \"./dist/tools.mjs\",\n\t\t\t\"require\": \"./dist/tools.js\"\n\t\t},\n\t\t\"./integrations/ai-sdk\": {\n\t\t\t\"types\": \"./dist/ai-sdk.d.ts\",\n\t\t\t\"import\": \"./dist/ai-sdk.mjs\",\n\t\t\t\"require\": \"./dist/ai-sdk.js\"\n\t\t},\n\t\t\"./integrations/langchain\": {\n\t\t\t\"types\": \"./dist/langchain.d.ts\",\n\t\t\t\"import\": \"./dist/langchain.mjs\",\n\t\t\t\"require\": \"./dist/langchain.js\"\n\t\t}\n\t},\n\t\"scripts\": {\n\t\t\"build\": \"tsup\",\n\t\t\"dev\": \"wrangler dev\",\n\t\t\"deploy\": \"wrangler deploy\",\n\t\t\"cf-typegen\": \"wrangler types\",\n\t\t\"inspector\": \"npx @modelcontextprotocol/inspector npx -y mcp-remote@latest http://localhost:8787/mcp\",\n\t\t\"test\": \"vitest\",\n\t\t\"test:integration\": \"vitest run --config vitest.integration.config.mts\",\n\t\t\"test:watch\": \"vitest watch\",\n\t\t\"typecheck\": \"tsc --noEmit\"\n\t},\n\t\"keywords\": [\"posthog\", \"mcp\", \"ai\", \"agents\", \"analytics\", \"feature-flags\"],\n\t\"author\": \"PostHog Inc.\",\n\t\"license\": \"MIT\",\n\t\"peerDependencies\": {\n\t\t\"@langchain/core\": \"^0.3.72\",\n\t\t\"@langchain/openai\": \"^0.6.9\",\n\t\t\"ai\": \"^5.0.0\",\n\t\t\"langchain\": \"^0.3.31\"\n\t},\n\t\"dependencies\": {\n\t\t\"@modelcontextprotocol/sdk\": \"^1.17.3\",\n\t\t\"agents\": \"^0.0.113\",\n\t\t\"ai\": \"^5.0.18\",\n\t\t\"posthog-node\": \"^4.18.0\",\n\t\t\"zod\": \"^3.24.4\"\n\t},\n\t\"devDependencies\": {\n\t\t\"@langchain/core\": \"^0.3.72\",\n\t\t\"@langchain/openai\": \"^0.6.9\",\n\t\t\"@types/dotenv\": \"^6.1.1\",\n\t\t\"@types/node\": \"^22.15.34\",\n\t\t\"dotenv\": \"^16.4.7\",\n\t\t\"langchain\": \"^0.3.31\",\n\t\t\"tsup\": \"^8.5.0\",\n\t\t\"typescript\": \"^5.8.3\",\n\t\t\"uuid\": \"^11.1.0\",\n\t\t\"vite\": \"^5.0.0\",\n\t\t\"vite-tsconfig-paths\": \"^5.1.4\",\n\t\t\"vitest\": \"^3.2.4\",\n\t\t\"wrangler\": \"^4.14.4\",\n\t\t\"zod-to-json-schema\": \"^3.24.6\"\n\t},\n\t\"files\": [\"dist\", \"README.md\"]\n}\n"
+}

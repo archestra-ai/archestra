@@ -3,22 +3,24 @@ title: "SSO"
 category: Administration
 subcategory: Identity Providers
 description: "Sign users in with their existing identity provider via OIDC or SAML"
-order: 3
-lastUpdated: 2026-05-06
+order: 4
+lastUpdated: 2026-07-16
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
+<!--
 Provider-agnostic SSO concept page. Covers what SSO is in Archestra, how the
 flow works, callback URL formats, supported protocols, allowed-domain
-boundary, basic-auth/invitation toggles, user provisioning, account linking,
-and common SSO error codes.
+boundary, basic-auth/invitation toggles, user provisioning, and common SSO
+error codes.
 
 Per-provider walkthroughs (Entra, Okta) live on their own pages and link here.
 -->
 
 Single Sign-On (SSO) lets users sign in to Archestra with the identity they already have at work — Microsoft, Okta, Google, GitHub, GitLab, or any OIDC/SAML provider — instead of managing yet another username and password.
+
+> **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
 
 ## How sign-in works
 
@@ -107,16 +109,9 @@ When a user authenticates via SSO for the first time:
 
 Subsequent logins link to the existing account by email. Role mapping rules are evaluated on each login, so role changes in the IdP take effect on next sign-in.
 
-## Account linking
-
-If a user already has an Archestra account (for example created via email/password), SSO will automatically link to it when:
-
-- The email addresses match
-- The SSO provider is trusted for account linking — Archestra trusts the built-in providers (Okta, Google, GitHub, GitLab, Entra ID) plus any custom Generic OIDC or Generic SAML provider configured in Identity Providers
-
 ## Downstream providers
 
-An identity provider can be configured without showing it on the sign-in page. Disable **Show on sign-in page** when the provider is only used to link delegated tokens for downstream MCP tool calls.
+An identity provider can be configured without being used for login. Disable **Use for Single Sign-On** when the provider is only used to link delegated tokens for downstream MCP tool calls. With this disabled, the provider is hidden from the sign-in page and its role mapping and team sync never run — connecting the provider to fetch a downstream token cannot change a user's Archestra role or team memberships.
 
 This is useful when one provider is the primary Archestra login provider, but a specific MCP tool needs a token from another provider. See [Enterprise-Managed Auth — Linked downstream IdPs](/docs/platform-enterprise-managed-auth#linked-downstream-idps).
 
@@ -125,6 +120,8 @@ This is useful when one provider is the primary Archestra login provider, but a 
 Once SSO is working, you can disable the username/password login form to enforce SSO-only authentication. Set `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=true` and restart the backend. See [Deployment — Environment Variables](/docs/platform-deployment#environment-variables).
 
 > **Important:** verify at least one SSO provider is working before disabling basic auth, or you (and your admins) will be locked out.
+
+Because there is no email provider, password recovery is a shell operation. If you disable basic auth and SSO later breaks, recover a locked-out admin by resetting their password from the backend container, then re-enable basic auth. See [Password Reset](/docs/platform-reset-user-password).
 
 ## Disabling User Invitations
 

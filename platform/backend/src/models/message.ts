@@ -1,6 +1,7 @@
-import { and, eq, gt, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
-import type { InsertMessage, Message } from "@/types";
+import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
+import db, { schema, withDbTransaction } from "@/database";
+import { ApiError, type InsertMessage, type Message } from "@/types";
+import { isUuid, uuidv7 } from "@/utils/uuid";
 
 type DbExecutor =
   | typeof db
@@ -8,22 +9,38 @@ type DbExecutor =
 
 class MessageModel {
   /**
-   * Update the conversation's updatedAt timestamp when messages are added.
-   * This ensures conversations are sorted by latest message activity.
+   * Update the conversation's timestamps when messages are added.
+   *
+   * `lastMessageAt` is forced strictly past `lastReadAt` when the two would
+   * otherwise land on the same millisecond: the unread check is a strict
+   * `lastMessageAt > lastReadAt` comparison, so a message racing markRead
+   * into the same instant would silently read as already-seen. GREATEST with
+   * a 1ms nudge keeps the invariant "written after a read ⇒ unread" without
+   * needing a sequence column.
    */
   private static async touchConversation(
     conversationId: string,
+    executor: DbExecutor = db,
   ): Promise<void> {
-    await db
+    await executor
       .update(schema.conversationsTable)
-      .set({ updatedAt: new Date() })
+      .set({
+        updatedAt: new Date(),
+        // now() (DB clock), not a JS Date param: node-postgres serializes
+        // Dates in host-local time and the ::timestamp cast drops the offset,
+        // shifting the stamp by the host's UTC offset on non-UTC hosts.
+        lastMessageAt: sql`GREATEST(now()::timestamp, ${schema.conversationsTable.lastReadAt} + interval '1 millisecond')`,
+      })
       .where(eq(schema.conversationsTable.id, conversationId));
   }
 
   static async create(data: InsertMessage): Promise<Message> {
     const [message] = await db
       .insert(schema.messagesTable)
-      .values(data)
+      // Monotonic v7 id: with `created_at` at millisecond precision,
+      // back-to-back writes can tie, and every "which message is later?"
+      // question (ordering, delete-subsequent) breaks ties with the id.
+      .values({ id: uuidv7(), ...data })
       .returning();
 
     // Update conversation's updatedAt so it sorts to the top
@@ -32,19 +49,28 @@ class MessageModel {
     return message;
   }
 
-  static async bulkCreate(messages: InsertMessage[]): Promise<void> {
+  static async bulkCreate(
+    messages: InsertMessage[],
+    executor: DbExecutor = db,
+  ): Promise<void> {
     if (messages.length === 0) {
       return;
     }
 
-    await db.insert(schema.messagesTable).values(messages);
+    await executor
+      .insert(schema.messagesTable)
+      .values(messages.map((m) => ({ id: uuidv7(), ...m })));
 
-    // Update conversation's updatedAt for all affected conversations
+    // Update conversation's updatedAt for all affected conversations. Must run
+    // on the same executor: with a transaction executor, a separate `db` query
+    // would escape the transaction (and deadlock single-connection PGlite).
     const uniqueConversationIds = [
       ...new Set(messages.map((m) => m.conversationId)),
     ];
     await Promise.all(
-      uniqueConversationIds.map((id) => MessageModel.touchConversation(id)),
+      uniqueConversationIds.map((id) =>
+        MessageModel.touchConversation(id, executor),
+      ),
     );
   }
 
@@ -53,9 +79,20 @@ class MessageModel {
       .select()
       .from(schema.messagesTable)
       .where(eq(schema.messagesTable.conversationId, conversationId))
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     return messages;
+  }
+
+  /** Cheap emptiness probe — avoids loading full rows just to count them. */
+  static async existsForConversation(conversationId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.messagesTable.id })
+      .from(schema.messagesTable)
+      .where(eq(schema.messagesTable.conversationId, conversationId))
+      .limit(1);
+
+    return row !== undefined;
   }
 
   static async delete(id: string): Promise<void> {
@@ -100,13 +137,78 @@ class MessageModel {
   static async findByAnyId(id: string): Promise<Message | null> {
     // Try DB UUID first (fast indexed lookup) — only if it looks like a UUID
     // to avoid PostgreSQL "invalid input syntax for type uuid" errors
-    if (UUID_REGEX.test(id)) {
+    if (isUuid(id)) {
       const byDbId = await MessageModel.findById(id);
       if (byDbId) return byDbId;
     }
 
     // Fall back to content ID (AI SDK nanoid)
     return MessageModel.findByContentId(id);
+  }
+
+  /**
+   * Like findByAnyId, but scoped to a single conversation. Content IDs are
+   * client-supplied and carry no uniqueness guarantee across conversations,
+   * so callers that know the conversation must scope the lookup to it.
+   */
+  static async findByAnyIdInConversation(
+    id: string,
+    conversationId: string,
+  ): Promise<Message | null> {
+    if (isUuid(id)) {
+      const [byDbId] = await db
+        .select()
+        .from(schema.messagesTable)
+        .where(
+          and(
+            eq(schema.messagesTable.id, id),
+            eq(schema.messagesTable.conversationId, conversationId),
+          ),
+        );
+      if (byDbId) return byDbId;
+    }
+
+    // Content IDs carry no uniqueness guarantee even within one conversation
+    // (client-supplied), so pick the newest match deterministically instead of
+    // whatever row the planner returns first.
+    const [byContentId] = await db
+      .select()
+      .from(schema.messagesTable)
+      .where(
+        and(
+          sql`${schema.messagesTable.content}->>'id' = ${id}`,
+          eq(schema.messagesTable.conversationId, conversationId),
+        ),
+      )
+      .orderBy(
+        desc(schema.messagesTable.createdAt),
+        desc(schema.messagesTable.id),
+      )
+      .limit(1);
+
+    return byContentId || null;
+  }
+
+  /**
+   * Set or clear the owner's feedback on a message. Deliberately does not
+   * touch the conversation's recency — a rating is not new activity.
+   * Returns null when the row vanished between lookup and update (e.g. a
+   * concurrent regeneration deleted it).
+   */
+  static async updateFeedback(
+    messageId: string,
+    feedback: Message["feedback"],
+  ): Promise<Message | null> {
+    const [updatedMessage] = await db
+      .update(schema.messagesTable)
+      .set({
+        feedback,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.messagesTable.id, messageId))
+      .returning();
+
+    return updatedMessage || null;
   }
 
   static async updateTextPart(
@@ -118,7 +220,7 @@ class MessageModel {
     const message = await MessageModel.findById(messageId);
 
     if (!message) {
-      throw new Error("Message not found");
+      throw new ApiError(404, "Message not found");
     }
 
     // biome-ignore lint/suspicious/noExplicitAny: UIMessage content is dynamic
@@ -126,13 +228,14 @@ class MessageModel {
 
     // Validate that the part exists
     if (!content.parts?.[partIndex]) {
-      throw new Error("Invalid part index");
+      throw new ApiError(400, "Invalid part index");
     }
 
     // Validate that the part is a text part to prevent data corruption
     // Only text parts can have their text property modified
     if (content.parts[partIndex].type !== "text") {
-      throw new Error(
+      throw new ApiError(
+        400,
         `Cannot update non-text part: part at index ${partIndex} is of type "${content.parts[partIndex].type}"`,
       );
     }
@@ -151,6 +254,61 @@ class MessageModel {
       .returning();
 
     return updatedMessage;
+  }
+
+  /**
+   * Replace a message's full content. Used when a turn changes after it was
+   * first persisted — e.g. a tool call that has since been approved or declined.
+   */
+  static async updateContent(
+    messageId: string,
+    content: Message["content"],
+  ): Promise<Message> {
+    // Validate the row exists so the return type holds — `.returning()`
+    // would otherwise yield `undefined` for an unknown id.
+    const message = await MessageModel.findById(messageId);
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    const [updatedMessage] = await db
+      .update(schema.messagesTable)
+      .set({
+        content,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.messagesTable.id, messageId))
+      .returning();
+
+    // A content change (e.g. a tool call's final output landing in an existing
+    // assistant message) is fresh activity the owner may not have seen, so it
+    // advances the conversation's recency the same way a new message does.
+    await MessageModel.touchConversation(updatedMessage.conversationId);
+
+    return updatedMessage;
+  }
+
+  /**
+   * Hard-delete the given message rows by their primary keys. Accepts an
+   * optional executor so a regenerate can delete the stale trailing turn and
+   * persist its replacement in one transaction. Deletion is by identity (id),
+   * never by a timestamp window, so colliding `createdAt` values can't cause
+   * the wrong rows to be removed.
+   */
+  static async deleteByIds(
+    ids: string[],
+    executor: DbExecutor = db,
+  ): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const rows = await executor
+      .delete(schema.messagesTable)
+      .where(inArray(schema.messagesTable.id, ids))
+      .returning({ id: schema.messagesTable.id });
+
+    return rows.length;
   }
 
   static async deleteAfterMessage(
@@ -175,7 +333,7 @@ class MessageModel {
       .where(
         and(
           eq(schema.messagesTable.conversationId, conversationId),
-          gt(schema.messagesTable.createdAt, message.createdAt),
+          MessageModel.createdAfter(message),
         ),
       );
   }
@@ -199,7 +357,7 @@ class MessageModel {
         .where(eq(schema.messagesTable.id, messageId));
 
       if (!message) {
-        throw new Error("Message not found");
+        throw new ApiError(404, "Message not found");
       }
 
       // biome-ignore lint/suspicious/noExplicitAny: UIMessage content is dynamic
@@ -207,12 +365,13 @@ class MessageModel {
 
       // Validate that the part exists
       if (!content.parts?.[partIndex]) {
-        throw new Error("Invalid part index");
+        throw new ApiError(400, "Invalid part index");
       }
 
       // Validate that the part is a text part to prevent data corruption
       if (content.parts[partIndex].type !== "text") {
-        throw new Error(
+        throw new ApiError(
+          400,
           `Cannot update non-text part: part at index ${partIndex} is of type "${content.parts[partIndex].type}"`,
         );
       }
@@ -237,7 +396,7 @@ class MessageModel {
           .where(
             and(
               eq(schema.messagesTable.conversationId, message.conversationId),
-              gt(schema.messagesTable.createdAt, message.createdAt),
+              MessageModel.createdAfter(message),
             ),
           );
       }
@@ -247,13 +406,28 @@ class MessageModel {
 
     // when no outer transaction is provided, wrap so update + delete remain atomic
     if (executor === db) {
-      return await db.transaction(async (tx) => run(tx));
+      return await withDbTransaction(async (tx) => run(tx));
     }
     return await run(executor);
+  }
+
+  /**
+   * Rows that come after `message` in the canonical conversation order,
+   * `(created_at, id)`. A strict `created_at >` comparison alone misses
+   * same-millisecond neighbours (back-to-back writes routinely tie), so
+   * "subsequent" is the tuple comparison that matches exactly what
+   * findByConversation displays. New ids are monotonic UUIDv7, so for
+   * fresh data the id tiebreak IS insertion order.
+   */
+  private static createdAfter(message: Pick<Message, "id" | "createdAt">) {
+    return or(
+      gt(schema.messagesTable.createdAt, message.createdAt),
+      and(
+        eq(schema.messagesTable.createdAt, message.createdAt),
+        gt(schema.messagesTable.id, message.id),
+      ),
+    );
   }
 }
 
 export default MessageModel;
-
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

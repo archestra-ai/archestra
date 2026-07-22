@@ -1,6 +1,10 @@
 "use client";
 
-import { type AgentType, type archestraApiTypes, E2eTestId } from "@shared";
+import {
+  type AgentType,
+  type archestraApiTypes,
+  E2eTestId,
+} from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -13,8 +17,10 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   ActiveFilterBadges,
+  AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
+import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   ConnectDialog,
   ConnectDialogSection,
@@ -24,6 +30,7 @@ import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
@@ -31,18 +38,19 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
-  useCloneAgent,
   useDeleteProfile,
   useExportAgent,
   useProfile,
-  useProfiles,
   useProfilesPaginated,
+  useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useTeams } from "@/lib/teams/team.query";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { AgentActions } from "./agent-actions";
+import { ConvertToSkillDialog } from "./convert-to-skill-dialog";
 
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
@@ -79,7 +87,7 @@ function SortIcon({
     return downArrow;
   }
   return (
-    <div className="text-muted-foreground/50 flex flex-col items-center">
+    <div className="text-muted-foreground flex flex-col items-center">
       {upArrow}
       <span className="mt-[-4px]">{downArrow}</span>
     </div>
@@ -103,8 +111,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const sortByFromUrl = searchParams.get("sortBy") as
     | "name"
     | "createdAt"
-    | "toolsCount"
-    | "subagentsCount"
     | "team"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
@@ -121,12 +127,21 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const authorIdsFromUrl = searchParams.get("authorIds");
   const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
+  const statusFromUrl = searchParams.get("status") as
+    | "active"
+    | "deleted"
+    | null;
 
   // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
   const sortDirection = sortDirectionFromUrl || DEFAULT_SORT_DIRECTION;
 
-  const { data: agentsResponse, isPending } = useProfilesPaginated({
+  const {
+    data: agentsResponse,
+    isPending,
+    isLoadingError: isAgentsLoadError,
+    refetch: refetchAgents,
+  } = useProfilesPaginated({
     initialData: initialData?.agents ?? undefined,
     limit: pageSize,
     offset,
@@ -147,11 +162,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         ? true
         : undefined,
     labels: labelsFromUrl || undefined,
+    status: statusFromUrl || undefined,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
-  const { data: userTeams } = useTeams({
-    initialData: initialData?.teams,
+  const { data: userTeams } = useMyTeams({
     enabled: !!canReadTeams,
   });
 
@@ -182,26 +197,28 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     name: string;
     agentType: AgentType;
   } | null>(null);
-  const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
-  const [viewingAgent, setViewingAgent] = useState<AgentData | null>(null);
+  const editId = searchParams.get("edit");
+  const { data: editAgentFromUrl } = useProfile(editId ?? undefined);
+  const editDialog = useDialogUrlParam<AgentData>({
+    paramName: "edit",
+    entityFromUrl: editAgentFromUrl ?? null,
+  });
+  const viewId = searchParams.get("view");
+  const { data: viewAgentFromUrl } = useProfile(viewId ?? undefined);
+  const viewDialog = useDialogUrlParam<AgentData>({
+    paramName: "view",
+    entityFromUrl: viewAgentFromUrl ?? null,
+  });
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
-  const cloneAgent = useCloneAgent();
-
-  const handleClone = useCallback(
-    async (agentId: string) => {
-      try {
-        const cloned = await cloneAgent.mutateAsync(agentId);
-        if (cloned) {
-          // Open edit dialog for the cloned agent so user can rename immediately
-          setEditingAgent(cloned as AgentData);
-        }
-      } catch (_error) {}
-    },
-    [cloneAgent],
-  );
+  const [cloningAgent, setCloningAgent] = useState<AgentData | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
+  const restoreAgent = useRestoreProfile();
+
+  const [convertingAgent, setConvertingAgent] = useState<AgentData | null>(
+    null,
+  );
 
   // Handle 'create' URL parameter to open the Create Agent dialog
   useEffect(() => {
@@ -213,44 +230,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       router.replace(`${pathname}?${newParams.toString()}`);
     }
   }, [searchParams, pathname, router]);
-
-  // Handle 'edit' URL parameter to open the Edit Agent dialog
-  const editAgentId = searchParams.get("edit");
-  const { data: editAgentData } = useProfile(editAgentId ?? undefined);
-  useEffect(() => {
-    if (editAgentId && editAgentData && !editingAgent) {
-      setEditingAgent(editAgentData as AgentData);
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete("edit");
-      router.replace(`${pathname}?${newParams.toString()}`);
-    }
-  }, [
-    editAgentId,
-    editAgentData,
-    editingAgent,
-    searchParams,
-    pathname,
-    router,
-  ]);
-
-  // Handle 'view' URL parameter to open the View Agent dialog (read-only)
-  const viewAgentId = searchParams.get("view");
-  const { data: viewAgentData } = useProfile(viewAgentId ?? undefined);
-  useEffect(() => {
-    if (viewAgentId && viewAgentData && !viewingAgent) {
-      setViewingAgent(viewAgentData as AgentData);
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete("view");
-      router.replace(`${pathname}?${newParams.toString()}`);
-    }
-  }, [
-    viewAgentId,
-    viewAgentData,
-    viewingAgent,
-    searchParams,
-    pathname,
-    router,
-  ]);
 
   // Update URL when sorting changes
   const handleSortingChange = useCallback(
@@ -287,7 +266,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
   const showLoading = isPending && !initialData?.agents;
-  const hasActiveFilters = !!(nameFilter || scopeFromUrl || labelsFromUrl);
+  const isDeletedView = statusFromUrl === "deleted";
+  const hasActiveFilters = !!(
+    nameFilter ||
+    scopeFromUrl ||
+    labelsFromUrl ||
+    isDeletedView
+  );
 
   const clearFilters = useCallback(() => {
     updateQueryParams({
@@ -298,6 +283,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       authorIds: null,
       excludeAuthorIds: null,
       labels: null,
+      status: null,
     });
   }, [updateQueryParams]);
 
@@ -332,7 +318,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         return (
           <AgentNameCell
             name={agent.name}
-            scope={agent.scope}
             builtIn={agent.builtIn ?? undefined}
             description={agent.description}
             labels={agent.labels}
@@ -341,82 +326,20 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       },
     },
     {
-      id: "toolsCount",
-      accessorKey: "toolsCount",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Tools
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
+      id: "team",
+      header: "Accessible to",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={row.original.teams}
+          authorId={row.original.authorId}
+          authorName={row.original.authorName}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
       ),
-      cell: ({ row }) => {
-        const toolsCount = row.original.tools.filter(
-          (t) => !t.delegateToAgentId,
-        ).length;
-        return <div>{toolsCount}</div>;
-      },
     },
-    {
-      id: "knowledgeSourcesCount",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Knowledge Sources
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => {
-        const count =
-          (row.original.knowledgeBaseIds?.length ?? 0) +
-          (row.original.connectorIds?.length ?? 0);
-        return <div>{count}</div>;
-      },
-    },
-    {
-      id: "subagentsCount",
-      accessorKey: "subagentsCount",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Subagents
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
-      cell: ({ row }) => {
-        const subagentsCount = row.original.tools.filter(
-          (t) => t.delegateToAgentId,
-        ).length;
-        return <div>{subagentsCount}</div>;
-      },
-    },
-    ...(isAgentAdmin
-      ? [
-          {
-            id: "team",
-            header: "Accessible to",
-            enableSorting: false,
-            cell: ({ row }: { row: { original: AgentData } }) => (
-              <ResourceVisibilityBadge
-                scope={row.original.scope}
-                teams={row.original.teams}
-                authorId={row.original.authorId}
-                authorName={row.original.authorName}
-                currentUserId={currentUserId}
-              />
-            ),
-          } satisfies ColumnDef<AgentData>,
-        ]
-      : []),
     {
       id: "actions",
       header: "Actions",
@@ -442,14 +365,19 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             agent={agent}
             canModify={canModify}
             onConnect={setConnectingAgent}
-            onEdit={(agentData) => {
-              setEditingAgent(agentData);
-            }}
-            onView={(agentData) => {
-              setViewingAgent(agentData);
-            }}
+            onEdit={editDialog.open}
+            onView={viewDialog.open}
             onDelete={setDeletingAgentId}
-            onClone={handleClone}
+            onRestore={(agentId) => {
+              restoreAgent.mutate(agentId, {
+                onSuccess: (data) => {
+                  if (!data) return;
+                  toast.success("Agent restored successfully");
+                },
+              });
+            }}
+            onClone={setCloningAgent}
+            onConvertToSkill={setConvertingAgent}
             onExport={(agentData) => {
               exportAgent.mutate(agentData.id, {
                 onSuccess: (data) => {
@@ -471,6 +399,25 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       },
     },
   ];
+
+  if (isAgentsLoadError) {
+    return (
+      <PageLayout
+        title="Agents"
+        description={
+          <p className="text-sm text-muted-foreground">
+            Agents are AI assistants with system prompts, tools, knowledge
+            sources, and integrations like ChatOps, email, and A2A.
+          </p>
+        }
+      >
+        <QueryLoadError
+          title="Couldn't load your agents"
+          onRetry={() => refetchAgents()}
+        />
+      </PageLayout>
+    );
+  }
 
   return (
     <LoadingWrapper
@@ -515,7 +462,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter showBuiltIn ownerLabelPlural="agents" />
+                <AgentScopeFilter
+                  showBuiltIn
+                  ownerLabelPlural="agents"
+                  adminPermission={{ agent: ["admin"] }}
+                />
+                <AgentDeletedStatusFilter
+                  deletePermission={{ agent: ["delete"] }}
+                />
               </div>
               {!canReadTeams && (
                 <PermissionRequirementHint
@@ -523,7 +477,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   permissions={[{ resource: "team", action: "read" }]}
                 />
               )}
-              <ActiveFilterBadges />
+              <ActiveFilterBadges adminPermission={{ agent: ["admin"] }} />
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>
@@ -542,7 +496,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 onPaginationChange={handlePaginationChange}
                 emptyMessage="No agents found"
                 hasActiveFilters={hasActiveFilters}
-                filteredEmptyMessage="No agents match your filters. Try adjusting your search."
+                filteredEmptyMessage={
+                  isDeletedView
+                    ? "No deleted agents found."
+                    : "No agents match your filters. Try adjusting your search."
+                }
                 onClearFilters={clearFilters}
               />
             </div>
@@ -551,8 +509,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               open={isCreateDialogOpen}
               onOpenChange={setIsCreateDialogOpen}
               agentType="agent"
-              onCreated={() => {
+              onCreated={(created) => {
                 setIsCreateDialogOpen(false);
+                // Land the user on "how do I use this?" instead of a closed
+                // dialog: open the connect dialog for the new agent.
+                setConnectingAgent({ ...created, agentType: "agent" });
               }}
             />
 
@@ -565,16 +526,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             )}
 
             <AgentDialog
-              open={!!editingAgent}
-              onOpenChange={(open) => !open && setEditingAgent(null)}
-              agent={editingAgent}
+              open={!!editDialog.entity}
+              onOpenChange={(open) => !open && editDialog.close()}
+              agent={editDialog.entity}
               agentType="agent"
             />
 
             <AgentDialog
-              open={!!viewingAgent}
-              onOpenChange={(open) => !open && setViewingAgent(null)}
-              agent={viewingAgent}
+              open={!!viewDialog.entity}
+              onOpenChange={(open) => !open && viewDialog.close()}
+              agent={viewDialog.entity}
               agentType="agent"
               readOnly
             />
@@ -592,6 +553,24 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               onOpenChange={setIsImportDialogOpen}
               onSuccess={() => {}}
             />
+
+            <ConvertToSkillDialog
+              agent={convertingAgent}
+              onOpenChange={(open) => {
+                if (!open) setConvertingAgent(null);
+              }}
+            />
+
+            <CloneAgentDialog
+              agent={cloningAgent}
+              onOpenChange={(open) => {
+                if (!open) setCloningAgent(null);
+              }}
+              onCloned={(cloned) => {
+                // Open edit dialog for the cloned agent so user can rename immediately
+                editDialog.open(cloned as AgentData);
+              }}
+            />
           </div>
         </div>
       </PageLayout>
@@ -601,9 +580,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
 function AgentConnectionColumns({ agentId }: { agentId: string }) {
   const appName = useAppName();
-  // Fetch agent data for A2A connection instructions
-  const { data: profiles, isPending } = useProfiles();
-  const agent = profiles?.find((p) => p.id === agentId);
+  // Fetch by id so a just-created agent resolves without waiting for the
+  // paginated list cache to refresh.
+  const { data: agent, isPending } = useProfile(agentId);
 
   if (isPending || !agent) {
     return (
@@ -639,12 +618,7 @@ function ConnectAgentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   return (
-    <ConnectDialog
-      agent={agent}
-      open={open}
-      onOpenChange={onOpenChange}
-      docsPage="platform-agents"
-    >
+    <ConnectDialog agent={agent} open={open} onOpenChange={onOpenChange}>
       <AgentConnectionColumns agentId={agent.id} />
     </ConnectDialog>
   );

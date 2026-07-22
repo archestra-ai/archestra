@@ -1,0 +1,107 @@
+{
+  "name": "lpigeon__unitree-go2-mcp-server",
+  "display_name": "unitree-go2-mcp-server",
+  "description": "The Unitree Go2 MCP Server is a server built on the MCP that enables users to control the Unitree Go2 robot using natural language commands interpreted by a LLM.",
+  "author": {
+    "name": "lpigeon"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "server.py"],
+    "env": {
+      "UNITREE_ROS2_SETUP_SH_PATH": "${user_config.unitree_ros2_setup_sh_path}",
+      "LOCAL_IP": "${user_config.local_ip}",
+      "ROSBRIDGE_IP": "${user_config.rosbridge_ip}",
+      "ROSBRIDGE_PORT": "${user_config.rosbridge_port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "unitree_ros2_setup_sh_path": {
+      "type": "file",
+      "title": "Unitree ROS2 Setup Script Path",
+      "description": "Absolute path to the `setup.sh` script in your `unitree_ros2` environment (e.g., `/home/user/unitree_ros2/setup.sh`). This script is sourced by the server to set up the ROS2 environment.",
+      "required": true
+    },
+    "local_ip": {
+      "type": "string",
+      "title": "Local IP Address for ROSBridge",
+      "description": "Your local IP address if using rosbridge. This is used by the server to bind to the correct network interface for ROSBridge communication.",
+      "required": false
+    },
+    "rosbridge_ip": {
+      "type": "string",
+      "title": "ROSBridge Server IP Address",
+      "description": "The IP address of the rosbridge server if using rosbridge. This is the target IP for the server to connect to the ROSBridge.",
+      "required": false
+    },
+    "rosbridge_port": {
+      "type": "number",
+      "title": "ROSBridge Server Port",
+      "description": "The port of the rosbridge server if using rosbridge.",
+      "default": 9090,
+      "required": false,
+      "min": 1,
+      "max": 65535
+    }
+  },
+  "readme": "# Unitree Go2 MCP Server\n![ROS 2](https://img.shields.io/badge/ROS_2-Foxy|Humble-blue)\n![Static Badge](https://img.shields.io/badge/License-Apache2.0-green)\n\n<center><img src=\"https://github.com/lpigeon/unitree-go2-mcp-server/blob/main/img/thumbnail.png\" width=\"800\"/></center>\n\nThe **Unitree Go2 MCP Server** is a server built on the Model Context Protocol (MCP) that enables users to control the Unitree Go2 robot using natural language commands interpreted by a Large Language Model (LLM). These commands are translated into ROS2 instructions, allowing the robot to perform corresponding actions.\n\n<a href=\"https://glama.ai/mcp/servers/@lpigeon/unitree-go2-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@lpigeon/unitree-go2-mcp-server/badge\" alt=\"Unitree Go2 Server MCP server\" />\n</a>\n\n## Requirements\n\n- **Unitree Go2 robot**\n- **Ubuntu 20.04 or 22.04**\n- **ROS2 environment** : [Humble](https://docs.ros.org/en/humble/Installation.html)(recommended) or [Foxy](https://docs.ros.org/en/foxy/Installation.html)\n\n## MCP Functions\n\nYou can find the list of functions in the [MCPFUNCTIONS.md](MCPFUNCTIONS.md).\n\n## Installation\n\n### 1. Setup `unitree_ros2` environment\n\nhttps://github.com/unitreerobotics/unitree_ros2\n\n- **You need to complete the setup up to `Step 2: Connect and test` in the repository linked above.**\n\n### 2. Clone this repository\n\n```bash\ngit clone https://github.com/lpigeon/unitree-go2-mcp-server.git\ncd unitree-go2-mcp-server\n```\n\n### 3. `uv` Installation\n- To install `uv`, you can use the following command:\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\nor\n```bash\npip install uv\n```\n\n- Create virtual environment and activate it (Optional)\n```bash\nuv venv\nsource .venv/bin/activate\n```\n\n### 4. MCP Server Configuration\nSet MCP setting to mcp.json.\n\n**Please keep in mind that the configuration must be done on the PC connected to the Go2.**\n\n```bash\n{\n    \"mcpServers\": {\n        \"unitree-go2-mcp-server\": {\n            \"command\": \"uv\",\n            \"args\": [\n              \"--directory\",\n              \"/ABSOLUTE/PATH/TO/PARENT/FOLDER/unitree-go2-mcp-server\",\n              \"run\",\n              \"server.py\"\n            ]\n        }\n    }\n}\n```\n\nIf you use Claude Desktop, you can find mcp.json using the following command:\n\n- MacOS\n```bash\ncode ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n```\n\n- Linux(Ubuntu)\n  \nYou can install Claude Desktop to use [claude-desktop-debian](https://github.com/aaddrick/claude-desktop-debian).\n\n```bash\ncode ~/.config/Claude/claude_desktop_config.json\n```\n\n- Windows\n```bash\ncode $env:AppData\\Claude\\claude_desktop_config.json\n```\n\n## How To Use\n### 1. Set `UNITREE_ROS2_SETUP_SH_PATH`.\n- Open `server.py` and change your `UNITREE_ROS2_SETUP_SH_PATH` (eg. `/home/lpigeon/unitree_ros2/setup.sh`)\n\n#### If you use `rosbridge`, you need Set IP and Port to connect rosbridge (Optional).\n- Open `server.py` and change your `LOCAL_IP`, `ROSBRIDGE_IP` and `ROSBRIDGE_PORT`. (`ROSBRIDGE_PORT`'s default value is `9090`)\n\n### 2. Check the Go2 robot is connected to the network.\nType the following command in the terminal.\n```bash\nros2 topic list\n```\nYou should see the following topic:\n```bash\n/wirelesscontroller\n```\n**If you don't see the topic, check the connection between the Go2 robot and the network.**\n\n### 3. Run any AI system that has imported `unitree-go2-mcp-server`.\n\n### 4. Type \"Make the Go2 robot move forward at a velocity of 0.5 m/s for 3 seconds.\".\n\n<center><img src=\"https://github.com/lpigeon/unitree-go2-mcp-server/blob/main/img/how_to_use_1.png\" width=\"500\"/></center>\n\n### 5. Check the Go2 robot's movement.\n\n<center><img src=\"https://github.com/lpigeon/unitree-go2-mcp-server/blob/main/img/how_to_use_2.gif\" width=\"500\"/></center>\n\n### 6. Type what you want to do and Enjoy!\n\n## Contextual Understanding\nWhen you type a command like \"It looks like the Go2 is getting tired,\" the LLM interprets this contextually — understanding that the robot might need a break or some form of stretching!\n\n<center><img src=\"https://github.com/lpigeon/unitree-go2-mcp-server/blob/main/img/contextual_understanding.gif\" width=\"800\"/></center>\n\n## Simple Task\nThis task is a comprehensive demo task showcasing the Unitree Go2 robot's obstacle avoidance, direction changing, and user interaction capabilities.\n\n<center><img src=\"https://github.com/lpigeon/unitree-go2-mcp-server/blob/main/img/task_test.gif\" width=\"800\"/></center>\n\n## Contributing\nContributions are welcome!  \nWhether you're fixing a typo, adding a new function, or suggesting improvements, your help is appreciated.  \nPlease follow the [contributing guidelines](CONTRIBUTING.md) for more details on how to contribute to this project.\n",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "unitree-go2-mcp-server": {
+        "command": "uv",
+        "args": ["--directory", "/ABSOLUTE/PATH/TO/PARENT/FOLDER/unitree-go2-mcp-server", "run", "server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "lpigeon",
+    "repo": "unitree-go2-mcp-server",
+    "url": "https://github.com/lpigeon/unitree-go2-mcp-server",
+    "name": "lpigeon__unitree-go2-mcp-server",
+    "path": null,
+    "stars": 42,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "84c22ff63a6e0c03f82e48a7b8ced00ec1b98c93"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:39.785Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "websocket",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"unitree-go2-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"The Unitree Go2 MCP Server is a server built on the MCP that enables users to control the Unitree Go2 robot using natural language commands interpreted by a LLM.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp>=1.7.1\",\n    \"websocket>=0.2.1\",\n]\n"
+}

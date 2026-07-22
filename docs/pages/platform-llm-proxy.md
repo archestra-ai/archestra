@@ -3,21 +3,14 @@ title: Overview
 category: LLM Proxy
 order: 1
 description: Secure proxy for LLM provider interactions
-lastUpdated: 2025-10-31
+lastUpdated: 2026-07-19
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
-
-Exception:
-- Screenshot
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 LLM Proxy is Archestra's security layer that sits between AI agents and LLM providers (OpenAI, Anthropic, Google, etc.). It intercepts, analyzes, and modifies LLM requests and responses to enforce security policies, prevent data leakage, and ensure compliance with organizational guidelines.
 
-## To use LLM Proxy:
+## To use LLM Proxy
 
 1. Go to **LLM Proxies** and create a new LLM proxy
 2. Click the **Connect** icon, choose the LLM provider you are using, and copy the provided URL.
@@ -99,8 +92,9 @@ Archestra supports the following custom headers on LLM Proxy requests. All heade
 
 | Header                     | Description                                                                                                                                                                                                                                          | Example Value                          |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `X-Archestra-Agent-Id`     | Client-provided identifier for the calling agent or application. Stored with each interaction and included in Prometheus metrics as the `external_agent_id` label. Useful when multiple applications share the same LLM Proxy.                       | `my-chatbot-prod`                      |
+| `X-Archestra-Agent-Id`     | Identifier for the calling agent or application. Stored with each interaction and included in [trace attributes](/docs/platform-observability#distributed-tracing) as `archestra.external_agent_id`. Client-provided when set; if absent, Archestra auto-discovers known clients — Claude (recorded as `anthropic_claude`) and Codex (recorded as `openai_codex`). Useful when multiple applications share the same LLM Proxy.                       | `my-chatbot-prod`                      |
 | `X-Archestra-User-Id`      | Associates the request with a specific Archestra user. Automatically included when using the built-in Archestra Chat.                                                                                                                                | `123e4567-e89b-12d3-a456-426614174000` |
+| `X-Archestra-Virtual-Key`  | Authenticates the acting Archestra user with a [passthrough virtual key](/docs/platform-llm-proxy-authentication#passthrough-virtual-keys) when the provider credential in `Authorization` is passed straight through. Unlike `X-Archestra-User-Id`, it is authenticated. | `arch_abc123def456...`                 |
 | `X-Archestra-Session-Id`   | Groups related LLM requests into a session - included in [trace attributes](/docs/platform-observability#distributed-tracing) as `gen_ai.conversation.id`.                                                                                           | `session-abc-123`                      |
 | `X-Archestra-Execution-Id` | Associates the request with a specific execution run. Used for the `agent_executions_total` Prometheus metric which counts unique executions. See [Observability](/docs/platform-observability).                                                     | `exec-run-456`                         |
 | `X-Archestra-Meta`         | Composite header combining agent ID, execution ID, and session ID in one value. Format: `<agent-id>/<execution-id>/<session-id>`. Any segment can be empty. Individual headers take precedence over meta header values. Values must not contain `/`. | `my-agent/exec-123/session-456`        |
@@ -131,6 +125,12 @@ curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
+
+## Environment
+
+An LLM proxy can be assigned a deployment environment. Its inference is then attributed to that environment, so usage counts against that environment's cost limits. Unassigned proxies use the Default environment. See [Environments](/docs/platform-environments).
+
+The environment also scopes skills on the connect page: the setup command only offers [skills](/docs/platform-agent-skills) in the selected proxy's environment.
 
 ## Supported Providers
 

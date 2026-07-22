@@ -1,18 +1,15 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  calculateCostSavings,
-  DynamicInteraction,
-} from "@shared";
+import { type archestraApiTypes, DynamicInteraction } from "@archestra/shared";
 import { ArrowLeft, Database, Layers } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { BilledCost } from "@/components/billed-cost";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
-import { Savings } from "@/components/savings";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SourceBadge } from "@/components/source-badge";
 import {
   Accordion,
@@ -55,13 +52,27 @@ function LogDetail({
   };
   id: string;
 }) {
-  const { data: dynamicInteraction, isPending } = useInteraction({
+  const {
+    data: dynamicInteraction,
+    isPending,
+    isLoadingError,
+    refetch,
+  } = useInteraction({
     interactionId: id,
     initialData: initialData?.interaction,
   });
 
   if (isPending) {
     return <LoadingSpinner />;
+  }
+
+  if (isLoadingError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load this interaction"
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   if (!dynamicInteraction) {
@@ -143,33 +154,38 @@ function LogDetail({
                 {(dynamicInteraction.inputTokens ?? 0).toLocaleString()} in /{" "}
                 {(dynamicInteraction.outputTokens ?? 0).toLocaleString()} out
               </div>
+              {((dynamicInteraction.cacheReadTokens ?? 0) > 0 ||
+                (dynamicInteraction.cacheWriteTokens ?? 0) > 0) && (
+                <div className="font-mono text-muted-foreground">
+                  {(dynamicInteraction.cacheReadTokens ?? 0).toLocaleString()}{" "}
+                  cache read /{" "}
+                  {(dynamicInteraction.cacheWriteTokens ?? 0).toLocaleString()}{" "}
+                  cache write
+                </div>
+              )}
             </MetadataItem>
             <MetadataItem label="Cost">
               <div className="font-mono">
                 {dynamicInteraction.cost ? (
-                  (() => {
-                    const savings = calculateCostSavings(dynamicInteraction);
-                    const effectiveCost = dynamicInteraction.cost;
-                    const effectiveBaselineCost =
-                      dynamicInteraction.baselineCost ||
-                      dynamicInteraction.cost;
-                    return (
-                      <TooltipProvider>
-                        <Savings
-                          cost={effectiveCost}
-                          baselineCost={effectiveBaselineCost}
-                          toonCostSavings={dynamicInteraction.toonCostSavings}
-                          toonTokensSaved={savings.toonTokensSaved}
-                          toonSkipReason={dynamicInteraction.toonSkipReason}
-                          format="percent"
-                          tooltip="always"
-                          variant="interaction"
-                          baselineModel={dynamicInteraction.baselineModel}
-                          actualModel={dynamicInteraction.model}
-                        />
-                      </TooltipProvider>
-                    );
-                  })()
+                  <TooltipProvider>
+                    <BilledCost
+                      cost={dynamicInteraction.cost}
+                      billingMode={dynamicInteraction.billingMode}
+                      baselineCost={
+                        dynamicInteraction.baselineCost ||
+                        dynamicInteraction.cost
+                      }
+                      toonCostSavings={dynamicInteraction.toonCostSavings}
+                      toonTokensBefore={dynamicInteraction.toonTokensBefore}
+                      toonTokensAfter={dynamicInteraction.toonTokensAfter}
+                      toonSkipReason={dynamicInteraction.toonSkipReason}
+                      format="percent"
+                      tooltip="always"
+                      variant="interaction"
+                      baselineModel={dynamicInteraction.baselineModel}
+                      actualModel={dynamicInteraction.model}
+                    />
+                  </TooltipProvider>
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}
@@ -345,6 +361,8 @@ function formatAuthMethod(authMethod: InteractionAuthMethod) {
       return "OAuth User";
     case "virtual_key":
       return "Virtual Key";
+    case "passthrough_virtual_key":
+      return "Passthrough Virtual Key";
     case "provider_key":
       return "Provider Key";
     case "jwks":

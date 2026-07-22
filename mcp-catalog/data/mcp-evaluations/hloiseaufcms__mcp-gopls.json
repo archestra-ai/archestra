@@ -1,0 +1,78 @@
+{
+  "name": "hloiseaufcms__mcp-gopls",
+  "display_name": "mcp-gopls",
+  "description": "MCP server from hloiseaufcms/mcp-gopls",
+  "author": {
+    "name": "hloiseaufcms"
+  },
+  "server": {
+    "command": "mcp-gopls",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP LSP Go\n\nA Model Context Protocol (MCP) server that allows AI assistants like Claude to interact with Go's Language Server Protocol (LSP) and benefit from advanced Go code analysis features.\n\n## Overview\n\nThis MCP server helps AI assistants to:\n\n- Use LSP to analyze Go code\n- Navigate to definitions and find references\n- Check code diagnostics\n- Get hover information for symbols\n- Get completion suggestions\n\n## Architecture\n\nThis project uses the [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) library to implement the Model Context Protocol. The MCP integration enables seamless communication between AI assistants and Go tools.\n\nThe server communicates with [gopls](https://github.com/golang/tools/tree/master/gopls), the official language server for Go, via the Language Server Protocol (LSP).\n\n## Features\n\n- **LSP Integration**: Connection to Go's Language Server Protocol for code analysis\n- **Code Navigation**: Finding definitions and references in the code\n- **Code Quality**: Getting diagnostics and errors\n- **Advanced Information**: Hover information and completion suggestions\n\n## Project Structure\n\n```bash\n.\n├── cmd\n│   └── mcp-gopls        # Application entry point\n├── pkg\n│   ├── lsp             # LSP client to communicate with gopls\n│   │   ├── client      # LSP client implementation\n│   │   └── protocol    # LSP protocol types and features\n│   ├── server          # MCP server\n│   └── tools           # MCP tools exposing LSP features\n```\n\n## Installation\n\n```bash\ngo install github.com/hloiseaufcms/mcp-gopls/cmd/mcp-gopls@latest\n```\n\n## Add to Cursor\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-gopls\": {\n      \"command\": \"mcp-gopls\"\n    }\n  }\n} \n```\n\n## MCP Tools\n\nThe MCP server provides the following tools:\n\n| Tool | Description |\n|-------|-------------|\n| `go_to_definition` | Navigate to the definition of a symbol |\n| `find_references` | Find all references to a symbol |\n| `check_diagnostics` | Get diagnostics for a file |\n| `get_hover_info` | Get detailed information about a symbol |\n| `get_completion` | Get completion suggestions at a position |\n| `analyze_coverage` | Analyze test coverage for Go code |\n\n## Usage Example\n\nUsing the server with AI assistants that support MCP:\n\n```Markdown\n# Ask the AI to get information about the code\nCan you find the definition of the `ServeStdio` function in this project?\n\n# Ask for diagnostics\nAre there any errors in my main.go file?\n\n# Ask for information about a symbol\nWhat does the Context.WithTimeout function do in Go?\n```\n\n## Development\n\n```bash\ngit clone https://github.com/hloiseaufcms/mcp-gopls.git\ncd mcp-gopls\ngo mod tidy\ngo build -o mcp-gopls cmd/mcp-gopls/main.go\n./mcp-gopls\n```\n\n## Prerequisites\n\n- Go 1.21 or higher\n- gopls installed (`go install golang.org/x/tools/gopls@latest`)\n\n## Integration with Ollama\n\nThis MCP server can be used with any tool that supports the MCP protocol. For Ollama integration:\n\n1. Make sure Ollama is running\n2. The MCP server runs independently and communicates through stdin/stdout\n3. Configure your client to use the MCP server as a tool provider\n\n## License\n\nApache License 2.0",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-gopls": {
+        "command": "mcp-gopls",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hloiseaufcms",
+    "repo": "mcp-gopls",
+    "url": "https://github.com/hloiseaufcms/mcp-gopls",
+    "name": "hloiseaufcms__mcp-gopls",
+    "path": null,
+    "stars": 40,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "2587313f195c6410c8f7ceb858a83d71298ebcfb"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:37.000Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "google/uuid",
+      "importance": 4
+    },
+    {
+      "name": "yosida95/uritemplate",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/hloiseaufcms/mcp-gopls\n\ngo 1.21\n\nrequire github.com/mark3labs/mcp-go v0.18.0\n\nrequire (\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n)"
+}

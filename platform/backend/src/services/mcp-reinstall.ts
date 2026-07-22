@@ -1,14 +1,19 @@
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
-import type { InternalMcpCatalog, LocalConfig, McpServer } from "@/types";
+import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import type {
+  InternalMcpCatalog,
+  LocalConfig,
+  McpServer,
+  McpServerReinstallReason,
+} from "@/types";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 /**
- * Checks if a catalog edit requires new user input for reinstallation.
+ * Checks if a catalog edit requires a manual reinstall.
  *
  * Returns true (manual reinstall required) when:
- * - Server name changed (local servers) - affects secret paths
  * - Local execution config changed (command/args/docker/transport) - restart should be explicit
  * - Prompted env vars changed: added, removed, or key/required/type changed (local servers)
  * - OAuth config changed: added or removed (remote servers)
@@ -18,29 +23,31 @@ import { broadcastMcpInstallationStatus } from "@/websocket";
  * - Only non-prompted config changed (local servers) - existing secrets can be reused
  * - Only non-auth config changed (remote servers) - existing auth can be reused
  *
- * Note: We compare old vs new config to allow auto-reinstall when auth-related
- * settings haven't changed. This enables auto-reinstall for name/URL changes.
- *
- * Note 2:
- * We don't check if the deployment spec YAML changed (advanced yaml config),
- * because it's impossible to set a prompted env var and do not allow to change name of the mcp server.
+ * Name changes never reach this gate: the PUT route strips them and applies
+ * them through `InternalMcpCatalogModel.renameCascade` — a pure DB cascade.
+ * Deployment identity is frozen (`deployment_name`) and secret names are
+ * id-keyed, so a rename needs no reinstall at all.
  */
 export function requiresNewUserInputForReinstall(
   oldCatalogItem: InternalMcpCatalog,
   newCatalogItem: InternalMcpCatalog,
 ): boolean {
-  // Local servers: check if name or prompted env vars changed
-  if (newCatalogItem.serverType === "local") {
-    // 1. Check if name changed - affects secret paths
-    if (oldCatalogItem.name !== newCatalogItem.name) {
-      logger.info(
-        { catalogId: newCatalogItem.id },
-        "Catalog name changed - manual reinstall required",
-      );
-      return true;
-    }
+  return manualReinstallReason(oldCatalogItem, newCatalogItem) !== null;
+}
 
-    // 2. Check if prompted env vars changed
+/**
+ * Classifies WHY a catalog edit needs a manual reinstall, or null when it
+ * doesn't. "new-input": the prompted schema changed — installs owe values
+ * they don't have, so the UI must collect them. "restart": stored values
+ * stay valid (single-tenant execution-config drift); an explicit restart
+ * reusing the stored secret bag suffices. "new-input" wins when one edit
+ * carries both kinds of change.
+ */
+export function manualReinstallReason(
+  oldCatalogItem: InternalMcpCatalog,
+  newCatalogItem: InternalMcpCatalog,
+): McpServerReinstallReason | null {
+  if (newCatalogItem.serverType === "local") {
     const oldPromptedEnvVars = getPromptedEnvVars(oldCatalogItem);
     const newPromptedEnvVars = getPromptedEnvVars(newCatalogItem);
 
@@ -49,27 +56,10 @@ export function requiresNewUserInputForReinstall(
         { catalogId: newCatalogItem.id },
         "Prompted env vars changed - manual reinstall required",
       );
-      return true;
+      return "new-input";
     }
 
-    // Multi-tenant catalogs handle execution-config drift via the
-    // catalog-level `catalogReinstallRequired` flag (one shared pod across
-    // all installs; the catalog-reinstall endpoint applies the change for
-    // everyone in one shot). Single-tenant: each install owns its own pod,
-    // so a silent auto-restart of others' pods would surprise them; mark
-    // every install reinstall-required and let owners reinstall explicitly.
-    if (
-      !newCatalogItem.multitenant &&
-      localExecutionConfigChanged(oldCatalogItem, newCatalogItem)
-    ) {
-      logger.info(
-        { catalogId: newCatalogItem.id },
-        "Local execution config changed - manual reinstall required",
-      );
-      return true;
-    }
-
-    // 4. Check if required userConfig fields changed (e.g. header-backed fields
+    // Check if required userConfig fields changed (e.g. header-backed fields
     // added by editing the Headers section). Without this, installs end up with
     // a credential record that has no value for the new field and the header is
     // silently omitted on the wire.
@@ -83,11 +73,29 @@ export function requiresNewUserInputForReinstall(
         { catalogId: newCatalogItem.id },
         "Required userConfig fields changed - manual reinstall required",
       );
-      return true;
+      return "new-input";
+    }
+
+    // Multi-tenant catalogs handle execution-config drift via the
+    // catalog-level `catalogReinstallRequired` flag (one shared pod across
+    // all installs; the catalog-reinstall endpoint applies the change for
+    // everyone in one shot). Single-tenant: each install owns its own pod,
+    // so a silent auto-restart of others' pods would surprise them; mark
+    // every install reinstall-required and let owners reinstall explicitly.
+    // Stored credentials stay valid — no re-prompt, just a restart.
+    if (
+      !newCatalogItem.multitenant &&
+      localExecutionConfigChanged(oldCatalogItem, newCatalogItem)
+    ) {
+      logger.info(
+        { catalogId: newCatalogItem.id },
+        "Local execution config changed - manual reinstall required",
+      );
+      return "restart";
     }
 
     // No relevant changes - auto-reinstall can proceed with existing secrets
-    return false;
+    return null;
   }
 
   // Remote servers: check if OAuth or required userConfig changed
@@ -100,7 +108,7 @@ export function requiresNewUserInputForReinstall(
         { catalogId: newCatalogItem.id },
         "OAuth config changed - manual reinstall required",
       );
-      return true;
+      return "new-input";
     }
 
     // Check if required userConfig fields changed
@@ -112,15 +120,15 @@ export function requiresNewUserInputForReinstall(
         { catalogId: newCatalogItem.id },
         "Required userConfig fields changed - manual reinstall required",
       );
-      return true;
+      return "new-input";
     }
 
     // No auth-related changes - auto-reinstall can proceed
-    return false;
+    return null;
   }
 
   // Builtin servers don't need reinstall
-  return false;
+  return null;
 }
 
 /**
@@ -191,13 +199,11 @@ export function onlyForwardCompatibleEnvDiff(
   // than `JSON.stringify({...cat, …})`. Two reasons spread+stringify
   // is unsafe here:
   //   (a) The two snapshots can come from differently-enriched code
-  //       paths — the parent-cascade-to-children loop in
-  //       `routes/internal-mcp-catalog.ts` passes `originalChild`
-  //       from `Model.findChildren()` (with `attachListMetadata`
-  //       adding `toolCount`) against `updatedChild` from
-  //       `Model.update()` (which adds `authorName` but not
-  //       `toolCount`). A whole-row stringify diffs on these
-  //       bookkeeping fields and over-fires the auto cascade.
+  //       paths — e.g. a list/read snapshot carrying `toolCount`
+  //       compared against `Model.update()`'s return (which adds
+  //       `authorName` but not `toolCount`). A whole-row stringify
+  //       diffs on these bookkeeping fields and over-fires the auto
+  //       cascade.
   //   (b) JavaScript object-spread preserves the original key order,
   //       so even if every value matches after overrides, the JSON
   //       string can still differ when the two inputs spread keys in
@@ -219,13 +225,16 @@ export function onlyForwardCompatibleEnvDiff(
       authFields: cat.authFields ?? null,
       serverType: cat.serverType ?? "",
       multitenant: Boolean(cat.multitenant),
+      // Environment assignment determines the deployment namespace; a change
+      // must trigger the cascade so the pod relocates (single-tenant via the
+      // per-install restart below; multi-tenant via reinstallSharedDeployment
+      // in the catalog PUT route).
+      environmentId: cat.environmentId ?? null,
       serverUrl: cat.serverUrl ?? "",
       docsUrl: cat.docsUrl ?? "",
       icon: cat.icon ?? null,
       clientSecretId: cat.clientSecretId ?? null,
       localConfigSecretId: cat.localConfigSecretId ?? null,
-      presetSecretId: cat.presetSecretId ?? null,
-      presetFieldValues: cat.presetFieldValues ?? {},
       deploymentSpecYaml: cat.deploymentSpecYaml ?? "",
       oauthConfig: cat.oauthConfig ?? null,
       enterpriseManagedConfig: cat.enterpriseManagedConfig ?? null,
@@ -274,16 +283,14 @@ function userConfigChangedBreakingly(
     if (String(p.headerName ?? "") !== String(n.headerName ?? "")) return true; // Routing changed
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage moved
     // Static header value rotation. For a static header-mapped userConfig
-    // entry (no install/preset prompt), `default` IS the runtime header
-    // value the form transform writes from the admin's input — changing it
-    // changes what installs send on the wire. For prompted entries
-    // `default` is just a placeholder/template, so we still skip those.
+    // entry (no install prompt), `default` IS the runtime header value the
+    // form transform writes from the admin's input — changing it changes
+    // what installs send on the wire. For prompted entries `default` is
+    // just a placeholder/template, so we still skip those.
     if (
       String(p.headerName ?? "") !== "" &&
       !p.promptOnInstallation &&
-      !p.promptOnPreset &&
       !n.promptOnInstallation &&
-      !n.promptOnPreset &&
       String(p.default ?? "") !== String(n.default ?? "")
     ) {
       return true;
@@ -355,6 +362,19 @@ export async function autoReinstallServer(
 
   // For local servers: restart K8s deployment
   if (catalogItem.serverType === "local") {
+    // Re-enforce the trusted-image-registry gate on redeploy. A catalog edit
+    // that swaps in an untrusted image (approval is reset on image change) must
+    // not be rolled out to the running pod until an admin approves it — mirrors
+    // the install-time gate and the env-regex policy, which is also re-checked
+    // on reinstall. Only personal local items are gated; for everything else
+    // the policy is a no-op. `organizationId` lives on the catalog row (personal
+    // catalogs always carry it); skip when absent rather than fail open loudly.
+    if (catalogItem.organizationId) {
+      await assertInstallAllowedOrBlock({
+        catalogItem,
+        organizationId: catalogItem.organizationId,
+      });
+    }
     await McpServerRuntimeManager.restartServer(server.id);
 
     // Wait for deployment to be ready
@@ -397,7 +417,7 @@ async function syncToolsForServer(
       }>
     >;
   },
-): Promise<void> {
+): Promise<Awaited<ReturnType<typeof ToolModel.syncToolsForCatalog>>> {
   const tools = options?.getTools
     ? await options.getTools({ server, catalogItem })
     : await McpServerModel.getToolsFromServer(server);
@@ -425,6 +445,40 @@ async function syncToolsForServer(
     },
     "Tools synced for MCP server",
   );
+
+  return syncResult;
+}
+
+/**
+ * Re-discover an installed MCP server's tools from the LIVE server and
+ * reconcile the `tools` table for its catalog — without recreating the pod.
+ * Updates changed schemas/descriptions/raw names, inserts newly-advertised
+ * tools, and removes tools the server no longer exposes. Like any tool sync
+ * it operates per-catalog, so it cascades to every install sharing the
+ * catalog. Throws if the catalog item is missing; propagates the connection
+ * error if the live server is unreachable.
+ */
+export async function reloadToolsForServer(server: McpServer): Promise<{
+  created: number;
+  updated: number;
+  unchanged: number;
+  deleted: number;
+}> {
+  const catalogItem = await InternalMcpCatalogModel.findById(server.catalogId, {
+    expandSecrets: false,
+  });
+  if (!catalogItem) {
+    throw new Error(
+      `Catalog item ${server.catalogId} not found for MCP server ${server.id}`,
+    );
+  }
+  const result = await syncToolsForServer(server, catalogItem);
+  return {
+    created: result.created.length,
+    updated: result.updated.length,
+    unchanged: result.unchanged.length,
+    deleted: result.deleted.length,
+  };
 }
 
 /**
@@ -520,8 +574,14 @@ export async function reinstallMultitenantCatalog(
         // the tenant is stuck: the catalog Reinstall button is gone and
         // the per-install Reinstall button is gated on
         // `reinstallRequired` (see mcp-server-card.tsx userFlaggedInstalls).
+        // The retry needs no new user input — stored credentials are valid —
+        // unless the install already owed input from an earlier edit.
         await McpServerModel.update(install.id, {
           reinstallRequired: true,
+          reinstallReason:
+            install.reinstallRequired && install.reinstallReason === "new-input"
+              ? "new-input"
+              : "restart",
           localInstallationStatus: "error",
           localInstallationError: errorMessage,
         });

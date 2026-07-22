@@ -1,4 +1,12 @@
-import { Check, Copy, Pencil, RefreshCw } from "lucide-react";
+import type { ChatMessageFeedback } from "@archestra/shared";
+import {
+  Check,
+  Copy,
+  Pencil,
+  RefreshCw,
+  ThumbsDown,
+  ThumbsUp,
+} from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -6,6 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 export function MessageActions({
@@ -15,6 +24,9 @@ export function MessageActions({
   isRegenerateConfirming,
   className,
   editDisabled = false,
+  feedback = null,
+  onFeedbackChange,
+  feedbackDisabled = false,
 }: {
   className?: string;
   textToCopy: string;
@@ -22,11 +34,15 @@ export function MessageActions({
   onRegenerateClick?: () => void;
   isRegenerateConfirming?: boolean;
   editDisabled?: boolean;
+  feedback?: ChatMessageFeedback | null;
+  /** When set, thumbs up/down buttons render; clicking the selected thumb clears. */
+  onFeedbackChange?: (feedback: ChatMessageFeedback | null) => void;
+  feedbackDisabled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(textToCopy);
+    await copyToClipboard(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -107,6 +123,60 @@ export function MessageActions({
               </TooltipTrigger>
               <TooltipContent side="bottom">Regenerate</TooltipContent>
             </Tooltip>
+          )}
+          {onFeedbackChange && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 hover:bg-muted"
+                    aria-pressed={feedback === "up"}
+                    disabled={feedbackDisabled}
+                    onClick={() =>
+                      onFeedbackChange(feedback === "up" ? null : "up")
+                    }
+                  >
+                    <ThumbsUp
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        feedback === "up"
+                          ? "text-green-500"
+                          : "text-muted-foreground",
+                      )}
+                    />
+                    <span className="sr-only">Good response</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Good response</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 hover:bg-muted"
+                    aria-pressed={feedback === "down"}
+                    disabled={feedbackDisabled}
+                    onClick={() =>
+                      onFeedbackChange(feedback === "down" ? null : "down")
+                    }
+                  >
+                    <ThumbsDown
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        feedback === "down"
+                          ? "text-red-500"
+                          : "text-muted-foreground",
+                      )}
+                    />
+                    <span className="sr-only">Bad response</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Bad response</TooltipContent>
+              </Tooltip>
+            </>
           )}
         </>
       )}

@@ -1,0 +1,54 @@
+{
+  "name": "githubcopilot__remote-mcp",
+  "display_name": "GitHub",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxLjI0ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDIwOCI+PHBhdGggZD0iTTIwNS4yOCAzMS4zNmMxNC4wOTYgMTQuODggMjAuMDE2IDM1LjIgMjIuNTEyIDYzLjY4YzYuNjI2IDAgMTIuODA1IDEuNDcgMTYuOTc2IDcuMTUybDcuNzkyIDEwLjU2QTE3LjU1IDE3LjU1IDAgMCAxIDI1NiAxMjMuMnYyOC42ODhjLS4wMDggMy43MDQtMS44NDMgNy4zMTUtNC44MzIgOS41MDRDMjE1Ljg4NSAxODcuMjIyIDE3Mi4zNSAyMDggMTI4IDIwOGMtNDkuMDY2IDAtOTguMTktMjguMjczLTEyMy4xNjgtNDYuNjA4Yy0yLjk4OS0yLjE4OS00LjgyNS01LjgtNC44MzItOS41MDRWMTIzLjJjMC0zLjc3NiAxLjItNy40MjQgMy40MjQtMTAuNDY0bDcuNzkyLTEwLjU0NGM0LjE3My01LjY1NyAxMC4zOC03LjE1MiAxNi45OTItNy4xNTJjMi40OTYtMjguNDggOC40LTQ4LjggMjIuNTEyLTYzLjY4Qzc3LjMzMSAzLjE2NSAxMTIuNTY3LjA2IDEyNy41NTIgMEgxMjhjMTQuNzIgMCA1MC40IDIuODggNzcuMjggMzEuMzZtLTc3LjI2NCA0Ny4zNzZjLTMuMDQgMC02LjU0NC4xNzYtMTAuMjcyLjU0NGMtMS4zMTIgNC44OTYtMy4yNDggOS4zMTItNi4wOCAxMi4xMjhjLTExLjIgMTEuMi0yNC43MDQgMTIuOTI4LTMxLjkzNiAxMi45MjhjLTYuODAyIDAtMTMuOTI3LTEuNDItMTkuNzQ0LTUuMDg4Yy01LjUwMiAxLjgwOC0xMC43ODYgNC40MTUtMTEuMTM2IDEwLjkxMmMtLjU4NiAxMi4yOC0uNjM3IDI0LjU1LS42ODggMzYuODI0Yy0uMDI2IDYuMTYtLjA1IDEyLjMyMi0uMTQ0IDE4LjQ4OGMuMDI0IDMuNTc5IDIuMTgyIDYuOTAzIDUuNDQgOC4zODRDNzkuOTM2IDE4NS45MiAxMDQuOTc2IDE5MiAxMjguMDE2IDE5MmMyMy4wMDggMCA0OC4wNDgtNi4wOCA3NC41MTItMTguMTQ0YzMuMjU4LTEuNDggNS40MTUtNC44MDUgNS40NC04LjM4NGMuMzE3LTE4LjQxOC4wNjItMzYuOTEyLS44MTYtNTUuMzEyaC4wMTZjLS4zNDItNi41MzQtNS42NDgtOS4wOTgtMTEuMTY4LTEwLjkxMmMtNS44MiAzLjY1Mi0xMi45MjcgNS4wODgtMTkuNzI4IDUuMDg4Yy03LjIzMiAwLTIwLjcyLTEuNzI4LTMxLjkzNi0xMi45MjhjLTIuODMyLTIuODE2LTQuNzY4LTcuMjMyLTYuMDgtMTIuMTI4YTEwNiAxMDYgMCAwIDAtMTAuMjQtLjU0NG0tMjYuOTQxIDQzLjkzYzUuNzQ4IDAgMTAuNDA4IDQuNjYgMTAuNDA4IDEwLjQwOXYxOS4xODNjMCA1Ljc0OS00LjY2IDEwLjQwOS0xMC40MDggMTAuNDA5cy0xMC40MDgtNC42Ni0xMC40MDgtMTAuNDA5di0xOS4xODNjMC01Ljc0OCA0LjY2LTEwLjQwOCAxMC40MDgtMTAuNDA4bTUzLjMzMyAwYzUuNzQ5IDAgMTAuNDA5IDQuNjYgMTAuNDA5IDEwLjQwOXYxOS4xODNjMCA1Ljc0OS00LjY2IDEwLjQwOS0xMC40MDkgMTAuNDA5Yy01Ljc0OCAwLTEwLjQwOC00LjY2LTEwLjQwOC0xMC40MDl2LTE5LjE4M2MwLTUuNzQ4IDQuNjYtMTAuNDA4IDEwLjQwOC0xMC40MDhNODEuNDQgMjguMzJjLTExLjIgMS4xMi0yMC42NCA0LjgtMjUuNDQgOS45MmMtMTAuNCAxMS4zNi04LjE2IDQwLjE2LTIuMjQgNDYuMjRjNC4zMiA0LjMyIDEyLjQ4IDcuMiAyMS4yOCA3LjJjNi43MiAwIDE5LjUyLTEuNDQgMzAuMDgtMTIuMTZjNC42NC00LjQ4IDcuNTItMTUuNjggNy4yLTI3LjA0Yy0uMzItOS4xMi0yLjg4LTE2LjY0LTYuNzItMTkuODRjLTQuMTYtMy42OC0xMy42LTUuMjgtMjQuMTYtNC4zMm02OC45NiA0LjMyYy0zLjg0IDMuMi02LjQgMTAuNzItNi43MiAxOS44NGMtLjMyIDExLjM2IDIuNTYgMjIuNTYgNy4yIDI3LjA0YzEwLjU2IDEwLjcyIDIzLjM2IDEyLjE2IDMwLjA4IDEyLjE2YzguOCAwIDE2Ljk2LTIuODggMjEuMjgtNy4yYzUuOTItNi4wOCA4LjE2LTM0Ljg4LTIuMjQtNDYuMjRjLTQuOC01LjEyLTE0LjI0LTguOC0yNS40NC05LjkyYy0xMC41Ni0uOTYtMjAgLjY0LTI0LjE2IDQuMzJNMTI4IDU2Yy0yLjU2IDAtNS42LjE2LTguOTYuNDhjLjMyIDEuNzYuNDggMy42OC42NCA1Ljc2YzAgMS40NCAwIDIuODgtLjE2IDQuNDhjMy4yLS4zMiA1LjkyLS4zMiA4LjQ4LS4zMnM1LjI4IDAgOC40OC4zMmMtLjE2LTEuNi0uMTYtMy4wNC0uMTYtNC40OGMuMTYtMi4wOC4zMi00IC42NC01Ljc2Yy0zLjM2LS4zMi02LjQtLjQ4LTguOTYtLjQ4Ii8+PC9zdmc+",
+  "description": "Remote MCP server for github - issue tracking and project management",
+  "tools": [],
+  "prompts": [],
+  "user_config": {
+    "access_token": {
+      "sensitive": true,
+      "type": "string",
+      "title": "Access Token",
+      "description": "A GitHub Personal Access Token (classic or fine-grained). Required scopes: repo, read:packages, read:org. Create one at https://github.com/settings/tokens",
+      "required": true
+    }
+  },
+  "readme": null,
+  "category": "Development",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "oauth_config": {
+    "name": "GitHub Copilot MCP",
+    "server_url": "https://api.githubcopilot.com/mcp",
+    "client_id": "Ov23li3CnHLM7PNQ2Xiv",
+    "client_secret": "REDACTED",
+    "redirect_uris": ["https://oauth.dev.archestra.ai/oauth/callback", "http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "GitHub Copilot MCP Server",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true,
+    "requires_proxy": true
+  },
+  "author": {
+    "name": "github"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://api.githubcopilot.com/mcp/",
+    "docs_url": "https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md"
+  },
+  "github_info": null,
+  "programming_language": null
+}

@@ -1,0 +1,105 @@
+{
+  "name": "ahnlabio__bicscan-mcp",
+  "display_name": "bicscan-mcp",
+  "description": "BICScan MCP Server",
+  "author": {
+    "name": "ahnlabio"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/ahnlabio/bicscan-mcp", "bicscan-mcp"],
+    "env": {
+      "BICSCAN_API_KEY": "${user_config.bicscan_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bicscan_api_key": {
+      "type": "string",
+      "title": "BICScan API Key",
+      "description": "Your free API key obtained from https://bicscan.io",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# BICScan MCP Server\n\nA powerful and efficient Blockchain address risk scoring API MCP Server, leveraging the BICScan API to provide comprehensive risk assessments and asset information for blockchain addresses, domains, and decentralized applications (dApps).\n\n🎉 We're listed on https://github.com/modelcontextprotocol/servers for official integration 🎉\n\n\nhttps://github.com/user-attachments/assets/f9425429-1cb1-4508-b962-81351075258b\n\n## Key Features\n- **Risk Scoring**: Obtain risk scores for various blockchain entities, including crypto addresses, domain names, and decentralized application URLs, with scores ranging from 0 to 100, where 100 indicates high risk.\n- **Asset Information**: Retrieve detailed asset holdings for specified crypto addresses, including cryptocurrencies and tokens, with support for multiple blockchain networks.\n- **Real-time Scanning**: Utilize the BICScan API to perform real-time scans and receive up-to-date information on potential risks and asset holdings.\n- **Secure and Reliable**: Built with robust error handling and logging to ensure secure and reliable operations.\n\n## Example Output\n\n## How to use.\n\nYou con either use Python with `uv` or `docker` depending on your preference.\n\nDepending on your environment, you can choose to use either `uv`, `docker`, or `uvx`.\n\n### 1. Running with `uv`\n\n#### 1-1. Requirements\n1. Python 3.10 or higher\n2. uv 0.6.x\n3. git\n\n#### 1.2. Clone the repository\n```sh\ngit clone https://github.com/ahnlabio/bicscan-mcp\n```\n\n#### 1.3. Config `claude_desktop_config.json`\n\nAppend following to `claude_desktop_config.json`.\n\nMake sure to replace:\n - `YOUR_BICSCAN_REPO_DIR_HERE`: to something like `C:\\\\Users\\\\ABC\\\\repo\\\\bicscan-mcp` or `/home/abc/repo/bicscan-mcp` similarly.\n - `YOUR_BICSCAN_API_KEY_HERE`: to free API key can be obtained from https://bicscan.io (details below)\n\n```json\n{\n  \"mcpServers\": {\n    ... some other mcp servers ...,\n    \"bicscan\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"YOUR_BICSCAN_REPO_DIR_HERE\",\n        \"run\",\n        \"bicscan-mcp\"\n      ],\n      \"env\": {\n        \"BICSCAN_API_KEY\": \"YOUR_BICSCAN_API_KEY_HERE\"\n      }\n    }\n  }\n}\n```\n\n### 2. Running with `Docker`\n\n#### 2.1. Requirements\n1. Docker environment\n\n#### 2.2. Clone the repository\n```sh\ngit clone https://github.com/ahnlabio/bicscan-mcp\n```\n\n#### 2.3. Build Docker image.\n\nJust run `make` in the repository directory to build docker image.\n\n#### 2.4. Config\nAppend following to `claude_desktop_config.json`\n\nMake sure to replace:\n - `YOUR_BICSCAN_API_KEY_HERE` to API key obtained from https://bicscan.io (details below)\n\n```json\n{\n  \"mcpServers\": {\n    ... some other mcp servers ...,\n    \"bicscan\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"--interactive\",\n        \"--env\", \"BICSCAN_API_KEY=YOUR_BICSCAN_API_KEY_HERE\",\n        \"bicscan-mcp\"\n      ]\n    }\n  }\n}\n```\n\n### 3. Running with `uvx`\n\n#### 3.1. Requirements\n1. Python 3.10 or higher\n2. uv 0.6.x\n3. git\n\n#### 3.2. Config `claude_desktop_config.json`\n\nAppend following to `claude_desktop_config.json`.\n\nMake sure to replace:\n - `YOUR_BICSCAN_API_KEY_HERE`: to free API key can be obtained from https://bicscan.io (details below)\n\n```json\n{\n  \"mcpServers\": {\n    ... some other mcp servers ...,\n    \"bicscan\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--from\",\n        \"git+https://github.com/ahnlabio/bicscan-mcp\",\n        \"bicscan-mcp\"\n      ],\n      \"env\": {\n        \"BICSCAN_API_KEY\": \"YOUR_BICSCAN_API_KEY_HERE\"\n      }\n    }\n  }\n}\n```\n\n## How to obtain Free BICScan API Key?\n\n1. Visit `https://bicscan.io` and register.\n2. Go to profile and create \"Create App\"\n3. Enter name and description on your choice.\n4. Replace `YOUR_BICSCAN_API_KEY_HERE` part from above config to your newly obtained key.\n5. restart the Claude Desktop.\n",
+  "category": "Security",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bicscan-mcp-uv": {
+        "command": "uv",
+        "args": ["--directory", "YOUR_BICSCAN_REPO_DIR_HERE", "run", "bicscan-mcp"],
+        "env": {
+          "BICSCAN_API_KEY": "YOUR_BICSCAN_API_KEY_HERE"
+        }
+      },
+      "bicscan-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "--interactive", "--env", "BICSCAN_API_KEY=YOUR_BICSCAN_API_KEY_HERE", "bicscan-mcp"],
+        "env": {
+          "BICSCAN_API_KEY": "YOUR_BICSCAN_API_KEY_HERE"
+        },
+        "docker_image": "bicscan-mcp"
+      },
+      "bicscan-mcp-uvx": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/ahnlabio/bicscan-mcp", "bicscan-mcp"],
+        "env": {
+          "BICSCAN_API_KEY": "YOUR_BICSCAN_API_KEY_HERE"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ahnlabio",
+    "repo": "bicscan-mcp",
+    "url": "https://github.com/ahnlabio/bicscan-mcp",
+    "name": "ahnlabio__bicscan-mcp",
+    "path": null,
+    "stars": 9,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "072c48ec4fed9069be88668c85fba871b29bc635"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:08.604Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"bicscan-mcp\"\nversion = \"0.1.0\"\ndescription = \"BICScan MCP Server\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.5.0\",\n    \"python-dotenv>=1.0.1\",\n]\n\n[project.scripts]\nbicscan-mcp = \"bicscan_mcp:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n"
+}

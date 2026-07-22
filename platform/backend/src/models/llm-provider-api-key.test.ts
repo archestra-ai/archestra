@@ -1,5 +1,8 @@
+import config from "@/config";
+import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, test } from "@/test";
 import { SelectLlmProviderApiKeySchema } from "@/types";
+import { _resetCachedKey } from "@/utils/crypto";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 
 describe("LlmProviderApiKeyModel", () => {
@@ -113,6 +116,73 @@ describe("LlmProviderApiKeyModel", () => {
       });
 
       expect(key.isPrimary).toBe(true);
+    });
+
+    test("creating a new primary demotes the current primary in the same scope", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const first = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "First Org Key",
+        provider: "openai",
+        scope: "org",
+        isPrimary: true,
+      });
+
+      // Previously this violated chat_api_keys_primary_org_unique and 500'd.
+      const second = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Second Org Key",
+        provider: "openai",
+        scope: "org",
+        isPrimary: true,
+      });
+
+      expect(second.isPrimary).toBe(true);
+      const demoted = await LlmProviderApiKeyModel.findById(first.id);
+      expect(demoted?.isPrimary).toBe(false);
+    });
+
+    test("a new primary does not demote primaries in other scopes or providers", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const personalPrimary = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Personal Primary",
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        isPrimary: true,
+      });
+      const otherProviderPrimary = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Anthropic Org Primary",
+        provider: "anthropic",
+        scope: "org",
+        isPrimary: true,
+      });
+
+      await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "OpenAI Org Primary",
+        provider: "openai",
+        scope: "org",
+        isPrimary: true,
+      });
+
+      expect(
+        (await LlmProviderApiKeyModel.findById(personalPrimary.id))?.isPrimary,
+      ).toBe(true);
+      expect(
+        (await LlmProviderApiKeyModel.findById(otherProviderPrimary.id))
+          ?.isPrimary,
+      ).toBe(true);
     });
 
     test("allows personal keys for different providers", async ({
@@ -299,6 +369,54 @@ describe("LlmProviderApiKeyModel", () => {
 
       expect(updated).toBeDefined();
       expect(updated?.name).toBe("Updated Name");
+    });
+
+    test("promoting a key to primary demotes the current primary in its scope", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const currentPrimary = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Current Primary",
+        provider: "openai",
+        scope: "org",
+        isPrimary: true,
+      });
+      const challenger = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Challenger",
+        provider: "openai",
+        scope: "org",
+      });
+
+      // Previously this violated chat_api_keys_primary_org_unique and 500'd.
+      const promoted = await LlmProviderApiKeyModel.update(challenger.id, {
+        isPrimary: true,
+      });
+
+      expect(promoted?.isPrimary).toBe(true);
+      expect(
+        (await LlmProviderApiKeyModel.findById(currentPrimary.id))?.isPrimary,
+      ).toBe(false);
+    });
+
+    test("re-promoting the current primary is a no-op that keeps it primary", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const primary = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Primary",
+        provider: "openai",
+        scope: "org",
+        isPrimary: true,
+      });
+
+      const updated = await LlmProviderApiKeyModel.update(primary.id, {
+        isPrimary: true,
+      });
+
+      expect(updated?.isPrimary).toBe(true);
     });
   });
 
@@ -524,6 +642,94 @@ describe("LlmProviderApiKeyModel", () => {
 
       expect(visible).toHaveLength(1);
       expect(visible[0].name).toBe("Primary%Key");
+    });
+
+    test("flags a ChatGPT-subscription (Codex) key so the edit form can pick the right tab", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const codexSecret = await makeSecret({
+        secret: {
+          apiKey: encodeOpenAiCodexCredential({
+            refreshToken: "rt-abc",
+            accountId: "acct-123",
+          }),
+        },
+      });
+      await makeLlmProviderApiKey(org.id, codexSecret.id, {
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        name: "ChatGPT Subscription",
+      });
+
+      const plainSecret = await makeSecret({ secret: { apiKey: "sk-plain" } });
+      await makeLlmProviderApiKey(org.id, plainSecret.id, {
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        name: "Plain OpenAI Key",
+      });
+
+      const visible = await LlmProviderApiKeyModel.getVisibleKeys(
+        org.id,
+        user.id,
+        [],
+        false,
+      );
+
+      const codexKey = visible.find((k) => k.name === "ChatGPT Subscription");
+      const plainKey = visible.find((k) => k.name === "Plain OpenAI Key");
+      expect(codexKey?.isChatgptSubscription).toBe(true);
+      expect(plainKey?.isChatgptSubscription).toBe(false);
+    });
+
+    test("still lists a key whose stored secret cannot be decrypted", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const secret = await makeSecret({ secret: { apiKey: "sk-old" } });
+      await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        name: "Key From Before Rotation",
+      });
+
+      // Simulate an auth-secret rotation: the stored secret was encrypted
+      // under the previous ARCHESTRA_AUTH_SECRET and can no longer be
+      // decrypted with the current one.
+      _resetCachedKey();
+      const original = config.auth.secret;
+      config.auth.secret = "rotated-auth-secret-that-cannot-decrypt-old-rows";
+
+      try {
+        const visible = await LlmProviderApiKeyModel.getVisibleKeys(
+          org.id,
+          user.id,
+          [],
+          false,
+        );
+
+        expect(visible).toHaveLength(1);
+        expect(visible[0].name).toBe("Key From Before Rotation");
+        // Metadata derived from the secret value degrades to its defaults.
+        expect(visible[0].isChatgptSubscription).toBe(false);
+        expect(visible[0].vaultSecretPath).toBeNull();
+      } finally {
+        config.auth.secret = original;
+        _resetCachedKey();
+      }
     });
   });
 
@@ -774,6 +980,82 @@ describe("LlmProviderApiKeyModel", () => {
       });
 
       expect(resolved?.id).toBe(olderKey.id);
+    });
+
+    // GitHub Copilot is a per-user-credential provider: resolution must use ONLY
+    // the acting user's personal key, never an agent's attached key or a
+    // team/org key — those would let one user ride on another's GitHub token.
+    test("per-user provider: resolves only the acting user's personal key", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const secret = await makeSecret();
+
+      const personalKey = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "My Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+        userId: user.id,
+        secretId: secret.id,
+      });
+
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: user.id,
+        userTeamIds: [],
+        provider: "github-copilot",
+        conversationId: null,
+      });
+
+      expect(resolved?.id).toBe(personalKey.id);
+    });
+
+    test("per-user provider: ignores an agent's attached key and another user's/org key", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+    }) => {
+      const org = await makeOrganization();
+      const owner = await makeUser();
+      const otherUser = await makeUser();
+      const ownerSecret = await makeSecret();
+      const orgSecret = await makeSecret();
+
+      // The agent owner's personal Copilot key (used as the agent's attached key)
+      const ownerKey = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Owner Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+        userId: owner.id,
+        secretId: ownerSecret.id,
+      });
+      // An org-scoped Copilot key (shouldn't exist under enforcement, but the
+      // guard must ignore it even if one is present)
+      await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Shared Copilot",
+        provider: "github-copilot",
+        scope: "org",
+        secretId: orgSecret.id,
+      });
+
+      // otherUser invokes the agent (agentLlmApiKeyId = owner's key) but has no
+      // personal Copilot key → must resolve to null, not the owner's/org key.
+      const resolved = await LlmProviderApiKeyModel.getCurrentApiKey({
+        organizationId: org.id,
+        userId: otherUser.id,
+        userTeamIds: [],
+        provider: "github-copilot",
+        conversationId: null,
+        agentLlmApiKeyId: ownerKey.id,
+      });
+
+      expect(resolved).toBeNull();
     });
   });
 

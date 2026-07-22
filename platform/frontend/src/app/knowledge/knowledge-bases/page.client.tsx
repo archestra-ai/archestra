@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -8,7 +8,9 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Database,
   Link2,
+  MessageSquare,
   Pencil,
   Plus,
   Trash2,
@@ -18,8 +20,10 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
+import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import {
@@ -29,25 +33,33 @@ import {
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useConnectors as useAllConnectors,
   useAssignConnectorToKnowledgeBases,
+  useConnector,
   useConnectors,
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
 import {
   useDeleteKnowledgeBase,
+  useKnowledgeBase,
   useKnowledgeBasesPaginated,
 } from "@/lib/knowledge/knowledge-base.query";
 import { cn, formatDate } from "@/lib/utils";
+import { formatCronSchedule } from "@/lib/utils/format-cron";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
 import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
 import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
+import { useChatWithKnowledgeBase } from "./_parts/use-chat-with-knowledge-base";
 
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
+
+const KNOWLEDGE_BASES_DESCRIPTION =
+  "A knowledge base is a searchable collection of content, grouped from one or more connectors, that your agents can retrieve answers from.";
 
 export default function KnowledgeBasesPage() {
   return (
@@ -75,6 +87,8 @@ function KnowledgeBasesList() {
     data: knowledgeBases,
     isPending,
     isFetching,
+    isLoadingError: isKnowledgeBasesLoadError,
+    refetch: refetchKnowledgeBases,
   } = useKnowledgeBasesPaginated({
     limit: pageSize,
     offset,
@@ -82,10 +96,37 @@ function KnowledgeBasesList() {
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editingItem, setEditingItem] = useState<KnowledgeBaseItem | null>(
-    null,
+  const editId = searchParams.get("edit");
+  const { data: editingItemFromUrl } = useKnowledgeBase(editId ?? undefined);
+  const {
+    entity: editingItem,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<
+    KnowledgeBaseItem | archestraApiTypes.GetKnowledgeBaseResponses["200"]
+  >({
+    paramName: "edit",
+    entityFromUrl: editingItemFromUrl ?? null,
+  });
+  // The connector edit dialog is owned here (one hook instance for the
+  // page-level "connector" param); expanded rows only report which connector
+  // to open it for.
+  const connectorId = searchParams.get("connector");
+  const { data: editingConnectorFromUrl } = useConnector(
+    connectorId ?? undefined,
   );
+  const {
+    entity: editingConnector,
+    open: openEditConnector,
+    close: closeEditConnector,
+  } = useDialogUrlParam<
+    ConnectorItem | archestraApiTypes.GetConnectorResponses["200"]
+  >({
+    paramName: "connector",
+    entityFromUrl: editingConnectorFromUrl ?? null,
+  });
   const [addConnectorKbId, setAddConnectorKbId] = useState<string | null>(null);
+  const { startChat, isCreating: isChatCreating } = useChatWithKnowledgeBase();
 
   const items = knowledgeBases?.data ?? [];
   const pagination = knowledgeBases?.pagination;
@@ -110,6 +151,7 @@ function KnowledgeBasesList() {
             e.stopPropagation();
             row.toggleExpanded();
           }}
+          aria-label="Toggle row"
         >
           {row.getIsExpanded() ? (
             <ChevronDown className="h-4 w-4" />
@@ -152,7 +194,17 @@ function KnowledgeBasesList() {
       header: "Actions",
       cell: ({ row }) => {
         const kb = row.original;
+        const hasDocs = kb.totalDocsIndexed > 0;
         const actions: TableRowAction[] = [
+          {
+            icon: <MessageSquare className="h-4 w-4" />,
+            label: "Talk to Knowledge Base",
+            onClick: () => startChat(kb),
+            disabled: isChatCreating || !hasDocs,
+            disabledTooltip: hasDocs
+              ? "Starting chat..."
+              : "Add a connector and index documents to chat with this knowledge base",
+          },
           {
             icon: <Plus className="h-4 w-4" />,
             label: "Add connector",
@@ -161,7 +213,7 @@ function KnowledgeBasesList() {
           {
             icon: <Pencil className="h-4 w-4" />,
             label: "Edit",
-            onClick: () => setEditingItem(kb),
+            onClick: () => openEditDialog(kb),
           },
           {
             icon: <Trash2 className="h-4 w-4" />,
@@ -170,15 +222,32 @@ function KnowledgeBasesList() {
             onClick: () => setDeletingId(kb.id),
           },
         ];
-        return <TableRowActions actions={actions} />;
+        return <TableRowActions actions={actions} itemName={kb.name} />;
       },
     },
   ];
 
+  if (isKnowledgeBasesLoadError) {
+    return (
+      <KnowledgePageLayout
+        title="Knowledge Bases"
+        description={KNOWLEDGE_BASES_DESCRIPTION}
+        createLabel="Create Knowledge Base"
+        onCreateClick={() => setIsCreateDialogOpen(true)}
+        isPending={false}
+      >
+        <QueryLoadError
+          title="Couldn't load your knowledge bases"
+          onRetry={() => refetchKnowledgeBases()}
+        />
+      </KnowledgePageLayout>
+    );
+  }
+
   return (
     <KnowledgePageLayout
       title="Knowledge Bases"
-      description="Manage knowledge bases and their data connectors."
+      description={KNOWLEDGE_BASES_DESCRIPTION}
       createLabel="Create Knowledge Base"
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !knowledgeBases}
@@ -194,7 +263,10 @@ function KnowledgeBasesList() {
           columns={columns}
           data={items}
           renderSubComponent={({ row }) => (
-            <ExpandedConnectors knowledgeBaseId={row.original.id} />
+            <ExpandedConnectors
+              knowledgeBaseId={row.original.id}
+              onEditConnector={openEditConnector}
+            />
           )}
           emptyMessage="No knowledge bases found"
           hasActiveFilters={!!search}
@@ -225,7 +297,15 @@ function KnowledgeBasesList() {
           <EditKnowledgeBaseDialog
             knowledgeBase={editingItem}
             open={!!editingItem}
-            onOpenChange={(open) => !open && setEditingItem(null)}
+            onOpenChange={(open) => !open && closeEditDialog()}
+          />
+        )}
+
+        {editingConnector && (
+          <EditConnectorDialog
+            connector={editingConnector}
+            open={!!editingConnector}
+            onOpenChange={(open) => !open && closeEditConnector()}
           />
         )}
 
@@ -263,11 +343,15 @@ function KnowledgeBasesList() {
 type ConnectorItem =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
 
-function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
+function ExpandedConnectors({
+  knowledgeBaseId,
+  onEditConnector,
+}: {
+  knowledgeBaseId: string;
+  onEditConnector: (connector: ConnectorItem) => void;
+}) {
   const router = useRouter();
   const { data: connectors, isPending } = useConnectors(knowledgeBaseId);
-  const [editingConnector, setEditingConnector] =
-    useState<ConnectorItem | null>(null);
   const [removingConnectorId, setRemovingConnectorId] = useState<string | null>(
     null,
   );
@@ -276,55 +360,87 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
 
   const columns: ColumnDef<ConnectorItem>[] = [
     {
+      id: "icon",
+      size: 40,
+      header: "",
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center">
+          <ConnectorTypeIcon
+            type={row.original.connectorType}
+            className="h-5 w-5"
+          />
+        </div>
+      ),
+    },
+    {
       id: "name",
+      accessorKey: "name",
       header: "Connector",
       cell: ({ row }) => (
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
-            <ConnectorTypeIcon
-              type={row.original.connectorType}
-              className="h-5 w-5"
-            />
-          </div>
-          <div className="min-w-0">
-            <div className="font-medium truncate">{row.original.name}</div>
+        <div className="min-w-0">
+          <div className="font-medium truncate">{row.original.name}</div>
+          {row.original.description && (
             <div className="text-xs text-muted-foreground truncate">
-              {row.original.description || row.original.connectorType}
+              {row.original.description}
             </div>
-          </div>
+          )}
         </div>
       ),
     },
     {
       id: "status",
       header: "Status",
-      cell: ({ row }) =>
-        row.original.lastSyncAt ? (
-          <div className="flex items-center gap-2">
-            <ConnectorStatusBadge status={row.original.lastSyncStatus} />
-            <span
-              className="text-xs text-muted-foreground"
-              title={formatDate({ date: row.original.lastSyncAt })}
-            >
-              {formatDistanceToNow(new Date(row.original.lastSyncAt), {
-                addSuffix: true,
-              })}
-            </span>
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">Never synced</span>
-        ),
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          {row.original.lastSyncAt ? (
+            <>
+              <ConnectorStatusBadge status={row.original.lastSyncStatus} />
+              <span
+                className="text-xs text-muted-foreground"
+                title={formatDate({ date: row.original.lastSyncAt })}
+              >
+                {formatDistanceToNow(new Date(row.original.lastSyncAt), {
+                  addSuffix: true,
+                })}
+              </span>
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">Never synced</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "accessibleTo",
+      header: "Accessible to",
+      cell: ({ row }) => (
+        <ConnectorAccessBadge
+          visibility={row.original.visibility}
+          teamIds={row.original.teamIds}
+        />
+      ),
+    },
+    {
+      id: "schedule",
+      header: "Schedule",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Database className="h-3.5 w-3.5" />
+          <span>{formatCronSchedule(row.original.schedule)}</span>
+        </div>
+      ),
     },
     {
       id: "actions",
       header: "Actions",
       cell: ({ row }) => (
         <TableRowActions
+          itemName={row.original.name}
           actions={[
             {
               icon: <Pencil className="h-4 w-4" />,
               label: "Edit connector",
-              onClick: () => setEditingConnector(row.original),
+              onClick: () => onEditConnector(row.original),
             },
             {
               icon: <Trash2 className="h-4 w-4" />,
@@ -333,7 +449,6 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
               onClick: () => setRemovingConnectorId(row.original.id),
             },
           ]}
-          size="sm"
         />
       ),
     },
@@ -355,14 +470,6 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
           manualPagination
         />
       </div>
-
-      {editingConnector && (
-        <EditConnectorDialog
-          connector={editingConnector}
-          open={!!editingConnector}
-          onOpenChange={(open) => !open && setEditingConnector(null)}
-        />
-      )}
 
       {removingConnectorId && (
         <RemoveConnectorDialog
@@ -479,6 +586,7 @@ function AddConnectorDialog({
                   setStep("choose");
                   setSelectedIds(new Set());
                 }}
+                aria-label="Go back"
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>

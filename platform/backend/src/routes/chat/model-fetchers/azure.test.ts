@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import { fetchAzureModels } from "./azure";
 
-vi.mock("@/config", () => ({
-  default: {
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
     llm: {
       azure: {
         baseUrl:
@@ -10,12 +10,8 @@ vi.mock("@/config", () => ({
         apiVersion: "2024-02-01",
       },
     },
-  },
-}));
-
-vi.mock("@/logging", () => ({
-  default: { warn: vi.fn(), error: vi.fn() },
-}));
+  }),
+);
 
 vi.mock("@/clients/azure-openai-credentials", () => ({
   getAzureManagementBearerTokenProvider: vi.fn(() => async () => "mgmt-token"),
@@ -77,6 +73,35 @@ describe("fetchAzureModels", () => {
       "https://my-resource.openai.azure.com/openai/deployments?api-version=2024-02-01",
       { headers: { "api-key": "test-key" } },
     );
+
+    vi.unstubAllGlobals();
+  });
+
+  test("captures the backing model name from data-plane deployments for pricing", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        // A deployment whose name differs from the backing model.
+        data: [{ id: "prod-chat", model: "gpt-4o" }, { id: "gpt-4o-mini" }],
+      }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "test-key",
+      "https://my-resource.openai.azure.com/openai/deployments/prod-chat",
+    );
+
+    expect(result).toEqual([
+      {
+        id: "prod-chat",
+        displayName: "prod-chat",
+        provider: "azure",
+        underlyingModelName: "gpt-4o",
+      },
+      // No `model` field → underlyingModelName omitted.
+      { id: "gpt-4o-mini", displayName: "gpt-4o-mini", provider: "azure" },
+    ]);
 
     vi.unstubAllGlobals();
   });

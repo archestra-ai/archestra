@@ -1,0 +1,199 @@
+{
+  "name": "doggybee__mcp-server-ccxt",
+  "display_name": "mcp-server-ccxt",
+  "description": "High-performance CCXT MCP server for cryptocurrency exchange integration",
+  "author": {
+    "name": "doggybee"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@mcpfun/mcp-server-ccxt"],
+    "env": {
+      "DEFAULT_EXCHANGE": "${user_config.default_exchange}",
+      "DEFAULT_MARKET_TYPE": "${user_config.default_market_type}",
+      "BINANCE_API_KEY": "${user_config.binance_api_key}",
+      "BINANCE_SECRET": "${user_config.binance_secret}",
+      "KUCOIN_API_KEY": "${user_config.kucoin_api_key}",
+      "KUCOIN_SECRET": "${user_config.kucoin_secret}",
+      "KUCOIN_PASSPHRASE": "${user_config.kucoin_passphrase}",
+      "USE_PROXY": "${user_config.use_proxy}",
+      "PROXY_URL": "${user_config.proxy_url}",
+      "PROXY_USERNAME": "${user_config.proxy_username}",
+      "PROXY_PASSWORD": "${user_config.proxy_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "default_exchange": {
+      "type": "string",
+      "title": "Default Exchange",
+      "description": "The default cryptocurrency exchange to use (e.g., binance)",
+      "required": false,
+      "default": "binance"
+    },
+    "default_market_type": {
+      "type": "string",
+      "title": "Default Market Type",
+      "description": "The default market type (e.g., spot, futures)",
+      "required": false,
+      "default": "spot"
+    },
+    "binance_api_key": {
+      "type": "string",
+      "title": "Binance API Key",
+      "description": "Your API key for Binance",
+      "sensitive": true,
+      "required": false
+    },
+    "binance_secret": {
+      "type": "string",
+      "title": "Binance Secret",
+      "description": "Your API secret for Binance",
+      "sensitive": true,
+      "required": false
+    },
+    "kucoin_api_key": {
+      "type": "string",
+      "title": "KuCoin API Key",
+      "description": "Your API key for KuCoin",
+      "sensitive": true,
+      "required": false
+    },
+    "kucoin_secret": {
+      "type": "string",
+      "title": "KuCoin Secret",
+      "description": "Your API secret for KuCoin",
+      "sensitive": true,
+      "required": false
+    },
+    "kucoin_passphrase": {
+      "type": "string",
+      "title": "KuCoin Passphrase",
+      "description": "Your passphrase for KuCoin (if required)",
+      "sensitive": true,
+      "required": false
+    },
+    "use_proxy": {
+      "type": "boolean",
+      "title": "Use Proxy",
+      "description": "Enable or disable proxy for exchange connections",
+      "required": false,
+      "default": false
+    },
+    "proxy_url": {
+      "type": "string",
+      "title": "Proxy URL",
+      "description": "The full URL for the proxy server (e.g., http://username:password@your-proxy-server:port)",
+      "sensitive": true,
+      "required": false
+    },
+    "proxy_username": {
+      "type": "string",
+      "title": "Proxy Username (Legacy)",
+      "description": "Username for proxy authentication (legacy format, prefer PROXY_URL)",
+      "sensitive": true,
+      "required": false
+    },
+    "proxy_password": {
+      "type": "string",
+      "title": "Proxy Password (Legacy)",
+      "description": "Password for proxy authentication (legacy format, prefer PROXY_URL)",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# CCXT MCP Server\n\n<img src=\"assets/ccxt-logo.png\" alt=\"CCXT Logo\" width=\"100\" height=\"100\"/>\n\n![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)\n[![MCP Standard](https://img.shields.io/badge/MCP-Standard-green.svg)](https://www.modelcontextprotocol.org/)\n[![CCXT](https://img.shields.io/badge/CCXT-4.0.0-orange.svg)](https://github.com/ccxt/ccxt)\n[![smithery badge](https://smithery.ai/badge/@doggybee/mcp-server-ccxt)](https://smithery.ai/server/@doggybee/mcp-server-ccxt)\n\nHigh-performance cryptocurrency exchange integration using MCP (Model Context Protocol) and CCXT.\n\n## Features\n\n- 🚀 **Exchange Support**: Connects to 20+ cryptocurrency exchanges\n- 🔃 **Market Types**: Supports spot, futures, swap markets and more\n- 🔧 **Proxy Configuration**: Options for accessing exchanges through proxies\n- 📊 **Fast & Reliable**: Optimized caching and rate limiting\n- 🌐 **MCP Standard**: Compatible with LLMs like Claude and GPT via MCP\n\n## CCXT MCP Server Integration Architecture\n\n![CCXT MCP Server Integration Architecture](docs/images/mcp-integration.svg)\n\nThe CCXT MCP Server connects language models to cryptocurrency exchanges through the Model Context Protocol. It serves as a bridge that allows LLMs to access real-time market data and execute trading operations across multiple exchanges through a unified API.\n\nThe architecture includes:\n- LLM clients (Claude and other MCP-compatible models) that send requests\n- The Model Context Protocol (MCP) that standardizes communication\n- The CCXT MCP Server that processes requests and manages exchange interactions\n- The CCXT Library that provides unified access to exchange APIs\n- Connections to multiple cryptocurrency exchanges\n\n## CCXT MCP Server Code Architecture\n\n![CCXT MCP Server Code Architecture](docs/images/code-architecture.svg)\n\nThe server is organized into three main modules for better maintainability and extensibility:\n\n- **Exchange**: Manages exchange instances, credentials, and symbol validation\n- **Utils**: Provides caching, rate limiting, and logging functionality \n- **Tools**: Implements MCP tools and resources for exchange interaction\n\n## Quick Start\n\n### Installing via Smithery\n\nTo install mcp-server-ccxt for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@doggybee/mcp-server-ccxt):\n\n```bash\nnpx -y @smithery/cli install @doggybee/mcp-server-ccxt --client claude\n```\n\n### NPM Package (Recommended)\n\nYou can install CCXT MCP Server from npm:\n\n```bash\n# Install globally\nnpm install -g @mcpfun/mcp-server-ccxt\n\n# Start the server\nmcp-server-ccxt\n```\n\nOr run directly:\n\n```bash\nnpx @mcpfun/mcp-server-ccxt\n```\n\n### Manual Installation\n\nAlternatively, you can clone and build the repository:\n\n```bash\n# Clone the repository\ngit clone https://github.com/doggybee/mcp-server-ccxt.git\ncd mcp-server-ccxt\n\n# Install dependencies\nnpm install\n\n# Build the server\nnpm run build\n\n# Start the server\nnpm start\n```\n\n## Configuration\n\n1. Create an environment file\n   ```bash\n   cp .env.example .env\n   ```\n\n2. Edit the `.env` file to add your exchange API keys\n   ```\n   # Default exchange (optional)\n   DEFAULT_EXCHANGE=binance\n   \n   # Default market type (optional)\n   DEFAULT_MARKET_TYPE=spot \n   \n   # API credentials (optional)\n   BINANCE_API_KEY=your_api_key\n   BINANCE_SECRET=your_api_secret\n   # For exchanges requiring passphrase (e.g., KuCoin)\n   KUCOIN_API_KEY=your_kucoin_api_key\n   KUCOIN_SECRET=your_kucoin_secret\n   KUCOIN_PASSPHRASE=your_kucoin_passphrase\n   \n   # Proxy configuration (optional)\n   USE_PROXY=false\n   PROXY_URL=http://username:password@your-proxy-server:port\n   # Legacy format (still supported but recommended to use the integrated URL format above)\n   # PROXY_USERNAME=\n   # PROXY_PASSWORD=\n   ```\n\n## Usage\n\n> **Note**: If you encounter any issues with MCP communication, please see the [Troubleshooting Guide](docs/troubleshooting.md) for solutions.\n\n### Running the Server\n\nStart the server:\n\n```bash\n# If installed globally via npm\nmcp-server-ccxt\n\n# If installed manually\nnpm start\n```\n\n### Using with Claude for Desktop\n\n1. Add the server to your `claude_desktop_config.json`:\n\nIf installed via npm (globally):\n```json\n{\n  \"mcpServers\": {\n    \"ccxt\": {\n      \"command\": \"mcp-server-ccxt\"\n    }\n  }\n}\n```\n\nIf installed manually:\n```json\n{\n  \"mcpServers\": {\n    \"ccxt\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/mcp-server-ccxt/build/index.js\"\n      ]\n    }\n  }\n}\n```\n\n2. Restart Claude for Desktop\n\n### Using as a Module in Another Project\n\nYou can also use this package as a module in your own Node.js projects:\n\n```javascript\n// Import the CCXT MCP Server\nimport '@mcpfun/mcp-server-ccxt';\n\n// The server starts automatically when imported\n// You can configure it through environment variables\n```\n\n## Example Queries\n\nHere are some example queries you can use with the MCP server:\n\n- \"What's the current price of Bitcoin on Binance?\"\n- \"Show me the order book for ETH/USDT on Coinbase\"\n- \"Get the 1-hour OHLCV data for BTC/USDT on Binance for the last 24 candles\"\n- \"Compare the price of SOL/USDT across different exchanges\"\n- \"What's my current balance on Binance?\" (requires API keys)\n- \"Place a market buy order for 0.1 ETH on Kraken\" (requires API keys)\n\n## Available Tools\n\n### Public API Tools\n\n- `list-exchanges`: List all available cryptocurrency exchanges\n- `get-ticker`: Get current ticker information for a trading pair\n- `batch-get-tickers`: Get ticker information for multiple trading pairs at once\n- `get-orderbook` / `get-order-book`: Get market order book for a trading pair\n- `get-ohlcv`: Get OHLCV candlestick data for a trading pair\n- `get-trades`: Get recent trades for a trading pair\n- `get-markets`: Get all available markets for an exchange\n- `get-exchange-info`: Get exchange information and status\n- `get-leverage-tiers`: Get futures leverage tiers\n- `get-funding-rates`: Get current funding rates\n- `get-positions`: Get open positions information\n- `get-open-orders`: Get all open orders\n- `get-order-history`: Get order history\n\n### Private API Tools (requires API keys)\n\n- `account-balance`: Get your account balance from a crypto exchange\n- `place-market-order`: Place a market order on an exchange\n- `place-limit-order`: Place a limit order on an exchange\n- `cancel-order`: Cancel an existing order\n- `cancel-all-orders`: Cancel all open orders\n- `set-leverage`: Set leverage for futures\n- `set-margin-mode`: Set margin mode for futures\n- `place-futures-market-order`: Place futures market orders\n- `place-futures-limit-order`: Place futures limit orders\n- `transfer-funds`: Transfer funds between accounts (e.g., spot to futures)\n\n### Configuration & Utility Tools\n\n- `cache-stats`: Get CCXT cache statistics\n- `clear-cache`: Clear CCXT cache\n- `set-log-level`: Set logging level\n- `get-proxy-config`: Get proxy settings\n- `set-proxy-config`: Configure proxy settings\n- `set-market-type`: Set default market type\n- `set-default-exchange`: Change the default exchange\n- `system-info`: Get system and environment information\n\n## Performance Optimizations\n\nMCP-CCXT includes several optimizations to ensure high performance:\n\n1. **LRU Caching System**:\n   - Different TTLs for different types of data\n   - Ticker data: 10 seconds\n   - Order book data: 5 seconds\n   - Market data: 1 hour\n\n2. **Adaptive Rate Limiting**:\n   - Automatically adjusts request rates based on exchange responses\n   - Implements exponential backoff for errors\n   - Manages concurrent requests per exchange\n\n3. **Exchange Connection Management**:\n   - Efficient initialization of exchange instances\n   - Proper error handling and retries\n\n## Security Best Practices\n\n### API Key Security\n\n1. **Create Dedicated API Keys**:\n   - Create separate API keys for different applications/purposes\n   - Never reuse API keys across different services or applications\n\n2. **Limit API Key Permissions**:\n   - Enable only the permissions you need (e.g., read-only for market data)\n   - Disable withdrawal permissions if you only need trading functionality\n   - Use IP whitelisting when available to restrict access to known IPs\n\n3. **Secure Storage**:\n   - Never commit API keys to version control systems\n   - Store API keys in environment variables or a secure vault\n   - Use `.env` files that are excluded from git via `.gitignore`\n\n## Risk Disclaimer\n\nThis software is provided for informational purposes only. Using this software to interact with cryptocurrency exchanges involves significant risks:\n\n- **Financial Risk**: Cryptocurrency trading involves risk of loss\n- **API Security**: Ensure your API keys have appropriate permission limits\n- **No Investment Advice**: This tool does not provide investment advice\n- **No Warranty**: The software is provided \"as is\" without warranty of any kind\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE.txt](LICENSE.txt) file for details.\n\n## Copyright and Attribution\n\nThis project uses the CCXT library (https://github.com/ccxt/ccxt), which is:\n\n```\nCopyright (c) 2016-2024 CCXT developers\n```\n\nCCXT is released under the MIT License, which is included below:\n\n```\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n```\n\n---\n\nFor issues, feature requests, or contributions, please visit [the GitHub repository](https://github.com/doggybee/mcp-server-ccxt).",
+  "category": "Finance",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-ccxt": {
+        "command": "mcp-server-ccxt",
+        "args": [],
+        "env": {}
+      },
+      "mcpfun-mcp-server-ccxt": {
+        "command": "npx",
+        "args": ["@mcpfun/mcp-server-ccxt"],
+        "env": {}
+      },
+      "mcp-server-ccxt-npm-start": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "mcp-server-ccxt-node-direct": {
+        "command": "node",
+        "args": ["/path/to/mcp-server-ccxt/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "doggybee",
+    "repo": "mcp-server-ccxt",
+    "url": "https://github.com/doggybee/mcp-server-ccxt",
+    "name": "doggybee__mcp-server-ccxt",
+    "path": null,
+    "stars": 103,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:09.296Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "ccxt",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "lru-cache",
+      "importance": 5
+    },
+    {
+      "name": "p-queue",
+      "importance": 5
+    },
+    {
+      "name": "rxjs",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": null
+}

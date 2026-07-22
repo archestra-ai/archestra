@@ -1,0 +1,100 @@
+{
+  "name": "inventer-dev__mcp-internet-speed-test",
+  "display_name": "mcp-internet-speed-test",
+  "description": "The MCP Internet Speed Test is a specialized Model Context Protocol (MCP) server that enables AI models and agents to perform internet speed measurements.",
+  "author": {
+    "name": "inventer-dev"
+  },
+  "server": {
+    "command": "mcp-internet-speed-test",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![smithery badge](https://smithery.ai/badge/@inventer-dev/mcp-internet-speed-test)](https://smithery.ai/server/@inventer-dev/mcp-internet-speed-test)\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/inventer-dev-mcp-internet-speed-test-badge.png)](https://mseep.ai/app/inventer-dev-mcp-internet-speed-test)\n\n<a href=\"https://glama.ai/mcp/servers/@inventer-dev/mcp-internet-speed-test\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@inventer-dev/mcp-internet-speed-test/badge\" alt=\"mcp-internet-speed-test MCP server\" />\n</a>\n\n# MCP Internet Speed Test\n\nAn implementation of a Model Context Protocol (MCP) for internet speed testing. It allows AI models and agents to measure, analyze, and report network performance metrics through a standardized interface.\n\n**📦 Available on PyPI:** https://pypi.org/project/mcp-internet-speed-test/\n\n**🚀 Quick Start:**\n```bash\npip install mcp-internet-speed-test\nmcp-internet-speed-test\n```\n\n## What is MCP?\n\nThe Model Context Protocol (MCP) provides a standardized way for Large Language Models (LLMs) to interact with external tools and data sources. Think of it as the \"USB-C for AI applications\" - a common interface that allows AI systems to access real-world capabilities and information.\n\n## Features\n\n- **Smart Incremental Testing**: Uses SpeedOf.Me methodology with 8-second threshold for optimal accuracy\n- **Download Speed Testing**: Measures bandwidth using files from 128KB to 100MB from GitHub repository\n- **Upload Speed Testing**: Tests upload bandwidth using generated data from 128KB to 100MB\n- **Latency Testing**: Measures network latency with detailed server location information\n- **Jitter Analysis**: Calculates network stability using multiple latency samples (default: 5)\n- **Multi-CDN Support**: Detects and provides info for Fastly, Cloudflare, and AWS CloudFront\n- **Geographic Location**: Maps POP codes to physical locations (50+ locations worldwide)\n- **Cache Analysis**: Detects HIT/MISS status and cache headers\n- **Server Metadata**: Extracts detailed CDN headers including `x-served-by`, `via`, `x-cache`\n- **Comprehensive Testing**: Single function to run all tests with complete metrics\n\n## Installation\n\n### Prerequisites\n\n- Python 3.12 or higher (required for async support)\n- pip or [uv](https://github.com/astral-sh/uv) package manager\n\n### Option 1: Install from PyPI with pip (Recommended)\n\n```bash\n# Install the package globally\npip install mcp-internet-speed-test\n\n# Run the MCP server\nmcp-internet-speed-test\n```\n\n### Option 2: Install from PyPI with uv\n\n```bash\n# Install the package globally\nuv add mcp-internet-speed-test\n\n# Or run directly without installing\nuvx mcp-internet-speed-test\n```\n\n### Option 3: Using docker\n\n```bash\n# Build the Docker image\ndocker build -t mcp-internet-speed-test .\n\n# Run the MCP server in a Docker container\ndocker run -it --rm -v $(pwd):/app -w /app mcp-internet-speed-test\n```\n\n### Option 4: Development/Local Installation\n\nIf you want to contribute or modify the code:\n\n```bash\n# Clone the repository\ngit clone https://github.com/inventer-dev/mcp-internet-speed-test.git\ncd mcp-internet-speed-test\n\n# Install in development mode\npip install -e .\n\n# Or using uv\nuv sync\nuv run python -m mcp_internet_speed_test.main\n```\n\n### Dependencies\n\nThe package automatically installs these dependencies:\n- `mcp[cli]>=1.6.0`: MCP server framework with CLI integration\n- `httpx>=0.27.0`: Async HTTP client for speed tests\n\n\n## Configuration\n\nTo use this MCP server with Claude Desktop or other MCP clients, add it to your MCP configuration file.\n\n### Claude Desktop Configuration\n\nEdit your Claude Desktop MCP configuration file:\n\n#### Option 1: Using pip installed package (Recommended)\n\n```json\n{\n    \"mcpServers\": {\n        \"mcp-internet-speed-test\": {\n            \"command\": \"mcp-internet-speed-test\"\n        }\n    }\n}\n```\n\n#### Option 2: Using uvx\n\n```json\n{\n    \"mcpServers\": {\n        \"mcp-internet-speed-test\": {\n            \"command\": \"uvx\",\n            \"args\": [\"mcp-internet-speed-test\"]\n        }\n    }\n}\n```\n\n## API Tools\n\nThe MCP Internet Speed Test provides the following tools:\n\n### Testing Functions\n1. `measure_download_speed`: Measures download bandwidth (in Mbps) with server location info\n2. `measure_upload_speed`: Measures upload bandwidth (in Mbps) with server location info\n3. `measure_latency`: Measures network latency (in ms) with server location info\n4. `measure_jitter`: Measures network jitter by analyzing latency variations with server info\n5. `get_server_info`: Get detailed CDN server information for any URL without running speed tests\n6. `run_complete_test`: Comprehensive test with all metrics and server metadata\n\n## CDN Server Detection\n\nThis speed test now provides detailed information about the CDN servers serving your tests:\n\n### What You Get\n- **CDN Provider**: Identifies if you're connecting to Fastly, Cloudflare, or Amazon CloudFront\n- **Geographic Location**: Shows the physical location of the server (e.g., \"Mexico City, Mexico\")\n- **POP Code**: Three-letter code identifying the Point of Presence (e.g., \"MEX\", \"QRO\", \"DFW\")\n- **Cache Status**: Whether content is served from cache (HIT) or fetched from origin (MISS)\n- **Server Headers**: Full HTTP headers including `x-served-by`, `via`, and `x-cache`\n\n### Technical Implementation\n\n#### Smart Testing Methodology\n- **Incremental Approach**: Starts with small files (128KB) and progressively increases\n- **Time-Based Optimization**: Uses 8-second base threshold + 4-second additional buffer\n- **Accuracy Focus**: Selects optimal file size that provides reliable measurements\n- **Multi-Provider Support**: Tests against geographically distributed endpoints\n\n#### CDN Detection Capabilities\n- **Fastly**: Detects POP codes and maps to 50+ global locations\n- **Cloudflare**: Identifies data centers and geographic regions\n- **AWS CloudFront**: Recognizes edge locations across continents\n- **Header Analysis**: Parses `x-served-by`, `via`, `x-cache`, and custom CDN headers\n\n### Why This Matters\n- **Network Diagnostics**: Understand which server is actually serving your tests\n- **Performance Analysis**: Correlate speed results with server proximity\n- **CDN Optimization**: Identify if your ISP's routing is optimal\n- **Geographic Awareness**: Know if tests are running from your expected region\n- **Troubleshooting**: Identify routing issues and CDN misconfigurations\n\n### Example Server Info Output\n```json\n{\n  \"cdn_provider\": \"Fastly\",\n  \"pop_code\": \"MEX\",\n  \"pop_location\": \"Mexico City, Mexico\",\n  \"served_by\": \"cache-mex4329-MEX\",\n  \"cache_status\": \"HIT\",\n  \"x_cache\": \"HIT, HIT\"\n}\n```\n\n### Technical Configuration\n\n#### Default Test Files Repository\n```\nGitHub Repository: inventer-dev/speed-test-files\nBranch: main\nFile Sizes: 128KB, 256KB, 512KB, 1MB, 2MB, 5MB, 10MB, 20MB, 40MB, 50MB, 100MB\n```\n\n#### Upload Endpoints Priority\n1. **Cloudflare Workers** (httpi.dev) - Global distribution, highest priority\n2. **HTTPBin** (httpbin.org) - AWS-based, secondary endpoint\n\n#### Supported CDN Locations (150+ POPs)\n\n**Fastly POPs**: MEX, QRO, DFW, LAX, NYC, MIA, LHR, FRA, AMS, CDG, NRT, SIN, SYD, GRU, SCL, BOG, MAD, MIL...\n\n**Cloudflare Centers**: DFW, LAX, SJC, SEA, ORD, MCI, IAD, ATL, MIA, YYZ, LHR, FRA, AMS, CDG, ARN, STO...\n\n**AWS CloudFront**: ATL, BOS, ORD, CMH, DFW, DEN, IAD, LAX, MIA, MSP, JFK, SEA, SJC, AMS, ATH, TXL...\n\n#### Performance Thresholds\n- **Base Test Duration**: 8.0 seconds\n- **Additional Buffer**: 4.0 seconds\n- **Maximum File Size**: Configurable (default: 100MB)\n- **Jitter Samples**: 5 measurements (configurable)\n\n## Troubleshooting\n\n### Common Issues\n\n#### MCP Server Connection\n1. **Path Configuration**: Ensure absolute path is used in MCP configuration\n2. **Directory Permissions**: Verify read/execute permissions for the project directory\n3. **Python Version**: Requires Python 3.12+ with async support\n4. **Dependencies**: Install `fastmcp` and `httpx` packages\n\n#### Speed Test Issues\n1. **GitHub Repository Access**: Ensure `inventer-dev/speed-test-files` is accessible\n2. **Firewall/Proxy**: Check if corporate firewalls block test endpoints\n3. **CDN Routing**: Some ISPs may route differently to CDNs\n4. **Network Stability**: Jitter tests require stable connections\n\n#### Performance Considerations\n- **File Size Limits**: Large files (>50MB) may timeout on slow connections\n- **Upload Endpoints**: If primary endpoint fails, fallback is automatic\n- **Geographic Accuracy**: POP detection depends on CDN header consistency\n\n## Development\n\n### Project Structure\n```\nmcp-internet-speed-test/\n├── mcp_internet_speed_test/  # Main package directory\n│   ├── __init__.py      # Package initialization\n│   └── main.py          # MCP server implementation\n├── README.md           # This documentation\n├── Dockerfile          # Container configuration\n└── pyproject.toml      # Python project configuration\n```\n\n### Key Components\n\n#### Configuration Constants\n- `GITHUB_RAW_URL`: Base URL for test files repository\n- `UPLOAD_ENDPOINTS`: Prioritized list of upload test endpoints\n- `SIZE_PROGRESSION`: Ordered list of file sizes for incremental testing\n- `*_POP_LOCATIONS`: Mappings of CDN codes to geographic locations\n\n#### Core Functions\n- `extract_server_info()`: Parses HTTP headers to identify CDN providers\n- `measure_*()`: Individual test functions for different metrics\n- `run_complete_test()`: Orchestrates comprehensive testing suite\n\n### Configuration Customization\n\nYou can customize the following in `mcp_internet_speed_test/main.py` if you clone the repository:\n```python\n# GitHub repository settings\nGITHUB_USERNAME = \"your-username\"\nGITHUB_REPO = \"your-speed-test-files\"\nGITHUB_BRANCH = \"main\"\n\n# Test duration thresholds\nBASE_TEST_DURATION = 8.0  # seconds\nADDITIONAL_TEST_DURATION = 4.0  # seconds\n\n# Default endpoints\nDEFAULT_UPLOAD_URL = \"your-upload-endpoint\"\nDEFAULT_LATENCY_URL = \"your-latency-endpoint\"\n```\n\n### Contributing\n\nThis is an experimental project and contributions are welcome:\n\n1. **Issues**: Report bugs or request features\n2. **Pull Requests**: Submit code improvements\n3. **Documentation**: Help improve this README\n4. **Testing**: Test with different network conditions and CDNs\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Acknowledgments\n\n- MCP Framework maintainers for standardizing AI tool interactions\n- The Model Context Protocol community for documentation and examples",
+  "category": "Monitoring",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-internet-speed-test": {
+        "command": "mcp-internet-speed-test",
+        "args": [],
+        "env": {}
+      },
+      "mcp-internet-speed-test-uvx": {
+        "command": "uvx",
+        "args": ["mcp-internet-speed-test"],
+        "env": {}
+      },
+      "mcp-internet-speed-test-docker": {
+        "command": "docker",
+        "args": ["run", "-it", "--rm", "-v", "$(pwd):/app", "-w", "/app", "mcp-internet-speed-test"],
+        "env": {},
+        "docker_image": "mcp-internet-speed-test"
+      },
+      "mcp-internet-speed-test-dev": {
+        "command": "uv",
+        "args": ["run", "python", "-m", "mcp_internet_speed_test.main"],
+        "env": {}
+      },
+      "mcp-internet-speed-test-configured": {
+        "command": "mcp-internet-speed-test",
+        "args": [],
+        "env": {}
+      },
+      "mcp-internet-speed-test-configured-uvx": {
+        "command": "uvx",
+        "args": ["mcp-internet-speed-test"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "inventer-dev",
+    "repo": "mcp-internet-speed-test",
+    "url": "https://github.com/inventer-dev/mcp-internet-speed-test",
+    "name": "mcp-internet-speed-test",
+    "path": null,
+    "stars": 7,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f008350f104f16291f2093eb7bcbf92476b8ab88"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:23.723Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"mcp-internet-speed-test\"\nversion = \"0.1.1\"\ndescription = \"Enables AI models and agents to perform internet speed measurements.\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\nauthors = [\n    {name = \"Pedro Cruz\", email = \"hola@inventer.dev\"},\n]\nmaintainers = [\n    {name = \"Pedro Cruz\", email = \"hola@inventer.dev\"},\n]\nkeywords = [\"mcp\", \"speed-test\", \"internet\", \"network\", \"ai\", \"model-context-protocol\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.12\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n    \"Topic :: Internet :: WWW/HTTP\",\n    \"Topic :: System :: Networking :: Monitoring\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n]\ndependencies = [\n    \"mcp[cli]>=1.6.0\",\n    \"httpx>=0.27.0\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/inventer-dev/mcp-internet-speed-test\"\n\"Bug Reports\" = \"https://github.com/inventer-dev/mcp-internet-speed-test/issues\"\n\"Source\" = \"https://github.com/inventer-dev/mcp-internet-speed-test\"\n\"Documentation\" = \"https://github.com/inventer-dev/mcp-internet-speed-test#readme\"\n\n[project.scripts]\nmcp-internet-speed-test = \"mcp_internet_speed_test.main:mcp.run\"\n\n[tool.setuptools.packages.find]\nwhere = [\".\"]\ninclude = [\"mcp_internet_speed_test*\"]"
+}

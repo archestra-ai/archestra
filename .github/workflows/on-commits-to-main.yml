@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths:
+      - ".github/**"
+      - "platform/**"
   # Allow manual triggering of the workflow
   workflow_dispatch:
 
@@ -11,13 +14,24 @@ on:
 # Each job will explicitly declare the permissions it needs
 permissions: {}
 
-concurrency:
-  group: on-commits-to-main-${{ github.ref }}
-  cancel-in-progress: false
+# Concurrency is handled per-job (below) rather than per-workflow so that a new
+# commit doesn't have to wait for the previous run to finish end-to-end:
+#   - builds for superseded commits are cancelled (safe: images are pushed
+#     per-sha and the newer commit contains the older one's changes)
+#   - deploys are NEVER cancelled mid-flight (killing `helm upgrade` leaves the
+#     release stuck in a pending-upgrade state); instead they queue, and GitHub
+#     keeps at most one pending job per group, cancelling older pending ones, so
+#     queued deploys collapse to the newest commit
 
 jobs:
   deploy-dev-platform-images:
     name: Build Platform Staging and MCP Server Base Images
+    # A newer commit's build supersedes an in-flight one, so cancel it and let
+    # the build for the newest commit start immediately (it can also run while
+    # the previous commit's deploy is still in progress)
+    concurrency:
+      group: on-commits-to-main-build-${{ github.ref }}
+      cancel-in-progress: true
     uses: ./.github/workflows/deploy-dev-platform-images.yml
     permissions:
       contents: read # Required to invoke the reusable image publishing workflow.
@@ -35,12 +49,19 @@ jobs:
     name: Deploy to staging
     runs-on: blacksmith-2vcpu-ubuntu-2404
     needs: [deploy-dev-platform-images]
+    # cancel-in-progress MUST stay false here: cancelling `helm upgrade`
+    # mid-flight has previously left the release wedged in pending-upgrade.
+    # A running deploy always finishes; pending deploys collapse to the newest
+    # commit because GitHub cancels older pending jobs in the same group
+    concurrency:
+      group: on-commits-to-main-deploy-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read # Required to checkout the repository and deploy the chart.
       id-token: write # Required for Workload Identity Federation.
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -67,7 +88,6 @@ jobs:
       - name: Deploy to staging
         env:
           PLATFORM_IMAGE_TAG: ${{ github.sha }}
-          ARCHESTRA_STAGING_DATABASE_URL: ${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}
           ARCHESTRA_STAGING_METRICS_SECRET: ${{ secrets.ARCHESTRA_STAGING_METRICS_SECRET }}
           ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT }}
           ARCHESTRA_STAGING_AUTH_SECRET: ${{ secrets.ARCHESTRA_STAGING_AUTH_SECRET }}
@@ -79,6 +99,9 @@ jobs:
           ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID: ${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID }}
           ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET: ${{ secrets.ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET }}
           ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY: ${{ secrets.ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY }}
+          ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_CLIENT_ID: ${{ secrets.ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_CLIENT_ID }}
+          ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_TENANT_ID: ${{ secrets.ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_TENANT_ID }}
+          ARCHESTRA_STAGING_DATABASE_URL: ${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}
         run: |
           helm upgrade archestra-platform \
             ./platform/helm/archestra \
@@ -86,7 +109,6 @@ jobs:
             --namespace archestra \
             --create-namespace \
             --set "archestra.image=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:${PLATFORM_IMAGE_TAG}" \
-            --set "archestra.databaseUrl=${ARCHESTRA_STAGING_DATABASE_URL}" \
             --set "archestra.env.ARCHESTRA_METRICS_SECRET=${ARCHESTRA_STAGING_METRICS_SECRET}" \
             --set "archestra.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT=${ARCHESTRA_STAGING_OTEL_EXPORTER_OTLP_ENDPOINT}" \
             --set "archestra.env.ARCHESTRA_AUTH_SECRET=${ARCHESTRA_STAGING_AUTH_SECRET}" \
@@ -98,5 +120,9 @@ jobs:
             --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_ID=${ARCHESTRA_STAGING_OUTLOOK_CLIENT_ID}" \
             --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET=${ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET}" \
             --set "archestra.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY=${ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY}" \
+            --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID=${ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_CLIENT_ID}" \
+            --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID=${ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_TENANT_ID}" \
+            --set-string "postgresql.external_database_url=${ARCHESTRA_STAGING_DATABASE_URL}" \
             --values .github/values-staging.yaml \
-            --wait
+            --atomic \
+            --timeout 15m

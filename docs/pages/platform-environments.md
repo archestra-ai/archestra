@@ -1,0 +1,184 @@
+---
+title: "Environments"
+category: Administration
+description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
+order: 3
+lastUpdated: 2026-07-22
+---
+
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
+<!--
+This document is the canonical reference for deployment Environments. Include:
+- What an environment is and the implicit "Default" environment (null)
+- Who can view vs. manage environments (environment:read / create / update / delete), Settings > Environments
+- Restricted environments and the per-resource deploy-to-restricted permissions
+- Environment isolation: how an environment scopes which tools, knowledge,
+  skills, and delegation targets an agent / MCP gateway / LLM proxy can use
+  (strict matching; Default is a peer, not a wildcard; skills can be
+  restricted to several environments or none = everywhere; built-in servers
+  and built-in skills are exempt)
+- Network egress policies (namespace + egress policy applied to MCP server pods AND
+  agent code sandboxes), provider support matrix, and domain presets
+- How environments scope per-environment cost limits
+- Link out to: agents, mcp gateway, llm proxy, knowledge connectors, costs & limits
+-->
+
+An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Environments partition an organization's resources so that what an agent or gateway can reach is scoped to where it runs: a "dev" gateway cannot use "prod" tools or knowledge, and spend can be capped per environment. Each environment carries a name, an optional Kubernetes namespace, and an optional network egress policy.
+
+Viewing environments requires the `environment:read` permission — every predefined role includes it. Creating, editing, and deleting environments require `environment:create`, `environment:update`, and `environment:delete`. Environments are managed in **Settings → Environments**.
+
+## The Default environment
+
+Every organization has an implicit **Default** environment. Any resource whose environment is unset belongs to Default. Default is a real peer environment, not a wildcard: a resource in Default is not visible to a resource assigned to a named environment, and vice versa. Because everything starts in Default, isolation only changes behavior once you explicitly assign a non-default environment. Default can define a Kubernetes namespace and network egress policy like any other environment.
+
+## Restricted environments
+
+An environment can be marked **restricted**. Assigning a resource to a restricted environment requires the `deploy-to-restricted` permission on that resource — `mcpRegistry:deploy-to-restricted` for MCP servers, or `llmProxy:deploy-to-restricted` for LLM proxies, for example. Each resource is gated on its own permission, so an organization can allow agents, apps, and proxies in a restricted environment while still limiting who deploys MCP servers there. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
+
+## Trusted image registries
+
+An environment can list the image registries it trusts. If an MCP server's image is not from a trusted registry, it is not deployed until an admin approves it. With no list set, any image is allowed.
+
+![MCP server held pending admin approval of its image](/docs/automated_screenshots/platform-environments_image-pending-approval.webp)
+
+### Use case
+
+Acme wants engineers to install MCP servers only from its own image registry. An admin sets the environment's trusted list to `registry.acme.com`. Servers built from `registry.acme.com/slack-mcp` or `registry.acme.com/jira-mcp` deploy automatically, but one from `ghcr.io/community/notion-mcp` waits for admin approval.
+
+![Trusted image registries editor in Settings > Environments](/docs/automated_screenshots/platform-environments_trusted-image-registries.webp)
+
+## Tool, knowledge, skill, and subagent isolation
+
+An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and use:
+
+- MCP tools whose server (catalog item) is in Production
+- knowledge connectors in Production
+- [Agent Skills](/docs/platform-agent-skills#environments) restricted to Production, or restricted to no environment at all
+- [subagent delegation targets](/docs/platform-agents#delegation) in Production
+
+Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available.
+
+This applies to both explicitly assigned resources and the implicit **Auto** access modes — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent dialog's explicit assignment pickers, resources from another environment are shown disabled. Skill filtering covers `list_skills`, `load_skill`, chat slash commands, and the skills offered on the [connect page](/docs/platform-llm-proxy#environment); a [skill that runs in a subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent) additionally requires its designated agent in the same environment.
+
+## Network egress policies
+
+An environment can define a Kubernetes **namespace** and a **network egress policy**. Both MCP server pods and agent [code sandboxes](/docs/platform-code-sandbox) for that environment run in its namespace and inherit its egress policy, so their outbound network reach is contained. Policies can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
+
+When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in unrestricted policy.
+
+How a policy applies depends on the workload. A **self-hosted MCP server** (or agent code sandbox) runs as a pod in your cluster, so the policy is enforced continuously at the network layer — a workload that needs broad outbound access (for example one that visits arbitrary sites) fails under a restrictive policy unless its destinations are allowlisted.
+
+A **remote MCP server** runs outside Archestra and is reached over HTTP, so the policy cannot constrain what the server itself reaches downstream. What Archestra enforces is its own outbound connection to the server: the server's URL host is checked against the environment's policy both when the catalog entry is created or edited (the error is surfaced in the form) and at runtime on every connection. A server whose host the policy forbids is blocked — including one added before the policy was tightened — and its tool calls return an error to the client.
+
+| Cluster provider        | IP/CIDR rules                                                         | Domain rules                                                                               |
+| ----------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| EKS Auto Mode           | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | AWS `ApplicationNetworkPolicy` when the EKS Auto Mode Network Policy Controller is enabled |
+| EKS with AWS VPC CNI    | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | Not supported outside EKS Auto Mode DNS-based policies                                     |
+| AKS                     | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | Cilium `CiliumNetworkPolicy` when the cluster exposes the Cilium CRD                       |
+| GKE                     | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | GKE `FQDNNetworkPolicy` when GKE Dataplane V2 and FQDN network policy are enabled          |
+| Cilium-enabled clusters | Kubernetes `NetworkPolicy` or Cilium policy                           | Cilium `CiliumNetworkPolicy`                                                               |
+
+See Kubernetes [NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/), Cilium [DNS policy](https://docs.cilium.io/en/latest/security/dns/), GKE [FQDN network policy](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies), and EKS Auto Mode [network policy](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html) docs for provider details. AWS DNS-based rules apply only to workloads running on EKS Auto Mode-launched EC2 instances.
+
+On EKS Auto Mode, `ApplicationNetworkPolicy` only supports IP and domain egress peers, so Archestra automatically adds a DNS bootstrap rule allowing port 53 to the cluster DNS service IP (recorded in the `archestra.io/network-policy-cluster-dns` annotation).
+
+### Domain Presets
+
+#### Common Dependencies
+
+```text
+alpinelinux.org
+archlinux.org
+bitbucket.org
+centos.org
+crates.io
+debian.org
+docker.com
+docker.io
+*.docker.io
+fedoraproject.org
+files.pythonhosted.org
+gcr.io
+ghcr.io
+github.com
+*.github.com
+githubusercontent.com
+*.githubusercontent.com
+gitlab.com
+golang.org
+goproxy.io
+gradle.org
+hex.pm
+maven.org
+mcr.microsoft.com
+nodejs.org
+npmjs.com
+npmjs.org
+nuget.org
+packagecloud.io
+packages.microsoft.com
+packagist.org
+pkg.go.dev
+production.cloudflare.docker.com
+pub.dev
+pypa.io
+pypi.org
+pypi.python.org
+raw.githubusercontent.com
+objects.githubusercontent.com
+quay.io
+registry-1.docker.io
+registry.npmjs.org
+ruby-lang.org
+rubygems.org
+rustup.rs
+ubuntu.com
+yarnpkg.com
+```
+
+#### Package Managers
+
+```text
+crates.io
+files.pythonhosted.org
+gcr.io
+ghcr.io
+golang.org
+goproxy.io
+gradle.org
+hex.pm
+maven.org
+mcr.microsoft.com
+npmjs.com
+npmjs.org
+nuget.org
+packagist.org
+pkg.go.dev
+registry-1.docker.io
+registry.npmjs.org
+rubygems.org
+rustup.rs
+pub.dev
+pypi.org
+pypi.python.org
+pythonhosted.org
+quay.io
+docker.io
+*.docker.io
+production.cloudflare.docker.com
+yarnpkg.com
+```
+
+## Cost limits
+
+Cost limits and per-user default limits can be scoped to an environment. A limit on **Production** only counts usage attributed to Production (an interaction's environment is snapshotted from its agent at request time). See [Costs and Limits](/docs/platform-costs-and-limits).
+
+## Where environments apply
+
+- [Agents](/docs/platform-agents) — sandbox runtime, network egress, and visible tools/knowledge
+- [MCP Gateway](/docs/platform-mcp-gateway) — which tools and knowledge the gateway exposes
+- [LLM Proxy](/docs/platform-llm-proxy) — cost-limit attribution for inference
+- [Agent Skills](/docs/platform-agent-skills#environments) — which skills an agent can list, load, or run
+- [Knowledge Connectors](/docs/platform-knowledge) — which environments can use the connector's knowledge
+- [Private Registry](/docs/platform-private-registry) — assigning MCP catalog entries to environments

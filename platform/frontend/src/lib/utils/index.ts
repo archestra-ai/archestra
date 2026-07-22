@@ -1,4 +1,11 @@
-export { getApiErrorMessage, handleApiError, toApiError } from "./api";
+export {
+  getApiErrorInternalCode,
+  getApiErrorMessage,
+  getApiErrorType,
+  handleApiError,
+  throwOnApiError,
+  toApiError,
+} from "./api";
 export {
   formatDate,
   formatRelativeTime,

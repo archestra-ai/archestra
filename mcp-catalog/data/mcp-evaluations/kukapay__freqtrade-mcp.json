@@ -1,0 +1,104 @@
+{
+  "name": "kukapay__freqtrade-mcp",
+  "display_name": "freqtrade-mcp",
+  "description": "An MCP server that integrates with the Freqtrade cryptocurrency trading bot.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "__main__.py"],
+    "env": {
+      "FREQTRADE_API_URL": "${user_config.freqtrade_api_url}",
+      "FREQTRADE_USERNAME": "${user_config.freqtrade_username}",
+      "FREQTRADE_PASSWORD": "${user_config.freqtrade_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "freqtrade_api_url": {
+      "type": "string",
+      "title": "Freqtrade API URL",
+      "description": "The URL of the running Freqtrade REST API server.",
+      "required": true,
+      "default": "http://127.0.0.1:8080"
+    },
+    "freqtrade_username": {
+      "type": "string",
+      "title": "Freqtrade Username",
+      "description": "Username for Freqtrade REST API authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "freqtrade_password": {
+      "type": "string",
+      "title": "Freqtrade Password",
+      "description": "Password for Freqtrade REST API authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Freqtrade-MCP\n\nAn MCP server that integrates with the [Freqtrade](https://www.freqtrade.io/) cryptocurrency trading bot via its REST API, enabling seamless AI agent interaction for automated trading operation.\n\n[![Discord](https://img.shields.io/discord/1353556181251133481?cacheSeconds=3600)](https://discord.gg/aRnuu2eJ)\n![GitHub License](https://img.shields.io/github/license/kukapay/freqtrade-mcp)\n![Python Version](https://img.shields.io/badge/python-3.13+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Installation\n\n### Prerequisites\n- **Python 3.13+**: Ensure Python is installed on your system.\n- **Freqtrade**: A running Freqtrade instance with the REST API enabled (see [Freqtrade Docs](https://www.freqtrade.io/en/stable/rest-api/)).\n- **Git**: For cloning the repository.\n\n### Steps\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/freqtrade-mcp.git\n   cd freqtrade-mcp\n   ```\n\n2. **Install Dependencies**:\n   Using `pip`:\n   ```bash\n   pip install freqtrade-client mcp[cli]\n   ```\n   Or with `uv` (optional):\n   ```bash\n   uv add freqtrade-client \"mcp[cli]\"\n   ```\n\n3. **Client Configuration**:\n\n    ```\n    \"mcpServers\": { \n      \"freqtrade-mcp\": { \n        \"command\": \"uv\", \n        \"args\": [ \n          \"--directory\", \"/your/path/to/freqtrade-mcp\", \n          \"run\", \n          \"__main__.py\" \n        ], \n        \"env\": { \n           \"FREQTRADE_API_URL\": \"http://127.0.0.1:8080\",\n           \"FREQTRADE_USERNAME\": \"your_username\",\n           \"FREQTRADE_PASSWORD\": \"your_password\"\n        } \n      } \n    }\n    ```\n    \n4. **Freqtrade Configuration**:\n\n    Enable the rest API by adding the api_server section to your configuration and setting api_server.enabled to true.\n\n    Sample configuration:\n    ```\n        \"api_server\": {\n        \"enabled\": true,\n        \"listen_ip_address\": \"127.0.0.1\",\n        \"listen_port\": 8080,\n        \"verbosity\": \"error\",\n        \"enable_openapi\": false,\n        \"jwt_secret_key\": \"somethingrandom\",\n        \"CORS_origins\": [],\n        \"username\": \"Freqtrader\",\n        \"password\": \"SuperSecret1!\",\n        \"ws_token\": \"sercet_Ws_t0ken\"\n    },\n    ```\n\n   Check the document [here](https://www.freqtrade.io/en/stable/rest-api/#configuration).\n\n## Usage\n\n### Available Tools\nThe server exposes the following Freqtrade API endpoints as MCP tools:\n\n| Tool                  | Description                          | Parameters                          |\n|-----------------------|--------------------------------------|-------------------------------------|\n| `fetch_market_data`   | Fetch OHLCV data for a pair          | `pair: str`, `timeframe: str`       |\n| `fetch_bot_status`    | Get open trade status                | None                                |\n| `fetch_profit`        | Get profit summary                   | None                                |\n| `fetch_balance`       | Get account balance                  | None                                |\n| `fetch_performance`   | Get performance metrics              | None                                |\n| `fetch_whitelist`     | Get whitelist of pairs               | None                                |\n| `fetch_blacklist`     | Get blacklist of pairs               | None                                |\n| `fetch_trades`        | Get trade history                    | None                                |\n| `fetch_config`        | Get bot configuration                | None                                |\n| `fetch_locks`         | Get trade locks                      | None                                |\n| `place_trade`         | Place a buy/sell trade               | `pair: str`, `side: str`, `stake_amount: float` |\n| `start_bot`           | Start the bot                        | None                                |\n| `stop_bot`            | Stop the bot                         | None                                |\n| `reload_config`       | Reload bot configuration             | None                                |\n| `add_blacklist`       | Add pair to blacklist                | `pair: str`                         |\n| `delete_blacklist`    | Remove pair from blacklist           | `pair: str`                         |\n| `delete_lock`         | Delete a trade lock                  | `lock_id: int`                      |\n\n### Example Prompts\n1. **Fetch Market Data**:\n   - \"Show me the hourly price data for BTC/USDT.\"\n   - \"What’s the 5-minute chart for ETH/BTC like?\"\n   - \"Give me the latest candlestick data for XRP/USDT over the past hour.\"\n\n2. **Fetch Bot Status**:\n   - \"What’s the current status of my open trades?\"\n   - \"Are there any active trades right now?\"\n   - \"Tell me about the bot’s trading activity at the moment.\"\n\n3. **Fetch Profit**:\n   - \"How much profit have I made so far?\"\n   - \"What’s the total profit summary for the bot?\"\n   - \"Can you show me my trading gains?\"\n\n4. **Fetch Balance**:\n   - \"What’s my account balance?\"\n   - \"How much money do I have in the trading account?\"\n   - \"Tell me the current balance of my Freqtrade wallet.\"\n\n5. **Fetch Performance**:\n   - \"How well has the bot been performing?\"\n   - \"What are the performance metrics for my trades?\"\n   - \"Show me the trading stats.\"\n\n6. **Fetch Whitelist**:\n   - \"Which pairs are on the whitelist?\"\n   - \"What trading pairs is the bot allowed to use?\"\n   - \"List the whitelisted pairs for me.\"\n\n7. **Fetch Blacklist**:\n   - \"Which pairs are blacklisted?\"\n   - \"What trading pairs are blocked right now?\"\n   - \"Tell me about the blacklist.\"\n\n8. **Fetch Trades**:\n   - \"What’s the history of my closed trades?\"\n   - \"Show me all the trades the bot has completed.\"\n   - \"Can you list my past trades?\"\n\n9. **Fetch Config**:\n   - \"What’s the current bot configuration?\"\n   - \"Show me the settings the bot is using.\"\n   - \"Tell me about the Freqtrade config.\"\n\n10. **Fetch Locks**:\n    - \"Are there any trade locks active?\"\n    - \"What locks are currently in place?\"\n    - \"Show me the list of trading locks.\"\n\n11. **Place Trade**:\n    - \"Buy 0.01 BTC/USDT right now.\"\n    - \"Sell 0.05 ETH/USDT immediately.\"\n    - \"Place a buy order for 0.1 XRP/USDT.\"\n\n12. **Start Bot**:\n    - \"Start the trading bot.\"\n    - \"Turn on the Freqtrade bot.\"\n    - \"Get the bot running now.\"\n\n13. **Stop Bot**:\n    - \"Stop the trading bot.\"\n    - \"Shut down the Freqtrade bot.\"\n    - \"Pause the bot’s trading.\"\n\n14. **Reload Config**:\n    - \"Reload the bot’s configuration.\"\n    - \"Update the bot settings.\"\n    - \"Refresh the Freqtrade config.\"\n\n15. **Add Blacklist**:\n    - \"Blacklist ETH/USDT.\"\n    - \"Add BTC/ETH to the blacklist.\"\n    - \"Block trading for XRP/USDT.\"\n\n16. **Delete Blacklist**:\n    - \"Remove ETH/USDT from the blacklist.\"\n    - \"Unblock BTC/ETH for trading.\"\n    - \"Take XRP/USDT off the blacklist.\"\n\n17. **Delete Lock**:\n    - \"Delete the trade lock with ID 123.\"\n    - \"Remove lock number 45.\"\n    - \"Unlock the trade with ID 7.\"\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Finance",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "freqtrade-mcp": {
+        "command": "uv",
+        "args": ["--directory", "/your/path/to/freqtrade-mcp", "run", "__main__.py"],
+        "env": {
+          "FREQTRADE_API_URL": "http://127.0.0.1:8080",
+          "FREQTRADE_USERNAME": "your_username",
+          "FREQTRADE_PASSWORD": "your_password"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "freqtrade-mcp",
+    "url": "https://github.com/kukapay/freqtrade-mcp",
+    "name": "freqtrade-mcp",
+    "path": null,
+    "stars": 65,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:14.280Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "freqtrade-client",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

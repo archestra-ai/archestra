@@ -1,12 +1,16 @@
 import {
   type Action,
-  type AgentType,
   getResourceForAgentType,
   type Resource,
-} from "@shared";
-import { UserModel } from "@/models";
-import { type AgentScope, ApiError } from "@/types";
-import { userHasPermission } from "./utils";
+} from "@archestra/shared";
+import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
+import {
+  type AgentScope,
+  type AgentType,
+  AgentTypeSchema,
+  ApiError,
+} from "@/types";
+import { getPermissionsForUserContext, userHasPermission } from "./utils";
 
 /** @public — re-exported for testability */
 export { getResourceForAgentType };
@@ -29,7 +33,12 @@ export async function requireAgentTypePermission(params: {
     params.action,
   );
   if (!allowed) {
-    throw new ApiError(403, "Forbidden");
+    throw new ApiError(
+      403,
+      buildForbiddenErrorMessage({
+        missingPermissions: { [resource]: [params.action] },
+      }),
+    );
   }
 }
 
@@ -82,15 +91,17 @@ export async function getAgentTypePermissionChecker(params: {
   userId: string;
   organizationId: string;
 }): Promise<AgentTypePermissionChecker> {
-  const permissions = await UserModel.getUserPermissions(
-    params.userId,
-    params.organizationId,
-  );
+  const permissions = await getPermissionsForUserContext(params);
   return {
     require(agentType: AgentType, action: Action): void {
       const resource = getResourceForAgentType(agentType);
       if (!(permissions[resource]?.includes(action) ?? false)) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(
+          403,
+          buildForbiddenErrorMessage({
+            missingPermissions: { [resource]: [action] },
+          }),
+        );
       }
     },
     isAdmin(agentType: AgentType): boolean {
@@ -105,6 +116,12 @@ export async function getAgentTypePermissionChecker(params: {
       return AGENT_TYPE_RESOURCES.some(
         (r) => permissions[r]?.includes("read") ?? false,
       );
+    },
+    getAgentTypesWithPermission(action: Action): AgentType[] {
+      return AgentTypeSchema.options.filter((agentType) => {
+        const resource = getResourceForAgentType(agentType);
+        return permissions[resource]?.includes(action) ?? false;
+      });
     },
     hasAnyAdminPermission(): boolean {
       return AGENT_TYPE_RESOURCES.some(
@@ -208,6 +225,12 @@ export function requireScopedModifyPermission(params: {
         );
       }
       return;
+
+    // Fail closed: an out-of-union scope (data corruption, manual write, or a
+    // future scope shipped before this code is updated) must be denied, not
+    // fall through and implicitly grant.
+    default:
+      throw new ApiError(403, `Unknown ${resourceLabel} scope`);
   }
 }
 
@@ -223,6 +246,8 @@ export interface AgentTypePermissionChecker {
   isTeamAdmin(agentType: AgentType): boolean;
   /** Returns true if the user has read on any of the three agent-type resources. */
   hasAnyReadPermission(): boolean;
+  /** Returns agent types for which the user has the requested permission. */
+  getAgentTypesWithPermission(action: Action): AgentType[];
   /** Returns true if the user has admin on any of the three agent-type resources. */
   hasAnyAdminPermission(): boolean;
 }
@@ -236,10 +261,7 @@ async function hasAnyAgentTypePermission(params: {
   organizationId: string;
   action: Action;
 }): Promise<boolean> {
-  const permissions = await UserModel.getUserPermissions(
-    params.userId,
-    params.organizationId,
-  );
+  const permissions = await getPermissionsForUserContext(params);
   return AGENT_TYPE_RESOURCES.some(
     (r) => permissions[r]?.includes(params.action) ?? false,
   );

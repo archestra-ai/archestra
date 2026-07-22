@@ -7,12 +7,16 @@ import {
   DEFAULT_APP_NAME,
   MEMBER_ROLE_NAME,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
+  AppDataModel,
+  AppModel,
+  AppToolModel,
+  AppVersionModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
   ScheduleTriggerModel,
@@ -25,12 +29,17 @@ import {
   TrustedDataPolicyModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import type {
   Agent,
   AgentTool,
+  App,
+  AppTool,
+  AppVersion,
   ConnectorRun,
   InsertAccount,
   InsertAgent,
+  InsertApp,
   InsertConnectorRun,
   InsertConversation,
   InsertInteraction,
@@ -39,7 +48,6 @@ import type {
   InsertKnowledgeBase,
   InsertKnowledgeBaseConnector,
   InsertLlmProviderApiKey,
-  InsertMcpServer,
   InsertMember,
   InsertOrganization,
   InsertOrganizationRole,
@@ -58,9 +66,13 @@ import type {
   ToolInvocation,
   TrustedData,
 } from "@/types";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 
 type MakeUserOverrides = Partial<
-  Pick<InsertUser, "email" | "name" | "emailVerified" | "role">
+  Pick<
+    InsertUser,
+    "email" | "name" | "emailVerified" | "role" | "twoFactorEnabled"
+  >
 >;
 
 /**
@@ -80,6 +92,10 @@ interface TestFixtures {
   makeScheduleTriggerRun: typeof makeScheduleTriggerRun;
   makeTool: typeof makeTool;
   makeAgentTool: typeof makeAgentTool;
+  makeApp: typeof makeApp;
+  makeAppVersion: typeof makeAppVersion;
+  makeAppTool: typeof makeAppTool;
+  makeAppData: typeof makeAppData;
   makeToolPolicy: typeof makeToolPolicy;
   makeTrustedDataPolicy: typeof makeTrustedDataPolicy;
   makeCustomRole: typeof makeCustomRole;
@@ -168,7 +184,15 @@ async function makeVirtualApiKey(
  * Creates a test organization in the database
  */
 async function makeOrganization(
-  overrides: Partial<Pick<InsertOrganization, "name" | "slug">> = {},
+  overrides: Partial<
+    Pick<
+      InsertOrganization,
+      | "name"
+      | "slug"
+      | "defaultDiscoveredToolInvocationPolicy"
+      | "defaultDiscoveredToolResultPolicy"
+    >
+  > = {},
 ) {
   const orgId = crypto.randomUUID();
   const [org] = await db
@@ -215,7 +239,7 @@ async function makeTeam(
 async function makeTeamMember(
   teamId: string,
   userId: string,
-  overrides: { role?: string; syncedFromSso?: boolean } = {},
+  overrides: { role?: "admin" | "member"; syncedFromSso?: boolean } = {},
 ): Promise<TeamMember> {
   return await TeamModel.addMember(
     teamId,
@@ -342,11 +366,24 @@ async function makeScheduleTriggerRun(
  */
 async function makeTool(
   overrides: Partial<
-    Pick<Tool, "name" | "description" | "parameters" | "catalogId" | "agentId">
+    Pick<
+      Tool,
+      | "name"
+      | "rawName"
+      | "description"
+      | "parameters"
+      | "catalogId"
+      | "agentId"
+      | "meta"
+    >
   > = {},
 ): Promise<Tool> {
+  const name =
+    overrides.name ?? `test-tool-${crypto.randomUUID().substring(0, 8)}`;
   const toolData = {
-    name: `test-tool-${crypto.randomUUID().substring(0, 8)}`,
+    name,
+    // Mirror production: catalog-backed tools carry the raw upstream name.
+    rawName: ToolModel.unslugifyName(name),
     description: "Test tool description",
     parameters: {},
     ...overrides,
@@ -375,6 +412,120 @@ async function makeAgentTool(
   return await AgentToolModel.create(agentId, toolId, {
     mcpServerId: overrides.mcpServerId,
     credentialResolutionMode: overrides.credentialResolutionMode,
+  });
+}
+
+/**
+ * Creates a test app (with its version 1) via the App model. Auto-creates an
+ * organization if not provided; defaults to org scope.
+ */
+async function makeApp(
+  overrides: Partial<InsertApp> & {
+    html?: string;
+    teamIds?: string[];
+    scope?: ResourceVisibilityScope;
+    environmentId?: string | null;
+  } = {},
+): Promise<App> {
+  let organizationId = overrides.organizationId;
+  if (!organizationId) {
+    const org = await makeOrganization();
+    organizationId = org.id;
+  }
+  const {
+    html,
+    teamIds,
+    scope: scopeOverride,
+    environmentId,
+    ...appOverrides
+  } = overrides;
+  const scope = scopeOverride ?? "org";
+  // Visibility/environment live on the backing catalog, so an author is needed
+  // (catalog authorId + personal-scope access checks).
+  const authorId = appOverrides.authorId ?? (await makeUser()).id;
+
+  const created = await AppModel.create({
+    app: {
+      name: `Test App ${crypto.randomUUID().substring(0, 8)}`,
+      // Default to a live (enabled) app so existing tests exercise normal
+      // visibility/consumption; disabled-specific tests pass `enabled: false`.
+      enabled: true,
+      ...appOverrides,
+      authorId,
+      organizationId,
+    },
+    payload: {
+      html: html ?? "<!doctype html><title>test app</title>",
+      uiPermissions: null,
+    },
+  });
+  await createAppBacking({
+    app: created,
+    scope,
+    environmentId: environmentId ?? null,
+    userId: authorId,
+    organizationId,
+    teamIds: teamIds ?? [],
+  });
+
+  const app = await AppModel.findById(created.id);
+  if (!app) throw new Error("makeApp: failed to load created app");
+  return app;
+}
+
+/** Forks a new app version (changing the html) and returns the new head version. */
+async function makeAppVersion(
+  appId: string,
+  html?: string,
+): Promise<AppVersion> {
+  const app = await AppModel.update({
+    id: appId,
+    version: {
+      html:
+        html ??
+        `<!doctype html><title>v ${crypto.randomUUID().substring(0, 8)}</title>`,
+      uiPermissions: null,
+    },
+  });
+  if (!app) throw new Error("makeAppVersion: app not found");
+  const head = await AppVersionModel.findByAppAndVersion(
+    appId,
+    app.latestVersion,
+  );
+  if (!head) throw new Error("makeAppVersion: head version missing");
+  return head;
+}
+
+/** Attaches a tool to an app via the AppTool model. */
+async function makeAppTool(
+  appId: string,
+  toolId: string,
+  overrides: Partial<
+    Pick<AppTool, "mcpServerId" | "credentialResolutionMode">
+  > = {},
+) {
+  return await AppToolModel.create(appId, toolId, {
+    mcpServerId: overrides.mcpServerId,
+    credentialResolutionMode: overrides.credentialResolutionMode,
+  });
+}
+
+/** Writes an App Data Store entry (shared partition unless a userId is given). */
+async function makeAppData(
+  appId: string,
+  key: string,
+  value: unknown,
+  userId: string | null = null,
+) {
+  return await AppDataModel.set({
+    appId,
+    userId,
+    key,
+    value,
+    // Fixtures write collaborative (unowned) data; override keeps any future
+    // ownership check a no-op and callerUserId is otherwise unused here.
+    callerUserId: userId ?? "fixture",
+    callerCanOverrideOwner: true,
   });
 }
 
@@ -481,8 +632,22 @@ async function makeMember(
  * Creates a test MCP server in the database
  */
 async function makeMcpServer(
+  // Typed against the raw Drizzle insert shape, not the API-validated
+  // `InsertMcpServer` — this fixture writes directly via `db.insert`, and
+  // `oauthRefreshError` (server-owned state) is intentionally excluded from
+  // the API-facing insert schema.
   overrides: Partial<
-    Pick<InsertMcpServer, "name" | "catalogId" | "ownerId" | "teamId" | "scope">
+    Pick<
+      typeof schema.mcpServersTable.$inferInsert,
+      | "name"
+      | "catalogId"
+      | "ownerId"
+      | "teamId"
+      | "scope"
+      | "localInstallationStatus"
+      | "oauthRefreshError"
+      | "deploymentName"
+    >
   > = {},
 ) {
   // Create a catalog if catalogId is not provided
@@ -520,6 +685,7 @@ async function makeInternalMcpCatalog(
       InsertInternalMcpCatalog,
       | "id"
       | "name"
+      | "icon"
       | "serverType"
       | "serverUrl"
       | "description"
@@ -536,6 +702,10 @@ async function makeInternalMcpCatalog(
       | "enterpriseManagedConfig"
       | "scope"
       | "teams"
+      | "clonedFrom"
+      | "environmentId"
+      | "multitenant"
+      | "deploymentSpecYaml"
     >
   > & {
     organizationId?: string;
@@ -701,7 +871,19 @@ async function makeInteraction(
   overrides: Partial<
     Pick<
       InsertInteraction,
-      "request" | "response" | "type" | "model" | "inputTokens" | "outputTokens"
+      | "request"
+      | "response"
+      | "type"
+      | "model"
+      | "inputTokens"
+      | "outputTokens"
+      | "cost"
+      | "baselineCost"
+      | "toonCostSavings"
+      | "cacheSavings"
+      | "billingMode"
+      | "sessionId"
+      | "cacheReadTokens"
     >
   > = {},
 ) {
@@ -805,7 +987,13 @@ async function makeLlmProviderApiKey(
   overrides: Partial<
     Pick<
       InsertLlmProviderApiKey,
-      "name" | "provider" | "scope" | "userId" | "teamId"
+      | "name"
+      | "provider"
+      | "scope"
+      | "userId"
+      | "teamId"
+      | "baseUrl"
+      | "inferenceBaseUrl"
     >
   > = {},
 ) {
@@ -818,6 +1006,8 @@ async function makeLlmProviderApiKey(
     scope: overrides.scope ?? "org",
     userId: overrides.userId ?? null,
     teamId: overrides.teamId ?? null,
+    baseUrl: overrides.baseUrl ?? null,
+    inferenceBaseUrl: overrides.inferenceBaseUrl ?? null,
   });
 }
 
@@ -880,6 +1070,8 @@ async function makeOAuthClient(
     name?: string;
     redirectUris?: string[];
     userId?: string;
+    scopes?: string[] | null;
+    grantTypes?: string[];
   } = {},
 ) {
   const id = crypto.randomUUID();
@@ -893,12 +1085,16 @@ async function makeOAuthClient(
         "http://localhost:8005/callback",
       ],
       tokenEndpointAuthMethod: "none",
-      grantTypes: ["authorization_code", "refresh_token"],
+      grantTypes: overrides.grantTypes ?? [
+        "authorization_code",
+        "refresh_token",
+      ],
       responseTypes: ["code"],
       public: true,
       type: "web",
       createdAt: new Date(),
       updatedAt: new Date(),
+      ...(overrides.scopes !== undefined ? { scopes: overrides.scopes } : {}),
       ...(overrides.userId ? { userId: overrides.userId } : {}),
     })
     .returning();
@@ -1035,14 +1231,29 @@ async function makeKnowledgeBaseConnector(
 async function makeConnectorRun(
   connectorId: string,
   overrides: Partial<
-    Pick<InsertConnectorRun, "status" | "startedAt" | "documentsProcessed">
+    Pick<
+      InsertConnectorRun,
+      | "status"
+      | "startedAt"
+      | "documentsProcessed"
+      | "documentsIngested"
+      | "stats"
+      | "leaseOwner"
+      | "leaseExpiresAt"
+      | "leaseEpoch"
+      | "runType"
+    >
   > = {},
 ): Promise<ConnectorRun> {
   const [result] = await db
     .insert(schema.connectorRunsTable)
     .values({
+      // Default to a terminal status: the single-flight unique index allows only
+      // one "running" run per connector, so tests that create several runs for a
+      // connector must not all be running. Pass `status: "running"` explicitly
+      // (one per connector) when a live run is needed.
+      status: "success",
       connectorId,
-      status: "running",
       startedAt: new Date(),
       ...overrides,
     })
@@ -1111,6 +1322,18 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeAgentTool: async ({}, use) => {
     await use(makeAgentTool);
+  },
+  makeApp: async ({}, use) => {
+    await use(makeApp);
+  },
+  makeAppVersion: async ({}, use) => {
+    await use(makeAppVersion);
+  },
+  makeAppTool: async ({}, use) => {
+    await use(makeAppTool);
+  },
+  makeAppData: async ({}, use) => {
+    await use(makeAppData);
   },
   makeToolPolicy: async ({}, use) => {
     await use(makeToolPolicy);

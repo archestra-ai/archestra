@@ -2,13 +2,15 @@
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+  TOOL_LIST_AGENTS_SHORT_NAME,
+} from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { AgentKnowledgeBaseModel, AgentModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { archestraMcpBranding } from "./branding";
 
 describe("agent tool execution", () => {
   let testAgent: Agent;
@@ -47,6 +49,23 @@ describe("agent tool execution", () => {
       "Successfully created agent",
     );
     expect((result.content[0] as any).text).toContain("New Test Agent");
+  });
+
+  test("create_agent attributes the calling user as author for org-scoped agents", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      { name: "Org Scoped Agent", scope: "org" },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+
+    const created = await AgentModel.findById(
+      extractCreatedId(result),
+      mockContext.userId,
+      true,
+    );
+    expect(created?.scope).toBe("org");
+    expect(created?.authorId).toBe(mockContext.userId);
   });
 
   test("create_agent persists toolExposureMode", async () => {
@@ -549,6 +568,9 @@ describe("agent RBAC visibility", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("not found");
+    expect((result.content[0] as any).text).toContain(
+      archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
+    );
   });
 });
 

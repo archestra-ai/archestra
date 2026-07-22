@@ -1,0 +1,117 @@
+{
+  "name": "markuspfundstein__mcp-obsidian",
+  "display_name": "mcp-obsidian",
+  "description": "MCP server that interacts with Obsidian via the Obsidian rest API community plugin",
+  "author": {
+    "name": "MarkusPfundstein"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-obsidian"],
+    "env": {
+      "OBSIDIAN_API_KEY": "${user_config.obsidian_api_key}",
+      "OBSIDIAN_HOST": "${user_config.obsidian_host}",
+      "OBSIDIAN_PORT": "${user_config.obsidian_port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "obsidian_api_key": {
+      "type": "string",
+      "title": "Obsidian API Key",
+      "description": "Your API key for the Obsidian Local REST API plugin.",
+      "sensitive": true,
+      "required": true
+    },
+    "obsidian_host": {
+      "type": "string",
+      "title": "Obsidian Host",
+      "description": "The host address where Obsidian is running.",
+      "default": "127.0.0.1",
+      "required": false
+    },
+    "obsidian_port": {
+      "type": "number",
+      "title": "Obsidian Port",
+      "description": "The port number for the Obsidian Local REST API.",
+      "default": 27124,
+      "required": false
+    }
+  },
+  "readme": "# MCP server for Obsidian\n\nMCP server to interact with Obsidian via the Local REST API community plugin.\n\n<a href=\"https://glama.ai/mcp/servers/3wko1bhuek\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/3wko1bhuek/badge\" alt=\"server for Obsidian MCP server\" /></a>\n\n## Components\n\n### Tools\n\nThe server implements multiple tools to interact with Obsidian:\n\n- list_files_in_vault: Lists all files and directories in the root directory of your Obsidian vault\n- list_files_in_dir: Lists all files and directories in a specific Obsidian directory\n- get_file_contents: Return the content of a single file in your vault.\n- search: Search for documents matching a specified text query across all files in the vault\n- patch_content: Insert content into an existing note relative to a heading, block reference, or frontmatter field.\n- append_content: Append content to a new or existing file in the vault.\n- delete_file: Delete a file or directory from your vault.\n\n### Example prompts\n\nIts good to first instruct Claude to use Obsidian. Then it will always call the tool.\n\nThe use prompts like this:\n- Get the contents of the last architecture call note and summarize them\n- Search for all files where Azure CosmosDb is mentioned and quickly explain to me the context in which it is mentioned\n- Summarize the last meeting notes and put them into a new note 'summary meeting.md'. Add an introduction so that I can send it via email.\n\n## Configuration\n\n### Obsidian REST API Key\n\nThere are two ways to configure the environment with the Obsidian REST API Key. \n\n1. Add to server config (preferred)\n\n```json\n{\n  \"mcp-obsidian\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"mcp-obsidian\"\n    ],\n    \"env\": {\n      \"OBSIDIAN_API_KEY\": \"<your_api_key_here>\",\n      \"OBSIDIAN_HOST\": \"<your_obsidian_host>\",\n      \"OBSIDIAN_PORT\": \"<your_obsidian_port>\"\n    }\n  }\n}\n```\nSometimes Claude has issues detecting the location of uv / uvx. You can use `which uvx` to find and paste the full path in above config in such cases.\n\n2. Create a `.env` file in the working directory with the following required variables:\n\n```\nOBSIDIAN_API_KEY=your_api_key_here\nOBSIDIAN_HOST=your_obsidian_host\nOBSIDIAN_PORT=your_obsidian_port\n```\n\nNote:\n- You can find the API key in the Obsidian plugin config\n- Default port is 27124 if not specified\n- Default host is 127.0.0.1 if not specified\n\n## Quickstart\n\n### Install\n\n#### Obsidian REST API\n\nYou need the Obsidian REST API community plugin running: https://github.com/coddingtonbear/obsidian-local-rest-api\n\nInstall and enable it in the settings and copy the api key.\n\n#### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n<details>\n  <summary>Development/Unpublished Servers Configuration</summary>\n  \n```json\n{\n  \"mcpServers\": {\n    \"mcp-obsidian\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"<dir_to>/mcp-obsidian\",\n        \"run\",\n        \"mcp-obsidian\"\n      ],\n      \"env\": {\n        \"OBSIDIAN_API_KEY\": \"<your_api_key_here>\",\n        \"OBSIDIAN_HOST\": \"<your_obsidian_host>\",\n        \"OBSIDIAN_PORT\": \"<your_obsidian_port>\"\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n  <summary>Published Servers Configuration</summary>\n  \n```json\n{\n  \"mcpServers\": {\n    \"mcp-obsidian\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"mcp-obsidian\"\n      ],\n      \"env\": {\n        \"OBSIDIAN_API_KEY\": \"<YOUR_OBSIDIAN_API_KEY>\",\n        \"OBSIDIAN_HOST\": \"<your_obsidian_host>\",\n        \"OBSIDIAN_PORT\": \"<your_obsidian_port>\"\n      }\n    }\n  }\n}\n```\n</details>\n\n## Development\n\n### Building\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n```bash\nuv sync\n```\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory /path/to/mcp-obsidian run mcp-obsidian\n```\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n\nYou can also watch the server logs with this command:\n\n```bash\ntail -n 20 -f ~/Library/Logs/Claude/mcp-server-mcp-obsidian.log\n```\n",
+  "category": "File Management",
+  "quality_score": 79,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-obsidian-unpublished": {
+        "command": "uv",
+        "args": ["--directory", "<dir_to>/mcp-obsidian", "run", "mcp-obsidian"],
+        "env": {
+          "OBSIDIAN_API_KEY": "<your_api_key_here>",
+          "OBSIDIAN_HOST": "<your_obsidian_host>",
+          "OBSIDIAN_PORT": "<your_obsidian_port>"
+        }
+      },
+      "mcp-obsidian-published": {
+        "command": "uvx",
+        "args": ["mcp-obsidian"],
+        "env": {
+          "OBSIDIAN_API_KEY": "<YOUR_OBSIDIAN_API_KEY>",
+          "OBSIDIAN_HOST": "<your_obsidian_host>",
+          "OBSIDIAN_PORT": "<your_obsidian_port>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "MarkusPfundstein",
+    "repo": "mcp-obsidian",
+    "url": "https://github.com/MarkusPfundstein/mcp-obsidian",
+    "name": "mcp-obsidian",
+    "path": null,
+    "stars": 1655,
+    "contributors": 16,
+    "issues": 41,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4aac5c2b874a219652e783b13fde2fb89e9fb640"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:49.809Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-obsidian\"\nversion = \"0.2.1\"\ndescription = \"MCP server to work with Obsidian via the remote REST plugin\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n \"mcp>=1.1.0\",\n \"python-dotenv>=1.0.1\",\n \"requests>=2.32.3\",\n]\n[[project.authors]]\nname = \"Markus Pfundstein\"\nemail = \"markus@life-electronic.nl\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[dependency-groups]\ndev = [\n    \"pyright>=1.1.389\",\n]\n\n[project.scripts]\nmcp-obsidian = \"mcp_obsidian:main\"\n"
+}

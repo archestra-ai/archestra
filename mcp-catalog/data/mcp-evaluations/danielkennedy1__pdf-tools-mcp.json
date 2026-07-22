@@ -1,0 +1,86 @@
+{
+  "name": "danielkennedy1__pdf-tools-mcp",
+  "display_name": "pdf-tools-mcp",
+  "description": "MCP server from danielkennedy1/pdf-tools-mcp",
+  "author": {
+    "name": "danielkennedy1"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "src.main"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# PDF Tools MCP\n\n[![smithery badge](https://smithery.ai/badge/@danielkennedy1/pdf-tools-mcp)](https://smithery.ai/server/@danielkennedy1/pdf-tools-mcp)\n\nA comprehensive set of PDF manipulation tools built with the Model Context Protocol (MCP) framework.\n\n## Features\n\n### Local PDF Operations\n- **Display**: Render PDF pages as images\n- **Merge**: Combine multiple pages into a single long page\n- **Metadata**: Extract document metadata\n- **Text**: Extract text blocks and detailed text information\n- **Snippets**: Create freeform or full-width snippets from PDF pages\n- **Fuse**: Combine pages from multiple documents into a single document\n\n### Remote PDF Operations\n- **Display**: Render remote PDF pages as images\n- **Download**: Fetch PDFs from URLs to local storage\n\n## Installation\n\n### Installing via Smithery\n\nTo install PDF Tools for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@danielkennedy1/pdf-tools-mcp):\n\n```bash\nnpx -y @smithery/cli install @danielkennedy1/pdf-tools-mcp --client claude\n```\n\n### Manual Installation\n```bash\n# Clone the repository\ngit clone https://github.com/yourusername/pdf-tools-mcp.git\ncd pdf-tools-mcp\n\n# Install dependencies\nuv pip install -e .\n```\n\n## Usage\n\nStart the MCP server:\n\n```bash\npython -m src.main\n```\n\nThe server provides PDF manipulation endpoints through the MCP protocol.\n\n## Development\n\n- Python 3.12+ required\n- Uses the MCP framework for tool registration\n- PDF documents are stored with UUID4 filenames for security\n\n```bash\n# Update dependencies\nuv pip install -e . --upgrade\n\n# Commit changes (uses conventional commit format)\ncz commit\n```\n\n## Dependencies\n\n- [MCP Framework](https://github.com/modelcontextprotocol/python-sdk)\n- [PyMuPDF](https://github.com/pymupdf/PyMuPDF)\n- aiohttp/aiofiles for async operations\n- python-magic-bin for file type detection\n\n## License\n\nMIT. See [LICENSE](LICENSE).\n",
+  "category": "File Management",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pdf-tools-mcp": {
+        "command": "python",
+        "args": ["-m", "src.main"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "danielkennedy1",
+    "repo": "pdf-tools-mcp",
+    "url": "https://github.com/danielkennedy1/pdf-tools-mcp",
+    "name": "pdf-tools-mcp",
+    "path": null,
+    "stars": 27,
+    "contributors": 3,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "d5b3757f691f1551e0c0d8be446310f4f67d0558"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:46.711Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "aiofiles",
+      "importance": 7
+    },
+    {
+      "name": "aiohttp",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pymupdf",
+      "importance": 9
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"pdf-tools-mcp\"\nversion = \"0.3.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"aiofiles>=24.1.0\",\n    \"aiohttp>=3.11.16\",\n    \"mcp\",\n    \"pymupdf>=1.25.5\",\n    \"requests>=2.32.3\",\n]\n\n[tool.commitizen]\nname = \"cz_conventional_commits\"\ntag_format = \"$version\"\nversion_scheme = \"pep440\"\nversion_provider = \"pep621\"\nupdate_changelog_on_bump = true\nmajor_version_zero = true\n\n[tool.uv.sources]\nmcp = { git = \"https://github.com/modelcontextprotocol/python-sdk.git\" }\n"
+}

@@ -1,13 +1,16 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { type Mock, vi } from "vitest";
-import { TeamModel, TeamTokenModel } from "@/models";
+import {
+  AgentModel,
+  AgentTeamModel,
+  TeamModel,
+  TeamTokenModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 
 // Mock the hasPermission function
-vi.mock("@/auth", () => ({
-  hasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
 import { hasPermission } from "@/auth";
 
@@ -87,7 +90,7 @@ describe("Token Route Authorization", () => {
     });
 
     describe("team token authorization", () => {
-      test("team admin can access any team token", async ({
+      test("organization-level team manager can access any team token", async ({
         makeOrganization,
         makeUser,
         makeTeam,
@@ -98,17 +101,16 @@ describe("Token Route Authorization", () => {
 
         await TeamTokenModel.createTeamToken(team.id, team.name);
 
-        // Grant team:admin permission
-        setupPermissions({ team: ["admin"] });
+        setupPermissions({ team: ["create"] });
 
         const { success } = await hasPermission(
-          { team: ["admin"] },
+          { team: ["create"] },
           {} as IncomingHttpHeaders,
         );
         expect(success).toBe(true);
       });
 
-      test("user with team:update and membership can access team token", async ({
+      test("literal team admin can access team token", async ({
         makeOrganization,
         makeUser,
         makeTeam,
@@ -117,60 +119,43 @@ describe("Token Route Authorization", () => {
         const org = await makeOrganization();
         const user = await makeUser();
         const team = await makeTeam(org.id, user.id, { name: "Test Team" });
-        await makeTeamMember(team.id, user.id);
+        await makeTeamMember(team.id, user.id, { role: "admin" });
 
         const { token } = await TeamTokenModel.createTeamToken(
           team.id,
           team.name,
         );
 
-        // Grant team:update permission
-        setupPermissions({ team: ["update"] });
+        setupPermissions({ team: ["read"] });
 
-        // Verify permission check
-        const { success: hasUpdate } = await hasPermission(
-          { team: ["update"] },
-          {} as IncomingHttpHeaders,
-        );
-        expect(hasUpdate).toBe(true);
-
-        // Verify team membership
-        const isMember = await TeamModel.isUserInTeam(team.id, user.id);
-        expect(isMember).toBe(true);
+        const isTeamAdmin = await TeamModel.isUserTeamAdmin(team.id, user.id);
+        expect(isTeamAdmin).toBe(true);
 
         // Token should be accessible
         const tokenValue = await TeamTokenModel.getTokenValue(token.id);
         expect(tokenValue).toBeDefined();
       });
 
-      test("user with team:update but no membership cannot access team token", async ({
+      test("literal team member cannot access team token", async ({
         makeOrganization,
         makeUser,
         makeTeam,
+        makeTeamMember,
       }) => {
         const org = await makeOrganization();
         const user = await makeUser();
-        const otherUser = await makeUser();
         const team = await makeTeam(org.id, user.id, { name: "Test Team" });
+        await makeTeamMember(team.id, user.id, { role: "member" });
 
         await TeamTokenModel.createTeamToken(team.id, team.name);
 
-        // Grant team:update permission
-        setupPermissions({ team: ["update"] });
+        setupPermissions({ team: ["read"] });
 
-        // Verify permission check passes
-        const { success: hasUpdate } = await hasPermission(
-          { team: ["update"] },
-          {} as IncomingHttpHeaders,
-        );
-        expect(hasUpdate).toBe(true);
-
-        // But user is not a member
-        const isMember = await TeamModel.isUserInTeam(team.id, otherUser.id);
-        expect(isMember).toBe(false);
+        const isTeamAdmin = await TeamModel.isUserTeamAdmin(team.id, user.id);
+        expect(isTeamAdmin).toBe(false);
       });
 
-      test("user without team:update cannot access team token", async ({
+      test("user without team admin role cannot access team token", async ({
         makeOrganization,
         makeUser,
         makeTeam,
@@ -183,14 +168,10 @@ describe("Token Route Authorization", () => {
 
         await TeamTokenModel.createTeamToken(team.id, team.name);
 
-        // Grant only team:read, not team:update
         setupPermissions({ team: ["read"] });
 
-        const { success: hasUpdate } = await hasPermission(
-          { team: ["update"] },
-          {} as IncomingHttpHeaders,
-        );
-        expect(hasUpdate).toBe(false);
+        const isTeamAdmin = await TeamModel.isUserTeamAdmin(team.id, user.id);
+        expect(isTeamAdmin).toBe(false);
       });
     });
   });
@@ -200,8 +181,7 @@ describe("Token Route Authorization", () => {
       await makeOrganization();
       await TeamTokenModel.ensureOrganizationToken();
 
-      // Grant ac:update and team:admin
-      setupPermissions({ ac: ["update"], team: ["admin"] });
+      setupPermissions({ ac: ["update"], team: ["create"] });
 
       const { success: canSeeOrgTokens } = await hasPermission(
         { ac: ["update"] },
@@ -220,8 +200,7 @@ describe("Token Route Authorization", () => {
       await makeOrganization();
       await TeamTokenModel.ensureOrganizationToken();
 
-      // Grant only team permissions
-      setupPermissions({ team: ["admin"] });
+      setupPermissions({ team: ["create"] });
 
       const { success: canSeeOrgTokens } = await hasPermission(
         { ac: ["update"] },
@@ -238,7 +217,7 @@ describe("Token Route Authorization", () => {
       expect(visibleTokens.filter((t) => t.isOrganizationToken).length).toBe(0);
     });
 
-    test("user with team:admin sees all team tokens", async ({
+    test("organization-level team manager sees all team tokens", async ({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -252,21 +231,20 @@ describe("Token Route Authorization", () => {
       await TeamTokenModel.createTeamToken(team1.id, team1.name);
       await TeamTokenModel.createTeamToken(team2.id, team2.name);
 
-      // Grant team:admin
-      setupPermissions({ team: ["admin"] });
+      setupPermissions({ team: ["create"] });
 
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      const { success: canManageAllTeams } = await hasPermission(
+        { team: ["create"] },
         {} as IncomingHttpHeaders,
       );
-      expect(isTeamAdmin).toBe(true);
+      expect(canManageAllTeams).toBe(true);
 
       const tokens = await TeamTokenModel.findAllWithTeam();
       const teamTokens = tokens.filter((t) => !t.isOrganizationToken);
       expect(teamTokens.length).toBe(2);
     });
 
-    test("user with team:update sees only their team tokens", async ({
+    test("team member sees only tokens for teams they belong to", async ({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -279,31 +257,16 @@ describe("Token Route Authorization", () => {
       const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, otherUser.id, { name: "Team 2" });
 
-      // User is only member of team1
-      await makeTeamMember(team1.id, user.id);
+      await makeTeamMember(team1.id, user.id, { role: "admin" });
 
       await TeamTokenModel.createTeamToken(team1.id, team1.name);
       await TeamTokenModel.createTeamToken(team2.id, team2.name);
 
-      // Grant team:update but not team:admin
-      setupPermissions({ team: ["update"] });
+      setupPermissions({ team: ["read"] });
 
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
-        {} as IncomingHttpHeaders,
-      );
-      expect(isTeamAdmin).toBe(false);
-
-      const { success: hasTeamUpdate } = await hasPermission(
-        { team: ["update"] },
-        {} as IncomingHttpHeaders,
-      );
-      expect(hasTeamUpdate).toBe(true);
-
-      // Get user's teams
+      // Get user's teams (membership, any role — same as the route)
       const userTeamIds = await TeamModel.getUserTeamIds(user.id);
-      expect(userTeamIds).toContain(team1.id);
-      expect(userTeamIds).not.toContain(team2.id);
+      expect(userTeamIds).toEqual([team1.id]);
 
       // Simulate filtering logic
       const tokens = await TeamTokenModel.findAllWithTeam();
@@ -335,14 +298,8 @@ describe("Token Route Authorization", () => {
       await TeamTokenModel.createTeamToken(team1.id, team1.name);
       await TeamTokenModel.createTeamToken(team2.id, team2.name);
 
-      // Grant only mcpGateway:team-admin (no team:admin or team:update)
+      // Grant only mcpGateway:team-admin
       setupPermissions({ mcpGateway: ["team-admin"] });
-
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
-        {} as IncomingHttpHeaders,
-      );
-      expect(isTeamAdmin).toBe(false);
 
       const { success: hasTeamUpdate } = await hasPermission(
         { team: ["update"] },
@@ -409,7 +366,7 @@ describe("Token Route Authorization", () => {
       );
     });
 
-    test("user without team:update sees no team tokens", async ({
+    test("plain team member without team management permissions still sees their team's token listed", async ({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -422,7 +379,9 @@ describe("Token Route Authorization", () => {
 
       await TeamTokenModel.createTeamToken(team.id, team.name);
 
-      // Grant only team:read
+      // Grant only team:read — the member can list the token's metadata,
+      // while the value endpoint stays admin-gated (see checkTokenAccess
+      // tests above).
       setupPermissions({ team: ["read"] });
 
       const { success: hasTeamUpdate } = await hasPermission(
@@ -431,15 +390,128 @@ describe("Token Route Authorization", () => {
       );
       expect(hasTeamUpdate).toBe(false);
 
-      // Simulate filtering logic - no team tokens visible
+      // Simulate filtering logic — membership grants listing visibility
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
       const tokens = await TeamTokenModel.findAllWithTeam();
-      const visibleTokens = hasTeamUpdate
-        ? tokens
-        : tokens.filter((t) => t.isOrganizationToken);
+      const visibleTokens = tokens.filter(
+        (t) =>
+          t.isOrganizationToken || (t.teamId && userTeamIds.includes(t.teamId)),
+      );
 
       expect(visibleTokens.filter((t) => !t.isOrganizationToken).length).toBe(
-        0,
+        1,
       );
+    });
+  });
+  describe("GET /api/tokens worksWithProfile annotation", () => {
+    // Mirrors the route's rule (and AgentTeamModel.teamHasAgentAccess):
+    // org-scoped agents accept any team token, team-scoped agents only
+    // their assigned teams' tokens, personal agents none. Tokens are
+    // annotated (not filtered) so the UI can grey out the rest.
+    const annotateForAgent = async (
+      profileId: string,
+      tokens: Awaited<ReturnType<typeof TeamTokenModel.findAllWithTeam>>,
+    ) => {
+      const agent = await AgentModel.findAccessContextById(profileId);
+      const profileTeamIds =
+        agent?.scope === "team"
+          ? await AgentTeamModel.getTeamsForAgent(profileId)
+          : [];
+      return tokens.map((t) => ({
+        ...t,
+        worksWithProfile:
+          t.isOrganizationToken ||
+          agent?.scope === "org" ||
+          (agent?.scope === "team" &&
+            !!t.teamId &&
+            profileTeamIds.includes(t.teamId)),
+      }));
+    };
+
+    test("org-scoped agent offers every team token, even without team assignments", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id, { name: "Team 1" });
+      await TeamTokenModel.createTeamToken(team.id, team.name);
+
+      const agent = await makeAgent({
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+      });
+
+      const tokens = await TeamTokenModel.findAllWithTeam();
+      const annotated = await annotateForAgent(agent.id, tokens);
+
+      expect(
+        annotated.filter((t) => !t.isOrganizationToken && t.worksWithProfile)
+          .length,
+      ).toBe(1);
+    });
+
+    test("team-scoped agent only offers its assigned teams' tokens", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+      await TeamTokenModel.createTeamToken(team1.id, team1.name);
+      await TeamTokenModel.createTeamToken(team2.id, team2.name);
+
+      const agent = await makeAgent({
+        organizationId: org.id,
+        scope: "team",
+        teams: [team1.id],
+      });
+
+      const tokens = await TeamTokenModel.findAllWithTeam();
+      const annotated = await annotateForAgent(agent.id, tokens);
+
+      const workingTeamTokens = annotated.filter(
+        (t) => !t.isOrganizationToken && t.worksWithProfile,
+      );
+      expect(workingTeamTokens.length).toBe(1);
+      expect(workingTeamTokens[0].teamId).toBe(team1.id);
+      // The other team's token stays listed, just marked unusable
+      expect(annotated.filter((t) => !t.isOrganizationToken).length).toBe(2);
+    });
+
+    test("personal agent offers no team tokens", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id, { name: "Team 1" });
+      await TeamTokenModel.createTeamToken(team.id, team.name);
+
+      const agent = await makeAgent({
+        organizationId: org.id,
+        scope: "personal",
+        teams: [],
+        authorId: user.id,
+      });
+
+      const tokens = await TeamTokenModel.findAllWithTeam();
+      const annotated = await annotateForAgent(agent.id, tokens);
+
+      // Still listed, but no team token is usable against a personal agent
+      expect(annotated.filter((t) => !t.isOrganizationToken).length).toBe(1);
+      expect(
+        annotated.filter((t) => !t.isOrganizationToken && t.worksWithProfile)
+          .length,
+      ).toBe(0);
     });
   });
 });

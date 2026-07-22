@@ -2,9 +2,7 @@ import type OpenAIProvider from "openai";
 import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 
-vi.mock("@/observability", () => ({
-  metrics: { llm: { getObservableFetch: vi.fn() } },
-}));
+vi.mock("@/observability");
 
 vi.mock("@/clients/azure-openai-credentials", () => ({
   getAzureOpenAiBearerTokenProvider: vi.fn(() => async () => "entra-token"),

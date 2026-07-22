@@ -1,5 +1,6 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentKnowledgeBase } from "@/types";
 
 class AgentKnowledgeBaseModel {
@@ -14,10 +15,17 @@ class AgentKnowledgeBaseModel {
     knowledgeBaseId: string,
   ): Promise<AgentKnowledgeBase[]> {
     return await db
-      .select()
+      .select(getTableColumns(schema.agentKnowledgeBasesTable))
       .from(schema.agentKnowledgeBasesTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentKnowledgeBasesTable.agentId, schema.agentsTable.id),
+      )
       .where(
-        eq(schema.agentKnowledgeBasesTable.knowledgeBaseId, knowledgeBaseId),
+        and(
+          eq(schema.agentKnowledgeBasesTable.knowledgeBaseId, knowledgeBaseId),
+          notDeleted(schema.agentsTable),
+        ),
       );
   }
 

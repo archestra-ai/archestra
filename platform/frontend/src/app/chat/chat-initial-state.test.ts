@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildCreateConversationInput,
-  getProviderForModelId,
+  isAutoSendHandoffInProgress,
   resolveChatModelState,
   resolveInitialAgentSelection,
   resolveInitialAgentState,
@@ -156,19 +156,8 @@ describe("resolveInitialAgentSelection", () => {
   });
 });
 
-describe("getProviderForModelId", () => {
-  test("returns the model provider for a model UUID", () => {
-    expect(
-      getProviderForModelId({
-        modelId: "uuid-gpt",
-        chatModels: [model("gpt-4.1", "uuid-gpt", "openai")],
-      }),
-    ).toBe("openai");
-  });
-});
-
 describe("resolveChatModelState", () => {
-  test("includes provider information when chat models are supplied", () => {
+  test("resolves the agent's model and api key", () => {
     const result = resolveChatModelState({
       agent: { id: "agent-1", modelId: "uuid-gpt", llmApiKeyId: "key-1" },
       modelsByProvider: {
@@ -177,13 +166,11 @@ describe("resolveChatModelState", () => {
       chatApiKeys: [{ id: "key-1", provider: "openai" }],
       organization: null,
       memberDefault: null,
-      chatModels: [model("gpt-4.1", "uuid-gpt", "openai")],
     });
 
     expect(result).toEqual({
       modelId: "uuid-gpt",
       apiKeyId: "key-1",
-      provider: "openai",
     });
   });
 });
@@ -273,5 +260,85 @@ describe("shouldResetInitialChatState", () => {
         routeConversationId: undefined,
       }),
     ).toBe(true);
+  });
+});
+
+describe("isAutoSendHandoffInProgress", () => {
+  const base = {
+    conversationId: undefined,
+    initialUserPrompt: undefined,
+    hasAttachmentsMarker: false,
+    hasPendingHandoffFiles: false,
+    autoSendTriggered: false,
+  };
+
+  test("true on first render of a prompt handoff (before the send fires)", () => {
+    // The frame that used to flash the empty New Chat splash: /chat mounted with
+    // a user_prompt, no conversation yet, auto-send not triggered.
+    expect(
+      isAutoSendHandoffInProgress({
+        ...base,
+        initialUserPrompt: "Say hello",
+      }),
+    ).toBe(true);
+  });
+
+  test("stays true after user_prompt is stripped from the URL (latched via ref)", () => {
+    // clearUserPromptQueryParam has run, so initialUserPrompt is gone, but the
+    // conversation is still being created — the ref keeps the splash suppressed.
+    expect(
+      isAutoSendHandoffInProgress({
+        ...base,
+        initialUserPrompt: undefined,
+        autoSendTriggered: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("false during an interactive submit (no handoff signals)", () => {
+    // Pressing Enter on the splash runs the same create mutation, but the
+    // splash must stay visible: its composer keeps focus and is the old half
+    // of the shared-element morph into the conversation view. Handoffs are
+    // identified by their own signals, never by the mutation being pending.
+    expect(isAutoSendHandoffInProgress(base)).toBe(false);
+  });
+
+  test("true for a files-only handoff whose stashed files are still in memory", () => {
+    expect(
+      isAutoSendHandoffInProgress({
+        ...base,
+        hasAttachmentsMarker: true,
+        hasPendingHandoffFiles: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("false for a files-only handoff whose stashed files were lost (reload)", () => {
+    // No prompt and no pending files: nothing will auto-send, so the composer
+    // must show rather than a permanently blank pane.
+    expect(
+      isAutoSendHandoffInProgress({
+        ...base,
+        hasAttachmentsMarker: true,
+        hasPendingHandoffFiles: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("false on the plain /chat new-chat page (no handoff)", () => {
+    expect(isAutoSendHandoffInProgress(base)).toBe(false);
+  });
+
+  test("false once a conversation exists, even mid-handoff signals", () => {
+    // After navigating to /chat/<id> the conversation view owns the screen; the
+    // suppression must not linger and blank out a real conversation.
+    expect(
+      isAutoSendHandoffInProgress({
+        ...base,
+        conversationId: "conv-1",
+        initialUserPrompt: "Say hello",
+        autoSendTriggered: true,
+      }),
+    ).toBe(false);
   });
 });

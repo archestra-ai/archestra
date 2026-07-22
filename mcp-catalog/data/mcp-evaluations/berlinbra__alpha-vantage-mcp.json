@@ -1,0 +1,111 @@
+{
+  "name": "berlinbra__alpha-vantage-mcp",
+  "display_name": "alpha-vantage-mcp",
+  "description": "MCP Server for Alpha Advantage API",
+  "author": {
+    "name": "berlinbra"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "src/alpha_vantage_mcp/server.py"],
+    "env": {
+      "ALPHA_VANTAGE_API_KEY": "${user_config.alpha_vantage_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "alpha_vantage_api_key": {
+      "type": "string",
+      "title": "Alpha Vantage API Key",
+      "description": "Your API key for accessing the Alpha Vantage API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Alpha Vantage MCP Server\n[![smithery badge](https://smithery.ai/badge/@berlinbra/alpha-vantage-mcp)](https://smithery.ai/server/@berlinbra/alpha-vantage-mcp)\n\nA Model Context Protocol (MCP) server that provides real-time access to financial market data through the free [Alpha Vantage API](https://www.alphavantage.co/documentation/). This server implements a standardized interface for retrieving stock quotes and company information.\n\n<a href=\"https://glama.ai/mcp/servers/0wues5td08\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/0wues5td08/badge\" alt=\"AlphaVantage-MCP MCP server\" /></a>\n\n# Features\n\n- Real-time stock quotes with price, volume, and change data\n- Detailed company information including sector, industry, and market cap\n- Real-time cryptocurrency exchange rates with bid/ask prices\n- Daily, weekly, and monthly cryptocurrency time series data\n- Historical options chain data with advanced filtering and sorting\n- Built-in error handling and rate limit management\n\n## Installation\n\n### Using Claude Desktop\n\n#### Installing via Docker\n\n- Clone the repository and build a local image to be utilized by your Claude desktop client\n\n```sh\ncd alpha-vantage-mcp\ndocker build -t mcp/alpha-vantage .\n```\n\n- Change your `claude_desktop_config.json` to match the following, replacing `REPLACE_API_KEY` with your actual key:\n\n > `claude_desktop_config.json` path\n >\n > - On MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n > - On Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"alphavantage\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"-e\",\n        \"ALPHA_VANTAGE_API_KEY\",\n        \"mcp/alpha-vantage\"\n      ],\n      \"env\": {\n        \"ALPHA_VANTAGE_API_KEY\": \"REPLACE_API_KEY\"\n      }\n    }\n  }\n}\n```\n\n#### Installing via Smithery\n\nTo install Alpha Vantage MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@berlinbra/alpha-vantage-mcp):\n\n```bash\nnpx -y @smithery/cli install @berlinbra/alpha-vantage-mcp --client claude\n```\n\n<summary> <h3> Development/Unpublished Servers Configuration <h3> </summary>\n\n<details>\n\n```json\n{\n \"mcpServers\": {\n  \"alpha-vantage-mcp\": {\n   \"args\": [\n    \"--directory\",\n    \"/Users/{INSERT_USER}/YOUR/PATH/TO/alpha-vantage-mcp\",\n    \"run\",\n    \"alpha-vantage-mcp\"\n   ],\n   \"command\": \"uv\",\n   \"env\": {\n    \"ALPHA_VANTAGE_API_KEY\": \"<insert api key>\"\n   }\n  }\n }\n}\n```\n        \n</details>\n\n#### Install packages\n\n```\nuv install -e .\n```\n\n#### Running\n\nAfter connecting Claude client with the MCP tool via json file and installing the packages, Claude should see the server's mcp tools:\n\nYou can run the sever yourself via:\nIn alpha-vantage-mcp repo: \n```\nuv run src/alpha_vantage_mcp/server.py\n```\n\nwith inspector\n```\n* npx @modelcontextprotocol/inspector uv --directory /Users/{INSERT_USER}/YOUR/PATH/TO/alpha-vantage-mcp run src/alpha_vantage_mcp/server.py `\n```\n\n## Available Tools\n\nThe server implements eight tools:\n- `get-stock-quote`: Get the latest stock quote for a specific company\n- `get-company-info`: Get stock-related information for a specific company\n- `get-crypto-exchange-rate`: Get current cryptocurrency exchange rates\n- `get-time-series`: Get historical daily price data for a stock\n- `get-historical-options`: Get historical options chain data with sorting capabilities\n- `get-crypto-daily`: Get daily time series data for a cryptocurrency\n- `get-crypto-weekly`: Get weekly time series data for a cryptocurrency\n- `get-crypto-monthly`: Get monthly time series data for a cryptocurrency\n\n### get-stock-quote\n\n**Input Schema:**\n```json\n{\n    \"symbol\": {\n        \"type\": \"string\",\n        \"description\": \"Stock symbol (e.g., AAPL, MSFT)\"\n    }\n}\n```\n\n**Example Response:**\n```\nStock quote for AAPL:\n\nPrice: $198.50\nChange: $2.50 (+1.25%)\nVolume: 58942301\nHigh: $199.62\nLow: $197.20\n```\n\n### get-company-info\n\nRetrieves detailed company information for a given symbol.\n\n**Input Schema:**\n```json\n{\n    \"symbol\": {\n        \"type\": \"string\",\n        \"description\": \"Stock symbol (e.g., AAPL, MSFT)\"\n    }\n}\n```\n\n**Example Response:**\n```\nCompany information for AAPL:\n\nName: Apple Inc\nSector: Technology\nIndustry: Consumer Electronics\nMarket Cap: $3000000000000\nDescription: Apple Inc. designs, manufactures, and markets smartphones...\nExchange: NASDAQ\nCurrency: USD\n```\n\n### get-crypto-exchange-rate\n\nRetrieves real-time cryptocurrency exchange rates with additional market data.\n\n**Input Schema:**\n```json\n{\n    \"crypto_symbol\": {\n        \"type\": \"string\",\n        \"description\": \"Cryptocurrency symbol (e.g., BTC, ETH)\"\n    },\n    \"market\": {\n        \"type\": \"string\",\n        \"description\": \"Market currency (e.g., USD, EUR)\",\n        \"default\": \"USD\"\n    }\n}\n```\n\n**Example Response:**\n```\nCryptocurrency exchange rate for BTC/USD:\n\nFrom: Bitcoin (BTC)\nTo: United States Dollar (USD)\nExchange Rate: 43521.45000\nLast Updated: 2024-12-17 19:45:00 UTC\nBid Price: 43521.00000\nAsk Price: 43522.00000\n```\n\n### get-time-series\n\nRetrieves daily time series (OHLCV) data.\n\n**Input Schema:**\n```json\n{\n    \"symbol\": {\n        \"type\": \"string\",\n        \"description\": \"Stock symbol (e.g., AAPL, MSFT)\"\n    },\n    \"outputsize\": {\n        \"type\": \"string\",\n        \"description\": \"compact (latest 100 data points) or full (up to 20 years of data)\",\n        \"default\": \"compact\"\n    }\n}\n```\n**Example Response:**\n```\nTime Series Data for AAPL (Last Refreshed: 2024-12-17 16:00:00):\n\nDate: 2024-12-16\nOpen: $195.09\nHigh: $197.68\nLow: $194.83\nClose: $197.57\nVolume: 55,751,011\n```\n\n### get-historical-options\n\nRetrieves historical options chain data with advanced sorting and filtering capabilities.\n\n**Input Schema:**\n```json\n{\n    \"symbol\": {\n        \"type\": \"string\",\n        \"description\": \"Stock symbol (e.g., AAPL, MSFT)\"\n    },\n    \"date\": {\n        \"type\": \"string\",\n        \"description\": \"Optional: Trading date in YYYY-MM-DD format (defaults to previous trading day, must be after 2008-01-01)\",\n        \"pattern\": \"^20[0-9]{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$\"\n    },\n    \"limit\": {\n        \"type\": \"integer\",\n        \"description\": \"Optional: Number of contracts to return (default: 10, use -1 for all contracts)\",\n        \"default\": 10,\n        \"minimum\": -1\n    },\n    \"sort_by\": {\n        \"type\": \"string\",\n        \"description\": \"Optional: Field to sort by\",\n        \"enum\": [\"strike\", \"expiration\", \"volume\", \"open_interest\", \"implied_volatility\", \"delta\", \"gamma\", \"theta\", \"vega\", \"rho\", \"last\", \"bid\", \"ask\"],\n        \"default\": \"strike\"\n    },\n    \"sort_order\": {\n        \"type\": \"string\",\n        \"description\": \"Optional: Sort order\",\n        \"enum\": [\"asc\", \"desc\"],\n        \"default\": \"asc\"\n    }\n}\n```\n\n**Example Response:**\n```\nHistorical Options Data for AAPL (2024-02-20):\n\nContract 1:\nStrike: $190.00\nExpiration: 2024-03-15\nLast: $8.45\nBid: $8.40\nAsk: $8.50\nVolume: 1245\nOpen Interest: 4567\nImplied Volatility: 0.25\nGreeks:\n  Delta: 0.65\n  Gamma: 0.04\n  Theta: -0.15\n  Vega: 0.30\n  Rho: 0.25\n\nContract 2:\n...\n```\n\n### get-crypto-daily\n\nRetrieves daily time series data for a cryptocurrency.\n\n**Input Schema:**\n```json\n{\n    \"symbol\": {\n        \"type\": \"string\",\n        \"description\": \"Cryptocurrency symbol (e.g., BTC, ETH)\"\n    },\n    \"market\": {\n        \"type\": \"string\",\n        \"description\": \"Market currency (e.g., USD, EUR)\",\n        \"default\": \"USD\"\n    }\n}\n```\n\n**Example Response:**\n```\nDaily cryptocurrency time series for SOL in USD:\n\nDaily Time Series for Solana (SOL)\nMarket: United States Dollar (USD)\nLast Refreshed: 2025-04-17 00:00:00 UTC\n\nDate: 2025-04-17\nOpen: 131.31000000 USD\nHigh: 131.67000000 USD\nLow: 130.74000000 USD\nClose: 131.15000000 USD\nVolume: 39652.22195178\n---\nDate: 2025-04-16\nOpen: 126.10000000 USD\nHigh: 133.91000000 USD\nLow: 123.46000000 USD\nClose: 131.32000000 USD\nVolume: 1764240.04195810\n---\n```\n\n### get-crypto-weekly\n\nRetrieves weekly time series data for a cryptocurrency.\n\n**Input Schema:**\n```json\n{\n    \"symbol\": {\n        \"type\": \"string\",\n        \"description\": \"Cryptocurrency symbol (e.g., BTC, ETH)\"\n    },\n    \"market\": {\n        \"type\": \"string\",\n        \"description\": \"Market currency (e.g., USD, EUR)\",\n        \"default\": \"USD\"\n    }\n}\n```\n\n**Example Response:**\n```\nWeekly cryptocurrency time series for SOL in USD:\n\nWeekly Time Series for Solana (SOL)\nMarket: United States Dollar (USD)\nLast Refreshed: 2025-04-17 00:00:00 UTC\n\nDate: 2025-04-17\nOpen: 128.32000000 USD\nHigh: 136.00000000 USD\nLow: 123.46000000 USD\nClose: 131.15000000 USD\nVolume: 4823091.05667581\n---\nDate: 2025-04-13\nOpen: 105.81000000 USD\nHigh: 134.11000000 USD\nLow: 95.16000000 USD\nClose: 128.32000000 USD\nVolume: 18015328.38860037\n---\n```\n\n### get-crypto-monthly\n\nRetrieves monthly time series data for a cryptocurrency.\n\n**Input Schema:**\n```json\n{\n    \"symbol\": {\n        \"type\": \"string\",\n        \"description\": \"Cryptocurrency symbol (e.g., BTC, ETH)\"\n    },\n    \"market\": {\n        \"type\": \"string\",\n        \"description\": \"Market currency (e.g., USD, EUR)\",\n        \"default\": \"USD\"\n    }\n}\n```\n\n**Example Response:**\n```\nMonthly cryptocurrency time series for SOL in USD:\n\nMonthly Time Series for Solana (SOL)\nMarket: United States Dollar (USD)\nLast Refreshed: 2025-04-17 00:00:00 UTC\n\nDate: 2025-04-17\nOpen: 124.51000000 USD\nHigh: 136.18000000 USD\nLow: 95.16000000 USD\nClose: 131.15000000 USD\nVolume: 34268628.85976021\n---\nDate: 2025-03-31\nOpen: 148.09000000 USD\nHigh: 180.00000000 USD\nLow: 112.00000000 USD\nClose: 124.54000000 USD\nVolume: 42360395.75443056\n---\n```\n\n## Error Handling\n\nThe server includes comprehensive error handling for various scenarios:\n\n- Rate limit exceeded\n- Invalid API key\n- Network connectivity issues\n- Timeout handling\n- Malformed responses\n\nError messages are returned in a clear, human-readable format.\n\n## Prerequisites\n\n- Python 3.12 or higher\n- httpx\n- mcp\n\n## Contributors\n\n- [berlinbra](https://github.com/berlinbra)\n- [zzulanas](https://github.com/zzulanas)\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## License\nThis MCP server is licensed under the MIT License. \nThis means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "Finance",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-alpha-vantage-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "-e", "ALPHA_VANTAGE_API_KEY", "mcp/alpha-vantage"],
+        "env": {
+          "ALPHA_VANTAGE_API_KEY": "REPLACE_API_KEY"
+        },
+        "docker_image": "mcp/alpha-vantage"
+      },
+      "alpha-vantage-mcp-with-config": {
+        "command": "uv",
+        "args": ["--directory", "/Users/{INSERT_USER}/YOUR/PATH/TO/alpha-vantage-mcp", "run", "alpha-vantage-mcp"],
+        "env": {
+          "ALPHA_VANTAGE_API_KEY": "<insert api key>"
+        }
+      },
+      "alpha-vantage-mcp-uv-run": {
+        "command": "uv",
+        "args": ["run", "src/alpha_vantage_mcp/server.py"],
+        "env": {}
+      },
+      "alpha-vantage-mcp-with-inspector": {
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/inspector",
+          "uv",
+          "--directory",
+          "/Users/{INSERT_USER}/YOUR/PATH/TO/alpha-vantage-mcp",
+          "run",
+          "src/alpha_vantage_mcp/server.py"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "berlinbra",
+    "repo": "alpha-vantage-mcp",
+    "url": "https://github.com/berlinbra/alpha-vantage-mcp",
+    "name": "berlinbra__alpha-vantage-mcp",
+    "path": null,
+    "stars": 71,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:09.295Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

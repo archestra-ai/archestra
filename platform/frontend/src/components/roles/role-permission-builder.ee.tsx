@@ -7,8 +7,8 @@ import {
   resourceCategories,
   resourceDescriptions,
   resourceLabels,
-} from "@shared";
-import { allAvailableActions } from "@shared/access-control";
+} from "@archestra/shared";
+import { allAvailableActions } from "@archestra/shared/access-control";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,10 @@ const actionLabels: Record<Action, string> = {
   cancel: "Cancel",
   enable: "Enable",
   query: "Query",
+  execute: "Execute",
+  "deploy-to-restricted": "Deploy to Restricted",
+  manage: "Manage",
+  "read-all": "Read All Chats",
 };
 
 const UNGRANTABLE_PERMISSION_TOOLTIP =

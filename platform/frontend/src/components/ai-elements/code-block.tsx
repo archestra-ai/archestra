@@ -15,6 +15,7 @@ import {
   oneLight,
 } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Button } from "@/components/ui/button";
+import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 type CodeBlockContextType = {
@@ -58,7 +59,12 @@ export const CodeBlock = ({
         )}
         {...props}
       >
-        <div className="relative">
+        {/* biome-ignore-start lint/a11y/noNoninteractiveTabindex: scrollable code regions must be keyboard focusable (WCAG 2.1.1) */}
+        <section
+          className="relative"
+          tabIndex={0}
+          aria-label={`Code sample, ${language}`}
+        >
           <SyntaxHighlighter
             className={cn("overflow-hidden", contentClassName)}
             codeTagProps={{
@@ -89,7 +95,8 @@ export const CodeBlock = ({
               {children}
             </div>
           )}
-        </div>
+        </section>
+        {/* biome-ignore-end lint/a11y/noNoninteractiveTabindex: scrollable code regions must be keyboard focusable (WCAG 2.1.1) */}
       </div>
     </CodeBlockContext.Provider>
   );
@@ -112,14 +119,9 @@ export const CodeBlockCopyButton = ({
   const [isCopied, setIsCopied] = useState(false);
   const { code } = useContext(CodeBlockContext);
 
-  const copyToClipboard = async () => {
-    if (typeof window === "undefined" || !navigator.clipboard.writeText) {
-      onError?.(new Error("Clipboard API not available"));
-      return;
-    }
-
+  const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(code);
+      await copyToClipboard(code);
       setIsCopied(true);
       onCopy?.();
       setTimeout(() => setIsCopied(false), timeout);
@@ -134,7 +136,7 @@ export const CodeBlockCopyButton = ({
     <Button
       aria-label={isCopied ? "Copied!" : "Copy to clipboard"}
       className={cn("shrink-0", className)}
-      onClick={copyToClipboard}
+      onClick={handleCopy}
       size="icon"
       variant="ghost"
       {...props}

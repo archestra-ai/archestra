@@ -1,0 +1,102 @@
+{
+  "name": "vasayxtx__mcp-prompt-engine",
+  "display_name": "mcp-prompt-engine",
+  "description": "MCP Prompt Engine",
+  "author": {
+    "name": "vasayxtx"
+  },
+  "server": {
+    "command": "mcp-prompt-engine",
+    "args": ["serve", "--prompts", "${__dirname}/prompts"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Prompt Engine\n\n[![Go Report Card](https://goreportcard.com/badge/github.com/vasayxtx/mcp-prompt-engine)](https://goreportcard.com/report/github.com/vasayxtx/mcp-prompt-engine)\n[![GitHub release (latest by date)](https://img.shields.io/github/v/release/vasayxtx/mcp-prompt-engine)](https://github.com/vasayxtx/mcp-prompt-engine/releases)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Go.Dev reference](https://img.shields.io/badge/go.dev-reference-blue?logo=go&logoColor=white)](https://pkg.go.dev/github.com/vasayxtx/mcp-prompt-engine)\n\nA Model Control Protocol (MCP) server for managing and serving dynamic prompt templates using elegant and powerful text template engine.\nCreate reusable, logic-driven prompts with variables, partials, and conditionals that can be served to any [compatible MCP client](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/clients.mdx) like Claude Code, Claude Desktop, Gemini CLI, VSCode with Copilot, etc.\n\n## Key Features\n\n-   **MCP Compatible**: Works out-of-the-box with any [MCP client](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/clients.mdx) that supports [prompts](https://modelcontextprotocol.io/docs/concepts/prompts).\n-   **Powerful Go Templates**: Utilizes the full power of Go [text/template](https://pkg.go.dev/text/template) syntax, including variables, conditionals, loops, and more.\n-   **Reusable Partials**: Define common components in partial templates (e.g., `_header.tmpl`) and reuse them across your prompts.\n-   **Prompt Arguments**: All template variables are automatically exposed as MCP prompt arguments, allowing dynamic input from clients.\n-   **Hot-Reload**: Automatically detects changes to your prompt files and reloads them without restarting the server.\n-   **Rich CLI**: A modern command-line interface to list, validate, and render templates for easy development and testing.\n-   **Smart Argument Handling**:\n    -   Automatically parses JSON arguments (booleans, numbers, arrays, objects).\n    -   Injects environment variables as fallbacks for template arguments.\n-   **Containerized**: Full Docker support for easy deployment and integration.\n\n## Getting Started\n\n### 1. Installation\n\nInstall using Go:\n```bash\ngo install github.com/vasayxtx/mcp-prompt-engine@latest\n```\n(For other methods like Docker or pre-built binaries, see the [Installation section](#installation) below.)\n\n### 2. Create a Prompt\n\nCreate a `prompts` directory and add a template file. Let's create a prompt to help write a Git commit message.\n\nFirst, create a reusable partial named `prompts/_git_commit_role.tmpl`:\n    ```go\n    {{ define \"_git_commit_role\" }}\n    You are an expert programmer specializing in writing clear, concise, and conventional Git commit messages.\n    Commit message must strictly follow the Conventional Commits specification.\n\n    The final commit message you generate must be formatted exactly as follows:\n\n    ```\n    <type>: A brief, imperative-tense summary of changes\n\n    [Optional longer description, explaining the \"why\" of the change. Use dash points for clarity.]\n    ```\n    {{ if .type -}}\n    Use {{.type}} as a type.\n    {{ end }}\n    {{ end }}\n    ```\n\nNow, create a main prompt `prompts/git_stage_commit.tmpl` that uses this partial:\n    ```go\n    {{- /* Commit currently staged changes */ -}}\n\n    {{- template \"_git_commit_role\" . -}}\n\n    Your task is to commit all currently staged changes.\n    To understand the context, analyze the staged code using the command: `git diff --staged`\n    Based on that analysis, commit staged changes using a suitable commit message.\n    ```\n\n### 3. Validate Your Prompt\n\nValidate your prompt to ensure it has no syntax errors:\n```bash\nmcp-prompt-engine validate git_stage_commit\n✓ git_stage_commit.tmpl - Valid\n```\n\n### 4. Connect MCP Server to Your Client\n\nAdd MCP Server to your MCP client. See [Connecting to Clients](#connecting-to-clients) for configuration examples.\n\n### 5. Use Your Prompt\n\nYour `git_stage_commit` prompt will now be available in your client!\n\nFor example, in Claude Desktop, you can select the `git_stage_commit` prompt, provide the `type` MCP Prompt argument and get a generated prompt that will help you to do a commit with a perfect message.\n\nIn Claude Code or Gemini CLI, you can start typing `/git_stage_commit` and it will suggest the prompt with the provided arguments that will be executed after you select it.\n\n---\n\n## Installation\n\n### Pre-built Binaries\n\nDownload the latest release for your OS from the [GitHub Releases page](https://github.com/vasayxtx/mcp-prompt-engine/releases).\n\n### Build from Source\n\n```bash\ngit clone https://github.com/vasayxtx/mcp-prompt-engine.git\ncd mcp-prompt-engine\nmake build\n```\n\n### Docker\n\nA pre-built Docker image is available. Mount your local `prompts` and `logs` directories to the container.\n\n```bash\n# Pull and run the pre-built image from GHCR\ndocker run -i --rm \\\n  -v /path/to/your/prompts:/app/prompts:ro \\\n  -v /path/to/your/logs:/app/logs \\\n  ghcr.io/vasayxtx/mcp-prompt-engine\n```\n\nYou can also build the image locally with `make docker-build`.\n\n---\n\n## Usage\n\n### Creating Prompt Templates\n\nCreate a directory to store your prompt templates. Each template should be a `.tmpl` file using Go's [text/template](https://pkg.go.dev/text/template) syntax with the following format:\n\n```go\n{{/* Brief description of the prompt */}}\nYour prompt text here with {{.template_variable}} placeholders.\n```\n\nThe first line comment (`{{/* description */}}`) is used as the prompt description, and the rest of the file is the prompt template.\n\nPartial templates should be prefixed with an underscore (e.g., `_header.tmpl`) and can be included in other templates using `{{template \"partial_name\" .}}`.\n\n### Template Syntax\n\nThe server uses Go's `text/template` engine, which provides powerful templating capabilities:\n\n- **Variables**: `{{.variable_name}}` - Access template variables\n- **Built-in variables**:\n    - `{{.date}}` - Current date and time\n- **Conditionals**: `{{if .condition}}...{{end}}`, `{{if .condition}}...{{else}}...{{end}}`\n- **Logical operators**: `{{if and .condition1 .condition2}}...{{end}}`, `{{if or .condition1 .condition2}}...{{end}}`\n- **Loops**: `{{range .items}}...{{end}}`\n- **Template inclusion**: `{{template \"partial_name\" .}}` or `{{template \"partial_name\" dict \"key\" \"value\"}}`\n\nSee the [Go text/template documentation](https://pkg.go.dev/text/template) for more details on syntax and features.\n\n### JSON Argument Parsing\n\nThe server automatically parses argument values as JSON when possible, enabling rich data types in templates:\n\n- **Booleans**: `true`, `false` → Go boolean values\n- **Numbers**: `42`, `3.14` → Go numeric values\n- **Arrays**: `[\"item1\", \"item2\"]` → Go slices for use with `{{range}}`\n- **Objects**: `{\"key\": \"value\"}` → Go maps for structured data\n- **Strings**: Invalid JSON falls back to string values\n\nThis allows for advanced template operations like:\n```go\n{{range .items}}Item: {{.}}{{end}}\n{{if .enabled}}Feature is enabled{{end}}\n{{.config.timeout}} seconds\n```\n\nTo disable JSON parsing and treat all arguments as strings, use the `--disable-json-args` flag for the `serve` and `render` commands.\n\n### CLI Commands\n\nThe CLI is your main tool for managing and testing templates.\nBy default, it looks for templates in the `./prompts` directory, but you can specify a different directory with the `--prompts` flag.\n\n**1. List Templates**\n```bash\n# See a simple list of available prompts\nmcp-prompt-engine list\n\n# See a detailed view with descriptions and variables\nmcp-prompt-engine list --verbose\n```\n\n**2. Render a Template**\n\nRender a prompt directly in your terminal, providing arguments with the `-a` or `--arg` flag.\nIt will automatically inject environment variables as fallbacks for any missing arguments. For example, if you have an environment variable `TYPE=fix`, it will be injected into the template as `{{.type}}`.\n\n```bash\n# Render the git commit prompt, providing the 'type' variable\nmcp-prompt-engine render git_stage_commit --arg type=feat\n```\n\n**3. Validate Templates**\n\nCheck all your templates for syntax errors. The command will return an error if any template is invalid.\n```bash\n# Validate all templates in the directory\nmcp-prompt-engine validate\n\n# Validate a single template\nmcp-prompt-engine validate git_stage_commit\n```\n\n**4. Start the Server**\n\nRun the MCP server to make your prompts available to clients.\n```bash\n# Run with default settings (looks for ./prompts)\nmcp-prompt-engine serve\n\n# Specify a different prompts directory and a log file\nmcp-prompt-engine --prompts /path/to/prompts serve --log-file ./server.log\n```\n\n---\n\n## Connecting to Clients\n\nTo use this engine with any client that supports MCP Prompts, add a new entry to its MCP servers configuration.\n\nGlobal configuration locations (MacOS):\n- Claude Code: `~/.claude.json` (`mcpServers` section)\n- Claude Desktop: `~/Library/Application\\ Support/Claude/claude_desktop_config.json` (`mcpServers` section)\n- Gemini CLI: `~/.gemini/settings.json` (`mcpServers` section)\n\n**Example for a local binary:**\n```json\n{\n  \"prompts\": {\n    \"command\": \"/path/to/your/mcp-prompt-engine\",\n    \"args\": [\n      \"--prompts\", \"/path/to/your/prompts\",\n      \"serve\",\n      \"--quiet\"\n    ]\n  }\n}\n```\n\n**Example for Docker:**\n```json\n{\n  \"mcp-prompt-engine-docker\": {\n    \"command\": \"docker\",\n    \"args\": [\n      \"run\", \"-i\", \"--rm\",\n      \"-v\", \"/path/to/your/prompts:/app/prompts:ro\",\n      \"-v\", \"/path/to/your/logs:/app/logs\",\n      \"ghcr.io/vasayxtx/mcp-prompt-engine\"\n    ]\n  }\n}\n```\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-prompt-engine": {
+        "command": "mcp-prompt-engine",
+        "args": ["serve"],
+        "env": {}
+      },
+      "mcp-prompt-engine-configured": {
+        "command": "mcp-prompt-engine",
+        "args": ["serve", "--prompts", "/path/to/your/prompts", "--disable-json-args"],
+        "env": {}
+      },
+      "ghcr.io-vasayxtx-mcp-prompt-engine-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-v",
+          "/path/to/your/prompts:/app/prompts:ro",
+          "-v",
+          "/path/to/your/logs:/app/logs",
+          "ghcr.io/vasayxtx/mcp-prompt-engine"
+        ],
+        "env": {},
+        "docker_image": "ghcr.io/vasayxtx/mcp-prompt-engine"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "vasayxtx",
+    "repo": "mcp-prompt-engine",
+    "url": "https://github.com/vasayxtx/mcp-prompt-engine",
+    "name": "vasayxtx__mcp-prompt-engine",
+    "path": null,
+    "stars": 6,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "3dd398cd6193b8526c84621d21bc45f53d85f74e"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:44.302Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fatih/color",
+      "importance": 3
+    },
+    {
+      "name": "fsnotify/fsnotify",
+      "importance": 7
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 9
+    },
+    {
+      "name": "urfave/cli/v3",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/vasayxtx/mcp-prompt-engine\n\ngo 1.24\n\nrequire (\n\tgithub.com/fatih/color v1.18.0\n\tgithub.com/fsnotify/fsnotify v1.9.0\n\tgithub.com/mark3labs/mcp-go v0.32.0\n\tgithub.com/stretchr/testify v1.10.0\n\tgithub.com/urfave/cli/v3 v3.3.8\n)\n\nrequire (\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/mattn/go-colorable v0.1.13 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/spf13/cast v1.9.2 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgolang.org/x/sys v0.33.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

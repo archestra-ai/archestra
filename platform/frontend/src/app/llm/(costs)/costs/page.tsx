@@ -1,6 +1,9 @@
 "use client";
 
-import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@shared";
+import {
+  type StatisticsTimeFrame,
+  StatisticsTimeFrameSchema,
+} from "@archestra/shared";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Clock } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -96,6 +99,11 @@ export default function StatisticsPage() {
   const searchParams = useSearchParams();
 
   const [timeframe, setTimeframe] = useState<StatisticsTimeFrame>("1h");
+  // The real timeframe (URL param or localStorage) is only known once the
+  // init effect below has run; hold the statistics queries until then so a
+  // page load doesn't fire a throwaway round of default-timeframe requests
+  // that gets discarded one render later.
+  const [isTimeframeResolved, setIsTimeframeResolved] = useState(false);
   const [customFrom, setCustomFrom] = useState<Date | undefined>();
   const [customTo, setCustomTo] = useState<Date | undefined>();
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
@@ -103,15 +111,19 @@ export default function StatisticsPage() {
   // Statistics data fetching hooks
   const { data: teamStatistics = [] } = useTeamStatistics({
     timeframe,
+    enabled: isTimeframeResolved,
   });
   const { data: agentStatistics = [] } = useProfileStatistics({
     timeframe,
+    enabled: isTimeframeResolved,
   });
   const { data: modelStatistics = [] } = useModelStatistics({
     timeframe,
+    enabled: isTimeframeResolved,
   });
   const { data: costSavingsData } = useCostSavingsStatistics({
     timeframe,
+    enabled: isTimeframeResolved,
   });
 
   /**
@@ -135,6 +147,7 @@ export default function StatisticsPage() {
       setCustomFrom(undefined);
       setCustomTo(undefined);
     }
+    setIsTimeframeResolved(true);
   }, [searchParams]);
 
   // Update URL when timeframe changes
@@ -389,8 +402,13 @@ export default function StatisticsPage() {
       label: formatTimestamp(point.timestamp),
       nonOptimized: point.baselineCost,
       actual: point.actualCost,
+      subscription: point.subscriptionCost,
     }));
   }, [costSavingsData, formatTimestamp]);
+
+  // Whether any subscription-covered (unbilled) usage exists in the window, so
+  // the extra series/legend only appears when it's relevant.
+  const hasSubscriptionCost = (costSavingsData?.totalSubscriptionCost ?? 0) > 0;
 
   const costSavingsChartConfig: ChartConfig = {
     nonOptimized: {
@@ -398,9 +416,17 @@ export default function StatisticsPage() {
       color: "var(--chart-4)",
     },
     actual: {
-      label: "Actual Cost",
+      label: "Actual Cost (Billed)",
       color: "var(--chart-2)",
     },
+    ...(hasSubscriptionCost
+      ? {
+          subscription: {
+            label: "Subscription (Not Billed)",
+            color: "var(--chart-5)",
+          },
+        }
+      : {}),
   };
 
   // Savings breakdown chart data
@@ -412,6 +438,7 @@ export default function StatisticsPage() {
       label: formatTimestamp(point.timestamp),
       optimization: point.optimizationSavings,
       compression: point.toonSavings,
+      cache: point.cacheSavings,
     }));
   }, [costSavingsData, formatTimestamp]);
 
@@ -423,6 +450,10 @@ export default function StatisticsPage() {
     compression: {
       label: "Tool Compression Savings",
       color: "var(--chart-5)",
+    },
+    cache: {
+      label: "Prompt Cache Savings",
+      color: "var(--chart-3)",
     },
   };
 
@@ -565,6 +596,21 @@ export default function StatisticsPage() {
                   dot={{ strokeWidth: 0, r: 3, fill: "var(--color-actual)" }}
                   activeDot={{ strokeWidth: 0, r: 5 }}
                 />
+                {hasSubscriptionCost && (
+                  <Line
+                    dataKey="subscription"
+                    type="monotone"
+                    stroke="var(--color-subscription)"
+                    strokeWidth={2}
+                    strokeDasharray="4 4"
+                    dot={{
+                      strokeWidth: 0,
+                      r: 3,
+                      fill: "var(--color-subscription)",
+                    }}
+                    activeDot={{ strokeWidth: 0, r: 5 }}
+                  />
+                )}
               </LineChart>
             </ChartContainerWrapper>
           </CardContent>
@@ -620,6 +666,18 @@ export default function StatisticsPage() {
                     strokeWidth: 0,
                     r: 3,
                     fill: "var(--color-compression)",
+                  }}
+                  activeDot={{ strokeWidth: 0, r: 5 }}
+                />
+                <Line
+                  dataKey="cache"
+                  type="monotone"
+                  stroke="var(--color-cache)"
+                  strokeWidth={2}
+                  dot={{
+                    strokeWidth: 0,
+                    r: 3,
+                    fill: "var(--color-cache)",
                   }}
                   activeDot={{ strokeWidth: 0, r: 5 }}
                 />
@@ -818,6 +876,9 @@ export default function StatisticsPage() {
                     <TableHead className="bg-card sticky top-0 z-10">
                       Tokens
                     </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Cache read
+                    </TableHead>
                     <TableHead className="bg-card sticky top-0 z-10 text-right">
                       Cost
                     </TableHead>
@@ -827,7 +888,7 @@ export default function StatisticsPage() {
                   {sortedChatAgentStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={6}
                         className="text-center py-8 text-muted-foreground"
                       >
                         No agent data available for the selected timeframe
@@ -845,6 +906,9 @@ export default function StatisticsPage() {
                           {(
                             agent.inputTokens + agent.outputTokens
                           ).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          {(agent.cacheReadTokens ?? 0).toLocaleString()}
                         </TableCell>
                         <TableCell className="text-right">
                           ${agent.cost.toFixed(2)}
@@ -1042,6 +1106,9 @@ export default function StatisticsPage() {
                       Tokens Used
                     </TableHead>
                     <TableHead className="bg-card sticky top-0 z-10">
+                      Cache read
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
                       Cost
                     </TableHead>
                     <TableHead className="bg-card sticky top-0 z-10 text-right">
@@ -1053,7 +1120,7 @@ export default function StatisticsPage() {
                   {sortedModelStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={6}
                         className="text-center py-8 text-muted-foreground"
                       >
                         No model data available for the selected timeframe
@@ -1070,6 +1137,9 @@ export default function StatisticsPage() {
                           {(
                             model.inputTokens + model.outputTokens
                           ).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          {(model.cacheReadTokens ?? 0).toLocaleString()}
                         </TableCell>
                         <TableCell>${model.cost.toFixed(2)}</TableCell>
                         <TableCell className="text-right">

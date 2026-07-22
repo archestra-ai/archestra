@@ -1,8 +1,12 @@
 "use client";
 
-import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  parseFullToolName,
+  TOOL_LOAD_SKILL_SHORT_NAME,
+} from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
+import { BotIcon, CheckCircleIcon, ClockIcon, WebhookIcon } from "lucide-react";
 import { useState } from "react";
 import {
   Tool,
@@ -25,15 +29,72 @@ import {
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils";
+import { useApps } from "./apps-context";
+import {
+  type AppEntryRender,
+  resolveAppEntryRender,
+  resolveRunToolTargetName,
+} from "./chat-messages.utils";
+import { HookRunChip, type HookRunChipData } from "./hook-run-chip";
+import { McpAppEntryContent, McpAppEntryPill } from "./mcp-app-container";
+import { SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 
 type CompactToolEntry = {
+  kind: "tool";
   key: string;
   toolName: string;
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
   errorText: string | undefined;
+  /** A delegation call's surfaced subagent tool calls, rendered between its
+   * Request and Result once the circle is expanded. */
+  nestedToolCalls?: React.ReactNode;
+};
+
+type CompactAppEntry = {
+  /** An MCP-App-rendering call: app pill in the row, app content below it. */
+  kind: "app";
+  key: string;
+  toolName: string;
+  part: ToolUIPart | DynamicToolUIPart;
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null;
+  errorText: string | undefined;
+  /** Never set for app entries; present so ExpandedToolCard can take either. */
+  nestedToolCalls?: React.ReactNode;
+};
+
+type CompactHookEntry = {
+  kind: "hook";
+  key: string;
+  data: HookRunChipData;
+};
+
+type CompactEntry = CompactToolEntry | CompactAppEntry | CompactHookEntry;
+
+/**
+ * Conversation-level context an app entry needs to mount its runtime. Absent
+ * (e.g. in subagent rows), app entries degrade to plain tool circles.
+ */
+type CompactAppContext = {
+  agentId?: string;
+  earlyToolUiStarts?: Record<
+    string,
+    {
+      uiResourceUri: string;
+      html?: string;
+      csp?: { connectDomains?: string[]; resourceDomains?: string[] };
+      permissions?: {
+        camera?: boolean;
+        microphone?: boolean;
+        geolocation?: boolean;
+        clipboardWrite?: boolean;
+      };
+      toolName?: string;
+    }
+  >;
+  onSendMessage?: (text: string) => void;
 };
 
 function CompactCircle({
@@ -46,13 +107,23 @@ function CompactCircle({
   catalogId,
 }: {
   toolName: string;
-  state: "running" | "completed" | "error";
+  state: "running" | "completed" | "error" | "denied";
   isExpanded: boolean;
   isExpandable?: boolean;
   onClick: () => void;
   icon?: string | null;
   catalogId?: string;
 }) {
+  const stateSuffix =
+    state === "running"
+      ? " (running)"
+      : state === "error"
+        ? " (error)"
+        : state === "denied"
+          ? " (denied)"
+          : "";
+  const accessibleName = `${parseFullToolName(toolName).toolName.replace(/_/g, " ")}${stateSuffix}`;
+
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
@@ -61,6 +132,8 @@ function CompactCircle({
             type="button"
             onClick={onClick}
             disabled={!isExpandable}
+            aria-label={accessibleName}
+            aria-expanded={isExpandable ? isExpanded : undefined}
             className={cn(
               "relative inline-flex items-center justify-center size-8 rounded-full border transition-all",
               isExpandable &&
@@ -82,6 +155,7 @@ function CompactCircle({
                 state === "completed" && "bg-green-500",
                 state === "running" && "bg-blue-500 animate-pulse",
                 state === "error" && "bg-destructive",
+                state === "denied" && "bg-orange-500",
               )}
             />
           </button>
@@ -92,7 +166,125 @@ function CompactCircle({
             ? " (running)"
             : state === "error"
               ? " (error)"
-              : ""}
+              : state === "denied"
+                ? " (denied)"
+                : ""}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Variant of CompactCircle for `archestra__load_skill` activation calls (no
+ * `path`). Same chrome as the circle (32px tall, rounded-full, bordered) but
+ * the pill extends horizontally to surface the skill name inline. The pill
+ * itself does NOT expand the tool-call detail card on click — only the skill
+ * name navigates to the Skills list (filtered by name) and only when the user
+ * has `skill:read`. A `load_skill` call with a `path` reads a bundled file from
+ * an already-loaded skill; that's not a skill trigger, so it renders as a plain
+ * tool circle instead of this pill (#6184).
+ */
+function ToolCallSkillPill({
+  toolName,
+  skillName,
+  state,
+}: {
+  toolName: string;
+  skillName: string | null;
+  state: "running" | "completed" | "error" | "denied";
+}) {
+  const tooltipLabel = (() => {
+    const base = skillName ? `Skill: ${skillName}` : "Loading skill";
+    if (state === "running") return `${base} (running)`;
+    if (state === "error") return `${base} (error)`;
+    return base;
+  })();
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <SkillPill skillName={skillName} data-tool-name={toolName}>
+            {state === "running" || state === "error" ? (
+              <span
+                className={cn(
+                  "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+                  state === "running" && "bg-blue-500 animate-pulse",
+                  state === "error" && "bg-destructive",
+                )}
+              />
+            ) : null}
+          </SkillPill>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {tooltipLabel}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Compact circle for a hook run, visually matching CompactCircle: webhook icon
+ * in a bordered circle with an outcome dot (green proceeded, orange blocked,
+ * red error / timeout). Clicking expands the full HookRunChip card below the
+ * row, exactly like a tool circle expands its tool card.
+ */
+function HookCircle({
+  data,
+  isExpanded,
+  isExpandable = true,
+  onClick,
+}: {
+  data: HookRunChipData;
+  isExpanded: boolean;
+  isExpandable?: boolean;
+  onClick: () => void;
+}) {
+  const outcome = data.outcome ?? "";
+  const tooltip = [
+    data.hookEventName,
+    data.fileName,
+    outcome ? `(${outcome})` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onClick}
+            disabled={!isExpandable}
+            className={cn(
+              "relative inline-flex items-center justify-center size-8 rounded-full border transition-all",
+              isExpandable &&
+                "hover:bg-accent hover:border-accent-foreground/20",
+              !isExpandable && "cursor-default",
+              isExpanded
+                ? "bg-accent border-accent-foreground/20 ring-2 ring-primary/20"
+                : "bg-background",
+            )}
+            aria-label="Show hook run details"
+            aria-expanded={isExpandable ? isExpanded : undefined}
+          >
+            <WebhookIcon className="size-3.5 text-muted-foreground" />
+            <span
+              className={cn(
+                "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+                outcome === "proceeded" && "bg-green-500",
+                outcome === "blocked" && "bg-orange-500",
+                (outcome === "error" || outcome === "timeout") &&
+                  "bg-destructive",
+              )}
+            />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {tooltip}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -109,8 +301,9 @@ export function CompactToolGroup({
   toolIconMap,
   canExpandToolCalls = true,
   onToolApprovalResponse,
+  appContext,
 }: {
-  tools: CompactToolEntry[];
+  tools: CompactEntry[];
   toolIconMap?: ToolIconMap;
   canExpandToolCalls?: boolean;
   onToolApprovalResponse?: (params: {
@@ -118,50 +311,232 @@ export function CompactToolGroup({
     approved: boolean;
     reason?: string;
   }) => void;
+  appContext?: CompactAppContext;
 }) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const { isToolName } = useArchestraMcpIdentity();
+  const { isToolName, getToolShortName } = useArchestraMcpIdentity();
+  const { isAppOpen, toggleAppOpen, portalTarget } = useApps();
 
   const handleToggle = (key: string) => {
     if (!canExpandToolCalls) return;
+    // Expanding a tool card collapses any inline app open in this row — the
+    // mirror of an app pill collapsing an expanded tool card, so only one
+    // thing unfolds under the row at a time. Panel-hosted apps are untouched
+    // (nothing is expanded inline while the panel hosts).
+    if (expandedKey !== key && !portalTarget) {
+      for (const entry of tools) {
+        if (
+          entry.kind === "app" &&
+          entry.part.toolCallId &&
+          isAppOpen(entry.part.toolCallId)
+        ) {
+          toggleAppOpen(entry.part.toolCallId);
+        }
+      }
+    }
     setExpandedKey((prev) => (prev === key ? null : key));
   };
 
-  const expandedTool = tools.find((t) => t.key === expandedKey);
+  const expandedEntry = tools.find((t) => t.key === expandedKey);
+
+  // Resolve each app entry's render once: the pill needs the app identity, the
+  // content below the row needs the full mount props. A `null` render (e.g. a
+  // still-streaming scaffold/edit call) degrades to a plain tool circle.
+  const appRenders = new Map<string, AppEntryRender>();
+  if (appContext?.agentId) {
+    for (const entry of tools) {
+      if (entry.kind !== "app") continue;
+      const render = resolveAppEntryRender({
+        part: entry.part,
+        toolResultPart: entry.toolResultPart,
+        early: entry.part.toolCallId
+          ? appContext.earlyToolUiStarts?.[entry.part.toolCallId]
+          : undefined,
+        getToolShortName,
+      });
+      if (render) appRenders.set(entry.key, render);
+    }
+  }
+
+  const circleIconProps = (displayToolName: string) => {
+    const iconInfo = toolIconMap?.get(displayToolName);
+    return {
+      icon: iconInfo?.icon,
+      catalogId:
+        iconInfo?.catalogId ??
+        (isToolName(displayToolName) ? ARCHESTRA_MCP_CATALOG_ID : undefined),
+    };
+  };
 
   return (
-    <div className="mb-1">
+    <div className="mb-4">
       <div className="flex flex-wrap gap-1.5 items-center">
-        {tools.map((tool) => {
-          const iconInfo = toolIconMap?.get(tool.toolName);
+        {tools.map((entry) => {
+          if (entry.kind === "hook") {
+            return (
+              <HookCircle
+                key={entry.key}
+                data={entry.data}
+                isExpanded={expandedKey === entry.key}
+                isExpandable={canExpandToolCalls}
+                onClick={() => handleToggle(entry.key)}
+              />
+            );
+          }
+          const state = getCompactToolState({
+            part: entry.part,
+            toolResultPart: entry.toolResultPart,
+          });
+          if (entry.kind === "app") {
+            const render = appRenders.get(entry.key);
+            if (!render) {
+              // No render to mount (still streaming, or no agent context):
+              // a regular circle that expands the tool details.
+              const displayToolName = resolveRunToolTargetName(
+                entry.part,
+                entry.toolName,
+                { getToolShortName },
+              );
+              const iconProps = circleIconProps(displayToolName);
+              return (
+                <CompactCircle
+                  key={entry.key}
+                  toolName={displayToolName}
+                  state={state}
+                  isExpanded={expandedKey === entry.key}
+                  isExpandable={canExpandToolCalls}
+                  onClick={() => handleToggle(entry.key)}
+                  {...iconProps}
+                />
+              );
+            }
+            // No icon override: the pill keeps the generic app-window glyph —
+            // the app pill identifies the APP, not the serving MCP catalog.
+            return (
+              <McpAppEntryPill
+                key={entry.key}
+                appId={render.appId}
+                appName={render.appName}
+                toolName={render.mcpAppToolName}
+                toolCallId={entry.part.toolCallId}
+                state={state}
+                // Opening an app collapses an expanded tool-call card so only
+                // one thing unfolds under the row at a time.
+                onClick={() => setExpandedKey(null)}
+              />
+            );
+          }
+          if (getToolShortName(entry.toolName) === TOOL_LOAD_SKILL_SHORT_NAME) {
+            const input = (entry.part.input ?? {}) as {
+              name?: unknown;
+              path?: unknown;
+            };
+            // A `load_skill` call with a `path` reads a bundled file from an
+            // already-loaded skill — a sub-action, not a new skill trigger.
+            // Only activation calls (no path) get the "Skill:" pill; file reads
+            // fall through to the normal tool circle below (#6184).
+            const skillPath =
+              typeof input.path === "string" && input.path.length > 0
+                ? input.path
+                : null;
+            if (!skillPath) {
+              const skillName =
+                typeof input.name === "string" && input.name.length > 0
+                  ? input.name
+                  : null;
+              return (
+                <ToolCallSkillPill
+                  key={entry.key}
+                  toolName={entry.toolName}
+                  skillName={skillName}
+                  state={state}
+                />
+              );
+            }
+          }
+          // A run_tool dispatch belongs visually to its *target* tool: unwrap
+          // so the circle shows the underlying MCP server's icon (and tooltip
+          // name) instead of the generic Archestra built-in icon.
+          const displayToolName = resolveRunToolTargetName(
+            entry.part,
+            entry.toolName,
+            { getToolShortName },
+          );
+          const iconInfo = toolIconMap?.get(displayToolName);
           const fallbackCatalogId =
             iconInfo?.catalogId ??
-            (isToolName(tool.toolName) ? ARCHESTRA_MCP_CATALOG_ID : undefined);
+            (isToolName(displayToolName)
+              ? ARCHESTRA_MCP_CATALOG_ID
+              : undefined);
           return (
             <CompactCircle
-              key={tool.key}
-              toolName={tool.toolName}
-              state={getCompactToolState({
-                part: tool.part,
-                toolResultPart: tool.toolResultPart,
-              })}
-              isExpanded={expandedKey === tool.key}
+              key={entry.key}
+              toolName={displayToolName}
+              state={state}
+              isExpanded={expandedKey === entry.key}
               isExpandable={canExpandToolCalls}
-              onClick={() => handleToggle(tool.key)}
+              onClick={() => handleToggle(entry.key)}
               icon={iconInfo?.icon}
               catalogId={fallbackCatalogId}
             />
           );
         })}
       </div>
-      {expandedTool && (
+      {expandedEntry && (
         <div className="mt-2">
-          <ExpandedToolCard
-            tool={expandedTool}
-            onToolApprovalResponse={onToolApprovalResponse}
-          />
+          {expandedEntry.kind === "hook" ? (
+            <HookRunChip data={expandedEntry.data} defaultOpen />
+          ) : (
+            <ExpandedToolCard
+              tool={expandedEntry}
+              onToolApprovalResponse={onToolApprovalResponse}
+            />
+          )}
         </div>
       )}
+      {appContext?.agentId
+        ? tools.map((entry) => {
+            if (entry.kind !== "app") return null;
+            const render = appRenders.get(entry.key);
+            if (!render) return null;
+            const early = entry.part.toolCallId
+              ? appContext.earlyToolUiStarts?.[entry.part.toolCallId]
+              : undefined;
+            return (
+              <McpAppEntryContent
+                key={entry.key}
+                uiResourceUri={render.uiResourceUri}
+                appId={render.appId}
+                mcpServerId={render.mcpServerId}
+                appName={render.appName}
+                appVersion={render.appVersion}
+                agentId={appContext.agentId as string}
+                toolName={render.mcpAppToolName}
+                toolCallId={entry.part.toolCallId}
+                toolInput={render.toolInput}
+                rawOutput={render.rawOutput}
+                preloadedResource={
+                  early?.html
+                    ? {
+                        html: early.html,
+                        csp: early.csp,
+                        permissions: early.permissions,
+                      }
+                    : undefined
+                }
+                // Surfaced only when the app renders nothing to display, so the
+                // call stays inspectable instead of the section going blank.
+                toolDetails={
+                  <ExpandedToolCard
+                    tool={entry}
+                    onToolApprovalResponse={onToolApprovalResponse}
+                  />
+                }
+                onSendMessage={appContext.onSendMessage}
+              />
+            );
+          })
+        : null}
     </div>
   );
 }
@@ -170,23 +545,16 @@ function ExpandedToolCard({
   tool,
   onToolApprovalResponse,
 }: {
-  tool: CompactToolEntry;
+  tool: CompactToolEntry | CompactAppEntry;
   onToolApprovalResponse?: (params: {
     id: string;
     approved: boolean;
     reason?: string;
   }) => void;
 }) {
-  const { part, toolResultPart, toolName, errorText } = tool;
+  const { part, toolResultPart, toolName, errorText, nestedToolCalls } = tool;
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const isApprovalRequested = part.state === "approval-requested";
-  const hasContent = Boolean(
-    hasInput ||
-      errorText ||
-      isApprovalRequested ||
-      (toolResultPart && Boolean(toolResultPart.output)) ||
-      (!toolResultPart && Boolean(part.output)),
-  );
 
   const logsButton = errorText ? (
     <ToolErrorLogsButton toolName={toolName} />
@@ -198,15 +566,16 @@ function ExpandedToolCard({
   });
 
   return (
-    <Tool defaultOpen={true}>
+    <Tool open>
       <ToolHeader
         type={`tool-${toolName}`}
         state={headerState}
-        isCollapsible={hasContent}
+        isCollapsible={false}
         actionButton={logsButton}
       />
       <ToolContent>
-        {hasInput ? <ToolInput input={part.input} /> : null}
+        {hasInput ? <ToolInput input={part.input} defaultOpen /> : null}
+        {nestedToolCalls}
         {isApprovalRequested &&
           onToolApprovalResponse &&
           "approval" in part &&

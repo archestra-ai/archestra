@@ -1,0 +1,97 @@
+{
+  "name": "srinath1510__alltrails-mcp-server",
+  "display_name": "alltrails-mcp-server",
+  "description": "MCP server from srinath1510/alltrails-mcp-server",
+  "author": {
+    "name": "srinath1510"
+  },
+  "server": {
+    "command": "python3",
+    "args": ["${__dirname}/server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# AllTrails MCP Server\n\nA Model Context Protocol (MCP) server that provides access to AllTrails data, allowing you to search for hiking trails and get detailed trail information directly through Claude Desktop.\n\n## Features\n\n- 🥾 **Search trails** by national park\n- 📍 **Get detailed trail information** including difficulty, length, elevation gain, and descriptions\n- 🏔️ **Comprehensive trail data** from AllTrails including ratings, route types, and summaries\n- 🤖 **Seamless Client integration** via MCP protocol\n\n## Technical Specifications\n\n### Protocol Support\n\n- **Protocol Version**: MCP 1.9.4\n- **Communication**: Standard input/output (stdio)\n- **Capabilities**: Tools\n- **Server Name**: alltrails-mcp\n- **Server Version**: 0.1.0\n\n## Tools Available\n\n### `search_trails`\nSearch for trails in a specific national park using AllTrails data.\n\n**Parameters:**\n- `park` (required): Park slug in format `us/state/park-name` (e.g., `us/tennessee/great-smoky-mountains-national-park`)\n\n### `get_trail_details`\nGet detailed information about a specific trail by its AllTrails slug.\n\n**Parameters:**\n- `slug` (required): Trail slug from AllTrails URL (the part after `/trail/`)\n\n## Installation Options\n\n### Option 1: With Virtual Environment (Recommended)\n\nThis approach isolates dependencies and prevents conflicts with other Python projects.\n\n### 1. Clone the Repository\n\n```\ngit clone <your-repo-url>\ncd alltrails_mcp\n```\n\n### 2. Create Virtual Environment\n\n```\npython3 -m venv alltrails_mcp_venv\nsource alltrails_mcp_venv/bin/activate  # On Windows: alltrails_mcp_venv\\Scripts\\activate\n```\n\n### 3. Install Dependencies\n\n```\npip install -r requirements.txt\n```\n\n### 4. Verify Installation\n\nTest that the server starts without errors:\n\n```\npython3 server.py\n```\n\nYou should see the server start without crashing. Press Ctrl+C to stop.\n\n## Prerequisites\n\n- Python 3.8 or higher\n- This server can be used with any MCP-compatible client. I use Claude Desktop with Pro subscription.\n- macOS (tested) or other Unix-like system\n\n---\n\n### Option 2: With System Python\n\nIf you prefer not to use a virtual environment, you can install dependencies globally.\n\n### 1. Clone the Repository\n\n```\ngit clone <your-repo-url>\ncd alltrails_mcp\n```\n\n### 2. Install Dependencies Globally\n\n```\npip install -r requirements.txt\n```\n\n### 3. Verify Installation\n\nTest that the server starts without errors:\n\n```\npython3 server.py\n```\n\nYou should see the server start without crashing. Press Ctrl+C to stop.\n\n## Claude Desktop Configuration\n\n### 1. Locate Claude Desktop Config\n\nFind your Claude Desktop configuration file:\n- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\nIf it doesn't exist, create a json file named claude_desktop_config.json in the above directory.\n\n### 2. Add MCP Server Configuration\n\nAdd the following to your `claude_desktop_config.json` file:\n\n#### Option A: Using Virtual Environment (Recommended)\n```json\n{\n  \"mcpServers\": {\n    \"alltrails_mcp_server\": {\n      \"command\": \"/path/to/your/alltrails_mcp/alltrails_mcp_venv/bin/python3\",\n      \"args\": [\"/path/to/your/alltrails_mcp/server.py\"]\n    }\n  }\n}\n```\n\n#### Option B: Using System Python\n```json\n{\n  \"mcpServers\": {\n    \"alltrails_mcp_server\": {\n      \"command\": \"python3\",\n      \"args\": [\"/path/to/your/alltrails_mcp/server.py\"]\n    }\n  }\n}\n```\n\n**Or with absolute Python path:**\n```json\n{\n  \"mcpServers\": {\n    \"alltrails_mcp_server\": {\n      \"command\": \"/usr/bin/python3\",\n      \"args\": [\"/path/to/your/alltrails_mcp/server.py\"]\n    }\n  }\n}\n```\n\n**Important:** Replace `/path/to/your/alltrails_mcp` with the actual absolute path to your project directory.\n\n#### Other MCP Clients\n\nFor other MCP-compatible clients, refer to their documentation for server configuration. The server implements the standard MCP protocol and should work with any compliant client.\n\n**Server Command:** `python3 server.py`  \n**Communication:** Standard input/output (stdio)  \n**Protocol Version:** MCP 1.9.4\n\n### 3. Find Your Python Path\n\n#### For Virtual Environment Users:\n```\ncd /path/to/your/alltrails_mcp\nsource alltrails_mcp_venv/bin/activate\nwhich python3\n```\n\n#### For System Python Users:\n```\nwhich python3\n```\n\nUse the output path in your configuration.\n\n### 4. Install Dependencies\n\n#### If Using Virtual Environment:\nDependencies are already installed in your virtual environment from step 3.\n\n#### If Using System Python:\nInstall dependencies globally:\n```\npip install -r requirements.txt\n```\n\n### 5. Restart Claude Desktop\n\nCompletely quit and restart Claude Desktop for the changes to take effect.\n\n## Usage Examples\n\nOnce configured, you can use these commands in Claude Desktop:\n\n### Search for Trails\n\n**By park name:**\n```\nFind trails in Great Smoky Mountains National Park\n```\n\n**By location:**\n```\nWhat are the best hiking trails in Yosemite?\n```\n\n**With specific criteria:**\n```\nShow me moderate difficulty trails in Yellowstone\n```\n\n**Using park slugs directly:**\n```\nSearch for trails in us/california/yosemite-national-park\n```\n\n**For specific activities:**\n```\nFind family-friendly trails in Zion National Park\n```\n\n### Get Trail Details\n\n**By trail name:**\n```\nGet details for Alum Cave Trail to Mount LeConte\n```\n\n**Using trail slugs:**\n```\nGet details for trail us/tennessee/alum-cave-trail-to-mount-leconte\n```\n\n**For planning purposes:**\n```\nI need detailed information about Rainbow Falls Trail including difficulty and elevation\n```\n\n### Combination Queries\n\n**Search and get details:**\n```\nFind the most popular trails in Grand Canyon National Park and give me details about the top rated one\n```\n\n**Compare trails:**\n```\nSearch for trails in Great Smoky Mountains and tell me which ones are best for beginners\n```\n\n**Trip planning:**\n```\nI'm visiting Yellowstone for 3 days. Find me a mix of easy and moderate trails with good views\n```\n\n### Natural Language Examples\n\nThe MCP server works with natural language, so you can ask questions like:\n\n- \"What are some good day hikes in the Smoky Mountains?\"\n- \"Find me a challenging trail with waterfalls in Tennessee\"\n- \"I want to hike to a summit with 360-degree views\"\n- \"Show me trails that are good for photography\"\n- \"Find dog-friendly trails in national parks\"\n- \"What's the difficulty level of Charlies Bunion trail?\"\n\n### Common Park Slugs\n- Great Smoky Mountains: `us/tennessee/great-smoky-mountains-national-park`\n- Yosemite: `us/california/yosemite-national-park`\n- Yellowstone: `us/wyoming/yellowstone-national-park`\n- Grand Canyon: `us/arizona/grand-canyon-national-park`\n- Zion: `us/utah/zion-national-park`\n\n## Troubleshooting\n\n### Server Not Connecting\n\n1. **Check the logs:**\n   ```bash\n   tail -f ~/Library/Logs/Claude/mcp.log\n   ```\n\n2. **Verify your config file:**\n   ```bash\n   cat ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n   ```\n\n3. **Test the server manually:**\n   ```bash\n   cd /path/to/your/alltrails_mcp\n   source alltrails_mcp_venv/bin/activate\n   python3 server.py\n   ```\n\n### Common Issues\n\n- **\"Connection closed\" errors**: Usually indicates a Python path or virtual environment issue\n### **Path configuration issues**: Check that all paths in the config are absolute and correct\n- **Import errors**: Ensure all dependencies are installed in the correct Python environment (virtual environment vs system Python)\n- **Python path errors**: Use `which python3` or `which python` to verify the correct Python executable path\n\n### Debug Mode\n\nFor detailed debugging, check the MCP logs:\n\n```\n# macOS\ntail -f ~/Library/Logs/Claude/mcp.log\n\n# The server also outputs debug information to stderr\n```\n\n## Project Structure\n\n```\nalltrails_mcp/\n├── app/\n│   └── alltrails_scraper.py    # AllTrails scraping logic\n├── examples/\n│   └── claude_desktop_config.json  # Example configuration file for Claude Desktop\n├── server.py                   # MCP server implementation\n├── requirements.txt            # Python dependencies\n├── alltrails_mcp_venv/         # Virtual environment\n└── README.md                   # This file\n└── .gitignore                  # Git ignore file\n```\n\n## How It Works\n\n1. **MCP Protocol**: Uses the Model Context Protocol to communicate with Claude Desktop\n2. **Web Scraping**: Scrapes AllTrails website for trail data using BeautifulSoup\n3. **Data Processing**: Formats and returns trail information in a structured format\n4. **Tool Integration**: Exposes tools that Claude can call to search and retrieve trail data\n\n\n## License\n\nMIT License\n\nCopyright (c) 2025 Srinath Srinivasan\n\n## Acknowledgments\n\n- Built using the [Model Context Protocol](https://modelcontextprotocol.io/)\n- Trail data sourced from [AllTrails](https://www.alltrails.com/)\n- Inspired by the MCP community examples\n\n---\n\n**Note:** This tool scrapes publicly available data from AllTrails. Please use responsibly and in accordance with AllTrails' terms of service.",
+  "category": "Travel",
+  "quality_score": 41,
+  "archestra_config": {
+    "client_config_permutations": {
+      "alltrails-mcp-stdio": {
+        "command": "python3",
+        "args": ["server.py"],
+        "env": {}
+      },
+      "alltrails_mcp_server-venv": {
+        "command": "/path/to/your/alltrails_mcp/alltrails_mcp_venv/bin/python3",
+        "args": ["/path/to/your/alltrails_mcp/server.py"],
+        "env": {}
+      },
+      "alltrails_mcp_server-system-relative": {
+        "command": "python3",
+        "args": ["/path/to/your/alltrails_mcp/server.py"],
+        "env": {}
+      },
+      "alltrails_mcp_server-system-absolute": {
+        "command": "/usr/bin/python3",
+        "args": ["/path/to/your/alltrails_mcp/server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "srinath1510",
+    "repo": "alltrails-mcp-server",
+    "url": "https://github.com/srinath1510/alltrails-mcp-server",
+    "name": "alltrails-mcp-server",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d23458a5ce2075ecf7f06d9101364709a4f674cd"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:39.625Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "beautifulsoup4",
+      "importance": 8
+    },
+    {
+      "name": "lxml",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp>=1.0.0\nrequests>=2.31.0\nbeautifulsoup4>=4.12.0\nlxml>=4.9.0"
+}

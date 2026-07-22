@@ -18,8 +18,7 @@ jobs:
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 60
     permissions:
@@ -30,7 +29,7 @@ jobs:
       actions: read # Required for Claude to read CI results on PRs.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 10 # give Claude a bit more context
           persist-credentials: false
@@ -46,6 +45,5 @@ jobs:
           use_sticky_comment: "true"
           additional_permissions: |
             actions: read
-          assignee_trigger: "claude-bot"
-          allowed_tools: 'Bash(pnpm install),Bash(pnpm add:*),Bash(pnpm test),Bash(pnpm typecheck),Bash(pnpm codegen:*),Bash(pnpm prettier:*)'
-          additional_claude_args: '--system-prompt "Keep responses concise and to the point. Avoid lengthy explanations unless specifically requested."'
+          allowed_tools: 'Bash(pnpm install),Bash(pnpm add:*),Bash(pnpm test),Bash(pnpm type-check),Bash(pnpm codegen:*)'
+          additional_claude_args: '--append-system-prompt "Keep responses concise and to the point. Avoid lengthy explanations unless specifically requested."'

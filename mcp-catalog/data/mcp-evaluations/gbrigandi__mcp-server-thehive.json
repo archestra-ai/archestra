@@ -1,0 +1,193 @@
+{
+  "name": "gbrigandi__mcp-server-thehive",
+  "display_name": "mcp-server-thehive",
+  "description": "MCP Server for TheHive",
+  "author": {
+    "name": "gbrigandi"
+  },
+  "server": {
+    "command": "${__dirname}/mcp-server-thehive",
+    "args": [],
+    "env": {
+      "THEHIVE_URL": "${user_config.thehive_url}",
+      "THEHIVE_API_TOKEN": "${user_config.thehive_api_token}",
+      "VERIFY_SSL": "${user_config.verify_ssl}",
+      "RUST_LOG": "${user_config.rust_log}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "thehive_url": {
+      "type": "string",
+      "title": "TheHive API Base URL",
+      "description": "The base URL for TheHive API requests (e.g., https://your-thehive-instance.com/api)",
+      "required": false,
+      "default": "http://localhost:9000/api"
+    },
+    "thehive_api_token": {
+      "type": "string",
+      "title": "TheHive API Token",
+      "description": "Your API token for authenticating with TheHive. Obtain from User Settings -> API Keys.",
+      "sensitive": true,
+      "required": true
+    },
+    "verify_ssl": {
+      "type": "boolean",
+      "title": "Verify SSL Certificates",
+      "description": "Whether to verify SSL certificates for TheHive connection. Set to 'true' in production.",
+      "required": false,
+      "default": false
+    },
+    "rust_log": {
+      "type": "string",
+      "title": "Logging Level",
+      "description": "Logging level for the server (e.g., debug, info, warn, error).",
+      "required": false,
+      "default": "info"
+    }
+  },
+  "readme": "# MCP Server for TheHive\n\nAn MCP (Model Context Protocol) server that provides AI models and automation tools with access to TheHive incident response platform.\n\n## Overview\n\nThis server acts as a bridge between MCP clients (like AI assistants) and TheHive, allowing them to:\n\n- Retrieve and analyze security alerts\n- Access case information\n- Promote alerts to cases\n- Perform incident response operations\n\n## Features\n\n### Available Tools\n\n1. **get_thehive_alerts** - Retrieve a list of alerts from TheHive\n   - Optional `limit` parameter (default: 100)\n   - Returns formatted alert information including ID, title, severity, and status\n\n2. **get_thehive_alert_by_id** - Get detailed information about a specific alert\n   - Required `alert_id` parameter\n   - Returns comprehensive alert details\n\n3. **get_thehive_cases** - Retrieve a list of cases from TheHive\n   - Optional `limit` parameter (default: 100)\n   - Returns formatted case information\n\n4. **get_thehive_case_by_id** - Get detailed information about a specific case\n   - Required `case_id` parameter\n   - Returns comprehensive case details\n\n5. **promote_alert_to_case** - Promote an alert to a case\n   - Required `alert_id` parameter\n   - Returns information about the newly created case\n\n6. **create_thehive_case** - Create a new case in TheHive\n   - Required `title` and `description` parameters\n   - Optional parameters: `severity`, `tags`, `tlp`, `pap`, `status`, `assignee`, `case_template`, `start_date`\n   - Returns information about the newly created case\n\n## Installation\n\n### Prerequisites\n\n- Access to a TheHive 5 instance\n- Valid TheHive API token\n\n### Downloading Pre-compiled Binaries\n\nYou can download pre-compiled binaries for various operating systems from the [GitHub Releases page](https://github.com/gbrigandi/mcp-server-thehive/releases). Download the appropriate binary for your system, make it executable, and place it in your desired location.\n\n### Building from Source\n\n```bash\ngit clone <repository-url>\ncd mcp-server-thehive\ncargo build --release\n```\n\n## Configuration\n\nThe server requires the following environment variables:\n\n- `THEHIVE_URL` - TheHive API base URL (default: `http://localhost:9000/api`)\n- `THEHIVE_API_TOKEN` - TheHive API token (required)\n- `VERIFY_SSL` - Whether to verify SSL certificates (default: `false`)\n- `RUST_LOG` - Logging level (optional, e.g., `debug`, `info`)\n\n### Environment File\n\nCreate a `.env` file in the project root:\n\n```env\nTHEHIVE_URL=https://your-thehive-instance.com/api\nTHEHIVE_API_TOKEN=your-api-token-here\nVERIFY_SSL=true\nRUST_LOG=info\n```\n\n### Getting a TheHive API Token\n\n1. Log into your TheHive instance\n2. Go to **User Settings** → **API Keys**\n3. Click **Create API Key**\n4. Copy the generated token and use it as `THEHIVE_API_TOKEN`\n\n## Usage\n\n### Running the Server\n\n```bash\n# Using cargo\ncargo run\n\n# Using the built binary\n./target/release/mcp-server-thehive\n```\n\n### Integration with MCP Clients\n\nThe server communicates over stdio using the MCP protocol. Configure your MCP client to use this server:\n\n```json\n{\n  \"mcpServers\": {\n    \"thehive\": {\n      \"command\": \"/path/to/mcp-server-thehive\",\n      \"env\": {\n        \"THEHIVE_URL\": \"https://your-thehive-instance.com:9000/api\",\n        \"THEHIVE_API_TOKEN\": \"your-api-token-here\"\n      }\n    }\n  }\n}\n```\n\n## Examples\n\n### Retrieving Recent Alerts\n\n```json\n{\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_thehive_alerts\",\n    \"arguments\": {\n      \"limit\": 10\n    }\n  }\n}\n```\n\n### Getting Alert Details\n\n```json\n{\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_thehive_alert_by_id\",\n    \"arguments\": {\n      \"alert_id\": \"~123456\"\n    }\n  }\n}\n```\n\n### Promoting an Alert to Case\n\n```json\n{\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"promote_alert_to_case\",\n    \"arguments\": {\n      \"alert_id\": \"~123456\"\n    }\n  }\n}\n```\n\n### Creating a New Case\n\n```json\n{\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"create_thehive_case\",\n    \"arguments\": {\n      \"title\": \"Potential Malware Outbreak\",\n      \"description\": \"Multiple endpoints reporting suspicious process activity.\",\n      \"severity\": 3,\n      \"tags\": [\"malware\", \"endpoint\", \"epp\"],\n      \"tlp\": 2,\n      \"assignee\": \"soc_level2\"\n    }\n  }\n}\n```\n\n## Development\n\n### Project Structure\n\n```\nmcp-server-thehive/\n├── src/\n│   ├── main.rs              # Main server implementation\n│   ├── lib.rs               # Library exports\n│   └── thehive/\n│       ├── mod.rs           # Module declarations\n│       ├── client.rs        # TheHive API client\n│       └── error.rs         # Error types\n├── tests/\n│   ├── bin/\n│   │   └── mock_thehive_server.rs # Mock TheHive API server for testing\n│   ├── integration_test.rs    # Integration tests\n│   └── mcp_stdio_test.rs      # Stdio interface tests\n├── Cargo.toml               # Dependencies and metadata\n└── README.md                # This file\n```\n\n### Dependencies\n\n- **rmcp** - MCP protocol implementation\n- **thehive-client** - TheHive API client library\n- **tokio** - Async runtime\n- **reqwest** - HTTP client\n- **serde** - Serialization framework\n- **tracing** - Logging and instrumentation\n\n### Testing\n\nThe project includes a comprehensive suite of integration tests that leverage a mock TheHive server. This mock server simulates the TheHive API, allowing for isolated and repeatable testing of the MCP server's functionality without requiring a live TheHive instance.\n\n**Running Tests:**\n\n```bash\n# Run all tests (including integration tests that use the mock server)\ncargo test\n\n# Run tests with verbose logging (includes MCP server and mock server logs)\nRUST_LOG=debug MCP_SERVER_THEHIVE_VERBOSE_TEST_LOGS=true cargo test\n```\n\n## Security Considerations\n\n- Store API tokens securely (use environment variables or secure credential stores)\n- Never commit API tokens to version control\n- Enable SSL verification in production environments\n- Limit network access to TheHive instance\n- Use least-privilege API tokens for TheHive access\n- Monitor and log all API interactions\n- Rotate API tokens regularly\n\n## Troubleshooting\n\n### Common Issues\n\n1. **Connection Refused**\n   - Verify `THEHIVE_URL` is correct\n   - Check network connectivity to TheHive instance\n   - Ensure TheHive is running and accessible\n\n2. **Authentication Failed**\n   - Verify `THEHIVE_API_TOKEN` is correct and not expired\n   - Check if the API token has necessary permissions\n   - Ensure the token is properly formatted\n\n3. **SSL Certificate Errors**\n   - Set `VERIFY_SSL=false` for testing (not recommended for production)\n   - Install proper SSL certificates\n   - Use valid certificate authority\n\n### Logging\n\nEnable debug logging for troubleshooting:\n\n```bash\nRUST_LOG=debug cargo run\n```\n\n## Contributing\n\n1. Fork the repository\n2. Create a feature branch\n3. Make your changes\n4. Add tests if applicable\n5. Submit a pull request\n\n## License\n \nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Related Projects\n\n- [thehive-client-rs](https://github.com/gbrigandi/thehive-client-rs) - Rust client library for TheHive API\n- [mcp-server-cortex](https://github.com/gbrigandi/mcp-server-cortex) - MCP server for Cortex\n- [mcp-server-wazuh](https://github.com/gbrigandi/mcp-server-wazuh) - MCP server for Wazuh SIEM\n",
+  "category": "Security",
+  "quality_score": 41,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-thehive-cargo": {
+        "command": "cargo",
+        "args": ["run"],
+        "env": {
+          "THEHIVE_URL": "http://localhost:9000/api",
+          "THEHIVE_API_TOKEN": "your-api-token-here",
+          "VERIFY_SSL": "false",
+          "RUST_LOG": "info"
+        }
+      },
+      "mcp-server-thehive-binary": {
+        "command": "./target/release/mcp-server-thehive",
+        "args": [],
+        "env": {
+          "THEHIVE_URL": "http://localhost:9000/api",
+          "THEHIVE_API_TOKEN": "your-api-token-here",
+          "VERIFY_SSL": "false",
+          "RUST_LOG": "info"
+        }
+      },
+      "mcp-server-thehive-client-example": {
+        "command": "/path/to/mcp-server-thehive",
+        "args": [],
+        "env": {
+          "THEHIVE_URL": "https://your-thehive-instance.com:9000/api",
+          "THEHIVE_API_TOKEN": "your-api-token-here",
+          "VERIFY_SSL": "true",
+          "RUST_LOG": "info"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gbrigandi",
+    "repo": "mcp-server-thehive",
+    "url": "https://github.com/gbrigandi/mcp-server-thehive",
+    "name": "mcp-server-thehive",
+    "path": null,
+    "stars": 10,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "323d2a1529a4b996e40626f3de998ea8197385bb"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:33.610Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "reqwest",
+      "importance": 8
+    },
+    {
+      "name": "serde",
+      "importance": 8
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "anyhow",
+      "importance": 6
+    },
+    {
+      "name": "axum",
+      "importance": 8
+    },
+    {
+      "name": "tracing",
+      "importance": 7
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 6
+    },
+    {
+      "name": "schemars",
+      "importance": 5
+    },
+    {
+      "name": "clap",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 6
+    },
+    {
+      "name": "thiserror",
+      "importance": 5
+    },
+    {
+      "name": "chrono",
+      "importance": 5
+    },
+    {
+      "name": "thehive-client",
+      "importance": 9
+    },
+    {
+      "name": "tower-http",
+      "importance": 7
+    },
+    {
+      "name": "once_cell",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"mcp-server-thehive\"\nversion = \"0.1.0\"\nedition = \"2021\"\ndescription = \"TheHive Incident Response Platform MCP Server\"\nauthors = [\"Gianluca Brigandi <gbrigand@gmail.com>\"]\nlicense = \"MIT\"\nrepository = \"https://github.com/gbrigandi/mcp-server-thehive\"\nreadme = \"README.md\"\n\n[dependencies]\nrmcp = { version = \"0.1.5\", features = [\"server\", \"transport-io\"] }\ntokio = { version = \"1\", features = [\"full\"] }\nreqwest = { version = \"0.12\", features = [\"json\", \"rustls-tls\"], default-features = false }\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\nanyhow = \"1.0\"\naxum = { version = \"0.7\", features = [\"macros\"] }\ntracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\"env-filter\", \"fmt\"] }\nschemars = \"0.8\"\nclap = { version = \"4.5\", features = [\"derive\"] }\ndotenv = \"0.15\"\nthiserror = \"2.0\"\nchrono = \"0.4.41\"\nthehive-client = \"0.1.0\"\ntower-http = { version = \"0.6\", features = [\"cors\", \"trace\"] }\nonce_cell = \"1.21\"\n\n[dev-dependencies]\nmockito = \"1.7\"\nanyhow = \"1.0\"\nhttpmock = \"0.7\"\nuuid = { version = \"1.16\", features = [\"v4\"] }\nonce_cell = \"1.21\"\nasync-trait = \"0.1\"\nregex = \"1.11\"\ntokio-test = \"0.4\"\nserde_json = \"1.0\"\ntempfile = \"3.0\"\ntracing-subscriber = { version = \"0.3\", features = [\"env-filter\", \"fmt\"] }\n\n[[bin]]\nname = \"mock_thehive_server\"\npath = \"tests/bin/mock_thehive_server.rs\"\ntest = false \nharness = false \n"
+}

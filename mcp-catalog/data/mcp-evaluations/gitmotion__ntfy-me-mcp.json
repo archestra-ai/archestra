@@ -1,0 +1,181 @@
+{
+  "name": "gitmotion__ntfy-me-mcp",
+  "display_name": "ntfy-me-mcp",
+  "description": "An ntfy MCP server for sending/fetching ntfy notifications to any/self-hosted ntfy.sh server from AI Agents 📤 (supports secure token auth & more - use with npx or docker!)",
+  "author": {
+    "name": "gitmotion"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "ntfy-me-mcp"],
+    "env": {
+      "NTFY_TOPIC": "${user_config.ntfy_topic}",
+      "NTFY_URL": "${user_config.ntfy_url}",
+      "NTFY_TOKEN": "${user_config.ntfy_token}",
+      "PROTECTED_TOPIC": "${user_config.protected_topic}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ntfy_topic": {
+      "type": "string",
+      "title": "Ntfy Topic",
+      "description": "The topic name to send notifications to.",
+      "required": true,
+      "sensitive": false
+    },
+    "ntfy_url": {
+      "type": "string",
+      "title": "Ntfy Server URL",
+      "description": "The URL of your ntfy server (e.g., https://ntfy.sh or your self-hosted instance).",
+      "default": "https://ntfy.sh",
+      "required": false,
+      "sensitive": false
+    },
+    "ntfy_token": {
+      "type": "string",
+      "title": "Ntfy Authentication Token",
+      "description": "Authentication token for protected topics or self-hosted ntfy servers.",
+      "sensitive": true,
+      "required": false
+    },
+    "protected_topic": {
+      "type": "boolean",
+      "title": "Protected Topic",
+      "description": "Set to true if your ntfy topic requires an authentication token.",
+      "default": false,
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "readme": "# <img src=\"https://m2tg1pnwn0.ufs.sh/f/GMqNN8nd9I8l9tUbmif1CnFX8Baqr7mHeicYu0AULDyNVWJE\" width=30 /> ntfy-me-mcp\n\n[![TypeScript](https://img.shields.io/badge/TypeScript-5.8.2-blue.svg?logo=typescript)](https://www.typescriptlang.org/)\n[![Model Context Protocol](https://img.shields.io/badge/MCP-1.8.0-green.svg?logo=anthropic)](https://modelcontextprotocol.io/)\n[![NPM Version](https://img.shields.io/npm/v/ntfy-me-mcp.svg?logo=npm&color=orange)](https://www.npmjs.com/package/ntfy-me-mcp)\n[![Docker Image Version](https://img.shields.io/docker/v/gitmotion/ntfy-me-mcp?logo=docker&label=Docker)](https://hub.docker.com/r/gitmotion/ntfy-me-mcp)\n[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)\n[![GitHub](https://img.shields.io/github/stars/gitmotion/ntfy-me-mcp?style=social)](https://github.com/gitmotion/ntfy-me-mcp)\n<a href=\"https://www.buymeacoffee.com/gitmotion\" target=\"_blank\" rel=\"noopener noreferrer\">\n<img src=\"https://www.buymeacoffee.com/assets/img/custom_images/yellow_img.png\" alt=\"Buy me a coffee\" width=\"105px\" />\n</a>\n\n> A streamlined Model Context Protocol (MCP) server for sending notifications via ntfy service (public or selfhosted with token support) 📲\n\n## Overview\n\nntfy-me-mcp provides AI assistants with the ability to send real-time notifications to your devices through the [ntfy](https://ntfy.sh) service (either public or selfhosted with token support). Get notified when your AI completes tasks, encounters errors, or reaches important milestones - all without constant monitoring.\n\nThe server includes intelligent features like automatic URL detection for creating view actions and smart markdown formatting detection, making it easier for AI assistants to create rich, interactive notifications without extra configuration.\n\n<img src=\"https://m2tg1pnwn0.ufs.sh/f/GMqNN8nd9I8lvhAeasbt6OQorL7fKJdgMSekE0Wanp5HXNIm\" alt=\"autodetect-preview\" width=50%>\n\n### Available via:\n\n| Name        | Link / Badge                                                                                                                                                                       |\n| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |\n| Glama.ai    | <a href=\"https://glama.ai/mcp/servers/@gitmotion/ntfy-me-mcp\"><img width=\"250\" src=\"https://glama.ai/mcp/servers/@gitmotion/ntfy-me-mcp/badge\" alt=\"ntfy-me-mcp MCP server\" /></a> |\n| Smithery.ai | [![smithery badge](https://smithery.ai/badge/@gitmotion/ntfy-me-mcp)](https://smithery.ai/server/@gitmotion/ntfy-me-mcp)                                                           |\n| MseeP.ai    | <a href=\"https://mseep.ai/app/gitmotion-ntfy-me-mcp\"><img width=\"150\" src=\"https://mseep.net/pr/gitmotion-ntfy-me-mcp-badge.png\" alt=\"ntfy-me-mc-mseepai\" /></a>                   |\n\n## Table of Contents\n\n- [Features](#features)\n  - [Coming soon...](#coming-soon)\n- [Quickstart - MCP Server Configuration](#quickstart---mcp-server-configuration)\n  - [NPM / NPX (Recommended Method)](#npm--npx-recommended-method)\n    - [Minimal Configuration](#minimal-configuration-for-public-topics-on-ntfysh)\n    - [Full Configuration](#full-configuration-for-private-servers-or-protected-topics)\n      - [Option 1: Direct Token](#option-1-direct-token-in-configuration-less-secure)\n      - [Option 2: VS Code Inputs](#option-2-using-vs-code-inputs-for-secure-token-handling-recommended)\n  - [Docker](#docker)\n    - [Using with MCP in Docker](#using-with-mcp-in-docker)\n- [Installation](#installation)\n  - [Option 1: Install Globally](#option-1-install-globally)\n  - [Option 2: Run with npx](#option-2-run-with-npx)\n  - [Option 3: Install Locally](#option-3-install-locally)\n  - [Option 4: Build and Use Locally](#option-4-build-and-use-locally-with-node-command)\n    - [Using locally built server with MCP](#using-locally-built-server-with-mcp)\n  - [Option 5: MCP Marketplace Installations](#option-5-mcp-marketplace-installations)\n- [Configuration](#configuration)\n  - [Environment Variables](#environment-variables)\n- [Usage](#usage)\n  - [Authentication](#authentication)\n  - [Setting Up the Notification Receiver](#setting-up-the-notification-receiver)\n  - [Sending Notifications (ntfy_me tool)](#sending-notifications-ntfy_me-tool)\n    - [Using Natural Language](#using-natural-language)\n    - [Message Parameters](#message-parameters)\n    - [Action Links](#action-links)\n    - [Emoji Shortcodes](#emoji-shortcodes)\n    - [Markdown Formatting](#markdown-formatting)\n  - [Retrieving Messages (ntfy_me_fetch tool)](#retrieving-messages-ntfy_me_fetch-tool)\n    - [Using Natural Language](#using-natural-language-1)\n    - [Message Parameters](#message-parameters-1)\n    - [Examples](#examples)\n  - [Development](#development)\n    - [Building from Source](#building-from-source)\n- [License](#license)\n- [Contributing](#contributing)\n\n## Features\n\n- 🚀 **Quick Setup**: Run with npx or docker!\n- 🔔 **Real-time Notifications**: Get updates on your phone/desktop when tasks complete\n- 🎨 **Rich Notifications**: Support for topic, title, priorities, emoji tags, and detailed messages\n- 🔍 **Notification Fetching**: Fetch and filter cached messages from your ntfy topics\n- 🎯 **Smart Action Links**: Automatically detects URLs in messages and creates view actions\n- 📄 **Intelligent Markdown**: Auto-detects and enables markdown formatting when present\n- 🔒 **Secure**: Optional authentication with access tokens\n- 🔑 **Input Masking**: Securely store your ntfy token in your vs config!\n- 🌐 **Self-hosted Support**: Works with both ntfy.sh and self-hosted ntfy instances\n\n### (Coming soon...)\n\n- 📨 **Email**: Send notifications to email (requires ntfy email server configuration)\n- 🔗 **Click urls**: Ability to customize click urls\n- 🖼️ **Image urls**: Intelligent image url detection to automatically include image urls in messages and notifications\n- 🏁 and more!\n\n## Quickstart - MCP Server Configuration\n\n### NPM / NPX (Recommended Method)\n\n- Requires npm / npx installed on your system.\n- This method is recommended for most users as it provides a simple & lightweight method to set up the server.\n\nFor the easiest setup with MCP-compatible assistants, add this to your MCP configuration:\n\n#### Minimal configuration (for public topics on ntfy.sh)\n\n```json\n{\n  \"ntfy-me-mcp\": {\n    \"command\": \"npx\",\n    \"args\": [\"ntfy-me-mcp\"],\n    \"env\": {\n      \"NTFY_TOPIC\": \"your-topic-name\"\n    }\n  }\n}\n```\n\n#### Full configuration (for private servers or protected topics)\n\n#### Option 1: Direct token in configuration\n\n```json\n{\n  \"ntfy-me-mcp\": {\n    \"command\": \"npx\",\n    \"args\": [\"ntfy-me-mcp\"],\n    \"env\": {\n      \"NTFY_TOPIC\": \"your-topic-name\",\n      \"NTFY_URL\": \"https://your-ntfy-server.com\",\n      \"NTFY_TOKEN\": \"your-auth-token\" // Use if using a protected topic/server\n    }\n  }\n}\n```\n\n#### Option 2: Using VS Code inputs for secure token handling (recommended)\n\nAdd this to your VS Code settings.json file:\n\n```json\n\"mcp\": {\n  \"inputs\": [\n    { // Add this to your inputs array\n      \"type\": \"promptString\",\n      \"id\": \"ntfy_token\",\n      \"description\": \"Ntfy Token\",\n      \"password\": true\n    }\n  ],\n  \"servers\": {\n    // Other servers...\n    \"ntfy-me-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"ntfy-me-mcp\"],\n      \"env\": {\n        \"NTFY_TOPIC\": \"your-topic-name\",\n        \"NTFY_URL\": \"https://your-ntfy-server.com\",\n        \"NTFY_TOKEN\": \"${input:ntfy_token}\", // Use the input id variable for the token\n        \"PROTECTED_TOPIC\": \"true\" // Prompts for token and masks it in your config\n      }\n    }\n  }\n}\n```\n\nWith this setup, VS Code will prompt you for the token when starting the server and the token will be masked when entered.\n\n## Docker\n\n### Using with MCP in Docker\n\n- Requires Docker installed on your system.\n- This method is useful for running the server in a containerized environment.\n- You can use the official Docker images available on Docker Hub or GitHub Container Registry.\n\nDocker Images:\n\n- `gitmotion/ntfy-me-mcp:latest` (Docker Hub)\n- `ghcr.io/gitmotion/ntfy-me-mcp:latest` (GitHub Container Registry)\n\nIn your MCP configuration (e.g., VS Code settings.json):\n\n```json\n\"mcp\": {\n  \"servers\": {\n    \"ntfy-mcp\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"NTFY_TOPIC\",\n        \"-e\",\n        \"NTFY_URL\",\n        \"-e\",\n        \"NTFY_TOKEN\",\n        \"-e\",\n        \"PROTECTED_TOPIC\",\n        \"gitmotion/ntfy-me-mcp\", // OR use ghcr.io/gitmotion/ntfy-me-mcp:latest\n      ],\n      \"env\": {\n        \"NTFY_TOPIC\": \"your-topic-name\",\n        \"NTFY_URL\": \"https://your-ntfy-server.com\",\n        \"NTFY_TOKEN\": \"${input:ntfy_token}\",\n        \"PROTECTED_TOPIC\": \"true\"\n      }\n    }\n  }\n}\n```\n\n## Installation\n\nIf you need to install and run the server directly (alternative to the MCP configuration above):\n\n### Option 1: Install globally\n\n```bash\nnpm install -g ntfy-me-mcp\n```\n\n### Option 2: Run with npx\n\n```bash\nnpx ntfy-me-mcp\n```\n\n### Option 3: Install locally\n\n```bash\n# Clone the repository\ngit clone https://github.com/gitmotion/ntfy-me-mcp.git\ncd ntfy-me-mcp\n\n# Install dependencies\nnpm install\n\n# Copy the example environment file and configure it\ncp .env.example .env\n# Edit .env with your preferred editor and update the variables\n# nano .env  # or use your preferred editor\n\n# Build the project\nnpm run build\n\n# Start the server\nnpm start\n```\n\n### Option 4: Build and use locally with node command\n\nIf you're developing or customizing the server, you might want to run it directly with node:\n\n```bash\n# Clone the repository\ngit clone https://github.com/gitmotion/ntfy-me-mcp.git\ncd ntfy-me-mcp\n\n# Install dependencies\nnpm install\n\n# Copy the example environment file and configure it\ncp .env.example .env\n# Edit the .env file to set your NTFY_TOPIC and other optional settings\n# nano .env  # or use your preferred editor\n\n# Build the project\nnpm run build\n\n# Run using node directly\nnpm start\n```\n\n#### Using locally built server with MCP\n\nWhen configuring your MCP to use a locally built version, specify the node command and path to the built index.js file:\n\n```json\n{\n  \"ntfy-me\": {\n    \"command\": \"node\",\n    \"args\": [\"/path/to/ntfy-mcp/build/index.js\"],\n    \"env\": {\n      \"NTFY_TOPIC\": \"your-topic-name\"\n      //\"NTFY_URL\": \"https://your-ntfy-server.com\", // Use if using a self-hosted server\n      //\"NTFY_TOKEN\": \"your-auth-token\" // Use if using a protected topic/server\n    }\n  }\n}\n```\n\nRemember to use the absolute path to your build/index.js file in the args array.\n\n### Option 5: MCP Marketplace installations\n\n#### Installing via Smithery\n\nTo install ntfy-me-mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@gitmotion/ntfy-me-mcp):\n\n```bash\nnpx -y @smithery/cli install @gitmotion/ntfy-me-mcp --client claude\n```\n\n## Configuration\n\n### Environment Variables\n\nCreate a `.env` file in your project directory by copying the provided example:\n\n```bash\n# Copy the example file\ncp .env.example .env\n\n# Edit the file with your preferred editor\nnano .env  # or vim, code, etc.\n```\n\nYour `.env` file should contain these variables:\n\n```\n# Required\nNTFY_TOPIC=your-topic-name\n\n# Optional - Configure these if using a private/protected ntfy server\n# NTFY_URL=https://ntfy.sh  # Default is ntfy.sh, change to your self-hosted ntfy server URL if needed\n                            # Include port if needed, e.g., https://your-ntfy-server.com:8443\n# NTFY_TOKEN=your-access-token  # Required for authentication with protected topics/servers\n# PROTECTED_TOPIC=false  # Set to \"true\" if your topic requires authentication (helps prevent auth errors)\n```\n\n> **Note**: The `PROTECTED_TOPIC` flag helps the application determine whether authentication is required for your topic. When set to \"true\" and no token is provided, you'll be prompted to enter one. This prevents authentication failures with protected topics.\n\n## Usage\n\n### Authentication\n\nThis server supports both authenticated and unauthenticated ntfy endpoints:\n\n- **Public Topics**: When using public topics on ntfy.sh or other public servers, no authentication is required.\n- **Protected Topics**: For protected topics or private servers, you need to provide an access token.\n\nIf authentication is required but not provided, you'll receive a clear error message explaining how to add your token.\n\n### Setting Up the Notification Receiver\n\n1. Install the [ntfy app](https://ntfy.sh/app) on your device\n2. Subscribe to your chosen topic (the same as your `NTFY_TOPIC` setting)\n\n### Sending Notifications (ntfy_me tool)\n\nThis section covers all functionality related to sending notifications using the ntfy_me tool.\n\n#### Using Natural Language\n\nWhen working with your AI assistant, you can use natural phrases like:\n\n```\n\"Send me a notification when the build is complete\"\n\"Notify me when the task is done\"\n\"Alert me after generating the code\"\n\"Message me when the process finishes\"\n\"Send an alert with high priority\"\n```\n\n#### Message Parameters\n\nThe tool accepts these parameters:\n\n| Parameter   | Description                                            | Required |\n| ----------- | ------------------------------------------------------ | -------- |\n| taskTitle   | The notification title                                 | Yes      |\n| taskSummary | The notification body                                  | Yes      |\n| priority    | Message priority: min, low, default, high, max         | No       |\n| tags        | Array of notification tags (supports emoji shortcodes) | No       |\n| markdown    | Boolean to enable markdown formatting (true/false)     | No       |\n| actions     | Array of view action objects for clickable links       | No       |\n\nExample:\n\n```javascript\n{\n  taskTitle: \"Code Generation Complete\",\n  taskSummary: \"Your React component has been created successfully with proper TypeScript typing.\",\n  priority: \"high\",\n  tags: [\"check\", \"code\", \"react\"]\n}\n```\n\nThis will send a high-priority notification with a checkmark emoji.\n\n#### Action Links\n\nYou can add clickable action buttons to your notifications using the `actions` parameter, or let the server automatically detect URLs in your message.\n\n##### Automatic URL Detection\n\nWhen URLs are present in the message body, the server automatically creates up to 3 view actions (ntfy's maximum limit) from the first detected URLs. This makes it easy to include clickable links without manually specifying the actions array.\n\nFor example, this message:\n\n```javascript\n{\n  taskTitle: \"Build Complete\",\n  taskSummary: \"Your PR has been merged! View the changes at https://github.com/org/repo/pull/123 or check the deployment at https://staging.app.com\"\n}\n```\n\nWill automatically generate view actions for both URLs, making them easily clickable in the notification.\n\n##### Manual Action Configuration\n\nFor more control, you can manually specify actions:\n\n| Property | Description                                       | Required |\n| -------- | ------------------------------------------------- | -------- |\n| action   | Must be \"view\"                                    | Yes      |\n| label    | Button text to display                            | Yes      |\n| url      | URL to open when clicked                          | Yes      |\n| clear    | Whether to clear notification on click (optional) | No       |\n\nExample with action links:\n\n```javascript\n{\n  taskTitle: \"Pull Request Review\",\n  taskSummary: \"Your code has been reviewed and is ready for final checks\",\n  priority: \"high\",\n  tags: [\"check\", \"code\"],\n  actions: [\n    {\n      action: \"view\",\n      label: \"View PR\",\n      url: \"https://github.com/org/repo/pull/123\"\n    },\n    {\n      action: \"view\",\n      label: \"View Changes\",\n      url: \"https://github.com/org/repo/pull/123/files\",\n      clear: true\n    }\n  ]\n}\n```\n\n#### Emoji Shortcodes\n\nYou can use emoji shortcodes in your tags for visual indicators:\n\n- `warning` → ⚠️\n- `check` → ✅\n- `rocket` → 🚀\n- `tada` → 🎉\n\nSee the [full list of supported emoji shortcodes](https://docs.ntfy.sh/emojis/).\n\n#### Markdown Formatting\n\nYour notifications support rich markdown formatting with intelligent detection! When you include markdown syntax in your `taskSummary`, the server automatically detects it and enables markdown parsing - no need to set `markdown: true` explicitly.\n\n##### Automatic Detection\n\nThe server checks for common markdown patterns like:\n\n- Headers (#, ##, etc.)\n- Lists (-, \\*, numbers)\n- Code blocks (```)\n- Links ([text](url))\n- Bold/italic (_text_, **text**)\n\nWhen these patterns are detected, markdown parsing is automatically enabled for the message.\n\n##### Manual Override\n\nWhile automatic detection works in most cases, you can still explicitly control markdown parsing:\n\n```javascript\n{\n  taskTitle: \"Task Complete\",\n  taskSummary: \"Regular plain text message\",\n  markdown: false  // Force disable markdown parsing\n}\n```\n\n### Retrieving Messages (ntfy_me_fetch tool)\n\nThis section covers all functionality related to fetching and filtering messages using the ntfy_me_fetch tool.\n\n#### Using Natural Language\n\nAI assistants understand various ways to request message fetching:\n\n```\n\"Show me my recent notifications\"\n\"Get messages from the last hour\"\n\"Find notifications with title 'Build Complete'\"\n\"Search for messages with the test_tube tag\"\n\"Show notifications from the updates topic from the last 24hr\"\n\"Check my latest alerts\"\n```\n\n#### Message Parameters\n\nThe tool accepts these parameters:\n\n| Parameter    | Description                                                                            | Required |\n| ------------ | -------------------------------------------------------------------------------------- | -------- |\n| ntfyTopic    | Topic to fetch messages from (defaults to NTFY_TOPIC env var)                          | No       |\n| since        | How far back to retrieve messages ('10m', '1h', '1d', timestamp, message ID, or 'all') | No       |\n| messageId    | Find a specific message by its ID                                                      | No       |\n| messageText  | Find messages containing exact text content                                            | No       |\n| messageTitle | Find messages with exact title/subject                                                 | No       |\n| priorities   | Find messages with specific priority levels                                            | No       |\n| tags         | Find messages with specific tags                                                       | No       |\n\n#### Examples\n\n1. **Fetch Recent Messages**\n\n```javascript\n{\n  since: \"30m\"; // Get messages from last 30 minutes\n}\n```\n\n2. **Filter by Title and Priority**\n\n```javascript\n{\n  messageTitle: \"Build Complete\",\n  priorities: \"high\",\n  since: \"1d\"\n}\n```\n\n3. **Search Different Topic with Tags**\n\n```javascript\n{\n  ntfyTopic: \"updates\",\n  tags: [\"error\", \"warning\"],\n  since: \"all\"\n}\n```\n\n4. **Find Specific Message**\n\n```javascript\n{\n  messageId: \"xxxxXXXXxxxx\";\n}\n```\n\nMessages are returned with full details including:\n\n- Message ID and timestamp\n- Topic and title\n- Content and priority\n- Tags and attachments\n- Action links and expiration\n\n> **Note**: Message history availability depends on your ntfy server's cache settings. The public ntfy.sh server typically caches messages for 12 hours.\n\n## Development & Contributions\n\n### Building from Source\n\n```bash\ngit clone https://github.com/gitmotion/ntfy-me-mcp.git\ncd ntfy-me-mcp\nnpm install\nnpm run build\n```\n\n## License\n\nThis project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.\n\n## Contributing\n\nContributions are welcome! Please follow these guidelines:\n\n- Point your pull requests to the `dev` or `testing` branches (not `main`).\n- For all logging, use the `Logger` class abstraction:\n  - Replace any `console.log`, `console.warn`, or `console.error` with `logger.info`, `logger.warn`, or `logger.error`.\n- Ensure your code is clean, well-documented, and passes all tests.\n- Clearly describe your changes in the PR description.\n- For local testing:\n  - Build the project with `npm run build`.\n  - Run the server locally using `npm start` or `node build/index.js`.\n  - Test your changes before submitting a PR.\n\nThank you for helping improve ntfy-me-mcp!\n\n---\n\nMade with ❤️ by [gitmotion](https://github.com/gitmotion)\n",
+  "category": "Monitoring",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ntfy-me-mcp-minimal": {
+        "command": "npx",
+        "args": ["ntfy-me-mcp"],
+        "env": {
+          "NTFY_TOPIC": "your-topic-name"
+        }
+      },
+      "ntfy-me-mcp-full-direct-token": {
+        "command": "npx",
+        "args": ["ntfy-me-mcp"],
+        "env": {
+          "NTFY_TOPIC": "your-topic-name",
+          "NTFY_URL": "https://your-ntfy-server.com",
+          "NTFY_TOKEN": "your-auth-token"
+        }
+      },
+      "ntfy-me-mcp-full-vscode-input": {
+        "command": "npx",
+        "args": ["ntfy-me-mcp"],
+        "env": {
+          "NTFY_TOPIC": "your-topic-name",
+          "NTFY_URL": "https://your-ntfy-server.com",
+          "NTFY_TOKEN": "${input:ntfy_token}",
+          "PROTECTED_TOPIC": "true"
+        }
+      },
+      "gitmotion-ntfy-me-mcp-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "NTFY_TOPIC",
+          "-e",
+          "NTFY_URL",
+          "-e",
+          "NTFY_TOKEN",
+          "gitmotion/ntfy-me-mcp:latest"
+        ],
+        "env": {
+          "NTFY_TOPIC": "your-topic-name",
+          "NTFY_URL": "https://your-ntfy-server.com",
+          "NTFY_TOKEN": "your-auth-token"
+        },
+        "docker_image": "gitmotion/ntfy-me-mcp:latest"
+      },
+      "ntfy-me-mcp-local-build": {
+        "command": "node",
+        "args": ["dist/index.js"],
+        "env": {
+          "NTFY_TOPIC": "your-topic-name",
+          "NTFY_URL": "https://your-ntfy-server.com",
+          "NTFY_TOKEN": "your-auth-token"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gitmotion",
+    "repo": "ntfy-me-mcp",
+    "url": "https://github.com/gitmotion/ntfy-me-mcp",
+    "name": "gitmotion__ntfy-me-mcp",
+    "path": null,
+    "stars": 38,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "cf09dadca63ec3de27f6fee75ee19b5f9191fe04"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:22.610Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@types/markdown-it",
+      "importance": 3
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    },
+    {
+      "name": "markdown-it",
+      "importance": 7
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    },
+    {
+      "name": "prompts",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"ntfy-me-mcp\",\n  \"version\": \"1.3.5\",\n  \"description\": \"An ntfy MCP server for sending ntfy notifications to your self-hosted ntfy server from AI Agents 📤 (supports secure token auth & more - use with npx or docker!)\",\n  \"keywords\": [\n    \"ntfy\",\n    \"mcp\",\n    \"mcp-server\",\n    \"notifications\",\n    \"modelcontextprotocol\",\n    \"self-hosted\",\n    \"server\",\n    \"LLM\",\n    \"ntfy-me\",\n    \"ntfy-me-mcp\",\n    \"ntfy-mcp\",\n    \"ntfy-server\",\n    \"ntfy-notifications\",\n    \"ntfy-mcp-server\",\n    \"model-context-protocol\",\n    \"push-notifications\",\n    \"typescript\",\n    \"AI-integration\",\n    \"copilot\",\n    \"visual-studio-code\",\n    \"vscode\",\n    \"claude\"\n  ],\n  \"type\": \"module\",\n  \"main\": \"build/index.js\",\n  \"bin\": {\n    \"ntfy-me-mcp\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build/**/*\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && chmod +x build/index.js\",\n    \"start\": \"node build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"@types/markdown-it\": \"^14.1.2\",\n    \"dotenv\": \"^16.4.7\",\n    \"markdown-it\": \"^14.1.0\",\n    \"node-fetch\": \"^3.3.2\",\n    \"prompts\": \"^2.4.2\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.10\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"@types/prompts\": \"^2.4.9\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"author\": \"gitmotion\",\n  \"license\": \"GPL-3.0\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/gitmotion/ntfy-me-mcp.git\"\n  }\n}\n"
+}

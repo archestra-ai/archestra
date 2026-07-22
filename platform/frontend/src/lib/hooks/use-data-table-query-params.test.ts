@@ -1,23 +1,28 @@
 "use client";
 
 import { act, renderHook } from "@testing-library/react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDataTableQueryParams } from "./use-data-table-query-params";
 
 const mockPush = vi.fn();
-const mockUseSearchParams = vi.fn();
 
-vi.mock("next/navigation", () => ({
-  usePathname: () => "/agents",
-  useRouter: () => ({ push: mockPush }),
-  useSearchParams: () => mockUseSearchParams(),
-}));
+vi.mock("next/navigation");
+
+function setSearchParams(params: URLSearchParams) {
+  vi.mocked(useSearchParams).mockReturnValue(
+    params as unknown as ReturnType<typeof useSearchParams>,
+  );
+}
 
 describe("useDataTableQueryParams", () => {
   beforeEach(() => {
-    mockPush.mockReset();
-    mockUseSearchParams.mockReset();
-    mockUseSearchParams.mockReturnValue(new URLSearchParams());
+    vi.clearAllMocks();
+    vi.mocked(usePathname).mockReturnValue("/agents");
+    vi.mocked(useRouter).mockReturnValue({
+      push: mockPush,
+    } as unknown as ReturnType<typeof useRouter>);
+    setSearchParams(new URLSearchParams());
   });
 
   it("returns default pagination values when query params are absent", () => {
@@ -29,9 +34,7 @@ describe("useDataTableQueryParams", () => {
   });
 
   it("parses page and pageSize from search params", () => {
-    mockUseSearchParams.mockReturnValue(
-      new URLSearchParams("page=3&pageSize=25&search=models"),
-    );
+    setSearchParams(new URLSearchParams("page=3&pageSize=25&search=models"));
 
     const { result } = renderHook(() => useDataTableQueryParams());
 
@@ -42,9 +45,7 @@ describe("useDataTableQueryParams", () => {
   });
 
   it("updates query params and removes empty values", () => {
-    mockUseSearchParams.mockReturnValue(
-      new URLSearchParams("page=2&pageSize=10&search=agents"),
-    );
+    setSearchParams(new URLSearchParams("page=2&pageSize=10&search=agents"));
 
     const { result } = renderHook(() => useDataTableQueryParams());
 
@@ -62,9 +63,7 @@ describe("useDataTableQueryParams", () => {
   });
 
   it("pushes the bare pathname when all query params are removed", () => {
-    mockUseSearchParams.mockReturnValue(
-      new URLSearchParams("page=1&pageSize=10"),
-    );
+    setSearchParams(new URLSearchParams("page=1&pageSize=10"));
 
     const { result } = renderHook(() => useDataTableQueryParams());
 

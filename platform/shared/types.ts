@@ -29,6 +29,7 @@ export const ApiErrorTypeSchema = z.enum([
   "unknown_api_error",
   "api_conflict_error",
   "api_payload_too_large_error",
+  "api_service_unavailable_error",
 ]);
 
 /**
@@ -65,6 +66,11 @@ export class ApiError extends Error {
         break;
       case 413:
         this.type = "api_payload_too_large_error";
+        break;
+      // Anthropic uses 529 for the same transient condition as 503.
+      case 503:
+      case 529:
+        this.type = "api_service_unavailable_error";
         break;
       default:
         this.type = "unknown_api_error";

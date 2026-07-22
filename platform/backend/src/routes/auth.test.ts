@@ -1,25 +1,35 @@
 import { createHash } from "node:crypto";
-import { IDENTITY_PROVIDER_ID, LLM_PROXY_OAUTH_SCOPE } from "@shared";
+import {
+  IDENTITY_PROVIDER_ID,
+  LLM_PROXY_OAUTH_SCOPE,
+  MCP_GATEWAY_OAUTH_SCOPE,
+} from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import config from "@/config";
+import db, { schema } from "@/database";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
+import McpOauthClientModel from "@/models/mcp-oauth-client";
 import OAuthAccessTokenModel from "@/models/oauth-access-token";
+import OAuthClientModel from "@/models/oauth-client";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import {
+  appConnectorAudienceRef,
+  buildConnectorResourceUri,
+} from "@/services/apps/app-connector-resource";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
-vi.mock("@/auth", () => ({
-  betterAuth: {
-    handler: vi.fn(),
-  },
-}));
+vi.mock("@/auth");
 
 describe("auth routes", () => {
   let app: FastifyInstanceWithZod;
 
   beforeEach(async () => {
+    // `handler` is not part of the canonical @/auth mock surface, so add it here.
+    betterAuth.handler = vi.fn();
     app = createFastifyInstance();
     const { default: authRoutes } = await import("./auth");
     await app.register(authRoutes);
@@ -79,7 +89,11 @@ describe("auth routes", () => {
         grant_type: "authorization_code",
         client_id: client.clientId,
         code: "auth-code",
-        resource: `http://localhost:3000/v1/mcp/${agent.id}`,
+        // Build the resource on the configured issuer origin (not a hardcoded
+        // localhost) so the lifetime lookup's origin check in
+        // getProfileIdFromResource resolves the gateway regardless of whether a
+        // local .env points the frontend origin at a tunnel domain.
+        resource: `${new URL(config.frontendBaseUrl).origin}/v1/mcp/${agent.id}`,
       },
     });
 
@@ -123,6 +137,7 @@ describe("auth routes", () => {
     );
     const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -177,6 +192,7 @@ describe("auth routes", () => {
     );
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -218,6 +234,7 @@ describe("auth routes", () => {
     );
     const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -240,6 +257,178 @@ describe("auth routes", () => {
     expect(response.json()).toEqual({
       error: "invalid_scope",
       error_description: `${LLM_PROXY_OAUTH_SCOPE} scope is required`,
+    });
+  });
+
+  test("issues an MCP OAuth client credentials access token", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const gateway = await makeAgent({
+      organizationId: organization.id,
+      agentType: "mcp_gateway",
+    });
+    const { oauthClient, clientSecret } = await McpOauthClientModel.create({
+      organizationId: organization.id,
+      authorId: crypto.randomUUID(),
+      name: "Backend Service",
+      allowedGatewayIds: [gateway.id],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: clientSecret,
+        scope: MCP_GATEWAY_OAUTH_SCOPE,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      token_type: "Bearer",
+      expires_in: 3600,
+      scope: MCP_GATEWAY_OAUTH_SCOPE,
+    });
+    expect(response.json().access_token).toMatch(/^mcp_at_/);
+
+    const tokenHash = createHash("sha256")
+      .update(response.json().access_token)
+      .digest("base64url");
+    const storedToken = await OAuthAccessTokenModel.getByTokenHash(tokenHash);
+    expect(storedToken?.clientId).toBe(oauthClient.clientId);
+    expect(storedToken?.userId).toBeNull();
+    expect(storedToken?.scopes).toEqual([MCP_GATEWAY_OAUTH_SCOPE]);
+    expect(storedToken?.referenceId).toBe(`mcp-oauth-client:${oauthClient.id}`);
+  });
+
+  test("forwards client_secret_basic credentials to better-auth as client_secret_post on the authorization_code grant", async ({
+    makeOrganization,
+  }) => {
+    // A confidential native client (e.g. Claude Desktop) authenticates the token
+    // request with `Authorization: Basic base64(client_id:client_secret)`. Our
+    // better-auth apiKey plugin reads API keys from the Authorization header
+    // (config.api.apiKeyAuthorizationHeaderName), so it would intercept and
+    // reject that header as an invalid API key before the OAuth token handler
+    // runs. The handler must instead lift the Basic credentials into the body
+    // and drop the Authorization header so the request authenticates as
+    // client_secret_post.
+    const organization = await makeOrganization();
+    const { oauthClient, clientSecret } = await McpOauthClientModel.create({
+      organizationId: organization.id,
+      authorId: crypto.randomUUID(),
+      name: "Native Client",
+      grantType: "authorization_code",
+      redirectUris: ["http://127.0.0.1:53280/callback"],
+    });
+
+    let forwardedRequest: Request | undefined;
+    vi.mocked(betterAuth.handler).mockImplementation(async (req: Request) => {
+      forwardedRequest = req;
+      return new Response(
+        JSON.stringify({
+          access_token: "native-client-access-token",
+          token_type: "Bearer",
+          expires_in: 3_600,
+          scope: MCP_GATEWAY_OAUTH_SCOPE,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+
+    const basic = Buffer.from(
+      `${oauthClient.clientId}:${clientSecret}`,
+    ).toString("base64");
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      headers: { authorization: `Basic ${basic}` },
+      payload: {
+        grant_type: "authorization_code",
+        code: "auth-code",
+        code_verifier: "verifier",
+        redirect_uri: "http://127.0.0.1:53280/callback",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    if (!forwardedRequest) {
+      throw new Error("better-auth handler was not called");
+    }
+    // The Authorization header must not reach better-auth, or the apiKey plugin
+    // rejects it before the OAuth client is authenticated.
+    expect(forwardedRequest.headers.get("authorization")).toBeNull();
+    // The credentials are carried in the body as client_secret_post instead.
+    const forwardedBody = JSON.parse(await forwardedRequest.text());
+    expect(forwardedBody.client_id).toBe(oauthClient.clientId);
+    expect(forwardedBody.client_secret).toBe(clientSecret);
+  });
+
+  test("rejects MCP OAuth client credentials with an invalid secret", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const gateway = await makeAgent({
+      organizationId: organization.id,
+      agentType: "mcp_gateway",
+    });
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: organization.id,
+      authorId: crypto.randomUUID(),
+      name: "Backend Service",
+      allowedGatewayIds: [gateway.id],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: "wrong-secret",
+        scope: MCP_GATEWAY_OAUTH_SCOPE,
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "invalid_client" });
+  });
+
+  test("rejects MCP OAuth client credentials without the mcp scope", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const gateway = await makeAgent({
+      organizationId: organization.id,
+      agentType: "mcp_gateway",
+    });
+    const { oauthClient, clientSecret } = await McpOauthClientModel.create({
+      organizationId: organization.id,
+      authorId: crypto.randomUUID(),
+      name: "Backend Service",
+      allowedGatewayIds: [gateway.id],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: clientSecret,
+        scope: LLM_PROXY_OAUTH_SCOPE,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: "invalid_scope",
+      error_description: `${MCP_GATEWAY_OAUTH_SCOPE} scope is required`,
     });
   });
 
@@ -405,7 +594,9 @@ describe("auth routes", () => {
     );
 
     const originalTrustProxy = config.api.trustProxy;
+    const originalAllowlist = process.env.ARCHESTRA_API_BASE_URL;
     config.api.trustProxy = true;
+    process.env.ARCHESTRA_API_BASE_URL = "https://backend.example.com";
     await app.close();
     app = await createAuthTestApp();
 
@@ -432,6 +623,11 @@ describe("auth routes", () => {
       });
     } finally {
       config.api.trustProxy = originalTrustProxy;
+      if (originalAllowlist === undefined) {
+        delete process.env.ARCHESTRA_API_BASE_URL;
+      } else {
+        process.env.ARCHESTRA_API_BASE_URL = originalAllowlist;
+      }
     }
   });
 
@@ -537,7 +733,9 @@ describe("auth routes", () => {
     );
 
     const originalTrustProxy = config.api.trustProxy;
+    const originalAllowlist = process.env.ARCHESTRA_API_BASE_URL;
     config.api.trustProxy = true;
+    process.env.ARCHESTRA_API_BASE_URL = "https://gateway.example.com";
     await app.close();
     app = await createAuthTestApp();
 
@@ -565,6 +763,11 @@ describe("auth routes", () => {
       });
     } finally {
       config.api.trustProxy = originalTrustProxy;
+      if (originalAllowlist === undefined) {
+        delete process.env.ARCHESTRA_API_BASE_URL;
+      } else {
+        process.env.ARCHESTRA_API_BASE_URL = originalAllowlist;
+      }
     }
   });
 
@@ -718,6 +921,403 @@ describe("auth routes", () => {
       });
     }
   });
+
+  describe("x-archestra-client-ip is never forwarded from client input", () => {
+    // `resolveAuthClientIp` in better-auth.ts trusts only this single header,
+    // so if any auth handler forwards a client-supplied value through to
+    // better-auth, the audit IP can be spoofed. These tests make sure every
+    // forwarding handler scrubs the header and re-injects Fastify's
+    // `request.ip` instead.
+    const SPOOFED = "1.2.3.4";
+
+    function lastForwardedHeader(name: string): string | null {
+      const calls = vi.mocked(betterAuth.handler).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      if (!last) return null;
+      return last.headers.get(name);
+    }
+
+    test("/api/auth/sign-in/sso strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/sign-in/sso",
+        headers: { "x-archestra-client-ip": SPOOFED },
+        payload: {
+          providerId: "google",
+          callbackURL: "http://localhost:3000/",
+        },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const forwarded = lastForwardedHeader("x-archestra-client-ip");
+      expect(forwarded).not.toBe(SPOOFED);
+    });
+
+    test("/api/auth/organization/remove-member strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/organization/remove-member",
+        headers: { "x-archestra-client-ip": SPOOFED },
+        payload: { memberIdOrEmail: "nobody@example.com", organizationId: "x" },
+      });
+
+      expect(lastForwardedHeader("x-archestra-client-ip")).not.toBe(SPOOFED);
+    });
+
+    test("/api/auth/* catch-all strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/sign-in/email",
+        headers: { "x-archestra-client-ip": SPOOFED },
+        payload: { email: "a@b.c", password: "x" },
+      });
+
+      expect(lastForwardedHeader("x-archestra-client-ip")).not.toBe(SPOOFED);
+    });
+
+    test("/api/auth/oauth2/register strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ client_id: "c" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        headers: { "x-archestra-client-ip": SPOOFED },
+        payload: { client_name: "test" },
+      });
+
+      expect(lastForwardedHeader("x-archestra-client-ip")).not.toBe(SPOOFED);
+    });
+
+    test("/api/auth/oauth2/consent strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ url: "http://example.com" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/consent",
+        headers: { "x-archestra-client-ip": SPOOFED },
+        payload: { accept: true, scope: "openid", oauth_query: "" },
+      });
+
+      expect(lastForwardedHeader("x-archestra-client-ip")).not.toBe(SPOOFED);
+    });
+
+    test("/api/auth/oauth2/authorize strips spoofed x-archestra-client-ip", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("ok", {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+
+      await app.inject({
+        method: "GET",
+        url: "/api/auth/oauth2/authorize?client_id=test&response_type=code",
+        headers: { "x-archestra-client-ip": SPOOFED },
+      });
+
+      expect(lastForwardedHeader("x-archestra-client-ip")).not.toBe(SPOOFED);
+    });
+  });
+
+  describe("dynamic client registration toggle", () => {
+    let dcrOriginal: boolean;
+
+    beforeEach(() => {
+      dcrOriginal = config.auth.dynamicClientRegistrationEnabled;
+    });
+
+    afterEach(() => {
+      config.auth.dynamicClientRegistrationEnabled = dcrOriginal;
+    });
+
+    test("rejects dynamic client registration when DCR is disabled", async () => {
+      config.auth.dynamicClientRegistrationEnabled = false;
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "Self Registered",
+          redirect_uris: ["https://app.example.com/callback"],
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error).toBe("access_denied");
+      // The request must never reach better-auth's registration handler.
+      expect(vi.mocked(betterAuth.handler)).not.toHaveBeenCalled();
+    });
+
+    test("forwards dynamic client registration to better-auth when DCR is enabled", async () => {
+      config.auth.dynamicClientRegistrationEnabled = true;
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ client_id: "mcp_dcr_generated" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "Self Registered",
+          redirect_uris: ["https://app.example.com/callback"],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(vi.mocked(betterAuth.handler)).toHaveBeenCalled();
+    });
+  });
+
+  describe("offline_access scope for refresh-token DCR clients", () => {
+    let dcrOriginal: boolean;
+
+    beforeEach(() => {
+      dcrOriginal = config.auth.dynamicClientRegistrationEnabled;
+      config.auth.dynamicClientRegistrationEnabled = true;
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ client_id: "c" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+
+    afterEach(() => {
+      config.auth.dynamicClientRegistrationEnabled = dcrOriginal;
+    });
+
+    async function lastForwardedBody(): Promise<Record<string, unknown>> {
+      const calls = vi.mocked(betterAuth.handler).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      return last ? await last.clone().json() : {};
+    }
+
+    test("adds offline_access when the client requests the refresh_token grant", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "Claude Desktop",
+          grant_types: ["authorization_code", "refresh_token"],
+          scope: "mcp",
+        },
+      });
+
+      expect((await lastForwardedBody()).scope).toBe("mcp offline_access");
+    });
+
+    test("does not add offline_access without the refresh_token grant", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "No Refresh",
+          grant_types: ["authorization_code"],
+          scope: "mcp",
+        },
+      });
+
+      expect((await lastForwardedBody()).scope).toBe("mcp");
+    });
+
+    test("does not duplicate offline_access when already requested", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: {
+          client_name: "Already Offline",
+          grant_types: ["authorization_code", "refresh_token"],
+          scope: "mcp offline_access",
+        },
+      });
+
+      expect((await lastForwardedBody()).scope).toBe("mcp offline_access");
+    });
+  });
+
+  describe("offline_access reconciliation at authorize", () => {
+    let dcrOriginal: boolean;
+
+    beforeEach(() => {
+      dcrOriginal = config.auth.dynamicClientRegistrationEnabled;
+      config.auth.dynamicClientRegistrationEnabled = true;
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://127.0.0.1:5000/callback?code=x" },
+        }),
+      );
+    });
+
+    afterEach(() => {
+      config.auth.dynamicClientRegistrationEnabled = dcrOriginal;
+    });
+
+    function lastForwardedUrl(): string | null {
+      const calls = vi.mocked(betterAuth.handler).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      return last ? last.url : null;
+    }
+
+    function authorizeUrl(clientId: string, scope: string): string {
+      const params = new URLSearchParams({
+        client_id: clientId,
+        response_type: "code",
+        scope,
+        redirect_uri: "http://127.0.0.1:5000/callback",
+      });
+      return `/api/auth/oauth2/authorize?${params.toString()}`;
+    }
+
+    test("persists offline_access for a refresh-capable client that requests it but registered only mcp", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "mcp_cached_client",
+        scopes: ["mcp"],
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await app.inject({
+        method: "GET",
+        url: authorizeUrl(client.clientId, "mcp offline_access"),
+      });
+
+      // Self-healed: the client now carries offline_access, so the provider's
+      // scope check (against stored scopes) passes on this same request.
+      const found = await OAuthClientModel.findByClientId(client.clientId);
+      expect(found?.scopes).toEqual(["mcp", "offline_access"]);
+      // The request is forwarded with offline_access intact.
+      expect(lastForwardedUrl()).toContain("offline_access");
+    });
+
+    test("injects offline_access when a registered client omits it from the request", async ({
+      makeOAuthClient,
+    }) => {
+      const client = await makeOAuthClient({
+        clientId: "mcp_registered_offline",
+        scopes: ["mcp", "offline_access"],
+        grantTypes: ["authorization_code", "refresh_token"],
+      });
+
+      await app.inject({
+        method: "GET",
+        url: authorizeUrl(client.clientId, "mcp"),
+      });
+
+      expect(lastForwardedUrl()).toContain("offline_access");
+    });
+  });
+
+  describe("Origin header for native (Origin-less) OAuth clients", () => {
+    // Native MCP clients (e.g. Claude Desktop) call the OAuth endpoints
+    // server-to-server with no Origin header. Better Auth rejects such requests
+    // with MISSING_OR_NULL_ORIGIN before consulting trustedOrigins, so the
+    // forwarding handlers must inject the configured frontend origin. Browsers
+    // always send an Origin on cross-origin POSTs, so a present Origin must be
+    // preserved unchanged.
+    function lastForwardedOrigin(): string | null {
+      const calls = vi.mocked(betterAuth.handler).mock.calls;
+      const last = calls[calls.length - 1]?.[0];
+      return last ? last.headers.get("origin") : null;
+    }
+
+    test("injects frontend origin for DCR when the client sends none", async () => {
+      config.auth.dynamicClientRegistrationEnabled = true;
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(JSON.stringify({ client_id: "c" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/register",
+        payload: { client_name: "Claude Desktop" },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(lastForwardedOrigin()).toBe(config.frontendBaseUrl);
+    });
+
+    test("preserves a client-supplied Origin on the token endpoint", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/token",
+        headers: { origin: "https://app.example.com" },
+        payload: {
+          grant_type: "authorization_code",
+          client_id: "mcp_some_client",
+          code: "auth-code",
+        },
+      });
+
+      expect(lastForwardedOrigin()).toBe("https://app.example.com");
+    });
+
+    test("does not inject an origin for non-public-OAuth routes", async () => {
+      // The carve-out is scoped to the public OAuth endpoints. Credentialed
+      // browser routes (sign-in, consent, etc.) keep Better Auth's origin-based
+      // CSRF protection, so a missing Origin must be forwarded as missing — never
+      // back-filled with the frontend origin.
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/sign-in/email",
+        payload: { email: "user@example.com", password: "password" },
+      });
+
+      expect(lastForwardedOrigin()).toBeNull();
+    });
+  });
 });
 
 async function createAuthTestApp(): Promise<FastifyInstanceWithZod> {
@@ -726,3 +1326,398 @@ async function createAuthTestApp(): Promise<FastifyInstanceWithZod> {
   await app.register(authRoutes);
   return app;
 }
+
+describe("bindAppConnectorTokenAudience", () => {
+  const ORIGIN = "http://localhost:9000";
+  const APP_A = "11111111-1111-4111-8111-111111111111";
+  const APP_B = "22222222-2222-4222-8222-222222222222";
+  const connA = `${ORIGIN}/api/mcp/app/${APP_A}`;
+  const connB = `${ORIGIN}/api/mcp/app/${APP_B}`;
+  const refA = appConnectorAudienceRef(
+    buildConnectorResourceUri(ORIGIN, APP_A) as string,
+  );
+  const sha256 = (v: string) =>
+    createHash("sha256").update(v).digest("base64url");
+
+  test("authorization_code grant stamps the consented connector audience", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `tok-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: null,
+    });
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const result = await bindAppConnectorTokenAudience({
+      resource: connA,
+      responseBody: JSON.stringify({ access_token: rawToken }),
+      grantType: "authorization_code",
+      tokenEndpointOrigin: ORIGIN,
+    });
+    expect(result.status).toBe("ok");
+    const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+    expect(row?.referenceId).toBe(refA);
+  });
+
+  test("a grant with no connector resource leaves the token unbound", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `tok-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: null,
+    });
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const result = await bindAppConnectorTokenAudience({
+      resource: undefined,
+      responseBody: JSON.stringify({ access_token: rawToken }),
+      grantType: "authorization_code",
+      tokenEndpointOrigin: ORIGIN,
+    });
+    expect(result.status).toBe("skip");
+    const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+    expect(row?.referenceId).toBeNull();
+  });
+
+  test("a connector-targeted resource on an untrusted origin fails closed (not an unbound token)", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `tok-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: null,
+    });
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const result = await bindAppConnectorTokenAudience({
+      // Connector-shaped, but the origin is not one this server serves — must
+      // not fall through to an unbound mcp token.
+      resource: `https://evil.example.com/api/mcp/app/${APP_A}`,
+      responseBody: JSON.stringify({ access_token: rawToken }),
+      grantType: "authorization_code",
+      tokenEndpointOrigin: ORIGIN,
+    });
+    expect(result.status).toBe("error");
+    const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+    expect(row?.referenceId).toBeNull();
+  });
+
+  test("refresh honors the inherited binding for the same resource and when omitted", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    for (const resource of [connA, undefined]) {
+      const client = await makeOAuthClient({ userId: user.id });
+      const rawToken = `tok-${crypto.randomUUID()}`;
+      // better-auth carries the audience onto the refreshed token.
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: sha256(rawToken),
+        referenceId: refA,
+      });
+      const result = await bindAppConnectorTokenAudience({
+        resource,
+        responseBody: JSON.stringify({ access_token: rawToken }),
+        grantType: "refresh_token",
+        tokenEndpointOrigin: ORIGIN,
+      });
+      expect(result.status).toBe("ok");
+    }
+  });
+
+  // A refresh cannot re-target: better-auth ignores the requested `resource` and
+  // inherits the original audience, and it has already rotated (revoked the old
+  // refresh token) by the time we run — so erroring on a mismatch would strand a
+  // working session for no gain. Honor the inherited binding instead.
+  test("refresh honors the inherited binding and never strands on a mismatched resource", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const mismatches: unknown[] = [
+      connB, // a different connector
+      [connB, connA], // a repeated connector array (refresh ignores `resource`)
+      `https://evil.example.com/api/mcp/app/${APP_A}`, // an untrusted origin
+    ];
+    for (const resource of mismatches) {
+      const client = await makeOAuthClient({ userId: user.id });
+      const rawToken = `tok-${crypto.randomUUID()}`;
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: sha256(rawToken),
+        referenceId: refA,
+      });
+      const result = await bindAppConnectorTokenAudience({
+        resource,
+        responseBody: JSON.stringify({ access_token: rawToken }),
+        grantType: "refresh_token",
+        tokenEndpointOrigin: ORIGIN,
+      });
+      expect(result.status).toBe("ok");
+      // The rotated token stays bound to the ORIGINAL connector; the requested
+      // resource is ignored (connector B would still reject this token).
+      const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+      expect(row?.referenceId).toBe(refA);
+    }
+  });
+
+  test("refresh of an originally-unbound token does not acquire a connector", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `tok-${crypto.randomUUID()}`;
+    // The original grant never bound a connector, so a refresh that names one
+    // cannot acquire it — the token stays unbound (and the connector rejects it).
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: null,
+    });
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const result = await bindAppConnectorTokenAudience({
+      resource: connA,
+      responseBody: JSON.stringify({ access_token: rawToken }),
+      grantType: "refresh_token",
+      tokenEndpointOrigin: ORIGIN,
+    });
+    expect(result.status).toBe("skip");
+    const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+    expect(row?.referenceId).toBeNull();
+  });
+
+  test("refresh stamps the inherited binding when the access token came back unbound", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+    makeOAuthRefreshToken,
+  }) => {
+    const user = await makeUser();
+    const client = await makeOAuthClient({ userId: user.id });
+    // The refresh token carries the original grant's connector audience, but the
+    // refreshed access token came back unbound — the binding must be recovered
+    // from the refresh token and stamped onto the access token.
+    const refresh = await makeOAuthRefreshToken(client.clientId, user.id);
+    await db
+      .update(schema.oauthRefreshTokensTable)
+      .set({ referenceId: refA })
+      .where(eq(schema.oauthRefreshTokensTable.id, refresh.id));
+    const rawToken = `tok-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: null,
+      refreshId: refresh.id,
+    });
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const result = await bindAppConnectorTokenAudience({
+      resource: undefined,
+      responseBody: JSON.stringify({ access_token: rawToken }),
+      grantType: "refresh_token",
+      tokenEndpointOrigin: ORIGIN,
+    });
+    expect(result.status).toBe("ok");
+    const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+    expect(row?.referenceId).toBe(refA);
+  });
+
+  // RFC 8707 permits repeated `resource` params (a JS array). A connector token
+  // binds to exactly one audience, so a connector named among repeated resources
+  // can't be honored on the initial grant — fail closed rather than mint an
+  // unbound token. Only the authorization_code path applies these checks.
+  test("authorization_code fails closed for a resource array naming a connector", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const arrays: unknown[] = [
+      [connA, connB], // two distinct connectors
+      [connA, connA], // the same connector twice
+      [connA, `${ORIGIN}/v1/mcp/some-agent`], // connector mixed with a gateway resource
+    ];
+    for (const resource of arrays) {
+      const client = await makeOAuthClient({ userId: user.id });
+      const rawToken = `tok-${crypto.randomUUID()}`;
+      await makeOAuthAccessToken(client.clientId, user.id, {
+        token: sha256(rawToken),
+        referenceId: null,
+      });
+      const result = await bindAppConnectorTokenAudience({
+        resource,
+        responseBody: JSON.stringify({ access_token: rawToken }),
+        grantType: "authorization_code",
+        tokenEndpointOrigin: ORIGIN,
+      });
+      expect(result.status).toBe("error");
+      const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+      expect(row?.referenceId).toBeNull();
+    }
+  });
+
+  test("authorization_code with only non-connector resources leaves the token unbound", async ({
+    makeUser,
+    makeOAuthClient,
+    makeOAuthAccessToken,
+  }) => {
+    const user = await makeUser();
+    const client = await makeOAuthClient({ userId: user.id });
+    const rawToken = `tok-${crypto.randomUUID()}`;
+    await makeOAuthAccessToken(client.clientId, user.id, {
+      token: sha256(rawToken),
+      referenceId: null,
+    });
+    const { bindAppConnectorTokenAudience } = await import("./auth");
+    const result = await bindAppConnectorTokenAudience({
+      // No connector among them — not our concern, so it binds elsewhere or not
+      // at all (here: not at all).
+      resource: [`${ORIGIN}/v1/mcp/agent-a`, `${ORIGIN}/v1/mcp/agent-b`],
+      responseBody: JSON.stringify({ access_token: rawToken }),
+      grantType: "authorization_code",
+      tokenEndpointOrigin: ORIGIN,
+    });
+    expect(result.status).toBe("skip");
+    const row = await OAuthAccessTokenModel.getByTokenHash(sha256(rawToken));
+    expect(row?.referenceId).toBeNull();
+  });
+});
+
+describe("getOAuthAccessTokenLifetimeSeconds — shareable-App connector tokens", () => {
+  const ORIGIN = "http://localhost:9000";
+  const APP_ORG_LIFETIME = 1111;
+  const FIRST_MEMBERSHIP_LIFETIME = 600;
+
+  const setOrgLifetime = (organizationId: string, seconds: number) =>
+    db
+      .update(schema.organizationsTable)
+      .set({ oauthAccessTokenLifetimeSeconds: seconds })
+      .where(eq(schema.organizationsTable.id, organizationId));
+
+  test("a connector token uses the app's org lifetime, not the viewer's first membership", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+  }) => {
+    const user = await makeUser();
+    // The viewer's only (→ first) membership is a different org with its own
+    // lifetime — the bug returned this for connector tokens.
+    const firstOrg = await makeOrganization();
+    await setOrgLifetime(firstOrg.id, FIRST_MEMBERSHIP_LIFETIME);
+    await makeMember(user.id, firstOrg.id);
+    // The app lives in an org the viewer is not a member of.
+    const appOrg = await makeOrganization();
+    await setOrgLifetime(appOrg.id, APP_ORG_LIFETIME);
+    const app = await makeApp({ organizationId: appOrg.id });
+    const connectorUri = buildConnectorResourceUri(ORIGIN, app.id) as string;
+
+    const { getOAuthAccessTokenLifetimeSeconds } = await import("./auth");
+
+    // authorization_code: the connector is named by the requested `resource`.
+    await expect(
+      getOAuthAccessTokenLifetimeSeconds({
+        resource: connectorUri,
+        referenceId: null,
+        tokenEndpointOrigin: ORIGIN,
+        userId: user.id,
+      }),
+    ).resolves.toBe(APP_ORG_LIFETIME);
+
+    // refresh: better-auth inherits the audience ref onto the token, so `resource`
+    // is absent but the binding identifies the connector.
+    await expect(
+      getOAuthAccessTokenLifetimeSeconds({
+        resource: undefined,
+        referenceId: appConnectorAudienceRef(connectorUri),
+        tokenEndpointOrigin: ORIGIN,
+        userId: user.id,
+      }),
+    ).resolves.toBe(APP_ORG_LIFETIME);
+
+    // A non-connector request still falls back to the viewer's first membership,
+    // proving the connector branch is what redirects to the app's org above.
+    await expect(
+      getOAuthAccessTokenLifetimeSeconds({
+        resource: undefined,
+        referenceId: null,
+        tokenEndpointOrigin: ORIGIN,
+        userId: user.id,
+      }),
+    ).resolves.toBe(FIRST_MEMBERSHIP_LIFETIME);
+  });
+
+  test("a connector resource on an untrusted origin does not resolve an app org", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+  }) => {
+    const user = await makeUser();
+    const firstOrg = await makeOrganization();
+    await setOrgLifetime(firstOrg.id, FIRST_MEMBERSHIP_LIFETIME);
+    await makeMember(user.id, firstOrg.id);
+    const appOrg = await makeOrganization();
+    await setOrgLifetime(appOrg.id, APP_ORG_LIFETIME);
+    const app = await makeApp({ organizationId: appOrg.id });
+
+    const { getOAuthAccessTokenLifetimeSeconds } = await import("./auth");
+    // Same app id, but an origin this server does not serve — must not bind to the
+    // app's org; falls back to the viewer's first membership.
+    await expect(
+      getOAuthAccessTokenLifetimeSeconds({
+        resource: `https://evil.example.com/api/mcp/app/${app.id}`,
+        referenceId: null,
+        tokenEndpointOrigin: ORIGIN,
+        userId: user.id,
+      }),
+    ).resolves.toBe(FIRST_MEMBERSHIP_LIFETIME);
+  });
+
+  test("on refresh the lifetime follows the inherited binding, not a re-sent resource", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+  }) => {
+    const user = await makeUser();
+    const firstOrg = await makeOrganization();
+    await setOrgLifetime(firstOrg.id, FIRST_MEMBERSHIP_LIFETIME);
+    await makeMember(user.id, firstOrg.id);
+    // The token is bound (inherited) to appA's connector; the client re-sends a
+    // different connector (appB) on refresh. better-auth ignores the re-sent
+    // resource, so the lifetime must come from appA's org, not appB's.
+    const orgA = await makeOrganization();
+    await setOrgLifetime(orgA.id, APP_ORG_LIFETIME);
+    const appA = await makeApp({ organizationId: orgA.id });
+    const orgB = await makeOrganization();
+    await setOrgLifetime(orgB.id, APP_ORG_LIFETIME + 222);
+    const appB = await makeApp({ organizationId: orgB.id });
+
+    const { getOAuthAccessTokenLifetimeSeconds } = await import("./auth");
+    await expect(
+      getOAuthAccessTokenLifetimeSeconds({
+        resource: buildConnectorResourceUri(ORIGIN, appB.id) as string,
+        referenceId: appConnectorAudienceRef(
+          buildConnectorResourceUri(ORIGIN, appA.id) as string,
+        ),
+        tokenEndpointOrigin: ORIGIN,
+        userId: user.id,
+      }),
+    ).resolves.toBe(APP_ORG_LIFETIME);
+  });
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@shared";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { ArrowUpRight, Database, Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ export function EmbeddingRequiredPlaceholder() {
             </Button>
           )}
           <a
-            href={getDocsUrl(DocsPage.PlatformKnowledgeBases)}
+            href={getDocsUrl(DocsPage.PlatformKnowledge)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"

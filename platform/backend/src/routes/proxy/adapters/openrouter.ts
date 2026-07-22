@@ -4,7 +4,7 @@
  * OpenRouter exposes an OpenAI-compatible API at https://openrouter.ai/api/v1
  * and recommends attribution headers (HTTP-Referer, X-OpenRouter-Title).
  */
-import { ArchestraInternalErrorCode } from "@shared";
+import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -12,6 +12,7 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
+import { applyResponseHealing } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import { metrics } from "@/observability";
 import type {
@@ -21,6 +22,7 @@ import type {
   LLMResponseAdapter,
   LLMStreamAdapter,
   Openrouter,
+  StreamAccumulatorState,
 } from "@/types";
 import {
   OpenAIRequestAdapter,
@@ -103,6 +105,7 @@ class OpenrouterResponseAdapter
   private delegate: OpenAIResponseAdapter;
 
   constructor(response: OpenrouterResponse) {
+    assertOpenrouterResponseHasOutput(response);
     this.delegate = new OpenAIResponseAdapter(response);
   }
 
@@ -150,7 +153,9 @@ class OpenrouterStreamAdapter
   }
 
   processChunk(chunk: OpenrouterStreamChunk) {
-    return this.delegate.processChunk(chunk);
+    const result = this.delegate.processChunk(chunk);
+    assertOpenrouterStreamChunkHasOutput(this.delegate.state, chunk);
+    return result;
   }
   getSSEHeaders() {
     return this.delegate.getSSEHeaders();
@@ -240,7 +245,6 @@ export const openrouterAdapterFactory: LLMProvider<
           "openrouter",
           options.agent,
           options.source,
-          options.externalAgentId,
         )
       : undefined;
 
@@ -260,10 +264,12 @@ export const openrouterAdapterFactory: LLMProvider<
     request: OpenrouterRequest,
   ): Promise<OpenrouterResponse> {
     const openrouterClient = client as OpenAIProvider;
-    const openrouterRequest = {
+    // Force non-streaming before healing so the decision never depends on the
+    // caller having already cleared `stream`.
+    const openrouterRequest = applyResponseHealing({
       ...request,
       stream: false,
-    } as unknown as ChatCompletionCreateParamsNonStreaming;
+    }) as unknown as ChatCompletionCreateParamsNonStreaming;
 
     return (await openrouterClient.chat.completions.create(
       openrouterRequest,
@@ -313,3 +319,57 @@ export const openrouterAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+function assertOpenrouterResponseHasOutput(response: OpenrouterResponse): void {
+  const choice = response.choices[0];
+  if (!choice || choice.finish_reason !== "stop") {
+    return;
+  }
+
+  const { message } = choice;
+  if (
+    hasText(message.content) ||
+    hasRefusal(message.refusal) ||
+    (message.tool_calls?.length ?? 0) > 0 ||
+    message.function_call
+  ) {
+    return;
+  }
+
+  throwEmptyOpenrouterResponseError();
+}
+
+function assertOpenrouterStreamChunkHasOutput(
+  state: StreamAccumulatorState,
+  chunk: OpenrouterStreamChunk,
+): void {
+  if (chunk.choices[0]?.finish_reason !== "stop") {
+    return;
+  }
+
+  if (state.text.length > 0 || state.toolCalls.length > 0) {
+    return;
+  }
+
+  throwEmptyOpenrouterResponseError();
+}
+
+function hasText(content: string | null | undefined): boolean {
+  return typeof content === "string" && content.length > 0;
+}
+
+function hasRefusal(refusal: string | null | undefined): boolean {
+  return typeof refusal === "string" && refusal.length > 0;
+}
+
+function throwEmptyOpenrouterResponseError(): never {
+  // Tagged with the normalized internal code so downstream consumers can
+  // recognize this known-transient upstream condition: error reporting drops
+  // it as expected noise, and the chat error mapper surfaces it as the
+  // retryable EmptyResponse card instead of a generic server error.
+  throw new ApiError(
+    503,
+    "OpenRouter returned an empty response without content or tool calls",
+    ArchestraInternalErrorCode.UpstreamEmptyResponse,
+  );
+}

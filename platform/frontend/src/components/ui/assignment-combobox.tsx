@@ -4,7 +4,7 @@ import {
   getAssignmentComboboxDisabledOptionTestId,
   getAssignmentComboboxOptionTestId,
   getAssignmentComboboxSearchInputTestId,
-} from "@shared";
+} from "@archestra/shared";
 import { ExternalLink, Plus } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
@@ -111,6 +111,7 @@ export function AssignmentCombobox({
       >
         <div className="px-2 py-1.5">
           <Input
+            aria-label={placeholder || "Search"}
             placeholder={placeholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}

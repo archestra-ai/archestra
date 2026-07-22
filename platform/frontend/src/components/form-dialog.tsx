@@ -9,6 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DialogDismissProvider,
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "@/components/unsaved-changes-guard";
 import { cn } from "@/lib/utils";
 
 type DialogSize = "small" | "medium" | "large";
@@ -21,13 +26,25 @@ export type FormDialogProps = {
   size?: DialogSize;
   children: React.ReactNode;
   preventCloseOnInteractOutside?: boolean;
+  /** Block Esc from closing — the X button stays the only dismissal. */
+  preventCloseOnEscape?: boolean;
+  /**
+   * When the form holds unsaved data, closing it (Esc, outside-click, or the
+   * X button) shows a "Discard unsaved changes?" confirmation instead of
+   * silently dropping the edits. Leave undefined/false to keep the form
+   * unguarded.
+   */
+  isDirty?: boolean;
   className?: string;
+  /** Extra classes for the header block, e.g. `border-b-0` to drop its rule. */
+  headerClassName?: string;
 };
 
+// Flex column + overflow-hidden come from the base DialogContent.
 const sizeClasses: Record<DialogSize, string> = {
-  small: "max-w-md max-h-[85vh] flex flex-col overflow-hidden",
-  medium: "max-w-2xl max-h-[85vh] flex flex-col overflow-hidden",
-  large: "max-w-5xl h-[90vh] flex flex-col overflow-hidden",
+  small: "max-w-md max-h-[85vh]",
+  medium: "max-w-2xl max-h-[85vh]",
+  large: "max-w-5xl h-[90vh]",
 };
 
 export function FormDialog({
@@ -38,22 +55,43 @@ export function FormDialog({
   size = "medium",
   children,
   preventCloseOnInteractOutside,
+  preventCloseOnEscape,
+  isDirty = false,
   className,
+  headerClassName,
 }: FormDialogProps) {
+  const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={cn(sizeClasses[size], className)}
-        onInteractOutside={
-          preventCloseOnInteractOutside ? (e) => e.preventDefault() : undefined
-        }
-      >
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription>{description}</DialogDescription>}
-        </DialogHeader>
-        {children}
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={guard.handleOpenChange}>
+        <DialogContent
+          className={cn(sizeClasses[size], className)}
+          onInteractOutside={
+            preventCloseOnInteractOutside
+              ? (e) => e.preventDefault()
+              : undefined
+          }
+          onEscapeKeyDown={
+            preventCloseOnEscape ? (e) => e.preventDefault() : undefined
+          }
+        >
+          <DialogDismissProvider requestClose={guard.requestClose}>
+            <DialogHeader className={headerClassName}>
+              <DialogTitle>{title}</DialogTitle>
+              {description && (
+                <DialogDescription>{description}</DialogDescription>
+              )}
+            </DialogHeader>
+            {children}
+          </DialogDismissProvider>
+        </DialogContent>
+      </Dialog>
+      <UnsavedChangesDialog
+        open={guard.confirmOpen}
+        onKeepEditing={guard.keepEditing}
+        onDiscard={guard.discardChanges}
+      />
+    </>
   );
 }

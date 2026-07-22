@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type AgentsList = archestraApiTypes.GetAgentsResponses["200"];
 type Agent = AgentsList["data"][number];
@@ -13,6 +13,7 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     slug: null,
     isDefault: false,
     isPersonalGateway: false,
+    isPersonalProxy: false,
     considerContextUntrusted: false,
     agentType: "agent",
     systemPrompt: null,
@@ -25,13 +26,16 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     llmModel: null,
     modelId: null,
     identityProviderId: null,
+    environmentId: null,
     passthroughHeaders: null,
     toolExposureMode: "full",
-    toolAssignmentMode: "manual",
+    accessAllTools: false,
+    accessAllSubagents: false,
     builtInAgentConfig: null,
     builtIn: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
+    deletedAt: null,
     tools: [],
     teams: [],
     labels: [],

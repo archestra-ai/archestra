@@ -1,7 +1,8 @@
 import {
+  BillingModeSchema,
   InteractionSourceSchema,
   SupportedProvidersDiscriminatorSchema,
-} from "@shared";
+} from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -16,7 +17,10 @@ import {
   Cohere,
   DeepSeek,
   Gemini,
+  GithubCopilot,
   Groq,
+  Kimi,
+  Microsoft365Copilot,
   Minimax,
   Mistral,
   Ollama,
@@ -39,12 +43,21 @@ export const UserInfoSchema = z.object({
 export const InteractionAuthMethodSchema = z.enum([
   "provider_key",
   "virtual_key",
+  "passthrough_virtual_key",
   "jwks",
   "oauth_client_credentials",
   "oauth_user",
   "internal",
   "unknown",
 ]);
+
+/**
+ * A failed upstream call is persisted with the provider `type` but this shape
+ * in place of a provider response (the proxy error path in llm-proxy-handler).
+ * The insert union and every read arm accept it so the row round-trips instead
+ * of poisoning the whole interactions list on read-back.
+ */
+export const InteractionErrorResponseSchema = z.object({ error: z.string() });
 
 /**
  * Request/Response schemas that accept any provider type
@@ -67,15 +80,38 @@ export const InteractionRequestSchema = z.union([
   Cohere.API.ChatRequestSchema,
   Zhipuai.API.ChatCompletionRequestSchema,
   DeepSeek.API.ChatCompletionRequestSchema,
+  GithubCopilot.API.ChatCompletionRequestSchema,
+  Kimi.API.ChatCompletionRequestSchema,
+  Microsoft365Copilot.API.ChatCompletionRequestSchema,
   Minimax.API.ChatCompletionRequestSchema,
   OpenAi.API.ResponsesRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
   Azure.API.ResponsesRequestSchema,
 ]);
 
+/**
+ * Embedding interactions are logged with a truncated vector preview (see
+ * `buildEmbeddingInteraction`): each vector holds only its first few values plus
+ * `truncatedFrom` = the full length. This interaction-only schema permits that
+ * marker (on both the write and read sides) so it survives read-back
+ * serialization, without polluting the canonical OpenAI embedding response
+ * contract used for live proxy responses.
+ */
+const EmbeddingInteractionResponseSchema =
+  OpenAi.API.EmbeddingResponseSchema.extend({
+    data: z.array(
+      z.object({
+        object: z.literal("embedding"),
+        embedding: z.array(z.number()),
+        index: z.number(),
+        truncatedFrom: z.number().optional(),
+      }),
+    ),
+  });
+
 export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
-  OpenAi.API.EmbeddingResponseSchema,
+  EmbeddingInteractionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
   Anthropic.API.MessagesResponseSchema,
   Bedrock.API.ConverseResponseSchema,
@@ -90,10 +126,14 @@ export const InteractionResponseSchema = z.union([
   Cohere.API.ChatResponseSchema,
   Zhipuai.API.ChatCompletionResponseSchema,
   DeepSeek.API.ChatCompletionResponseSchema,
+  GithubCopilot.API.ChatCompletionResponseSchema,
+  Kimi.API.ChatCompletionResponseSchema,
+  Microsoft365Copilot.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
   OpenAi.API.ResponsesResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
   Azure.API.ResponsesResponseSchema,
+  InteractionErrorResponseSchema,
 ]);
 
 const extendedFields = {
@@ -110,10 +150,33 @@ const extendedFields = {
  */
 const BaseSelectInteractionSchema = createSelectSchema(
   schema.interactionsTable,
-  extendedFields,
+  {
+    ...extendedFields,
+    // Required on read: the column is NOT NULL, so every row carries a concrete
+    // BillingMode. (The default override belongs on the insert schema only.)
+    billingMode: BillingModeSchema,
+  },
 );
 
-const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.extend({
+/**
+ * Delta-encoding bookkeeping columns. They live on the Drizzle table (and so on
+ * the row the model reads) so the delta manager can walk parent chains, but they
+ * are internal plumbing: the `request` / `processedRequest` returned by the model
+ * is always fully reconstructed, so these must never leak into the public API
+ * surface (OpenAPI spec, generated response types). Omit them from every response
+ * schema. The internal row type stays available via Drizzle's `$inferSelect`.
+ */
+const DELTA_ENCODING_COLUMNS = {
+  threadId: true,
+  parentId: true,
+  requestSharedPrefix: true,
+  processedRequestSharedPrefix: true,
+  requestLastMessageIdx: true,
+} as const;
+
+const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit(
+  DELTA_ENCODING_COLUMNS,
+).extend({
   chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
 });
 
@@ -125,200 +188,359 @@ const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.extend({
 export const RequestTypeSchema = z.enum(["main", "subagent"]);
 
 /**
+ * Persisted `request` / `processedRequest` payloads are re-validated on
+ * read-back, and the provider schemas inevitably drift from what was actually
+ * persisted (see FinishReasonSchema; delta-reconstructed requests can also be
+ * partial). Without a fallback, one nonconforming row 500s the entire
+ * GET /api/interactions response, so every read arm falls back to serializing
+ * the raw persisted object when it no longer matches the canonical schema.
+ * The canonical schema stays first so conforming rows keep precise OpenAPI
+ * types. Responses have their own guard: normalizeInteractionResponse below.
+ */
+const LoosePersistedPayloadSchema = z.record(z.string(), z.unknown());
+
+const withReadFallback = <T extends z.ZodTypeAny>(schema: T) =>
+  z.union([schema, LoosePersistedPayloadSchema]);
+
+/**
+ * Each arm's read schema accepts either the provider response or a persisted
+ * error response, so a failed interaction (stored with the provider `type`)
+ * still serializes on read-back.
+ */
+const withErrorResponse = <T extends z.ZodTypeAny>(schema: T) =>
+  z.union([schema, InteractionErrorResponseSchema]);
+
+/**
  * Discriminated union schema for API responses
  * This provides type safety based on the type field
  */
 export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["openai:chatCompletions"]),
-    request: OpenAi.API.ChatCompletionRequestSchema,
-    processedRequest:
-      OpenAi.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: OpenAi.API.ChatCompletionResponseSchema,
+    request: withReadFallback(OpenAi.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(OpenAi.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(OpenAi.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["openai:responses"]),
-    request: OpenAi.API.ResponsesRequestSchema,
-    processedRequest: OpenAi.API.ResponsesRequestSchema.nullable().optional(),
-    response: OpenAi.API.ResponsesResponseSchema,
+    request: withReadFallback(OpenAi.API.ResponsesRequestSchema),
+    processedRequest: withReadFallback(OpenAi.API.ResponsesRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(OpenAi.API.ResponsesResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["openai:embeddings"]),
-    request: OpenAi.API.EmbeddingRequestSchema,
-    processedRequest: OpenAi.API.EmbeddingRequestSchema.nullable().optional(),
-    response: OpenAi.API.EmbeddingResponseSchema,
+    request: withReadFallback(OpenAi.API.EmbeddingRequestSchema),
+    processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(EmbeddingInteractionResponseSchema),
+  }),
+  // Gemini embeddings are persisted through the OpenAI-compatible embedding
+  // client, so they share OpenAI's embedding request/response shape.
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["gemini:embeddings"]),
+    request: withReadFallback(OpenAi.API.EmbeddingRequestSchema),
+    processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(EmbeddingInteractionResponseSchema),
+  }),
+  // Bedrock (Titan) embeddings are normalized to the OpenAI embedding shape.
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["bedrock:embeddings"]),
+    request: withReadFallback(OpenAi.API.EmbeddingRequestSchema),
+    processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(EmbeddingInteractionResponseSchema),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["gemini:generateContent"]),
-    request: Gemini.API.GenerateContentRequestSchema,
-    processedRequest:
-      Gemini.API.GenerateContentRequestSchema.nullable().optional(),
-    response: Gemini.API.GenerateContentResponseSchema,
+    request: withReadFallback(Gemini.API.GenerateContentRequestSchema),
+    processedRequest: withReadFallback(Gemini.API.GenerateContentRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Gemini.API.GenerateContentResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["anthropic:messages"]),
-    request: Anthropic.API.MessagesRequestSchema,
-    processedRequest: Anthropic.API.MessagesRequestSchema.nullable().optional(),
-    response: Anthropic.API.MessagesResponseSchema,
+    request: withReadFallback(Anthropic.API.MessagesRequestSchema),
+    processedRequest: withReadFallback(Anthropic.API.MessagesRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Anthropic.API.MessagesResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["bedrock:converse"]),
-    request: Bedrock.API.ConverseRequestSchema,
-    processedRequest: Bedrock.API.ConverseRequestSchema.nullable().optional(),
-    response: Bedrock.API.ConverseResponseSchema,
+    request: withReadFallback(Bedrock.API.ConverseRequestSchema),
+    processedRequest: withReadFallback(Bedrock.API.ConverseRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Bedrock.API.ConverseResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  // Bedrock InvokeModel carries the Anthropic Messages wire format.
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["bedrock:invoke"]),
+    request: withReadFallback(Bedrock.API.InvokeRequestSchema),
+    processedRequest: withReadFallback(Bedrock.API.InvokeRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Bedrock.API.InvokeResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["cerebras:chatCompletions"]),
-    request: Cerebras.API.ChatCompletionRequestSchema,
-    processedRequest:
-      Cerebras.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: Cerebras.API.ChatCompletionResponseSchema,
+    request: withReadFallback(Cerebras.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(Cerebras.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Cerebras.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["mistral:chatCompletions"]),
-    request: Mistral.API.ChatCompletionRequestSchema,
-    processedRequest:
-      Mistral.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: Mistral.API.ChatCompletionResponseSchema,
+    request: withReadFallback(Mistral.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(Mistral.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Mistral.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["perplexity:chatCompletions"]),
-    request: Perplexity.API.ChatCompletionRequestSchema,
-    processedRequest:
-      Perplexity.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: Perplexity.API.ChatCompletionResponseSchema,
+    request: withReadFallback(Perplexity.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(
+      Perplexity.API.ChatCompletionRequestSchema,
+    )
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Perplexity.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["groq:chatCompletions"]),
-    request: Groq.API.ChatCompletionRequestSchema,
-    processedRequest:
-      Groq.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: Groq.API.ChatCompletionResponseSchema,
+    request: withReadFallback(Groq.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(Groq.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Groq.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["xai:chatCompletions"]),
-    request: Xai.API.ChatCompletionRequestSchema,
-    processedRequest: Xai.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: Xai.API.ChatCompletionResponseSchema,
+    request: withReadFallback(Xai.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(Xai.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Xai.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["openrouter:chatCompletions"]),
-    request: Openrouter.API.ChatCompletionRequestSchema,
-    processedRequest:
-      Openrouter.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: Openrouter.API.ChatCompletionResponseSchema,
+    request: withReadFallback(Openrouter.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(
+      Openrouter.API.ChatCompletionRequestSchema,
+    )
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Openrouter.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["vllm:chatCompletions"]),
-    request: Vllm.API.ChatCompletionRequestSchema,
-    processedRequest:
-      Vllm.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: Vllm.API.ChatCompletionResponseSchema,
+    request: withReadFallback(Vllm.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(Vllm.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Vllm.API.ChatCompletionResponseSchema),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["ollama:chatCompletions"]),
-    request: Ollama.API.ChatCompletionRequestSchema,
-    processedRequest:
-      Ollama.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: Ollama.API.ChatCompletionResponseSchema,
+    request: withReadFallback(Ollama.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(Ollama.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Ollama.API.ChatCompletionResponseSchema),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["cohere:chat"]),
-    request: Cohere.API.ChatRequestSchema,
-    processedRequest: Cohere.API.ChatRequestSchema.nullable().optional(),
-    response: Cohere.API.ChatResponseSchema,
+    request: withReadFallback(Cohere.API.ChatRequestSchema),
+    processedRequest: withReadFallback(Cohere.API.ChatRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Cohere.API.ChatResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["zhipuai:chatCompletions"]),
-    request: Zhipuai.API.ChatCompletionRequestSchema,
-    processedRequest:
-      Zhipuai.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: Zhipuai.API.ChatCompletionResponseSchema,
+    request: withReadFallback(Zhipuai.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(Zhipuai.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Zhipuai.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["deepseek:chatCompletions"]),
-    request: DeepSeek.API.ChatCompletionRequestSchema,
-    processedRequest:
-      DeepSeek.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: DeepSeek.API.ChatCompletionResponseSchema,
+    request: withReadFallback(DeepSeek.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(DeepSeek.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(DeepSeek.API.ChatCompletionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["kimi:chatCompletions"]),
+    request: withReadFallback(Kimi.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(Kimi.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Kimi.API.ChatCompletionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["github-copilot:chatCompletions"]),
+    request: withReadFallback(GithubCopilot.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(
+      GithubCopilot.API.ChatCompletionRequestSchema,
+    )
+      .nullable()
+      .optional(),
+    response: withErrorResponse(GithubCopilot.API.ChatCompletionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["microsoft-365-copilot:chatCompletions"]),
+    request: withReadFallback(
+      Microsoft365Copilot.API.ChatCompletionRequestSchema,
+    ),
+    processedRequest: withReadFallback(
+      Microsoft365Copilot.API.ChatCompletionRequestSchema,
+    )
+      .nullable()
+      .optional(),
+    response: withErrorResponse(
+      Microsoft365Copilot.API.ChatCompletionResponseSchema,
+    ),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["minimax:chatCompletions"]),
-    request: Minimax.API.ChatCompletionRequestSchema,
-    processedRequest:
-      Minimax.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: Minimax.API.ChatCompletionResponseSchema,
+    request: withReadFallback(Minimax.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(Minimax.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Minimax.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["azure:chatCompletions"]),
-    request: Azure.API.ChatCompletionRequestSchema,
-    processedRequest:
-      Azure.API.ChatCompletionRequestSchema.nullable().optional(),
-    response: Azure.API.ChatCompletionResponseSchema,
+    request: withReadFallback(Azure.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(Azure.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Azure.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["azure:responses"]),
-    request: Azure.API.ResponsesRequestSchema,
-    processedRequest: Azure.API.ResponsesRequestSchema.nullable().optional(),
-    response: Azure.API.ResponsesResponseSchema,
+    request: withReadFallback(Azure.API.ResponsesRequestSchema),
+    processedRequest: withReadFallback(Azure.API.ResponsesRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Azure.API.ResponsesResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
 ]);
 
+/**
+ * Per-`type` read schema for the `response` field, derived from the
+ * discriminated union above so it can never drift from the arms.
+ */
+const responseSchemaByInteractionType = new Map<string, z.ZodTypeAny>(
+  SelectInteractionSchema.options.map((arm) => [
+    arm.shape.type.options[0],
+    arm.shape.response,
+  ]),
+);
+
+/**
+ * Coerce a stored `response` that no longer matches its provider's read schema
+ * (provider-schema drift, partial/aborted-stream bodies, legacy error shapes)
+ * into a serializable sentinel, so a single unparseable row can't 500 the whole
+ * interactions list. Returns the response unchanged when it already conforms.
+ */
+export function normalizeInteractionResponse(
+  type: string,
+  response: unknown,
+): unknown {
+  const schema = responseSchemaByInteractionType.get(type);
+  if (!schema) {
+    return response;
+  }
+  return schema.safeParse(response).success
+    ? response
+    : { error: "Malformed stored interaction response" };
+}
+
 export const InsertInteractionSchema = createInsertSchema(
   schema.interactionsTable,
   {
     ...extendedFields,
+    // Optional on write: the column has a DB default ("metered"), so callers may
+    // omit it. The proxy write path sets it explicitly (buildInteractionRecord).
+    billingMode: BillingModeSchema.optional(),
     type: SupportedProvidersDiscriminatorSchema,
     request: InteractionRequestSchema,
     processedRequest: InteractionRequestSchema.nullable().optional(),
@@ -361,9 +583,17 @@ export const SessionSummarySchema = z.object({
   requestCount: z.number(),
   totalInputTokens: z.number(),
   totalOutputTokens: z.number(),
+  totalCacheReadTokens: z.number(),
+  totalCacheWriteTokens: z.number(),
+  /** Full list-price estimate for the session (all rows, regardless of billing mode). */
   totalCost: z.string().nullable(),
+  /** Billed spend: list-price `cost` of metered rows only (null when none). */
+  totalBilledCost: z.string().nullable(),
+  /** Would-be list-price cost of subscription-covered rows (null when none). */
+  totalSubscriptionCost: z.string().nullable(),
   totalBaselineCost: z.string().nullable(),
   totalToonCostSavings: z.string().nullable(),
+  totalCacheSavings: z.string().nullable(),
   toonSkipReasonCounts: ToonSkipReasonCountsSchema,
   firstRequestTime: z.date(),
   lastRequestTime: z.date(),

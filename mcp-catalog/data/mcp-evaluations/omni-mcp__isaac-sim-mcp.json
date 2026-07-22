@@ -1,0 +1,100 @@
+{
+  "name": "omni-mcp__isaac-sim-mcp",
+  "display_name": "isaac-sim-mcp",
+  "description": "Isaac Simulation MCP Extension and Server",
+  "author": {
+    "name": "omni-mcp"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "${__dirname}/isaac_mcp/server.py"],
+    "env": {
+      "BEAVER3D_MODEL": "${user_config.beaver3d_model}",
+      "ARK_API_KEY": "${user_config.ark_api_key}",
+      "NVIDIA_API_KEY": "${user_config.nvidia_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "beaver3d_model": {
+      "type": "string",
+      "title": "Beaver3D Model Name",
+      "description": "The name of your Beaver3D model used for Gen3D features.",
+      "required": false
+    },
+    "ark_api_key": {
+      "type": "string",
+      "title": "Beaver3D API Key",
+      "description": "Your Beaver3D (ARK) API Key for Gen3D features.",
+      "sensitive": true,
+      "required": false
+    },
+    "nvidia_api_key": {
+      "type": "string",
+      "title": "NVIDIA API Key",
+      "description": "Your NVIDIA API key from ngc.nvidia.com, used for features like USD search.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Isaac Sim MCP Extension and MCP Server\n\nThe MCP Server and its extension leverage the Model Context Protocol (MCP) framework to enable natural language control of NVIDIA Isaac Sim, transforming conversational AI inputs into precise simulation manipulation. This expansion bridges the MCP ecosystem with embodied intelligence applications.\n\n## Features\n\n- Natural language control of Isaac Sim\n- Dynamic robot positioning and movement\n- Custom lighting and scene creation\n- Advanced robot simulations with obstacle navigation\n- Interactive code preview before execution\n\n## Requirements\n\n- NVIDIA Isaac Sim 4.2.0 or higher\n- Python 3.9+\n- Cursor AI editor for MCP integration\n\n## **Mandatory** Pre-requisite\n\n- Install uv/uvx: [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)\n- Install mcp[cli] to base env: [uv pip install \"mcp[cli]\"](https://pypi.org/project/mcp/)\n\n## Installation\n\n```bash\ncd ~/Documents\ngit clone https://github.com/omni-mcp/isaac-sim-mcp\n```\n\n### Install and Enable Extension\n\nIsaac Sim extension folder should point to your project folder:\n- Extension location: `~/Documents/isaac-sim-mcp` \n- Extension ID: `isaac.sim.mcp_extension`\n\n```bash\n# Enable extension in Isaac Simulation\n# cd to your Isaac Sim installation directory\n# You can change assets root to local with --/persistent/isaac/asset_root/default=\"<your asset location>\"\n# By default it is an AWS bucket, e.g. --/persistent/isaac/asset_root/default=\"/share/Assets/Isaac/4.2\"\n# Setup API KEY for Beaver3d and NVIDIA\nexport BEAVER3D_MODEL=<your beaver3d model name>\nexport export ARK_API_KEY=<Your Bearver3D API Key>\nexport NVIDIA_API_KEY=\"<your nvidia api key  and apply it from https://ngc.nvidia.com/signout>\"\n\ncd ~/.local/share/ov/pkg/isaac-sim-4.2.0\n./isaac-sim.sh --ext-folder /home/ubuntu/Documents/isaac-sim-mcp/ --enable isaac.sim.mcp_extension \n```\n\nVerify the extension starts successfully. The output should look like:\n\n```\n[7.160s] [ext: isaac.sim.mcp_extension-0.1.0] startup\ntrigger  on_startup for:  isaac.sim.mcp_extension-0.1.0\nsettings:  {'envPath': '/home/ubuntu/.local/share/ov/data/Kit/Isaac-Sim/4.2/pip3-envs/default', 'archiveDirs': {}, 'installCheckIgnoreVersion': False, 'allowOnlineIndex': True, 'tryUpgradePipOnFirstUse': False}\nServer thread startedIsaac Sim MCP server started on localhost:8766\n```\n\nThe extension should be listening at **localhost:8766** by default.\n\n\n\n### Install MCP Server\n\n1. Go to terminal and run, make sure mcp server could start sucessfully at terminal with base venv.\n   ```\n   uv pip install \"mcp[cli]\"\n   uv run /home/ubuntu/Documents/isaac-sim-mcp/isaac_mcp/server.py\n   ```\n2. Start Cursor and open the folder `~/Documents/isaac-sim-mcp`\n3. Go to Cursor preferences, choose MCP and add a global MCP server:\n\n```json\n{\n    \"mcpServers\": {\n        \"isaac-sim\": {\n            \"command\": \"uv run /home/ubuntu/Documents/isaac-sim-mcp/isaac_mcp/server.py\"\n        }\n    }\n}\n```\n\n### Development Mode\n\nTo develop the MCP Server, start the MCP inspector:\n\n```bash\nuv run mcp dev ~/Documents/isaac-sim-mcp/isaac_mcp/server.py\n```\n\nYou can visit the debug page through http://localhost:5173\n\n## Example Prompts for Simulation\nNotice: Switch to Agent mode in top left of Chat dialog before you type prompt and choose sonnet 3.7 for better coding.\n\n### Robot Party\n```\n# Create robots and improve lighting\ncreate  3x3 frankas robots in these current stage across location [3, 0, 0] and [6, 3, 0]\nalways check connection with get_scene_info before execute code.\nadd more light in the stage\n\n\n# Add specific robots at positions\ncreate a g1 robot at [3, 9, 0]\nadd Go1 robot at location [2, 1, 0]\nmove go1 robot to [1, 1, 0]\n```\n\n### Factory Setup\n```\n# Create multiple robots in a row\nacreate  3x3 frankas robots in these current stage across location [3, 0, 0] and [6, 3, 0]\nalways check connection with get_scene_info before execute code.\nadd more light in the stage\n\n\n```\n### Vibe Coding from scratch\n```\nreference to g1.py to create an new g1 robot simulation and allow robot g1 walk straight  from [0, 0, 0] to [3, 0, 0] and [3, 3, 0]\ncreate more obstacles in the stage\n\n```\n### Gen3D with beaver3d model support\n\n```\nUse following images to generate beaver 3d objects and place them into a grid area across [0, 0, 0] to [40, 40, 0] with scale [3, 3, 3]\n\n<your image url here, could be multiple images urls>\n```\n\n### USD search\n```\nsearch a rusty desk and place it at [0, 5, 0] with scale [3, 3, 3]\n```\n\n## MCP Tools\n\nThe Isaac Sim MCP Extension provides several specialized tools that can be accessed through natural language in Cursor AI. These tools enable you to control and manipulate NVIDIA Isaac Sim with simple commands:\n\n### Connection and Scene Management\n\n- **get_scene_info** - Pings the Isaac Sim Extension Server to verify connection status and retrieve basic scene information. Always use this first to ensure the connection is active.\n\n### Physics and Environment Creation\n\n- **create_physics_scene** - Creates a physics scene with configurable parameters:\n  - `objects`: List of objects to create (each with type and position)\n  - `floor`: Whether to create a ground plane (default: true)\n  - `gravity`: Vector defining gravity direction and magnitude (default: [0, -0.981, 0])\n  - `scene_name`: Name for the scene (default: \"physics_scene\")\n\n### Robot Creation and Control\n\n- **create_robot** - Creates a robot in the scene at a specified position:\n  - `robot_type`: Type of robot to create (options: \"franka\", \"jetbot\", \"carter\", \"g1\", \"go1\")\n  - `position`: [x, y, z] position coordinates\n\n### Omniverse Kit and Scripting\n\n- **omni_kit_command** - Executes an Omni Kit command:\n  - `command`: The Omni Kit command to execute (e.g., \"CreatePrim\")\n  - `prim_type`: The primitive type for the command (e.g., \"Sphere\")\n\n- **execute_script** - Executes arbitrary Python code in Isaac Sim:\n  - `code`: Python code to execute\n\n### Usage Best Practices\n\n1. Always check connection with `get_scene_info` before executing any commands\n2. Initialize a physics scene with `create_physics_scene` before adding robots\n3. Use `create_robot` for standard robot placement before trying custom scripts\n4. For complex simulations, use `execute_script` with proper async patterns\n5. Preview code in chat before execution for verification\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Video Demonstrations\n\nBelow are demonstrations of the Isaac Sim MCP Extension in action:\n\n### Robot Party Demo\n\n![Robot Party Demo](media/add_more_robot_into_party.gif)\n\n*GIF: Adding more robots to the simulation using natural language commands*\n\n\n### Video Format (MP4)\n\nFor higher quality video, you can access the MP4 version directly:\n\n- [Robot Party Demo (MP4)](media/add_more_robot_into_party.mp4)\n\nWhen viewing on GitHub, you can click the link above to view or download the MP4 file.\n",
+  "category": "AI Tools",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "isaac-sim-mcp": {
+        "command": "uv",
+        "args": ["run", "/home/ubuntu/Documents/isaac-sim-mcp/isaac_mcp/server.py"],
+        "env": {}
+      },
+      "isaac-sim-mcp-dev": {
+        "command": "uv",
+        "args": ["run", "mcp", "dev", "~/Documents/isaac-sim-mcp/isaac_mcp/server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "omni-mcp",
+    "repo": "isaac-sim-mcp",
+    "url": "https://github.com/omni-mcp/isaac-sim-mcp",
+    "name": "omni-mcp__isaac-sim-mcp",
+    "path": null,
+    "stars": 79,
+    "contributors": 2,
+    "issues": 4,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "6653138244ebe1f1b6b098528061a4659aeec839"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:12.324Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

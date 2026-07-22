@@ -1,0 +1,96 @@
+{
+  "name": "stape-io__stape-mcp-server",
+  "display_name": "stape-mcp-server",
+  "description": "Interact with the Seape API using AI assistants like Claude, or in AI-powered IDEs like Cursor. ",
+  "author": {
+    "name": "stape-io"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-remote", "https://mcp.stape.ai/sse", "--header", "Authorization: ${user_config.stape_api_key}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "stape_api_key": {
+      "type": "string",
+      "title": "Stape API Key",
+      "description": "Your Stape API key for authentication with the remote MCP server.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Stape MCP Server\n\nThis project implements an **MCP (Model Context Protocol) server** for the **Stape** platform.\n\n## Prerequisites\n- Node.js (v18 or higher)\n\n## Access the remote MCP server from Claude Desktop\n\nOpen Claude Desktop and navigate to Settings -> Developer -> Edit Config. This opens the configuration file that controls which MCP servers Claude can access.\n\nReplace the content with the following configuration (make sure npx is installed on your machine). Get Stape API key from your Stape account and set it in the configuration file instead of ${your_stape_api_key}. Once you restart Claude Desktop.\n\n```json\n{\n  \"mcpServers\": {\n    \"stape-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-remote\",\n        \"https://mcp.stape.ai/sse\",\n        \"--header\",\n        \"Authorization: ${your_stape_api_key}\"\n      ]\n    }\n  }\n}\n```\n\n### Troubleshooting\n\n**MCP Server Name Length Limit**\n\nSome MCP clients (like Cursor AI) have a 60-character limit for the combined MCP server name + tool name length. If you use a longer server name in your configuration (e.g., `stape-mcp-server-your-additional-long-name`), some tools may be filtered out.\n\nTo avoid this issue:\n- Use shorter server names in your MCP configuration (e.g., `stape-mcp-server`)\n\n**Clearing MCP Cache**\n\n[mcp-remote](https://github.com/geelen/mcp-remote#readme) stores all the credential information inside ~/.mcp-auth (or wherever your MCP_REMOTE_CONFIG_DIR points to). If you're having persistent issues, try running:\nYou can run rm -rf ~/.mcp-auth to clear any locally stored state and tokens.\n```\nrm -rf ~/.mcp-auth\n```\nThen restarting your MCP client.\n\n## Open Source\n\nThe **Stape MCP Server** is developed and maintained by [Stape Team](https://stape.io/) under the Apache 2.0 license.\n",
+  "category": "AI Tools",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "stape-io",
+    "repo": "stape-mcp-server",
+    "url": "https://github.com/stape-io/stape-mcp-server",
+    "name": "stape-mcp-server",
+    "path": null,
+    "stars": 2,
+    "contributors": 3,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "588336d9c25f477de73312f5e1209d7d8e1b307e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:23.744Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@cloudflare/workers-oauth-provider",
+      "importance": 7
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "agents",
+      "importance": 4
+    },
+    {
+      "name": "dotenv",
+      "importance": 3
+    },
+    {
+      "name": "hono",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"stape-mcp-server\",\n  \"version\": \"3.0.0\",\n  \"description\": \"MCP server for Stape\",\n  \"license\": \"Apache-2.0\",\n  \"author\": \"stape-io\",\n  \"homepage\": \"https://github.com/stape-io/stape-mcp-server\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"stape-mcp-server\": \"./dist/index.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"modelcontextprotocol\",\n    \"gtm\",\n    \"stape\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 dist/index.js\",\n    \"postinstall\": \"npm run build\",\n    \"lint\": \"eslint --ext .ts src\",\n    \"lint:fix\": \"eslint --ext .ts src --fix\",\n    \"deploy\": \"wrangler deploy\",\n    \"dev\": \"wrangler dev\",\n    \"start\": \"wrangler dev\",\n    \"cf-typegen\": \"wrangler types\"\n  },\n  \"dependencies\": {\n    \"@cloudflare/workers-oauth-provider\": \"^0.0.5\",\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\n    \"agents\": \"^0.0.94\",\n    \"dotenv\": \"^16.3.1\",\n    \"hono\": \"^4.7.10\",\n    \"node-fetch\": \"^2.7.0\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.24.0\",\n    \"@types/node\": \"^20.11.19\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.30.1\",\n    \"@typescript-eslint/parser\": \"^8.30.1\",\n    \"eslint\": \"^9.24.0\",\n    \"eslint-config-prettier\": \"^10.1.2\",\n    \"eslint-plugin-prettier\": \"^5.2.6\",\n    \"prettier\": \"^3.5.3\",\n    \"ts-node\": \"^10.9.2\",\n    \"ts-node-dev\": \"^2.0.0\",\n    \"typescript\": \"^5.8.3\",\n    \"typescript-eslint\": \"^8.30.1\",\n    \"wrangler\": \"^4.16.0\"\n  }\n}\n"
+}

@@ -1,5 +1,6 @@
 import config from "@/config";
-import logger from "@/logging";
+import { joinBaseUrl } from "@/utils/base-url";
+import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { ModelInfo } from "./types";
 
 export async function fetchCohereModels(
@@ -8,31 +9,18 @@ export async function fetchCohereModels(
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.cohere.baseUrl;
-  const url = `${baseUrl}/v2/models`;
-
-  const response = await fetch(url, {
-    headers: {
-      ...(extraHeaders ?? {}),
-      Authorization: `Bearer ${apiKey}`,
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    logger.error(
-      { status: response.status, error: errorText },
-      "Failed to fetch Cohere models",
-    );
-    throw new Error(`Failed to fetch Cohere models: ${response.status}`);
-  }
-
-  const data = (await response.json()) as {
+  const data = await fetchModelsWithBearerAuth<{
     models: Array<{
       name: string;
       endpoints?: string[];
       created_at?: string;
     }>;
-  };
+  }>({
+    url: joinBaseUrl(baseUrl, "/v2/models"),
+    apiKey,
+    errorLabel: "Cohere models",
+    extraHeaders,
+  });
 
   return data.models
     .filter((model) => {

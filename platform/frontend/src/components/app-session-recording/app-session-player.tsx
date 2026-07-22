@@ -833,37 +833,38 @@ export function AppSessionPlayer({
 
 /**
  * The "Powered by Archestra.AI" mark composited into every downloaded session
- * video, in the bottom-left of the exported frame.
+ * video. It rests inside the replay's dummy chat composer (see ReplayComposer),
+ * centered, so the brand reads as native chat chrome rather than a corner
+ * sticker, and stays on screen for the whole video.
  *
- * The official Archestra logo tile sits on a light chip so its black squircle
- * reads on any footage, and the whole mark rides a translucent dark pill with a
- * hairline ring — a contrast watermark legible over a light or dark app alike.
- * It uses the app's own `font-sans` (the brand/white-label font) and is purely
- * decorative, so it is hidden from assistive tech. Only ever mounted while
- * filming (see the render region), so it never touches the live player.
+ * Built on the official Archestra wordmark lockup: the black logo tile beside
+ * "Archestra" in the brand's monospace face, with ".AI" set apart in a muted
+ * grey. The logo rides its own light chip so its black squircle stays legible
+ * whether the exported chat renders light or dark. Purely decorative, so it is
+ * hidden from assistive tech.
  */
 export function RecordingExportWatermark() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute bottom-8 left-8 z-30 flex select-none items-center gap-6 rounded-full bg-black/55 py-6 pl-6 pr-16 font-sans text-white shadow-2xl ring-2 ring-white/15 backdrop-blur-sm"
+      className="flex select-none items-center justify-center gap-6 py-3 font-mono"
     >
-      <span className="flex size-32 shrink-0 items-center justify-center rounded-full bg-white shadow-sm">
+      <span className="flex size-[88px] shrink-0 items-center justify-center rounded-3xl bg-white shadow-sm ring-2 ring-black/5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={DEFAULT_APP_LOGO}
           alt=""
-          width={96}
-          height={96}
-          className="size-24"
+          width={64}
+          height={64}
+          className="size-16"
         />
       </span>
       <span className="flex flex-col leading-none">
-        <span className="text-[40px] font-medium tracking-wide text-white/70">
+        <span className="text-[22px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
           Powered by
         </span>
-        <span className="mt-2 text-[56px] font-semibold tracking-tight">
-          Archestra.AI
+        <span className="mt-3 text-5xl font-semibold tracking-tight text-foreground">
+          Archestra<span className="text-muted-foreground">.AI</span>
         </span>
       </span>
     </div>
@@ -2204,9 +2205,7 @@ function PlayerSurface({
         // itself around.
         {...{ [APP_RECORDING_RENDER_REGION_ATTR]: "" }}
         className={cn(
-          // `relative`: the export watermark anchors to this region — the exact
-          // rectangle the offline renderer captures — so it lands in the video.
-          "relative flex min-h-0 shrink-0",
+          "flex min-h-0 shrink-0",
           playState !== "playing" &&
             promptDraft === null &&
             !chatEditing &&
@@ -2365,11 +2364,6 @@ function PlayerSurface({
             ) : null}
           </ReplayAppStage>
         </div>
-        {/* The export watermark. Rendered only while filming — it is a mark on
-            the downloaded video, never chrome the author edits against — and
-            anchored to the render region's bottom-left corner so it lands in
-            the exported frame's lower-left. */}
-        {filming && <RecordingExportWatermark />}
       </div>
       {/* One transport row, one timeline: the strip below is scrubber and
           cutter at once — click seeks, hold-and-drag selects a stretch to
@@ -3973,7 +3967,11 @@ function ReplayChatPane({
           )}
         </ConversationContent>
       </Conversation>
-      <ReplayComposer text={composerText} sending={isSending} />
+      <ReplayComposer
+        text={composerText}
+        sending={isSending}
+        filming={filming}
+      />
     </div>
   );
 }
@@ -4514,11 +4512,28 @@ function ReplayEditableRow({
 function ReplayComposer({
   text,
   sending,
+  filming,
 }: {
   text: string | null;
   sending: boolean;
+  /** A video export is running — an idle composer carries the brand watermark. */
+  filming?: boolean;
 }) {
   const active = text != null;
+  // While filming, the composer box IS the export watermark for the whole
+  // video: the "Powered by Archestra.AI" lockup, enclosed in the composer box
+  // and centered, so the brand is on screen constantly. It replaces the
+  // replayed typing entirely — the recorded user messages still post as chat
+  // bubbles above, so nothing is lost, and the mark never flickers away.
+  if (filming) {
+    return (
+      <div className="shrink-0 p-3">
+        <div className="flex items-center justify-center rounded-md border border-input px-4 py-3 dark:bg-input/30">
+          <RecordingExportWatermark />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="shrink-0 p-3">
       {/* Mirrors the real chat composer: a bordered input group with the message

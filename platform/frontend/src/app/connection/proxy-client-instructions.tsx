@@ -407,6 +407,20 @@ function GenericProxyInstructions({
 
   return (
     <div className="space-y-3">
+      {selectedProvider === "bedrock" ? (
+        <BedrockGenericInstructions
+          baseUrl={baseUrl}
+          profileId={profileId}
+          originalUrl={originalUrl}
+        />
+      ) : (
+        <ReplaceUrlBlock
+          label={providerLabel}
+          originalUrl={originalUrl}
+          url={providerUrl}
+        />
+      )}
+
       <div className="space-y-4 rounded-lg border bg-card p-4">
         <div className="space-y-2">
           <div className="text-xs font-medium text-muted-foreground">
@@ -477,20 +491,6 @@ function GenericProxyInstructions({
             ))}
         </div>
       </div>
-
-      {selectedProvider === "bedrock" ? (
-        <BedrockGenericInstructions
-          baseUrl={baseUrl}
-          profileId={profileId}
-          originalUrl={originalUrl}
-        />
-      ) : (
-        <ReplaceUrlBlock
-          label={providerLabel}
-          originalUrl={originalUrl}
-          url={providerUrl}
-        />
-      )}
 
       <CreateLlmProviderApiKeyDialog
         open={showAddProviderKey}
@@ -583,6 +583,12 @@ function ModelRouterInstructions({
 
   return (
     <div className="space-y-3">
+      <ReplaceUrlBlock
+        label="OpenAI-compatible"
+        originalUrl="https://api.openai.com/v1/"
+        url={routerUrl}
+      />
+
       <div className="space-y-4 rounded-lg border bg-card p-4">
         <p className="text-xs text-muted-foreground">
           One OpenAI-style endpoint for every configured provider. Send
@@ -678,12 +684,6 @@ function ModelRouterInstructions({
           )}
         </div>
       </div>
-
-      <ReplaceUrlBlock
-        label="OpenAI-compatible"
-        originalUrl="https://api.openai.com/v1/"
-        url={routerUrl}
-      />
     </div>
   );
 }

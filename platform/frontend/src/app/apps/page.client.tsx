@@ -4,6 +4,11 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { AppWindow, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
+import {
+  type ListViewMode,
+  ListViewToggle,
+  useListViewMode,
+} from "@/components/list-view-toggle";
 import { LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
@@ -23,6 +28,7 @@ import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
 import { AppsScopeFilter } from "./_parts/apps-scope-filter";
+import { AppsTable } from "./_parts/apps-table";
 
 const PAGE_SIZE = 100;
 
@@ -56,6 +62,7 @@ export default function AppsPage() {
     { toastOnError: false },
   );
   const [createOpen, setCreateOpen] = useState(false);
+  const [viewMode, setViewMode] = useListViewMode("archestra-apps-view");
 
   // The settings dialog is owned here (one hook instance for the page-level
   // "settings" param); cards only report which app to open it for, and the
@@ -131,6 +138,9 @@ export default function AppsPage() {
           </SelectContent>
         </Select>
         <AppsScopeFilter />
+        <span className="ml-auto">
+          <ListViewToggle value={viewMode} onChange={setViewMode} />
+        </span>
       </div>
 
       <LoadingWrapper isPending={isPending && !data}>
@@ -156,16 +166,19 @@ export default function AppsPage() {
             <AppSection
               title="Pinned"
               apps={pinnedApps}
+              viewMode={viewMode}
               onOpenSettings={openSettings}
             />
             <AppSection
               title="Apps"
               apps={ownedApps}
+              viewMode={viewMode}
               onOpenSettings={openSettings}
             />
             <AppSection
               title="Apps from installed MCP servers"
               apps={externalApps}
+              viewMode={viewMode}
               onOpenSettings={openSettings}
             />
           </div>
@@ -188,15 +201,17 @@ export default function AppsPage() {
 }
 
 // Mirrors the Projects page's ProjectSection: an uppercase header over the
-// card grid. Renders nothing when the group is empty, so only sections with
-// cards appear.
+// card grid (or table, in table view). Renders nothing when the group is
+// empty, so only sections with entries appear.
 function AppSection({
   title,
   apps,
+  viewMode,
   onOpenSettings,
 }: {
   title: string;
   apps: AppListItem[];
+  viewMode: ListViewMode;
   onOpenSettings: (app: { id: string }) => void;
 }) {
   if (apps.length === 0) return null;
@@ -206,23 +221,27 @@ function AppSection({
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {apps.map((app) => (
-          <AppCard
-            // Several tools of one server can share a widget resource, so
-            // (mcpServerId, resourceUri) alone collides; duplicate keys make
-            // React duplicate/omit cards on search re-renders, breaking the
-            // grid. The tool-scoped name disambiguates.
-            key={
-              app.source === "owned"
-                ? app.id
-                : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
-            }
-            app={app}
-            onOpenSettings={onOpenSettings}
-          />
-        ))}
-      </div>
+      {viewMode === "table" ? (
+        <AppsTable apps={apps} onOpenSettings={onOpenSettings} />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {apps.map((app) => (
+            <AppCard
+              // Several tools of one server can share a widget resource, so
+              // (mcpServerId, resourceUri) alone collides; duplicate keys make
+              // React duplicate/omit cards on search re-renders, breaking the
+              // grid. The tool-scoped name disambiguates.
+              key={
+                app.source === "owned"
+                  ? app.id
+                  : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
+              }
+              app={app}
+              onOpenSettings={onOpenSettings}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

@@ -1,7 +1,12 @@
 import {
+  CLAUDE_CODE_PROXY_ENV_KEYS,
   CLAUDE_DESKTOP_CLIENT_ID,
   type SupportedProvider,
 } from "@archestra/shared";
+
+const [ANTHROPIC_BASE_URL_KEY] = CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
+const [CLAUDE_USE_BEDROCK_KEY, AWS_REGION_KEY, BEDROCK_BASE_URL_KEY] =
+  CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
 
 /**
  * Title of the final wizard step for OAuth-gated clients. Registering the
@@ -221,13 +226,17 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
                 title: "Add the Bedrock proxy settings to env",
                 body: "Merge the snippet below into the file (keep your existing keys). Update AWS_REGION if you use a different one.",
                 language: "json",
-                code: `{
-  "env": {
-    "CLAUDE_CODE_USE_BEDROCK": "1",
-    "AWS_REGION": "us-east-1",
-    "ANTHROPIC_BEDROCK_BASE_URL": "${url}"
-  }
-}`,
+                code: JSON.stringify(
+                  {
+                    env: {
+                      [CLAUDE_USE_BEDROCK_KEY]: "1",
+                      [AWS_REGION_KEY]: "us-east-1",
+                      [BEDROCK_BASE_URL_KEY]: url,
+                    },
+                  },
+                  null,
+                  2,
+                ),
               },
               {
                 title: "Export your Bedrock API key in the shell",
@@ -250,11 +259,11 @@ claude`,
               title: "Add the Archestra base URL to env",
               body: "Merge the snippet below into the file (keep your existing keys). Your Claude subscription keeps working as-is.",
               language: "json",
-              code: `{
-  "env": {
-    "ANTHROPIC_BASE_URL": "${url}"
-  }
-}`,
+              code: JSON.stringify(
+                { env: { [ANTHROPIC_BASE_URL_KEY]: url } },
+                null,
+                2,
+              ),
             },
           ],
         };

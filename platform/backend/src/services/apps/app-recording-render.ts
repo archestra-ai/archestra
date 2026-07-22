@@ -5,6 +5,7 @@ import {
   APP_RECORDING_RENDER_ROUTE,
   type AppRecordingBundle,
 } from "@archestra/shared";
+import type { CDPSession } from "playwright-core";
 import config from "@/config";
 import logger from "@/logging";
 import { ApiError } from "@/types";
@@ -16,10 +17,10 @@ import { ensureRenderRuntime } from "./app-recording-render-runtime";
  * The replayed app lives in a nested sandboxed iframe on an opaque origin, so
  * no page script can ever read its pixels — which rules out rasterizing the
  * DOM from the host. This renders through the COMPOSITOR instead: a real
- * Chromium loads the ordinary replay page and every frame is a screenshot
- * cropped to the two viewports. What the compositor draws is what lands in the
- * file, including the sandboxed app, its WebGL canvases and its blend modes,
- * with the isolation completely untouched.
+ * Chromium loads the ordinary replay page and every frame is captured from
+ * compositor output. What the compositor draws is what lands in the file,
+ * including the sandboxed app, its WebGL canvases and its blend modes, with
+ * the isolation completely untouched.
  *
  * Frames are stepped, never sampled. Wall-clock time drives nothing: playback
  * is seeked to an exact millisecond and animations are scrubbed to the same
@@ -27,6 +28,23 @@ import { ensureRenderRuntime } from "./app-recording-render-runtime";
  * any machine at any speed — and rendering runs faster or slower than realtime
  * without changing the result. Sampling a live replay on a timer produces
  * judder and is not reproducible.
+ *
+ * The frame loop is built not to wait on anything it doesn't have to:
+ *
+ * - Compositing is DRIVEN, not awaited, where the browser allows it: under
+ *   begin-frame control one protocol command composites exactly one fully
+ *   drawn frame and returns its pixels, replacing the settle-then-screenshot
+ *   dance (two rAF waits plus a separate capture) of the fallback path. A
+ *   browser that refuses the protocol is detected up front and relaunched
+ *   without it.
+ * - Encoding is ENQUEUED, not awaited: the page chains frames onto an ordered
+ *   internal queue, so the next seek-and-capture overlaps the previous
+ *   frame's JPEG decode and H.264 encode. A bounded backlog keeps memory flat.
+ * - Unchanged frames are never re-sent: a frame whose pixels match the
+ *   previous one (compositor reported no damage, or same digest) is re-added
+ *   in the page from the retained previous bitmap — no JPEG crosses the
+ *   protocol and nothing is re-decoded. The player hides its transport chrome
+ *   while filming so an idle replay moment really does produce zero damage.
  *
  * Encoding happens inside that same browser (WebCodecs H.264), so no ffmpeg or
  * any other binary is needed beyond the browser itself.
@@ -59,23 +77,85 @@ async function render(params: {
   // cancel that only lands once the frame loop starts leaves the author's one
   // render slot held for all of it — which reads as "a video is already being
   // prepared" when they try again.
-  const abort = () => params.abortSignal?.throwIfAborted();
-  abort();
+  params.abortSignal?.throwIfAborted();
   // Installs the browser on first use; a boot-time warm usually means this
   // has already happened by the time anyone clicks Download.
   const runtime = await ensureRenderRuntime();
-  abort();
+  params.abortSignal?.throwIfAborted();
   const chromium = await loadChromium();
-  abort();
+  params.abortSignal?.throwIfAborted();
 
-  const browser = await chromium.launch({
-    executablePath: runtime.chromiumPath,
+  // Begin-frame control is probed before any real work, so an unsupported
+  // browser costs one launch-and-goto — once per process, not per render.
+  if (beginFrameVerdict !== false) {
+    try {
+      const video = await renderWithBrowser({
+        ...params,
+        fps,
+        chromium,
+        runtime,
+        beginFrameControl: true,
+      });
+      beginFrameVerdict = true;
+      return video;
+    } catch (error) {
+      if (!(error instanceof BeginFrameUnsupportedError)) throw error;
+      beginFrameVerdict = false;
+      logger.info(
+        { reason: error.message },
+        "Begin-frame compositing is unavailable in this browser; rendering with settled captures",
+      );
+    }
+  }
+  return renderWithBrowser({
+    ...params,
+    fps,
+    chromium,
+    runtime,
+    beginFrameControl: false,
+  });
+}
+
+/**
+ * Whether this process's browser supports begin-frame compositing. Probed on
+ * the first render, remembered after: the browser binary cannot change under
+ * a running process, so re-probing would only re-pay the doomed launch.
+ */
+let beginFrameVerdict: boolean | null = null;
+
+async function renderWithBrowser(params: {
+  bundle: AppRecordingBundle;
+  fps: number;
+  abortSignal?: AbortSignal;
+  chromium: Awaited<ReturnType<typeof loadChromium>>;
+  runtime: Awaited<ReturnType<typeof ensureRenderRuntime>>;
+  beginFrameControl: boolean;
+}): Promise<Buffer> {
+  const { fps, beginFrameControl } = params;
+  const browser = await params.chromium.launch({
+    executablePath: params.runtime.chromiumPath,
     // The replay page renders the recorded app, which the sandbox already
-    // contains; these flags only make a containerized Chromium start at all.
+    // contains; the first three flags only make a containerized Chromium
+    // start at all.
     args: [
       "--no-sandbox",
       "--disable-dev-shm-usage",
       "--font-render-hinting=none",
+      // Deterministic compositing: the browser never draws on its own — every
+      // frame is composited by an explicit beginFrame command and is fully
+      // drawn by the time that command acks. The documented begin-frame-
+      // control set; threaded animation/scrolling and checker-imaging would
+      // let paints trail the frame that supposedly contained them.
+      ...(beginFrameControl
+        ? [
+            "--enable-begin-frame-control",
+            "--run-all-compositor-stages-before-draw",
+            "--disable-new-content-rendering-timeout",
+            "--disable-threaded-animation",
+            "--disable-threaded-scrolling",
+            "--disable-checker-imaging",
+          ]
+        : []),
     ],
   });
   try {
@@ -106,25 +186,62 @@ async function render(params: {
     });
 
     const renderUrl = `${config.hackathonRecorder.renderBaseUrl}${APP_RECORDING_RENDER_ROUTE}`;
-    await cancellable(
-      page.goto(renderUrl, { waitUntil: "domcontentloaded" }),
-      params.abortSignal,
-    );
+    let cdp: CDPSession;
+    try {
+      cdp = await page.context().newCDPSession(page);
+      if (beginFrameControl) {
+        // Probe on the fresh about:blank page, BEFORE the expensive page
+        // load: an unsupported browser (today's Chromium dropped the domain
+        // outright) is found in milliseconds, so the doomed launch costs
+        // almost nothing. A browser without begin-frame control either
+        // rejects the command or ACCEPTS IT AND NEVER ANSWERS — a hang is as
+        // much a "no" as an error, so the probe is deadline-bounded and both
+        // outcomes relaunch the same way.
+        await withDeadline({
+          work: cdp.send("HeadlessExperimental.beginFrame", {}),
+          ms: BEGIN_FRAME_PROBE_TIMEOUT_MS,
+          what: "probing deterministic compositing",
+          signal: params.abortSignal,
+        });
+      }
+      await cancellable(
+        page.goto(renderUrl, { waitUntil: "domcontentloaded" }),
+        params.abortSignal,
+      );
+    } catch (error) {
+      params.abortSignal?.throwIfAborted();
+      // Under the deterministic flags an unsupporting build can wedge as
+      // early as page load, so everything before the mode's first real use
+      // counts as the browser refusing it. A genuinely broken page fails the
+      // relaunched attempt too, with its proper report.
+      if (beginFrameControl) {
+        throw new BeginFrameUnsupportedError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      throw error;
+    }
+    // Drive page-side work that awaits animation frames. Under begin-frame
+    // control nothing composites — and no rAF fires — unless we pump.
+    const drive = <T>(work: Promise<T>): Promise<T> =>
+      beginFrameControl ? pumpFrames(cdp, work) : work;
     // The page installs its controls from a React effect, so the document is
     // parsed well before they exist — waiting on load state is not enough.
+    // Interval polling, never rAF polling: under begin-frame control a rAF
+    // poller would wait on frames nobody is pumping yet.
     try {
       await cancellable(
         page.waitForFunction(
           () => typeof window.__archestraRenderSeed === "function",
           undefined,
-          { timeout: PAGE_READY_TIMEOUT_MS },
+          { timeout: PAGE_READY_TIMEOUT_MS, polling: 100 },
         ),
         params.abortSignal,
       );
     } catch {
       // A cancelled render is not a broken page — rethrow it as itself rather
       // than reporting the author's own cancel as a page that never loaded.
-      abort();
+      params.abortSignal?.throwIfAborted();
       logger.error(
         { renderUrl, pageErrors },
         "The replay render page never became ready",
@@ -150,14 +267,24 @@ async function render(params: {
     let durationMs: number;
     try {
       durationMs = await withDeadline({
-        work: page.evaluate(() => window.__archestraRenderReady()),
+        work: drive(page.evaluate(() => window.__archestraRenderReady())),
         ms: REPLAY_READY_TIMEOUT_MS,
         what: "waiting for the recorded app to load",
         signal: params.abortSignal,
       });
     } catch (error) {
       // A cancelled render is not a broken app frame.
-      abort();
+      params.abortSignal?.throwIfAborted();
+      // The replay's readiness settle is the first thing that WAITS on pumped
+      // frames — a build whose compositor ignores the pump surfaces here, and
+      // must relaunch plainly rather than report a stall. (A genuinely
+      // unloadable app fails the relaunched attempt too, with the full
+      // diagnosis below.)
+      if (beginFrameControl) {
+        throw new BeginFrameUnsupportedError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
       // The page already knows WHY the app pane never came up — a blocked
       // frame, a refused certificate, a name that would not resolve — and that
       // reason is the entire diagnosis. Reporting only that the wait expired
@@ -200,7 +327,6 @@ async function render(params: {
     const width = even(box.width);
     const height = even(box.height);
 
-    const cdp = await page.context().newCDPSession(page);
     const clip = { x: box.x, y: box.y, width, height, scale: 1 };
     const frameCount = Math.max(1, Math.ceil((durationMs / 1000) * fps));
     if (frameCount > MAX_FRAMES) {
@@ -210,43 +336,124 @@ async function render(params: {
       );
     }
 
-    await page.evaluate(
-      ({ w, h, f }) => window.__archestraRenderEncoderStart(w, h, f),
-      { w: width, h: height, f: fps },
-    );
+    await page.evaluate((opts) => window.__archestraRenderEncoderStart(opts), {
+      width,
+      height,
+      fps,
+      // beginFrame screenshots have no clip parameter — they capture the
+      // whole viewport, and the encoder crops the region back out. The
+      // settled path clips at the compositor and sends frames pre-cropped.
+      crop: beginFrameControl
+        ? { x: Math.round(box.x), y: Math.round(box.y), width, height }
+        : undefined,
+    });
+
+    let encodedFrames = 0;
+    let repeatedFrames = 0;
+    let previousDigest: string | null = null;
     for (let i = 0; i < frameCount; i++) {
       params.abortSignal?.throwIfAborted();
-      // Seek, settle, then capture: the frame must be composited at the
-      // seeked instant, not at whatever the previous frame left on screen.
-      await withDeadline({
-        work: page.evaluate(
-          (ms) => window.__archestraRenderSeek(ms),
-          (i / fps) * 1000,
-        ),
-        ms: FRAME_TIMEOUT_MS,
-        what: `rendering frame ${i + 1} of ${frameCount}`,
-        signal: params.abortSignal,
-      });
-      const shot = await withDeadline({
-        work: cdp.send("Page.captureScreenshot", {
-          format: "jpeg",
-          quality: FRAME_QUALITY,
-          captureBeyondViewport: false,
-          clip,
-        }),
-        ms: FRAME_TIMEOUT_MS,
-        what: `capturing frame ${i + 1} of ${frameCount}`,
-        signal: params.abortSignal,
-      });
-      await withDeadline({
-        work: page.evaluate(
-          ({ data, index }) => window.__archestraRenderEncodeFrame(data, index),
-          { data: shot.data, index: i },
-        ),
+      let data: string | null;
+      try {
+        // Seek, settle, then capture: the frame must be composited at the
+        // seeked instant, not at whatever the previous frame left on screen.
+        await withDeadline({
+          work: drive(
+            page.evaluate(
+              (ms) => window.__archestraRenderSeek(ms),
+              (i / fps) * 1000,
+            ),
+          ),
+          ms: FRAME_TIMEOUT_MS,
+          what: `rendering frame ${i + 1} of ${frameCount}`,
+          signal: params.abortSignal,
+        });
+        if (beginFrameControl) {
+          const frame = (await withDeadline({
+            work: cdp.send("HeadlessExperimental.beginFrame", {
+              screenshot: {
+                format: "jpeg",
+                quality: FRAME_QUALITY,
+                optimizeForSpeed: true,
+              },
+            }),
+            ms: FRAME_TIMEOUT_MS,
+            what: `capturing frame ${i + 1} of ${frameCount}`,
+            signal: params.abortSignal,
+          })) as { hasDamage?: boolean; screenshotData?: string };
+          // No damage since the last composite = the previous frame, pixel
+          // for pixel — the compositor itself said this frame is a repeat.
+          data = frame.screenshotData ?? null;
+        } else {
+          const shot = await withDeadline({
+            work: cdp.send("Page.captureScreenshot", {
+              format: "jpeg",
+              quality: FRAME_QUALITY,
+              captureBeyondViewport: false,
+              // Faster JPEG encode over smaller bytes — the frame is
+              // re-encoded to H.264 anyway, and it crosses a local pipe.
+              optimizeForSpeed: true,
+              clip,
+            }),
+            ms: FRAME_TIMEOUT_MS,
+            what: `capturing frame ${i + 1} of ${frameCount}`,
+            signal: params.abortSignal,
+          });
+          data = shot.data;
+        }
+      } catch (error) {
+        params.abortSignal?.throwIfAborted();
+        // The first frame proves the mode end to end: a compositor that took
+        // the probe but cannot actually step-and-capture surfaces here and
+        // relaunches plainly. Past frame 0 the mode has proven itself and a
+        // failure is a real stall, reported as one.
+        if (beginFrameControl && i === 0) {
+          throw new BeginFrameUnsupportedError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+        throw error;
+      }
+      if (data === null && previousDigest === null) {
+        throw new ApiError(500, "The compositor produced no first frame.");
+      }
+      // An unchanged frame is re-added in the page from the retained previous
+      // bitmap: no JPEG crosses the protocol, nothing is re-decoded.
+      const digest = data === null ? null : fnv1a(data);
+      const unchanged =
+        previousDigest !== null && (data === null || digest === previousDigest);
+      const backlog = await withDeadline({
+        work: unchanged
+          ? page.evaluate(
+              (index) => window.__archestraRenderRepeatFrame(index),
+              i,
+            )
+          : page.evaluate(
+              ({ data, index }) =>
+                window.__archestraRenderEncodeFrame(data, index),
+              { data: data as string, index: i },
+            ),
         ms: FRAME_TIMEOUT_MS,
         what: `encoding frame ${i + 1} of ${frameCount}`,
         signal: params.abortSignal,
       });
+      if (unchanged) {
+        repeatedFrames++;
+      } else {
+        encodedFrames++;
+        previousDigest = digest;
+      }
+      // The queue hides encode latency, it must not hide encode collapse:
+      // past the window, wait it out (and surface any queued failure) before
+      // capturing more.
+      if (backlog > ENCODE_BACKLOG_LIMIT) {
+        await withDeadline({
+          work: page.evaluate(() => window.__archestraRenderEncodeDrain()),
+          ms: FRAME_TIMEOUT_MS,
+          what: `encoding frame ${i + 1} of ${frameCount}`,
+          signal: params.abortSignal,
+        });
+      }
     }
     const encoded = await withDeadline({
       work: page.evaluate(() => window.__archestraRenderEncoderFinish()),
@@ -255,7 +462,16 @@ async function render(params: {
       signal: params.abortSignal,
     });
     logger.info(
-      { frames: frameCount, fps, width, height, bytes: encoded.length },
+      {
+        frames: frameCount,
+        encodedFrames,
+        repeatedFrames,
+        beginFrameControl,
+        fps,
+        width,
+        height,
+        bytes: encoded.length,
+      },
       "Rendered an app session recording to video",
     );
     return Buffer.from(encoded, "base64");
@@ -347,9 +563,71 @@ const REPLAY_READY_TIMEOUT_MS = 90_000;
 const FRAME_TIMEOUT_MS = 30_000;
 /** Muxing and handing back a multi-megabyte file as base64. */
 const ENCODER_FINISH_TIMEOUT_MS = 120_000;
+/**
+ * How many frames may sit in the page's encode queue before the loop waits it
+ * out. Deep enough to hide a frame's decode+encode behind the next capture,
+ * shallow enough that a stalled encoder stops the render within a beat — and
+ * bounds the queue's held JPEGs to a few megabytes.
+ */
+const ENCODE_BACKLOG_LIMIT = 6;
+/** Breather between pumped frames — the ack itself paces the pump. */
+const PUMP_STEP_MS = 4;
+/** A supporting compositor acks a beginFrame in milliseconds; one that has
+ * ignored it for this long is never going to answer. */
+const BEGIN_FRAME_PROBE_TIMEOUT_MS = 10_000;
+
+/** Thrown only by the begin-frame probe: the one error that means "relaunch
+ * without it", never "the render failed". */
+class BeginFrameUnsupportedError extends Error {}
 
 function even(value: number): number {
   return Math.max(2, Math.floor(value / 2) * 2);
+}
+
+/**
+ * Drive the compositor while page-side work awaits animation frames.
+ *
+ * Under begin-frame control the browser never composites on its own, so any
+ * in-page code awaiting requestAnimationFrame — the seek settle's two-frame
+ * wait above all — waits for frames nobody else will produce. While `work` is
+ * outstanding, keep issuing beginFrames; each acks only once its frame is
+ * fully drawn (--run-all-compositor-stages-before-draw), so the ack itself
+ * paces the loop. The in-flight command is always finished before returning —
+ * a caller's next protocol message must never race a half-issued frame.
+ */
+async function pumpFrames<T>(cdp: CDPSession, work: Promise<T>): Promise<T> {
+  let settled = false;
+  const tracked = work.finally(() => {
+    settled = true;
+  });
+  tracked.catch(() => {});
+  const pumping = (async () => {
+    while (!settled) {
+      try {
+        await cdp.send("HeadlessExperimental.beginFrame", {});
+      } catch {
+        // The browser is closing underneath us; the awaited work says why.
+        return;
+      }
+      if (settled) return;
+      await new Promise((resolve) => setTimeout(resolve, PUMP_STEP_MS));
+    }
+  })();
+  try {
+    return await tracked;
+  } finally {
+    await pumping;
+  }
+}
+
+/** Tiny non-cryptographic digest — plenty to say "same JPEG as last frame". */
+function fnv1a(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${(hash >>> 0).toString(16)}:${text.length}`;
 }
 
 /**
@@ -438,15 +716,21 @@ declare global {
     __archestraRenderSeed(bundle: Record<string, unknown>): Promise<void>;
     __archestraRenderReady(): Promise<number>;
     __archestraRenderSeek(ms: number): Promise<void>;
-    __archestraRenderEncoderStart(
-      width: number,
-      height: number,
-      fps: number,
-    ): Promise<void>;
+    __archestraRenderEncoderStart(params: {
+      width: number;
+      height: number;
+      fps: number;
+      crop?: { x: number; y: number; width: number; height: number };
+    }): Promise<void>;
+    /** Enqueue a frame; resolves with the encoder's backlog depth. */
     __archestraRenderEncodeFrame(
       jpegBase64: string,
       index: number,
-    ): Promise<void>;
+    ): Promise<number>;
+    /** Re-add the previous frame at this index (compositor saw no change). */
+    __archestraRenderRepeatFrame(index: number): Promise<number>;
+    /** Wait out the encode backlog; rethrows a queued frame's failure. */
+    __archestraRenderEncodeDrain(): Promise<void>;
     __archestraRenderEncoderFinish(): Promise<string>;
   }
 }

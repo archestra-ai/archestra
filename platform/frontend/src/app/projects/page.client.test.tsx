@@ -136,12 +136,14 @@ vi.mock("@/components/ui/button", () => ({
     children,
     onClick,
     type = "button",
+    "aria-label": ariaLabel,
   }: {
     children: React.ReactNode;
     onClick?: () => void;
     type?: "button" | "submit";
+    "aria-label"?: string;
   }) => (
-    <button type={type} onClick={onClick}>
+    <button type={type} onClick={onClick} aria-label={ariaLabel}>
       {children}
     </button>
   ),
@@ -256,6 +258,7 @@ describe("ProjectsPageClient", () => {
     };
     mockDeleteMutateAsync.mockResolvedValue(true);
     mockUpdateMutateAsync.mockResolvedValue(true);
+    window.localStorage.clear();
   });
 
   it("shows the pinned section only when pinned projects exist", () => {
@@ -363,6 +366,43 @@ describe("ProjectsPageClient", () => {
 
     expect(screen.queryByTestId("api-key-load-error")).not.toBeInTheDocument();
     expect(screen.queryByTestId("no-api-key-setup")).not.toBeInTheDocument();
+    expect(screen.getByText("Plain project")).toBeInTheDocument();
+  });
+
+  it("switches to a table view and persists the choice", () => {
+    mockProjects = [
+      makeProject({
+        id: "pinned",
+        name: "Pinned project",
+        pinnedAt: "2026-01-03T00:00:00.000Z",
+      }),
+      makeProject({ id: "plain", name: "Plain project" }),
+    ];
+
+    render(<ProjectsPageClient />);
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("View as table"));
+
+    // The Pinned / All projects sections survive the switch, each rendering
+    // its own table; both projects stay visible.
+    expect(screen.getAllByRole("table")).toHaveLength(2);
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    expect(screen.getByText("All projects")).toBeInTheDocument();
+    expect(screen.getByText("Pinned project")).toBeInTheDocument();
+    expect(screen.getByText("Plain project")).toBeInTheDocument();
+    expect(window.localStorage.getItem("archestra-projects-view")).toBe(
+      "table",
+    );
+  });
+
+  it("restores the stored table view preference on mount", () => {
+    window.localStorage.setItem("archestra-projects-view", "table");
+    mockProjects = [makeProject({ id: "plain", name: "Plain project" })];
+
+    render(<ProjectsPageClient />);
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.getByText("Plain project")).toBeInTheDocument();
   });
 

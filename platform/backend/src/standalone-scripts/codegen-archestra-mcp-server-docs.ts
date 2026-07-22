@@ -2,8 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME,
+  ARCHESTRA_TOOL_GROUPS,
+  type ArchestraToolGroupId,
   type ArchestraToolShortName,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
+  getArchestraToolGroupId,
   getArchestraToolShortName,
 } from "@archestra/shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
@@ -17,175 +21,15 @@ type ToolPermissionDisplay = string;
 
 // === Tool group definitions ===
 
-enum ToolGroup {
-  Identity = "Identity",
-  Agents = "Agents",
-  LLMProxies = "LLM Proxies",
-  MCPGateways = "MCP Gateways",
-  MCPServers = "MCP Servers",
-  Teams = "Teams",
-  Limits = "Limits",
-  Policies = "Policies",
-  ToolAssignment = "Tool Assignment",
-  KnowledgeManagement = "Knowledge Management",
-  Chat = "Chat",
-  Meta = "Meta",
-  CodeExecution = "Code Execution",
-  Skills = "Skills",
-  SkillSandbox = "Skill Sandbox",
-  Apps = "Apps",
-}
-
-const groupOrder: Record<ToolGroup, number> = {
-  [ToolGroup.Identity]: 0,
-  [ToolGroup.Agents]: 1,
-  [ToolGroup.LLMProxies]: 2,
-  [ToolGroup.MCPGateways]: 3,
-  [ToolGroup.MCPServers]: 4,
-  [ToolGroup.Teams]: 5,
-  [ToolGroup.Limits]: 6,
-  [ToolGroup.Policies]: 7,
-  [ToolGroup.ToolAssignment]: 8,
-  [ToolGroup.KnowledgeManagement]: 9,
-  [ToolGroup.Chat]: 10,
-  [ToolGroup.Meta]: 11,
-  [ToolGroup.CodeExecution]: 12,
-  [ToolGroup.Skills]: 13,
-  [ToolGroup.SkillSandbox]: 14,
-  [ToolGroup.Apps]: 15,
-};
-
-/**
- * Maps every Archestra tool short name to its documentation group.
- * Typed as Record<ArchestraToolShortName, ToolGroup> so that adding a new tool
- * to any group file without updating this mapping causes a compile error.
- */
-const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
-  whoami: ToolGroup.Identity,
-
-  create_agent: ToolGroup.Agents,
-  get_agent: ToolGroup.Agents,
-  list_agents: ToolGroup.Agents,
-  edit_agent: ToolGroup.Agents,
-  list_hooks: ToolGroup.Agents,
-  create_hook: ToolGroup.Agents,
-  update_hook: ToolGroup.Agents,
-  delete_hook: ToolGroup.Agents,
-
-  create_llm_proxy: ToolGroup.LLMProxies,
-  get_llm_proxy: ToolGroup.LLMProxies,
-  edit_llm_proxy: ToolGroup.LLMProxies,
-
-  create_mcp_gateway: ToolGroup.MCPGateways,
-  get_mcp_gateway: ToolGroup.MCPGateways,
-  edit_mcp_gateway: ToolGroup.MCPGateways,
-
-  search_private_mcp_registry: ToolGroup.MCPServers,
-  get_mcp_servers: ToolGroup.MCPServers,
-  get_mcp_server_tools: ToolGroup.MCPServers,
-  edit_mcp_description: ToolGroup.MCPServers,
-  edit_mcp_config: ToolGroup.MCPServers,
-  create_mcp_server: ToolGroup.MCPServers,
-  deploy_mcp_server: ToolGroup.MCPServers,
-  list_mcp_server_deployments: ToolGroup.MCPServers,
-  get_mcp_server_logs: ToolGroup.MCPServers,
-  reload_mcp_server_tools: ToolGroup.MCPServers,
-  create_mcp_server_installation_request: ToolGroup.MCPServers,
-
-  create_team: ToolGroup.Teams,
-  get_team: ToolGroup.Teams,
-  list_teams: ToolGroup.Teams,
-  edit_team: ToolGroup.Teams,
-  delete_team: ToolGroup.Teams,
-  list_team_members: ToolGroup.Teams,
-  add_team_member: ToolGroup.Teams,
-  update_team_member_role: ToolGroup.Teams,
-  remove_team_member: ToolGroup.Teams,
-  list_team_external_groups: ToolGroup.Teams,
-  add_team_external_group: ToolGroup.Teams,
-  remove_team_external_group: ToolGroup.Teams,
-
-  create_limit: ToolGroup.Limits,
-  get_limits: ToolGroup.Limits,
-  update_limit: ToolGroup.Limits,
-  delete_limit: ToolGroup.Limits,
-  get_agent_token_usage: ToolGroup.Limits,
-  get_llm_proxy_token_usage: ToolGroup.Limits,
-
-  get_autonomy_policy_operators: ToolGroup.Policies,
-  get_tool_invocation_policies: ToolGroup.Policies,
-  create_tool_invocation_policy: ToolGroup.Policies,
-  get_tool_invocation_policy: ToolGroup.Policies,
-  update_tool_invocation_policy: ToolGroup.Policies,
-  delete_tool_invocation_policy: ToolGroup.Policies,
-  get_trusted_data_policies: ToolGroup.Policies,
-  create_trusted_data_policy: ToolGroup.Policies,
-  get_trusted_data_policy: ToolGroup.Policies,
-  update_trusted_data_policy: ToolGroup.Policies,
-  delete_trusted_data_policy: ToolGroup.Policies,
-
-  bulk_assign_tools_to_agents: ToolGroup.ToolAssignment,
-  bulk_remove_tools_from_agents: ToolGroup.ToolAssignment,
-  bulk_assign_tools_to_mcp_gateways: ToolGroup.ToolAssignment,
-
-  query_knowledge_sources: ToolGroup.KnowledgeManagement,
-  create_knowledge_base: ToolGroup.KnowledgeManagement,
-  get_knowledge_bases: ToolGroup.KnowledgeManagement,
-  get_knowledge_base: ToolGroup.KnowledgeManagement,
-  update_knowledge_base: ToolGroup.KnowledgeManagement,
-  delete_knowledge_base: ToolGroup.KnowledgeManagement,
-  create_knowledge_connector: ToolGroup.KnowledgeManagement,
-  get_knowledge_connectors: ToolGroup.KnowledgeManagement,
-  get_knowledge_connector: ToolGroup.KnowledgeManagement,
-  update_knowledge_connector: ToolGroup.KnowledgeManagement,
-  delete_knowledge_connector: ToolGroup.KnowledgeManagement,
-  assign_knowledge_connector_to_knowledge_base: ToolGroup.KnowledgeManagement,
-  unassign_knowledge_connector_from_knowledge_base:
-    ToolGroup.KnowledgeManagement,
-  assign_knowledge_base_to_agent: ToolGroup.KnowledgeManagement,
-  unassign_knowledge_base_from_agent: ToolGroup.KnowledgeManagement,
-  assign_knowledge_connector_to_agent: ToolGroup.KnowledgeManagement,
-  unassign_knowledge_connector_from_agent: ToolGroup.KnowledgeManagement,
-
-  todo_write: ToolGroup.Chat,
-  create_project_from_conversation: ToolGroup.Chat,
-
-  search_tools: ToolGroup.Meta,
-  run_tool: ToolGroup.Meta,
-
-  list_skills: ToolGroup.Skills,
-  load_skill: ToolGroup.Skills,
-  create_skill: ToolGroup.Skills,
-  update_skill: ToolGroup.Skills,
-  edit_skill: ToolGroup.Skills,
-
-  run_command: ToolGroup.SkillSandbox,
-  download_file: ToolGroup.SkillSandbox,
-  upload_file: ToolGroup.SkillSandbox,
-  search_files: ToolGroup.SkillSandbox,
-  read_file: ToolGroup.SkillSandbox,
-  save_file: ToolGroup.SkillSandbox,
-  edit_file: ToolGroup.SkillSandbox,
-  delete_file: ToolGroup.SkillSandbox,
-
-  scaffold_app: ToolGroup.Apps,
-  refine_app: ToolGroup.Apps,
-  list_apps: ToolGroup.Apps,
-  render_app: ToolGroup.Apps,
-  read_app: ToolGroup.Apps,
-  edit_app: ToolGroup.Apps,
-  set_app_tools: ToolGroup.Apps,
-  validate_app: ToolGroup.Apps,
-  publish_app: ToolGroup.Apps,
-  delete_app: ToolGroup.Apps,
-  preview_app_tool: ToolGroup.Apps,
-  get_app_diagnostics: ToolGroup.Apps,
-  app_data_get: ToolGroup.Apps,
-  app_data_set: ToolGroup.Apps,
-  app_data_list: ToolGroup.Apps,
-  app_data_delete: ToolGroup.Apps,
-  llm_complete: ToolGroup.Apps,
-};
+// Domain groups and their shortName→group mapping are the shared taxonomy in
+// `@archestra/shared` (also drives the agent tool-picker UI). Here we derive a
+// display label and a display order from the canonical ordered list.
+const groupLabel = new Map<ArchestraToolGroupId, string>(
+  ARCHESTRA_TOOL_GROUPS.map((group) => [group.id, group.label]),
+);
+const groupOrder = new Map<ArchestraToolGroupId, number>(
+  ARCHESTRA_TOOL_GROUPS.map((group, index) => [group.id, index]),
+);
 
 /**
  * Extra access requirements for tools whose real authorization is finer-grained
@@ -238,7 +82,8 @@ async function main() {
   fs.writeFileSync(docsFilePath, markdownContent);
 
   const tools = getArchestraMcpTools();
-  const groupCount = new Set(Object.values(toolGroups)).size;
+  const groupCount = new Set(Object.values(ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME))
+    .size;
 
   logger.info(`Documentation generated at: ${docsFilePath}`);
   logger.info(`Generated tables for:`);
@@ -278,7 +123,7 @@ function generateMarkdownBody(): string {
 
   // Group tools
   const grouped = new Map<
-    ToolGroup,
+    ArchestraToolGroupId,
     {
       shortName: ArchestraToolShortName;
       description: string;
@@ -293,11 +138,11 @@ function generateMarkdownBody(): string {
     const shortName = getArchestraToolShortName(tool.name) ?? tool.name;
 
     const typedShortName = shortName as ArchestraToolShortName;
-    const group = toolGroups[typedShortName];
+    const group = getArchestraToolGroupId(shortName);
     if (!group) {
       throw new Error(
-        `Tool "${shortName}" has no group mapping in toolGroups. ` +
-          "Add it to the toolGroups record in codegen-archestra-mcp-server-docs.ts",
+        `Tool "${shortName}" has no group mapping. ` +
+          "Add it to ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME in @archestra/shared.",
       );
     }
 
@@ -316,13 +161,13 @@ function generateMarkdownBody(): string {
 
   // Sort groups by order
   const sortedGroups = [...grouped.entries()].sort(
-    ([a], [b]) => groupOrder[a] - groupOrder[b],
+    ([a], [b]) => (groupOrder.get(a) ?? 0) - (groupOrder.get(b) ?? 0),
   );
 
   // Build unified Tools Reference sections (overview table + detailed schemas per group)
   const referenceSections: string[] = [];
   for (const [group, groupTools] of sortedGroups) {
-    let section = `### ${group}\n\n`;
+    let section = `### ${groupLabel.get(group) ?? group}\n\n`;
     section += "| Tool | Description | Required RBAC Permission |\n";
     section += "|------|-------------|--------------------------|\n";
 
@@ -465,7 +310,7 @@ function formatToolLink(toolShortName: ArchestraToolShortName): string {
 function isArchestraToolShortName(
   toolShortName: string,
 ): toolShortName is ArchestraToolShortName {
-  return Object.hasOwn(toolGroups, toolShortName);
+  return Object.hasOwn(ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME, toolShortName);
 }
 
 // === Input schema rendering ===

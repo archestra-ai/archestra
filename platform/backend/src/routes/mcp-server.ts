@@ -1536,6 +1536,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               description: z.string().nullable(),
               parameters: z.record(z.string(), z.any()),
               createdAt: z.coerce.date(),
+              // Domain group id for built-in Archestra tools; null for external
+              // MCP tools (the only kind this endpoint serves). Kept in sync
+              // with the internal-mcp-catalog tools schema, which shares
+              // ToolModel.findByCatalogId.
+              group: z.string().nullable(),
               assignedAgentCount: z.number(),
               assignedAgents: z.array(
                 z.object({

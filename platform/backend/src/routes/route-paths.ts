@@ -29,6 +29,21 @@ export const ORGANIZATION_APPEARANCE_SETTINGS_PATH =
   "/api/organization/appearance-settings";
 export const PUBLIC_CONFIG_PATH = "/api/config/public";
 
+/**
+ * Public unauthenticated existence check used by the Claude Code startup
+ * guard: reports whether a connected remote (MCP gateway / LLM proxy) still
+ * exists, because the data-plane endpoints deliberately answer uniformly
+ * (gateway: 401 whether or not the id exists; proxy: no unauthenticated GET
+ * surface), so a client can't tell "deleted" from "needs auth". Discloses
+ * only a boolean for a caller-supplied id/slug.
+ */
+/**
+ * Public single-request health check for the Claude Code startup guard:
+ * GET /v1/health?mcp=<id-or-slug>&llm=<id-or-slug>. Allowlisted in the auth
+ * middleware; rate limited per requester and globally in the route.
+ */
+export const CONNECTION_HEALTH_PATH = "/v1/health";
+
 export const INCOMING_EMAIL_WEBHOOK_PREFIX = "/api/webhooks/incoming-email";
 
 /**

@@ -1,10 +1,14 @@
 import {
   CLAUDE_CODE_CLIENT_ID,
+  CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
+  CLAUDE_CODE_PROXY_ENV_KEYS,
   DEFAULT_APP_NAME,
   EXTERNAL_AGENT_ID_HEADER,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
+import { buildClaudeCodeStartupGuardContext } from "./claude-code-startup-guard";
+import { buildWindowsClaudeCodeStartupGuardInstallSection } from "./claude-code-startup-guard.windows";
 import {
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
@@ -221,6 +225,11 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
           "The shared skills are installed for Claude Code — start `claude` and they load automatically.",
         );
       }
+      if (ctx.mcp || ctx.proxy || ctx.skills) {
+        steps.push(
+          "Open a new PowerShell session so the startup guard wrapper takes effect — it checks these remotes before every `claude` launch.",
+        );
+      }
       break;
     case "codex":
       if (ctx.mcp) {
@@ -364,11 +373,26 @@ claude plugin install ${psq(pluginRef)}
 if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)} }`);
   }
 
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    sections.push(
+      buildWindowsClaudeCodeStartupGuardInstallSection(
+        buildClaudeCodeStartupGuardContext(ctx),
+      ),
+    );
+  }
+
   return sections;
 }
 
 const CLAUDE_SETTINGS_PATH =
   "(Join-Path $env:USERPROFILE '.claude\\settings.json')";
+
+// Same shared env-key source as the bash renderer, so connect and every
+// disconnect surface write/strip identical settings.json keys.
+const [ANTHROPIC_BASE_URL_KEY, ANTHROPIC_AUTH_TOKEN_KEY] =
+  CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
+const [CLAUDE_USE_BEDROCK_KEY, AWS_REGION_KEY, BEDROCK_BASE_URL_KEY] =
+  CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
 
 /**
  * Custom headers Claude Code sends on every proxied request (Anthropic and
@@ -386,10 +410,10 @@ function claudeCustomHeaderLines(proxy: SetupScriptProxySection): string[] {
 
 function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
   const values: Record<string, string> = {
-    ANTHROPIC_BASE_URL: proxy.url,
+    [ANTHROPIC_BASE_URL_KEY]: proxy.url,
   };
   if (proxy.virtualKey) {
-    values.ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
+    values[ANTHROPIC_AUTH_TOKEN_KEY] = proxy.virtualKey;
   }
   // Append our custom headers after the base-URL merge, preserving any the user
   // already set.
@@ -427,14 +451,14 @@ $arch_henv = $arch_hconfig.env
 $arch_hnew = @(${psArray})
 $arch_hnames = @($arch_hnew | ForEach-Object { ($_ -split ':',2)[0].Trim().ToLower() })
 $arch_hexisting = ''
-if ($arch_henv.PSObject.Properties['ANTHROPIC_CUSTOM_HEADERS']) { $arch_hexisting = [string]$arch_henv.ANTHROPIC_CUSTOM_HEADERS }
+if ($arch_henv.PSObject.Properties['${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}']) { $arch_hexisting = [string]$arch_henv.${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY} }
 $arch_hkept = @()
 foreach ($arch_hl in ($arch_hexisting -split "\\r?\\n")) {
   if ($arch_hl.Trim() -and ($arch_hnames -notcontains ($arch_hl -split ':',2)[0].Trim().ToLower())) { $arch_hkept += $arch_hl }
 }
 $arch_hkept += $arch_hnew
 $arch_hjoined = ($arch_hkept -join "\`n")
-if ($arch_henv.PSObject.Properties['ANTHROPIC_CUSTOM_HEADERS']) { $arch_henv.ANTHROPIC_CUSTOM_HEADERS = $arch_hjoined } else { $arch_henv | Add-Member -NotePropertyName 'ANTHROPIC_CUSTOM_HEADERS' -NotePropertyValue $arch_hjoined }
+if ($arch_henv.PSObject.Properties['${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}']) { $arch_henv.${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY} = $arch_hjoined } else { $arch_henv | Add-Member -NotePropertyName '${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}' -NotePropertyValue $arch_hjoined }
 $arch_hconfig | ConvertTo-Json -Depth 32 | Set-Content -Path $arch_hpath -Encoding utf8
 Write-Host ('Updated ' + $arch_hpath)`;
 }
@@ -445,9 +469,9 @@ ${mergeJsonFileSnippet({
   pathExpr: CLAUDE_SETTINGS_PATH,
   nestedKey: "env",
   values: {
-    CLAUDE_CODE_USE_BEDROCK: "1",
-    AWS_REGION: "us-east-1",
-    ANTHROPIC_BEDROCK_BASE_URL: proxy.url,
+    [CLAUDE_USE_BEDROCK_KEY]: "1",
+    [AWS_REGION_KEY]: "us-east-1",
+    [BEDROCK_BASE_URL_KEY]: proxy.url,
   },
 })}
 ${claudeCustomHeaderAppendSnippet(claudeCustomHeaderLines(proxy))}

@@ -5,8 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import { AppSessionPlayer } from "@/components/app-session-recording/app-session-player";
 import { recordingStore } from "@/lib/app-session-recording/app-recording-store";
 import {
-  encodeFrame,
+  drainEncoder,
+  enqueueFrame,
   finishEncoder,
+  repeatFrame,
   startEncoder,
 } from "@/lib/app-session-recording/app-recording-video-encoder";
 
@@ -49,8 +51,21 @@ export default function AppRecordingRenderPage() {
       const replay = await waitFor(() => window.__archestraReplay);
       await replay.seek(ms);
     };
-    window.__archestraRenderEncoderStart = startEncoder;
-    window.__archestraRenderEncodeFrame = encodeFrame;
+    window.__archestraRenderEncoderStart = async (params) => {
+      // The renderer films pixels only; the captured sound is decoded by the
+      // player onto the export timeline and muxed here as the MP4's audio
+      // track. Best-effort — a failure just yields a silent video.
+      let audio = null;
+      try {
+        const replay = await waitFor(() => window.__archestraReplay);
+        audio = (await replay.audio?.()) ?? null;
+      } catch {}
+      await startEncoder({ ...params, audio });
+    };
+    window.__archestraRenderEncodeFrame = async (jpeg, index) =>
+      enqueueFrame(jpeg, index);
+    window.__archestraRenderRepeatFrame = async (index) => repeatFrame(index);
+    window.__archestraRenderEncodeDrain = drainEncoder;
     window.__archestraRenderEncoderFinish = finishEncoder;
   }, [seed]);
 

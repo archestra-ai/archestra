@@ -336,16 +336,25 @@ declare global {
       ready(): Promise<void>;
       durationMs(): number;
       seek(ms: number): Promise<void>;
+      /** The recording's captured audio, decoded onto the export timeline, for
+       *  the renderer to mux as the MP4's audio track. Null when silent. */
+      audio(): Promise<import("./app-recording-audio").PlaybackAudio | null>;
     };
     __archestraRenderSeed(bundle: unknown): Promise<void>;
     __archestraRenderReady(): Promise<number>;
     __archestraRenderSeek(ms: number): Promise<void>;
-    __archestraRenderEncoderStart(
-      width: number,
-      height: number,
-      fps: number,
-    ): Promise<void>;
-    __archestraRenderEncodeFrame(jpeg: string, index: number): Promise<void>;
+    __archestraRenderEncoderStart(params: {
+      width: number;
+      height: number;
+      fps: number;
+      crop?: { x: number; y: number; width: number; height: number };
+    }): Promise<void>;
+    /** Enqueue a frame; resolves with the encoder's backlog depth. */
+    __archestraRenderEncodeFrame(jpeg: string, index: number): Promise<number>;
+    /** Re-add the previous frame at this index (compositor saw no change). */
+    __archestraRenderRepeatFrame(index: number): Promise<number>;
+    /** Wait out the encode backlog; rethrows a queued frame's failure. */
+    __archestraRenderEncodeDrain(): Promise<void>;
     __archestraRenderEncoderFinish(): Promise<string>;
   }
 }

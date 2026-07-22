@@ -50,6 +50,7 @@ export function makeConfig(
       kbAutoSyncPermissionsEnabled: false,
       hackathonRecorderEnabled: true,
       hackathonRecorderOverrideActive: false,
+      hackathonGalleryRepo: null,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },
@@ -69,6 +70,7 @@ export function makePublicConfig(
     disableInvitations: false,
     devAutoLoginEnabled: false,
     enterpriseCoreActive: false,
+    mcpSandboxDomain: null,
     analytics: {
       enabled: false,
       instanceId: null,

@@ -403,8 +403,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetProjectConversations,
         description:
-          "All chats in a project the caller can read. `readOnly` marks " +
-          "chats authored by someone else (viewable, never writable).",
+          "All chats in a project the caller can read. Chats authored by " +
+          "others require `project:read-all`; without it the caller sees " +
+          "only their own. `readOnly` marks chats authored by someone else " +
+          "(viewable, never writable).",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(

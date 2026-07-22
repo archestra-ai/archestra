@@ -87,7 +87,10 @@ export function AppRecordingControls() {
           of their own) keeps the cluster symmetric and tight by construction. */}
       <div
         className={cn(
-          "inline-flex h-8 items-center gap-1 rounded-full border pl-2.5 pr-1 shadow-sm transition-colors",
+          // ml-1.5: breathing room from the context-usage ring the cluster
+          // sits next to — the composer's own item gap is too tight for two
+          // bordered neighbors.
+          "ml-1.5 inline-flex h-8 items-center gap-1 rounded-full border pl-2.5 pr-1 shadow-sm transition-colors",
           isRecording
             ? "border-destructive/50 bg-destructive/10"
             : "border-primary/30 bg-primary/5",

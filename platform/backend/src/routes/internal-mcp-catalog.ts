@@ -78,6 +78,9 @@ const ToolWithAssignedAgentCountSchema = z.object({
   description: z.string().nullable(),
   parameters: z.record(z.string(), z.any()),
   createdAt: z.coerce.date(),
+  // Domain group id for built-in Archestra tools (drives the grouped
+  // tool-picker UI); null for external MCP tools.
+  group: z.string().nullable(),
   assignedAgentCount: z.number(),
   assignedAgents: z.array(
     z.object({

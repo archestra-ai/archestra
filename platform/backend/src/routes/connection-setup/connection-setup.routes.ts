@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
   providerDisplayNames,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
+  VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -47,6 +49,7 @@ import {
   type Organization,
 } from "@/types";
 import {
+  CONNECTION_HEALTH_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   SKILL_MARKETPLACE_PREFIX,
 } from "../route-paths";
@@ -146,7 +149,91 @@ const CreateConnectionPassthroughKeyResponseSchema = z.object({
   name: z.string(),
 });
 
+const ConnectionHealthRefSchema = z.string().min(1).max(256);
+
+const ConnectionHealthQuerySchema = z.object({
+  /** MCP gateway id or slug, exactly as embedded in the client's config. */
+  mcp: ConnectionHealthRefSchema.optional(),
+  /** LLM proxy id or slug, exactly as embedded in the client's config. */
+  llm: ConnectionHealthRefSchema.optional(),
+});
+
+const ConnectionHealthStatusSchema = z.enum(["ok", "down"]);
+
+const ConnectionHealthResponseSchema = z.object({
+  /**
+   * One entry per requested query param. "down" deliberately conflates every
+   * per-resource failure mode (deleted, never existed, wrong type) — the
+   * endpoint discloses no more than "claude will not reach this". Always a
+   * 200: the startup guard treats any response without a "down" marker (the
+   * 404 an older backend returns for this then-unknown route, or a 429) as
+   * "can't tell" and stays green, so version skew and rate limiting can
+   * never read as an outage.
+   */
+  mcp: ConnectionHealthStatusSchema.optional(),
+  llm: ConnectionHealthStatusSchema.optional(),
+});
+
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    CONNECTION_HEALTH_PATH,
+    {
+      schema: {
+        operationId: RouteId.GetConnectionHealth,
+        description:
+          "Health of the remotes a connected client is wired to, one request for all of them. " +
+          "Public: used by the Claude Code startup guard before every launch, from machines with no session. " +
+          "Reports only ok/down per requested remote.",
+        tags: ["Connection Setups"],
+        querystring: ConnectionHealthQuerySchema,
+        response: constructResponseSchema(ConnectionHealthResponseSchema),
+      },
+    },
+    async (request) => {
+      // Heavy per-requester limit plus a fair instance-wide backstop: a
+      // launch fires one request, so 30/min per requester is generous for
+      // humans and hostile to id/slug enumeration; the global bucket caps
+      // what a distributed scan can extract regardless of identities.
+      const [requesterLimited, globallyLimited] = await Promise.all([
+        isRateLimited(
+          `${CacheKey.ConnectionHealthRateLimit}-${connectionHealthRequesterKey(request)}`,
+          { windowMs: 60_000, maxRequests: 30 },
+        ),
+        isRateLimited(`${CacheKey.ConnectionHealthRateLimit}-global`, {
+          windowMs: 60_000,
+          maxRequests: 600,
+        }),
+      ]);
+      if (requesterLimited || globallyLimited) {
+        throw new ApiError(429, "Too many requests");
+      }
+
+      const { mcp, llm } = request.query;
+      const [mcpExists, llmExists] = await Promise.all([
+        mcp
+          ? AgentModel.existsByIdOrSlugAndType({
+              idOrSlug: mcp,
+              agentType: "mcp_gateway",
+            })
+          : null,
+        llm
+          ? AgentModel.existsByIdOrSlugAndType({
+              idOrSlug: llm,
+              agentType: "llm_proxy",
+            })
+          : null,
+      ]);
+
+      const statusOf = (exists: boolean | null) =>
+        exists === null
+          ? undefined
+          : exists
+            ? ("ok" as const)
+            : ("down" as const);
+      return { mcp: statusOf(mcpExists), llm: statusOf(llmExists) };
+    },
+  );
+
   fastify.post(
     "/api/connection-setups",
     {
@@ -879,4 +966,27 @@ function toMcpServerSlug(appName: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return slug || "archestra";
+}
+
+/**
+ * Rate-limit identity for the public health endpoint, most-specific wins:
+ * the connection's virtual-key header when the caller sends one (hashed —
+ * the raw secret never becomes a cache key), else the first X-Forwarded-For
+ * hop, else the socket address. Spoofing any of these only moves the caller
+ * into a different bucket, which is all a rate-limit key needs.
+ */
+function connectionHealthRequesterKey(request: {
+  headers: Record<string, string | string[] | undefined>;
+  ip: string;
+}): string {
+  const virtualKey = request.headers[VIRTUAL_KEY_HEADER.toLowerCase()];
+  if (typeof virtualKey === "string" && virtualKey.length > 0) {
+    return `vk-${createHash("sha256").update(virtualKey).digest("hex").slice(0, 32)}`;
+  }
+  const forwardedFor = request.headers["x-forwarded-for"];
+  if (typeof forwardedFor === "string" && forwardedFor.length > 0) {
+    const firstHop = forwardedFor.split(",")[0]?.trim();
+    if (firstHop) return `xff-${firstHop}`;
+  }
+  return `ip-${request.ip}`;
 }

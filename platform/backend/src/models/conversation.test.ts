@@ -7,6 +7,8 @@ import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationShareModel from "./conversation-share";
 import MessageModel from "./message";
 import ModelModel from "./model";
+import ProjectModel from "./project";
+import ProjectShareModel from "./project-share";
 
 describe("ConversationModel", () => {
   test("can create a conversation", async ({
@@ -563,6 +565,7 @@ describe("ConversationModel", () => {
       id: conversation.id,
       userId: user.id,
       organizationId: org.id,
+      canReadOthersViaProject: () => Promise.resolve(true),
     });
 
     expect(found?.id).toBe(conversation.id);
@@ -613,6 +616,10 @@ describe("ConversationModel", () => {
       id: conversation.id,
       userId: viewer.id,
       organizationId: org.id,
+      // An explicit conversation share is an intentional, targeted grant and is
+      // NOT gated by project:read-all — the share branch returns before the
+      // predicate is ever consulted, so access holds even with it denying.
+      canReadOthersViaProject: () => Promise.resolve(false),
     });
 
     expect(found?.id).toBe(conversation.id);
@@ -657,6 +664,7 @@ describe("ConversationModel", () => {
       id: conversation.id,
       userId: outsider.id,
       organizationId: org.id,
+      canReadOthersViaProject: () => Promise.resolve(true),
     });
 
     expect(found).toBeNull();
@@ -697,9 +705,152 @@ describe("ConversationModel", () => {
       id: conversation.id,
       userId: viewer.id,
       organizationId: otherOrg.id,
+      canReadOthersViaProject: () => Promise.resolve(true),
     });
 
     expect(found).toBeNull();
+  });
+
+  test("findAccessibleById gates project-membership access to a non-authored chat behind the read-all predicate", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Project Agent", teams: [] });
+
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: owner.id,
+      name: "Shared Project",
+      description: null,
+    });
+    await ProjectShareModel.upsert({
+      projectId: project.id,
+      organizationId: org.id,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Owner's chat in shared project",
+      projectId: project.id,
+    });
+
+    // Without read-all, a non-author reaching the chat only via project
+    // membership is denied (the route turns this null into a 404).
+    const denied = await ConversationModel.findAccessibleById({
+      id: conversation.id,
+      userId: viewer.id,
+      organizationId: org.id,
+      canReadOthersViaProject: () => Promise.resolve(false),
+    });
+    expect(denied).toBeNull();
+
+    // With read-all, the same non-author gets a read-only view.
+    const allowed = await ConversationModel.findAccessibleById({
+      id: conversation.id,
+      userId: viewer.id,
+      organizationId: org.id,
+      canReadOthersViaProject: () => Promise.resolve(true),
+    });
+    expect(allowed?.id).toBe(conversation.id);
+    expect(allowed?.userId).toBe(owner.id);
+  });
+
+  test("findAccessibleById does not exempt the project owner from the read-all predicate", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const owner = await makeUser();
+    const author = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Owner Project Agent", teams: [] });
+
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: owner.id,
+      name: "Owner's Project",
+      description: null,
+    });
+    await ProjectShareModel.upsert({
+      projectId: project.id,
+      organizationId: org.id,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+    // A chat authored by another member inside the owner's own project.
+    const foreignChat = await ConversationModel.create({
+      userId: author.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Member's chat in owner's project",
+      projectId: project.id,
+    });
+
+    // Ownership is NOT an exemption: the owner still needs read-all to open a
+    // chat they did not author, even inside their own project.
+    const denied = await ConversationModel.findAccessibleById({
+      id: foreignChat.id,
+      userId: owner.id,
+      organizationId: org.id,
+      canReadOthersViaProject: () => Promise.resolve(false),
+    });
+    expect(denied).toBeNull();
+
+    const allowed = await ConversationModel.findAccessibleById({
+      id: foreignChat.id,
+      userId: owner.id,
+      organizationId: org.id,
+      canReadOthersViaProject: () => Promise.resolve(true),
+    });
+    expect(allowed?.id).toBe(foreignChat.id);
+  });
+
+  test("findAccessibleById returns the caller's own chat without consulting the read-all predicate", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const author = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Own Chat Agent", teams: [] });
+
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: author.id,
+      name: "Author's Project",
+      description: null,
+    });
+    const ownChat = await ConversationModel.create({
+      userId: author.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "My own chat",
+      projectId: project.id,
+    });
+
+    let predicateCalled = false;
+    const found = await ConversationModel.findAccessibleById({
+      id: ownChat.id,
+      userId: author.id,
+      organizationId: org.id,
+      canReadOthersViaProject: () => {
+        predicateCalled = true;
+        return Promise.resolve(false);
+      },
+    });
+    // Own chats short-circuit before the project branch, so the read-all gate
+    // is never consulted and a user is never locked out of their own chat.
+    expect(found?.id).toBe(ownChat.id);
+    expect(predicateCalled).toBe(false);
   });
 
   test("returns null when updating non-existent conversation", async ({

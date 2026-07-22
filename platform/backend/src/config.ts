@@ -1243,6 +1243,32 @@ export function parseHackathonRecorderEnabled(params: {
   return true;
 }
 
+/**
+ * The App Gallery repository a shared recording is submitted to, as
+ * `owner/name` on github.com. Unset means sharing is not offered — the
+ * recorder itself works without it (record/replay/download stay local).
+ *
+ * Undocumented on purpose, like the rest of the recorder — not in
+ * .env.example or the deployment docs.
+ *
+ * @public — exported for testability
+ */
+export function parseHackathonGalleryRepo(
+  envValue: string | undefined,
+): { owner: string; name: string } | undefined {
+  const raw = envValue?.trim();
+  if (!raw) {
+    return undefined;
+  }
+  const match = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(raw);
+  if (!match) {
+    throw new Error(
+      `ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO must be "owner/name" (a github.com repository), got "${raw}"`,
+    );
+  }
+  return { owner: match[1], name: match[2] };
+}
+
 // the code execution sandbox (run_command / upload_file / download_file, plus
 // skill activation-mounts) needs a Dagger runner host: it runs when a host is
 // configured and stays off otherwise — presence of the host is the switch. it
@@ -1782,6 +1808,29 @@ const config = {
     overrideActive:
       process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
     /**
+     * Sharing a recording to the public App Gallery (a PR filed on the
+     * participant's own GitHub account). Both values must be set for the
+     * share surface to exist; the recorder works without them.
+     *
+     * `githubClientId` is the PUBLIC client id of the "Archestra App Gallery"
+     * GitHub OAuth app with the device flow enabled — the device flow needs no
+     * client secret, which is what lets community deployments offer sharing
+     * with nothing but this id. Register a classic OAuth app, not a GitHub
+     * App: a GitHub App's user token cannot write to the participant's fork
+     * unless they also install the app on their account.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
+     */
+    gallery: {
+      githubClientId:
+        process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID?.trim() ||
+        undefined,
+      repo: parseHackathonGalleryRepo(
+        process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO,
+      ),
+    },
+    /**
      * Escape hatch, not a requirement: the renderer finds or installs its own
      * Chromium (see app-recording-render-runtime). Set this only to pin a
      * specific browser — it must be a FULL Chromium, since Playwright's
@@ -2124,13 +2173,12 @@ const config = {
     domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   },
   chatops: {
-    // Gate for the Telegram integration: per-feature flag with ARCHESTRA_BETA
-    // as the fallback (betaFeatureEnabled). Off = the provider never starts
-    // (even with a token saved in the DB), the config endpoint rejects
-    // updates, and the frontend hides the Telegram messaging channel.
-    telegramEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED,
-    ),
+    // The Telegram integration is generally available: on by default, with
+    // ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=false as the operator opt-out.
+    // Off = the provider never starts (even with a token saved in the DB),
+    // the config endpoint rejects updates, and the frontend hides the
+    // Telegram messaging channel.
+    telegramEnabled: process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED !== "false",
     // Per-process cap on concurrent chatops file downloads + image shrinking.
     // Chatops events are acked to the provider before processing, so an OOM
     // during a burst of attachment-heavy messages means silent message loss —

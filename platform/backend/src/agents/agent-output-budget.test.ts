@@ -44,4 +44,46 @@ describe("resolveAgentMaxOutputTokens", () => {
       resolveAgentMaxOutputTokens({ outputLength: null, ceiling: 4096 }),
     ).toBe(4096);
   });
+
+  test("caps shared-window models at half the context so the prompt has room", () => {
+    // gpt-4: output 8192 == context 8192 — requesting the full output ceiling
+    // would consume the entire window and 400 on every request.
+    expect(
+      resolveAgentMaxOutputTokens({
+        outputLength: 8192,
+        contextLength: 8192,
+        ceiling,
+      }),
+    ).toBe(4096);
+  });
+
+  test("the shared-window cap never binds for modern large-context models", () => {
+    expect(
+      resolveAgentMaxOutputTokens({
+        outputLength: 128000,
+        contextLength: 400000,
+        ceiling: 200000,
+      }),
+    ).toBe(128000);
+  });
+
+  test("an unknown context window leaves the budget unchanged", () => {
+    expect(
+      resolveAgentMaxOutputTokens({
+        outputLength: 8192,
+        contextLength: null,
+        ceiling,
+      }),
+    ).toBe(8192);
+  });
+
+  test("an invalid context window is treated as unknown", () => {
+    expect(
+      resolveAgentMaxOutputTokens({
+        outputLength: 8192,
+        contextLength: 0,
+        ceiling,
+      }),
+    ).toBe(8192);
+  });
 });

@@ -33,7 +33,7 @@ import type { SetupScriptContext } from "./connection-setup-script";
  * - then plays the pre-loader animation resource by resource (~0.35s of
  *   appended trailing dots — append-only output cannot flicker): a check for
  *   ok, "Failed to connect to <type> (<id-or-slug>)" for a down one — and
- *   after the whole turn, ONE "Remove … from Claude? (Y/n)" prompt covers
+ *   after the whole turn, ONE "Disconnect … from Claude? (Y/n)" prompt covers
  *   every down remote. Everything draws on the alternate screen, so the
  *   terminal is clean again after claude exits;
  * - disconnecting runs the exact reverse of the connect steps and records the
@@ -198,11 +198,11 @@ RETRY_TOTAL_SECONDS=15
 NOTICE_AFTER_SECONDS=3
 HANG_TIGHT_AFTER_SECONDS=10
 
-# Each resource's turn shows ~0.35s of animation — enough to read as a
+# Each resource's turn shows ~0.5s of animation — enough to read as a
 # deliberate step, short enough to never feel like waiting. A tick appends
-# one trailing dot every ~90ms.
-MIN_CHECK_FRAMES=4
-FRAME_SLEEP=0.09
+# one unhurried trailing dot every ~160ms.
+MIN_CHECK_FRAMES=3
+FRAME_SLEEP=0.16
 
 # Only drive the terminal (and prompt) when a human is watching: a real tty on
 # both ends and no -p/--print run. Otherwise check once, warn on stderr, and
@@ -433,9 +433,9 @@ prompt_down_all() {
   printf '\\n'
   if [ "$DOWN_COUNT" -eq 1 ]; then
     set -- $DOWN_IDXS
-    printf 'Remove unreachable %s from Claude? (Y/n) ' "\${GUARD_FAIL_NAMES[$1]}"
+    printf 'Disconnect unreachable %s from Claude? (Y/n) ' "\${GUARD_FAIL_NAMES[$1]}"
   else
-    printf 'Remove %s unreachable resources from Claude? (Y/n) ' "$DOWN_COUNT"
+    printf 'Disconnect %s unreachable resources from Claude? (Y/n) ' "$DOWN_COUNT"
   fi
   key=''
   read -rs -n 1 key </dev/tty 2>/dev/null || key='n'

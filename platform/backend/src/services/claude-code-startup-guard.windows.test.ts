@@ -59,6 +59,9 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("DownMarker = ''");
     expect(script).toContain("Wait-ArchHealth");
     expect(script).toContain("-TimeoutSec 3");
+    // Invoke-WebRequest's progress banner paints over the header rows —
+    // silencing it is what keeps the logo from flickering on every fetch
+    expect(script).toContain("$ProgressPreference = 'SilentlyContinue'");
     // reachable-but-erroring servers still count as answered on both editions
     expect(script).toContain(
       "$_.Exception.PSObject.Properties['Response'] -and $_.Exception.Response",
@@ -73,11 +76,11 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("FailName = 'Skills marketplace (acme-skills)'");
     // a single down remote gets the classic Y/n removal prompt naming it…
     expect(script).toContain(
-      "'Remove unreachable ' + $downRemotes[0].FailName + ' from Claude? (Y/n) '",
+      "'Disconnect unreachable ' + $downRemotes[0].FailName + ' from Claude? (Y/n) '",
     );
     // …several down remotes get the remove-all-at-once variant
     expect(script).toContain(
-      "'Remove ' + $downRemotes.Count + ' unreachable resources from Claude? (Y/n) '",
+      "'Disconnect ' + $downRemotes.Count + ' unreachable resources from Claude? (Y/n) '",
     );
     // Enter accepts the (Y/n) default: remove
     expect(script).toContain("$k.Key -eq 'Enter'");
@@ -117,12 +120,12 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("Get-Random -Minimum 0 -Maximum 2");
   });
 
-  test("paces every check with ~0.35s of appended dots, on the alternate screen", () => {
+  test("paces every check with ~0.5s of appended dots, on the alternate screen", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
-    // ~0.35s per row, one appended dot per ~90ms tick — append-only output
+    // ~0.5s per row, one appended dot per ~160ms tick — append-only output
     // cannot flicker (glyph spinners strobed on Windows Terminal)
-    expect(script).toContain("$MinCheckFrames = 4");
-    expect(script).toContain("$FrameSleepMs = 90");
+    expect(script).toContain("$MinCheckFrames = 3");
+    expect(script).toContain("$FrameSleepMs = 160");
     expect(script).toContain("function Show-ArchSpinTick");
     // colors go out as raw VT codes — console-API colors die on the
     // alternate screen buffer under conpty; checks are the brand purple

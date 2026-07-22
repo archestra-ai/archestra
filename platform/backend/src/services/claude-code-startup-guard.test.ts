@@ -322,10 +322,12 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("'MCP gateway (prod-gateway)'");
     expect(script).toContain("'Skills marketplace (acme-skills)'");
     // a single down remote gets the classic Y/n removal prompt naming it…
-    expect(script).toContain("Remove unreachable %s from Claude? (Y/n)");
+    expect(script).toContain(
+      "Disconnect unreachable %s from Claude? (Y/n)",
+    );
     // …several down remotes get the remove-all-at-once variant
     expect(script).toContain(
-      "Remove %s unreachable resources from Claude? (Y/n)",
+      "Disconnect %s unreachable resources from Claude? (Y/n)",
     );
   });
 
@@ -343,12 +345,12 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("HEALTH_STATE='down'");
   });
 
-  test("paces every check with ~0.35s of appended dots, on the alternate screen", () => {
+  test("paces every check with ~0.5s of appended dots, on the alternate screen", () => {
     const script = renderClaudeCodeStartupGuardScript(CTX);
-    // ~0.35s per row, one appended dot per ~90ms tick — append-only output
+    // ~0.5s per row, one appended dot per ~160ms tick — append-only output
     // cannot flicker (glyph spinners strobed on Windows Terminal)
-    expect(script).toContain("MIN_CHECK_FRAMES=4");
-    expect(script).toContain("FRAME_SLEEP=0.09");
+    expect(script).toContain("MIN_CHECK_FRAMES=3");
+    expect(script).toContain("FRAME_SLEEP=0.16");
     expect(script).toContain("spin_tick()");
     // a tick appends; it never clears or rewrites the line
     expect(script).not.toMatch(/spin_tick\(\) \{[^}]*2K/);
@@ -578,7 +580,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     });
     expect(output).toContain("Failed to connect to MCP gateway (prod-gateway)");
     expect(output).toContain(
-      "Remove unreachable MCP gateway (prod-gateway) from Claude? (Y/n)",
+      "Disconnect unreachable MCP gateway (prod-gateway) from Claude? (Y/n)",
     );
     expect(output).toContain("Disconnected MCP gateway (prod_gateway)");
     const log = await readClaudeLog(guardHome);
@@ -606,7 +608,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(output).toContain("Failed to connect to LLM proxy (profile-123)");
     expect(output).toContain("Failed to connect to MCP gateway (prod-gateway)");
     expect(output).toContain(
-      "Remove 2 unreachable resources from Claude? (Y/n)",
+      "Disconnect 2 unreachable resources from Claude? (Y/n)",
     );
     const log = await readClaudeLog(guardHome);
     expect(log).toContain("mcp remove --scope user prod_gateway");

@@ -27,7 +27,7 @@ import {
  *   flicker), all on the alternate screen so the terminal is clean after
  *   claude exits; an unreachable platform gets the 15s capped-backoff retry
  *   ladder with jitter, status line at 3s, "hang tight" at 10s, and `s`/`d`
- *   hotkeys live throughout; after the whole turn, ONE "Remove … from
+ *   hotkeys live throughout; after the whole turn, ONE "Disconnect … from
  *   Claude? (Y/n)" prompt covers every down remote;
  * - disconnect = the exact reverse of connect (mcp remove, settings.json
  *   key strip with a one-time backup, marketplace remove), recorded in a
@@ -70,6 +70,9 @@ export function renderClaudeCodeStartupGuardPowerShell(
 
 if ($env:ARCHESTRA_CLAUDE_GUARD -eq '0') { exit 0 }
 $ErrorActionPreference = 'Continue'
+# Invoke-WebRequest paints its progress banner across the TOP console rows —
+# straight over the logo — on every request unless progress is silenced.
+$ProgressPreference = 'SilentlyContinue'
 
 $AppName = ${psq(ctx.appName)}
 # One request answers for every checkable remote ('' = no health endpoint
@@ -138,11 +141,11 @@ $RetryTotalSeconds = 15
 $NoticeAfterSeconds = 3
 $HangTightAfterSeconds = 10
 
-# Each check shows ~0.35s of animation — enough to read as a deliberate
-# step, short enough to never feel like waiting. A tick appends one trailing
-# dot every ~90ms.
-$MinCheckFrames = 4
-$FrameSleepMs = 90
+# Each check shows ~0.5s of animation — enough to read as a deliberate
+# step, short enough to never feel like waiting. A tick appends one
+# unhurried trailing dot every ~160ms.
+$MinCheckFrames = 3
+$FrameSleepMs = 160
 
 # Only drive the terminal (and prompt) when a human is watching: a real
 # console on both ends and no -p/--print run. Otherwise probe once per remote,
@@ -348,9 +351,9 @@ function Show-ArchRemovedNote {
 function Show-ArchDownSummaryPrompt($downRemotes) {
   Write-Host ''
   if ($downRemotes.Count -eq 1) {
-    Write-Host -NoNewline ('Remove unreachable ' + $downRemotes[0].FailName + ' from Claude? (Y/n) ')
+    Write-Host -NoNewline ('Disconnect unreachable ' + $downRemotes[0].FailName + ' from Claude? (Y/n) ')
   } else {
-    Write-Host -NoNewline ('Remove ' + $downRemotes.Count + ' unreachable resources from Claude? (Y/n) ')
+    Write-Host -NoNewline ('Disconnect ' + $downRemotes.Count + ' unreachable resources from Claude? (Y/n) ')
   }
   $yes = $false
   try {

@@ -29,6 +29,7 @@ export const UpdateChatOpsChannelBindingSchema = createUpdateSchema(
   schema.chatopsChannelBindingsTable,
 ).pick({
   agentId: true,
+  answerAllMessages: true,
 });
 
 /**

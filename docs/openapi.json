@@ -95879,6 +95879,9 @@
                           "isDm": {
                             "type": "boolean"
                           },
+                          "answerAllMessages": {
+                            "type": "boolean"
+                          },
                           "dmOwnerEmail": {
                             "nullable": true,
                             "type": "string",
@@ -95910,6 +95913,7 @@
                           "channelName",
                           "workspaceName",
                           "isDm",
+                          "answerAllMessages",
                           "dmOwnerEmail",
                           "agentId",
                           "createdAt",
@@ -96331,6 +96335,9 @@
                       "isDm": {
                         "type": "boolean"
                       },
+                      "answerAllMessages": {
+                        "type": "boolean"
+                      },
                       "dmOwnerEmail": {
                         "nullable": true,
                         "type": "string",
@@ -96362,6 +96369,7 @@
                       "channelName",
                       "workspaceName",
                       "isDm",
+                      "answerAllMessages",
                       "dmOwnerEmail",
                       "agentId",
                       "createdAt",
@@ -96903,6 +96911,9 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "answerAllMessages": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -96967,6 +96978,9 @@
                     "isDm": {
                       "type": "boolean"
                     },
+                    "answerAllMessages": {
+                      "type": "boolean"
+                    },
                     "dmOwnerEmail": {
                       "nullable": true,
                       "type": "string",
@@ -96998,6 +97012,7 @@
                     "channelName",
                     "workspaceName",
                     "isDm",
+                    "answerAllMessages",
                     "dmOwnerEmail",
                     "agentId",
                     "createdAt",
@@ -97328,6 +97343,9 @@
                     "isDm": {
                       "type": "boolean"
                     },
+                    "answerAllMessages": {
+                      "type": "boolean"
+                    },
                     "dmOwnerEmail": {
                       "nullable": true,
                       "type": "string",
@@ -97359,6 +97377,7 @@
                     "channelName",
                     "workspaceName",
                     "isDm",
+                    "answerAllMessages",
                     "dmOwnerEmail",
                     "agentId",
                     "createdAt",

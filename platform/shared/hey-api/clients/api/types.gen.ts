@@ -27004,6 +27004,7 @@ export type ListChatOpsBindingsResponses = {
             channelName: string | null;
             workspaceName: string | null;
             isDm: boolean;
+            answerAllMessages: boolean;
             dmOwnerEmail: string | null;
             agentId: string | null;
             createdAt: string;
@@ -27119,6 +27120,7 @@ export type BulkUpdateChatOpsBindingsResponses = {
         channelName: string | null;
         workspaceName: string | null;
         isDm: boolean;
+        answerAllMessages: boolean;
         dmOwnerEmail: string | null;
         agentId: string | null;
         createdAt: string;
@@ -27216,6 +27218,7 @@ export type DeleteChatOpsBindingResponse = DeleteChatOpsBindingResponses[keyof D
 export type UpdateChatOpsBindingData = {
     body: {
         agentId?: string | null;
+        answerAllMessages?: boolean;
     };
     path: {
         id: string;
@@ -27302,6 +27305,7 @@ export type UpdateChatOpsBindingResponses = {
         channelName: string | null;
         workspaceName: string | null;
         isDm: boolean;
+        answerAllMessages: boolean;
         dmOwnerEmail: string | null;
         agentId: string | null;
         createdAt: string;
@@ -27399,6 +27403,7 @@ export type CreateChatOpsDmBindingResponses = {
         channelName: string | null;
         workspaceName: string | null;
         isDm: boolean;
+        answerAllMessages: boolean;
         dmOwnerEmail: string | null;
         agentId: string | null;
         createdAt: string;

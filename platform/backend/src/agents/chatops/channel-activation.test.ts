@@ -6,16 +6,28 @@ import { cacheManager } from "@/cache-manager";
 // every test. A spy over the fake's real set() lets tests assert the TTLs.
 vi.mock("@/cache-manager");
 
+// isChannelAnswerAllEnabled reads the binding through the model; stub it so the
+// cache behavior can be asserted without a database.
+vi.mock("@/models/chatops-channel-binding", () => ({
+  default: { findByChannel: vi.fn() },
+}));
+
 const setSpy = vi.spyOn(cacheManager, "set");
 
+import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import {
   claimThreadMuteHint,
   clearChannelThreadActive,
+  clearChannelThreadMuted,
   getThreadMuteMarker,
+  invalidateChannelAnswerAll,
+  isChannelAnswerAllEnabled,
   isChannelThreadActive,
+  isChannelThreadMuted,
   isMuteReaction,
   isThreadMuteCommand,
   markChannelThreadActive,
+  markChannelThreadMuted,
   mightBeAddressedMuteCommand,
   muteChannelThread,
   resolveChannelGateAction,
@@ -361,5 +373,130 @@ describe("resolveChannelGateAction", () => {
     expect(
       resolveChannelGateAction({ botMentioned, wantsMute, isActive }),
     ).toBe(expected);
+  });
+
+  describe('with a per-channel "answer all messages" setting', () => {
+    test("an un-mentioned, inactive message is processed instead of ignored", () => {
+      expect(
+        resolveChannelGateAction({
+          botMentioned: false,
+          wantsMute: false,
+          isActive: false,
+          answerAll: true,
+        }),
+      ).toBe("process");
+    });
+
+    test("a muted thread stays quiet even though the channel answers all", () => {
+      expect(
+        resolveChannelGateAction({
+          botMentioned: false,
+          wantsMute: false,
+          isActive: false,
+          answerAll: true,
+          isMuted: true,
+        }),
+      ).toBe("ignore");
+    });
+
+    test("a bare mute command is honored in an answer-all channel", () => {
+      expect(
+        resolveChannelGateAction({
+          botMentioned: false,
+          wantsMute: true,
+          isActive: false,
+          answerAll: true,
+        }),
+      ).toBe("mute");
+    });
+
+    test("a mention still activates, regardless of the answer-all flag", () => {
+      expect(
+        resolveChannelGateAction({
+          botMentioned: true,
+          wantsMute: false,
+          isActive: false,
+          answerAll: true,
+        }),
+      ).toBe("activate");
+    });
+  });
+});
+
+describe("answer-all per-thread mute markers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("a thread is unmuted until marked, then muted, then cleared", async () => {
+    expect(await isChannelThreadMuted(TEAMS)).toBe(false);
+
+    await markChannelThreadMuted(TEAMS);
+    expect(await isChannelThreadMuted(TEAMS)).toBe(true);
+
+    await clearChannelThreadMuted(TEAMS);
+    expect(await isChannelThreadMuted(TEAMS)).toBe(false);
+  });
+
+  test("the mute marker is scoped per provider, channel, and thread", async () => {
+    await markChannelThreadMuted(TEAMS);
+
+    expect(await isChannelThreadMuted({ ...TEAMS, provider: "slack" })).toBe(
+      false,
+    );
+    expect(
+      await isChannelThreadMuted({ ...TEAMS, threadId: "other-thread" }),
+    ).toBe(false);
+  });
+
+  test("the mute marker uses the sticky auto-reply TTL", async () => {
+    await markChannelThreadMuted(TEAMS);
+    expect(setSpy).toHaveBeenCalledWith(
+      expect.stringContaining(CHANNEL),
+      true,
+      CHATOPS_CHANNEL_AUTO_REPLY.ACTIVE_TTL_MS,
+    );
+  });
+});
+
+describe("isChannelAnswerAllEnabled", () => {
+  const CHANNEL_PARAMS = {
+    provider: "slack",
+    channelId: "C123",
+    workspaceId: "T123",
+  } as const;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("reflects the binding flag and caches it (one DB read per window)", async () => {
+    vi.mocked(ChatOpsChannelBindingModel.findByChannel).mockResolvedValue({
+      answerAllMessages: true,
+    } as never);
+
+    expect(await isChannelAnswerAllEnabled(CHANNEL_PARAMS)).toBe(true);
+    // Second call is served from cache — no extra DB read.
+    expect(await isChannelAnswerAllEnabled(CHANNEL_PARAMS)).toBe(true);
+    expect(ChatOpsChannelBindingModel.findByChannel).toHaveBeenCalledTimes(1);
+  });
+
+  test("defaults to false when no binding exists", async () => {
+    vi.mocked(ChatOpsChannelBindingModel.findByChannel).mockResolvedValue(null);
+    expect(await isChannelAnswerAllEnabled(CHANNEL_PARAMS)).toBe(false);
+  });
+
+  test("invalidation forces a fresh read so a toggle takes effect", async () => {
+    vi.mocked(ChatOpsChannelBindingModel.findByChannel).mockResolvedValue({
+      answerAllMessages: false,
+    } as never);
+    expect(await isChannelAnswerAllEnabled(CHANNEL_PARAMS)).toBe(false);
+
+    await invalidateChannelAnswerAll(CHANNEL_PARAMS);
+    vi.mocked(ChatOpsChannelBindingModel.findByChannel).mockResolvedValue({
+      answerAllMessages: true,
+    } as never);
+    expect(await isChannelAnswerAllEnabled(CHANNEL_PARAMS)).toBe(true);
+    expect(ChatOpsChannelBindingModel.findByChannel).toHaveBeenCalledTimes(2);
   });
 });

@@ -46,10 +46,14 @@ import {
   isSsoConfigured,
 } from "./auto-provision";
 import {
+  clearChannelThreadMuted,
+  isChannelAnswerAllEnabled,
   isChannelThreadActive,
+  isChannelThreadMuted,
   isMuteReaction,
   isThreadMuteCommand,
   markChannelThreadActive,
+  markChannelThreadMuted,
   mightBeAddressedMuteCommand,
   muteChannelThread,
   resolveChannelGateAction,
@@ -321,6 +325,12 @@ class SlackProvider implements ChatOpsProvider {
     // "@bot mute"). It's honored both when the bot is mentioned and when the
     // thread is already active (so muting needs no re-mention), then the bot
     // stays quiet until @mentioned again.
+    //
+    // A channel can also opt into answering EVERY message (a per-channel
+    // "answer all messages" binding setting): a message the gate would normally
+    // ignore is processed instead, unless that thread was muted. That flag is
+    // only consulted when the message would otherwise be ignored, so mentions-
+    // only channels (the default) do no extra work.
     if (!isDM) {
       const activation = {
         provider: this.providerId,
@@ -341,18 +351,56 @@ class SlackProvider implements ChatOpsProvider {
       const isActive = hasBotMention
         ? false
         : await isChannelThreadActive(activation);
+      // Consult the per-channel "answer all messages" flag only for the cases it
+      // can change: a message the base gate would ignore (un-mentioned +
+      // inactive), or any mute we may need to persist on the thread (an
+      // answer-all channel has no mention-driven activation to clear). Mentioned
+      // or already-active messages resolve without it, so mentions-only channels
+      // (the default) do no extra work.
+      const answerAll =
+        (!hasBotMention && !isActive) || wantsMute
+          ? await isChannelAnswerAllEnabled({
+              provider: this.providerId,
+              channelId: event.channel,
+              workspaceId: body.team_id || null,
+            })
+          : false;
+      const isMuted =
+        answerAll && !hasBotMention && !isActive && !wantsMute
+          ? await isChannelThreadMuted(activation)
+          : false;
       switch (
         resolveChannelGateAction({
           botMentioned: hasBotMention,
           wantsMute,
           isActive,
+          answerAll,
+          isMuted,
         })
       ) {
-        case "mute":
-          await this.muteThreadAndNotify(event.channel, threadTs);
+        case "mute": {
+          const wasActive = await this.muteThreadAndNotify(
+            event.channel,
+            threadTs,
+          );
+          // An answer-all channel replies without a mention, so clearing the
+          // mention-driven activation isn't enough — remember the mute on the
+          // thread itself so it stays quiet until re-mentioned. Confirm it once
+          // (muteThreadAndNotify only confirms an active→muted transition, and a
+          // fresh answer-all thread isn't "active").
+          if (answerAll) {
+            const alreadyMuted = await isChannelThreadMuted(activation);
+            await markChannelThreadMuted(activation);
+            if (!wasActive && !alreadyMuted) {
+              await this.postThreadMutedNotice(event.channel, threadTs);
+            }
+          }
           return null;
+        }
         case "activate":
           await markChannelThreadActive(activation);
+          // A re-mention lifts an answer-all mute (see the "mute" case).
+          await clearChannelThreadMuted(activation);
           break;
         case "ignore":
           return null;
@@ -1459,7 +1507,7 @@ class SlackProvider implements ChatOpsProvider {
   private async muteThreadAndNotify(
     channelId: string,
     threadTs: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const wasActive = await muteChannelThread({
       provider: this.providerId,
       channelId,
@@ -1468,6 +1516,7 @@ class SlackProvider implements ChatOpsProvider {
     if (wasActive) {
       await this.postThreadMutedNotice(channelId, threadTs);
     }
+    return wasActive;
   }
 
   /**

@@ -1,4 +1,7 @@
-import { APP_RECORDING_DESCRIPTION_MAX_CHARS } from "@archestra/shared";
+import {
+  APP_GALLERY_CATEGORIES,
+  APP_RECORDING_DESCRIPTION_MAX_CHARS,
+} from "@archestra/shared";
 import { createLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
@@ -170,13 +173,19 @@ const BUILD_PROMPT_SYSTEM_PROMPT =
   "drop dead ends that were reversed along with any incidental detail nobody " +
   "would have thought to request.";
 
+/**
+ * Draws on the same canonical categories the gallery's upload dropdown and
+ * the website offer ({@link APP_GALLERY_CATEGORIES}) — this draft is only a
+ * suggested default the builder confirms or overrides at share time, so it
+ * should usually already be one of the real choices.
+ */
 const CATEGORY_SYSTEM_PROMPT =
   "You file an app under ONE gallery category. Given the app's name and the " +
   "chat session in which it was built, answer with a single category and " +
-  "nothing else. Prefer one of: Development, Engineering, Finance, Sales, " +
-  "Marketing, Design, Productivity, Data, Operations, Support, Research, " +
-  "Games, Weird. Use another single word only when none of those fits. " +
-  "Title Case, one or two words, no punctuation, no explanation.";
+  "nothing else. Prefer one of: " +
+  APP_GALLERY_CATEGORIES.join(", ") +
+  ". Use a short category of your own only when none of those fits. " +
+  "Title Case, a few words at most, no punctuation, no explanation.";
 
 /** Bounds so a marathon session still fits one utility-generation request. */
 const MAX_TRANSCRIPT_CHARS = 24_000;

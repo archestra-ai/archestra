@@ -580,6 +580,33 @@ export const AppRecordingBundleSchema = z
          * bundles saved before these fields keep validating. */
         mcpServers: z.array(z.string()).max(50).optional(),
         appVersionCount: z.number().int().nonnegative().optional(),
+        /** The LLM model that built the app, as a display name (e.g. "Claude
+         * Sonnet") — not a provider id. Set once at record time from the
+         * chat's active model; absent when it couldn't be resolved. */
+        model: z.string().max(200).optional(),
+        /** Count of the builder's own chat messages that produced the app —
+         * every `role: "user"` entry in `recording.transcript`, including any
+         * pre-recording history it carries. Distinct from `appVersionCount`
+         * (app versions, not prompts). */
+        userPromptCount: z.number().int().nonnegative().optional(),
+        /** The gallery submitter's public GitHub identity, stamped at share
+         * time after sign-in. Only the login and public display name — NEVER
+         * an email, even though GitHub's user endpoint returns one alongside
+         * them. */
+        github: z
+          .object({
+            login: z.string().max(100),
+            name: z.string().max(200).nullable(),
+          })
+          .strict()
+          .optional(),
+        /** The recording's duration as shown by the editor's final cut
+         * (cuts applied, idle time-lapse compressed) — what a gallery viewer
+         * should see as "how long this demo is". `recording.durationMs`
+         * stays the raw, uncut capture length; this is the one gallery
+         * submissions should display and derive a thumbnail's timing from.
+         * Absent on bundles saved before this field existed. */
+        finalCutDurationMs: z.number().int().nonnegative().optional(),
       })
       .strict(),
   })

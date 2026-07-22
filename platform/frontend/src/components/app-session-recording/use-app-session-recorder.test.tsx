@@ -5,6 +5,7 @@ import { recordingStore } from "@/lib/app-session-recording/app-recording-store"
 import { snapshotConversationTranscript } from "@/lib/app-session-recording/app-recording-transcript";
 import { useFeature } from "@/lib/config/config.query";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { resolveModelDisplayName } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
 import {
   type AppSessionRecorder,
@@ -45,8 +46,14 @@ vi.mock("sonner");
 vi.mock("@/lib/app-session-recording/app-recording-transcript", () => ({
   snapshotConversationTranscript: vi.fn(),
 }));
+// The chat's model is resolved from a raw modelId to a display name over the
+// SDK — stubbed so tests that don't care about it can ignore the boundary.
+vi.mock("@/lib/llm-models.query", () => ({
+  resolveModelDisplayName: vi.fn(),
+}));
 
 const mockSnapshot = vi.mocked(snapshotConversationTranscript);
+const mockResolveModel = vi.mocked(resolveModelDisplayName);
 
 // A fresh conversation id per test — the recording store is module-level, so a
 // shared id would leak stored bundles across tests.
@@ -57,7 +64,9 @@ function freshConversationId(tag: string) {
 // Bundle validation requires real UUID app ids.
 const APP_ID = "3b1f8d3e-8f5a-4c57-9a4e-2f60cf1f2b01";
 
-const TRANSCRIPT: Awaited<ReturnType<typeof snapshotConversationTranscript>> = [
+const TRANSCRIPT: Awaited<
+  ReturnType<typeof snapshotConversationTranscript>
+>["transcript"] = [
   { id: "m1", role: "user", atMs: -1, parts: [{ type: "text", text: "hi" }] },
 ];
 
@@ -157,7 +166,7 @@ function renderChatSurface(initial: {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSnapshot.mockResolvedValue(TRANSCRIPT);
+  mockSnapshot.mockResolvedValue({ transcript: TRANSCRIPT, modelId: null });
   // The recorder self-gates on the deployment flag; these tests exercise an
   // enabled deployment.
   vi.mocked(useFeature).mockReturnValue(true);
@@ -239,6 +248,12 @@ describe("useAppSessionRecorder", () => {
     });
     expect(bundle?.app).toEqual({ id: APP_ID, name: "Test App" });
     expect(bundle?.meta.authorName).toBe("Tester");
+    // How many prompts it took to build the app — every user message in the
+    // captured transcript (TRANSCRIPT has exactly one).
+    expect(bundle?.meta.userPromptCount).toBe(1);
+    // No modelId from the conversation snapshot (the default mock) → no
+    // model field at all, rather than a stamped `null`/empty string.
+    expect(bundle?.meta.model).toBeUndefined();
 
     // The transcript is snapshotted from the recorded conversation and stored
     // in the bundle — a chat recording is never saved without its chat.
@@ -258,6 +273,35 @@ describe("useAppSessionRecorder", () => {
     expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
       expect.stringContaining("Recording ready"),
     );
+  });
+
+  it("resolves the chat's model to a display name for the bundle", async () => {
+    const conversationId = freshConversationId("model");
+    const surface = renderChatSurface({ conversationId, appId: APP_ID });
+    const frame = fakeIframe();
+
+    mockSnapshot.mockResolvedValue({
+      transcript: TRANSCRIPT,
+      modelId: "model-db-id",
+    });
+    mockResolveModel.mockResolvedValue("Claude Sonnet");
+
+    act(() => {
+      surface.frame.runtimeHooks.bindIframe(frame.el);
+      surface.frame.runtimeHooks.captureSnapshot("<h1>v1</h1>", 1);
+      surface.composer.start();
+    });
+    await act(async () => {
+      await surface.composer.stop();
+    });
+
+    const bundle = await waitFor(async () => {
+      const stored = await recordingStore.get(conversationId);
+      expect(stored).not.toBeNull();
+      return stored;
+    });
+    expect(mockResolveModel).toHaveBeenCalledWith("model-db-id");
+    expect(bundle?.meta.model).toBe("Claude Sonnet");
   });
 
   it("seeds the first replay segment from the live record-start DOM, not the served source html", async () => {

@@ -209,7 +209,11 @@ export async function submitRecordingToAppGallery(params: {
     stage: "check",
     label: `Checking ${galleryName} for an existing submission…`,
   });
-  const viewer = await gh<{ login: string }>("GET", "/user");
+  // GitHub's /user payload also carries an email — never read past login/name.
+  const viewer = await gh<{ login: string; name: string | null }>(
+    "GET",
+    "/user",
+  );
   const existing = await findBlockingSubmission({
     gh,
     repo,
@@ -218,6 +222,21 @@ export async function submitRecordingToAppGallery(params: {
     slug: appSlug,
   });
   if (existing) throw new DuplicateSubmissionError(existing);
+
+  // The submitter's public GitHub identity, stamped onto the bundle that
+  // actually gets committed — never the automatic path's local `bundle`,
+  // which stays untouched. Picks only `login`/`name`; the same GitHub
+  // response also carries an email, which is never read here.
+  const bundleWithGithub: AppRecordingBundle = {
+    ...bundle,
+    meta: {
+      ...bundle.meta,
+      // GitHub always sends `name` (null when the account has none set) —
+      // coerced defensively in case a response ever omits the key outright,
+      // since the schema requires the field present, never `undefined`.
+      github: { login: viewer.login, name: viewer.name ?? null },
+    },
+  };
 
   onProgress({
     stage: "fork",
@@ -274,7 +293,7 @@ export async function submitRecordingToAppGallery(params: {
   // The same builder backs the manual-submission download, so what a
   // participant hand-uploads is byte-identical to what this commits.
   const dir = gallerySubmissionFolder(viewer.login, appSlug);
-  for (const file of buildGallerySubmissionFiles(bundle)) {
+  for (const file of buildGallerySubmissionFiles(bundleWithGithub)) {
     onProgress({
       stage: "upload",
       label: `Uploading ${file.name} to ${forkName}…`,
@@ -301,7 +320,7 @@ export async function submitRecordingToAppGallery(params: {
       "POST",
       `/repos/${repo.owner}/${repo.name}/pulls`,
       {
-        ...buildGallerySubmissionPr(bundle),
+        ...buildGallerySubmissionPr(bundleWithGithub),
         head: `${viewer.login}:${branch}`,
         base: fork.default_branch,
         maintainer_can_modify: true,
@@ -326,20 +345,23 @@ export async function submitRecordingToAppGallery(params: {
 }
 
 /**
- * The signed-in participant's GitHub login, or null when it can't be had
- * (no token, revoked token, network). Best-effort — the manual-submission
- * screen uses it to spell the exact target folder instead of a placeholder.
+ * The signed-in participant's public GitHub identity, or null when it can't
+ * be had (no token, revoked token, network). Best-effort — the
+ * manual-submission screen uses `login` to spell the exact target folder
+ * instead of a placeholder, and stamps both fields onto the downloaded
+ * bundle. GitHub's /user payload also carries an email — never read past
+ * login/name.
  */
-export async function fetchGithubLogin(
+export async function fetchGithubIdentity(
   token: string,
   signal: AbortSignal,
-): Promise<string | null> {
+): Promise<{ login: string; name: string | null } | null> {
   try {
-    const viewer = await makeGithubClient(token, signal)<{ login: string }>(
-      "GET",
-      "/user",
-    );
-    return viewer.login;
+    const viewer = await makeGithubClient(token, signal)<{
+      login: string;
+      name: string | null;
+    }>("GET", "/user");
+    return { login: viewer.login, name: viewer.name };
   } catch {
     return null;
   }
@@ -859,16 +881,31 @@ function extractThumbnail(
 }
 
 function prBody(bundle: AppRecordingBundle): string {
+  // The editor's final cut (cuts applied, idle compressed) when the bundle
+  // carries one — otherwise the raw capture length, for older bundles.
+  const durationMs =
+    bundle.meta.finalCutDurationMs ?? bundle.recording.durationMs;
   const lines = [
     `Submits a recorded session of **${bundle.app.name}**.`,
     "",
-    `- Duration: ${Math.round(bundle.recording.durationMs / 1000)}s`,
+    `- Duration: ${Math.round(durationMs / 1000)}s`,
   ];
   if (bundle.enhancement?.category) {
     lines.push(`- Category: ${bundle.enhancement.category}`);
   }
+  if (bundle.meta.github) {
+    lines.push(
+      `- Submitted by: @${bundle.meta.github.login}${bundle.meta.github.name ? ` (${bundle.meta.github.name})` : ""}`,
+    );
+  }
   if (bundle.meta.authorName) {
     lines.push(`- Author: ${bundle.meta.authorName}`);
+  }
+  if (bundle.meta.model) {
+    lines.push(`- Model: ${bundle.meta.model}`);
+  }
+  if (bundle.meta.userPromptCount) {
+    lines.push(`- Prompts: ${bundle.meta.userPromptCount}`);
   }
   if (bundle.meta.mcpServers?.length) {
     lines.push(`- MCP servers: ${bundle.meta.mcpServers.join(", ")}`);

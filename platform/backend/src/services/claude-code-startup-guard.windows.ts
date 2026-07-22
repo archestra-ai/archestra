@@ -23,13 +23,12 @@ import {
  *   gateway/proxy, existence via the public connection-health endpoint
  *   (reachability alone cannot catch a remote deleted on the platform — the
  *   data-plane answers uniformly without auth);
- * - checks are paced to ~0.2s with a spinner whose ticks repaint only the
- *   glyph (full-line repaints flicker), all on the alternate screen so the
- *   terminal is clean after claude exits; an unreachable platform gets the
- *   15s capped-backoff retry ladder with jitter, status line at 3s, "hang
- *   tight" at 10s, and `s`/`d` hotkeys live throughout; after the whole
- *   turn, ONE prompt covers every down remote — disconnect them all in one
- *   keypress, or skip them all;
+ * - checks show ~0.35s of appended trailing dots (append-only output cannot
+ *   flicker), all on the alternate screen so the terminal is clean after
+ *   claude exits; an unreachable platform gets the 15s capped-backoff retry
+ *   ladder with jitter, status line at 3s, "hang tight" at 10s, and `s`/`d`
+ *   hotkeys live throughout; after the whole turn, ONE "Remove … from
+ *   Claude? (Y/n)" prompt covers every down remote;
  * - disconnect = the exact reverse of connect (mcp remove, settings.json
  *   key strip with a one-time backup, marketplace remove), recorded in a
  *   skip file so later launches don't re-check the remote; once nothing
@@ -58,7 +57,7 @@ export function renderClaudeCodeStartupGuardPowerShell(
   const remoteEntries = resources
     .map(
       (r) =>
-        `  @{ Label = ${psq(r.label)}; Url = ${psq(r.url)}; Kind = ${psq(r.kind)}; TypeName = ${psq(r.typeName)}; FailName = ${psq(r.failName)}; DownMarker = ${psq(r.downMarker ?? "")} }`,
+        `  @{ Label = ${psq(r.label)}; Url = ${psq(r.url)}; Kind = ${psq(r.kind)}; FailName = ${psq(r.failName)}; DownMarker = ${psq(r.downMarker ?? "")} }`,
     )
     .join("\n");
 
@@ -139,10 +138,9 @@ $RetryTotalSeconds = 15
 $NoticeAfterSeconds = 3
 $HangTightAfterSeconds = 10
 
-# Each check is padded to ~0.35s of animation — enough to read as a
-# deliberate step, short enough to never feel like waiting. Frames advance
-# every ~90ms: the classic spinner cadence — faster reads as trembling, not
-# spinning.
+# Each check shows ~0.35s of animation — enough to read as a deliberate
+# step, short enough to never feel like waiting. A tick appends one trailing
+# dot every ~90ms.
 $MinCheckFrames = 4
 $FrameSleepMs = 90
 
@@ -163,7 +161,7 @@ try { $UseVt = [bool]$Host.UI.SupportsVirtualTerminal } catch { }
 # raw VT when the host supports it: Windows PowerShell 5.1's console-API
 # colors (-ForegroundColor) stop rendering on the alternate screen buffer
 # under conpty, while VT sequences always work there.
-$VtCodes = @{ Cyan = '96'; Green = '92'; Red = '91'; Yellow = '93'; DarkGray = '90'; White = '97' }
+$VtCodes = @{ Cyan = '96'; Magenta = '95'; Red = '91'; Yellow = '93'; DarkGray = '90'; White = '97' }
 
 function Write-Arch([string]$Text, [string]$Color, [switch]$NoNewline) {
   if ($UseColor -and $Color -and $UseVt) {
@@ -226,27 +224,34 @@ if (-not $Interactive) {
   exit 0
 }
 
-$Frames = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')
-$Script:Frame = 0
-
 function Clear-ArchLine {
   $w = 80; try { $w = [Console]::WindowWidth } catch { }
   Write-Host -NoNewline ("\`r" + (' ' * [Math]::Max($w - 1, 1)) + "\`r")
 }
 
-# A line is drawn ONCE; each tick then repaints only the spinner glyph at
-# column 0. Repainting the whole line every frame reads as flicker, not
-# motion — the whole row strobes (caught live on Windows Terminal).
+# Progress is a dim line growing trailing dots — each tick only APPENDS one
+# character, never rewrites the line, so nothing can flicker by
+# construction. (Glyph spinners redraw in place every frame; every terminal
+# renders that as some degree of strobing — caught live on Windows
+# Terminal.) The line wraps back after a few dots so a slow disconnect
+# can't grow it forever.
+$Script:SpinText = ''
+$Script:SpinDots = 0
 function Show-ArchSpinStart([string]$Label, [string]$Suffix) {
+  $text = $Label
+  if ($Suffix) { $text = $Label + ' ' + $Suffix }
+  $Script:SpinText = $text
+  $Script:SpinDots = 0
   Clear-ArchLine
-  Write-Arch $Frames[$Script:Frame] DarkGray -NoNewline
-  Write-Host (' ' + $Label) -NoNewline
-  if ($Suffix) { Write-Arch (' ' + $Suffix) DarkGray -NoNewline }
+  Write-Arch $text DarkGray -NoNewline
 }
 function Show-ArchSpinTick {
-  $Script:Frame = ($Script:Frame + 1) % 10
-  Write-Host -NoNewline "\`r"
-  Write-Arch $Frames[$Script:Frame] DarkGray -NoNewline
+  $Script:SpinDots++
+  if ($Script:SpinDots -gt 8) {
+    Show-ArchSpinStart $Script:SpinText ''
+    return
+  }
+  Write-Arch '.' DarkGray -NoNewline
 }
 
 function Read-ArchKey { # non-blocking; '' when no key is waiting
@@ -258,7 +263,7 @@ function Read-ArchKey { # non-blocking; '' when no key is waiting
 
 function Show-ArchOk([string]$Label) {
   Clear-ArchLine
-  Write-Arch '✓' Green -NoNewline
+  Write-Arch '✓' Magenta -NoNewline
   Write-Host (' ' + $Label)
 }
 
@@ -275,8 +280,8 @@ function Get-ArchClaudeExe {
   Get-Command -Name claude -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 }
 
-# Reversing a connect step animates the same way the probes do: the spinner
-# plays around the commands, and the row lands on a green check.
+# Reversing a connect step animates the same way the probes do: the dots
+# grow around the commands, and the row lands on a check.
 function Disconnect-ArchRemote([string]$Kind, [string]$Label) {
   Show-ArchSpinStart ('Disconnecting ' + $Label) ''
   for ($pad = 0; $pad -lt 2; $pad++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
@@ -309,7 +314,7 @@ function Disconnect-ArchRemote([string]$Kind, [string]$Label) {
   }
   for ($pad = 0; $pad -lt 2; $pad++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
   Clear-ArchLine
-  Write-Arch '✓' Green -NoNewline
+  Write-Arch '✓' Magenta -NoNewline
   Write-Host (' Disconnected ' + $Label)${
     ctx.proxy?.provider === "bedrock"
       ? `
@@ -331,7 +336,7 @@ function Disconnect-ArchRemotes($remotes) { # reverse connect, then skip on late
 
 function Show-ArchRemovedNote {
   Clear-ArchLine
-  Write-Arch '✓' Green -NoNewline
+  Write-Arch '✓' Magenta -NoNewline
   Write-Arch (' Nothing connected is left to check — removed the ' + $AppName + ' startup check. Reconnect any time from the ' + $AppName + ' /connection page.') DarkGray
 }
 
@@ -343,16 +348,18 @@ function Show-ArchRemovedNote {
 function Show-ArchDownSummaryPrompt($downRemotes) {
   Write-Host ''
   if ($downRemotes.Count -eq 1) {
-    Write-Arch 'Claude is configured to use it and may fail until it is reachable.' DarkGray
-    Write-Host ('[d] Disconnect ' + $downRemotes[0].TypeName + '   [s] Continue without it (default)')
+    Write-Host -NoNewline ('Remove unreachable ' + $downRemotes[0].FailName + ' from Claude? (Y/n) ')
   } else {
-    Write-Arch 'Claude is configured to use them and may fail until they are reachable.' DarkGray
-    Write-Host '[d] Disconnect all of them   [s] Continue without them (default)'
+    Write-Host -NoNewline ('Remove ' + $downRemotes.Count + ' unreachable resources from Claude? (Y/n) ')
   }
-  $choice = ''
-  try { $choice = [string][Console]::ReadKey($true).KeyChar } catch { $choice = 's' }
+  $yes = $false
+  try {
+    $k = [Console]::ReadKey($true)
+    if ($k.Key -eq 'Enter' -or $k.KeyChar -eq 'y' -or $k.KeyChar -eq 'Y') { $yes = $true }
+  } catch { }
   Write-Host ''
-  if ($choice -eq 'd' -or $choice -eq 'D') {
+  Write-Host ''
+  if ($yes) {
     $Script:Dwell = $true
     Disconnect-ArchRemotes $downRemotes
     if ($downRemotes.Count -ge $ActiveRemotes.Count) {
@@ -558,7 +565,6 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
   label: string;
   url: string;
   kind: "proxy" | "mcp" | "skills";
-  typeName: string;
   failName: string;
   downMarker: string | null;
 }> {
@@ -566,7 +572,6 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
     label: string;
     url: string;
     kind: "proxy" | "mcp" | "skills";
-    typeName: string;
     failName: string;
     downMarker: string | null;
   }> = [];
@@ -575,7 +580,6 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `LLM proxy (${ctx.proxy.providerLabel})`,
       url: ctx.proxy.url,
       kind: "proxy",
-      typeName: "LLM proxy",
       failName: `LLM proxy (${ctx.proxy.ref ?? ctx.proxy.providerLabel})`,
       downMarker: ctx.proxy.ref ? `"llm":"down"` : null,
     });
@@ -585,7 +589,6 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `MCP gateway (${ctx.mcp.serverName})`,
       url: ctx.mcp.url,
       kind: "mcp",
-      typeName: "MCP gateway",
       failName: `MCP gateway (${ctx.mcp.ref ?? ctx.mcp.serverName})`,
       downMarker: ctx.mcp.ref ? `"mcp":"down"` : null,
     });
@@ -595,7 +598,6 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `Skills marketplace (${ctx.skills.marketplaceName})`,
       url: ctx.skills.cloneUrl,
       kind: "skills",
-      typeName: "Skills marketplace",
       failName: `Skills marketplace (${ctx.skills.marketplaceName})`,
       downMarker: null,
     });

@@ -30,12 +30,12 @@ import type { SetupScriptContext } from "./connection-setup-script";
  *   connect…" line after 3s and a "hang tight" nudge after 10s, with `s`
  *   (skip) / `d` (disconnect) live the whole time. If the budget runs out,
  *   every remote is treated as down;
- * - then plays the pre-loader animation resource by resource (spinner, ~0.2s
- *   each, glyph-only ticks so nothing flickers): green for ok, "Failed to
- *   connect to <type> <id-or-slug>" for a down one — and after the whole
- *   turn, ONE prompt covers every down remote: disconnect them all in one
- *   keypress, or skip them all. Everything draws on the alternate screen, so
- *   the terminal is clean again after claude exits;
+ * - then plays the pre-loader animation resource by resource (~0.35s of
+ *   appended trailing dots — append-only output cannot flicker): a check for
+ *   ok, "Failed to connect to <type> (<id-or-slug>)" for a down one — and
+ *   after the whole turn, ONE "Remove … from Claude? (Y/n)" prompt covers
+ *   every down remote. Everything draws on the alternate screen, so the
+ *   terminal is clean again after claude exits;
  * - disconnecting runs the exact reverse of the connect steps and records the
  *   remote in a skip file so later launches don't re-check it. Once nothing
  *   connected is left to check, the guard uninstalls itself entirely (script,
@@ -186,8 +186,6 @@ GUARD_URLS=(${resources.map((r) => sh(r.url)).join(" ")})
 GUARD_KINDS=(${resources.map((r) => r.kind).join(" ")})
 # What a failure line names: resource type followed by its id or slug.
 GUARD_FAIL_NAMES=(${resources.map((r) => sh(r.failName)).join(" ")})
-# Resource type alone, for the disconnect prompt ("Disconnect MCP gateway").
-GUARD_TYPE_NAMES=(${resources.map((r) => sh(r.typeName)).join(" ")})
 # The health-response marker that means this resource is down ('' = resource
 # has no per-resource status; it follows overall endpoint reachability).
 GUARD_DOWN_MARKERS=(${resources.map((r) => sh(r.downMarker ?? "")).join(" ")})
@@ -200,10 +198,9 @@ RETRY_TOTAL_SECONDS=15
 NOTICE_AFTER_SECONDS=3
 HANG_TIGHT_AFTER_SECONDS=10
 
-# Each resource's turn is padded to ~0.35s of animation — enough to read as
-# a deliberate step, short enough to never feel like waiting. Frames advance
-# every ~90ms: the classic spinner cadence — faster reads as trembling, not
-# spinning.
+# Each resource's turn shows ~0.35s of animation — enough to read as a
+# deliberate step, short enough to never feel like waiting. A tick appends
+# one trailing dot every ~90ms.
 MIN_CHECK_FRAMES=4
 FRAME_SLEEP=0.09
 
@@ -307,38 +304,46 @@ if [ "$INTERACTIVE" = "0" ]; then
 fi
 
 if [ -z "\${NO_COLOR:-}" ]; then
-  C_TITLE=$'\\033[1;36m'; C_OK=$'\\033[32m'; C_ERR=$'\\033[1;31m'
+  C_TITLE=$'\\033[1;36m'; C_ACCENT=$'\\033[95m'; C_ERR=$'\\033[1;31m'
   C_WARN=$'\\033[33m'; C_DIM=$'\\033[2m'; C_RESET=$'\\033[0m'; C_LOGO=$'\\033[1m'
 else
-  C_TITLE=''; C_OK=''; C_ERR=''; C_WARN=''; C_DIM=''; C_RESET=''; C_LOGO=''
+  C_TITLE=''; C_ACCENT=''; C_ERR=''; C_WARN=''; C_DIM=''; C_RESET=''; C_LOGO=''
 fi
 
-FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-FRAME=0
-
-# Sub-second key polling (a smooth spinner during retries) needs bash 4's
-# fractional read -t; macOS system bash 3.2 falls back to 1s ticks.
+# Sub-second key polling during retries needs bash 4's fractional read -t;
+# macOS system bash 3.2 falls back to 1s ticks.
 TICK=1
 if [ "\${BASH_VERSINFO[0]:-3}" -ge 4 ]; then TICK=0.25; fi
 
 line_reset() { printf '\\r\\033[2K'; }
 
-# A line is drawn ONCE; each tick then repaints only the spinner glyph at
-# column 0. Repainting the whole line every frame reads as flicker, not
-# motion — the whole row strobes (caught live on Windows Terminal).
-spin_start() { # $1 line text after the spinner glyph
+# Progress is a dim line growing trailing dots — each tick only APPENDS one
+# character, never rewrites the line, so nothing can flicker by
+# construction. (Glyph spinners redraw in place every frame; every terminal
+# renders that as some degree of strobing — caught live on Windows
+# Terminal.) The line wraps back after a few dots so a slow disconnect
+# can't grow it forever.
+SPIN_TEXT=''
+SPIN_DOTS=0
+spin_start() { # $1 line text
+  SPIN_TEXT="$1"
+  SPIN_DOTS=0
   line_reset
-  printf '%s%s%s %s' "$C_DIM" "\${FRAMES[$FRAME]}" "$C_RESET" "$1"
+  printf '%s%s%s' "$C_DIM" "$1" "$C_RESET"
 }
 spin_tick() {
-  FRAME=$(( (FRAME + 1) % 10 ))
-  printf '\\r%s%s%s' "$C_DIM" "\${FRAMES[$FRAME]}" "$C_RESET"
+  SPIN_DOTS=$((SPIN_DOTS + 1))
+  if [ "$SPIN_DOTS" -gt 8 ]; then
+    spin_start "$SPIN_TEXT"
+    return 0
+  fi
+  printf '%s.%s' "$C_DIM" "$C_RESET"
 }
 
 # Status glyphs stay in the narrow ranges (○ ✓ ✗) so every row's icon and
 # text start in the same column — the heavy ✖/✔ render double-width in
 # common Windows fonts and break the alignment.
-mark_ok()   { line_reset; printf '%s✓%s %s\\n' "$C_OK" "$C_RESET" "$1"; }
+mark_ok()   { line_reset; printf '%s✓%s %s\\n' "$C_ACCENT" "$C_RESET" "$1"; }
 mark_down() { line_reset; printf '%s✗ Failed to connect to %s%s\\n' "$C_ERR" "\${GUARD_FAIL_NAMES[$1]}" "$C_RESET"; }
 
 disconnect_actions() { # $1 kind — the reverse-of-connect commands, silenced
@@ -369,8 +374,7 @@ disconnect_actions() { # $1 kind — the reverse-of-connect commands, silenced
 }
 
 # Reversing a connect step animates the same way the probes do: the commands
-# run in the background while the spinner plays, then the row lands on a
-# green check.
+# run in the background while the dots grow, then the row lands on a check.
 disconnect_resource() { # $1 kind, $2 label
   spin_start "Disconnecting $2"
   disconnect_actions "$1" >/dev/null 2>&1 &
@@ -383,7 +387,7 @@ disconnect_resource() { # $1 kind, $2 label
   done
   wait "$arch_dp" 2>/dev/null || true
   line_reset
-  printf '%s✓%s Disconnected %s\\n' "$C_OK" "$C_RESET" "$2"${
+  printf '%s✓%s Disconnected %s\\n' "$C_ACCENT" "$C_RESET" "$2"${
     ctx.proxy
       ? `
   [ "$1" = "proxy" ] && proxy_disconnect_notes`
@@ -417,7 +421,7 @@ disconnect_and_forget() { # $@ = resource indices: reverse connect, then skip on
 }
 
 removed_check_note() {
-  printf '%s✓%s %sNothing connected is left to check — removed the %s startup check. Reconnect any time from the %s /connection page.%s\\n' "$C_OK" "$C_RESET" "$C_DIM" "$APP_NAME" "$APP_NAME" "$C_RESET"
+  printf '%s✓%s %sNothing connected is left to check — removed the %s startup check. Reconnect any time from the %s /connection page.%s\\n' "$C_ACCENT" "$C_RESET" "$C_DIM" "$APP_NAME" "$APP_NAME" "$C_RESET"
 }
 
 # Every down remote already got its failure line during the turn; this single
@@ -429,17 +433,15 @@ prompt_down_all() {
   printf '\\n'
   if [ "$DOWN_COUNT" -eq 1 ]; then
     set -- $DOWN_IDXS
-    printf '%sClaude is configured to use it and may fail until it is reachable.%s\\n' "$C_DIM" "$C_RESET"
-    printf '[d] Disconnect %s   [s] Continue without it (default)\\n' "\${GUARD_TYPE_NAMES[$1]}"
+    printf 'Remove unreachable %s from Claude? (Y/n) ' "\${GUARD_FAIL_NAMES[$1]}"
   else
-    printf '%sClaude is configured to use them and may fail until they are reachable.%s\\n' "$C_DIM" "$C_RESET"
-    printf '[d] Disconnect all of them   [s] Continue without them (default)\\n'
+    printf 'Remove %s unreachable resources from Claude? (Y/n) ' "$DOWN_COUNT"
   fi
   key=''
-  read -rs -n 1 key </dev/tty 2>/dev/null || key='s'
-  printf '\\n'
+  read -rs -n 1 key </dev/tty 2>/dev/null || key='n'
+  printf '\\n\\n'
   case "$key" in
-    d|D)
+    y|Y|'')
       GUARD_DWELL=1
       disconnect_and_forget $DOWN_IDXS
       if [ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ]; then
@@ -490,9 +492,9 @@ wait_for_health() {
     fi
     wait_note=''
     if [ "$elapsed" -ge "$HANG_TIGHT_AFTER_SECONDS" ]; then
-      wait_note=" $C_DIM— trying to connect... \${elapsed}s, few more seconds, hang tight...  [s] Skip  [d] Disconnect$C_RESET"
+      wait_note=" — trying to connect... \${elapsed}s, few more seconds, hang tight...  [s] Skip  [d] Disconnect"
     elif [ "$elapsed" -ge "$NOTICE_AFTER_SECONDS" ]; then
-      wait_note=" $C_DIM— trying to connect... \${elapsed}s  [s] Skip  [d] Disconnect$C_RESET"
+      wait_note=" — trying to connect... \${elapsed}s  [s] Skip  [d] Disconnect"
     fi
     # redraw the full line only when its text changed; otherwise just the
     # spinner glyph moves (see spin_tick)
@@ -674,7 +676,6 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
   label: string;
   url: string;
   kind: "proxy" | "mcp" | "skills";
-  typeName: string;
   failName: string;
   downMarker: string | null;
 }> {
@@ -682,7 +683,6 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
     label: string;
     url: string;
     kind: "proxy" | "mcp" | "skills";
-    typeName: string;
     failName: string;
     downMarker: string | null;
   }> = [];
@@ -691,7 +691,6 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `LLM proxy (${ctx.proxy.providerLabel})`,
       url: ctx.proxy.url,
       kind: "proxy",
-      typeName: "LLM proxy",
       failName: `LLM proxy (${ctx.proxy.ref ?? ctx.proxy.providerLabel})`,
       downMarker: ctx.proxy.ref ? `"llm":"down"` : null,
     });
@@ -701,7 +700,6 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `MCP gateway (${ctx.mcp.serverName})`,
       url: ctx.mcp.url,
       kind: "mcp",
-      typeName: "MCP gateway",
       failName: `MCP gateway (${ctx.mcp.ref ?? ctx.mcp.serverName})`,
       downMarker: ctx.mcp.ref ? `"mcp":"down"` : null,
     });
@@ -711,7 +709,6 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `Skills marketplace (${ctx.skills.marketplaceName})`,
       url: ctx.skills.cloneUrl,
       kind: "skills",
-      typeName: "Skills marketplace",
       failName: `Skills marketplace (${ctx.skills.marketplaceName})`,
       downMarker: null,
     });

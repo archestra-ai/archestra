@@ -321,14 +321,11 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("'LLM proxy (profile-123)'");
     expect(script).toContain("'MCP gateway (prod-gateway)'");
     expect(script).toContain("'Skills marketplace (acme-skills)'");
-    // a single down remote names its resource type…
+    // a single down remote gets the classic Y/n removal prompt naming it…
+    expect(script).toContain("Remove unreachable %s from Claude? (Y/n)");
+    // …several down remotes get the remove-all-at-once variant
     expect(script).toContain(
-      "[d] Disconnect %s   [s] Continue without it (default)",
-    );
-    expect(script).toContain("GUARD_TYPE_NAMES=('LLM proxy' 'MCP gateway'");
-    // …several down remotes get the disconnect-all-at-once copy
-    expect(script).toContain(
-      "[d] Disconnect all of them   [s] Continue without them (default)",
+      "Remove %s unreachable resources from Claude? (Y/n)",
     );
   });
 
@@ -346,17 +343,14 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("HEALTH_STATE='down'");
   });
 
-  test("paces every resource's turn at ~0.2s with glyph-only spinner ticks, on the alternate screen", () => {
+  test("paces every check with ~0.35s of appended dots, on the alternate screen", () => {
     const script = renderClaudeCodeStartupGuardScript(CTX);
-    expect(script).toContain(
-      "FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')",
-    );
-    // ~0.35s per row at ~90ms per frame — the classic spinner cadence;
-    // faster frame rates read as trembling (caught live on Windows Terminal)
+    // ~0.35s per row, one appended dot per ~90ms tick — append-only output
+    // cannot flicker (glyph spinners strobed on Windows Terminal)
     expect(script).toContain("MIN_CHECK_FRAMES=4");
     expect(script).toContain("FRAME_SLEEP=0.09");
-    // ticks repaint only the spinner glyph — full-line repaints flicker
     expect(script).toContain("spin_tick()");
+    // a tick appends; it never clears or rewrites the line
     expect(script).not.toMatch(/spin_tick\(\) \{[^}]*2K/);
     // alternate screen in, restored on ANY exit — the terminal stays clean
     // after claude exits
@@ -580,11 +574,11 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       script: renderClaudeCodeStartupGuardScript(CTX),
       curlExitCode: 0,
       curlBody: '{"mcp":"down","llm":"ok"}',
-      keys: "d",
+      keys: "y",
     });
     expect(output).toContain("Failed to connect to MCP gateway (prod-gateway)");
     expect(output).toContain(
-      "[d] Disconnect MCP gateway   [s] Continue without it (default)",
+      "Remove unreachable MCP gateway (prod-gateway) from Claude? (Y/n)",
     );
     expect(output).toContain("Disconnected MCP gateway (prod_gateway)");
     const log = await readClaudeLog(guardHome);
@@ -606,12 +600,13 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       script: renderClaudeCodeStartupGuardScript(CTX),
       curlExitCode: 0,
       curlBody: '{"mcp":"down","llm":"down"}',
-      keys: "d",
+      // Enter alone accepts the (Y/n) default: remove
+      keys: "\r",
     });
     expect(output).toContain("Failed to connect to LLM proxy (profile-123)");
     expect(output).toContain("Failed to connect to MCP gateway (prod-gateway)");
     expect(output).toContain(
-      "[d] Disconnect all of them   [s] Continue without them (default)",
+      "Remove 2 unreachable resources from Claude? (Y/n)",
     );
     const log = await readClaudeLog(guardHome);
     expect(log).toContain("mcp remove --scope user prod_gateway");
@@ -631,7 +626,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       script: renderClaudeCodeStartupGuardScript(CTX),
       curlExitCode: 0,
       curlBody: '{"mcp":"down","llm":"ok"}',
-      keys: "s",
+      keys: "n",
     });
     expect(output).toContain("Skipped");
     expect(await readClaudeLog(guardHome)).toBe("");

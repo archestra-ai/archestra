@@ -71,15 +71,16 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("FailName = 'LLM proxy (profile-123)'");
     expect(script).toContain("FailName = 'MCP gateway (prod-gateway)'");
     expect(script).toContain("FailName = 'Skills marketplace (acme-skills)'");
-    // a single down remote names its resource type…
+    // a single down remote gets the classic Y/n removal prompt naming it…
     expect(script).toContain(
-      "'[d] Disconnect ' + $downRemotes[0].TypeName + '   [s] Continue without it (default)'",
+      "'Remove unreachable ' + $downRemotes[0].FailName + ' from Claude? (Y/n) '",
     );
-    expect(script).toContain("TypeName = 'MCP gateway'");
-    // …several down remotes get the disconnect-all-at-once copy
+    // …several down remotes get the remove-all-at-once variant
     expect(script).toContain(
-      "[d] Disconnect all of them   [s] Continue without them (default)",
+      "'Remove ' + $downRemotes.Count + ' unreachable resources from Claude? (Y/n) '",
     );
+    // Enter accepts the (Y/n) default: remove
+    expect(script).toContain("$k.Key -eq 'Enter'");
     expect(script).toContain("Show-ArchDownSummaryPrompt $DownRemotes");
   });
 
@@ -116,17 +117,16 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("Get-Random -Minimum 0 -Maximum 2");
   });
 
-  test("paces every resource's turn at ~0.2s with glyph-only spinner ticks, on the alternate screen", () => {
+  test("paces every check with ~0.35s of appended dots, on the alternate screen", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
-    expect(script).toContain(
-      "$Frames = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')",
-    );
-    // ~0.35s per row at ~90ms per frame — the classic spinner cadence;
-    // faster frame rates read as trembling (caught live on Windows Terminal)
+    // ~0.35s per row, one appended dot per ~90ms tick — append-only output
+    // cannot flicker (glyph spinners strobed on Windows Terminal)
     expect(script).toContain("$MinCheckFrames = 4");
     expect(script).toContain("$FrameSleepMs = 90");
-    // ticks repaint only the spinner glyph — full-line repaints flicker
     expect(script).toContain("function Show-ArchSpinTick");
+    // colors go out as raw VT codes — console-API colors die on the
+    // alternate screen buffer under conpty; checks are the brand purple
+    expect(script).toContain("Magenta = '95'");
     // alternate screen in/out — the terminal stays clean after claude exits
     expect(script).toContain("[?1049h");
     expect(script).toContain("[?1049l");

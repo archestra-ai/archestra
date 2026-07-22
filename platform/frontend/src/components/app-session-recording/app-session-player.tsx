@@ -832,40 +832,33 @@ export function AppSessionPlayer({
 }
 
 /**
- * The "Powered by Archestra.AI" mark composited into every downloaded session
- * video. It rests inside the replay's dummy chat composer (see ReplayComposer),
- * centered, so the brand reads as native chat chrome rather than a corner
- * sticker, and stays on screen for the whole video.
+ * The official "Powered by Archestra.AI" lockup composited into every
+ * downloaded session video, pinned to the exported frame's bottom-left corner
+ * (the chat pane's own bottom-left — see ReplayComposer) for the whole video.
  *
- * Built on the official Archestra wordmark lockup: the black logo tile beside
- * "Archestra" in the brand's monospace face, with ".AI" set apart in a muted
- * grey. The logo rides its own light chip so its black squircle stays legible
- * whether the exported chat renders light or dark. Purely decorative, so it is
- * hidden from assistive tech.
+ * The brand logo tile beside the "Archestra.AI" wordmark in the brand's
+ * monospace face. The "Powered by" kicker reuses the wordmark's exact type —
+ * same font, size, weight, colour and line-height — and shares its left edge,
+ * so it reads as part of the mark rather than a bolt-on. Purely decorative, so
+ * it is hidden from assistive tech, and only ever mounted while filming.
  */
 export function RecordingExportWatermark() {
   return (
     <div
       aria-hidden="true"
-      className="flex select-none items-center justify-center gap-6 py-3 font-mono"
+      className="flex w-fit select-none items-center gap-3 font-mono text-foreground"
     >
-      <span className="flex size-[88px] shrink-0 items-center justify-center rounded-3xl bg-white shadow-sm ring-2 ring-black/5">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={DEFAULT_APP_LOGO}
-          alt=""
-          width={64}
-          height={64}
-          className="size-16"
-        />
-      </span>
-      <span className="flex flex-col leading-none">
-        <span className="text-[22px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-          Powered by
-        </span>
-        <span className="mt-3 text-5xl font-semibold tracking-tight text-foreground">
-          Archestra<span className="text-muted-foreground">.AI</span>
-        </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={DEFAULT_APP_LOGO}
+        alt=""
+        width={56}
+        height={56}
+        className="size-14 shrink-0"
+      />
+      <span className="flex flex-col text-2xl font-semibold leading-tight tracking-tight">
+        <span>Powered by</span>
+        <span>Archestra.AI</span>
       </span>
     </div>
   );
@@ -4520,17 +4513,16 @@ function ReplayComposer({
   filming?: boolean;
 }) {
   const active = text != null;
-  // While filming, the composer box IS the export watermark for the whole
-  // video: the "Powered by Archestra.AI" lockup, enclosed in the composer box
-  // and centered, so the brand is on screen constantly. It replaces the
+  // While filming, the composer slot carries the export watermark for the whole
+  // video: the official Archestra.AI lockup pinned to the chat pane's bottom-
+  // left — the exported frame's left bottom corner. It stands in the chat's own
+  // flow (never overlapping the replayed messages above) and replaces the
   // replayed typing entirely — the recorded user messages still post as chat
-  // bubbles above, so nothing is lost, and the mark never flickers away.
+  // bubbles above, so nothing is lost and the mark stays put for every frame.
   if (filming) {
     return (
-      <div className="shrink-0 p-3">
-        <div className="flex items-center justify-center rounded-md border border-input px-4 py-3 dark:bg-input/30">
-          <RecordingExportWatermark />
-        </div>
+      <div className="shrink-0 pb-5 pl-6 pt-2">
+        <RecordingExportWatermark />
       </div>
     );
   }

@@ -6,10 +6,13 @@ describe("RecordingExportWatermark", () => {
   it("carries the Powered by Archestra.AI wordmark on the exported video", () => {
     render(<RecordingExportWatermark />);
 
-    expect(screen.getByText("Powered by")).toBeInTheDocument();
-    // The lockup reads "Archestra.AI" with ".AI" set apart in a muted grey.
-    expect(screen.getByText(/Archestra/)).toHaveTextContent("Archestra.AI");
-    expect(screen.getByText(".AI")).toBeInTheDocument();
+    // "Powered by" reuses the wordmark's exact type, so both lines sit in one
+    // styled block and share a left edge.
+    const powered = screen.getByText("Powered by");
+    const wordmark = screen.getByText("Archestra.AI");
+    expect(powered).toBeInTheDocument();
+    expect(wordmark).toBeInTheDocument();
+    expect(powered.parentElement).toBe(wordmark.parentElement);
   });
 
   it("shows the official Archestra logo, decorative beside the visible name", () => {
@@ -21,11 +24,11 @@ describe("RecordingExportWatermark", () => {
     expect(logo).toHaveAttribute("src", "/logo-icon.svg");
   });
 
-  it("is centered and hidden from assistive tech — it rests in the composer box", () => {
+  it("is a decorative lockup hidden from assistive tech", () => {
     const { container } = render(<RecordingExportWatermark />);
 
     const mark = container.firstElementChild;
-    expect(mark).toHaveClass("items-center", "justify-center");
+    expect(mark).toHaveClass("items-center");
     expect(mark).toHaveAttribute("aria-hidden", "true");
   });
 });

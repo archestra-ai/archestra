@@ -608,24 +608,14 @@ function ShareDialogBody(props: {
     return <WorkingStep label={state.label} onCancel={props.onCancelWork} />;
   }
   if (state.step === "already") {
-    // The duplicate guard tripped: explain and link the PR this app already
-    // has instead of pretending anything failed.
+    // The duplicate guard tripped: explain instead of pretending anything
+    // failed. Plain text — the footer's Go to Pull Request button is the
+    // way to the PR.
     return (
-      <p className="text-sm">
-        {state.merged ? (
-          <>This app is already in the Apps Gallery — its </>
-        ) : (
-          <>This app was already submitted — its </>
-        )}
-        <a
-          className={LINK_CLASS}
-          href={state.prUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          pull request
-        </a>
-        {state.merged ? <> was merged.</> : <> is waiting for review.</>}
+      <p className="text-center text-sm">
+        {state.merged
+          ? "This app is already in the Apps Gallery — its pull request was merged."
+          : "This app was already submitted — its pull request is waiting for review."}
       </p>
     );
   }

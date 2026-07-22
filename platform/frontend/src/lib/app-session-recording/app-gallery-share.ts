@@ -15,8 +15,9 @@ import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recordi
  *
  * The submission is the standard fork workflow, so it needs nothing but the
  * `public_repo` scope the device flow asked for: fork the gallery repository,
- * branch the fork, commit the bundle (and a thumbnail when the recording
- * carries canvas frames), then open the pull request on the gallery.
+ * branch the fork, commit the bundle (and a thumbnail — a canvas app's last
+ * still, or a frame decoded from its video-stream capture), then open the pull
+ * request on the gallery.
  *
  * One app, one submission: the branch name is stable per participant+app,
  * and a duplicate is blocked while an open pull request from it exists or
@@ -293,7 +294,7 @@ export async function submitRecordingToAppGallery(params: {
   // The same builder backs the manual-submission download, so what a
   // participant hand-uploads is byte-identical to what this commits.
   const dir = gallerySubmissionFolder(viewer.login, appSlug);
-  for (const file of buildGallerySubmissionFiles(bundleWithGithub)) {
+  for (const file of await buildGallerySubmissionFiles(bundleWithGithub)) {
     onProgress({
       stage: "upload",
       label: `Uploading ${file.name} to ${forkName}…`,
@@ -412,12 +413,35 @@ export function buildGallerySubmissionPr(bundle: AppRecordingBundle): {
 }
 
 /**
- * The complete submission package: the recording itself, plus a thumbnail
- * when the recording carries canvas frames. The single source of the bytes
- * for BOTH paths — the automatic PR commits these, and the manual-submission
- * fallback downloads these — so the two are identical by construction.
+ * The complete submission package: the recording itself, plus a thumbnail when
+ * one can be produced — a canvas app's last still frame, or (for a canvas
+ * captured as an encoded video stream) its final frame decoded from the last
+ * keyframe. The single source of the bytes for BOTH paths — the automatic PR
+ * commits these, and the manual-submission fallback downloads these — so the
+ * two are identical by construction. Async because decoding a video frame is.
  */
-export function buildGallerySubmissionFiles(
+export async function buildGallerySubmissionFiles(
+  bundle: AppRecordingBundle,
+): Promise<GallerySubmissionFile[]> {
+  const files = staticSubmissionFiles(bundle);
+  // A canvas app captured as video carries no still frame — decode its final
+  // frame so the submission still ships a real screenshot. Best-effort: an
+  // undecodable stream (or a browser without WebCodecs) ships no thumbnail,
+  // exactly as a DOM app does, and the gallery derives one from replay.
+  if (!files.some((file) => file.name.startsWith("thumbnail."))) {
+    const decoded = await extractVideoThumbnail(bundle);
+    if (decoded) files.push(thumbnailFile(decoded));
+  }
+  return files;
+}
+
+/**
+ * The files that can be built synchronously — the recording JSON and, when the
+ * recording has one, a legacy still-frame thumbnail. The oversize pre-flight
+ * sizes these: a decoded video-stream thumbnail is a single small keyframe that
+ * can never be the size culprit and isn't worth decoding before sign-in.
+ */
+function staticSubmissionFiles(
   bundle: AppRecordingBundle,
 ): GallerySubmissionFile[] {
   const files: GallerySubmissionFile[] = [
@@ -427,15 +451,21 @@ export function buildGallerySubmissionFiles(
       mimeType: "application/json",
     },
   ];
-  const thumbnail = extractThumbnail(bundle);
-  if (thumbnail) {
-    files.push({
-      name: `thumbnail.${thumbnail.ext}`,
-      bytes: base64ToBytes(thumbnail.base64),
-      mimeType: `image/${thumbnail.ext === "jpg" ? "jpeg" : thumbnail.ext}`,
-    });
-  }
+  const still = extractStillThumbnail(bundle);
+  if (still) files.push(thumbnailFile(still));
   return files;
+}
+
+/** A thumbnail (ext + base64) as the submission file the PR commits. */
+function thumbnailFile(thumbnail: {
+  ext: string;
+  base64: string;
+}): GallerySubmissionFile {
+  return {
+    name: `thumbnail.${thumbnail.ext}`,
+    bytes: base64ToBytes(thumbnail.base64),
+    mimeType: `image/${thumbnail.ext === "jpg" ? "jpeg" : thumbnail.ext}`,
+  };
 }
 
 /**
@@ -448,7 +478,7 @@ export function buildGallerySubmissionFiles(
 export function oversizedGallerySubmissionFile(
   bundle: AppRecordingBundle,
 ): string | null {
-  for (const file of buildGallerySubmissionFiles(bundle)) {
+  for (const file of staticSubmissionFiles(bundle)) {
     if (file.bytes.byteLength > GITHUB_MAX_FILE_BYTES) {
       return `This recording is ${mb(file.bytes.byteLength)}MB — GitHub refuses files over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Re-record a shorter session.`;
     }
@@ -862,11 +892,12 @@ async function waitForForkRef(params: {
 }
 
 /**
- * Best effort: a canvas-drawing app's last recorded frame is a genuine
- * screenshot; a DOM app records no frames, and the gallery pipeline derives
- * its imagery from the bundle's replay instead.
+ * Best effort: a canvas-drawing app's last recorded still is a genuine
+ * screenshot of its final state. Null when the recording carries no
+ * `kind:"canvas"` stills — a DOM app (no frames at all), or a canvas captured
+ * as a video stream (see {@link extractVideoThumbnail}).
  */
-function extractThumbnail(
+function extractStillThumbnail(
   bundle: AppRecordingBundle,
 ): { ext: string; base64: string } | null {
   for (let i = bundle.recording.events.length - 1; i >= 0; i--) {
@@ -878,6 +909,168 @@ function extractThumbnail(
     return { ext: match[1] === "jpeg" ? "jpg" : match[1], base64: match[2] };
   }
   return null;
+}
+
+type StoredVideoConfig = Extract<
+  AppRecordingBundle["recording"]["events"][number],
+  { kind: "video-config" }
+>;
+type StoredVideoChunk = Extract<
+  AppRecordingBundle["recording"]["events"][number],
+  { kind: "video-chunk" }
+>;
+
+/**
+ * A screenshot for a canvas captured as an encoded video stream: its FINAL
+ * frame, decoded from the stream's last keyframe forward. Best-effort and
+ * async — null when WebCodecs is unavailable, the codec can't be decoded here,
+ * or the stream has no keyframe. Recording is Chromium/WebCodecs-only, so this
+ * runs on exactly the browsers that produce these streams.
+ */
+async function extractVideoThumbnail(
+  bundle: AppRecordingBundle,
+): Promise<{ ext: string; base64: string } | null> {
+  if (
+    typeof VideoDecoder === "undefined" ||
+    typeof EncodedVideoChunk === "undefined"
+  ) {
+    return null;
+  }
+  const events = bundle.recording.events;
+
+  // The canvas most recently painted — whose last video chunk lands latest — so
+  // the thumbnail is the app's final visible state, matching the still path.
+  let targetSel: string | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.kind === "video-chunk") {
+      targetSel = event.sel;
+      break;
+    }
+  }
+  if (targetSel === null) return null;
+
+  // That stream's decoder config (codec, coded size, extradata) — emitted at
+  // stream start and on resize, so the most recent one governs the final frame.
+  let config: StoredVideoConfig | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.kind === "video-config" && event.sel === targetSel) {
+      config = event;
+      break;
+    }
+  }
+  if (!config) return null;
+
+  // Decode from the last keyframe forward: a keyframe stands alone and the
+  // deltas after it carry the stream to its end — the minimum for the final
+  // frame.
+  const chunks = events.filter(
+    (event): event is StoredVideoChunk =>
+      event.kind === "video-chunk" && event.sel === targetSel,
+  );
+  let start = -1;
+  for (let i = chunks.length - 1; i >= 0; i--) {
+    if (chunks[i].type === "key") {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) return null;
+
+  const decoderConfig: VideoDecoderConfig = {
+    codec: config.codec,
+    codedWidth: config.codedWidth,
+    codedHeight: config.codedHeight,
+    ...(config.description
+      ? { description: base64ToBytes(config.description) }
+      : {}),
+  };
+  const support = await VideoDecoder.isConfigSupported(decoderConfig).catch(
+    () => null,
+  );
+  if (!support?.supported) return null;
+
+  const frame = await decodeFinalVideoFrame(decoderConfig, chunks.slice(start));
+  if (!frame) return null;
+  try {
+    return await frameToWebp(frame);
+  } finally {
+    frame.close();
+  }
+}
+
+/**
+ * Feed a keyframe and the deltas after it to a one-shot decoder and resolve the
+ * LAST frame it emits — the stream's final state. Resolves null on any decoder
+ * error; every superseded frame is closed so only the winner outlives the call.
+ */
+function decodeFinalVideoFrame(
+  config: VideoDecoderConfig,
+  chunks: StoredVideoChunk[],
+): Promise<VideoFrame | null> {
+  return new Promise((resolve) => {
+    let latest: VideoFrame | null = null;
+    let settled = false;
+    const finish = (frame: VideoFrame | null) => {
+      if (settled) return;
+      settled = true;
+      try {
+        decoder.close();
+      } catch {
+        // already closed / never configured
+      }
+      resolve(frame);
+    };
+    const decoder = new VideoDecoder({
+      output: (frame) => {
+        latest?.close();
+        latest = frame;
+      },
+      error: () => finish(null),
+    });
+    try {
+      decoder.configure(config);
+      for (const chunk of chunks) {
+        decoder.decode(
+          new EncodedVideoChunk({
+            type: chunk.type,
+            timestamp: chunk.tsUs,
+            data: base64ToBytes(chunk.data),
+          }),
+        );
+      }
+      decoder
+        .flush()
+        .then(() => finish(latest))
+        .catch(() => finish(latest));
+    } catch {
+      finish(latest);
+    }
+  });
+}
+
+/** A decoded frame → a WebP still (ext + base64, the submission's shape). */
+async function frameToWebp(
+  frame: VideoFrame,
+): Promise<{ ext: string; base64: string } | null> {
+  const width = frame.displayWidth;
+  const height = frame.displayHeight;
+  if (!width || !height) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(frame, 0, 0, width, height);
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((result) => resolve(result), "image/webp", 0.85);
+  });
+  if (!blob) return null;
+  return {
+    ext: "webp",
+    base64: toBase64(new Uint8Array(await blob.arrayBuffer())),
+  };
 }
 
 function prBody(bundle: AppRecordingBundle): string {

@@ -814,6 +814,11 @@ const PromptInputContent = ({
         </div>
       )}
       <PromptInput
+        // Floor the composer's width so its controls — the Apps Hackathon
+        // recorder pill, mic, and submit especially — never collapse, overlap,
+        // or get clipped by the box's overflow-hidden. Below this the composer
+        // holds its width and the surrounding area scrolls instead of squeezing.
+        className="min-w-[40rem]"
         globalDrop
         multiple
         onSubmit={handleWrappedSubmit}

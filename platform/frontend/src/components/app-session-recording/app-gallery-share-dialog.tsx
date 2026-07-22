@@ -343,7 +343,7 @@ export function AppGalleryShareButton(props: {
     };
     setState({
       step: "manual",
-      files: buildGallerySubmissionFiles(withStamps),
+      files: await buildGallerySubmissionFiles(withStamps),
       slug: gallerySubmissionSlug(withStamps),
       pr: buildGallerySubmissionPr(withStamps),
       login: identity?.login ?? null,
@@ -833,7 +833,7 @@ function CategoryStep(props: {
   return (
     <div className="flex flex-col gap-3">
       <Select value={selected} onValueChange={setSelected}>
-        <SelectTrigger>
+        <SelectTrigger className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

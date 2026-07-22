@@ -281,7 +281,7 @@ describe("submitRecordingToAppGallery", () => {
       ...bundle,
       meta: { ...bundle.meta, github: { login: "sam", name: null } },
     };
-    const files = buildGallerySubmissionFiles(stamped);
+    const files = await buildGallerySubmissionFiles(stamped);
     // Same files, same order, same bytes — the manual fallback's downloads
     // must match what the automatic path commits, byte for byte.
     expect(

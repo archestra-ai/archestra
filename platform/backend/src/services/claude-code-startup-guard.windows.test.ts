@@ -68,12 +68,12 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
   test("every down remote gets the failure copy; ONE prompt then covers them all", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
     expect(script).toContain("'✗ Failed to connect to ' + $r.FailName");
-    expect(script).toContain("FailName = 'LLM proxy profile-123'");
-    expect(script).toContain("FailName = 'MCP gateway prod-gateway'");
-    expect(script).toContain("FailName = 'Skills marketplace acme-skills'");
+    expect(script).toContain("FailName = 'LLM proxy (profile-123)'");
+    expect(script).toContain("FailName = 'MCP gateway (prod-gateway)'");
+    expect(script).toContain("FailName = 'Skills marketplace (acme-skills)'");
     // a single down remote names its resource type…
     expect(script).toContain(
-      "'  [d] Disconnect ' + $downRemotes[0].TypeName + '   [s] Continue without it (default)'",
+      "'[d] Disconnect ' + $downRemotes[0].TypeName + '   [s] Continue without it (default)'",
     );
     expect(script).toContain("TypeName = 'MCP gateway'");
     // …several down remotes get the disconnect-all-at-once copy
@@ -121,10 +121,10 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain(
       "$Frames = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')",
     );
-    // ~100ms per frame — the classic spinner cadence; faster reads as
-    // trembling (caught live on Windows Terminal)
-    expect(script).toContain("$MinCheckFrames = 2");
-    expect(script).toContain("$FrameSleepMs = 100");
+    // ~0.35s per row at ~90ms per frame — the classic spinner cadence;
+    // faster frame rates read as trembling (caught live on Windows Terminal)
+    expect(script).toContain("$MinCheckFrames = 4");
+    expect(script).toContain("$FrameSleepMs = 90");
     // ticks repaint only the spinner glyph — full-line repaints flicker
     expect(script).toContain("function Show-ArchSpinTick");
     // alternate screen in/out — the terminal stays clean after claude exits

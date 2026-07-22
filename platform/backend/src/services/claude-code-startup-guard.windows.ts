@@ -139,12 +139,12 @@ $RetryTotalSeconds = 15
 $NoticeAfterSeconds = 3
 $HangTightAfterSeconds = 10
 
-# Each check is padded to ~0.2s of animation — enough to read as a
+# Each check is padded to ~0.35s of animation — enough to read as a
 # deliberate step, short enough to never feel like waiting. Frames advance
-# every 100ms: the classic spinner cadence — faster reads as trembling, not
+# every ~90ms: the classic spinner cadence — faster reads as trembling, not
 # spinning.
-$MinCheckFrames = 2
-$FrameSleepMs = 100
+$MinCheckFrames = 4
+$FrameSleepMs = 90
 
 # Only drive the terminal (and prompt) when a human is watching: a real
 # console on both ends and no -p/--print run. Otherwise probe once per remote,
@@ -156,10 +156,23 @@ try {
 } catch { $Interactive = $false }
 
 $UseColor = [string]::IsNullOrEmpty($env:NO_COLOR)
+$Esc = [char]27
+$UseVt = $false
+try { $UseVt = [bool]$Host.UI.SupportsVirtualTerminal } catch { }
+# ANSI color codes, matching the console palette's bright colors. Emitted as
+# raw VT when the host supports it: Windows PowerShell 5.1's console-API
+# colors (-ForegroundColor) stop rendering on the alternate screen buffer
+# under conpty, while VT sequences always work there.
+$VtCodes = @{ Cyan = '96'; Green = '92'; Red = '91'; Yellow = '93'; DarkGray = '90'; White = '97' }
 
 function Write-Arch([string]$Text, [string]$Color, [switch]$NoNewline) {
-  if ($UseColor -and $Color) { Write-Host -NoNewline:$NoNewline -ForegroundColor $Color $Text }
-  else { Write-Host -NoNewline:$NoNewline $Text }
+  if ($UseColor -and $Color -and $UseVt) {
+    Write-Host -NoNewline:$NoNewline ("$Esc[" + $VtCodes[$Color] + 'm' + $Text + "$Esc[0m")
+  } elseif ($UseColor -and $Color) {
+    Write-Host -NoNewline:$NoNewline -ForegroundColor $Color $Text
+  } else {
+    Write-Host -NoNewline:$NoNewline $Text
+  }
 }
 
 # One attempt at the single health request. Returns $true when the platform
@@ -245,11 +258,11 @@ function Read-ArchKey { # non-blocking; '' when no key is waiting
 
 function Show-ArchOk([string]$Label) {
   Clear-ArchLine
-  Write-Arch '●' Green -NoNewline
+  Write-Arch '✓' Green -NoNewline
   Write-Host (' ' + $Label)
 }
 
-# Status glyphs stay in the narrow ranges (● ○ ✓ ✗) so every row's icon and
+# Status glyphs stay in the narrow ranges (○ ✓ ✗) so every row's icon and
 # text start in the same column — the heavy ✖/✔ render double-width in
 # common Windows fonts and break the alignment.
 function Show-ArchDown($r) {
@@ -330,11 +343,11 @@ function Show-ArchRemovedNote {
 function Show-ArchDownSummaryPrompt($downRemotes) {
   Write-Host ''
   if ($downRemotes.Count -eq 1) {
-    Write-Arch '  Claude is configured to use it and may fail until it is reachable.' DarkGray
-    Write-Host ('  [d] Disconnect ' + $downRemotes[0].TypeName + '   [s] Continue without it (default)')
+    Write-Arch 'Claude is configured to use it and may fail until it is reachable.' DarkGray
+    Write-Host ('[d] Disconnect ' + $downRemotes[0].TypeName + '   [s] Continue without it (default)')
   } else {
-    Write-Arch '  Claude is configured to use them and may fail until they are reachable.' DarkGray
-    Write-Host '  [d] Disconnect all of them   [s] Continue without them (default)'
+    Write-Arch 'Claude is configured to use them and may fail until they are reachable.' DarkGray
+    Write-Host '[d] Disconnect all of them   [s] Continue without them (default)'
   }
   $choice = ''
   try { $choice = [string][Console]::ReadKey($true).KeyChar } catch { $choice = 's' }
@@ -401,9 +414,7 @@ function Wait-ArchHealth {
 # way claude itself does — so nothing lingers in the scrollback after claude
 # exits. When the launch needed attention, the outcome is held briefly
 # before the alternate screen closes over it.
-$Esc = [char]27
-$Script:AltScreen = $false
-try { $Script:AltScreen = [bool]$Host.UI.SupportsVirtualTerminal } catch { }
+$Script:AltScreen = $UseVt
 $Script:Dwell = $false
 function Exit-ArchGuard {
   if ($Script:Dwell) { Start-Sleep -Milliseconds 1200 }
@@ -565,7 +576,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       url: ctx.proxy.url,
       kind: "proxy",
       typeName: "LLM proxy",
-      failName: `LLM proxy ${ctx.proxy.ref ?? ctx.proxy.providerLabel}`,
+      failName: `LLM proxy (${ctx.proxy.ref ?? ctx.proxy.providerLabel})`,
       downMarker: ctx.proxy.ref ? `"llm":"down"` : null,
     });
   }
@@ -575,7 +586,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       url: ctx.mcp.url,
       kind: "mcp",
       typeName: "MCP gateway",
-      failName: `MCP gateway ${ctx.mcp.ref ?? ctx.mcp.serverName}`,
+      failName: `MCP gateway (${ctx.mcp.ref ?? ctx.mcp.serverName})`,
       downMarker: ctx.mcp.ref ? `"mcp":"down"` : null,
     });
   }
@@ -585,7 +596,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       url: ctx.skills.cloneUrl,
       kind: "skills",
       typeName: "Skills marketplace",
-      failName: `Skills marketplace ${ctx.skills.marketplaceName}`,
+      failName: `Skills marketplace (${ctx.skills.marketplaceName})`,
       downMarker: null,
     });
   }

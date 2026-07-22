@@ -200,12 +200,12 @@ RETRY_TOTAL_SECONDS=15
 NOTICE_AFTER_SECONDS=3
 HANG_TIGHT_AFTER_SECONDS=10
 
-# Each resource's turn is padded to ~0.2s of animation — enough to read as a
-# deliberate step, short enough to never feel like waiting. Frames advance
-# every 100ms: the classic spinner cadence — faster reads as trembling, not
+# Each resource's turn is padded to ~0.35s of animation — enough to read as
+# a deliberate step, short enough to never feel like waiting. Frames advance
+# every ~90ms: the classic spinner cadence — faster reads as trembling, not
 # spinning.
-MIN_CHECK_FRAMES=2
-FRAME_SLEEP=0.1
+MIN_CHECK_FRAMES=4
+FRAME_SLEEP=0.09
 
 # Only drive the terminal (and prompt) when a human is watching: a real tty on
 # both ends and no -p/--print run. Otherwise check once, warn on stderr, and
@@ -335,10 +335,10 @@ spin_tick() {
   printf '\\r%s%s%s' "$C_DIM" "\${FRAMES[$FRAME]}" "$C_RESET"
 }
 
-# Status glyphs stay in the narrow ranges (● ○ ✓ ✗) so every row's icon and
+# Status glyphs stay in the narrow ranges (○ ✓ ✗) so every row's icon and
 # text start in the same column — the heavy ✖/✔ render double-width in
 # common Windows fonts and break the alignment.
-mark_ok()   { line_reset; printf '%s●%s %s\\n' "$C_OK" "$C_RESET" "$1"; }
+mark_ok()   { line_reset; printf '%s✓%s %s\\n' "$C_OK" "$C_RESET" "$1"; }
 mark_down() { line_reset; printf '%s✗ Failed to connect to %s%s\\n' "$C_ERR" "\${GUARD_FAIL_NAMES[$1]}" "$C_RESET"; }
 
 disconnect_actions() { # $1 kind — the reverse-of-connect commands, silenced
@@ -429,11 +429,11 @@ prompt_down_all() {
   printf '\\n'
   if [ "$DOWN_COUNT" -eq 1 ]; then
     set -- $DOWN_IDXS
-    printf '%s  Claude is configured to use it and may fail until it is reachable.%s\\n' "$C_DIM" "$C_RESET"
-    printf '  [d] Disconnect %s   [s] Continue without it (default)\\n' "\${GUARD_TYPE_NAMES[$1]}"
+    printf '%sClaude is configured to use it and may fail until it is reachable.%s\\n' "$C_DIM" "$C_RESET"
+    printf '[d] Disconnect %s   [s] Continue without it (default)\\n' "\${GUARD_TYPE_NAMES[$1]}"
   else
-    printf '%s  Claude is configured to use them and may fail until they are reachable.%s\\n' "$C_DIM" "$C_RESET"
-    printf '  [d] Disconnect all of them   [s] Continue without them (default)\\n'
+    printf '%sClaude is configured to use them and may fail until they are reachable.%s\\n' "$C_DIM" "$C_RESET"
+    printf '[d] Disconnect all of them   [s] Continue without them (default)\\n'
   fi
   key=''
   read -rs -n 1 key </dev/tty 2>/dev/null || key='s'
@@ -692,7 +692,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       url: ctx.proxy.url,
       kind: "proxy",
       typeName: "LLM proxy",
-      failName: `LLM proxy ${ctx.proxy.ref ?? ctx.proxy.providerLabel}`,
+      failName: `LLM proxy (${ctx.proxy.ref ?? ctx.proxy.providerLabel})`,
       downMarker: ctx.proxy.ref ? `"llm":"down"` : null,
     });
   }
@@ -702,7 +702,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       url: ctx.mcp.url,
       kind: "mcp",
       typeName: "MCP gateway",
-      failName: `MCP gateway ${ctx.mcp.ref ?? ctx.mcp.serverName}`,
+      failName: `MCP gateway (${ctx.mcp.ref ?? ctx.mcp.serverName})`,
       downMarker: ctx.mcp.ref ? `"mcp":"down"` : null,
     });
   }
@@ -712,7 +712,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       url: ctx.skills.cloneUrl,
       kind: "skills",
       typeName: "Skills marketplace",
-      failName: `Skills marketplace ${ctx.skills.marketplaceName}`,
+      failName: `Skills marketplace (${ctx.skills.marketplaceName})`,
       downMarker: null,
     });
   }

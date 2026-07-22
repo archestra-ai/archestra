@@ -318,9 +318,9 @@ describe("renderClaudeCodeStartupGuardScript", () => {
   test("every down remote gets the failure copy; ONE prompt then covers them all", () => {
     const script = renderClaudeCodeStartupGuardScript(CTX);
     expect(script).toContain("✗ Failed to connect to");
-    expect(script).toContain("'LLM proxy profile-123'");
-    expect(script).toContain("'MCP gateway prod-gateway'");
-    expect(script).toContain("'Skills marketplace acme-skills'");
+    expect(script).toContain("'LLM proxy (profile-123)'");
+    expect(script).toContain("'MCP gateway (prod-gateway)'");
+    expect(script).toContain("'Skills marketplace (acme-skills)'");
     // a single down remote names its resource type…
     expect(script).toContain(
       "[d] Disconnect %s   [s] Continue without it (default)",
@@ -351,10 +351,10 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain(
       "FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')",
     );
-    // ~100ms per frame — the classic spinner cadence; faster reads as
-    // trembling (caught live on Windows Terminal)
-    expect(script).toContain("MIN_CHECK_FRAMES=2");
-    expect(script).toContain("FRAME_SLEEP=0.1");
+    // ~0.35s per row at ~90ms per frame — the classic spinner cadence;
+    // faster frame rates read as trembling (caught live on Windows Terminal)
+    expect(script).toContain("MIN_CHECK_FRAMES=4");
+    expect(script).toContain("FRAME_SLEEP=0.09");
     // ticks repaint only the spinner glyph — full-line repaints flicker
     expect(script).toContain("spin_tick()");
     expect(script).not.toMatch(/spin_tick\(\) \{[^}]*2K/);
@@ -450,10 +450,10 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       curlExitCode: 7,
     });
     expect(stdout).toBe("");
-    expect(stderr).toContain("failed to connect to LLM proxy profile-123");
-    expect(stderr).toContain("failed to connect to MCP gateway prod-gateway");
+    expect(stderr).toContain("failed to connect to LLM proxy (profile-123)");
+    expect(stderr).toContain("failed to connect to MCP gateway (prod-gateway)");
     expect(stderr).toContain(
-      "failed to connect to Skills marketplace acme-skills",
+      "failed to connect to Skills marketplace (acme-skills)",
     );
   });
 
@@ -466,8 +466,8 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       curlBody: '{"mcp":"down","llm":"down"}',
     });
     expect(stdout).toBe("");
-    expect(stderr).toContain("failed to connect to LLM proxy profile-123");
-    expect(stderr).toContain("failed to connect to MCP gateway prod-gateway");
+    expect(stderr).toContain("failed to connect to LLM proxy (profile-123)");
+    expect(stderr).toContain("failed to connect to MCP gateway (prod-gateway)");
     // endpoint reachable => the same-origin skills marketplace is fine
     expect(stderr).not.toContain("Skills marketplace");
   });
@@ -478,7 +478,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       curlExitCode: 0,
       curlBody: '{"mcp":"down","llm":"ok"}',
     });
-    expect(stderr).toContain("failed to connect to MCP gateway prod-gateway");
+    expect(stderr).toContain("failed to connect to MCP gateway (prod-gateway)");
     expect(stderr).not.toContain("LLM proxy");
   });
 
@@ -488,7 +488,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       curlExitCode: 0,
       curlBody: '{"mcp": "down", "llm": "ok"}',
     });
-    expect(stderr).toContain("failed to connect to MCP gateway prod-gateway");
+    expect(stderr).toContain("failed to connect to MCP gateway (prod-gateway)");
     expect(stderr).not.toContain("LLM proxy");
   });
 
@@ -582,7 +582,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       curlBody: '{"mcp":"down","llm":"ok"}',
       keys: "d",
     });
-    expect(output).toContain("Failed to connect to MCP gateway prod-gateway");
+    expect(output).toContain("Failed to connect to MCP gateway (prod-gateway)");
     expect(output).toContain(
       "[d] Disconnect MCP gateway   [s] Continue without it (default)",
     );
@@ -608,8 +608,8 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       curlBody: '{"mcp":"down","llm":"down"}',
       keys: "d",
     });
-    expect(output).toContain("Failed to connect to LLM proxy profile-123");
-    expect(output).toContain("Failed to connect to MCP gateway prod-gateway");
+    expect(output).toContain("Failed to connect to LLM proxy (profile-123)");
+    expect(output).toContain("Failed to connect to MCP gateway (prod-gateway)");
     expect(output).toContain(
       "[d] Disconnect all of them   [s] Continue without them (default)",
     );

@@ -3,10 +3,10 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { LlmProxyConnectInstructionsDialog } from "@/components/agent-connect-instructions-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
@@ -183,21 +183,15 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
 
   type ProxyData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
-  const router = useRouter();
-
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [postCreateProxy, setPostCreateProxy] = useState<{
     id: string;
     name: string;
   } | null>(null);
-  const navigateToConnection = useCallback(
-    (agentId: string) => {
-      router.push(
-        `/connection?proxyId=${encodeURIComponent(agentId)}&from=table`,
-      );
-    },
-    [router],
-  );
+  const [connectingProxy, setConnectingProxy] = useState<Pick<
+    ProxyData,
+    "id" | "name" | "agentType"
+  > | null>(null);
   const editId = searchParams.get("edit");
   const { data: editFromUrl } = useProfile(editId ?? undefined);
   const editDialog = useDialogUrlParam<ProxyData>({
@@ -341,7 +335,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
           <LlmProxyActions
             agent={agent}
             canModify={canModify}
-            onConnect={(a) => navigateToConnection(a.id)}
+            onConnect={setConnectingProxy}
             onEdit={editDialog.open}
             onDelete={setDeletingProxyId}
             onRestore={(agentId) => {
@@ -485,6 +479,13 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               agentType="llm_proxy"
               onOpenChange={(open) => {
                 if (!open) setPostCreateProxy(null);
+              }}
+            />
+
+            <LlmProxyConnectInstructionsDialog
+              proxy={connectingProxy}
+              onOpenChange={(open) => {
+                if (!open) setConnectingProxy(null);
               }}
             />
 

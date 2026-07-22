@@ -59,8 +59,11 @@ export type CascadeOutcome =
    *  old config. Bar shows "Reinstall required" / "Save and mark for
    *  reinstall". */
   | "manual"
-  /** Backend immediately restarts pods. Bar shows "Servers will
-   *  reinstall" / "Save and reinstall". */
+  /** Backend cascades immediately in the background: local servers get
+   *  a pod restart; remote servers just get a tool re-sync (no pod, so
+   *  nothing goes offline). Bar shows "Restart N installs now?" /
+   *  "Save and restart" for local; remote saves without a bar — the
+   *  scenario carries that via `frontendBar`. */
   | "auto";
 
 /** What the shared `isMetadataOnlyEdit` predicate should return for
@@ -104,6 +107,12 @@ export interface CascadeScenario {
     actual: CascadeOutcome;
     issue: string;
   };
+  /** Intentional, permanent frontend divergence — NOT a bug marker.
+   *  The backend still enacts `expected`; the confirm bar behaves as
+   *  this value instead. Sole current use: remote catalogs on the auto
+   *  path save without a bar ("skip") because the background cascade
+   *  restarts nothing for them. */
+  frontendBar?: CascadeOutcome;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -560,6 +569,18 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
     sharedPredicate: "non-metadata-diff",
     rationale:
       "For a static header-mapped userConfig entry (no install prompt), the form writes the admin's value into `userConfig[field].default` — that IS the runtime header sent on the wire. Changing it means installs would keep sending the old value until pods restart. The auto path is correct (no re-prompt needed; admin already provided the value). Caught by `userConfigChangedBreakingly` on both sides. Distinct from prompted headers where `default` is just a placeholder.",
+  },
+
+  {
+    id: "server-url-change-remote",
+    shape: "test1RemoteOAuthBag",
+    userAction: "Admin changes the server URL on a remote OAuth catalog",
+    edit: (base) => ({ ...base, serverUrl: "https://example.test/mcp/v2" }),
+    expected: "auto",
+    frontendBar: "skip",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "Auth is untouched, so existing installs stay valid — the backend applies the change and re-syncs tools in the background (auto). But a remote server has no pod: nothing restarts or goes offline, so the form saves without a confirm bar. A restart warning here would describe an event that never happens.",
   },
 
   // ── identity / nothing-changed sanity ─────────────────────────────

@@ -16,7 +16,11 @@
  *      "manual" when the catalog's deploymentSpecYaml references the
  *      serverName placeholder (the one way the display name reaches a
  *      pod spec, so those installs genuinely need a reinstall).
- *   4. Otherwise → "auto" (breaking change with no re-prompt needed)
+ *   4. Otherwise → "auto" (breaking change with no re-prompt needed).
+ *      Remote catalogs don't pause here: the backend cascade restarts
+ *      nothing for them (no pod — it only re-syncs tools), so the form
+ *      saves directly ("skip"), or shows "rename" when a rename rides
+ *      along.
  *
  * `renamed` rides along with the mode so the confirm bar can append the
  * MCP-client tool-list reload warning even when a rename composes with
@@ -24,7 +28,10 @@
  *
  * If this diverges from the backend gate, the scenario matrix's
  * frontend + backend sweeps will disagree. That's the contract — fix
- * either the code or the scenario, not the test.
+ * either the code or the scenario, not the test. The one by-design
+ * divergence is the remote auto path above: the backend still runs its
+ * background cascade, but the form shows no bar. Scenarios encode it
+ * via `frontendBar`.
  */
 
 import { SERVER_NAME_PLACEHOLDER } from "@archestra/shared";
@@ -143,9 +150,17 @@ export function computeCascadeOutcome(
 
   // ── Auto ─────────────────────────────────────────────────────────
   // A breaking diff exists but doesn't need a user re-prompt. The
-  // backend will fire its setImmediate background restart (which also
+  // backend will fire its setImmediate background cascade (which also
   // regenerates a placeholder-bearing YAML with the new name, so a
-  // combined rename needs no extra flag here).
+  // combined rename needs no extra flag here). For local servers that
+  // cascade restarts pods — a disruption worth a confirm bar. A remote
+  // server has no pod: the backend only re-syncs tools and nothing
+  // goes offline, so there is nothing to confirm — save directly,
+  // unless a rename rides along (connected clients must still reload
+  // the renamed tools).
+  if ((next.serverType ?? prev.serverType) === "remote") {
+    return { mode: renamed ? "rename" : "skip", renamed };
+  }
   return { mode: "auto", renamed };
 }
 

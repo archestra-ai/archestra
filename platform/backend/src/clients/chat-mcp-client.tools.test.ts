@@ -1533,6 +1533,40 @@ describe("getChatMcpTools approval-gated execution idempotency (#5132)", () => {
     expect(toolResultContent(replay)).toContain("NOT re-executed");
   });
 
+  test("an abort mid-dispatch leaves the claim executing, so a replay fails closed", async () => {
+    const { baseParams } = await setupApprovalGatedTool();
+    const controller = new AbortController();
+    vi.mocked(mcpClient.executeToolCallForOwner).mockImplementation(
+      async () => {
+        controller.abort();
+        throw new Error("MCP error -32001: The operation was aborted");
+      },
+    );
+
+    const abortableTools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      abortSignal: controller.signal,
+    });
+    await expect(
+      abortableTools.extsrv__create_ticket.execute?.(
+        { query: "Printer on fire" },
+        execOptions("call-1"),
+      ),
+    ).rejects.toThrow();
+
+    const replayTools = await chatClient.getChatMcpTools(baseParams);
+    const replay = await replayTools.extsrv__create_ticket.execute?.(
+      { query: "Printer on fire" },
+      execOptions("call-1"),
+    );
+
+    // The aborted dispatch may have committed externally — the replay must
+    // never re-dispatch.
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
+    expect(toolResultContent(replay)).toContain("already dispatched");
+    expect(toolResultContent(replay)).toContain("NOT re-executed");
+  });
+
   test("a tool with no approval policy re-dispatches on a duplicate toolCallId (no claim gate)", async () => {
     const { baseParams } = await setupChatToolEnv({
       gatewayTools: [externalTool("extsrv__fetch_data")],

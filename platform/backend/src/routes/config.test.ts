@@ -121,6 +121,7 @@ describe("config routes", () => {
 
     expect(Object.keys(payload.providerBaseUrls).sort()).toEqual([
       "anthropic",
+      "archestra",
       "azure",
       "bedrock",
       "cerebras",

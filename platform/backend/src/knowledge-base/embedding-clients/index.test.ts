@@ -144,6 +144,7 @@ describe("callEmbedding provider gating", () => {
   // OpenAI-compatible client where they crash on a non-OpenAI response.
   test.each([
     "anthropic",
+    "archestra",
     "cohere",
     "cerebras",
     "deepseek",

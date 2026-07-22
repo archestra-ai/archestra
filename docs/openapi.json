@@ -203929,6 +203929,14 @@
                       "reinstallRequired": {
                         "type": "boolean"
                       },
+                      "reinstallReason": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "new-input",
+                          "restart"
+                        ]
+                      },
                       "localInstallationStatus": {
                         "type": "string",
                         "enum": [
@@ -204092,6 +204100,7 @@
                       "teamId",
                       "scope",
                       "reinstallRequired",
+                      "reinstallReason",
                       "localInstallationStatus",
                       "localInstallationError",
                       "oauthRefreshError",
@@ -204535,6 +204544,14 @@
                     "reinstallRequired": {
                       "type": "boolean"
                     },
+                    "reinstallReason": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "new-input",
+                        "restart"
+                      ]
+                    },
                     "localInstallationStatus": {
                       "type": "string",
                       "enum": [
@@ -204698,6 +204715,7 @@
                     "teamId",
                     "scope",
                     "reinstallRequired",
+                    "reinstallReason",
                     "localInstallationStatus",
                     "localInstallationError",
                     "oauthRefreshError",
@@ -205059,6 +205077,14 @@
                     "reinstallRequired": {
                       "type": "boolean"
                     },
+                    "reinstallReason": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "new-input",
+                        "restart"
+                      ]
+                    },
                     "localInstallationStatus": {
                       "type": "string",
                       "enum": [
@@ -205222,6 +205248,7 @@
                     "teamId",
                     "scope",
                     "reinstallRequired",
+                    "reinstallReason",
                     "localInstallationStatus",
                     "localInstallationError",
                     "oauthRefreshError",
@@ -205892,6 +205919,14 @@
                     "reinstallRequired": {
                       "type": "boolean"
                     },
+                    "reinstallReason": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "new-input",
+                        "restart"
+                      ]
+                    },
                     "localInstallationStatus": {
                       "type": "string",
                       "enum": [
@@ -206055,6 +206090,7 @@
                     "teamId",
                     "scope",
                     "reinstallRequired",
+                    "reinstallReason",
                     "localInstallationStatus",
                     "localInstallationError",
                     "oauthRefreshError",
@@ -207358,6 +207394,14 @@
                     "reinstallRequired": {
                       "type": "boolean"
                     },
+                    "reinstallReason": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "new-input",
+                        "restart"
+                      ]
+                    },
                     "localInstallationStatus": {
                       "type": "string",
                       "enum": [
@@ -207521,6 +207565,7 @@
                     "teamId",
                     "scope",
                     "reinstallRequired",
+                    "reinstallReason",
                     "localInstallationStatus",
                     "localInstallationError",
                     "oauthRefreshError",

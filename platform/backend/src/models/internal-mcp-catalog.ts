@@ -676,7 +676,18 @@ class InternalMcpCatalogModel {
             install.id,
             {
               ...(nameChanged ? { name: newServerName } : {}),
-              ...(flagReinstallRequired ? { reinstallRequired: true } : {}),
+              // Pod respec only — the install's stored values stay valid,
+              // unless the install already owed input from an earlier edit.
+              ...(flagReinstallRequired
+                ? {
+                    reinstallRequired: true,
+                    reinstallReason:
+                      install.reinstallRequired &&
+                      install.reinstallReason === "new-input"
+                        ? ("new-input" as const)
+                        : ("restart" as const),
+                  }
+                : {}),
             },
             tx,
           );

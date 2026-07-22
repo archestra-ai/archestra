@@ -34,6 +34,7 @@ import {
   setOAuthState,
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
+import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -77,6 +78,7 @@ import {
   STATUS_OPTIONS,
 } from "./registry-list-controls";
 import { ReinstallConfirmationDialog } from "./reinstall-confirmation-dialog";
+import { decideReinstallDialog } from "./reinstall-dialog-decision";
 import {
   RemoteServerInstallDialog,
   type RemoteServerInstallResult,
@@ -132,6 +134,7 @@ export function InternalMCPCatalog({
   const currentUserId = session?.user?.id;
   const { data: environmentList } = useEnvironments();
   const defaultEnvironment = useDefaultEnvironment();
+  const byosEnabled = Boolean(useFeature("byosEnabled"));
 
   const [sort, setSort] = useState<SortKey>("name-asc");
   const [viewMode, setViewMode] = useListViewMode(
@@ -587,14 +590,25 @@ export function InternalMCPCatalog({
           ],
     );
 
-    // Open the install dialog in reinstall mode whenever there are prompted
-    // fields the user owes values for — otherwise the simple "Reinstall
-    // Required" confirmation modal is enough. Filters mirror each dialog's
-    // own render filters so the two stay in sync; if they drift, the user
-    // can be left clicking a confirm dialog when they actually owe input.
+    // Open the install dialog in reinstall mode only when the flagged
+    // installs actually owe prompted values (`reinstallReason: "new-input"`,
+    // or no reason to trust a skip) — a restart-only flag gets the simple
+    // confirmation modal whose empty-body reinstall reuses stored secrets.
+    // Prompted-field filters mirror each dialog's own render filters so the
+    // two stay in sync; if they drift, the user can be left clicking a
+    // confirm dialog when they actually owe input.
     const hasPromptedUserConfig = Object.values(
       catalogItem.userConfig ?? {},
     ).some((field) => field.promptOnInstallation !== false);
+    const hasSensitivePromptedUserConfig = Object.values(
+      catalogItem.userConfig ?? {},
+    ).some((field) => field.sensitive && field.promptOnInstallation !== false);
+
+    const dialogTargets = flagged.length > 0 ? flagged : [installedServer];
+    const flaggedForDecision = dialogTargets.map((s) => ({
+      reinstallRequired: s.reinstallRequired,
+      reinstallReason: s.reinstallReason ?? null,
+    }));
 
     if (catalogItem.serverType === "local") {
       const hasPromptedEnv =
@@ -603,8 +617,22 @@ export function InternalMCPCatalog({
           (env) => env.promptOnInstallation !== false,
         ) ??
           false);
+      const hasSecretPromptedEnv =
+        !catalogItem.multitenant &&
+        (catalogItem.localConfig?.environment?.some(
+          (env) => env.promptOnInstallation !== false && env.type === "secret",
+        ) ??
+          false);
 
-      if (hasPromptedEnv || hasPromptedUserConfig) {
+      const dialogKind = decideReinstallDialog({
+        hasPromptedFields: hasPromptedEnv || hasPromptedUserConfig,
+        byosCollectsSecrets:
+          byosEnabled &&
+          (hasSecretPromptedEnv || hasSensitivePromptedUserConfig),
+        flaggedInstalls: flaggedForDecision,
+      });
+
+      if (dialogKind === "collect-input") {
         setLocalServerCatalogItem(catalogItem);
         setReinstallServerId(installedServer.id);
         setReinstallServerTeamId(installedServer.teamId ?? null);
@@ -617,7 +645,13 @@ export function InternalMCPCatalog({
         setCatalogItemForReinstall(catalogItem);
         openDialog("reinstall");
       }
-    } else if (hasPromptedUserConfig) {
+    } else if (
+      decideReinstallDialog({
+        hasPromptedFields: hasPromptedUserConfig,
+        byosCollectsSecrets: byosEnabled && hasSensitivePromptedUserConfig,
+        flaggedInstalls: flaggedForDecision,
+      }) === "collect-input"
+    ) {
       setSelectedCatalogItem(catalogItem);
       setReinstallServerId(installedServer.id);
       setReinstallServerTeamId(installedServer.teamId ?? null);

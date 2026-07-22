@@ -990,4 +990,60 @@ describe("McpServerModel", () => {
       expect(cleared?.oauthRefreshFailedAt).toBeNull();
     });
   });
+
+  describe("reinstall reason invariant", () => {
+    test("clearing reinstallRequired also nulls reinstallReason", async ({
+      makeMcpServer,
+    }) => {
+      const server = await makeMcpServer();
+      await McpServerModel.update(server.id, {
+        reinstallRequired: true,
+        reinstallReason: "restart",
+      });
+
+      const cleared = await McpServerModel.update(server.id, {
+        reinstallRequired: false,
+      });
+      expect(cleared?.reinstallRequired).toBe(false);
+      expect(cleared?.reinstallReason).toBeNull();
+    });
+
+    test("flagging reinstallRequired without a reason defaults to 'new-input' (conservative: UI collects values)", async ({
+      makeMcpServer,
+    }) => {
+      const server = await makeMcpServer();
+      const flagged = await McpServerModel.update(server.id, {
+        reinstallRequired: true,
+      });
+      expect(flagged?.reinstallRequired).toBe(true);
+      expect(flagged?.reinstallReason).toBe("new-input");
+    });
+
+    test("flagging with an explicit reason persists it", async ({
+      makeMcpServer,
+    }) => {
+      const server = await makeMcpServer();
+      const flagged = await McpServerModel.update(server.id, {
+        reinstallRequired: true,
+        reinstallReason: "restart",
+      });
+      expect(flagged?.reinstallReason).toBe("restart");
+    });
+
+    test("an update not touching reinstallRequired leaves the reason alone", async ({
+      makeMcpServer,
+    }) => {
+      const server = await makeMcpServer();
+      await McpServerModel.update(server.id, {
+        reinstallRequired: true,
+        reinstallReason: "restart",
+      });
+
+      const renamed = await McpServerModel.update(server.id, {
+        name: "renamed-install",
+      });
+      expect(renamed?.reinstallRequired).toBe(true);
+      expect(renamed?.reinstallReason).toBe("restart");
+    });
+  });
 });

@@ -18,6 +18,7 @@ export function makeInstalledServer(
     teamId: null,
     scope: "personal",
     reinstallRequired: false,
+    reinstallReason: "restart",
     localInstallationStatus: "success",
     localInstallationError: null,
     oauthRefreshError: "refresh_failed",

@@ -1611,6 +1611,36 @@ describe("mcp-reinstall", () => {
         .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
       expect(catalogRow.catalogReinstallRequired).toBe(false);
     });
+
+    test("Phase 2 retry flag carries reason 'restart' — the tenant's stored credentials are still valid", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "shared-reason",
+        serverType: "local",
+        localConfig: { command: "npm", arguments: ["start"] },
+      });
+      await db
+        .update(schema.internalMcpCatalogTable)
+        .set({ catalogReinstallRequired: true })
+        .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+
+      const tenant = await makeMcpServer({ catalogId: catalog.id });
+
+      vi.mocked(
+        McpServerRuntimeManager.reinstallSharedDeployment,
+      ).mockResolvedValue(undefined);
+      vi.spyOn(McpServerModel, "getToolsFromServer").mockRejectedValue(
+        new Error("tool fetch boom"),
+      );
+
+      await reinstallMultitenantCatalog(catalog);
+
+      const failed = await getServer(tenant.id);
+      expect(failed.reinstallRequired).toBe(true);
+      expect(failed.reinstallReason).toBe("restart");
+    });
   });
 });
 

@@ -462,10 +462,11 @@ export function AppSessionPlayer({
     editor.applyEdits({ cuts: next, chat: recording.edits?.chat });
   }, [recording, editor]);
   // The over-length tooltips end with the fix, not just the diagnosis.
+  // Quietly: an invitation to trim, not an alarm — neutral until hovered.
   const trimPill = (
     <button
       type="button"
-      className="mt-1.5 flex w-fit items-center gap-1 rounded-full border border-destructive/50 bg-background px-2 py-0.5 font-medium text-destructive hover:bg-destructive/10"
+      className="mt-1.5 flex w-fit items-center gap-1 rounded-full border bg-background px-2 py-0.5 font-medium text-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
       // A tooltip dismisses on pointerdown — its content unmounts before a
       // click can complete inside it — so the action fires on pointerdown
       // alone. (Not also on click: the pair double-commits, because the
@@ -3321,26 +3322,27 @@ function ReplayTimeline({
             point (the same end trim the bracket drag makes, one undoable
             step). The mark's position is played time mapped onto the full
             strip, so it moves as cuts change. It sits drags out like the
-            hover pin: a live boundary preview would re-time it mid-gesture. */}
+            hover pin: a live boundary preview would re-time it mid-gesture.
+            Deliberately QUIET: a badge in the ruler band only — muted until
+            hovered, no line through the strip (that would read as a second
+            playhead), and no hit area over the strip itself, where an end
+            bracket dragged to ~30s must stay grabbable. */}
         {exportLimit !== null && !drag && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 aria-label="Trim to the maximum allowed length"
-                className="group absolute inset-y-0 z-30 flex w-5 -translate-x-1/2 cursor-pointer flex-col items-center"
+                className="group absolute top-0 z-30 flex h-2.5 -translate-x-1/2 cursor-pointer items-center"
                 style={{ left: leftPct(exportLimit) }}
                 disabled={saving}
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={onTrimToLimit}
               >
-                <span className="flex h-2.5 items-center">
-                  <span className="flex h-4 items-center gap-0.5 rounded-full border border-destructive/50 bg-background px-1 font-semibold text-[10px] text-destructive shadow-sm transition-colors group-hover:bg-destructive/10">
-                    <Scissors className="size-2.5" />
-                    {MAX_EXPORT_SECONDS}s
-                  </span>
+                <span className="flex h-4 items-center gap-0.5 rounded-full border bg-background px-1 font-medium text-[10px] text-muted-foreground shadow-sm transition-colors group-hover:border-destructive/50 group-hover:text-destructive">
+                  <Scissors className="size-2.5" />
+                  {MAX_EXPORT_SECONDS}s
                 </span>
-                <span className="w-0.5 flex-1 rounded-full bg-destructive/60 transition-colors group-hover:bg-destructive" />
               </button>
             </TooltipTrigger>
             <TooltipContent className="text-xs">

@@ -26,9 +26,10 @@ import {
  * - checks show ~0.35s of appended trailing dots (append-only output cannot
  *   flicker), all on the alternate screen so the terminal is clean after
  *   claude exits; an unreachable platform gets the 15s capped-backoff retry
- *   ladder with jitter, status line at 3s, "hang tight" at 10s, and `s`/`d`
- *   hotkeys live throughout; after the whole turn, ONE "Disconnect … from
- *   Claude? (Y/n)" prompt covers every down remote;
+ *   ladder with jitter, status line at 3s, "hang tight" at 10s, and the
+ *   disconnect (Y/n) offer on its own line below the row, `y`/`n` live
+ *   throughout; after the whole turn, ONE "Disconnect … from Claude now?
+ *   (Y/n)" prompt covers every down remote;
  * - disconnect = the exact reverse of connect (mcp remove, settings.json
  *   key strip with a one-time backup, marketplace remove), recorded in a
  *   skip file so later launches don't re-check the remote; once nothing
@@ -351,9 +352,9 @@ function Show-ArchRemovedNote {
 function Show-ArchDownSummaryPrompt($downRemotes) {
   Write-Host ''
   if ($downRemotes.Count -eq 1) {
-    Write-Host -NoNewline ('Disconnect unreachable ' + $downRemotes[0].FailName + ' from Claude? (Y/n) ')
+    Write-Host -NoNewline ('Disconnect ' + $downRemotes[0].FailName + ' from Claude now? (Y/n) ')
   } else {
-    Write-Host -NoNewline ('Disconnect ' + $downRemotes.Count + ' unreachable resources from Claude? (Y/n) ')
+    Write-Host -NoNewline ('Disconnect all ' + $downRemotes.Count + ' unreachable resources from Claude now? (Y/n) ')
   }
   $yes = $false
   try {
@@ -377,10 +378,53 @@ function Show-ArchDownSummaryPrompt($downRemotes) {
   }
 }
 
+# The disconnect offer during the retry ladder is the same classic (Y/n)
+# prompt, on its own line below the row after a blank line — drawn once via
+# cursor save/restore so the dots keep appending to the row above it, and
+# wiped again the moment the wait resolves. The platform being unreachable
+# affects every active remote, so answering yes disconnects them all.
+$Script:WaitPromptShown = $false
+function Get-ArchWaitPromptText {
+  if ($ActiveRemotes.Count -eq 1) { return 'Disconnect ' + $ActiveRemotes[0].FailName + ' from Claude now? (Y/n) ' }
+  return 'Disconnect all ' + $ActiveRemotes.Count + ' unreachable resources from Claude now? (Y/n) '
+}
+function Show-ArchWaitPrompt {
+  if ($Script:WaitPromptShown) { return }
+  $Script:WaitPromptShown = $true
+  if ($UseVt) {
+    Write-Host -NoNewline ("$Esc" + '7' + "\`r\`n\`r\`n" + (Get-ArchWaitPromptText) + "$Esc" + '8')
+  } else {
+    try {
+      $x = [Console]::CursorLeft; $y = [Console]::CursorTop
+      Write-Host ''
+      Write-Host ''
+      Write-Host -NoNewline (Get-ArchWaitPromptText)
+      [Console]::SetCursorPosition($x, $y)
+    } catch { }
+  }
+}
+function Clear-ArchWaitPrompt {
+  if (-not $Script:WaitPromptShown) { return }
+  $Script:WaitPromptShown = $false
+  if ($UseVt) {
+    Write-Host -NoNewline ("$Esc" + '[J')
+  } else {
+    try {
+      $x = [Console]::CursorLeft; $y = [Console]::CursorTop
+      $w = 80; try { $w = [Console]::WindowWidth } catch { }
+      [Console]::SetCursorPosition(0, $y + 2)
+      Write-Host -NoNewline (' ' * [Math]::Max($w - 1, 1))
+      [Console]::SetCursorPosition($x, $y)
+    } catch { }
+  }
+}
+
 # One health request for the whole launch, retried with backoff while the
-# spinner plays on the first resource row. s = skip the checks for this
-# launch; d = disconnect every remote (they are all unreachable) — and with
-# nothing left to check, remove the startup check itself.
+# spinner plays on the first resource row. y = disconnect every remote now
+# (they are all unreachable) — and with nothing left to check, remove the
+# startup check itself; n = skip the checks for this launch. Both answer
+# keys are live the whole wait; bare Enter accepts the disconnect default
+# only once the prompt is actually on screen.
 $Script:SkipAll = $false
 $Script:DiscAll = $false
 $Script:LastWaitNote = ''
@@ -389,24 +433,30 @@ function Wait-ArchHealth {
   $start = [DateTime]::UtcNow
   $delay = 1
   $nextAttempt = $start.AddSeconds(1)
+  $lastElapsed = 0
   while ($true) {
     Start-Sleep -Milliseconds 250
     $key = Read-ArchKey
-    if ($key -eq 's' -or $key -eq 'S') { $Script:SkipAll = $true; break }
-    if ($key -eq 'd' -or $key -eq 'D') { $Script:DiscAll = $true; break }
+    if ($key -eq 'y' -or $key -eq 'Y') { $Script:DiscAll = $true; break }
+    if ($key -eq 'n' -or $key -eq 'N') { $Script:SkipAll = $true; break }
+    if ($key -eq "\`r" -and $Script:WaitPromptShown) { $Script:DiscAll = $true; break }
     $now = [DateTime]::UtcNow
     if ($now -ge $nextAttempt) {
-      if (Invoke-ArchHealthFetch) { $Script:HealthState = 'ok'; return }
+      if (Invoke-ArchHealthFetch) { $Script:HealthState = 'ok'; Clear-ArchWaitPrompt; return }
       $delay = [Math]::Min($delay * 2, 4)
       $nextAttempt = $now.AddSeconds($delay + (Get-Random -Minimum 0 -Maximum 2))
     }
     $elapsed = [int]([DateTime]::UtcNow - $start).TotalSeconds
+    # the wall clock can step backwards mid-wait (NTP); the counter on
+    # screen must never run back
+    if ($elapsed -lt $lastElapsed) { $elapsed = $lastElapsed }
+    $lastElapsed = $elapsed
     if ($elapsed -ge $RetryTotalSeconds) { break }
     $waitNote = ''
     if ($elapsed -ge $HangTightAfterSeconds) {
-      $waitNote = '— trying to connect... ' + $elapsed + 's, few more seconds, hang tight...  [s] Skip  [d] Disconnect'
+      $waitNote = '— trying to connect... ' + $elapsed + 's, few more seconds, hang tight...'
     } elseif ($elapsed -ge $NoticeAfterSeconds) {
-      $waitNote = '— trying to connect... ' + $elapsed + 's  [s] Skip  [d] Disconnect'
+      $waitNote = '— trying to connect... ' + $elapsed + 's'
     }
     # redraw the full line only when its text changed; otherwise just the
     # spinner glyph moves (see Show-ArchSpinTick)
@@ -415,8 +465,10 @@ function Wait-ArchHealth {
     } else {
       $Script:LastWaitNote = $waitNote
       Show-ArchSpinStart $ActiveRemotes[0].Label $waitNote
+      if ($waitNote) { Show-ArchWaitPrompt }
     }
   }
+  Clear-ArchWaitPrompt
   $Script:HealthState = 'down'
 }
 

@@ -27,9 +27,10 @@ import type { SetupScriptContext } from "./connection-setup-script";
  *   on the same origin, so endpoint reachability covers it;
  * - retries that single request with capped exponential backoff + jitter for
  *   up to 15s when the platform is unreachable, surfacing a "trying to
- *   connect…" line after 3s and a "hang tight" nudge after 10s, with `s`
- *   (skip) / `d` (disconnect) live the whole time. If the budget runs out,
- *   every remote is treated as down;
+ *   connect…" line after 3s — with the disconnect (Y/n) offer on its own
+ *   line below it — and a "hang tight" nudge after 10s. `y`/`n` answer it
+ *   the whole wait. If the budget runs out, every remote is treated as
+ *   down;
  * - then plays the pre-loader animation resource by resource (~0.35s of
  *   appended trailing dots — append-only output cannot flicker): a check for
  *   ok, "Failed to connect to <type> (<id-or-slug>)" for a down one — and
@@ -433,9 +434,9 @@ prompt_down_all() {
   printf '\\n'
   if [ "$DOWN_COUNT" -eq 1 ]; then
     set -- $DOWN_IDXS
-    printf 'Disconnect unreachable %s from Claude? (Y/n) ' "\${GUARD_FAIL_NAMES[$1]}"
+    printf 'Disconnect %s from Claude now? (Y/n) ' "\${GUARD_FAIL_NAMES[$1]}"
   else
-    printf 'Disconnect %s unreachable resources from Claude? (Y/n) ' "$DOWN_COUNT"
+    printf 'Disconnect all %s unreachable resources from Claude now? (Y/n) ' "$DOWN_COUNT"
   fi
   key=''
   read -rs -n 1 key </dev/tty 2>/dev/null || key='n'
@@ -460,10 +461,34 @@ prompt_down_all() {
   return 0
 }
 
+# The disconnect offer during the retry ladder is the same classic (Y/n)
+# prompt, on its own line below the row after a blank line — drawn once via
+# cursor save/restore so the dots keep appending to the row above it, and
+# wiped again the moment the wait resolves. The platform being unreachable
+# affects every active remote, so answering yes disconnects them all.
+WAIT_PROMPT_SHOWN=0
+show_wait_prompt() {
+  [ "$WAIT_PROMPT_SHOWN" = "1" ] && return 0
+  WAIT_PROMPT_SHOWN=1
+  if [ "$ACTIVE_TOTAL" -eq 1 ]; then
+    wait_prompt="Disconnect \${GUARD_FAIL_NAMES[$FIRST_ACTIVE]} from Claude now? (Y/n)"
+  else
+    wait_prompt="Disconnect all $ACTIVE_TOTAL unreachable resources from Claude now? (Y/n)"
+  fi
+  printf '\\033[s\\n\\n%s \\033[u' "$wait_prompt"
+}
+clear_wait_prompt() {
+  [ "$WAIT_PROMPT_SHOWN" = "1" ] && printf '\\033[J'
+  WAIT_PROMPT_SHOWN=0
+  return 0
+}
+
 # One health request for the whole launch, retried with backoff while the
-# spinner plays on the first resource row. s = skip the checks for this
-# launch; d = disconnect every remote (they are all unreachable) — and with
-# nothing left to check, remove the startup check itself.
+# spinner plays on the first resource row. y = disconnect every remote now
+# (they are all unreachable) — and with nothing left to check, remove the
+# startup check itself; n = skip the checks for this launch. Both answer
+# keys are live the whole wait; bare Enter accepts the disconnect default
+# only once the prompt is actually on screen.
 SKIP_ALL=0
 DISC_ALL=0
 LAST_WAIT_NOTE=''
@@ -472,29 +497,42 @@ wait_for_health() {
   start=$(date +%s)
   next_delay=1
   next_attempt=$((start + 1))
+  last_elapsed=0
   while :; do
     key=''
-    read -rs -n 1 -t "$TICK" key </dev/tty 2>/dev/null || true
-    case "$key" in
-      s|S) SKIP_ALL=1; break ;;
-      d|D) DISC_ALL=1; break ;;
-    esac
+    got_key=0
+    read -rs -n 1 -t "$TICK" key </dev/tty 2>/dev/null && got_key=1
+    if [ "$got_key" = "1" ]; then
+      case "$key" in
+        y|Y) DISC_ALL=1; break ;;
+        n|N) SKIP_ALL=1; break ;;
+        '') [ "$WAIT_PROMPT_SHOWN" = "1" ] && { DISC_ALL=1; break; } ;;
+      esac
+    fi
     now=$(date +%s)
     if [ "$now" -ge "$next_attempt" ]; then
-      fetch_health && { HEALTH_STATE='ok'; return 0; }
+      if fetch_health; then
+        HEALTH_STATE='ok'
+        clear_wait_prompt
+        return 0
+      fi
       next_delay=$((next_delay * 2))
       [ "$next_delay" -gt 4 ] && next_delay=4
       next_attempt=$((now + next_delay + RANDOM % 2))
     fi
     elapsed=$(( $(date +%s) - start ))
+    # the wall clock can step backwards mid-wait (NTP); the counter on
+    # screen must never run back (caught live on WSL2)
+    [ "$elapsed" -lt "$last_elapsed" ] && elapsed=$last_elapsed
+    last_elapsed=$elapsed
     if [ "$elapsed" -ge "$RETRY_TOTAL_SECONDS" ]; then
       break
     fi
     wait_note=''
     if [ "$elapsed" -ge "$HANG_TIGHT_AFTER_SECONDS" ]; then
-      wait_note=" — trying to connect... \${elapsed}s, few more seconds, hang tight...  [s] Skip  [d] Disconnect"
+      wait_note=" — trying to connect... \${elapsed}s, few more seconds, hang tight..."
     elif [ "$elapsed" -ge "$NOTICE_AFTER_SECONDS" ]; then
-      wait_note=" — trying to connect... \${elapsed}s  [s] Skip  [d] Disconnect"
+      wait_note=" — trying to connect... \${elapsed}s"
     fi
     # redraw the full line only when its text changed; otherwise just the
     # spinner glyph moves (see spin_tick)
@@ -503,8 +541,10 @@ wait_for_health() {
     else
       LAST_WAIT_NOTE="$wait_note"
       spin_start "\${GUARD_LABELS[$FIRST_ACTIVE]}$wait_note"
+      [ -n "$wait_note" ] && show_wait_prompt
     fi
   done
+  clear_wait_prompt
   HEALTH_STATE='down'
   return 1
 }

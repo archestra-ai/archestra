@@ -76,11 +76,11 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("FailName = 'Skills marketplace (acme-skills)'");
     // a single down remote gets the classic Y/n removal prompt naming it…
     expect(script).toContain(
-      "'Disconnect unreachable ' + $downRemotes[0].FailName + ' from Claude? (Y/n) '",
+      "'Disconnect ' + $downRemotes[0].FailName + ' from Claude now? (Y/n) '",
     );
     // …several down remotes get the remove-all-at-once variant
     expect(script).toContain(
-      "'Disconnect ' + $downRemotes.Count + ' unreachable resources from Claude? (Y/n) '",
+      "'Disconnect all ' + $downRemotes.Count + ' unreachable resources from Claude now? (Y/n) '",
     );
     // Enter accepts the (Y/n) default: remove
     expect(script).toContain("$k.Key -eq 'Enter'");
@@ -108,14 +108,20 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("Nothing connected is left to check");
   });
 
-  test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, live keys", () => {
+  test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, own-line (Y/n) offer", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
     expect(script).toContain("$RetryTotalSeconds = 15");
     expect(script).toContain("$NoticeAfterSeconds = 3");
     expect(script).toContain("$HangTightAfterSeconds = 10");
     expect(script).toContain("few more seconds, hang tight...");
     expect(script).toContain("trying to connect...");
-    expect(script).toContain("[s] Skip  [d] Disconnect");
+    // the disconnect offer sits on its own line below the row (after a
+    // blank line), drawn via cursor save/restore so the dots keep
+    // appending to the row above it
+    expect(script).toContain("function Show-ArchWaitPrompt");
+    expect(script).toContain(
+      "'Disconnect all ' + $ActiveRemotes.Count + ' unreachable resources from Claude now? (Y/n) '",
+    );
     expect(script).toContain("[Math]::Min($delay * 2, 4)");
     expect(script).toContain("Get-Random -Minimum 0 -Maximum 2");
   });

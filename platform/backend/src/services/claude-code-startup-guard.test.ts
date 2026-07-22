@@ -322,23 +322,27 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("'MCP gateway (prod-gateway)'");
     expect(script).toContain("'Skills marketplace (acme-skills)'");
     // a single down remote gets the classic Y/n removal prompt naming it…
-    expect(script).toContain(
-      "Disconnect unreachable %s from Claude? (Y/n)",
-    );
+    expect(script).toContain("Disconnect %s from Claude now? (Y/n)");
     // …several down remotes get the remove-all-at-once variant
     expect(script).toContain(
-      "Disconnect %s unreachable resources from Claude? (Y/n)",
+      "Disconnect all %s unreachable resources from Claude now? (Y/n)",
     );
   });
 
-  test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, live keys", () => {
+  test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, own-line (Y/n) offer", () => {
     const script = renderClaudeCodeStartupGuardScript(CTX);
     expect(script).toContain("RETRY_TOTAL_SECONDS=15");
     expect(script).toContain("NOTICE_AFTER_SECONDS=3");
     expect(script).toContain("HANG_TIGHT_AFTER_SECONDS=10");
     expect(script).toContain("few more seconds, hang tight...");
     expect(script).toContain("trying to connect...");
-    expect(script).toContain("[s] Skip  [d] Disconnect");
+    // the disconnect offer sits on its own line below the row (after a
+    // blank line), drawn via cursor save/restore so the dots keep
+    // appending to the row above it
+    expect(script).toContain(
+      "Disconnect all $ACTIVE_TOTAL unreachable resources from Claude now? (Y/n)",
+    );
+    expect(script).toContain("printf '\\033[s\\n\\n%s \\033[u'");
     expect(script).toContain("next_delay=$((next_delay * 2))");
     expect(script).toContain("RANDOM % 2");
     // the budget running out downs everything
@@ -541,11 +545,11 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     }
   });
 
-  test("interactive, platform unreachable, d during the wait: disconnects EVERYTHING and removes the guard itself", async () => {
+  test("interactive, platform unreachable, y during the wait: disconnects EVERYTHING and removes the guard itself", async () => {
     const { output, guardHome } = await runGuardInteractive({
       script: renderClaudeCodeStartupGuardScript(CTX),
       curlExitCode: 7,
-      keys: "d",
+      keys: "y",
     });
     // every remote's connect step is reversed…
     const log = await readClaudeLog(guardHome);
@@ -580,7 +584,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     });
     expect(output).toContain("Failed to connect to MCP gateway (prod-gateway)");
     expect(output).toContain(
-      "Disconnect unreachable MCP gateway (prod-gateway) from Claude? (Y/n)",
+      "Disconnect MCP gateway (prod-gateway) from Claude now? (Y/n)",
     );
     expect(output).toContain("Disconnected MCP gateway (prod_gateway)");
     const log = await readClaudeLog(guardHome);
@@ -608,7 +612,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(output).toContain("Failed to connect to LLM proxy (profile-123)");
     expect(output).toContain("Failed to connect to MCP gateway (prod-gateway)");
     expect(output).toContain(
-      "Disconnect 2 unreachable resources from Claude? (Y/n)",
+      "Disconnect all 2 unreachable resources from Claude now? (Y/n)",
     );
     const log = await readClaudeLog(guardHome);
     expect(log).toContain("mcp remove --scope user prod_gateway");

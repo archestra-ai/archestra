@@ -297,14 +297,17 @@ export function AppGalleryShareButton(props: {
   // Actions live in the standard sticky footer (right-aligned, full-size
   // buttons), like every other dialog in the app — the body carries content
   // only.
+  // A lone footer action stretches the full width, exactly like the app's
+  // sign-in page button; only the error screen's Cancel/Try-again pair keeps
+  // the standard right-aligned footer row.
   const footer =
     state.step === "signin" ? (
-      <Button type="button" onClick={() => void run()}>
+      <Button type="button" className="w-full" onClick={() => void run()}>
         <Github />
         Sign in with GitHub
       </Button>
     ) : state.step === "ready" ? (
-      <Button type="button" onClick={() => void run()}>
+      <Button type="button" className="w-full" onClick={() => void run()}>
         <GitPullRequestCreateArrow />
         Create Pull Request
       </Button>
@@ -328,6 +331,7 @@ export function AppGalleryShareButton(props: {
       // was left to navigate.
       <Button
         type="button"
+        className="w-full"
         onClick={() => window.open(state.prUrl, GITHUB_TAB_NAME)}
       >
         Open Pull Request
@@ -378,8 +382,9 @@ export function AppGalleryShareButton(props: {
         preventCloseOnEscape
         title={chrome.title}
         // No rule under the header — these are short single-purpose screens,
-        // and the line just chops them in half.
-        headerClassName="border-b-0"
+        // and the line just chops them in half. Centered like the app's
+        // sign-in page, which this flow visually descends from.
+        headerClassName="border-b-0 sm:text-center"
         description={chrome.description}
         // Screens whose whole content is the header and footer (done, the
         // sign-in gate, ready) have no body — collapse its padding.
@@ -504,7 +509,7 @@ function dialogChrome(
   if (state.step === "done") {
     return {
       title: (
-        <span className="flex items-center gap-2">
+        <span className="flex items-center justify-center gap-2">
           <Check className="h-5 w-5 text-green-500" aria-hidden="true" />
           Done.
         </span>

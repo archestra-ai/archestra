@@ -344,7 +344,7 @@ export interface GallerySubmissionFile {
   mimeType: string;
 }
 
-/** The folder-name slug a submission files under (`submissions/<login>/<slug>`). */
+/** The app-name slug a submission's folder and branch are named with. */
 export function gallerySubmissionSlug(bundle: AppRecordingBundle): string {
   return slugify(bundle.app.name) || "app-session";
 }
@@ -354,9 +354,14 @@ export function gallerySubmissionBranch(slug: string): string {
   return `submission/${slug}`;
 }
 
-/** The gallery folder a submission's files live under. */
+/**
+ * The gallery folder a submission's files live under:
+ * `apps/<login>_<slug>`. One predictable segment per app — the gallery site
+ * walks `apps/` to build its grid, and since GitHub logins cannot contain
+ * underscores, the first `_` splits author from app name unambiguously.
+ */
 export function gallerySubmissionFolder(login: string, slug: string): string {
-  return `submissions/${login}/${slug}`;
+  return `apps/${login}_${slug}`;
 }
 
 /**

@@ -843,8 +843,8 @@ function ManualStep(props: {
         <CopyChip text={gallerySubmissionBranch(props.slug)} />
       </div>
       {/* The folder is the gallery's one predictable pattern —
-          submissions/<login>/<slug>/ — that the site walks to build its
-          grid, so the manual path must spell it exactly. */}
+          apps/<login>_<slug>/ — that the site walks to build its grid, so
+          the manual path must spell it exactly. */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span>4. Put bundle file{plural} into folder</span>
         <CopyChip

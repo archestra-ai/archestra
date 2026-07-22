@@ -150,12 +150,12 @@ describe("submitRecordingToAppGallery", () => {
       "GET /repos/archestra-ai/app-gallery/pulls",
       // The in-the-gallery-already probe: the submission's file on the
       // gallery's default branch.
-      "GET /repos/archestra-ai/app-gallery/contents/submissions/sam/pr_review_queue/recording.json",
+      "GET /repos/archestra-ai/app-gallery/contents/apps/sam_pr_review_queue/recording.json",
       "POST /repos/archestra-ai/app-gallery/forks",
       "GET /repos/sam/app-gallery/git/ref/heads/main",
       "POST /repos/sam/app-gallery/git/refs",
-      "GET /repos/sam/app-gallery/contents/submissions/sam/pr_review_queue/recording.json",
-      "PUT /repos/sam/app-gallery/contents/submissions/sam/pr_review_queue/recording.json",
+      "GET /repos/sam/app-gallery/contents/apps/sam_pr_review_queue/recording.json",
+      "PUT /repos/sam/app-gallery/contents/apps/sam_pr_review_queue/recording.json",
       "POST /repos/archestra-ai/app-gallery/pulls",
     ]);
 
@@ -213,7 +213,7 @@ describe("submitRecordingToAppGallery", () => {
     const uploads = calls.filter((c) => c.method === "PUT");
     expect(uploads).toHaveLength(2);
     expect(uploads[1].url).toContain(
-      "/contents/submissions/sam/pr_review_queue/thumbnail.webp",
+      "/contents/apps/sam_pr_review_queue/thumbnail.webp",
     );
     expect(atob((uploads[1].body as { content: string }).content)).toBe(
       "final-frame",
@@ -357,7 +357,7 @@ describe("submitRecordingToAppGallery", () => {
     expect(failure).toMatchObject({
       merged: true,
       prUrl:
-        "https://github.com/archestra-ai/app-gallery/tree/HEAD/submissions/sam/pr_review_queue",
+        "https://github.com/archestra-ai/app-gallery/tree/HEAD/apps/sam_pr_review_queue",
     });
   });
 
@@ -617,7 +617,7 @@ describe("fetchSubmittedPrState", () => {
           const url = String(input);
           if (url.includes("/files")) {
             return Response.json([
-              { filename: "submissions/sam/pr_review_queue/recording.json" },
+              { filename: "apps/sam_pr_review_queue/recording.json" },
             ]);
           }
           if (url.includes("/contents/")) return contents();

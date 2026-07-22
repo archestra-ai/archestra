@@ -1,0 +1,183 @@
+{
+  "name": "ankitmalik84__agentic_longterm_memory__src__notion_mcp_server",
+  "display_name": "notion_mcp_server",
+  "description": "Sophisticated AI chatbot with long-term memory capabilities, complete Notion workspace integration, and MCP (Model Context Protocol) implementation. Features semantic, episodic, and procedural memory systems.",
+  "author": {
+    "name": "ankitmalik84"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/notion_mcp_server/api_serverV2.py"],
+    "env": {
+      "NOTION_TOKEN": "${user_config.notion_token}",
+      "HOST": "${user_config.host}",
+      "PORT": "${user_config.port}",
+      "DEBUG": "${user_config.debug}",
+      "MAX_PAGE_SIZE": "${user_config.max_page_size}",
+      "DEFAULT_PAGE_SIZE": "${user_config.default_page_size}",
+      "MAX_CONTENT_LENGTH": "${user_config.max_content_length}",
+      "ENABLE_ANALYTICS": "${user_config.enable_analytics}",
+      "ENABLE_BULK_OPERATIONS": "${user_config.enable_bulk_operations}",
+      "LOG_LEVEL": "${user_config.log_level}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "notion_token": {
+      "type": "string",
+      "title": "Notion Integration Token",
+      "description": "Your Notion integration token (starts with ntn_)",
+      "sensitive": true,
+      "required": true,
+      "default": "ntn_your_integration_token_here"
+    },
+    "host": {
+      "type": "string",
+      "title": "Server Host",
+      "description": "The host address for the server",
+      "required": false,
+      "default": "0.0.0.0"
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port number for the server",
+      "required": false,
+      "default": 8081,
+      "min": 1,
+      "max": 65535
+    },
+    "debug": {
+      "type": "boolean",
+      "title": "Debug Mode",
+      "description": "Enable debug logging and features",
+      "required": false,
+      "default": false
+    },
+    "max_page_size": {
+      "type": "number",
+      "title": "Maximum Page Size",
+      "description": "Maximum number of items per page in paginated results",
+      "required": false,
+      "default": 100,
+      "min": 1
+    },
+    "default_page_size": {
+      "type": "number",
+      "title": "Default Page Size",
+      "description": "Default number of items per page in paginated results",
+      "required": false,
+      "default": 20,
+      "min": 1
+    },
+    "max_content_length": {
+      "type": "number",
+      "title": "Maximum Content Length",
+      "description": "Maximum character length for content blocks before splitting",
+      "required": false,
+      "default": 2000,
+      "min": 1
+    },
+    "enable_analytics": {
+      "type": "boolean",
+      "title": "Enable Analytics",
+      "description": "Enable workspace and content analytics features",
+      "required": false,
+      "default": true
+    },
+    "enable_bulk_operations": {
+      "type": "boolean",
+      "title": "Enable Bulk Operations",
+      "description": "Enable bulk page and content operations",
+      "required": false,
+      "default": true
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Logging Level",
+      "description": "Set the logging verbosity (e.g., INFO, DEBUG, WARNING, ERROR)",
+      "required": false,
+      "default": "INFO"
+    }
+  },
+  "readme": "# Notion MCP Server V2 🚀\n\nA comprehensive **Model Context Protocol (MCP) server** for Notion integration with enhanced functionality, robust error handling, production-ready features, and **bulletproof validation**.\n\n## ✨ Features\n\n### 🔧 **Core Operations**\n\n- ✅ **Search**: Find pages and databases with advanced filtering\n- ✅ **Page Operations**: Create, read, update pages with full content support\n- ✅ **Content Management**: Add paragraphs, headings, bullet points, todos, **links, and bookmarks**\n- ✅ **Database Operations**: List and query databases\n\n### 🔗 **Advanced Content Types** _(NEW)_\n\n- ✅ **Bookmarks**: Add external website links with URL validation\n- ✅ **Link to Page**: Create internal links between Notion pages\n- ✅ **Rich Content**: Support for all major Notion block types\n- ✅ **Content Splitting**: Automatic handling of long content (2000+ chars)\n\n### 📊 **Analytics & Insights**\n\n- ✅ **Workspace Analytics**: Total pages, databases, recent activity\n- ✅ **Content Analytics**: Structure analysis and metrics\n- ✅ **Activity Tracking**: Recent edits and usage patterns\n- ✅ **Performance Metrics**: Optimized with configurable timeouts\n\n### 🔄 **Bulk Operations** _(OPTIMIZED)_\n\n- ✅ **Smart Pagination**: Prevents timeouts with configurable limits\n- ✅ **Bulk Content Addition**: Add multiple content blocks at once\n- ✅ **Bulk Page Operations**: Create and manage multiple pages\n- ✅ **Performance Controls**: Optional block counts for faster responses\n\n### 🌐 **API Interfaces**\n\n- ✅ **FastAPI REST API**: Production-ready HTTP endpoints\n- ✅ **Interactive CLI**: Command-line interface for direct usage\n- ✅ **MCP Compatible**: Full Model Context Protocol support\n- ✅ **Agent Integration**: Unified endpoint for AI agents\n\n### 🛡️ **Production Features** _(ENHANCED)_\n\n- ✅ **Bulletproof Validation**: Comprehensive input validation and error handling\n- ✅ **Configuration Management**: Environment-based settings\n- ✅ **Smart Error Recovery**: Detailed error messages and recovery guidance\n- ✅ **Health Checks**: Monitoring and status endpoints with feature detection\n- ✅ **Structured Logging**: Configurable logging with performance insights\n- ✅ **CORS Support**: Cross-origin resource sharing\n- ✅ **Timeout Optimization**: Dynamic timeouts based on operation complexity\n\n### 🧪 **Testing & Quality** _(COMPREHENSIVE)_\n\n- ✅ **46KB Test Suite**: 1,158 lines of comprehensive tests\n- ✅ **13+ Test Categories**: Core, content, bulk, links, analytics, edge cases\n- ✅ **Validation Testing**: Tests for all error scenarios and edge cases\n- ✅ **Performance Testing**: Timeout and optimization validation\n- ✅ **Detailed Reporting**: JSON reports with timing and categorization\n\n## 🏗️ Architecture\n\n```\nnotion_mcp_server/\n├── 📄 __init__.py           # Package initialization\n├── 🔧 config.py             # Configuration management\n├── 🌐 api_serverV2.py       # FastAPI REST API server (49KB)\n├── 💻 serverV2.py           # Interactive CLI server\n├── ⚙️ core_operations.py    # Basic CRUD operations\n├── 📊 analytics_operations.py # Analytics and metrics\n├── 🔄 bulk_operations.py    # Bulk processing\n├── ✏️ update_operations.py  # Content updates (35KB)\n├── 🛠️ notion_utils.py      # Utility functions\n├── 🧪 test_server.py        # Comprehensive test suite (48KB)\n└── 📖 README.md             # This file\n```\n\n## 📦 Installation\n\n### Prerequisites\n\n- Python 3.8+\n- Notion account with integration token\n- pip or conda package manager\n\n### Setup\n\n1. **Install Dependencies**\n\n```bash\npip install notion-client fastapi uvicorn python-dotenv pydantic requests\n```\n\n2. **Environment Configuration**\n   Create a `.env` file in your project root:\n\n```env\n# Required\nNOTION_TOKEN=ntn_your_integration_token_here\n\n# Optional Server Settings\nHOST=0.0.0.0\nPORT=8081\nDEBUG=false\n\n# Optional Feature Settings\nMAX_PAGE_SIZE=100\nDEFAULT_PAGE_SIZE=20\nMAX_CONTENT_LENGTH=2000\nENABLE_ANALYTICS=true\nENABLE_BULK_OPERATIONS=true\n\n# Optional Logging\nLOG_LEVEL=INFO\n```\n\n3. **Get Your Notion Token**\n\n- Go to [Notion Integrations](https://www.notion.so/profile/integrations)\n- Create a new integration\n- Copy the token (starts with `ntn_`)\n- Share your pages/databases with the integration\n\n## 🚀 Usage\n\n### 1. FastAPI Server (Production)\n\n**Start the server:**\n\n```bash\npython -m notion_mcp_server.api_serverV2\n```\n\n**Server will be available at:**\n\n- API: `http://localhost:8081`\n- Documentation: `http://localhost:8081/docs`\n- Health Check: `http://localhost:8081/health`\n\n### 2. Interactive CLI\n\n```bash\npython -m notion_mcp_server.serverV2\n```\n\n### 3. Python Integration\n\n```python\nfrom notion_mcp_server import ComprehensiveNotionServer\nimport asyncio\n\nasync def example():\n    server = ComprehensiveNotionServer(\"your_notion_token\")\n    await server.core_ops.search_content(\"search term\")\n\nasyncio.run(example())\n```\n\n## 📚 API Documentation\n\n### 🔍 **Search Endpoint**\n\n```http\nPOST /api/search\nContent-Type: application/json\n\n{\n  \"query\": \"search term\",\n  \"page_size\": 10\n}\n```\n\n### 📄 **Create Page**\n\n```http\nPOST /api/page/create\nContent-Type: application/json\n\n{\n  \"title\": \"My New Page\",\n  \"content\": \"Initial content\",\n  \"parent_id\": \"optional-parent-page-id\"\n}\n```\n\n### 📖 **Read Page**\n\n```http\nPOST /api/page/read\nContent-Type: application/json\n\n{\n  \"identifier\": \"page-id-or-title\"\n}\n```\n\n### ✏️ **Add Content** _(ENHANCED)_\n\n```http\nPOST /api/page/add-content\nContent-Type: application/json\n\n{\n  \"page_id\": \"page-id\",\n  \"content_type\": \"paragraph\",\n  \"content\": \"New paragraph content\"\n}\n```\n\n**Supported content types:**\n\n- `paragraph` - Regular text\n- `heading_1` - Large heading\n- `heading_2` - Medium heading\n- `heading_3` - Small heading\n- `bulleted_list_item` - Bullet point\n- `to_do` - Checkbox item\n- `bookmark` - External website link _(NEW)_\n- `link_to_page` - Internal page link _(NEW)_\n\n### 🔗 **Link Content Types** _(NEW)_\n\n**Add Bookmark (External Link):**\n\n```http\nPOST /api/page/add-content\nContent-Type: application/json\n\n{\n  \"page_id\": \"page-id\",\n  \"content_type\": \"bookmark\",\n  \"content\": \"OpenAI Website\",\n  \"url\": \"https://www.openai.com\"\n}\n```\n\n**Add Link to Page (Internal Link):**\n\n```http\nPOST /api/page/add-content\nContent-Type: application/json\n\n{\n  \"page_id\": \"page-id\",\n  \"content_type\": \"link_to_page\",\n  \"content\": \"Link to related page\",\n  \"page_reference\": \"target-page-id-or-title\"\n}\n```\n\n### 🔄 **Bulk Content Addition** _(ENHANCED)_\n\n```http\nPOST /api/page/bulk-add-content\nContent-Type: application/json\n\n{\n  \"page_id\": \"page-id\",\n  \"items\": [\n    {\n      \"content_type\": \"heading_2\",\n      \"content\": \"Section Title\"\n    },\n    {\n      \"content_type\": \"paragraph\",\n      \"content\": \"Paragraph content\"\n    },\n    {\n      \"content_type\": \"bookmark\",\n      \"url\": \"https://example.com\",\n      \"content\": \"External Link\"\n    },\n    {\n      \"content_type\": \"link_to_page\",\n      \"page_reference\": \"other-page-id\",\n      \"content\": \"Internal Link\"\n    },\n    {\n      \"content_type\": \"to_do\",\n      \"content\": \"Task item\",\n      \"checked\": false\n    }\n  ]\n}\n```\n\n### 📊 **Analytics**\n\n```http\nPOST /api/analytics\nContent-Type: application/json\n\n{\n  \"type\": \"workspace\"\n}\n```\n\n**Analytics types:** `workspace`, `content`, `activity`, `database`\n\n### 🔄 **Bulk Operations** _(OPTIMIZED)_\n\n```http\nPOST /api/bulk\nContent-Type: application/json\n\n{\n  \"operation\": \"list\",\n  \"query\": \"{\\\"limit\\\": 10, \\\"include_block_counts\\\": false}\"\n}\n```\n\n**Optimization options:**\n\n- `limit`: Number of pages to process (1-50)\n- `include_block_counts`: Whether to calculate block counts (slower)\n\n**Operations:** `list`, `analyze`, `create`\n\n### 🤖 **Agent Integration**\n\n```http\nPOST /api/agent/query\nContent-Type: application/json\n\n{\n  \"action\": \"search\",\n  \"parameters\": {\n    \"query\": \"search term\",\n    \"page_size\": 10\n  }\n}\n```\n\n**Available actions:** `search`, `read_page`, `create_page`, `add_content`, `bulk_add_content`, `analytics`, `bulk_operations`\n\n## 🧪 Testing _(COMPREHENSIVE)_\n\nRun the comprehensive test suite:\n\n```bash\n# Start the server first\npython -m notion_mcp_server.api_serverV2\n\n# In another terminal, run tests\ncd src/notion_mcp_server\npython test_server.py\n```\n\n**Test Coverage (1,158 lines, 13+ categories):**\n\n- ✅ **Core Operations**: Health checks, search, page creation/reading\n- ✅ **Content Addition**: All content types including links and bookmarks\n- ✅ **Bulk Content**: Multiple content blocks and optimization\n- ✅ **Link Functionality**: Bookmark and link_to_page validation\n- ✅ **Analytics**: All analytics types and performance\n- ✅ **Bulk Operations**: Optimized pagination and limits\n- ✅ **Agent Integration**: All agent query actions\n- ✅ **Edge Cases**: Error handling, validation, timeouts\n- ✅ **Exception Handling**: Network issues, invalid inputs\n\n**Test Features:**\n\n- 🎯 **Detailed Reporting**: Success rates, timing, categorization\n- 📊 **Performance Insights**: Response times and bottlenecks\n- 📄 **JSON Reports**: Exportable test results with timestamps\n- 🧹 **Cleanup Scripts**: Automatic test data management\n\n## ⚙️ Configuration\n\n### Environment Variables\n\n| Variable                 | Default      | Description                   |\n| ------------------------ | ------------ | ----------------------------- |\n| `NOTION_TOKEN`           | _(required)_ | Your Notion integration token |\n| `HOST`                   | `0.0.0.0`    | Server host address           |\n| `PORT`                   | `8081`       | Server port                   |\n| `DEBUG`                  | `false`      | Enable debug mode             |\n| `MAX_PAGE_SIZE`          | `100`        | Maximum results per page      |\n| `DEFAULT_PAGE_SIZE`      | `20`         | Default results per page      |\n| `MAX_CONTENT_LENGTH`     | `2000`       | Maximum content block length  |\n| `ENABLE_ANALYTICS`       | `true`       | Enable analytics endpoints    |\n| `ENABLE_BULK_OPERATIONS` | `true`       | Enable bulk operations        |\n| `LOG_LEVEL`              | `INFO`       | Logging level                 |\n\n### Configuration Validation\n\nThe server automatically validates all configuration on startup and provides clear error messages for invalid settings.\n\n## 🔧 Integration Examples\n\n### With AI Agents\n\n```python\nimport requests\n\n# Search for content\nresponse = requests.post(\"http://localhost:8081/api/agent/query\", json={\n    \"action\": \"search\",\n    \"parameters\": {\"query\": \"project notes\"}\n})\n\n# Create a new page with links\nresponse = requests.post(\"http://localhost:8081/api/agent/query\", json={\n    \"action\": \"create_page\",\n    \"parameters\": {\n        \"title\": \"AI Generated Page\",\n        \"content\": \"This page was created by an AI agent\"\n    }\n})\n\n# Add bookmark to page\nresponse = requests.post(\"http://localhost:8081/api/agent/query\", json={\n    \"action\": \"add_content\",\n    \"parameters\": {\n        \"page_id\": \"page-id\",\n        \"content_type\": \"bookmark\",\n        \"content\": \"Useful Resource\",\n        \"url\": \"https://example.com\"\n    }\n})\n```\n\n### With Your Chatbot\n\n```python\n# Already integrated in your chatbot_agentic_v3.py!\n# Enhanced with ALL new functions:\n\n# Core functions\nserver.notion_search_content()\nserver.notion_read_page()\nserver.notion_create_page()\n\n# Content addition with links\nserver.notion_add_paragraph()\nserver.notion_add_heading()\nserver.notion_add_bullet_point()\nserver.notion_add_todo()\n\n# Smart content helpers\nserver.notion_add_structured_content()  # Multi-section content\nserver.notion_add_smart_content()       # AI-friendly content parsing\n\n# Bulk operations\nserver.notion_bulk_create_pages()\nserver.notion_bulk_list_pages()\nserver.notion_bulk_analyze_pages()\n\n# Analytics\nserver.notion_workspace_analytics()\nserver.notion_content_analytics()\nserver.notion_activity_analytics()\n```\n\n## 📈 Performance Features _(ENHANCED)_\n\n- **Async Operations**: Non-blocking I/O for better performance\n- **Smart Timeouts**: Dynamic timeouts (30s standard, 60s bulk, 45s analytics)\n- **Pagination Controls**: Configurable limits to prevent timeouts\n- **Connection Pooling**: Efficient Notion API connections\n- **Request Validation**: Fast input validation and sanitization\n- **Error Recovery**: Graceful handling of API failures\n- **Memory Efficient**: Optimized for low memory usage\n- **Progress Yielding**: Prevents blocking during bulk operations\n\n## 🛡️ Security & Validation Features _(BULLETPROOF)_\n\n- **Token Validation**: Automatic Notion token validation\n- **Input Sanitization**: Protection against malicious input\n- **Comprehensive Validation**: All content types validated\n  - Bookmark URLs must be valid HTTP/HTTPS\n  - Page references must exist\n  - Content length limits enforced\n  - Required fields validation\n- **Rate Limiting Ready**: Framework for rate limiting (configurable)\n- **CORS Support**: Secure cross-origin requests\n- **Environment Isolation**: Secure environment variable handling\n- **HTTP Status Handling**: Proper error code processing\n\n## 📋 Error Handling _(ENHANCED)_\n\nThe server provides detailed error messages for all scenarios:\n\n### Validation Errors\n\n- **Missing URLs**: \"URL is required for bookmark content type\"\n- **Invalid Page References**: \"Target page not found: page-name\"\n- **Empty Content**: \"Content cannot be empty\"\n- **Invalid Content Types**: Clear list of supported types\n\n### API Errors\n\n- **Invalid Tokens**: Clear guidance for token setup\n- **Missing Pages**: Helpful suggestions for page access\n- **API Limits**: Graceful handling of Notion API limits\n- **Network Issues**: Automatic retry mechanisms\n- **Timeout Prevention**: Smart limits and pagination\n\n### HTTP Status Codes\n\n- **200**: Successful operations\n- **400**: Validation errors (missing fields, invalid formats)\n- **404**: Resource not found (pages, invalid references)\n- **500**: Server errors (with detailed diagnostics)\n- **503**: Server not initialized\n\n## 🆔 Version History\n\n### V2.1.0 (Current) _(MAJOR UPDATE)_\n\n- 🔗 **Link Functionality**: Bookmarks and link_to_page support\n- 🛡️ **Bulletproof Validation**: Comprehensive input validation\n- ⚡ **Timeout Optimization**: Fixed bulk operations with smart pagination\n- 🧪 **Enhanced Test Suite**: 48KB comprehensive testing (1,158 lines)\n- 📊 **HTTP Status Handling**: Proper error code processing in tests\n- 🎯 **Performance Controls**: Configurable timeouts and limits\n- 📈 **Smart Content**: AI-friendly content parsing helpers\n\n### V2.0.0 (Previous)\n\n- ✅ Complete rewrite with enhanced features\n- ✅ Configuration management system\n- ✅ Basic test suite\n- ✅ Production-ready error handling\n- ✅ Bulk operations support\n- ✅ Enhanced content management\n- ✅ Agent integration endpoints\n\n### V1.0.0 (Legacy)\n\n- ✅ Basic MCP server functionality\n- ✅ Core operations (search, read, create)\n- ✅ Simple CLI interface\n\n## 🤝 Contributing\n\n1. Fork the repository\n2. Create a feature branch: `git checkout -b feature-name`\n3. Make your changes with tests\n4. Run the comprehensive test suite: `python test_server.py`\n5. Ensure all tests pass (aim for 90%+ success rate)\n6. Submit a pull request\n\n**Testing Requirements:**\n\n- All new features must include tests\n- Validation scenarios must be covered\n- Performance implications should be documented\n- Error handling paths must be tested\n\n## 📞 Support\n\nIf you encounter issues:\n\n1. **Check Configuration**: Ensure all environment variables are set correctly\n2. **Verify Token**: Make sure your Notion token is valid and has proper permissions\n3. **Run Health Check**: Visit `/health` endpoint to verify server status\n4. **Run Test Suite**: Use `python test_server.py` to identify specific issues\n5. **Check Logs**: Review server logs for detailed error messages\n6. **Test Validation**: Ensure your content meets validation requirements\n\n**Common Issues:**\n\n- **Link validation errors**: Ensure URLs start with http/https\n- **Timeout issues**: Use pagination controls for large operations\n- **Page not found**: Verify page sharing with integration\n- **Content too long**: Content blocks limited to 2000 characters\n\n### 📧 **Contact Information**\n\nFor direct support or questions:\n\n- **📱 Phone**: +918449035579\n- **📧 Email**: ankitmalik844903@gmail.com\n- **👨‍💻 Developer**: Ankit Malik\n\nFeel free to reach out for:\n\n- ✅ Technical support and troubleshooting\n- ✅ Feature requests and suggestions\n- ✅ Integration assistance\n- ✅ Bug reports and issues\n- ✅ Custom development needs\n\n## 📄 License\n\nThis project is part of the Agentic Long-Term Memory system.\n\n---\n\n**🎉 Your Notion MCP Server V2.1 is bulletproof and production-ready!**\n\n**⚡ New in V2.1:**\n\n- 🔗 **Link Support** - Bookmarks and internal page links\n- 🛡️ **Bulletproof Validation** - Comprehensive error prevention\n- ⚡ **Timeout Optimization** - Smart pagination and limits\n- 🧪 **48KB Test Suite** - Comprehensive testing and reporting\n- 🎯 **Performance Controls** - Configurable timeouts and limits\n\n**📊 Quality Metrics:**\n\n- **1,158 lines** of test coverage\n- **13+ test categories** including edge cases\n- **90%+ success rate** target for all operations\n- **Sub-5 second** response times for optimized operations\n",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "notion-mcp-server-api-v2": {
+        "command": "python",
+        "args": ["-m", "notion_mcp_server.api_serverV2"],
+        "env": {}
+      },
+      "notion-mcp-server-cli-v2": {
+        "command": "python",
+        "args": ["-m", "notion_mcp_server.serverV2"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ankitmalik84",
+    "repo": "Agentic_Longterm_Memory",
+    "url": "https://github.com/ankitmalik84/Agentic_Longterm_Memory/tree/main/src/notion_mcp_server",
+    "name": "Agentic_Longterm_Memory",
+    "path": "src/notion_mcp_server",
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e60135ebd7f01630f7c68bdc804a5fb05dc42a6f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:45.742Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "notion-client",
+      "importance": 9
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\n# Notion MCP Server V2.1 Requirements\n# Production-ready dependencies for the Notion MCP Server\n#\n# Installation:\n#   pip install -r requirements.txt\n#\n# For development:\n#   pip install -r requirements.txt -e .\n\n# Core Notion API\nnotion-client>=2.0.0\n\n# FastAPI Server Dependencies\nfastapi>=0.104.0\nuvicorn>=0.24.0\npydantic>=2.0.0\n\n# Environment and Configuration\npython-dotenv>=1.0.0\n\n# HTTP Client for Testing\nrequests>=2.31.0\n\n# Additional FastAPI Middleware (included with fastapi but explicit for clarity)\n# python-multipart>=0.0.6  # Uncomment if you need file upload support in the future\n\n# Notes:\n# - All dependencies are pinned to minimum versions for stability\n# - Compatible with Python 3.8+\n# - Tested with these versions in production environment "
+}

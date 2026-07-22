@@ -1,0 +1,101 @@
+{
+  "name": "isaacwasserman__mcp-vegalite-server",
+  "display_name": "mcp-vegalite-server",
+  "description": "MCP server from isaacwasserman/mcp-vegalite-server",
+  "author": {
+    "name": "isaacwasserman"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "mcp_server_datavis", "--output_type", "${user_config.output_type}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "output_type": {
+      "type": "string",
+      "title": "Output Type",
+      "description": "Specify the output format for visualizations (png or text).",
+      "required": false,
+      "default": "png"
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/isaacwasserman-mcp-vegalite-server-badge.png)](https://mseep.ai/app/isaacwasserman-mcp-vegalite-server)\n\n# Data Visualization MCP Server\n[![smithery badge](https://smithery.ai/badge/mcp-server-vegalite)](https://smithery.ai/server/mcp-server-vegalite)\n\n## Overview\nA Model Context Protocol (MCP) server implementation that provides the LLM an interface for visualizing data using Vega-Lite syntax.\n\n## Components\n\n### Tools\nThe server offers two core tools:\n\n- `save_data`\n   - Save a table of data agregations to the server for later visualization\n   - Input:\n     - `name` (string): Name of the data table to be saved\n     - `data` (array): Array of objects representing the data table\n   - Returns: success message\n- `visualize_data`\n   - Visualize a table of data using Vega-Lite syntax\n   - Input:\n     - `data_name` (string): Name of the data table to be visualized\n     - `vegalite_specification` (string): JSON string representing the Vega-Lite specification\n   - Returns: If the `--output_type` is set to `text`, returns a success message with an additional `artifact` key containing the complete Vega-Lite specification with data. If the `--output_type` is set to `png`, returns a base64 encoded PNG image of the visualization using the MPC `ImageContent` container.\n\n## Usage with Claude Desktop\n\n```python\n# Add the server to your claude_desktop_config.json\n{\n  \"mcpServers\": {\n    \"datavis\": {\n        \"command\": \"uv\",\n        \"args\": [\n            \"--directory\",\n            \"/absolute/path/to/mcp-datavis-server\",\n            \"run\",\n            \"mcp_server_datavis\",\n            \"--output_type\",\n            \"png\" # or \"text\"\n        ]\n    }\n  }\n}\n```\n",
+  "category": "Data Science",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp_server_datavis-png": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "/absolute/path/to/mcp-datavis-server",
+          "run",
+          "mcp_server_datavis",
+          "--output_type",
+          "png"
+        ],
+        "env": {}
+      },
+      "mcp_server_datavis-text": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "/absolute/path/to/mcp-datavis-server",
+          "run",
+          "mcp_server_datavis",
+          "--output_type",
+          "text"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "isaacwasserman",
+    "repo": "mcp-vegalite-server",
+    "url": "https://github.com/isaacwasserman/mcp-vegalite-server",
+    "name": "mcp-vegalite-server",
+    "path": null,
+    "stars": 83,
+    "contributors": 3,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "16aefed598b8cd897b78e99b907f6e2984572c61"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.958Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "vl-convert-python",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-vegalite\"\nversion = \"0.0.1\"\ndescription = \"A simple Data Visualization MCP server using Vega-Lite\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp>=1.0.0\",\n    \"vl-convert-python\"\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\"pyright>=1.1.389\"]\n\n[project.scripts]\nmcp_server_vegalite = \"mcp_server_vegalite:main\"\n"
+}

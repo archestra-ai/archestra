@@ -49,8 +49,33 @@
   // Events carry an absolute epoch `ts`; the host rebases them onto the
   // recording clock (same machine, same clock).
   const push = (event) => {
-    if (!recording) return;
+    // The recording gate — with one seam per encoder: encoded video/audio
+    // chunks may land during the post-stop drain, while an encoder flushes what
+    // it already owns.
+    if (
+      !recording &&
+      !(videoDraining && event.kind === "video-chunk") &&
+      !(
+        audioDraining &&
+        (event.kind === "audio-chunk" || event.kind === "audio-config")
+      )
+    ) {
+      return;
+    }
     event.ts = Date.now();
+    // Recorded input doubles as an activity signal for the canvas sampler: an
+    // event-driven draw (a click repainting a chart) follows input, not rAF.
+    // Captured output (stills, video/audio chunks/configs) must not count, or
+    // capture would self-sustain.
+    if (
+      event.kind !== "canvas" &&
+      event.kind !== "video-chunk" &&
+      event.kind !== "video-config" &&
+      event.kind !== "audio-chunk" &&
+      event.kind !== "audio-config"
+    ) {
+      inputActivityUntil = event.ts + INPUT_ACTIVITY_MS;
+    }
     buffer.push(event);
     if (buffer.length >= FLUSH_BUFFER_MAX) flush();
   };
@@ -123,18 +148,1045 @@
   // visible result is recorded directly and replayed as itself.
 
   /**
+   * WebGL capture prerequisite, installed at SDK load — the SDK is injected at
+   * the head of the document as a classic script, so this wrap is in place
+   * before any app code (module scripts run only after parse) can create a
+   * context.
+   *
+   * toDataURL reads a WebGL canvas's drawing buffer, and by default that
+   * buffer is cleared the moment each frame reaches the screen — sampled from
+   * a timer, every read comes back blank, so a WebGL app would record nothing
+   * but empty frames. preserveDrawingBuffer can only be chosen at context
+   * creation, and a recording can start at any moment in the app's life, so
+   * while the recording SDK is present every WebGL context is created
+   * preservable. The cost is one extra buffer copy per composited frame —
+   * paid only on deployments that enabled recording, which is what gates
+   * serving this file at all.
+   */
+  const origGetContext = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function (kind, attrs) {
+    if (/^(webgl2?|experimental-webgl)$/.test(String(kind))) {
+      return origGetContext.call(this, kind, {
+        ...(attrs && typeof attrs === "object" ? attrs : {}),
+        preserveDrawingBuffer: true,
+      });
+    }
+    return origGetContext.apply(this, arguments);
+  };
+
+  /**
    * Canvas pixels.
    *
    * A canvas is invisible to a MutationObserver — an app can repaint its entire
    * screen without producing a single mutation — and its contents cannot be
    * re-derived from input. Sampled rather than hooked: wrapping every 2D
-   * context method would be far more code and still miss WebGL. Frames are
-   * emitted only when the bytes change, so a still or paused app costs nothing.
+   * context method would be far more code and still miss WebGL.
+   *
+   * Sampling runs on requestAnimationFrame, so an animating app is captured at
+   * the rate it is presented — full motion, not a slideshow — and the encode
+   * backpressure gate below is the throughput governor: a machine that can't
+   * encode at display rate degrades to the rate it sustains instead of
+   * stalling the app. Three layers keep a quiet app cheap: frames are only
+   * attempted while the app looks active (it scheduled animation frames, or
+   * recorded input just happened), an inactive app drops to a slow keepalive
+   * probe, and a frame whose bytes didn't change is never emitted.
    */
-  const CANVAS_SAMPLE_MS = 100;
+  /** Capture floor while the app shows no animation or input activity. */
+  const CANVAS_KEEPALIVE_MS = 500;
+  /** How long a recorded input event counts as activity (event-driven draws). */
+  const INPUT_ACTIVITY_MS = 1_000;
+  /**
+   * Captured frames are capped at this many pixels (~1080p-class). Encode cost
+   * is linear in pixel count but runs off the main thread, and the queue-depth
+   * guard below sheds load on machines that can't keep up — the cap only
+   * exists for the truly huge sources (a full-viewport canvas on a 2x display
+   * approaches ~6MP). It sits high enough that a HiDPI canvas keeps most of
+   * its native resolution: the old ~720p cap threw away nearly half of a 2x
+   * backing store's linear detail, which replayed as the "low-res" look.
+   */
+  const CANVAS_CAPTURE_MAX_PIXELS = 1920 * 1080;
   const canvasLastFrame = new WeakMap();
-  let canvasTimer = null;
-  const sampleCanvases = () => {
+  /** Canvases with a capture currently encoding — see the backpressure note. */
+  const canvasCaptureBusy = new WeakSet();
+  /** When each canvas last attempted a capture, for the idle keepalive. */
+  const canvasLastAttemptAt = new WeakMap();
+  let canvasRafId = null;
+  /** The app scheduled an animation frame since the sampler last looked. */
+  let appRafScheduled = false;
+  /** Until when recorded input keeps counting as app activity. */
+  let inputActivityUntil = 0;
+  let scratchCanvas = null;
+
+  // ── Encoded video capture (WebCodecs) ──
+  // A canvas filmed as stills re-encodes the whole screen every frame; a video
+  // codec spends those bytes once per keyframe and encodes motion deltas in
+  // between — the difference between megabytes-per-second of WebPs and a few
+  // hundred kilobytes of VP9 at the same fidelity. Where VideoEncoder exists,
+  // each canvas gets one encoder stream: a config event opens it, keyframes
+  // land on a fixed cadence so a seek never re-decodes more than a cadence's
+  // worth of deltas, and chunks flow through the same event pipeline as
+  // everything else — as raw bytes; base64 exists only in the stored bundle.
+  //
+  // VP9/VP8 only, deliberately: every Chromium build decodes them (the offline
+  // renderer may run a codecs-free Chromium where H.264 decode is absent), and
+  // VP9 hardware encode is common on the machines that record. A browser that
+  // can encode neither (or has no WebCodecs) records WebP stills instead.
+  const VIDEO_CODEC_CANDIDATES = ["vp09.00.10.08", "vp8"];
+  /**
+   * Fallback rate control, only for encoders without per-frame quantizers:
+   * bits scale with the captured area (one fixed rate that suits 720p starves
+   * 1080p), clamped so tiny canvases stay decent and huge ones stay bounded.
+   */
+  const VIDEO_BITRATE_PER_PIXEL = 2.0;
+  const VIDEO_BITRATE_MIN = 1_000_000;
+  const VIDEO_BITRATE_MAX = 4_000_000;
+  /**
+   * Keyframe cadence. Keys at ~1080p cost hundreds of kilobytes each, so the
+   * cadence is a real share of the whole byte budget; a seek re-decodes at
+   * most a cadence's worth of deltas, which stays well under a second of
+   * decode work.
+   */
+  const VIDEO_KEYFRAME_MS = 2_000;
+  /** How deep the encoder's input queue may grow before frames are skipped. */
+  const VIDEO_MAX_QUEUE = 2;
+  // ── Constant quality (per-frame quantizer), where the encoder supports it.
+  // Quality stays fixed and bytes follow content: an unchanged scene encodes
+  // to skip-block deltas of a few hundred bytes, motion costs what it costs.
+  // Two feedback loops keep it safe: queue pressure raises the quantizer —
+  // cheaper frames also encode FASTER, so a slow machine softens briefly
+  // instead of dropping frames — and a byte-rate governor nudges it up when
+  // the rolling output rate crosses its ceiling, so a worst-case all-motion
+  // recording stays bounded instead of growing without limit.
+  const VIDEO_BASE_QP = 30; // VP9 0..63 — visually clean for UI/3D content
+  /** Keys are what seeks land on and posters paint — spend more on them. */
+  const VIDEO_KEY_QP_BONUS = 2;
+  const VIDEO_MIN_QP = 12;
+  const VIDEO_MAX_QP = 56;
+  const VIDEO_QP_BOOST_STEP = 3;
+  const VIDEO_QP_BOOST_MAX = 18;
+  /**
+   * The governor's ceiling is a TOTAL across every stream in the recording,
+   * not per canvas — bundles are stored, uploaded and rendered whole, so the
+   * number that matters is the recording's byte rate, and a three-canvas app
+   * must not cost three times a one-canvas app. Content that outruns even the
+   * maximum quantizer settles at the frame shed's line — this ceiling times
+   * its headroom — so the ceiling is sized from there: a worst-case
+   * all-motion 30s cut stays ~14MB of video (~19MB as a shared bundle), and
+   * a minutes-long raw take stays under the ~100MB ceilings of the render
+   * and gallery-upload paths. Content below the ceiling never feels it.
+   */
+  const VIDEO_GOVERNOR_MAX_BPS = 3_000_000;
+  /**
+   * Wide enough for the frame shed to hold the ceiling even when single
+   * frames are enormous: the shed can only space frames out, so its floor is
+   * one worst-case frame per window span — a ~2MB frame (1080p noise at max
+   * quantizer) against 5s is ~3 Mbit/s, inside the ceiling. Against a short
+   * window the same frame busts the cap all by itself and the rate floor
+   * lands far above the ceiling no matter how hard the shed works.
+   */
+  const VIDEO_GOVERNOR_WINDOW_MS = 5_000;
+  /**
+   * Reaches VIDEO_MAX_QP from base: on content VP9 cannot cheapen (noise,
+   * particles), a ceiling short of the maximum quantizer pins there and the
+   * rate runs away anyway — convergence has to be reachable, not hoped for.
+   */
+  const VIDEO_GOVERNOR_QP_MAX = VIDEO_MAX_QP - VIDEO_BASE_QP;
+  /**
+   * One quantizer step per adjustment, at most this often. Chunk arrivals
+   * scale with streams times frame rate, and stepping per chunk would swing
+   * the whole range in a fraction of a second; paced, a full climb takes a
+   * couple of seconds — fast enough to bound a burst, slow enough not to
+   * flicker between quality levels.
+   */
+  const VIDEO_GOVERNOR_STEP_MS = 80;
+  /**
+   * The hard brake behind the quantizer: frames stop being FED once the
+   * rolling rate runs this far past the ceiling. Quality-first is the right
+   * first response, but it cannot be the only one — a quantizer reduces what
+   * redundancy the codec can find, and content with none (noise, particles,
+   * camera grain) encodes at hundreds of megabits even at maximum quantizer.
+   * Measured, not assumed: 1080p noise at QP 56 still emits ~200 Mbit/s.
+   * Bytes, not quality, are the contract, so past this line the frame rate
+   * gives way instead: deltas are skipped until the window drains.
+   */
+  const VIDEO_SHED_HEADROOM = 1.25;
+  /**
+   * Keyframes outrank the shed — a stream without them stops being seekable —
+   * but under sustained over-budget content they stretch to this cadence
+   * instead of their usual one. The floor on what a pathological recording
+   * can cost: keys alone at this spacing stay around half the ceiling.
+   */
+  const VIDEO_KEY_MAX_INTERVAL_MS = 6_000;
+  /** canvas → { encoder, sel, width, height, lastKeyMs, errored, ... } */
+  const videoStreams = new WeakMap();
+  /** undefined = not probed yet; null = unsupported; else the chosen mode
+   *  { codec, quantizer } — quantizer true = constant-quality encoding. */
+  let videoMode;
+  let videoCodecProbe = null;
+  let videoDraining = false;
+  // The governor's shared state: every stream's chunks land in one rolling
+  // window, and the one quantizer surcharge applies to all of them.
+  let videoGovernorQp = 0;
+  let videoGovernorAdjustedAt = 0;
+  const videoRateWindow = [];
+
+  const videoBitrateFor = (pixels) =>
+    Math.max(
+      VIDEO_BITRATE_MIN,
+      Math.min(VIDEO_BITRATE_MAX, Math.round(pixels * VIDEO_BITRATE_PER_PIXEL)),
+    );
+
+  const probeVideoCodec = () => {
+    if (videoCodecProbe) return videoCodecProbe;
+    videoCodecProbe = (async () => {
+      if (typeof VideoEncoder !== "function") return null;
+      // Constant quality first — VP9 only, VP8 has no per-frame quantizer in
+      // WebCodecs. A browser without quantizer mode falls back to bitrate.
+      try {
+        const support = await VideoEncoder.isConfigSupported({
+          codec: VIDEO_CODEC_CANDIDATES[0],
+          width: 1280,
+          height: 720,
+          bitrateMode: "quantizer",
+          latencyMode: "realtime",
+        });
+        if (support && support.supported) {
+          return { codec: VIDEO_CODEC_CANDIDATES[0], quantizer: true };
+        }
+      } catch {
+        // fall through to the bitrate candidates
+      }
+      for (const codec of VIDEO_CODEC_CANDIDATES) {
+        try {
+          const support = await VideoEncoder.isConfigSupported({
+            codec,
+            width: 1280,
+            height: 720,
+            bitrate: videoBitrateFor(1280 * 720),
+            latencyMode: "realtime",
+          });
+          if (support && support.supported) return { codec, quantizer: false };
+        } catch {
+          // an unparseable candidate just means "not this one"
+        }
+      }
+      return null;
+    })().then((mode) => {
+      videoMode = mode;
+      return mode;
+    });
+    return videoCodecProbe;
+  };
+
+  const pushVideoConfig = (sel, width, height, description) => {
+    const event = {
+      kind: "video-config",
+      sel,
+      codec: videoMode.codec,
+      codedWidth: width,
+      codedHeight: height,
+    };
+    if (description) {
+      // Copy out of the encoder-owned buffer; the event outlives the callback.
+      event.description = new Uint8Array(
+        description instanceof ArrayBuffer
+          ? description.slice(0)
+          : description.buffer.slice(
+              description.byteOffset,
+              description.byteOffset + description.byteLength,
+            ),
+      );
+    }
+    push(event);
+  };
+
+  const createVideoStream = (sel, width, height) => {
+    const stream = {
+      sel,
+      width,
+      height,
+      lastKeyMs: Number.NEGATIVE_INFINITY,
+      errored: false,
+      encoder: null,
+      descriptionSent: false,
+      // Queue pressure is a property of this one encoder — the governor's
+      // byte-rate state is shared across streams instead.
+      qpBoost: 0,
+      // What this stream's frames have been costing lately — the frame
+      // shed's estimate for the one it is about to admit.
+      lastChunkBytes: 0,
+    };
+    try {
+      stream.encoder = new VideoEncoder({
+        output: (chunk, metadata) => {
+          try {
+            // Codec extradata, when a codec carries any, arrives with the
+            // first chunk — reopen the stream with it so the decoder gets it.
+            const description =
+              metadata &&
+              metadata.decoderConfig &&
+              metadata.decoderConfig.description;
+            if (description && !stream.descriptionSent) {
+              stream.descriptionSent = true;
+              pushVideoConfig(sel, width, height, description);
+            }
+            const bytes = new Uint8Array(chunk.byteLength);
+            chunk.copyTo(bytes);
+            push({
+              kind: "video-chunk",
+              sel,
+              type: chunk.type === "key" ? "key" : "delta",
+              tsUs: Math.max(0, Math.round(chunk.timestamp || 0)),
+              bytes,
+            });
+            stream.lastChunkBytes = bytes.byteLength;
+            governVideoRate(bytes.byteLength);
+          } catch {
+            // a dropped chunk must never break the app
+          }
+        },
+        error: () => {
+          stream.errored = true;
+        },
+      });
+      const config = {
+        codec: videoMode.codec,
+        width,
+        height,
+        // Realtime, deliberately — NOT the quality preset. Quality mode's
+        // lookahead can emit a wall-clock-forced keyframe OUT OF DECODE ORDER
+        // when the input cadence is irregular (capture idles at the keepalive
+        // rate between bursts), and one stale key makes the whole stored tail
+        // undecodable. Realtime has no lookahead, so output order is strict —
+        // and under a per-frame quantizer the quality preset measured zero
+        // size or quality benefit anyway (its wins live in rate control,
+        // which quantizer mode replaces). The hint keeps edges (wireframes,
+        // text) ahead of motion smoothness.
+        latencyMode: "realtime",
+        contentHint: "detail",
+      };
+      if (videoMode.quantizer) {
+        config.bitrateMode = "quantizer";
+      } else {
+        config.bitrate = videoBitrateFor(width * height);
+      }
+      stream.encoder.configure(config);
+    } catch {
+      return null;
+    }
+    pushVideoConfig(sel, width, height, null);
+    return stream;
+  };
+
+  /**
+   * The opaque colour a transparent canvas region flattens onto before it is
+   * encoded. VP9 (profile 0) carries no alpha and the encoder discards it, so a
+   * transparent canvas pixel — whose RGB under the transparency is (0,0,0) —
+   * would otherwise encode as opaque BLACK and, on replay, black out whatever
+   * showed through the real canvas (its own CSS background, the page behind
+   * it). The faithful backdrop is the first solid background up the canvas's
+   * ancestor chain — exactly what the browser composites the canvas over on
+   * screen — and white when none resolves. A non-flat background (an image, a
+   * gradient) can't be sampled and also falls back to white: still far closer
+   * than black.
+   */
+  const resolveVideoBackdrop = (canvas) => {
+    try {
+      let el = canvas;
+      while (el && el.nodeType === 1) {
+        const match = /^rgba?\(([^)]+)\)/.exec(
+          getComputedStyle(el).backgroundColor,
+        );
+        if (match) {
+          const parts = match[1].split(",").map((n) => parseFloat(n));
+          const alpha = parts.length >= 4 ? parts[3] : 1;
+          if (parts.length >= 3 && alpha >= 1) {
+            return "rgb(" + parts[0] + "," + parts[1] + "," + parts[2] + ")";
+          }
+        }
+        el = el.parentElement;
+      }
+    } catch {}
+    return "#ffffff";
+  };
+
+  /**
+   * Feed one canvas frame into its encoder stream, creating or reopening the
+   * stream as needed (first frame, canvas resize, encoder closed by a prior
+   * stop). VideoFrame reads the canvas GPU-side — no toDataURL readback, no
+   * main-thread image encode — and the encoder's own queue is the throttle:
+   * when it falls behind, frames are skipped, never queued up.
+   */
+  const feedVideoFrame = (canvas) => {
+    const pixels = canvas.width * canvas.height;
+    if (!pixels) return;
+    // Codecs subsample chroma in 2x2 blocks, so coded dimensions stay even.
+    let width = canvas.width;
+    let height = canvas.height;
+    if (pixels > CANVAS_CAPTURE_MAX_PIXELS) {
+      const scale = Math.sqrt(CANVAS_CAPTURE_MAX_PIXELS / pixels);
+      width = Math.round(canvas.width * scale);
+      height = Math.round(canvas.height * scale);
+    }
+    width = Math.max(2, width - (width % 2));
+    height = Math.max(2, height - (height % 2));
+
+    let stream = videoStreams.get(canvas);
+    if (
+      stream &&
+      (stream.errored ||
+        !stream.encoder ||
+        stream.encoder.state === "closed" ||
+        stream.width !== width ||
+        stream.height !== height)
+    ) {
+      if (stream.errored) return; // this canvas falls back to stills
+      try {
+        if (stream.encoder && stream.encoder.state !== "closed") {
+          stream.encoder.close();
+        }
+      } catch {}
+      stream = null;
+    }
+    if (!stream) {
+      stream = createVideoStream(
+        selectorFor(canvas).slice(0, 1000),
+        width,
+        height,
+      );
+      if (!stream) return;
+      // The backdrop this canvas's transparent regions flatten onto (see
+      // resolveVideoBackdrop) — resolved once per stream, not per frame.
+      stream.backdrop = resolveVideoBackdrop(canvas);
+      videoStreams.set(canvas, stream);
+    }
+    // Queue pressure: in quantizer mode the first response is a cheaper —
+    // and therefore faster-to-encode — frame, so a machine that falls behind
+    // softens briefly instead of stuttering; only a queue past the hard cap
+    // still skips the frame outright.
+    const queue = stream.encoder.encodeQueueSize;
+    if (queue >= 1) {
+      stream.qpBoost = Math.min(
+        stream.qpBoost + VIDEO_QP_BOOST_STEP,
+        VIDEO_QP_BOOST_MAX,
+      );
+    } else if (stream.qpBoost > 0) {
+      stream.qpBoost -= 1;
+    }
+    if (queue > VIDEO_MAX_QUEUE) return;
+
+    // Always composite onto an opaque backdrop before encoding. VP9 carries no
+    // alpha and the encoder discards it, so a transparent canvas region would
+    // encode as opaque BLACK and, on replay, black out whatever showed through
+    // the real canvas. Filling the stream's backdrop first — then drawing the
+    // canvas over it — makes a transparent region replay as that background
+    // instead. This is the source-over composite the browser already does to
+    // display the canvas, so an opaque canvas is unchanged (the backdrop never
+    // shows) and only genuinely-transparent pixels differ. It stays GPU-side (a
+    // blit, no toDataURL/getImageData readback) and doubles as the resample
+    // step when the frame is downscaled.
+    if (!scratchCanvas) scratchCanvas = document.createElement("canvas");
+    if (scratchCanvas.width !== width) scratchCanvas.width = width;
+    if (scratchCanvas.height !== height) scratchCanvas.height = height;
+    const ctx = scratchCanvas.getContext("2d");
+    if (!ctx) return;
+    // High-quality filter for the one place capture resamples (downscale).
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = stream.backdrop || "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    try {
+      ctx.drawImage(canvas, 0, 0, width, height);
+    } catch {
+      return; // tainted canvas — nothing to record
+    }
+    const source = scratchCanvas;
+    const atMs = nowMs();
+    const keyDue = atMs - stream.lastKeyMs >= VIDEO_KEYFRAME_MS;
+    // The byte-hard backstop. Once the recording's rolling rate — including
+    // what THIS frame is about to cost, estimated from the stream's previous
+    // chunk — would run past the ceiling with headroom, the quantizer has
+    // already given what it can: deltas are dropped outright, and even a due
+    // key waits, up to the hard key interval that keeps the stream seekable.
+    // Predicting the frame's cost matters when frames are huge — checking
+    // only what already landed admits every giant frame exactly once, and on
+    // content where one frame busts the whole window that is the difference
+    // between holding the ceiling and doubling it. Feeding nothing drains the
+    // window within seconds, so this self-limits to bursts around the cap:
+    // pathological content records as a slideshow, never as a runaway bundle.
+    const predictedBps =
+      videoWindowBps(atMs) +
+      (stream.lastChunkBytes * 8 * 1000) / VIDEO_GOVERNOR_WINDOW_MS;
+    if (predictedBps > VIDEO_GOVERNOR_MAX_BPS * VIDEO_SHED_HEADROOM) {
+      const keyOverdue = atMs - stream.lastKeyMs >= VIDEO_KEY_MAX_INTERVAL_MS;
+      if (!keyOverdue) return;
+    }
+    const keyFrame = keyDue;
+    let frame;
+    try {
+      frame = new VideoFrame(source, { timestamp: Math.round(atMs * 1000) });
+    } catch {
+      return;
+    }
+    try {
+      const options = { keyFrame };
+      if (videoMode.quantizer) {
+        const qp = Math.min(
+          VIDEO_MAX_QP,
+          Math.max(
+            VIDEO_MIN_QP,
+            VIDEO_BASE_QP + stream.qpBoost + videoGovernorQp,
+          ),
+        );
+        options.vp9 = {
+          quantizer: keyFrame
+            ? Math.max(VIDEO_MIN_QP, qp - VIDEO_KEY_QP_BONUS)
+            : qp,
+        };
+      }
+      stream.encoder.encode(frame, options);
+      if (keyFrame) stream.lastKeyMs = atMs;
+    } catch {
+      stream.errored = true;
+    } finally {
+      frame.close();
+    }
+  };
+
+  /**
+   * The recording's rolling video output rate — every stream's chunks in one
+   * window. What the governor steers by and the frame shed cuts on.
+   */
+  const videoWindowBps = (now) => {
+    while (
+      videoRateWindow.length &&
+      videoRateWindow[0].t < now - VIDEO_GOVERNOR_WINDOW_MS
+    ) {
+      videoRateWindow.shift();
+    }
+    let bytes = 0;
+    for (const entry of videoRateWindow) bytes += entry.bytes;
+    return (bytes * 8 * 1000) / VIDEO_GOVERNOR_WINDOW_MS;
+  };
+
+  /**
+   * The byte-rate governor: constant quality has no ceiling of its own, so
+   * when the recording's rolling output rate — all streams together — crosses
+   * the cap, quality gives way one quantizer step at a time (and comes back
+   * the same way once safely under). Bounds a worst-case all-motion recording
+   * without touching typical ones. The window is fed in every mode — the
+   * frame shed reads it too — while the quantizer response only exists where
+   * per-frame quantizers do.
+   */
+  const governVideoRate = (chunkBytes) => {
+    const now = nowMs();
+    videoRateWindow.push({ t: now, bytes: chunkBytes });
+    const bps = videoWindowBps(now);
+    if (!videoMode || !videoMode.quantizer) return;
+    if (now - videoGovernorAdjustedAt < VIDEO_GOVERNOR_STEP_MS) return;
+    if (bps > VIDEO_GOVERNOR_MAX_BPS) {
+      if (videoGovernorQp < VIDEO_GOVERNOR_QP_MAX) {
+        videoGovernorQp += 1;
+        videoGovernorAdjustedAt = now;
+      }
+    } else if (bps < VIDEO_GOVERNOR_MAX_BPS * 0.85 && videoGovernorQp > 0) {
+      videoGovernorQp -= 1;
+      videoGovernorAdjustedAt = now;
+    }
+  };
+
+  /**
+   * Flush every live encoder after the recording gate closes, so the chunks
+   * the encoders still own make it into the capture: `videoDraining` holds the
+   * push gate open for exactly those chunks, and the buffer is flushed again
+   * when the last encoder settles — inside the host's post-stop grace window.
+   */
+  const drainVideoStreams = () => {
+    let canvases;
+    try {
+      canvases = Array.from(document.querySelectorAll("canvas"));
+    } catch {
+      return;
+    }
+    const streams = [];
+    const flushes = [];
+    for (const canvas of canvases) {
+      const stream = videoStreams.get(canvas);
+      if (!stream || !stream.encoder || stream.encoder.state === "closed") {
+        continue;
+      }
+      streams.push(stream);
+      if (!stream.errored) {
+        try {
+          flushes.push(stream.encoder.flush());
+        } catch {}
+      }
+    }
+    if (streams.length === 0) return;
+    videoDraining = true;
+    Promise.allSettled(flushes).then(() => {
+      videoDraining = false;
+      flush();
+      for (const stream of streams) {
+        try {
+          stream.encoder.close();
+        } catch {}
+      }
+    });
+  };
+
+  // ── Encoded audio capture (WebCodecs) ──
+  // The app's SOUND, mixed into one Opus stream: Web Audio graphs and
+  // <audio>/<video> playback both. Capture taps the app's OUTPUT — what it
+  // routes to the speakers — never a microphone, so it adds no new input
+  // surface to redact. The stream has no replay counterpart in this file: the
+  // player decodes and plays it host-side (and muxes it into the exported
+  // video) rather than posting it back into the frame. Where AudioEncoder /
+  // MediaStreamTrackProcessor are absent the recording simply carries no audio
+  // and the visuals are unaffected — the same fail-soft as the video→stills
+  // fallback. And a silent app spins up nothing at all: the mixer starts only
+  // once a real source appears (a graph reaches the speakers, a media element
+  // plays), so silence is never encoded.
+  const AUDIO_CODEC = "opus";
+  // 60ms Opus frames (~16 events/s) keep audio an order of magnitude below the
+  // canvas video's event count, well inside the bundle's event cap.
+  const AUDIO_FRAME_DURATION_US = 60_000;
+  const AUDIO_BITRATE = 96_000;
+  // How deep the encoder's queue may grow before frames are dropped, so a slow
+  // machine sheds audio instead of piling backlog (mirrors the video gate).
+  const AUDIO_MAX_QUEUE = 8;
+
+  const OrigAudioContext =
+    typeof window.AudioContext === "function"
+      ? window.AudioContext
+      : typeof window.webkitAudioContext === "function"
+        ? window.webkitAudioContext
+        : null;
+  /** app AudioContext → its silent MediaStreamAudioDestinationNode tap. */
+  const audioTaps = new WeakMap();
+  /** Every app AudioContext we've tapped, so a recording started later can
+   *  adopt contexts already running (a WeakMap can't be enumerated). */
+  const liveAudioContexts = new Set();
+  /** Media elements routed through Web Audio (createMediaElementSource): their
+   *  sound is already in the graph tap, so they must NOT also be captured via
+   *  captureStream, or they'd be recorded twice. */
+  const graphRoutedMediaEls = new WeakSet();
+  /** The single live mix+encode session while recording, else null. */
+  let audioCapture = null;
+  /** Holds the push gate open for the encoder's post-stop flush (see push). */
+  let audioDraining = false;
+
+  // A per-context tap: fan the graph's output into a MediaStreamDestination we
+  // can read without disturbing playback. Created lazily on the first connect
+  // to a context's speakers, and adopted into a live recording at once.
+  const tapForContext = (ctx) => {
+    let tap = audioTaps.get(ctx);
+    if (tap) return tap;
+    try {
+      tap = ctx.createMediaStreamDestination();
+    } catch {
+      return null;
+    }
+    audioTaps.set(ctx, tap);
+    liveAudioContexts.add(ctx);
+    if (recording) {
+      ensureAudioCapture();
+      if (audioCapture) bridgeStream(audioCapture, tap.stream);
+    }
+    return tap;
+  };
+
+  // Installed at SDK load, before any app code runs (the IIFE completes first).
+  // Web Audio has no observer, so every node reaching a context's destination
+  // is ALSO fanned into that context's tap — the original connect runs first,
+  // so the sound still plays; the tap is a silent parallel branch.
+  if (
+    typeof AudioNode !== "undefined" &&
+    AudioNode.prototype &&
+    typeof AudioNode.prototype.connect === "function"
+  ) {
+    const origConnect = AudioNode.prototype.connect;
+    AudioNode.prototype.connect = function (target) {
+      const result = origConnect.apply(this, arguments);
+      try {
+        if (
+          target &&
+          typeof AudioDestinationNode !== "undefined" &&
+          target instanceof AudioDestinationNode
+        ) {
+          const tap = tapForContext(target.context);
+          if (tap) origConnect.call(this, tap);
+        }
+      } catch {
+        // a tap that can't be wired just means this context isn't captured
+      }
+      return result;
+    };
+  }
+
+  // Mark elements routed through Web Audio so they aren't double-captured.
+  if (
+    OrigAudioContext &&
+    OrigAudioContext.prototype &&
+    typeof OrigAudioContext.prototype.createMediaElementSource === "function"
+  ) {
+    const origCreateMediaElementSource =
+      OrigAudioContext.prototype.createMediaElementSource;
+    OrigAudioContext.prototype.createMediaElementSource = function (el) {
+      try {
+        if (el) graphRoutedMediaEls.add(el);
+      } catch {}
+      return origCreateMediaElementSource.apply(this, arguments);
+    };
+  }
+
+  // A media element played directly (not through Web Audio) reaches the speakers
+  // on its own; captureStream is the only way to tap it. Hooked on play() so
+  // even a `new Audio(url).play()` created mid-session is captured.
+  if (
+    typeof HTMLMediaElement !== "undefined" &&
+    HTMLMediaElement.prototype &&
+    typeof HTMLMediaElement.prototype.play === "function"
+  ) {
+    const origPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () {
+      try {
+        if (recording) {
+          ensureAudioCapture();
+          if (audioCapture) bridgeMediaElement(audioCapture, this);
+        }
+      } catch {}
+      return origPlay.apply(this, arguments);
+    };
+  }
+
+  const anyMediaElementActive = () => {
+    try {
+      for (const el of document.querySelectorAll("audio,video")) {
+        if (!el.paused && !el.ended) return true;
+      }
+    } catch {}
+    return false;
+  };
+
+  const pushAudioConfig = (decoderConfig) => {
+    const event = {
+      kind: "audio-config",
+      codec: decoderConfig.codec || AUDIO_CODEC,
+      sampleRate:
+        decoderConfig.sampleRate ||
+        (audioCapture && audioCapture.sampleRate) ||
+        48_000,
+      numberOfChannels:
+        decoderConfig.numberOfChannels ||
+        (audioCapture && audioCapture.numberOfChannels) ||
+        2,
+    };
+    const description = decoderConfig.description;
+    if (description) {
+      // Copy out of the codec-owned buffer; the event outlives the callback.
+      event.description = new Uint8Array(
+        description instanceof ArrayBuffer
+          ? description.slice(0)
+          : description.buffer.slice(
+              description.byteOffset,
+              description.byteOffset + description.byteLength,
+            ),
+      );
+    }
+    push(event);
+  };
+
+  // Source one MediaStream (a context tap, or a media element's captureStream)
+  // into the recording mix, once.
+  const bridgeStream = (session, stream) => {
+    try {
+      if (
+        !stream ||
+        session.bridged.has(stream) ||
+        typeof stream.getAudioTracks !== "function" ||
+        stream.getAudioTracks().length === 0
+      ) {
+        return;
+      }
+      session.ctx.createMediaStreamSource(stream).connect(session.mix);
+      session.bridged.add(stream);
+    } catch {}
+  };
+
+  const bridgeMediaElement = (session, el) => {
+    try {
+      if (graphRoutedMediaEls.has(el)) return; // already tapped via Web Audio
+      const capture = el.captureStream || el.mozCaptureStream;
+      if (typeof capture !== "function") return;
+      bridgeStream(session, capture.call(el));
+    } catch {}
+  };
+
+  // Pull mixed audio off the mix track and feed the encoder, configuring it on
+  // the first frame (whose real sample-rate/channels the config then carries).
+  const runAudioReader = (session) => {
+    let reader;
+    try {
+      const track = session.dest.stream.getAudioTracks()[0];
+      if (!track) return;
+      session.processor = new MediaStreamTrackProcessor({ track });
+      reader = session.processor.readable.getReader();
+      session.reader = reader;
+    } catch {
+      return;
+    }
+    const pump = () => {
+      reader.read().then(({ done, value }) => {
+        if (done || session.stopped) {
+          if (value) {
+            try {
+              value.close();
+            } catch {}
+          }
+          return;
+        }
+        try {
+          const enc = session.encoder;
+          if (recording && enc && enc.state !== "closed" && !session.errored) {
+            if (!session.configured) {
+              session.configured = true;
+              session.sampleRate = value.sampleRate;
+              session.numberOfChannels = value.numberOfChannels;
+              enc.configure({
+                codec: AUDIO_CODEC,
+                sampleRate: value.sampleRate,
+                numberOfChannels: value.numberOfChannels,
+                bitrate: AUDIO_BITRATE,
+                opus: { frameDuration: AUDIO_FRAME_DURATION_US },
+              });
+            }
+            if (enc.encodeQueueSize < AUDIO_MAX_QUEUE) enc.encode(value);
+          }
+        } catch {
+          session.errored = true;
+        }
+        try {
+          value.close();
+        } catch {}
+        pump();
+      }, () => {});
+    };
+    pump();
+  };
+
+  // Start the mix+encode session on first real audio, and adopt every source
+  // that already exists. Idempotent: later sources just bridge into it.
+  const ensureAudioCapture = () => {
+    if (
+      audioCapture ||
+      !recording ||
+      !OrigAudioContext ||
+      typeof AudioEncoder !== "function" ||
+      typeof MediaStreamTrackProcessor !== "function"
+    ) {
+      return;
+    }
+    let session;
+    try {
+      const ctx = new OrigAudioContext();
+      const mix = ctx.createGain();
+      const dest = ctx.createMediaStreamDestination();
+      mix.connect(dest);
+      session = {
+        ctx,
+        mix,
+        dest,
+        encoder: null,
+        bridged: new WeakSet(),
+        configured: false,
+        errored: false,
+        stopped: false,
+        configSent: false,
+        reader: null,
+        processor: null,
+        sampleRate: 0,
+        numberOfChannels: 0,
+      };
+      session.encoder = new AudioEncoder({
+        output: (chunk, metadata) => {
+          try {
+            if (!session.configSent) {
+              session.configSent = true;
+              pushAudioConfig((metadata && metadata.decoderConfig) || {});
+            }
+            const bytes = new Uint8Array(chunk.byteLength);
+            chunk.copyTo(bytes);
+            push({
+              kind: "audio-chunk",
+              tsUs: Math.max(0, Math.round(chunk.timestamp || 0)),
+              bytes,
+            });
+          } catch {
+            // a dropped chunk must never break the app
+          }
+        },
+        error: () => {
+          session.errored = true;
+        },
+      });
+    } catch {
+      if (session && session.ctx) {
+        try {
+          session.ctx.close();
+        } catch {}
+      }
+      return;
+    }
+    audioCapture = session;
+    // A user gesture in the app during recording satisfies autoplay; harmless
+    // if the context is already running.
+    try {
+      session.ctx.resume();
+    } catch {}
+    for (const ctx of liveAudioContexts) {
+      const tap = audioTaps.get(ctx);
+      if (tap) bridgeStream(session, tap.stream);
+    }
+    let els;
+    try {
+      els = document.querySelectorAll("audio,video");
+    } catch {
+      els = [];
+    }
+    for (const el of els) bridgeMediaElement(session, el);
+    runAudioReader(session);
+  };
+
+  /**
+   * Flush the audio encoder after the recording gate closes so its last frames
+   * make the capture — mirrors drainVideoStreams: `audioDraining` holds the
+   * push gate open for exactly those chunks, and the buffer is flushed again
+   * once the encoder settles, inside the host's post-stop grace window.
+   */
+  const drainAudioStreams = () => {
+    const session = audioCapture;
+    audioCapture = null;
+    if (!session) return;
+    session.stopped = true;
+    try {
+      if (session.reader) session.reader.cancel().catch(() => {});
+    } catch {}
+    const finish = () => {
+      audioDraining = false;
+      flush();
+      try {
+        if (session.encoder && session.encoder.state !== "closed") {
+          session.encoder.close();
+        }
+      } catch {}
+      try {
+        session.ctx.close();
+      } catch {}
+    };
+    if (
+      session.encoder &&
+      session.encoder.state === "configured" &&
+      !session.errored
+    ) {
+      audioDraining = true;
+      try {
+        session.encoder.flush().then(finish, finish);
+      } catch {
+        finish();
+      }
+    } else {
+      finish();
+    }
+  };
+
+  /**
+   * Read one canvas's current pixels into an encoded-image Blob (the stills
+   * fallback for browsers without WebCodecs), off the app's critical path: an
+   * oversized bitmap is first downscaled into a reused scratch canvas, and
+   * the encode goes through toBlob — which snapshots the bitmap at call time
+   * and encodes off the main thread — rather than toDataURL, whose whole
+   * encode runs synchronously on it. The bytes stay a Blob end to end;
+   * nothing here (or anywhere on the live path) renders base64. `sync`
+   * forces the synchronous path for the one capture that cannot wait (the
+   * final frame at stop, taken just before the recording gate closes). Calls
+   * `done` with null when the canvas can't be captured (tainted, zero-sized,
+   * encoder failure) — a skipped frame must never break the app.
+   */
+  const captureCanvas = (canvas, sync, done) => {
+    try {
+      const pixels = canvas.width * canvas.height;
+      if (!pixels) return done(null);
+      let source = canvas;
+      if (pixels > CANVAS_CAPTURE_MAX_PIXELS) {
+        const scale = Math.sqrt(CANVAS_CAPTURE_MAX_PIXELS / pixels);
+        if (!scratchCanvas) scratchCanvas = document.createElement("canvas");
+        // Assigning the size also clears the scratch between captures.
+        scratchCanvas.width = Math.max(1, Math.round(canvas.width * scale));
+        scratchCanvas.height = Math.max(1, Math.round(canvas.height * scale));
+        const ctx = scratchCanvas.getContext("2d");
+        if (!ctx) return done(null);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(canvas, 0, 0, scratchCanvas.width, scratchCanvas.height);
+        source = scratchCanvas;
+      }
+      if (!sync && typeof source.toBlob === "function") {
+        // WebP keeps a flat-colour game screen to a couple of kilobytes.
+        source.toBlob((blob) => done(blob || null), "image/webp", 0.85);
+        return;
+      }
+      done(dataUrlToBlob(source.toDataURL("image/webp", 0.85)));
+    } catch {
+      // A canvas holding cross-origin pixels is tainted and throws — skip it.
+      done(null);
+    }
+  };
+
+  /** data URL → Blob, in memory — the sync capture path and legacy replay. */
+  const dataUrlToBlob = (dataUrl) => {
+    try {
+      const comma = dataUrl.indexOf(",");
+      if (comma < 0) return null;
+      const header = dataUrl.slice(0, comma);
+      const payload = dataUrl.slice(comma + 1);
+      const mime = (/^data:([^;,]+)/.exec(header) || [])[1] || "image/webp";
+      if (header.indexOf(";base64") >= 0) {
+        const binary = atob(payload);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return new Blob([bytes], { type: mime });
+      }
+      return new Blob([decodeURIComponent(payload)], { type: mime });
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * A frame's identity for change detection: size plus FNV-1a over the encoded
+   * bytes. Encoded image data is high-entropy, so byte-identical digests mean
+   * byte-identical frames for any practical purpose — and it needs no
+   * SubtleCrypto, which an opaque-origin frame doesn't have.
+   */
+  const blobDigest = async (blob) => {
+    try {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let hash = 0x811c9dc5;
+      for (let i = 0; i < bytes.length; i++) {
+        hash ^= bytes[i];
+        hash = Math.imul(hash, 0x01000193);
+      }
+      return blob.size + ":" + (hash >>> 0).toString(16);
+    } catch {
+      return null;
+    }
+  };
+
+  const sampleCanvases = (sync, idle) => {
     let canvases;
     try {
       canvases = document.querySelectorAll("canvas");
@@ -142,19 +1194,74 @@
       return;
     }
     for (const canvas of canvases) {
-      let data;
-      try {
-        // WebP keeps a flat-colour game screen to a couple of kilobytes. A
-        // canvas holding cross-origin pixels is tainted and throws — skip it
-        // rather than let a recording break the app.
-        data = canvas.toDataURL("image/webp", 0.85);
-      } catch {
+      const now = Date.now();
+      // A quiet app is probed, not filmed: with no animation or input signal,
+      // a canvas only re-attempts at the keepalive rate (catching the odd draw
+      // made outside rAF and input handlers), and the byte-identical check
+      // below discards probes that found nothing new.
+      if (
+        idle &&
+        now - (canvasLastAttemptAt.get(canvas) || 0) < CANVAS_KEEPALIVE_MS
+      ) {
         continue;
       }
-      if (canvasLastFrame.get(canvas) === data) continue;
-      canvasLastFrame.set(canvas, data);
-      push({ kind: "canvas", sel: selectorFor(canvas).slice(0, 1000), data });
+      // The video path, wherever the codec probe granted one. Still resolving
+      // (a few frames at most) skips rather than committing this canvas to
+      // stills for the whole recording. A canvas whose encoder errored falls
+      // through to stills for good. The stop-time sync capture is stills-only:
+      // video canvases are closed out by the encoder drain instead.
+      if (videoMode === undefined && videoCodecProbe) continue;
+      const stream = videoStreams.get(canvas);
+      if (videoMode && !(stream && stream.errored)) {
+        if (sync) continue;
+        canvasLastAttemptAt.set(canvas, now);
+        feedVideoFrame(canvas);
+        continue;
+      }
+      // One capture in flight per canvas: a frame that lands while the
+      // previous one is still encoding is skipped, not queued, so on a machine
+      // where encoding is slower than the display rate the capture rate backs
+      // off by itself instead of stacking encodes. The stop-time sync capture
+      // bypasses the gate — any in-flight encode it overlaps can only complete
+      // after the recording gate has closed, where its late push is discarded.
+      if (!sync && canvasCaptureBusy.has(canvas)) continue;
+      canvasLastAttemptAt.set(canvas, now);
+      if (!sync) canvasCaptureBusy.add(canvas);
+      captureCanvas(canvas, sync, (blob) => {
+        canvasCaptureBusy.delete(canvas);
+        if (!blob) return;
+        const sel = selectorFor(canvas).slice(0, 1000);
+        if (sync) {
+          // The final frame cannot wait for an async digest; a possible
+          // duplicate of the last pushed frame is harmless.
+          push({ kind: "canvas", sel, blob });
+          return;
+        }
+        blobDigest(blob).then((digest) => {
+          if (digest && canvasLastFrame.get(canvas) === digest) return;
+          if (digest) canvasLastFrame.set(canvas, digest);
+          push({ kind: "canvas", sel, blob });
+        });
+      });
     }
+  };
+
+  /**
+   * The per-presented-frame sampling loop, alive only while recording. Runs on
+   * the browser's own frame clock so captures line up with what the viewer was
+   * actually shown, and pause with the tab. The activity flag is consumed each
+   * frame: an app animating via rAF re-sets it every frame it schedules, so
+   * "active" decays the moment the app's loop stops.
+   */
+  const canvasCaptureLoop = () => {
+    if (!recording) {
+      canvasRafId = null;
+      return;
+    }
+    canvasRafId = origRaf(canvasCaptureLoop);
+    const idle = !appRafScheduled && Date.now() >= inputActivityUntil;
+    appRafScheduled = false;
+    sampleCanvases(false, idle);
   };
 
   /**
@@ -215,20 +1322,68 @@
   };
 
 
+  /**
+   * The app's LIVE DOM the instant recording starts — the true seed for the
+   * replay's first frame.
+   *
+   * Replay otherwise begins from the served SOURCE html (segment 0), which is
+   * the app BEFORE its own code ran. But the app has always already run by the
+   * time a recording starts: it rendered on load, and its intro/onboarding may
+   * long since have been dismissed. None of that is a mutation the observer can
+   * see after the fact, so without this the replay opens on a screen the session
+   * never showed — an app frozen behind an intro the user had already skipped —
+   * and only catches up if the app happens to re-render that region later.
+   *
+   * Sent through the event channel as a control the host consumes to seed the
+   * segment; it is never stored as a timeline event. `outerHTML` carries the
+   * injected SDK envelope (kept alive through replay's script neutralization)
+   * and the app's live markup; canvas pixels aren't serializable this way and
+   * are seeded separately by {@link sampleCanvases}.
+   */
+  const captureInitialDom = () => {
+    try {
+      push({
+        kind: "snapshot",
+        html: "<!doctype html>\n" + document.documentElement.outerHTML,
+      });
+    } catch {
+      // A recording with no initial snapshot still replays from the source html.
+    }
+  };
+
   const startRecording = () => {
     if (recording) return;
     recording = true;
     buffer = [];
+    // A fresh take starts at base quality: governor pressure earned by the
+    // previous take's content says nothing about this one's.
+    videoGovernorQp = 0;
+    videoGovernorAdjustedAt = 0;
+    videoRateWindow.length = 0;
     push({
       kind: "viewport",
       width: window.innerWidth,
       height: window.innerHeight,
     });
+    // Seed the first replay frame from what is on screen now, before wiring up
+    // the observers that capture everything after.
+    captureInitialDom();
     flushTimer = setInterval(flush, FLUSH_INTERVAL_MS);
-    // What the app becomes, alongside what is done to it.
+    // What the app becomes, alongside what is done to it. The codec probe
+    // resolves the capture mode (encoded video vs WebP stills) within a few
+    // frames; the seed sample is unconditional (idle apps still show their
+    // first frame); the loop then captures at presented-frame rate while the
+    // app is active.
+    probeVideoCodec();
     startDomCapture();
     sampleCanvases();
-    canvasTimer = setInterval(sampleCanvases, CANVAS_SAMPLE_MS);
+    canvasRafId = origRaf(canvasCaptureLoop);
+    // Audio only if the app already has sound — a context routed to the speakers
+    // or a media element playing. The connect/play hooks spin the mixer up later
+    // if sound starts mid-session, so a silent app records no audio stream.
+    if (liveAudioContexts.size > 0 || anyMediaElementActive()) {
+      ensureAudioCapture();
+    }
 
     listen(window, "resize", () => {
       push({
@@ -377,8 +1532,13 @@
     if (!recording) return;
     // One last look before the gate closes, so the recording ends on the frame
     // the app actually finished on rather than a sample interval short of it.
-    sampleCanvases();
+    // Synchronous: an async capture would land after the gate closed and be
+    // discarded. Video canvases are handled by the encoder drain below — their
+    // last sampled frame is already in the encoder.
+    sampleCanvases(true);
     recording = false;
+    drainVideoStreams();
+    drainAudioStreams();
     for (const fn of teardownFns) {
       try {
         fn();
@@ -391,9 +1551,9 @@
       clearInterval(flushTimer);
       flushTimer = null;
     }
-    if (canvasTimer) {
-      clearInterval(canvasTimer);
-      canvasTimer = null;
+    if (canvasRafId != null) {
+      origCancelRaf(canvasRafId);
+      canvasRafId = null;
     }
     if (domObserver) {
       // One last look, so the final frame and the last DOM change are in the
@@ -819,7 +1979,11 @@
   let freezeStyleEl = null;
   const rafQueue = [];
   const origRaf = window.requestAnimationFrame.bind(window);
+  const origCancelRaf = window.cancelAnimationFrame.bind(window);
   window.requestAnimationFrame = (cb) => {
+    // An app scheduling animation frames is the record-side sampler's cue that
+    // pixels are moving (the sampler itself uses origRaf, so it never counts).
+    appRafScheduled = true;
     if (replayFrozen) {
       rafQueue.push(cb);
       return 0;
@@ -900,6 +2064,20 @@
     } else origClearInterval(id);
   };
 
+  // Canvas frames decode asynchronously — an <img> fed a data URL, decoded on
+  // the browser's own thread pool with no ordering guarantee — so a frame drawn
+  // "when it loads" is drawn in decode-completion order, not the order the host
+  // dispatched it. A heavier frame sent earlier can finish after a lighter one
+  // sent later, land on top of it, and leave the canvas showing the OLDER frame:
+  // the replay flickers backwards and can settle on the first-generated object
+  // instead of the last. So every paint is stamped with its dispatch order (the
+  // host posts them in timeline order, and postMessage preserves that order into
+  // this frame), and a frame that finishes decoding after a later-dispatched
+  // frame has already painted its canvas is dropped. A remount hands us a new
+  // canvas element, whose absent WeakMap entry restarts the guard cleanly.
+  const canvasPaintSeq = new WeakMap();
+  let nextPaintSeq = 0;
+
   /**
    * Put a recorded piece of the app's output back on screen.
    *
@@ -908,35 +2086,165 @@
    * cannot be applied is skipped rather than allowed to stop the replay — one
    * missing element must not cost every frame after it.
    */
+  /**
+   * Size the canvas's bitmap to the recorded frame and paint it. Sizing
+   * matters because replay serves the app's SOURCE html and never runs its
+   * code: a canvas the app sized in its own JS is still at the HTML default
+   * 300x150 here, so drawing a full frame into it would squeeze the whole app
+   * down to a thumbnail while the markup around it stayed full size.
+   * Assigning width resets the bitmap, so only on an actual change.
+   */
+  const drawFrameToCanvas = (canvas, frame, width, height) => {
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+  };
+
+  // ── Encoded video playback: one VideoDecoder per recorded stream, keyed by
+  // the stream's canvas selector. A config event (re)opens the stream — the
+  // host re-sends it on every seek, making it the decoder-reset point — and
+  // chunks decode in the order the host posts them. Decoded frames share the
+  // stills' paint-order guard, so a stale still can never overwrite a newer
+  // video frame or vice versa.
+  const videoPlayback = new Map();
+  const openVideoPlaybackStream = (event) => {
+    try {
+      if (typeof VideoDecoder !== "function") return;
+      const existing = videoPlayback.get(event.sel);
+      if (existing) {
+        try {
+          existing.decoder.close();
+        } catch {}
+      }
+      const sel = event.sel;
+      const state = { decoder: null, sawKey: false };
+      state.decoder = new VideoDecoder({
+        output: (frame) => {
+          try {
+            const canvas = document.querySelector(sel);
+            if (canvas && canvas.getContext) {
+              const seq = ++nextPaintSeq;
+              const drawnSeq = canvasPaintSeq.get(canvas);
+              if (drawnSeq === undefined || seq > drawnSeq) {
+                canvasPaintSeq.set(canvas, seq);
+                drawFrameToCanvas(
+                  canvas,
+                  frame,
+                  frame.displayWidth || frame.codedWidth,
+                  frame.displayHeight || frame.codedHeight,
+                );
+              }
+            }
+          } catch {}
+          frame.close();
+        },
+        error: () => {
+          // a broken stream shows its last good frame; never break the replay
+        },
+      });
+      const config = {
+        codec: event.codec,
+        codedWidth: event.codedWidth,
+        codedHeight: event.codedHeight,
+        optimizeForLatency: true,
+      };
+      if (event.description) {
+        config.description =
+          event.description instanceof Uint8Array
+            ? event.description
+            : new Uint8Array(event.description);
+      }
+      state.decoder.configure(config);
+      videoPlayback.set(sel, state);
+    } catch {}
+  };
+  /**
+   * Emit everything a stream's decoder still holds. Sent by the host after a
+   * rebuild burst (seek, poster): the burst is fed to a fresh decoder and then
+   * stops, and a decoder may hold decoded frames until more input or a flush
+   * arrives — without this a backward seek painted nothing at all. Flushing
+   * reimposes the decoder's key-chunk requirement, so the key gate re-arms:
+   * continuation deltas are skipped until the next keyframe.
+   */
+  const flushVideoPlayback = (event) => {
+    try {
+      const state = videoPlayback.get(event.sel);
+      if (!state || state.decoder.state !== "configured") return;
+      state.sawKey = false;
+      state.decoder.flush().catch(() => {});
+    } catch {}
+  };
+  const feedVideoPlaybackChunk = (event) => {
+    try {
+      const state = videoPlayback.get(event.sel);
+      if (!state || state.decoder.state !== "configured") return;
+      // Deltas before the stream's first keyframe are undecodable — a decoder
+      // fed one errors out and takes the rest of the stream with it.
+      if (!state.sawKey) {
+        if (event.type !== "key") return;
+        state.sawKey = true;
+      }
+      if (!(event.bytes instanceof Uint8Array)) return;
+      state.decoder.decode(
+        new EncodedVideoChunk({
+          type: event.type === "key" ? "key" : "delta",
+          timestamp: event.tsUs || 0,
+          data: event.bytes,
+        }),
+      );
+    } catch {}
+  };
+
   const paintRecordedOutput = (event) => {
     try {
+      if (event.kind === "video-config") {
+        openVideoPlaybackStream(event);
+        return;
+      }
+      if (event.kind === "video-chunk") {
+        feedVideoPlaybackChunk(event);
+        return;
+      }
+      if (event.kind === "video-flush") {
+        flushVideoPlayback(event);
+        return;
+      }
       if (event.kind === "canvas") {
         const canvas = document.querySelector(event.sel);
         if (!canvas || !canvas.getContext) return;
-        const image = new Image();
-        image.onload = () => {
-          try {
-            // Restore the canvas's own bitmap size before drawing. The frame
-            // already carries it — toDataURL captures at canvas.width ×
-            // canvas.height — and replay needs it because it serves the app's
-            // SOURCE html and never runs the app's code: a canvas the app
-            // sized in its own JS is still at the HTML default 300x150 here,
-            // so drawing a full frame into it squeezed the whole app down to a
-            // thumbnail while the markup around it stayed full size. Assigning
-            // width resets the bitmap, so only on an actual change.
-            if (canvas.width !== image.naturalWidth) {
-              canvas.width = image.naturalWidth;
-            }
-            if (canvas.height !== image.naturalHeight) {
-              canvas.height = image.naturalHeight;
-            }
-            const ctx = canvas.getContext("2d");
-            if (!ctx) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-          } catch {}
-        };
-        image.src = event.data;
+        // Stamp the dispatch order now, synchronously, before the async decode
+        // reorders things — this is the frame's true position in the timeline.
+        const seq = ++nextPaintSeq;
+        // Frames arrive as Blobs; `data` strings only from a bundle written by
+        // an older recorder.
+        const blob =
+          event.blob instanceof Blob
+            ? event.blob
+            : typeof event.data === "string"
+              ? dataUrlToBlob(event.data)
+              : null;
+        if (!blob) return;
+        createImageBitmap(blob)
+          .then((bitmap) => {
+            try {
+              // A later-dispatched frame already won this canvas while this
+              // one was decoding: its pixels are the more recent truth, so
+              // this stale frame is dropped rather than allowed to overwrite
+              // them.
+              const drawnSeq = canvasPaintSeq.get(canvas);
+              if (drawnSeq !== undefined && drawnSeq > seq) {
+                bitmap.close();
+                return;
+              }
+              canvasPaintSeq.set(canvas, seq);
+              drawFrameToCanvas(canvas, bitmap, bitmap.width, bitmap.height);
+              bitmap.close();
+            } catch {}
+          })
+          .catch(() => {});
         return;
       }
       if (event.kind === "dom") {
@@ -953,7 +2261,7 @@
             el.setAttribute(event.name, event.value);
           }
         } else if (typeof event.html === "string") {
-          el.replaceChildren(inertMarkup(event.html));
+          el.replaceChildren(inertMarkup(event.html, el));
         }
       }
     } catch {
@@ -965,28 +2273,56 @@
     typeof name === "string" && /^on/i.test(name);
 
   /**
-   * Parse recorded markup into an inert fragment, with anything that would run
-   * removed.
+   * Parse recorded markup into an inert fragment, in the target element's own
+   * parsing context, with anything that would run removed.
    *
    * A replay shows what the app produced; it must never run the app a second
    * time. Script elements are re-typed before the document loads, but a DOM
    * snapshot taken mid-session can still carry inline handlers — and an
-   * `onerror` on a broken image needs no interaction at all to fire. A
-   * `<template>`'s content is inert, so parsing here neither loads a resource
-   * nor executes anything; what it yields is then stripped of both.
+   * `onerror` on a broken image needs no interaction at all to fire. So the
+   * markup is parsed inside the template element's OWNER DOCUMENT, which the
+   * platform gives no browsing context: nothing there loads a resource or runs
+   * a handler. What it yields is then stripped of scripts and `on*` attributes
+   * as a second line of defence.
+   *
+   * The parsing CONTEXT matters as much as its inertness. The captured html is
+   * the target's own innerHTML, so its top-level nodes are bare children with no
+   * wrapping tag — and the HTML fragment parser decides their namespace and
+   * insertion mode from the element it is parsing INTO. Parse `<path>`/`<rect>`
+   * with a plain `<template>` and they land in the HTML namespace as
+   * non-rendering unknown elements (the recorded chart replays blank); the same
+   * befalls MathML (`<mrow>`/`<mi>`). Table rows and `<option>`s can be dropped
+   * outright. Matching the context to the target's real namespace and tag makes
+   * the parse reproduce exactly what the browser built live — SVG in the SVG
+   * namespace, MathML in MathML, an HTML integration point (`foreignObject`) or
+   * a `<tr>`/`<select>` in the right HTML insertion mode.
    */
-  const inertMarkup = (html) => {
+  const inertMarkup = (html, contextEl) => {
     const template = document.createElement("template");
-    template.innerHTML = html;
-    for (const node of template.content.querySelectorAll("script")) {
+    // The template's content is owned by an inert document (no browsing
+    // context); creating the parse context there keeps the whole parse inert.
+    const inertDoc = template.content.ownerDocument;
+    const context =
+      contextEl && contextEl.namespaceURI
+        ? inertDoc.createElementNS(contextEl.namespaceURI, contextEl.localName)
+        : template;
+    context.innerHTML = html;
+    // A `<template>` keeps its parsed tree on `.content`; every other element
+    // holds its children directly.
+    const root = context.content || context;
+    for (const node of root.querySelectorAll("script")) {
       node.remove();
     }
-    for (const node of template.content.querySelectorAll("*")) {
+    for (const node of root.querySelectorAll("*")) {
       for (const attr of Array.from(node.attributes)) {
         if (isHandlerAttr(attr.name)) node.removeAttribute(attr.name);
       }
     }
-    return template.content;
+    // Move the parsed children into a fragment (moving preserves each node's
+    // namespace); the throwaway context element is never inserted.
+    const fragment = inertDoc.createDocumentFragment();
+    while (root.firstChild) fragment.appendChild(root.firstChild);
+    return fragment;
   };
 
   const freezeReplay = () => {
@@ -1037,6 +2373,12 @@
         }
         hoverTarget = null;
         closeSelectMenu();
+        for (const state of videoPlayback.values()) {
+          try {
+            state.decoder.close();
+          } catch {}
+        }
+        videoPlayback.clear();
       } else if (data.action === "paint" && data.event) {
         paintRecordedOutput(data.event);
       } else if (data.action === "pause") {
@@ -1046,4 +2388,14 @@
       }
     }
   });
+
+  // Announce that THIS document's replay listener exists, on the same
+  // host-allow-listed channel the recorder uses. The player must not gate
+  // replay delivery on the bridge connect: that can resolve against a
+  // transient document (the sandbox re-delivers html while settling), and
+  // paints posted then die with it — verified live as a replay frame whose
+  // SDK parsed AFTER the host had already marked it ready. Every document
+  // announces for itself, so the player re-delivers to whichever document
+  // ends up being the one on screen.
+  post({ type: EVENT_TYPE, replayReady: true });
 })();

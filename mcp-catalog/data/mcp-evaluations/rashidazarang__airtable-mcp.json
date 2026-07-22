@@ -1,0 +1,147 @@
+{
+  "name": "rashidazarang__airtable-mcp",
+  "display_name": "airtable-mcp",
+  "description": "Airtable integration for AI-powered applications via Anthropic's Model Context Protocol (MCP). Connect your AI tools directly to Airtable for seamless data access and management.",
+  "author": {
+    "name": "rashidazarang"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["@rashidazarang/airtable-mcp"],
+    "env": {
+      "AIRTABLE_TOKEN": "${user_config.airtable_token}",
+      "AIRTABLE_BASE_ID": "${user_config.airtable_base_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "airtable_token": {
+      "type": "string",
+      "title": "Airtable Personal Access Token",
+      "description": "Your Personal Access Token from your Airtable account settings.",
+      "sensitive": true,
+      "required": true
+    },
+    "airtable_base_id": {
+      "type": "string",
+      "title": "Airtable Base ID",
+      "description": "The ID of the Airtable base you want to connect to, found in the URL (e.g., appXXXXXXXXXXXXXX).",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "readme": "# Airtable MCP Server\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/rashidazarang/airtable-mcp)](https://archestra.ai/mcp-catalog/rashidazarang__airtable-mcp)\n[![smithery badge](https://smithery.ai/badge/@rashidazarang/airtable-mcp)](https://smithery.ai/server/@rashidazarang/airtable-mcp)\n![Airtable](https://img.shields.io/badge/Airtable-18BFFF?style=for-the-badge&logo=Airtable&logoColor=white)\n[![MCP](https://img.shields.io/badge/MCP-3.1.0-blue)](https://github.com/rashidazarang/airtable-mcp)\n[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)\n[![AI Agent](https://img.shields.io/badge/AI_Agent-Enhanced-purple)](https://github.com/rashidazarang/airtable-mcp)\n[![Security](https://img.shields.io/badge/Security-Enterprise-green)](https://github.com/rashidazarang/airtable-mcp)\n[![Protocol](https://img.shields.io/badge/Protocol-2024--11--05-success)](https://modelcontextprotocol.io/)\n\n🤖 **Revolutionary AI Agent v3.1.0** - Advanced AI-powered Airtable MCP server with **TypeScript support**, comprehensive intelligence capabilities, predictive analytics, and enterprise automation features.\n\n## 🚀 Latest: TypeScript Support v3.1.0\n\n**Enterprise-Grade Type Safety** with full backward compatibility:\n- 🔷 **TypeScript Implementation** - Complete type-safe server with strict validation\n- 📘 **Comprehensive Type Definitions** - All 33 tools and 10 AI prompts fully typed\n- 🛡️ **Compile-Time Safety** - Catch errors before runtime with advanced type checking\n- 🎯 **Developer Experience** - IntelliSense, auto-completion, and refactoring support\n- 🔄 **Dual Distribution** - Use with JavaScript or TypeScript, your choice\n- 📖 **Type Documentation** - Self-documenting APIs through comprehensive type definitions\n\n## 🤖 AI Intelligence Suite\n\n**Complete AI-Powered Intelligence** with enterprise capabilities:\n- 🤖 **10 AI Prompt Templates** - Advanced analytics, predictions, and automation\n- 🔮 **Predictive Analytics** - Forecasting and trend analysis with confidence intervals\n- 🗣️ **Natural Language Processing** - Query your data using human language\n- 📊 **Business Intelligence** - Automated insights and recommendations\n- 🏗️ **Smart Schema Design** - AI-optimized database architecture\n- ⚡ **Workflow Automation** - Intelligent process optimization\n- 🔍 **Data Quality Auditing** - Comprehensive quality assessment and fixes\n- 📈 **Statistical Analysis** - Advanced analytics with significance testing\n\n## ✨ Features\n\n- 🔍 **Natural Language Queries** - Ask questions about your data in plain English\n- 📊 **Full CRUD Operations** - Create, read, update, and delete records\n- 🪝 **Webhook Management** - Create and manage webhooks for real-time notifications\n- 🏗️ **Advanced Schema Management** - Create tables, fields, and manage base structure\n- 🔍 **Base Discovery** - Explore all accessible bases and their schemas\n- 🔧 **Field Management** - Add, modify, and remove fields programmatically\n- 🔐 **Secure Authentication** - Uses environment variables for credentials\n- 🚀 **Easy Setup** - Multiple installation options available\n- ⚡ **Fast & Reliable** - Built with Node.js for optimal performance\n- 🎯 **33 Powerful Tools** - Complete Airtable API coverage with batch operations\n- 📎 **Attachment Management** - Upload files via URLs to attachment fields\n- ⚡ **Batch Operations** - Create, update, delete up to 10 records at once\n- 👥 **Collaboration Tools** - Manage base collaborators and shared views\n- 🤖 **AI Integration** - Prompts and sampling for intelligent data operations\n- 🔐 **Enterprise Security** - OAuth2, rate limiting, comprehensive validation\n\n## 📋 Prerequisites\n\n- Node.js 14+ installed on your system\n- An Airtable account with a Personal Access Token\n- Your Airtable Base ID\n\n## 🚀 Quick Start\n\n### Step 1: Get Your Airtable Credentials\n\n1. **Personal Access Token**: Visit [Airtable Account](https://airtable.com/account) → Create a token with the following scopes:\n   - `data.records:read` - Read records from tables\n   - `data.records:write` - Create, update, delete records\n   - `schema.bases:read` - View table schemas\n   - `schema.bases:write` - **New in v1.5.0** - Create/modify tables and fields\n   - `webhook:manage` - (Optional) For webhook features\n\n2. **Base ID**: Open your Airtable base and copy the ID from the URL:\n   ```\n   https://airtable.com/[BASE_ID]/...\n   ```\n\n### Step 2: Installation\n\nChoose one of these installation methods:\n\n#### 🔷 TypeScript Users (Recommended for Development)\n\n```bash\n# Install with TypeScript support\nnpm install -g @rashidazarang/airtable-mcp\n\n# For development with types\nnpm install --save-dev typescript @types/node\n```\n\n#### 📦 JavaScript Users (Production Ready)\n\n**Option A: Install via NPM (Recommended)**\n\n```bash\nnpm install -g @rashidazarang/airtable-mcp\n```\n\n**Option B: Clone from GitHub**\n\n```bash\ngit clone https://github.com/rashidazarang/airtable-mcp.git\ncd airtable-mcp\nnpm install\n```\n\n### Step 3: Set Up Environment Variables\n\nCreate a `.env` file in your project directory:\n\n```env\nAIRTABLE_TOKEN=your_personal_access_token_here\nAIRTABLE_BASE_ID=your_base_id_here\n```\n\n**Security Note**: Never commit `.env` files to version control!\n\n### Step 4: Configure Your MCP Client\n\n#### 🔷 TypeScript Configuration (Enhanced Developer Experience)\n\nAdd to your Claude Desktop configuration file with TypeScript binary:\n\n**MacOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n**Windows**: `%APPDATA%\\\\Claude\\\\claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"airtable-typescript\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@rashidazarang/airtable-mcp\",\n        \"--token\",\n        \"YOUR_AIRTABLE_TOKEN\",\n        \"--base\",\n        \"YOUR_BASE_ID\"\n      ],\n      \"env\": {\n        \"NODE_ENV\": \"production\",\n        \"LOG_LEVEL\": \"INFO\"\n      }\n    }\n  }\n}\n```\n\n#### 📦 JavaScript Configuration (Standard)\n\nAdd to your Claude Desktop configuration file:\n\n**MacOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n**Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"airtable\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@rashidazarang/airtable-mcp\",\n        \"--token\",\n        \"YOUR_AIRTABLE_TOKEN\",\n        \"--base\",\n        \"YOUR_BASE_ID\"\n      ]\n    }\n  }\n}\n```\n\n#### For Environment Variables (More Secure)\n\n```json\n{\n  \"mcpServers\": {\n    \"airtable\": {\n      \"command\": \"npx\",\n      \"args\": [\"@rashidazarang/airtable-mcp\"],\n      \"env\": {\n        \"AIRTABLE_TOKEN\": \"YOUR_AIRTABLE_TOKEN\",\n        \"AIRTABLE_BASE_ID\": \"YOUR_BASE_ID\"\n      }\n    }\n  }\n}\n```\n\n### Step 5: Restart Your MCP Client\n\nAfter configuration, restart Claude Desktop or your MCP client to load the Airtable server.\n\n## 🎯 Usage Examples\n\nOnce configured, you can interact with your Airtable data naturally:\n\n### 🔷 TypeScript Development\n\n```typescript\nimport { \n  AirtableMCPServer, \n  ListRecordsInput, \n  AnalyzeDataPrompt \n} from '@rashidazarang/airtable-mcp/types';\n\nconst server = new AirtableMCPServer();\n\n// Type-safe data operations\nconst params: ListRecordsInput = {\n  table: 'Tasks',\n  maxRecords: 10,\n  filterByFormula: \"Status = 'Active'\"\n};\n\nconst records = await server.handleToolCall('list_records', params);\n\n// Type-safe AI analytics\nconst analysis: AnalyzeDataPrompt = {\n  table: 'Sales',\n  analysis_type: 'predictive',\n  confidence_level: 0.95\n};\n\nconst insights = await server.handlePromptGet('analyze_data', analysis);\n```\n\n### 📦 Natural Language Interactions\n\n**Basic Operations**\n```\n\"Show me all records in the Projects table\"\n\"Create a new task with priority 'High' and due date tomorrow\"\n\"Update the status of task ID rec123 to 'Completed'\"\n\"Delete all records where status is 'Archived'\"\n\"What tables are in my base?\"\n\"Search for records where Status equals 'Active'\"\n```\n\n**Webhook Operations (v1.4.0+)**\n```\n\"Create a webhook for my table that notifies https://my-app.com/webhook\"\n\"List all active webhooks in my base\"\n\"Show me the recent webhook payloads\"\n\"Delete webhook ach123xyz\"\n```\n\n**Schema Management (v1.5.0+)**\n```\n\"List all my accessible Airtable bases\"\n\"Show me the complete schema for this base\"\n\"Describe the Projects table with all field details\"\n\"Create a new table called 'Tasks' with Name, Priority, and Due Date fields\"\n\"Add a Status field to the existing Projects table\"\n\"What field types are available in Airtable?\"\n```\n\n**Batch Operations & Attachments (v1.6.0+)**\n```\n\"Create 5 new records at once in the Tasks table\"\n\"Update multiple records with new status values\"\n\"Delete these 3 records in one operation\"\n\"Attach this image URL to the record's photo field\"\n\"Who are the collaborators on this base?\"\n\"Show me all shared views in this base\"\n```\n\n## 🛠️ Available Tools (33 Total)\n\n### 📊 Data Operations (7 tools)\n| Tool | Description |\n|------|-------------|\n| `list_tables` | Get all tables in your base with schema information |\n| `list_records` | Query records with optional filtering and pagination |\n| `get_record` | Retrieve a single record by ID |\n| `create_record` | Add new records to any table |\n| `update_record` | Modify existing record fields |\n| `delete_record` | Remove records from a table |\n| `search_records` | Advanced search with Airtable formulas and sorting |\n\n### 🪝 Webhook Management (5 tools)\n| Tool | Description |\n|------|-------------|\n| `list_webhooks` | View all webhooks configured for your base |\n| `create_webhook` | Set up real-time notifications for data changes |\n| `delete_webhook` | Remove webhook configurations |\n| `get_webhook_payloads` | Retrieve webhook notification history |\n| `refresh_webhook` | Extend webhook expiration time |\n\n### 🔍 Schema Discovery (6 tools) - **New in v1.5.0**\n| Tool | Description |\n|------|-------------|\n| `list_bases` | List all accessible Airtable bases with permissions |\n| `get_base_schema` | Get complete schema information for any base |\n| `describe_table` | Get detailed table info including all field specifications |\n| `list_field_types` | Reference guide for all available Airtable field types |\n| `get_table_views` | List all views for a specific table with configurations |\n\n### 🏗️ Table Management (3 tools) - **New in v1.5.0**\n| Tool | Description |\n|------|-------------|\n| `create_table` | Create new tables with custom field definitions |\n| `update_table` | Modify table names and descriptions |\n| `delete_table` | Remove tables (with safety confirmation required) |\n\n### 🔧 Field Management (3 tools) - **New in v1.5.0**\n| Tool | Description |\n|------|-------------|\n| `create_field` | Add new fields to existing tables with all field types |\n| `update_field` | Modify field properties, names, and options |\n| `delete_field` | Remove fields (with safety confirmation required) |\n\n### ⚡ Batch Operations (4 tools) - **New in v1.6.0**\n| Tool | Description |\n|------|-------------|\n| `batch_create_records` | Create up to 10 records at once for better performance |\n| `batch_update_records` | Update up to 10 records simultaneously |\n| `batch_delete_records` | Delete up to 10 records in a single operation |\n| `batch_upsert_records` | Update existing or create new records based on key fields |\n\n### 📎 Attachment Management (1 tool) - **New in v1.6.0**\n| Tool | Description |\n|------|-------------|\n| `upload_attachment` | Attach files from public URLs to attachment fields |\n\n### 👁️ Advanced Views (2 tools) - **New in v1.6.0**\n| Tool | Description |\n|------|-------------|\n| `create_view` | Create new views (grid, form, calendar, etc.) with custom configurations |\n| `get_view_metadata` | Get detailed view information including filters and sorts |\n\n### 🏢 Base Management (3 tools) - **New in v1.6.0**\n| Tool | Description |\n|------|-------------|\n| `create_base` | Create new Airtable bases with initial table structures |\n| `list_collaborators` | View base collaborators and their permission levels |\n| `list_shares` | List shared views and their public configurations |\n\n### 🤖 AI Intelligence Suite (10 prompts) - **New in v3.0.0**\n| Prompt | Description | Enterprise Features |\n|--------|-------------|-------------------|\n| `analyze_data` | Advanced statistical analysis with ML insights | Confidence intervals, anomaly detection |\n| `create_report` | Intelligent report generation with recommendations | Multi-stakeholder customization, ROI analysis |\n| `data_insights` | Business intelligence and pattern discovery | Cross-table correlations, predictive indicators |\n| `optimize_workflow` | AI-powered automation recommendations | Change management, implementation roadmaps |\n| `smart_schema_design` | Database optimization with best practices | Compliance-aware (GDPR, HIPAA), scalability planning |\n| `data_quality_audit` | Comprehensive quality assessment and fixes | Automated remediation, governance frameworks |\n| `predictive_analytics` | Forecasting and trend prediction | Multiple algorithms, uncertainty quantification |\n| `natural_language_query` | Process human questions intelligently | Context awareness, confidence scoring |\n| `smart_data_transformation` | AI-assisted data processing | Quality rules, audit trails, optimization |\n| `automation_recommendations` | Workflow optimization suggestions | Technical feasibility, cost-benefit analysis |\n\n## 🔧 Advanced Configuration\n\n### Using with Smithery Cloud\n\nFor cloud-hosted MCP servers:\n\n```json\n{\n  \"mcpServers\": {\n    \"airtable\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@smithery/cli\",\n        \"run\",\n        \"@rashidazarang/airtable-mcp\",\n        \"--token\",\n        \"YOUR_TOKEN\",\n        \"--base\",\n        \"YOUR_BASE_ID\"\n      ]\n    }\n  }\n}\n```\n\n### Direct Node.js Execution\n\nIf you cloned the repository:\n\n```json\n{\n  \"mcpServers\": {\n    \"airtable\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/airtable-mcp/airtable_simple.js\",\n        \"--token\",\n        \"YOUR_TOKEN\",\n        \"--base\",\n        \"YOUR_BASE_ID\"\n      ]\n    }\n  }\n}\n```\n\n## 🧪 Testing\n\n### 🔷 TypeScript Testing\n\nRun the comprehensive TypeScript test suite:\n\n```bash\n# Install dependencies first\nnpm install\n\n# Run TypeScript type checking\nnpm run test:types\n\n# Run full TypeScript test suite\nnpm run test:ts\n\n# Build and test TypeScript server\nnpm run build\nnpm run start:ts\n```\n\n### 📦 JavaScript Testing\n\nRun the comprehensive test suite to verify all 33 tools:\n\n```bash\n# Set environment variables first\nexport AIRTABLE_TOKEN=your_token\nexport AIRTABLE_BASE_ID=your_base_id\n\n# Start the server\nnode airtable_simple.js &\n\n# Run comprehensive tests (v1.6.0+)\n./test_v1.6.0_comprehensive.sh\n```\n\nThe TypeScript test suite validates:\n- **Type Safety**: Compile-time validation of all interfaces\n- **Enterprise Testing**: 33 tools with strict type checking\n- **AI Prompt Validation**: All 10 AI templates with proper typing\n- **Error Handling**: Type-safe error management\n- **Performance**: Concurrent operations with type safety\n- **Integration**: Full MCP protocol compliance\n\nThe JavaScript test suite validates:\n- All 33 tools with real API calls\n- Complete CRUD operations\n- Advanced schema management\n- Batch operations (create/update/delete multiple records)\n- Attachment management via URLs\n- Advanced view creation and metadata\n- Base management and collaboration tools\n- Webhook management\n- Error handling and edge cases\n- Security verification\n- 100% test coverage\n\n## 🐛 Troubleshooting\n\n### \"Connection Refused\" Error\n- Ensure the MCP server is running\n- Check that port 8010 is not blocked\n- Restart your MCP client\n\n### \"Invalid Token\" Error\n- Verify your Personal Access Token is correct\n- Check that the token has the required scopes\n- Ensure no extra spaces in your credentials\n\n### \"Base Not Found\" Error\n- Confirm your Base ID is correct\n- Check that your token has access to the base\n\n### Port Conflicts\nIf port 8010 is in use:\n```bash\nlsof -ti:8010 | xargs kill -9\n```\n\n## 📚 Documentation\n\n### 🔷 TypeScript Documentation\n- 📘 [TypeScript Examples](./examples/typescript/) - Complete type-safe usage examples\n- 🏗️ [Type Definitions](./types/) - Comprehensive type definitions for all features\n- 🧪 [TypeScript Testing](./src/test-suite.ts) - Enterprise-grade testing framework\n\n### 📦 General Documentation  \n- 🎆 [Release Notes v3.1.0](./RELEASE_NOTES_v3.1.0.md) - **Latest TypeScript release**\n- [Release Notes v1.6.0](./RELEASE_NOTES_v1.6.0.md) - Major feature release\n- [Release Notes v1.5.0](./RELEASE_NOTES_v1.5.0.md)\n- [Release Notes v1.4.0](./RELEASE_NOTES_v1.4.0.md)\n- [Detailed Setup Guide](./CLAUDE_INTEGRATION.md)\n- [Development Guide](./DEVELOPMENT.md)\n- [Security Notice](./SECURITY_NOTICE.md)\n\n## 📦 Version History\n\n- **v3.1.0** (2025-08-16) - 🔷 **TypeScript Support**: Enterprise-grade type safety, comprehensive type definitions, dual JS/TS distribution\n- **v3.0.0** (2025-08-16) - 🤖 **Revolutionary AI Agent**: 10 intelligent prompts, predictive analytics, natural language processing\n- **v2.2.3** (2025-08-16) - 🔒 **Security release**: Final XSS vulnerability fixes and enhanced validation\n- **v2.2.0** (2025-08-16) - 🏆 **Major release**: Complete MCP 2024-11-05 protocol implementation\n- **v1.6.0** (2025-08-15) - 🎆 **Major release**: Added batch operations & attachment management (33 total tools)\n- **v1.5.0** (2025-08-15) - Added comprehensive schema management (23 total tools)\n- **v1.4.0** (2025-08-14) - Added webhook support and enhanced CRUD operations (12 tools)\n- **v1.2.4** (2025-08-12) - Security fixes and stability improvements\n- **v1.2.3** (2025-08-11) - Bug fixes and error handling\n- **v1.2.2** (2025-08-10) - Initial stable release\n\n## 🤝 Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.\n\n## 📄 License\n\nMIT License - see [LICENSE](./LICENSE) file for details\n\n## 🙏 Acknowledgments\n\n- Built for the [Model Context Protocol](https://modelcontextprotocol.io/)\n- Powered by [Airtable API](https://airtable.com/developers/web/api/introduction)\n- Compatible with [Claude Desktop](https://claude.ai/) and other MCP clients\n\n## 📮 Support\n\n- **Issues**: [GitHub Issues](https://github.com/rashidazarang/airtable-mcp/issues)\n- **Discussions**: [GitHub Discussions](https://github.com/rashidazarang/airtable-mcp/discussions)\n\n---\n\n**Version**: 3.1.0 | **Status**: 🔷 TypeScript + 🤖 AI Agent | **MCP Protocol**: 2024-11-05 Complete | **Type Safety**: Enterprise-Grade | **Intelligence**: 10 AI Prompts | **Last Updated**: August 16, 2025\n",
+  "category": "AI Tools",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "rashidazarang-airtable-mcp-typescript": {
+        "command": "npx",
+        "args": ["@rashidazarang/airtable-mcp", "--token", "YOUR_AIRTABLE_TOKEN", "--base", "YOUR_BASE_ID"],
+        "env": {
+          "NODE_ENV": "production",
+          "LOG_LEVEL": "INFO"
+        }
+      },
+      "rashidazarang-airtable-mcp-args": {
+        "command": "npx",
+        "args": ["@rashidazarang/airtable-mcp", "--token", "YOUR_AIRTABLE_TOKEN", "--base", "YOUR_BASE_ID"]
+      },
+      "rashidazarang-airtable-mcp-env": {
+        "command": "npx",
+        "args": ["@rashidazarang/airtable-mcp"],
+        "env": {
+          "AIRTABLE_TOKEN": "YOUR_AIRTABLE_TOKEN",
+          "AIRTABLE_BASE_ID": "YOUR_BASE_ID"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "rashidazarang",
+    "repo": "airtable-mcp",
+    "url": "https://github.com/rashidazarang/airtable-mcp",
+    "name": "rashidazarang__airtable-mcp",
+    "path": null,
+    "stars": 33,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "f0367ba35f0696c12ed7ec7d2f14596d40c94239"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.953Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_logging": true,
+    "implementing_oauth2": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_roots": false,
+    "implementing_sampling": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_tools": true
+  },
+  "dependencies": [
+    {
+      "importance": 10,
+      "name": "mcp"
+    },
+    {
+      "importance": 9,
+      "name": "airtable"
+    },
+    {
+      "importance": 9,
+      "name": "airtable-python-wrapper"
+    },
+    {
+      "importance": 8,
+      "name": "anthropic"
+    },
+    {
+      "importance": 7,
+      "name": "@smithery/cli"
+    },
+    {
+      "importance": 6,
+      "name": "pydantic"
+    },
+    {
+      "importance": 6,
+      "name": "websockets"
+    },
+    {
+      "importance": 5,
+      "name": "requests"
+    },
+    {
+      "importance": 4,
+      "name": "dotenv"
+    },
+    {
+      "importance": 4,
+      "name": "python-dotenv"
+    },
+    {
+      "importance": 3,
+      "name": "argparse"
+    },
+    {
+      "importance": 3,
+      "name": "typing-extensions"
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@rashidazarang/airtable-mcp\",\n  \"version\": \"3.1.0\",\n  \"description\": \"Advanced AI-powered Airtable MCP server with TypeScript support, intelligent analytics, predictive modeling, and enterprise automation capabilities\",\n  \"main\": \"airtable_simple_production.js\",\n  \"exports\": {\n    \".\": {\n      \"import\": \"./dist/airtable-mcp-server.js\",\n      \"require\": \"./airtable_simple_production.js\",\n      \"types\": \"./types/index.d.ts\"\n    },\n    \"./types\": \"./types/index.d.ts\",\n    \"./types/*\": \"./types/*.d.ts\"\n  },\n  \"bin\": {\n    \"airtable-mcp\": \"./airtable_simple_production.js\",\n    \"airtable-mcp-ts\": \"./dist/airtable-mcp-server.js\"\n  },\n  \"scripts\": {\n    \"start\": \"node airtable_simple_production.js\",\n    \"start:ts\": \"node dist/airtable-mcp-server.js\",\n    \"start:python\": \"python3.10 inspector_server.py\",\n    \"test\": \"node test_mcp_comprehensive.js\",\n    \"test:quick\": \"./quick_test.sh\",\n    \"test:types\": \"tsc --noEmit\",\n    \"test:ts\": \"npm run build && node dist/test-suite.js\",\n    \"build\": \"tsc\",\n    \"build:watch\": \"tsc --watch\",\n    \"dev\": \"node airtable_simple_production.js --token YOUR_TOKEN --base YOUR_BASE_ID\",\n    \"dev:ts\": \"npm run build && npm run start:ts\"\n  },\n  \"keywords\": [\n    \"airtable\",\n    \"mcp\",\n    \"claude\",\n    \"claude-desktop\",\n    \"anthropic\",\n    \"ai\",\n    \"database\",\n    \"typescript\",\n    \"types\"\n  ],\n  \"files\": [\n    \"airtable_simple.js\",\n    \"airtable_simple_production.js\",\n    \"dist/\",\n    \"types/\",\n    \"README.md\",\n    \"LICENSE\",\n    \"package.json\",\n    \"tsconfig.json\",\n    \"examples/\",\n    \"bin/\"\n  ],\n  \"types\": \"types/index.d.ts\",\n  \"author\": \"Rashid Azarang\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@smithery/cli\": \"^1.0.0\",\n    \"airtable\": \"^0.12.2\",\n    \"dotenv\": \"^16.0.0\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5.3.0\",\n    \"@types/node\": \"^20.10.0\",\n    \"@types/dotenv\": \"^8.2.0\"\n  },\n  \"engines\": {\n    \"node\": \">=14.0.0\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/rashidazarang/airtable-mcp\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/rashidazarang/airtable-mcp/issues\"\n  },\n  \"homepage\": \"https://github.com/rashidazarang/airtable-mcp#readme\"\n}\n\n\n=== requirements.txt ===\nairtable-python-wrapper>=0.15.3\nanthropic>=0.19.1\nargparse>=1.4.0\npython-dotenv>=1.0.0\npydantic>=2.4.2\n# MCP core will be installed by Smithery during deployment\nrequests>=2.31.0\ntyping-extensions>=4.7.1\nwebsockets>=11.0.3\nmcp>=1.4.1 \n\n=== setup.py ===\n#!/usr/bin/env python3\n\nfrom setuptools import setup, find_packages\n\nwith open(\"README.md\", \"r\", encoding=\"utf-8\") as fh:\n    long_description = fh.read()\n\nwith open(\"requirements.txt\", \"r\", encoding=\"utf-8\") as req_file:\n    requirements = req_file.read().splitlines()\n\nsetup(\n    name=\"airtable-mcp\",\n    version=\"1.1.0\",\n    author=\"Rashid Azarang\",\n    author_email=\"rashidazarang@gmail.com\",\n    description=\"Airtable MCP for AI tools - updated to work with MCP SDK 1.4.1+\",\n    long_description=long_description,\n    long_description_content_type=\"text/markdown\",\n    url=\"https://github.com/rashidazarang/airtable-mcp\",\n    packages=find_packages(),\n    install_requires=requirements,\n    classifiers=[\n        \"Programming Language :: Python :: 3.10\",\n        \"License :: OSI Approved :: MIT License\",\n        \"Operating System :: OS Independent\",\n    ],\n    python_requires=\">=3.10\",\n    include_package_data=True,\n) "
+}

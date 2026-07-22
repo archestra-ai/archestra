@@ -85,7 +85,10 @@ export function handleApiError(error: ApiSdkError) {
   if (typeof window !== "undefined") {
     // Errors stay long enough to read and copy; the close button dismisses early.
     // The toast shows the humanized message; Sentry keeps the raw error.
-    toast.error(getApiErrorMessage(error), { duration: 12000 });
+    // Keyed by message so a repeating failure (retries, several queries hitting
+    // the same missing permission) refreshes one toast instead of stacking.
+    const message = getApiErrorMessage(error);
+    toast.error(message, { duration: 12000, id: message });
   }
 
   void import("@sentry/nextjs")

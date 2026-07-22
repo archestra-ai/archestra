@@ -1,0 +1,112 @@
+{
+  "name": "carsol__monarch-mcp-server",
+  "display_name": "monarch-mcp-server",
+  "description": "MCP server from carsol/monarch-mcp-server",
+  "author": {
+    "name": "carsol"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/run_server.py"],
+    "env": {
+      "MONARCH_EMAIL": "${user_config.monarch_email}",
+      "MONARCH_PASSWORD": "${user_config.monarch_password}",
+      "MONARCH_MFA_SECRET": "${user_config.monarch_mfa_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "monarch_email": {
+      "type": "string",
+      "title": "Monarch Money Email",
+      "description": "Your email address for your Monarch Money account.",
+      "required": true
+    },
+    "monarch_password": {
+      "type": "string",
+      "title": "Monarch Money Password",
+      "description": "Your password for your Monarch Money account.",
+      "sensitive": true,
+      "required": true
+    },
+    "monarch_mfa_secret": {
+      "type": "string",
+      "title": "Monarch Money MFA Secret",
+      "description": "Your MFA secret key for Monarch Money (optional but recommended for secure authentication).",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Monarch Money MCP Server\n\nA Model Context Protocol (MCP) server that provides read-only access to Monarch Money financial data. This allows AI assistants like Claude Desktop to analyze your financial information, transactions, budgets, and cashflow data.\n\nNote: I've created this for personal fun and is not affiated with Monarch Money. I mostly created it for learning about my spending, using it for projections. Since I don't have any need to mutate any data it's currently READONLY.\n\nShout out to \n\n## Features\n\n- **Read-only access** to Monarch Money accounts\n- **Transaction analysis** with date filtering and search\n- **Budget tracking** and cashflow analysis\n- **Account details** including investment holdings\n- **Secure authentication** with MFA support\n- **Session persistence** to minimize re-authentication\n\n## Installation\n\n### Prerequisites\n\n- Python 3.13+\n- [uv](https://docs.astral.sh/uv/) package manager (recommended)\n- A Monarch Money account\n\n### Setup\n\n1. **Clone the repository:**\n\n2. **Install dependencies:**\n   ```bash\n   uv add mcp monarchmoney python-dotenv\n   ```\n\n3. **Configure environment variables:**\n   ```bash\n   cp .env.example .env\n   ```\n   \n   Edit `.env` with your Monarch Money credentials:\n   ```\n   MONARCH_EMAIL=your-email@example.com\n   MONARCH_PASSWORD=your-monarch-password\n   MONARCH_MFA_SECRET=your-mfa-secret-key  # Optional but recommended\n   ```\n\n4. **Test the connection:**\n   ```bash\n   python test_api.py\n   ```\n\n## Usage\n\n### Running the Server\n\nStart the MCP server:\n```bash\npython run_server.py\n```\n\n### Claude Desktop Integration\n\nAdd to your Claude Desktop configuration (`claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"monarch-money\": {\n      \"command\": \"python\",\n      \"args\": [\"/path/to/monarch-mcp-server/run_server.py\"],\n      \"env\": {\n        \"MONARCH_EMAIL\": \"your-email@example.com\",\n        \"MONARCH_PASSWORD\": \"your-password\",\n        \"MONARCH_MFA_SECRET\": \"your-mfa-secret\"\n      }\n    }\n  }\n}\n```\n\n## Available Resources\n\n- `monarch://accounts` - All linked accounts\n- `monarch://transactions/recent` - Last 100 transactions  \n- `monarch://budgets` - Budget information with actual vs target\n- `monarch://cashflow/summary` - Income, expenses, and savings summary\n\n## Available Tools\n\n- **get_transactions** - Get transactions with date range filtering\n- **get_account_details** - Detailed account information including holdings\n- **get_cashflow_analysis** - Cashflow analysis by category and time period\n- **search_transactions** - Search transactions by description or merchant\n- **get_categories** - All transaction categories\n- **get_institutions** - Linked financial institutions\n\n## Example Prompts\n\nOnce configured with Claude Desktop, you can ask:\n\n- \"Show me my recent transactions from last month\"\n- \"What's my current budget status?\"\n- \"Analyze my spending patterns by category\"\n- \"How much did I spend on groceries this year?\"\n- \"What are my investment account balances?\"\n\n## Security\n\n- **No write operations** - Server is read-only for safety\n- **Local credentials** - Your login details stay on your machine\n- **Session caching** - Reduces authentication frequency\n- **MFA support** - Two-factor authentication recommended\n\n## Troubleshooting\n\n### Authentication Issues\n\n1. **Run the debug script:**\n   ```bash\n   python debug_server.py\n   ```\n\n2. **Check environment variables:**\n   ```bash\n   python -c \"import os; print('Email:', bool(os.getenv('MONARCH_EMAIL'))); print('Password:', bool(os.getenv('MONARCH_PASSWORD')))\"\n   ```\n\n3. **Clear session cache:**\n   ```bash\n   rm -rf .mm/\n   ```\n\n### Common Issues\n\n- **MFA required**: Set `MONARCH_MFA_SECRET` environment variable\n- **Session expired**: Delete `.mm/` directory to force fresh login\n- **Import errors**: Ensure all dependencies installed with `uv add`\n\n## Development\n\n### Project Structure\n\n```\nmonarch-mcp-server/\n├── monarch_mcp_server.py     # Main MCP server implementation\n├── run_server.py             # Server launcher script\n├── debug_server.py           # Authentication debugging\n├── test_api.py              # API connection testing\n├── tests/                   # Unit tests\n│   ├── __init__.py\n│   └── test_monarch_mcp_server.py\n├── pyproject.toml           # Project dependencies\n├── .github/workflows/       # CI/CD workflows\n└── .env.example             # Environment template\n```\n\n### Testing\n\nInstall test dependencies:\n```bash\nuv sync --extra test\n```\n\nRun the unit test suite:\n```bash\nuv run pytest tests/ -v\n```\n\nRun tests with coverage:\n```bash\nuv run pytest tests/ --cov=monarch_mcp_server --cov-report=term\n```\n\nRun manual API test:\n```bash\npython test_api.py\n```\n\n## Contributing\n\n1. Fork the repository\n2. Create a feature branch\n3. Make your changes\n4. Test thoroughly\n5. Submit a pull request\n\n## License\n\nMIT License - see [LICENSE](LICENSE) file for details.\n\n## Disclaimer\n\nThis project is not affiliated with Monarch Money. Use at your own risk and ensure compliance with Monarch Money's terms of service.\n",
+  "category": "Finance",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "monarch-money": {
+        "command": "python",
+        "args": ["run_server.py"],
+        "env": {}
+      },
+      "monarch-money-configured": {
+        "command": "python",
+        "args": ["/path/to/monarch-mcp-server/run_server.py"],
+        "env": {
+          "MONARCH_EMAIL": "your-email@example.com",
+          "MONARCH_PASSWORD": "your-password",
+          "MONARCH_MFA_SECRET": "your-mfa-secret"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "carsol",
+    "repo": "monarch-mcp-server",
+    "url": "https://github.com/carsol/monarch-mcp-server",
+    "name": "carsol__monarch-mcp-server",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "fc3cc6e2187f0788d4cff65a3468b6a7068126fe"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:09.305Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "monarchmoney",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"monarch-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"A Model Context Protocol server for read-only access to Monarch Money financial data\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"mcp>=1.9.2\",\n    \"monarchmoney>=0.1.15\",\n    \"python-dotenv>=1.1.0\",\n]\n\n[project.optional-dependencies]\ntest = [\n    \"pytest>=8.0.0\",\n    \"pytest-asyncio>=0.23.0\",\n]\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\ntestpaths = [\"tests\"]\npython_files = [\"test_*.py\"]\npython_classes = [\"Test*\"]\npython_functions = [\"test_*\"]\n\n[tool.coverage.run]\nsource = [\"monarch_mcp_server\"]\nomit = [\n    \"tests/*\",\n    \"debug_server.py\",\n    \"test_api.py\",\n]\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"if __name__ == .__main__.:\",\n    \"raise AssertionError\",\n    \"raise NotImplementedError\",\n]\n"
+}

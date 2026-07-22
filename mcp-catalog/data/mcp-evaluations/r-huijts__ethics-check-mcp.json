@@ -1,0 +1,107 @@
+{
+  "name": "r-huijts__ethics-check-mcp",
+  "display_name": "ethics-check-mcp",
+  "description": "MCP server from r-huijts/ethics-check-mcp",
+  "author": {
+    "name": "r-huijts"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@r-huijts/ethics-vibe-check"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "challenge_me_on": {
+      "type": "string",
+      "title": "Challenge me on",
+      "description": "Specific areas where the AI should challenge your thinking (e.g., confirmation bias, assumptions, blind spots).",
+      "required": false,
+      "default": "confirmation bias, assumptions, blind spots"
+    },
+    "my_typical_biases": {
+      "type": "string",
+      "title": "My typical biases",
+      "description": "Patterns of bias you commonly exhibit (e.g., overconfidence, negativity bias).",
+      "required": false,
+      "default": ""
+    },
+    "dont_let_me": {
+      "type": "string",
+      "title": "Don't let me",
+      "description": "Actions or behaviors the AI should prevent you from doing (e.g., avoid hard questions, seek easy answers).",
+      "required": false,
+      "default": "avoid hard questions, seek easy answers, etc."
+    },
+    "push_me_toward": {
+      "type": "string",
+      "title": "Push me toward",
+      "description": "Desired intellectual outcomes the AI should encourage (e.g., intellectual honesty, uncomfortable truths).",
+      "required": false,
+      "default": "intellectual honesty, uncomfortable truths, etc."
+    }
+  },
+  "readme": "# 🛡️ Ethics Check MCP\n\n**Make AI interrupt itself. Challenge your thinking. Stay sharp.**\n\n*An MCP server that turns Claude into a philosophical sparring partner who actively contradicts comfortable conversations and challenges confirmation bias.*\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=ethics-vibe-check&config=eyJjb21tYW5kIjoibnB4IC15IEByLWh1aWp0cy9ldGhpY3MtdmliZS1jaGVjayJ9)\n[![npm version](https://img.shields.io/npm/v/@r-huijts/ethics-vibe-check.svg)](https://www.npmjs.com/package/@r-huijts/ethics-vibe-check)\n[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)\n\n---\n\n## The Problem: AI That's Too \"Helpful\"\n\nAI assistants like ChatGPT and Claude are trained to be helpful. Sounds great, right? But in reality, this often means they tell you exactly what you want to hear, reinforce your biases, and follow questionable requests without pushback.\n\nAs we interact more personally with AI, we need systems that **challenge us**, not just comfort us. Especially when these technologies are driven by the interests of big tech companies.\n\n**Ethics Check MCP changes the game.** It makes AI actively interrupt itself, question its own answers, and challenge both your questions and assumptions. Think of it as an \"ethics vibe-check\" that keeps conversations from getting too comfortable.\n\n---\n\n## What This Actually Does\n\n### 🚨 **Interrupts Comfortable Conversations**\n- Stops AI from just telling you what you want to hear\n- Forces critical examination of assumptions\n- Challenges both your questions AND the AI's responses\n\n### 🔍 **Scans for 8 Ethical Dimensions**\n- Privacy sensitivity and data concerns\n- Confirmation bias detection  \n- Transparency and honesty gaps\n- Fairness and discrimination risks\n- Long-term consequence awareness\n- Stakeholder impact analysis\n- Power dynamics and manipulation\n- Ethical framework alignment\n\n### 🧠 **Forces Critical Thinking**\n- Ensures AI asks sufficient counter-questions\n- Provides alternative perspectives and counterarguments\n- Challenges you to examine your own biases and motivations\n\n### 📚 **Learns and Remembers**\n- Recognizes patterns in your thinking\n- Provides context from past interactions\n- Gets better at spotting your specific blind spots\n\n---\n\n## Real Examples of What Changes\n\n**Before Ethics Check:**\n> **You:** \"How can I increase user engagement on my app?\"\n> **Claude:** \"Here are 10 proven strategies to boost engagement...\"\n\n**After Ethics Check:**\n> **Claude:** \"Before suggesting engagement tactics, let me ask: What kind of engagement are you seeking? Are you trying to genuinely help users accomplish their goals, or maximize time-on-app? These require very different approaches with different ethical implications.\"\n\n**Before Ethics Check:**\n> **You:** \"Write me a persuasive email to get people to donate to my cause.\"\n> **Claude:** \"Here's a compelling donation email...\"\n\n**After Ethics Check:**\n> **Claude:** \"I notice this request focuses on persuasion rather than information. What evidence do you have that your cause effectively addresses the problem? Are you being transparent about how donations are used? Let's explore what makes requests genuinely ethical versus manipulative.\"\n\n**Before Ethics Check:**\n> **You:** \"My research shows that approach X is clearly the best solution.\"\n> **Claude:** \"That's interesting research! Here's how you could implement approach X...\"\n\n**After Ethics Check:**\n> **Claude:** \"I'm noticing potential confirmation bias here. What contradictory evidence have you considered? What would someone who disagrees with approach X argue? Let's examine the strongest counterarguments before proceeding.\"\n\n---\n\n## The Four Tools Working Together\n\n### 🛡️ **Ethics Check**\nScans conversations across eight ethical dimensions, flagging privacy issues, bias patterns, transparency gaps, and fairness concerns before they become problems.\n\n### 🤔 **Critical Thinking**  \nEnsures AI doesn't just agree with you. Forces deeper examination, alternative perspectives, and uncomfortable but necessary questions about assumptions.\n\n### 📖 **Ethics Guide**\nProvides guidance from multiple ethical frameworks (utilitarian, deontological, virtue ethics) for complex situations that don't have simple answers.\n\n### 🧠 **Ethics Learn**\nRemembers all interactions, recognizes your specific thinking patterns, and gets increasingly good at catching your personal blind spots and biases.\n\n---\n\n## Why This Matters Now\n\n**Personal Growth:** Stop getting comfortable answers. Start getting better questions.\n\n**Decision Quality:** Make choices based on thorough examination, not confirmation of existing beliefs.\n\n**Bias Awareness:** Become conscious of how often you (and AI) seek confirmation rather than truth.\n\n**Ethical Maturity:** Develop the skill of sitting with uncomfortable questions instead of rushing to comfortable answers.\n\n**AI Relationship:** Build a healthier dynamic with AI that challenges rather than enables your thinking patterns.\n\n---\n\n## 🎯 **Customize Your Ethics Vibe Check** (IMPORTANT!)\n\n**This is where the magic happens.** Add these system prompts to make the ethics vibe check work perfectly for YOUR specific situation and biases:\n\n### For Cursor Users\nAdd this to your Cursor rules/system prompts:\n\n```markdown\n## My Ethics Context\n- Challenge me on: [confirmation bias, assumptions, blind spots]\n- My typical biases: [what patterns do you fall into?]\n- Don't let me: [avoid hard questions, seek easy answers, etc.]\n- Push me toward: [intellectual honesty, uncomfortable truths, etc.]\n\nBe willing to interrupt me when I'm seeking confirmation rather than truth.\n```\n\n### For Claude Desktop Users\nAdd this to your custom instructions or at the start of conversations:\n\n```markdown\n## Ethics Vibe Check Instructions\nI want you to actively challenge my thinking and interrupt comfortable conversations. \n\n- Challenge me on: [confirmation bias, assumptions, blind spots]\n- My typical biases: [what patterns do you fall into?] \n- Don't let me: [avoid hard questions, seek easy answers, etc.]\n- Push me toward: [intellectual honesty, uncomfortable truths, etc.]\n\nWhen I'm seeking confirmation rather than truth, interrupt me and make me think harder.\n```\n\n### For Any Claude Interface\nYou can also start conversations with:\n\n*\"I'm using Ethics Vibe Check tools. Please actively challenge my assumptions and interrupt me when I'm seeking comfortable answers instead of truth. Focus on [your specific areas of concern].\"*\n\n**Why this matters:** Without context about your specific biases and goals, the tools work generically. WITH your custom prompt, they become laser-focused on YOUR thinking patterns and blind spots.\n\n---\n\n## Installation & Setup\n\n### One-Click Install\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=ethics-vibe-check&config=eyJjb21tYW5kIjoibnB4IC15IEByLWh1aWp0cy9ldGhpY3MtdmliZS1jaGVjayJ9)\n\nOr manually add to your Cursor MCP settings:\n\n\n```json\n{\n  \"mcpServers\": {\n    \"ethics-vibe-check\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\", \n        \"@r-huijts/ethics-vibe-check\"\n        ]\n    }\n  }\n}\n```\n\n### Alternative Methods\n```bash\n# Global install\nnpm install -g @r-huijts/ethics-vibe-check\n\n# Direct usage  \nnpx @r-huijts/ethics-vibe-check\n```\n\n---\n\n## How to Use\n\nThe tools work automatically in the background, but you can also invoke them directly:\n\n### Quick Ethics Reality Check\n```\n@ethics-check Am I being intellectually honest here? [describe your situation]\n```\n\n### Force Critical Examination\n```\n@critical-thinking What am I missing? What would someone who disagrees argue?\n```\n\n### Get Multi-Framework Guidance\n```\n@ethics-guide Help me think through this complex situation from different ethical angles\n```\n\n### Additional Tips\n\nThe tools automatically analyze context and patterns, but direct invocation can be helpful for specific situations. Remember: the better your system prompt customization above, the more targeted and effective the challenges will be.\n\n---\n\n## What Users Are Saying\n\n*\"It's confrontational in the best possible way. I didn't realize how often I was unconsciously seeking confirmation for my own ideas until this started interrupting those patterns.\"*\n\n*\"Finally, an AI that doesn't just tell me what I want to hear. It makes me think harder about everything.\"*\n\n*\"The first time it challenged one of my 'obviously correct' assumptions, I was annoyed. Then I realized it was right to push back.\"*\n\n---\n\n## Not for Everyone\n\n**This tool is for people who:**\n- Want to be challenged, not just helped\n- Prefer uncomfortable truths over comfortable lies\n- Are willing to examine their own biases and assumptions\n- Want AI to be a sparring partner, not just an assistant\n\n**This tool is NOT for people who:**\n- Just want AI to agree with them\n- Prefer quick answers over deep thinking\n- Are uncomfortable with being questioned or challenged\n- Want validation rather than examination\n\n---\n\n## Smart Features\n\n- **🚨 Interruption Engine**: Actively breaks up comfortable conversation patterns\n- **🎯 Bias Detection**: Recognizes when you're seeking confirmation vs. truth\n- **🔄 Context Learning**: Gets better at spotting your specific thinking patterns\n- **📊 Multi-Framework Analysis**: Examines issues from multiple ethical perspectives\n- **⚡ Real-Time Challenge**: Available in every conversation to keep you sharp\n\n---\n\n## Philosophy\n\nWe believe that as AI becomes more sophisticated, our relationship with it must become more sophisticated too. Instead of AI that makes us lazy thinkers, we need AI that makes us better thinkers.\n\n**This isn't about being \"more ethical\" - it's about being more thoughtful.**\n\nThe goal isn't to find the \"right\" answer, but to ensure you've asked the right questions and examined your assumptions before deciding.\n\n---\n\n## Contributing & Community\n\nHave ideas for better ways to challenge thinking? Found new bias patterns? Want to improve the interruption logic?\n\n- 🐛 [Report Issues](https://github.com/your-repo/ethics-check-mcp/issues)\n- 💡 [Suggest Features](https://github.com/your-repo/ethics-check-mcp/discussions)  \n- 🔧 [Contribute Code](https://github.com/your-repo/ethics-check-mcp/pulls)\n\n---\n\n## License\n\nMIT © 2024 - Built for people who want AI to make them think harder, not just feel better.\n\n*\"The point isn't to be right. The point is to be thoughtful.\"*",
+  "category": "AI Tools",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ethics-vibe-check": {
+        "command": "npx",
+        "args": ["-y", "@r-huijts/ethics-vibe-check"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "r-huijts",
+    "repo": "ethics-check-mcp",
+    "url": "https://github.com/r-huijts/ethics-check-mcp",
+    "name": "ethics-check-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4b563b19418618ff453ebb0cd4922c4779a1c2df"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:51.884Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@google/generative-ai",
+      "importance": 8
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@r-huijts/ethics-vibe-check\",\n  \"version\": \"1.0.2\",\n  \"description\": \"🛡️ Make AI interrupt itself and challenge your thinking. Turns Claude into a philosophical sparring partner who actively contradicts comfortable conversations and challenges confirmation bias.\",\n  \"main\": \"build/index.js\",\n  \"bin\": {\n    \"ethics-vibe-check\": \"build/index.js\"\n  },\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"dev\": \"npm run build && node build/index.js\",\n    \"start\": \"node build/index.js\",\n    \"test\": \"node test-ethics.js\",\n    \"test:storage\": \"node storage-analysis.js\",\n    \"test:curl\": \"curl -X POST http://localhost:3000/test -H \\\"Content-Type: application/json\\\" -d '{\\\"test\\\": true}'\",\n    \"test:all\": \"npm run build && npm run test && npm run test:storage\",\n    \"test:quick\": \"npm run build && echo 'Quick test: Build successful'\",\n    \"prepublishOnly\": \"npm run build\",\n    \"generate-deeplink\": \"node generate-cursor-link.js\"\n  },\n  \"keywords\": [\n    \"ai-ethics\",\n    \"ethical-ai\",\n    \"confirmation-bias\",\n    \"pattern-recognition\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"claude\",\n    \"cursor\",\n    \"ethics-oversight\",\n    \"bias-detection\",\n    \"critical-thinking\",\n    \"automated-learning\"\n  ],\n  \"author\": \"Your Name <your.email@example.com>\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/yourusername/ethics-check-mcp.git\"\n  },\n  \"homepage\": \"https://github.com/yourusername/ethics-check-mcp#readme\",\n  \"bugs\": {\n    \"url\": \"https://github.com/yourusername/ethics-check-mcp/issues\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"files\": [\n    \"build/\",\n    \"README.md\",\n    \"USAGE.md\",\n    \"LICENSE\",\n    \"env.example\",\n    \"generate-cursor-link.js\"\n  ],\n  \"dependencies\": {\n    \"@google/generative-ai\": \"^0.21.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.0.2\",\n    \"dotenv\": \"^16.4.7\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.10.2\",\n    \"typescript\": \"^5.7.2\"\n  }\n} "
+}

@@ -1,0 +1,131 @@
+{
+  "name": "polygon-io__mcp_polygon",
+  "display_name": "mcp_polygon",
+  "description": "An MCP server for Polygon.io Financial Market Data",
+  "author": {
+    "name": "polygon-io"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/polygon-io/mcp_polygon@v0.4.0", "mcp_polygon"],
+    "env": {
+      "POLYGON_API_KEY": "${user_config.polygon_api_key}",
+      "HOME": "${user_config.home}",
+      "MCP_TRANSPORT": "${user_config.mcp_transport}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "polygon_api_key": {
+      "type": "string",
+      "title": "Polygon.io API Key",
+      "description": "Your actual Polygon.io API key.",
+      "sensitive": true,
+      "required": true
+    },
+    "home": {
+      "type": "directory",
+      "title": "Home Directory",
+      "description": "Your home directory path, e.g., /home/username (Mac/Linux) or C:\\Users\\username (Windows).",
+      "required": false,
+      "default": "${HOME}"
+    },
+    "mcp_transport": {
+      "type": "string",
+      "title": "MCP Transport",
+      "description": "Transport configuration for the MCP server (e.g., stdio, sse, streamable-http). By default, STDIO transport is used.",
+      "required": false,
+      "default": "stdio"
+    }
+  },
+  "readme": "<a href=\"https://polygon.io\">\n  <div align=\"center\">\n    <picture>\n        <source media=\"(prefers-color-scheme: light)\" srcset=\"assets/polygon_banner_lightmode.png\">\n        <source media=\"(prefers-color-scheme: dark)\" srcset=\"assets/polygon_banner_darkmode.png\">\n        <img alt=\"Polygon.io logo\" src=\"assets/polygon_banner_lightmode.png\" height=\"100\">\n    </picture>\n  </div>\n</a>\n<br>\n\n> [!IMPORTANT]\n> :test_tube: This project is experimental and could be subject to breaking changes.\n\n# Polygon.io MCP Server\n\n [![GitHub release](https://img.shields.io/github/v/release/polygon-io/mcp_polygon)](https://github.com/polygon-io/mcp_polygon/releases)\n\nA [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides access to [Polygon.io](https://polygon.io?utm_campaign=mcp&utm_medium=referral&utm_source=github) financial market data API through an LLM-friendly interface.\n\n## Overview\n\nThis server exposes all Polygon.io API endpoints as MCP tools, providing access to comprehensive financial market data including:\n\n- Stock, options, forex, and crypto aggregates and bars\n- Real-time and historical trades and quotes\n- Market snapshots\n- Ticker details and reference data\n- Dividends and splits data\n- Financial fundamentals\n- Market status and holidays\n\n## Installation\n\n### Prerequisites\n\n- Python 3.10+\n- A Polygon.io API key <br> [![Button]][Link]\n- [Astral UV](https://docs.astral.sh/uv/getting-started/installation/)\n  - For existing installs, check that you have a version that supports the `uvx` command.\n\n### Claude Code\nFirst, install [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview)\n\n```bash\nnpm install -g @anthropic-ai/claude-code\n```\n\nUse the following command to add the Polygon MCP server to your local environment.\nThis assumes `uvx` is in your $PATH; if not, then you need to provide the full\npath to `uvx`.\n\n```bash\n# Claude CLI\nclaude mcp add polygon -e POLYGON_API_KEY=your_api_key_here -- uvx --from git+https://github.com/polygon-io/mcp_polygon@v0.4.0 mcp_polygon\n```\n\nThis command will install the MCP server in your current project.\nIf you want to install it globally, you can run the command with `-s <scope>` flag.\nSee `claude mcp add --help` for more options.\n\nTo start Claude Code, run `claude` in your terminal.\n- If this is your first time using, follow the setup prompts to authenticate\n\nYou can also run `claude mcp add-from-claude-desktop` if the MCP server is installed already for Claude Desktop.\n\n### Claude Desktop\n\n1. Follow the [Claude Desktop MCP installation instructions](https://modelcontextprotocol.io/quickstart/user) to complete the initial installation and find your configuration file.\n1. Use the following example as reference to add Polygon's MCP server.\nMake sure you complete the various fields.\n    1. Path find your path to `uvx`, run `which uvx` in your terminal.\n    2. Replace `<your_api_key_here>` with your actual Polygon.io API key.\n    3. Replace `<your_home_directory>` with your home directory path, e.g., `/home/username` (Mac/Linux) or `C:\\Users\\username` (Windows).\n\n<details>\n  <summary>claude_desktop_config.json</summary>\n\n```json\n{\n    \"mcpServers\": {\n        \"polygon\": {\n            \"command\": \"<path_to_your_uvx_install>/uvx\",\n            \"args\": [\n                \"--from\",\n                \"git+https://github.com/polygon-io/mcp_polygon@v0.4.0\",\n                \"mcp_polygon\"\n            ],\n            \"env\": {\n                \"POLYGON_API_KEY\": \"<your_api_key_here>\",\n                \"HOME\": \"<your_home_directory>\"\n            }\n        }\n    }\n}\n```\n</details>\n\n## Transport Configuration\n\nBy default, STDIO transport is used.\n\nTo configure [SSE](https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#http-with-sse) or [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http), set the `MCP_TRANSPORT` environment variable.\n\nExample:\n\n```bash\nMCP_TRANSPORT=streamable-http \\\nPOLYGON_API_KEY=<your_api_key_here> \\\nuv run entrypoint.py\n```\n\n## Usage Examples\n\nOnce integrated, you can prompt Claude to access Polygon.io data:\n\n```\nGet the latest price for AAPL stock\nShow me yesterday's trading volume for MSFT\nWhat were the biggest stock market gainers today?\nGet me the latest crypto market data for BTC-USD\n```\n\n## Available Tools\n\nThis MCP server implements all Polygon.io API endpoints as tools, including:\n\n- `get_aggs` - Stock aggregates (OHLC) data for a specific ticker\n- `list_trades` - Historical trade data\n- `get_last_trade` - Latest trade for a symbol\n- `list_ticker_news` - Recent news articles for tickers\n- `get_snapshot_ticker` - Current market snapshot for a ticker\n- `get_market_status` - Current market status and trading hours\n- `list_stock_financials` - Fundamental financial data\n- And many more...\n\nEach tool follows the Polygon.io SDK parameter structure while converting responses to standard JSON that LLMs can easily process.\n\n## Development\n\n### Running Locally\n\nCheck to ensure you have the [Prerequisites](#prerequisites) installed.\n\n```bash\n# Sync dependencies\nuv sync\n\n# Run the server\nPOLYGON_API_KEY=your_api_key_here uv run mcp_polygon\n```\n\n<details>\n  <summary>Local Dev Config for claude_desktop_config.json</summary>\n\n```json\n\n  \"mcpServers\": {\n    \"polygon\": {\n      \"command\": \"/your/path/.cargo/bin/uv\",\n      \"args\": [\n        \"run\",\n        \"--with\",\n        \"/your/path/mcp_polygon\",\n        \"mcp_polygon\"\n      ],\n      \"env\": {\n        \"POLYGON_API_KEY\": \"your_api_key_here\",\n        \"HOME\": \"/Users/danny\"\n      }\n    }\n  }\n```\n</details>\n\n### Debugging\n\nFor debugging and testing, we recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory /path/to/mcp_polygon run mcp_polygon\n```\n\nThis will launch a browser interface where you can interact with your MCP server directly and see input/output for each tool.\n\n### Code Linting\n\nThis project uses [just](https://github.com/casey/just) for common development tasks. To lint your code before submitting a PR:\n\n```bash\njust lint\n```\n\nThis will run `ruff format` and `ruff check --fix` to automatically format your code and fix linting issues.\n\n## Links\n- [Polygon.io Documentation](https://polygon.io/docs?utm_campaign=mcp&utm_medium=referral&utm_source=github)\n- [Model Context Protocol](https://modelcontextprotocol.io)\n- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)\n\n## Contributing\nIf you found a bug or have an idea for a new feature, please first discuss it with us by submitting a new issue.\nWe will respond to issues within at most 3 weeks.\nWe're also open to volunteers if you want to submit a PR for any open issues but please discuss it with us beforehand.\nPRs that aren't linked to an existing issue or discussed with us ahead of time will generally be declined.\n\n<!----------------------------------------------------------------------------->\n[Link]: https://polygon.io/?utm_campaign=mcp&utm_medium=referral&utm_source=github 'Polygon.io Home Page'\n<!---------------------------------[ Buttons ]--------------------------------->\n[Button]: https://img.shields.io/badge/Get_One_For_Free-5F5CFF?style=for-the-badge&logoColor=white\n",
+  "category": "Finance",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp_polygon-desktop-configured": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/polygon-io/mcp_polygon@v0.4.0", "mcp_polygon"],
+        "env": {
+          "POLYGON_API_KEY": "<your_api_key_here>",
+          "HOME": "<your_home_directory>"
+        }
+      },
+      "mcp_polygon-streamable-http": {
+        "command": "uv",
+        "args": ["run", "entrypoint.py"],
+        "env": {
+          "MCP_TRANSPORT": "streamable-http",
+          "POLYGON_API_KEY": "<your_api_key_here>"
+        }
+      },
+      "mcp_polygon-local": {
+        "command": "uv",
+        "args": ["run", "mcp_polygon"],
+        "env": {
+          "POLYGON_API_KEY": "your_api_key_here"
+        }
+      },
+      "mcp_polygon-local-desktop-configured": {
+        "command": "uv",
+        "args": ["run", "--with", "/your/path/mcp_polygon", "mcp_polygon"],
+        "env": {
+          "POLYGON_API_KEY": "your_api_key_here",
+          "HOME": "/Users/danny"
+        }
+      },
+      "modelcontextprotocol-inspector": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/inspector", "uv", "--directory", "/path/to/mcp_polygon", "run", "mcp_polygon"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "polygon-io",
+    "repo": "mcp_polygon",
+    "url": "https://github.com/polygon-io/mcp_polygon",
+    "name": "mcp_polygon",
+    "path": null,
+    "stars": 38,
+    "contributors": 6,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "fb048818dab8c1380d24f52609370b808d2fa4af"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.692Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "polygon-api-client",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp_polygon\"\nversion = \"0.4.0\"\ndescription = \"A MCP server project\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.9.3\",\n \"polygon-api-client>=1.15.3\",\n]\n[[project.authors]]\nname = \"Polygon\"\nemail = \"support@polygon.io\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[dependency-groups]\ndev = [\n    \"ruff>=0.12.4\",\n]\n\n[project.scripts]\nmcp_polygon = \"mcp_polygon:run\"\n"
+}

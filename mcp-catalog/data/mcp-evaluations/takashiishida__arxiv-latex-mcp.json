@@ -1,0 +1,78 @@
+{
+  "name": "takashiishida__arxiv-latex-mcp",
+  "display_name": "arxiv-latex-mcp",
+  "description": "MCP server that uses arxiv-to-prompt to fetch and process arXiv LaTeX sources for precise interpretation of mathematical expressions in scientific papers.",
+  "author": {
+    "name": "takashiishida"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "server/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# arxiv-latex MCP Server\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![GitHub Release](https://img.shields.io/github/v/release/takashiishida/arxiv-latex-mcp)](https://github.com/takashiishida/arxiv-latex-mcp/releases)\n\n\nAn MCP server that enables [Claude Desktop](https://claude.ai/download), [Cursor](https://www.cursor.com/), or other MCP clients to directly access and process arXiv papers by fetching the LaTeX source. It uses [arxiv-to-prompt](https://github.com/takashiishida/arxiv-to-prompt) under the hood to handle downloading and processing the LaTeX.\n\nWhy use the LaTeX source instead of uploading PDFs? Many PDF chat applications often struggle with mathematical content and equation-heavy papers. By utilizing the original LaTeX source code from arXiv papers, the LLM can accurately understand and handle equations and notations. This approach is particularly valuable for fields like computer science, mathematics, and engineering where precise interpretation of mathematical expressions is crucial.\n\n## Installation\n\nIf you are using Claude Desktop and MacOS, you can utilize Desktop Extensions by double-clicking on the .dxt file to install.\nDownload the .dxt file from [here](https://github.com/takashiishida/arxiv-latex-mcp/releases/).\n\nOtherwise, you can manually add the following configuration to your config file:\n```json\n{\n  \"mcpServers\": {\n      \"arxiv-latex-mcp\": {\n          \"command\": \"uv\",\n          \"args\": [\n              \"--directory\",\n              \"/ABSOLUTE/PATH/TO/arxiv-latex-mcp\",\n              \"run\",\n              \"server/main.py\"\n          ]\n      }\n  }\n}\n```\n\nYou may need to replace the `command` field with the full path of `uv`: check this by running `which uv` (MacOS/Linux) or `where uv` (Windows).\n\nRestart the application after saving the above.\n\nFor Claude Desktop, click on the hammer icon, and you should see `get_paper_prompt` in the list of \"Available MCP tools\".\n\n## Example\nTry asking questions about a paper from arXiv, e.g., \"Explain the first theorem in 2202.00395\"\n\n<div align=\"center\">\n  <img src=\"example.png\" alt=\"Example of using arXiv LaTeX MCP with Claude Desktop\" width=\"600\">\n</div>\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "arxiv-latex-mcp": {
+        "command": "uv",
+        "args": ["--directory", "/ABSOLUTE/PATH/TO/arxiv-latex-mcp", "run", "server/main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "takashiishida",
+    "repo": "arxiv-latex-mcp",
+    "url": "https://github.com/takashiishida/arxiv-latex-mcp",
+    "name": "arxiv-latex-mcp",
+    "path": null,
+    "stars": 39,
+    "contributors": 1,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "69d24ab8a67794fd65a0feafe6164928d3dfb259"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:30.908Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "arxiv-to-prompt",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"arxiv-latex-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that fetches and processes arXiv papers using LaTeX source for accurate equation handling\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.6.0\",\n    \"arxiv-to-prompt>=0.1.1\",\n]\n"
+}

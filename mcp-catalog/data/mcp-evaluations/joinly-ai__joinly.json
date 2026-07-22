@@ -1,0 +1,162 @@
+{
+  "name": "joinly-ai__joinly",
+  "display_name": "joinly",
+  "description": "Make your meetings accessible to AI Agents",
+  "author": {
+    "name": "joinly-ai"
+  },
+  "server": {
+    "command": "docker",
+    "args": ["run", "-p", "8000:8000", "ghcr.io/joinly-ai/joinly:latest"],
+    "env": {
+      "JOINLY_LLM_MODEL": "${user_config.joinly_llm_model}",
+      "JOINLY_LLM_PROVIDER": "${user_config.joinly_llm_provider}",
+      "OPENAI_API_KEY": "${user_config.openai_api_key}"
+    },
+    "type": "local",
+    "docker_image": "ghcr.io/joinly-ai/joinly:latest"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "joinly_llm_model": {
+      "type": "string",
+      "title": "Joinly LLM Model",
+      "description": "The LLM model to use (e.g., gpt-4o)",
+      "required": true,
+      "default": "gpt-4o"
+    },
+    "joinly_llm_provider": {
+      "type": "string",
+      "title": "Joinly LLM Provider",
+      "description": "The LLM provider to use (e.g., openai)",
+      "required": true,
+      "default": "openai"
+    },
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "<p align=\"center\">\n  <a href=\"https://github.com/joinly-ai/assets\">\n    <picture>\n      <source\n        media=\"(prefers-color-scheme: dark)\"\n        srcset=\"https://raw.githubusercontent.com/joinly-ai/assets/main/animations/logo-animations/joinly_logo_black_cropped.gif\"\n      >\n      <img\n        alt=\"Animated joinly.ai logo\"\n        src=\"https://raw.githubusercontent.com/joinly-ai/assets/main/animations/logo-animations/joinly_logo_light_cropped.gif\"\n      >\n    </picture>\n  </a>\n</p>\n\n[![GitHub Release](https://img.shields.io/github/v/release/joinly-ai/joinly?sytle=flat&label=Release&labelColor=black&color=%237B2CBF)](https://github.com/joinly-ai/joinly/releases)\n[![GitHub License](https://img.shields.io/github/license/joinly-ai/joinly?style=flat&label=License&labelColor=black&color=%237B2CBF)](LICENSE) \n[![GitHub Repo stars](https://img.shields.io/github/stars/joinly-ai/joinly?style=flat&logo=github&logoColor=white&label=Stars&labelColor=black&color=7B2CBF)](https://github.com/joinly-ai/joinly) \n[![Discord](https://img.shields.io/discord/1377431745632145500?style=flat&logo=discord&logoColor=white&label=Discord&labelColor=black&color=7B2CBF)](https://discord.com/invite/AN5NEBkS4d) \n[![GitHub Discussions](https://img.shields.io/github/discussions/joinly-ai/joinly?style=flat&labelColor=black&label=Discussions&color=%237B2CBF)](https://github.com/joinly-ai/joinly/discussions)\n\n<h1 align=\"center\">Make your meetings accessible to AI Agents 🤖</h1>\n\n**joinly.ai** is a connector middleware designed to enable AI agents to join and actively participate in video calls. Through its MCP server, joinly.ai provides essential [meeting tools](#tools) and [resources](#resources) that can equip any AI agent with the skills to perform tasks and interact with you in real time during your meetings.\n\n> Want to dive right in? Jump to the [Quickstart](#zap-quickstart)!\n> Want to know more? Visit our [website](https://joinly.ai/)!\n\n\n# :sparkles: Features\n- **Live Interaction**: Lets your agents execute tasks and respond in real-time by voice or chat within your meetings\n- **Conversational flow**: Built-in logic that ensures natural conversations by handling interruptions and multi-speaker interactions\n- **Cross-platform**: Join Google Meet, Zoom, and Microsoft Teams (or any available over the browser)\n- **Bring-your-own-LLM**: Works with all LLM providers (also locally with Ollama)\n- **Choose-your-preferred-TTS/STT**: Modular design supports multiple services - Whisper/Deepgram for STT and Kokoro/ElevenLabs/Deepgram for TTS (and more to come...)\n- **100% open-source, self-hosted and privacy-first** :rocket:\n\n# :video_camera: Demos\n### GitHub\n[![GitHub Demo](https://raw.githubusercontent.com/joinly-ai/assets/main/images/others/github-demo.png)](https://youtu.be/XWolVuxw8I8)\n> In this demo video, joinly answers the question 'What is Joinly?' by accessing the latest news from the web. It then creates an issue in a GitHub demo repository.\n### Notion\n[![Notion Demo](https://raw.githubusercontent.com/joinly-ai/assets/main/images/others/notion-demo.png)](https://www.youtube.com/watch?v=pvYqZi2KeI0)\n> In this demo video, we connect joinly to our notion via MCP and let it edit the content of a page content live in the meeting. \n\nAny ideas what we should build next? [Write us!](https://discord.com/invite/AN5NEBkS4d) :rocket:\n\n# :zap: Quickstart\nRun joinly via Docker with a basic conversational agent client.\n\n> [!IMPORTANT]\n> **Prerequisites**: [Docker installation](https://docs.docker.com/engine/install/)\n\nCreate a new folder `joinly` or clone this repository (not mandatory for the following steps). In this directory, create a new `.env` file with a valid API key for the LLM provider you want to use, e.g. OpenAI:\n\n> [!TIP]\n> You can find the OpenAI API key [here](https://platform.openai.com/api-keys)\n\n```Dotenv\n# .env\n# for OpenAI LLM\n# change key and model to your desired one\nJOINLY_LLM_MODEL=gpt-4o\nJOINLY_LLM_PROVIDER=openai\nOPENAI_API_KEY=your-openai-api-key\n```\n\n> [!NOTE]\n> See [.env.example](.env.example) for complete configuration options including Anthropic (Claude) and Ollama setups. Replace the placeholder values with your actual API keys and adjust the model name as needed. Delete the placeholder values of the providers you don't use.\n\n\nPull the Docker image (~2.3GB since it packages browser and models):\n```bash\ndocker pull ghcr.io/joinly-ai/joinly:latest\n```\n\nLaunch your meeting in [Zoom](https://www.zoom.com), [Google Meet](https://meet.google.com) or Teams and let joinly join the meeting using the meeting link as `<MeetingURL>`. Then, run the following command from the folder where you created the `.env` file:\n```bash  \ndocker run --env-file .env ghcr.io/joinly-ai/joinly:latest --client <MeetingURL>\n```\n> :red_circle: Having trouble getting started? Let's figure it out together on our [discord](https://discord.com/invite/AN5NEBkS4d)! \n\n# :technologist: Run an external client\nIn Quickstart, we ran the Docker Container directly as a client using `--client`. But we can also run it as a server and connect to it from outside the container, which allows us to connect other MCP servers. Here, we run an external client using the [joinly-client package](https://pypi.org/project/joinly-client/) and connect it to the joinly MCP server.\n\n> [!IMPORTANT]\n> **Prerequisites**: do the [Quickstart](#zap-quickstart) (except the last command), [install uv](https://github.com/astral-sh/uv), and open two terminals\n\nStart the joinly server in the first terminal (note, we are not using `--client` here and forward port `8000`):\n```bash  \ndocker run -p 8000:8000 ghcr.io/joinly-ai/joinly:latest\n```\n\nWhile the server is running, start the example client implementation in the second terminal window to connect to it and join a meeting:\n```bash  \nuvx joinly-client --env-file .env <MeetingUrl>\n```\n\n## Add MCP servers to the client\nAdd the tools of any MCP server to the agent by providing a JSON configuration. The configuration file can contain multiple entries under `\"mcpServers\"` which will all be available as tools in the meeting (see [fastmcp client docs](https://gofastmcp.com/clients/client) for config syntax):\n\n```json\n{\n    \"mcpServers\": {\n        \"localServer\": {\n            \"command\": \"npx\",\n            \"args\": [\"-y\", \"package@0.1.0\"]\n        },\n        \"remoteServer\": {\n            \"url\": \"http://mcp.example.com\",\n            \"auth\": \"oauth\"\n        }\n    }\n}\n```\n\nAdd for example a [Tavily config](examples/config_tavily.json) for web searching, then run the client using the config file, here named `config.json`:\n\n```bash\nuvx joinly-client --env-file .env --mcp-config config.json <MeetingUrl>\n```\n\n# :wrench: Configurations\n\nConfigurations can be given via env variables and/or command line args. Here is a list of common configuration options, which can be used when starting the docker container:\n```bash\ndocker run --env-file .env -p 8000:8000 ghcr.io/joinly-ai/joinly:latest <MyOptionArgs>\n```\n\nAlternatively, you can pass `--name`, `--lang`, and [provider settings](#providers) as command line arguments using `joinly-client`, which will override settings of the server:\n```bash\nuvx joinly-client <MyOptionArgs> <MeetingUrl>\n```\n\n## Basic Settings\n\nIn general, the docker image provides an MCP server which is started by default. But to quickly get started, we also include a client implementation that can be used via `--client`. Note, in this case no server is started and no other client can connect to it.\n\n```bash\n# Start directly as client; default is as server, to which an external client can connect\n--client <MeetingUrl>\n\n# Change participant name (default: joinly)\n--name \"AI Assistant\"\n\n# Change language of TTS/STT (default: en)\n# Note, availability depends on the TTS/STT provider\n--lang de\n\n# Change host & port of the joinly MCP server\n--host 0.0.0.0 --port 8000\n```\n\n## Providers\n\n### Text-to-Speech\n```bash\n# Kokoro (local) TTS (default)\n--tts kokoro\n--tts-arg voice=<VoiceName>  # optionally, set different voice\n\n# ElevenLabs TTS, include ELEVENLABS_API_KEY in .env\n--tts elevenlabs\n--tts-arg voice_id=<VoiceID>  # optionally, set different voice\n\n# Deepgram TTS, include DEEPGRAM_API_KEY in .env\n--tts deepgram\n--tts-arg model_name=<ModelName>  # optionally, set different model (voice)\n```\n\n### Transcription\n```bash\n# Whisper (local) STT (default)\n--stt whisper\n--stt-arg model_name=<ModelName>  # optionally, set different model (default: base), for GPU support see below\n\n# Deepgram STT, include DEEPGRAM_API_KEY in .env\n--stt deepgram\n--stt-arg model_name=<ModelName>  # optionally, set different model\n```\n\n## Debugging\n```bash\n# Start browser with a VNC server for debugging;\n# forward the port and connect to it using a VNC client\n--vnc-server --vnc-server-port 5900\n\n# Logging\n-v  # or -vv, -vvv\n\n# Help\n--help\n```\n\n## GPU Support\n\nWe provide a Docker image with CUDA GPU support for running the transcription and TTS models on a GPU. To use it, you need to have the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed and `CUDA >= 12.6`. Then pull the CUDA-enabled image:\n```bash\ndocker pull ghcr.io/joinly-ai/joinly:latest-cuda\n```\n\nRun as client or server with the same commands as above, but use the `joinly:{version}-cuda` image and set `--gpus all`:\n```bash\n# Run as server\ndocker run --gpus all --env-file .env -p 8000:8000 ghcr.io/joinly-ai/joinly:latest-cuda -v\n# Run as client\ndocker run --gpus all --env-file .env ghcr.io/joinly-ai/joinly:latest-cuda -v --client <MeetingURL>\n```\n\nBy default, the `joinly` image uses the Whisper model `base` for transcription, since it still runs reasonably fast on CPU. For `cuda`, it automatically defaults to `distil-large-v3` for significantly better transcription quality. You can change the model by setting `--stt-arg model_name=<model_name>` (e.g., `--stt-arg model_name=large-v3`). However, only the respective default models are packaged in the docker image, so it will start to download the model weights on container start.\n\n# :test_tube: Create your own agent\n\nYou can also write your own agent and connect it to our joinly MCP server. See the [code examples](https://github.com/joinly-ai/joinly/client/README.md#code-usage) for the joinly-client package or the [client_example.py](examples/client_example.py) if you want a starting point that doesn't depend on our framework.\n\nThe joinly MCP server provides following tools and resources:\n\n### Tools\n\n- **`join_meeting`** - Join meeting with URL, participant name, and optional passcode\n- **`leave_meeting`** - Leave the current meeting\n- **`speak_text`** - Speak text using TTS (requires `text` parameter)\n- **`send_chat_message`** - Send chat message (requires `message` parameter)\n- **`mute_yourself`** - Mute microphone\n- **`unmute_yourself`** - Unmute microphone\n- **`get_chat_history`** - Get current meeting chat history in JSON format\n- **`get_participants`** - Get current meeting participants in JSON format\n- **`get_transcript`** - Get current meeting transcript in JSON format, optionally filtered by minutes\n- **`get_video_snapshot`** - Get an image from the current meeting, e.g., view a current screenshare\n\n### Resources\n\n- **`transcript://live`** - Live meeting transcript in JSON format, including timestamps and speaker information. Subscribable for real-time updates when new utterances are added.\n\n# :building_construction: Developing joinly.ai\n\nFor development we recommend using the development container, which installs all necessary dependencies. To get started, install the DevContainer Extension for Visual Studio Code, open the repository and choose **Reopen in Container**.\n\n<img src=\"https://raw.githubusercontent.com/joinly-ai/assets/main/images/others/reopen_in_container.png\" width=\"500\" alt=\"Reopen in Devcontainer\">\n\nThe installation can take some time, since it downloads all packages as well as models for Whisper/Kokoro and the Chromium browser. At the end, it automatically invokes the [download_assets.py](scripts/download_assets.py) script. If you see errors like `Missing kokoro-v1.0.onnx`, run this script manually using:\n```bash\nuv run scripts/download_assets.py\n```\n\nWe'd love to see what you are using it for or building with it. Showcase your work on our [discord](https://discord.com/invite/AN5NEBkS4d)\n# :pencil2: Roadmap\n\n**Meeting**\n- [x] Meeting chat access\n- [ ] Camera in video call with status updates\n- [ ] Enable screen share during video conferences\n- [ ] Participant metadata and joining/leaving\n- [ ] Improve browser agent capabilities\n\n**Conversation**\n- [x] Speaker attribute for transcription\n- [ ] Improve client memory: reduce token usage, allow persistence across meetings\nevents\n- [ ] Improve End-of-Utterance/turn-taking detection\n- [ ] Human approval mechanism from inside the meeting\n\n**Integrations**\n- [ ] Showcase how to add agents using the A2A protocol\n- [ ] Add more provider integrations (STT, TTS)\n- [ ] Integrate meeting platform SDKs\n- [ ] Add alternative open-source meeting provider\n- [ ] Add support for Speech2Speech models\n  \n# :busts_in_silhouette: Contributing\nContributions are always welcome! Feel free to open issues for bugs or submit a feature request. We'll do our best to review all contributions promptly and help merge your changes.\n\nPlease check our [Roadmap](#pencil2-roadmap) and don't hesitate to reach out to us!\n\n# :memo: License\nThis project is licensed under the MIT License ‒ see the [LICENSE](LICENSE) file for details.\n\n# :speech_balloon: Getting help\nIf you have questions or feedback, or if you would like to chat with the maintainers or other community members, please use the following links:\n-  [Join our Discord](https://discord.com/invite/AN5NEBkS4d)\n-  [Explore our GitHub Discussions](https://github.com/joinly-ai/joinly/discussions)\n\n<div align=\"center\">\nMade with ❤️ in Osnabrück\n </div>\n",
+  "category": "Development",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ghcr.io-joinly-ai-joinly-docker": {
+        "command": "docker",
+        "args": ["run", "-p", "8000:8000", "ghcr.io/joinly-ai/joinly:latest"],
+        "env": {},
+        "docker_image": "ghcr.io/joinly-ai/joinly:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "joinly-ai",
+    "repo": "joinly",
+    "url": "https://github.com/joinly-ai/joinly",
+    "name": "joinly-ai__joinly",
+    "path": null,
+    "stars": 345,
+    "contributors": 3,
+    "issues": 12,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e78fe3eb28e6091d293a7987522b7c34c0048b1f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:23.786Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "click",
+      "importance": 6
+    },
+    {
+      "name": "deepgram-sdk",
+      "importance": 8
+    },
+    {
+      "name": "elevenlabs",
+      "importance": 8
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "faster-whisper",
+      "importance": 8
+    },
+    {
+      "name": "joinly-client",
+      "importance": 9
+    },
+    {
+      "name": "joinly-common",
+      "importance": 9
+    },
+    {
+      "name": "kokoro-onnx",
+      "importance": 8
+    },
+    {
+      "name": "numpy",
+      "importance": 7
+    },
+    {
+      "name": "onnxruntime",
+      "importance": 8
+    },
+    {
+      "name": "playwright",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "pydantic-ai-slim",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "rich",
+      "importance": 5
+    },
+    {
+      "name": "semchunk",
+      "importance": 7
+    },
+    {
+      "name": "webrtcvad-wheels",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"joinly\"\nversion = \"0.5.0\"\ndescription = \"Make your meetings accessible to AI Agents\"\nreadme = \"README.md\"\nauthors = [\n    { name = \"dbrockmann\", email = \"dominik@joinly.ai\" }\n]\nrequires-python = \">=3.12\"\ndependencies = [\n    \"click>=8.1.8\",\n    \"deepgram-sdk>=4.1.1\",\n    \"elevenlabs>=2.5.0\",\n    \"faster-whisper>=1.1.1\",\n    \"fastmcp>=2.10.5\",\n    \"joinly-client>=0.1.17\",\n    \"joinly-common>=0.1.3\",\n    \"kokoro-onnx>=0.4.9\",\n    \"numpy>=2.2.4\",\n    \"onnxruntime>=1.21.1\",\n    \"pillow>=11.3.0\",\n    \"playwright>=1.51.0\",\n    \"python-dotenv>=1.1.0\",\n    \"semchunk>=3.2.1\",\n    \"webrtcvad-wheels>=2.0.14\",\n]\n\n[project.scripts]\njoinly = \"joinly.main:cli\"\n\n[project.optional-dependencies]\ncuda = [\n    \"onnxruntime-gpu>=1.22.0\",\n]\n\n[dependency-groups]\ndev = [\n    \"aiofiles>=24.1.0\",\n    \"aiohttp>=3.11.18\",\n    \"jiwer>=3.1.0\",\n    \"pre-commit>=4.2.0\",\n    \"pyright>=1.1.399\",\n    \"pytest>=8.3.5\",\n    \"pytest-asyncio>=0.26.0\",\n    \"rich>=14.0.0\",\n    \"ruff>=0.11.6\",\n]\n\n[tool.uv.sources]\njoinly-client = { workspace = true }\njoinly-common = { workspace = true }\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"joinly\"]\n\n[tool.uv.workspace]\nmembers = [\n    \"client\",\n    \"common\",\n]\n\n[tool.ruff]\nexclude = [\n    \".git\",\n    \".pytest_cache\",\n    \".ruff_cache\",\n    \".vscode\",\n    \"__pycache__\",\n    \".venv\",\n]\nline-length = 88\nindent-width = 4\ntarget-version = \"py312\"\n\n[tool.ruff.lint]\nselect = [\"ALL\"]\nignore = [\n    \"COM812\",\n    \"COM819\",\n    \"D100\",\n    \"D104\",\n    \"D203\",\n    \"D213\",\n    \"D300\",\n    \"E111\",\n    \"E114\",\n    \"E117\",\n    \"ISC001\",\n    \"ISC002\",\n    \"Q000\",\n    \"Q001\",\n    \"Q002\",\n    \"Q003\",\n    \"W191\",\n    \"EXE002\",\n]\nfixable = [\"ALL\"]\nunfixable = []\ndummy-variable-rgx = \"^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$\"\n\n[tool.ruff.lint.pydocstyle]\nconvention = \"google\"\n\n[tool.ruff.lint.extend-per-file-ignores]\n\"tests/**/*.py\" = [\n    \"S101\",\n]\n\"scripts/**/*.py\" = [\n    \"INP001\",\n]\n\"examples/**/*.py\" = [\n    \"INP001\",\n]\n\n[tool.ruff.format]\nquote-style = \"double\"\nindent-style = \"space\"\nskip-magic-trailing-comma = false\nline-ending = \"auto\"\n\n[tool.pyright]\npythonVersion = \"3.12\"\npythonPlatform = \"All\"\nvenv = \".venv\"\ntypeCheckingMode = \"standard\"\ninclude = [\n    \"joinly\",\n    \"client\",\n    \"common\",\n    \"tests\"\n]\nexclude = [\n    \"**/__pycache__\",\n    \".pytest_cache\",\n    \".ruff_cache\",\n    \".venv\"\n]\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"session\"\nasyncio_default_test_loop_scope = \"session\"\ntestpaths = [\"tests\"]\npython_files = [\"test_*.py\"]\npython_classes = [\"Test*\"]\npython_functions = [\"test_*\"]\nlog_level = \"INFO\"\nlog_cli_level = \"INFO\"\nlog_cli = true\n\n\n=== client/pyproject.toml ===\n[project]\nname = \"joinly-client\"\nversion = \"0.1.17\"\ndescription = \"Client for joinly: Make your meetings accessible to AI Agents\"\nreadme = \"README.md\"\nauthors = [\n    { name = \"dbrockmann\", email = \"dominik@joinly.ai\" }\n]\nrequires-python = \">=3.12\"\ndependencies = [\n    \"click>=8.1.8\",\n    \"fastmcp>=2.10.5\",\n    \"joinly-common>=0.1.3\",\n    \"openai<=1.99.1\",\n    \"pydantic-ai-slim[anthropic,openai,google]>=0.4.9\",\n    \"python-dotenv>=1.1.0\",\n    \"rich>=14.0.0\",\n]\n\n[project.scripts]\njoinly-client = \"joinly_client.main:cli\"\n\n[tool.uv.sources]\njoinly-common = { workspace = true }\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"joinly_client\"]\n\n[project.urls]\n\"Repository\" = \"https://github.com/joinly-ai/joinly\"\n\n\n=== common/pyproject.toml ===\n[project]\nname = \"joinly-common\"\nversion = \"0.1.3\"\ndescription = \"Common library for joinly: Make your meetings accessible to AI Agents\"\nreadme = \"README.md\"\nauthors = [\n    { name = \"dbrockmann\", email = \"dominik@joinly.ai\" }\n]\nrequires-python = \">=3.12\"\ndependencies = [\n    \"pydantic>=2.11.7\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"joinly_common\"]\n\n[project.urls]\n\"Repository\" = \"https://github.com/joinly-ai/joinly\"\n"
+}

@@ -220,6 +220,7 @@ function SidebarModeToggle({
       type="button"
       key={value}
       onClick={() => onPick(value)}
+      aria-pressed={mode === value}
       className={cn(
         "relative flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors",
         mode === value
@@ -227,7 +228,7 @@ function SidebarModeToggle({
           : "text-muted-foreground hover:text-foreground",
       )}
     >
-      <Icon className="h-3.5 w-3.5" />
+      <Icon aria-hidden className="h-3.5 w-3.5" />
       {label}
       <OnboardingDot
         visible={modeDots[value]}
@@ -237,7 +238,12 @@ function SidebarModeToggle({
   );
 
   return (
-    <div className="flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
+    // biome-ignore lint/a11y/useSemanticElements: role="group" is the correct ARIA pattern for a segmented toggle; <fieldset> is for form inputs
+    <div
+      role="group"
+      aria-label="Sidebar view"
+      className="flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden"
+    >
       {segment("chats", "AI", MessageCircle)}
       {segment("studio", "Studio", PencilRuler)}
     </div>

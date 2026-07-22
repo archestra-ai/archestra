@@ -1,0 +1,90 @@
+{
+  "name": "reeeeemo__ancestry-mcp",
+  "display_name": "ancestry-mcp",
+  "description": "Ancestry MCP server made with Python that allows interactability with .ged (GEDCOM) files",
+  "author": {
+    "name": "reeeeemo"
+  },
+  "server": {
+    "command": "mcp-server-ancestry",
+    "args": ["--gedcom-path", "${user_config.gedcom_path}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "gedcom_path": {
+      "type": "directory",
+      "title": "GEDCOM Files Directory",
+      "description": "Specify the directory where your .ged (GEDCOM) files are located.",
+      "required": true,
+      "default": "${DOCUMENTS}/GEDCOM"
+    }
+  },
+  "readme": "# Ancestry MCP Server\n[![smithery badge](https://smithery.ai/badge/mcp-server-ancestry)](https://smithery.ai/server/mcp-server-ancestry)\n[![MIT licensed][mit-badge]][mit-url]\n[![Python Version][python-badge]][python-url]\n[![PyPI version][pypi-badge]][pypi-url]\n\n[mit-badge]: https://img.shields.io/pypi/l/mcp.svg\n[mit-url]: https://github.com/reeeeemo/ancestry-mcp/blob/main/LICENSE\n[python-badge]: https://img.shields.io/pypi/pyversions/mcp.svg\n[python-url]: https://www.python.org/downloads/\n[pypi-badge]: https://badge.fury.io/py/mcp-server-ancestry.svg\n[pypi-url]: https://pypi.org/project/mcp-server-ancestry\n\nBuilt on top of the [Model Context Protocol Python SDK](https://modelcontextprotocol.io)\n\n<a href=\"https://glama.ai/mcp/servers/pk5j4bp5nv\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/pk5j4bp5nv/badge\" alt=\"Ancestry MCP server\" /></a>\n\n## Overview\n\nPython server implementing Model Context Protocol (MCP) for interactibility with `.ged` files *(GEDCOM files, commonly seen on Ancestry.com)*\n\n## Features\n    \n- Read and parse .ged files\n- Rename `.ged` files\n- Search within .ged files for certain individuals, family, etc\n\n**Note:** The server will only allow operations within the directory specified via `args`\n\n## Resources\n\n- `gedcom://{file_name}`: `.ged` operations interface\n\n## Tools\n\n- **list_files**\n    - List a (or multiple) `.ged` file within the directory\n    - Input: `name` (string)\n\n- **rename_file**\n    - Renames a (or multiple) `.ged` file within the directory\n    - Inputs:\n        - `file_name` (string): Old file name\n        - `new_name` (string)\n \n- **view_file**\n    - Parses and reads full contents of a `.ged` file\n    - Can also parse and read multiple files\n    - Can get specific information out of file(s), such as date of birth, marriage, etc.\n    - Input: `name` (string)\n\n\n## Usage with Claude Desktop\n\n### Installing via Smithery\n\nTo install Ancestry GEDCOM Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-server-ancestry):\n\n```bash\nnpx -y @smithery/cli install mcp-server-ancestry --client claude\n```\n\n### Installing Manually\n1. First, install the package:\n```pip install mcp-server-ancestry```\n\n\n2. Add this to your `claude_desktop_config.json` \n\n```json\n{\n  \"mcpServers\": {\n     \"ancestry\": {\n       \"command\": \"mcp-server-ancestry\",\n       \"args\": [\"--gedcom-path\", \"path/to/your/gedcom/files\"]\n     }\n  }\n}\n```\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n",
+  "category": "Knowledge",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-ancestry": {
+        "command": "mcp-server-ancestry",
+        "args": ["--gedcom-path", "path/to/your/gedcom/files"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "reeeeemo",
+    "repo": "ancestry-mcp",
+    "url": "https://github.com/reeeeemo/ancestry-mcp",
+    "name": "ancestry-mcp",
+    "path": null,
+    "stars": 24,
+    "contributors": 9,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e923f54b67cbe619931751d5e37d3a572fe248bd"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:51.941Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "chardet",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-ancestry\"\nversion = \"0.1.1\"\ndescription = \"A Model Context Protocol server providing functionality to GEDCOM files via LLM usage\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nauthors = [{ name = \"Robert Oxley\" }]\nmaintainers = [{ name = \"Robert Oxley\", email = \"robbie@oxley.ca\" }]\nkeywords = [\"mcp\", \"llm\", \"automation\"]\nlicense = { text = \"MIT\" }\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n]\ndependencies = [\n    \"mcp>=1.0.0\",\n    \"pydantic>=2.0.0\",\n    \"requests>=2.32.3\",\n    \"chardet>=5.2.0\",\n]\n\n[project.scripts]\nmcp-server-ancestry = \"mcp_server_ancestry:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\"pyright>=1.1.389\", \"ruff>=0.7.3\"]"
+}

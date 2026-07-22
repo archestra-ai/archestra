@@ -1,0 +1,143 @@
+{
+  "name": "scrapeless-ai__scrapeless-mcp-server",
+  "display_name": "scrapeless-mcp-server",
+  "description": "Scrapeless Mcp Server",
+  "author": {
+    "name": "scrapeless-ai"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "scrapeless-mcp-server"],
+    "env": {
+      "SCRAPELESS_KEY": "${user_config.scrapeless_key}",
+      "BROWSER_PROFILE_ID": "${user_config.browser_profile_id}",
+      "BROWSER_PROFILE_PERSIST": "${user_config.browser_profile_persist}",
+      "BROWSER_SESSION_TTL": "${user_config.browser_session_ttl}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "scrapeless_key": {
+      "type": "string",
+      "title": "Scrapeless Key",
+      "description": "Your API key for authenticating with Scrapeless services. Obtain it from the Scrapeless Dashboard.",
+      "sensitive": true,
+      "required": true
+    },
+    "browser_profile_id": {
+      "type": "string",
+      "title": "Browser Profile ID",
+      "description": "Specifies a reusable browser profile ID for session continuity.",
+      "sensitive": false,
+      "required": false
+    },
+    "browser_profile_persist": {
+      "type": "boolean",
+      "title": "Browser Profile Persist",
+      "description": "Enables persistent storage for cookies, local storage, etc. across browser sessions.",
+      "sensitive": false,
+      "required": false,
+      "default": false
+    },
+    "browser_session_ttl": {
+      "type": "number",
+      "title": "Browser Session TTL (seconds)",
+      "description": "Defines the maximum session timeout in seconds. The session will automatically expire after this duration of inactivity.",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "![preview](/assets/banner.png)\n\n# Scrapeless MCP Server\n\n**Welcome to the official Scrapeless Model Context Protocol (MCP) Server** — a powerful integration layer that empowers LLMs, AI Agents, and AI applications to interact with the web in real time.\n\nBuilt on the open MCP standard, Scrapeless MCP Server seamlessly connects models like **ChatGPT**, **Claude**, and tools like **Cursor** and **Windsurf** to a wide range of external capabilities, including:\n\n- **Google services integration** (Search, Flights, Trends, Scholar, etc.)\n- **Browser automation** for page-level navigation and interaction\n- **Scrape** dynamic, JS-heavy sites—export as HTML, Markdown, or screenshots\n\nWhether you're building an AI research assistant, a coding copilot, or autonomous web agents, this server provides the dynamic context and real-world data your workflows need—**without getting blocked**.\n\n## Usage Examples\n\n1. Automated Web Interaction and Data Extraction with Claude\n\nUsing Scrapeless MCP Browser, Claude can perform complex tasks such as web navigation, clicking, scrolling, and scraping through conversational commands, with real-time preview of web interaction results via `live sessions`.\n\n![preview](/assets/mcp-1.gif)\n\n2. Bypassing Cloudflare to Retrieve Target Page Content\n\nUsing the Scrapeless MCP Browser service, the Cloudflare page is automatically accessed, and after the process is completed, the page content is extracted and returned in Markdown format.\n\n![preview](/assets/mcp-2.gif)\n\n3. Extracting Dynamically Rendered Page Content and Writing to File\n\nUsing the Scrapeless MCP Universal API, the JavaScript-rendered content of the target page above is scraped, exported in Markdown format, and finally written to a local file named **`text.md`**.\n\n![preview](/assets/mcp-3.gif)\n\n4. Automated SERP Scraping\n\nUsing the Scrapeless MCP Server, query the keyword “web scraping” on Google Search, retrieve the first 10 search results (including title, link, and summary), and write the content to the file named `serp.text`.\n\n![preview](/assets/mcp-4.gif)\n\nHere are some additional examples of how to use these servers:\n\n| Example                                                                                                                           |\n| --------------------------------------------------------------------------------------------------------------------------------- |\n| Please help me with my flight ticket from Chicago to New York on November 20, 2025.                                               |\n| Find papers by \"Yoshua Bengio\" on deep learning.                                                                                  |\n| Search scrapeless by Google search.                                                                                               |\n| Find the search interest for \"AI\" over the last year.                                                                             |\n| Use a browser to visit [chatgpt.com](http://chatgpt.com), search for \"What's the weather like today?\", and summarize the results. |\n| Scrape the HTML content of [scrapeless.com](http://scrapeless.com) page.                                                          |\n| Scrape the Markdown content of [scrapeless.com](http://scrapeless.com) page.                                                      |\n| Get screenshots of [scrapeless.com](http://scrapeless.com).                                                                       |\n\n## Setup Guide\n\n1. Get Scrapeless Key\n\n- [Log in](https://app.scrapeless.com/passport/login?utm_source=github&utm_medium=github-mcp&utm_campaign=mcp) to the Scrapeless Dashboard（Free trial available）\n- Then click \"**Setting**\" on the left -> select \"**API Key Management**\" -> click \"**Create API Key**\". Finally, click the API Key you created to **copy** it.\n\n![preview](/assets/get-apikey.png)\n\n2. Configure Your MCP Client\n\nScrapeless MCP Server supports both **Stdio** and **Streamable HTTP** transport modes.\n\n🖥️ Stdio (Local Execution)\n\n```JSON\n{\n  \"mcpServers\": {\n    \"Scrapeless MCP Server\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"scrapeless-mcp-server\"],\n      \"env\": {\n        \"SCRAPELESS_KEY\": \"YOUR_SCRAPELESS_KEY\"\n      }\n    }\n  }\n}\n```\n\n🌐 Streamable HTTP (Hosted API Mode)\n\n```JSON\n{\n  \"mcpServers\": {\n    \"Scrapeless MCP Server\": {\n      \"type\": \"streamable-http\",\n      \"url\": \"https://api.scrapeless.com/mcp\",\n      \"headers\": {\n        \"x-api-token\": \"YOUR_SCRAPELESS_KEY\"\n      },\n      \"disabled\": false,\n      \"alwaysAllow\": []\n    }\n  }\n}\n```\n\n#### Advanced Options\n\nCustomize browser session behavior with optional parameters. These can be set via environment variables (for Stdio) or HTTP headers (for Streamable HTTP):\n\n| Stdio (Env Var)         | Streamable HTTP (HTTP Header) | Description                                                  |\n| ----------------------- | ----------------------------- | ------------------------------------------------------------ |\n| BROWSER_PROFILE_ID      | x-browser-profile-id          | Specifies a reusable browser profile ID for session continuity. |\n| BROWSER_PROFILE_PERSIST | x-browser-profile-persist     | Enables persistent storage for cookies, local storage, etc.  |\n| BROWSER_SESSION_TTL     | x-browser-session-ttl         | Defines the **maximum session timeout** in seconds. The session will automatically expire after this duration of inactivity. |\n\n\n## Integration with Claude Desktop\n\n1. Open **Claude Desktop**\n2. Navigate to: `Settings` → `Tools` → `MCP Servers`\n3. Click **\"Add MCP Server\"**\n4. Paste either the `Stdio` or `Streamable HTTP` config above\n5. Save and enable the server\n6. Claude will now be able to issue web queries, extract content, and interact with pages using Scrapeless\n\n## Integration with Cursor IDE\n\n1. Open **Cursor**\n2. Press `Cmd + Shift + P` and search for: `Configure MCP Servers`\n3. Add the Scrapeless MCP config using the format above\n4. Save the file and restart Cursor (if needed)\n5. Now you can ask Cursor things like:\n   1. `\"Search StackOverflow for a solution to this error\"`\n   2. `\"Scrape the HTML from this page\"`\n6. And it will use Scrapeless in the background.\n\n## Supported MCP Tools\n\n| Name               | Description                                       |\n| ------------------ | ------------------------------------------------- |\n| google_search      | Universal information search engine.              |\n| google_flights     | Exclusive flight information query tool.          |\n| google_trends      | Get trending search data from Google Trends.      |\n| google_scholar     | Search for academic papers on Google Scholar.     |\n| browser_goto       | Navigate browser to a specified URL.              |\n| browser_go_back    | Go back one step in browser history.              |\n| browser_go_forward | Go forward one step in browser history.           |\n| browser_click      | Click a specific element on the page.             |\n| browser_type       | Type text into a specified input field.           |\n| browser_press_key  | Simulate a key press.                             |\n| browser_wait_for   | Wait for a specific page element to appear.       |\n| browser_wait       | Pause execution for a fixed duration.             |\n| browser_screenshot | Capture a screenshot of the current page.         |\n| browser_get_html   | Get the full HTML of the current page.            |\n| browser_get_text   | Get all visible text from the current page.       |\n| browser_scroll     | Scroll to the bottom of the page.                 |\n| browser_scroll_to  | Scroll a specific element into view.              |\n| scrape_html        | Scrape a URL and return its full HTML content.    |\n| scrape_markdown    | Scrape a URL and return its content as Markdown.  |\n| scrape_screenshot  | Capture a high-quality screenshot of any webpage. |\n\n## Security Best Practices\n\nWhen using Scrapeless MCP Server with LLMs (like ChatGPT, Claude, or Cursor), it's critical to handle all scraped or extracted web content with care. **Web data is untrusted by default**, and improper handling may expose your application to prompt injection or other security vulnerabilities.\n\n#### ✅ Recommended Practices\n\n- **Never pass raw scraped content directly into LLM prompts.** Raw HTML, JavaScript, or user-generated text may contain hidden injection payloads.\n- **Sanitize and validate all extracted content.** Strip or escape potentially harmful tags and scripts before using content in downstream logic or AI models.\n- **Prefer structured extraction over free-form text.** Use tools like `scrape_html`, `scrape_markdown`, or targeted `browser_get_text` with known-safe selectors to extract only the content you trust.\n- **Apply domain or selector whitelisting** when scraping dynamically generated pages, to restrict data flow to known and trusted sources.\n- **Log and monitor all outbound requests** made via browser or scraping tools, especially if you're handling sensitive data, tokens, or internal network access.\n\n#### 🚫 Avoid\n\n- Injecting scraped HTML directly into prompts\n- Letting users specify arbitrary URLs or CSS selectors without validation\n- Storing unfiltered scraped content for future prompt usage\n\n## Community\n\n- [MCP Server Discord](https://backend.scrapeless.com/app/api/v1/public/links/discord)\n\n## Contact Us\n\nFor questions, suggestions, or collaboration inquiries, feel free to contact us via:\n\n- Email: [market@scrapeless.com](mailto:market@scrapeless.com)\n- Official Website: [https://www.scrapeless.com](https://www.scrapeless.com/)\n- Community Forum: https://discord.gg/Np4CAHxB9a\n",
+  "category": "Browser Automation",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "scrapeless-mcp-server-stdio": {
+        "command": "npx",
+        "args": ["-y", "scrapeless-mcp-server"],
+        "env": {
+          "SCRAPELESS_KEY": "YOUR_SCRAPELESS_KEY"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "scrapeless-ai",
+    "repo": "scrapeless-mcp-server",
+    "url": "https://github.com/scrapeless-ai/scrapeless-mcp-server",
+    "name": "scrapeless-mcp-server",
+    "path": null,
+    "stars": 37,
+    "contributors": 0,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "df1439c3143115752c0596c5eec7626c32499fb9"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:30.998Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@chatmcp/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@scrapeless-ai/sdk",
+      "importance": 9
+    },
+    {
+      "name": "agents",
+      "importance": 8
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "nanoid",
+      "importance": 4
+    },
+    {
+      "name": "puppeteer-core",
+      "importance": 9
+    },
+    {
+      "name": "yaml",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"scrapeless-mcp-server\",\n  \"version\": \"0.4.5\",\n  \"main\": \"index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"scrapeless-mcp-server\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\",\n    \"start:http\": \"node build/index.js --port=9593\",\n    \"dev:http\": \"tsc && node build/index.js --port=9593\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"keywords\": [\n    \"scrapeless\",\n    \"mcp\",\n    \"google\",\n    \"google search\",\n    \"serpapi\",\n    \"cursor\",\n    \"claude\",\n    \"ai\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"Scrapeless Mcp Server\",\n  \"dependencies\": {\n    \"@chatmcp/sdk\": \"^1.0.5\",\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"@scrapeless-ai/sdk\": \"^1.8.0\",\n    \"agents\": \"^0.0.101\",\n    \"axios\": \"^1.8.4\",\n    \"express\": \"^5.1.0\",\n    \"nanoid\": \"^5.1.5\",\n    \"puppeteer-core\": \"^24.12.0\",\n    \"yaml\": \"^2.8.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"^5.0.3\",\n    \"@types/node\": \"^22.13.14\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"homepage\": \"https://scrapeless.com\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/scrapeless-ai/scrapeless-mcp-server\"\n  }\n}\n"
+}

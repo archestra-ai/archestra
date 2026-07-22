@@ -1,0 +1,280 @@
+{
+  "name": "browserbase__mcp-server-browserbase",
+  "display_name": "mcp-server-browserbase",
+  "description": "Allow LLMs to control a browser with Browserbase and Stagehand",
+  "author": {
+    "name": "browserbase"
+  },
+  "server": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "@browserbasehq/mcp-server-browserbase",
+      "--proxies",
+      "${user_config.proxies}",
+      "--advancedStealth",
+      "${user_config.advanced_stealth}",
+      "--keepAlive",
+      "${user_config.keep_alive}",
+      "--contextId",
+      "${user_config.context_id}",
+      "--persist",
+      "${user_config.persist}",
+      "--port",
+      "${user_config.port}",
+      "--host",
+      "${user_config.host}",
+      "--cookies",
+      "${user_config.cookies}",
+      "--browserWidth",
+      "${user_config.browser_width}",
+      "--browserHeight",
+      "${user_config.browser_height}",
+      "--modelName",
+      "${user_config.model_name}",
+      "--modelApiKey",
+      "${user_config.model_api_key}"
+    ],
+    "env": {
+      "BROWSERBASE_API_KEY": "${user_config.browserbase_api_key}",
+      "BROWSERBASE_PROJECT_ID": "${user_config.browserbase_project_id}",
+      "GEMINI_API_KEY": "${user_config.gemini_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "browserbase_api_key": {
+      "type": "string",
+      "title": "Browserbase API Key",
+      "description": "Your API key for Browserbase.",
+      "sensitive": true,
+      "required": true
+    },
+    "browserbase_project_id": {
+      "type": "string",
+      "title": "Browserbase Project ID",
+      "description": "Your Project ID for Browserbase.",
+      "required": true
+    },
+    "gemini_api_key": {
+      "type": "string",
+      "title": "Gemini API Key",
+      "description": "Your Google Gemini API key. Required if using the default Gemini model.",
+      "sensitive": true,
+      "required": false
+    },
+    "proxies": {
+      "type": "boolean",
+      "title": "Enable Proxies",
+      "description": "Enable Browserbase proxies for the session.",
+      "required": false,
+      "default": false
+    },
+    "advanced_stealth": {
+      "type": "boolean",
+      "title": "Enable Advanced Stealth",
+      "description": "Enable Browserbase Advanced Stealth (Only for Scale Plan Users).",
+      "required": false,
+      "default": false
+    },
+    "keep_alive": {
+      "type": "boolean",
+      "title": "Keep Alive Session",
+      "description": "Enable Browserbase Keep Alive Session.",
+      "required": false,
+      "default": false
+    },
+    "context_id": {
+      "type": "string",
+      "title": "Browserbase Context ID",
+      "description": "Specify a Browserbase Context ID to use for session persistence.",
+      "required": false
+    },
+    "persist": {
+      "type": "boolean",
+      "title": "Persist Context",
+      "description": "Whether to persist the Browserbase context.",
+      "required": false,
+      "default": true
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "Port to listen on for HTTP/SHTTP transport.",
+      "required": false
+    },
+    "host": {
+      "type": "string",
+      "title": "Server Host",
+      "description": "Host to bind server to (e.g., localhost, 0.0.0.0).",
+      "required": false,
+      "default": "localhost"
+    },
+    "cookies": {
+      "type": "string",
+      "title": "Cookies (JSON)",
+      "description": "JSON array of cookies to inject into the browser.",
+      "required": false
+    },
+    "browser_width": {
+      "type": "number",
+      "title": "Browser Width",
+      "description": "Browser viewport width.",
+      "required": false,
+      "default": 1024
+    },
+    "browser_height": {
+      "type": "number",
+      "title": "Browser Height",
+      "description": "Browser viewport height.",
+      "required": false,
+      "default": 768
+    },
+    "model_name": {
+      "type": "string",
+      "title": "Model Name",
+      "description": "The model to use for Stagehand.",
+      "required": false,
+      "default": "google/gemini-2.0-flash"
+    },
+    "model_api_key": {
+      "type": "string",
+      "title": "Custom Model API Key",
+      "description": "API key for the custom model provider (required when using custom models).",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Browserbase MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@browserbasehq/mcp-browserbase)](https://smithery.ai/server/@browserbasehq/mcp-browserbase)\n\n![cover](assets/cover-mcp.png)\n\n[The Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) is an open protocol that enables seamless integration between LLM applications and external data sources and tools. Whether you're building an AI-powered IDE, enhancing a chat interface, or creating custom AI workflows, MCP provides a standardized way to connect LLMs with the context they need.\n\nThis server provides cloud browser automation capabilities using [Browserbase](https://www.browserbase.com/) and [Stagehand](https://github.com/browserbase/stagehand). It enables LLMs to interact with web pages, take screenshots, extract information, and perform automated actions with atomic precision.\n\n## Features\n\n| Feature            | Description                                                 |\n| ------------------ | ----------------------------------------------------------- |\n| Browser Automation | Control and orchestrate cloud browsers via Browserbase      |\n| Data Extraction    | Extract structured data from any webpage                    |\n| Web Interaction    | Navigate, click, and fill forms with ease                   |\n| Screenshots        | Capture full-page and element screenshots                   |\n| Model Flexibility  | Supports multiple models (OpenAI, Claude, Gemini, and more) |\n| Vision Support     | Use annotated screenshots for complex DOMs                  |\n| Session Management | Create, manage, and close browser sessions                  |\n| Multi-Session      | Run multiple browser sessions in parallel                   |\n\n## How to Setup\n\n### Quickstarts:\n\n#### Add to Cursor\n\nCopy and Paste this link in your Browser:\n\n```text\ncursor://anysphere.cursor-deeplink/mcp/install?name=browserbase&config=eyJjb21tYW5kIjoibnB4IEBicm93c2VyYmFzZWhxL21jcCIsImVudiI6eyJCUk9XU0VSQkFTRV9BUElfS0VZIjoiIiwiQlJPV1NFUkJBU0VfUFJPSkVDVF9JRCI6IiIsIkdFTUlOSV9BUElfS0VZIjoiIn19\n```\n\nWe currently support 2 transports for our MCP server, STDIO and SHTTP. We recommend you use SHTTP with our remote hosted url to take advantage of the server at full capacity.\n\n## SHTTP:\n\nTo use the Browserbase MCP Server through our remote hosted URL, add the following to your configuration.\n\nGo to [smithery.ai](https://smithery.ai/server/@browserbasehq/mcp-browserbase) and enter your API keys and configuration to get a remote hosted URL.\nWhen using our remote hosted server, we provide the LLM costs for Gemini, the [best performing model](https://www.stagehand.dev/evals) in [Stagehand](https://www.stagehand.dev).\n\n![Smithery Image](assets/smithery.jpg)\n\nIf your client supports SHTTP:\n\n```json\n{\n  \"mcpServers\": {\n    \"browserbase\": {\n      \"url\": \"your-smithery-url.com\"\n    }\n  }\n}\n```\n\nIf your client doesn't support SHTTP:\n\n```json\n{\n  \"mcpServers\": {\n    \"browserbase\": {\n      \"command\": \"npx\",\n      \"args\": [\"mcp-remote\", \"your-smithery-url.com\"]\n    }\n  }\n}\n```\n\n## STDIO:\n\nYou can either use our Server hosted on NPM or run it completely locally by cloning this repo.\n\n> **❗️ Important:** If you want to use a different model you have to add --modelName to the args and provide that respective key as an arg. More info below.\n\n### To run on NPM (Recommended)\n\nGo into your MCP Config JSON and add the Browserbase Server:\n\n```json\n{\n  \"mcpServers\": {\n    \"browserbase\": {\n      \"command\": \"npx\",\n      \"args\": [\"@browserbasehq/mcp-server-browserbase\"],\n      \"env\": {\n        \"BROWSERBASE_API_KEY\": \"\",\n        \"BROWSERBASE_PROJECT_ID\": \"\",\n        \"GEMINI_API_KEY\": \"\"\n      }\n    }\n  }\n}\n```\n\nThat's it! Reload your MCP client and Claude will be able to use Browserbase.\n\n### To run 100% local:\n\n```bash\n# Clone the Repo\ngit clone https://github.com/browserbase/mcp-server-browserbase.git\ncd mcp-server-browserbase\n\n# Install the dependencies and build the project\nnpm install && npm run build\n```\n\nThen in your MCP Config JSON run the server. To run locally we can use STDIO or self-host SHTTP.\n\n### STDIO:\n\nTo your MCP Config JSON file add the following:\n\n```json\n{\n  \"mcpServers\": {\n    \"browserbase\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/mcp-server-browserbase/cli.js\"],\n      \"env\": {\n        \"BROWSERBASE_API_KEY\": \"\",\n        \"BROWSERBASE_PROJECT_ID\": \"\",\n        \"GEMINI_API_KEY\": \"\"\n      }\n    }\n  }\n}\n```\n\nThen reload your MCP client and you should be good to go!\n\n## Configuration\n\nThe Browserbase MCP server accepts the following command-line flags:\n\n| Flag                       | Description                                                                 |\n| -------------------------- | --------------------------------------------------------------------------- |\n| `--proxies`                | Enable Browserbase proxies for the session                                  |\n| `--advancedStealth`        | Enable Browserbase Advanced Stealth (Only for Scale Plan Users)             |\n| `--keepAlive`              | Enable Browserbase Keep Alive Session                                       |\n| `--contextId <contextId>`  | Specify a Browserbase Context ID to use                                     |\n| `--persist`                | Whether to persist the Browserbase context (default: true)                  |\n| `--port <port>`            | Port to listen on for HTTP/SHTTP transport                                  |\n| `--host <host>`            | Host to bind server to (default: localhost, use 0.0.0.0 for all interfaces) |\n| `--cookies [json]`         | JSON array of cookies to inject into the browser                            |\n| `--browserWidth <width>`   | Browser viewport width (default: 1024)                                      |\n| `--browserHeight <height>` | Browser viewport height (default: 768)                                      |\n| `--modelName <model>`      | The model to use for Stagehand (default: google/gemini-2.0-flash)           |\n| `--modelApiKey <key>`      | API key for the custom model provider (required when using custom models)   |\n| `--experimental`           | Enable experimental features (default: false)                               |\n\nThese flags can be passed directly to the CLI or configured in your MCP configuration file.\n\n### NOTE:\n\nCurrently, these flags can only be used with the local server (npx @browserbasehq/mcp-server-browserbase).\n\n## Configuration Examples\n\n### Proxies\n\nHere are our docs on [Proxies](https://docs.browserbase.com/features/proxies).\n\nTo use proxies, set the --proxies flag in your MCP Config:\n\n```json\n{\n  \"mcpServers\": {\n    \"browserbase\": {\n      \"command\": \"npx\",\n      \"args\": [\"@browserbasehq/mcp-server-browserbase\", \"--proxies\"],\n      \"env\": {\n        \"BROWSERBASE_API_KEY\": \"\",\n        \"BROWSERBASE_PROJECT_ID\": \"\",\n        \"GEMINI_API_KEY\": \"\"\n      }\n    }\n  }\n}\n```\n\n### Advanced Stealth\n\nHere are our docs on [Advanced Stealth](https://docs.browserbase.com/features/stealth-mode#advanced-stealth-mode).\n\nTo use advanced stealth, set the --advancedStealth flag in your MCP Config:\n\n```json\n{\n  \"mcpServers\": {\n    \"browserbase\": {\n      \"command\": \"npx\",\n      \"args\": [\"@browserbasehq/mcp-server-browserbase\", \"--advancedStealth\"],\n      \"env\": {\n        \"BROWSERBASE_API_KEY\": \"\",\n        \"BROWSERBASE_PROJECT_ID\": \"\",\n        \"GEMINI_API_KEY\": \"\"\n      }\n    }\n  }\n}\n```\n\n### Contexts\n\nHere are our docs on [Contexts](https://docs.browserbase.com/features/contexts)\n\nTo use contexts, set the --contextId flag in your MCP Config:\n\n```json\n{\n  \"mcpServers\": {\n    \"browserbase\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@browserbasehq/mcp-server-browserbase\",\n        \"--contextId\",\n        \"<YOUR_CONTEXT_ID>\"\n      ],\n      \"env\": {\n        \"BROWSERBASE_API_KEY\": \"\",\n        \"BROWSERBASE_PROJECT_ID\": \"\",\n        \"GEMINI_API_KEY\": \"\"\n      }\n    }\n  }\n}\n```\n\n### Browser Viewport Sizing\n\nThe default viewport sizing for a browser session is 1024 x 768. You can adjust the Browser viewport sizing with browserWidth and browserHeight flags.\n\nHere's how to use it for custom browser sizing. We recommend to stick with 16:9 aspect ratios (ie: 1920 x 1080, 1280 x 720, 1024 x 768)\n\n```json\n{\n  \"mcpServers\": {\n    \"browserbase\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@browserbasehq/mcp-server-browserbase\",\n        \"--browserHeight 1080\",\n        \"--browserWidth 1920\"\n      ],\n      \"env\": {\n        \"BROWSERBASE_API_KEY\": \"\",\n        \"BROWSERBASE_PROJECT_ID\": \"\",\n        \"GEMINI_API_KEY\": \"\"\n      }\n    }\n  }\n}\n```\n\n### Model Configuration\n\nStagehand defaults to using Google's Gemini 2.0 Flash model, but you can configure it to use other models like GPT-4o, Claude, or other providers.\n\n**Important**: When using any custom model (non-default), you must provide your own API key for that model provider using the `--modelApiKey` flag.\n\nHere's how to configure different models:\n\n```json\n{\n  \"mcpServers\": {\n    \"browserbase\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@browserbasehq/mcp-server-browserbase\",\n        \"--modelName\",\n        \"anthropic/claude-3-5-sonnet-latest\",\n        \"--modelApiKey\",\n        \"your-anthropic-api-key\"\n      ],\n      \"env\": {\n        \"BROWSERBASE_API_KEY\": \"\",\n        \"BROWSERBASE_PROJECT_ID\": \"\"\n      }\n    }\n  }\n}\n```\n\n_Note: The model must be supported in Stagehand. Check out the docs [here](https://docs.stagehand.dev/examples/custom_llms#supported-llms). When using any custom model, you must provide your own API key for that provider._\n\n### Resources\n\nThe server provides access to screenshot resources:\n\n1. **Screenshots** (`screenshot://<screenshot-name>`)\n   - PNG images of captured screenshots\n\n## Key Features\n\n- **AI-Powered Automation**: Natural language commands for web interactions\n- **Multi-Model Support**: Works with OpenAI, Claude, Gemini, and more\n- **Advanced Session Management**: Single and multi-session support for parallel browser automation\n- **Screenshot Capture**: Full-page and element-specific screenshots\n- **Data Extraction**: Intelligent content extraction from web pages\n- **Proxy Support**: Enterprise-grade proxy capabilities\n- **Stealth Mode**: Advanced anti-detection features\n- **Context Persistence**: Maintain authentication and state across sessions\n- **Parallel Workflows**: Run multiple browser sessions simultaneously for complex automation tasks\n\nFor more information about the Model Context Protocol, visit:\n\n- [MCP Documentation](https://modelcontextprotocol.io/docs)\n- [MCP Specification](https://spec.modelcontextprotocol.io/)\n\nFor the official MCP Docs:\n\n- [Browserbase MCP](https://docs.browserbase.com/integrations/mcp/introduction)\n\n## License\n\nLicensed under the Apache 2.0 License.\n\nCopyright 2025 Browserbase, Inc.\n",
+  "category": "Browser Automation",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "browserbasehq-mcp": {
+        "command": "npx",
+        "args": ["-y", "@browserbasehq/mcp"],
+        "env": {
+          "BROWSERBASE_API_KEY": "",
+          "BROWSERBASE_PROJECT_ID": "",
+          "GEMINI_API_KEY": ""
+        }
+      },
+      "browserbasehq-mcp-server-browserbase": {
+        "command": "npx",
+        "args": ["-y", "@browserbasehq/mcp-server-browserbase"],
+        "env": {
+          "BROWSERBASE_API_KEY": "",
+          "BROWSERBASE_PROJECT_ID": "",
+          "GEMINI_API_KEY": ""
+        }
+      },
+      "browserbasehq-mcp-server-browserbase-stdio": {
+        "command": "node",
+        "args": ["/path/to/mcp-server-browserbase/cli.js"],
+        "env": {
+          "BROWSERBASE_API_KEY": "",
+          "BROWSERBASE_PROJECT_ID": "",
+          "GEMINI_API_KEY": ""
+        }
+      },
+      "browserbasehq-mcp-server-browserbase-proxies-configured": {
+        "command": "npx",
+        "args": ["-y", "@browserbasehq/mcp-server-browserbase", "--proxies"],
+        "env": {
+          "BROWSERBASE_API_KEY": "",
+          "BROWSERBASE_PROJECT_ID": "",
+          "GEMINI_API_KEY": ""
+        }
+      },
+      "browserbasehq-mcp-server-browserbase-advanced-stealth-configured": {
+        "command": "npx",
+        "args": ["-y", "@browserbasehq/mcp-server-browserbase", "--advancedStealth"],
+        "env": {
+          "BROWSERBASE_API_KEY": "",
+          "BROWSERBASE_PROJECT_ID": "",
+          "GEMINI_API_KEY": ""
+        }
+      },
+      "browserbasehq-mcp-server-browserbase-context-configured": {
+        "command": "npx",
+        "args": ["-y", "@browserbasehq/mcp-server-browserbase", "--contextId", "<YOUR_CONTEXT_ID>"],
+        "env": {
+          "BROWSERBASE_API_KEY": "",
+          "BROWSERBASE_PROJECT_ID": "",
+          "GEMINI_API_KEY": ""
+        }
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "browserbase",
+    "repo": "mcp-server-browserbase",
+    "url": "https://github.com/browserbase/mcp-server-browserbase",
+    "name": "browserbase__mcp-server-browserbase",
+    "path": null,
+    "stars": 2553,
+    "contributors": 12,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "81377bb83a2d60fd3c6aeb4d6345cfb27676d2ba"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:13.928Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@browserbasehq/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@browserbasehq/stagehand",
+      "importance": 9
+    },
+    {
+      "name": "playwright-core",
+      "importance": 9
+    },
+    {
+      "name": "commander",
+      "importance": 7
+    },
+    {
+      "name": "@smithery/cli",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@browserbasehq/mcp-server-browserbase\",\n  \"version\": \"2.1.0\",\n  \"description\": \"MCP server for AI web browser automation using Browserbase and Stagehand\",\n  \"license\": \"Apache-2.0\",\n  \"author\": \"Browserbase, Inc. (https://www.browserbase.com/)\",\n  \"homepage\": \"https://www.browserbase.com\",\n  \"bugs\": \"https://github.com/modelcontextprotocol/servers/issues\",\n  \"type\": \"module\",\n  \"main\": \"./cli.js\",\n  \"module\": \"./src/index.ts\",\n  \"bin\": {\n    \"mcp-server-browserbase\": \"cli.js\"\n  },\n  \"files\": [\n    \"assets\",\n    \"README.md\",\n    \"dist\",\n    \"cli.js\",\n    \"index.d.ts\",\n    \"index.js\",\n    \"config.d.ts\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"husky && npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"smithery\": \"npx @smithery/cli dev src/index.ts\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"evals\": \"tsx evals/run-evals.ts run --config evals/mcp-eval-basic.config.json && tsx evals/run-evals.ts run --config evals/mcp-eval-minimal.config.json && tsx evals/run-evals.ts run --config evals/mcp-eval.config.json\",\n    \"lint\": \"eslint . --ext .ts\",\n    \"format\": \"prettier --write .\",\n    \"clean\": \"rm -rf dist\",\n    \"prepublishOnly\": \"pnpm clean && pnpm build\",\n    \"pre-commit\": \"pnpm lint-staged\",\n    \"changeset\": \"changeset\",\n    \"version:packages\": \"changeset version\",\n    \"release\": \"changeset publish\"\n  },\n  \"lint-staged\": {\n    \"*.{js,jsx,ts,tsx,json,css,scss,md}\": [\n      \"prettier --write .\",\n      \"eslint --fix\"\n    ]\n  },\n  \"dependencies\": {\n    \"@browserbasehq/sdk\": \"^2.6.0\",\n    \"@browserbasehq/stagehand\": \"^2.5.0\",\n    \"@mcp-ui/server\": \"^5.10.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.13.1\",\n    \"@smithery/cli\": \"^1.2.15\",\n    \"commander\": \"^14.0.0\",\n    \"dotenv\": \"^16.4.6\",\n    \"mcpvals\": \"^0.0.3\",\n    \"playwright-core\": \"^1.53.2\",\n    \"zod\": \"^3.25.67\"\n  },\n  \"devDependencies\": {\n    \"@changesets/cli\": \"^2.29.6\",\n    \"@eslint/js\": \"^9.29.0\",\n    \"chalk\": \"^5.3.0\",\n    \"eslint\": \"^9.29.0\",\n    \"eslint-plugin-react\": \"^7.37.5\",\n    \"globals\": \"^16.2.0\",\n    \"husky\": \"^9.1.7\",\n    \"lint-staged\": \"^16.1.2\",\n    \"prettier\": \"^3.6.1\",\n    \"shx\": \"^0.3.4\",\n    \"tsx\": \"^4.20.3\",\n    \"typescript\": \"^5.6.2\",\n    \"typescript-eslint\": \"^8.35.0\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"packageManager\": \"pnpm@10.12.4+sha512.5ea8b0deed94ed68691c9bad4c955492705c5eeb8a87ef86bc62c74a26b037b08ff9570f108b2e4dbd1dd1a9186fea925e527f141c648e85af45631074680184\"\n}\n"
+}

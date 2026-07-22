@@ -108,7 +108,7 @@ function SortIcon({
   if (isSorted === "desc") return <ChevronDown className="h-3 w-3" />;
 
   return (
-    <div className="text-muted-foreground/50 flex flex-col items-center">
+    <div className="text-muted-foreground flex flex-col items-center">
       <ChevronUp className="h-3 w-3" />
       <span className="mt-[-4px]">
         <ChevronDown className="h-3 w-3" />
@@ -742,6 +742,7 @@ export function AssignedToolsTable({
         header: "Actions",
         cell: ({ row }) => (
           <TableRowActions
+            itemName={row.original.name}
             actions={[
               {
                 icon: <Pencil className="h-4 w-4" />,
@@ -891,7 +892,11 @@ export function AssignedToolsTable({
                     handleBulkAction("callPolicy", value);
                   }}
                 >
-                  <SelectTrigger className="h-8 w-[168px] text-sm" size="sm">
+                  <SelectTrigger
+                    aria-label="Bulk call policy action"
+                    className="h-8 w-[168px] text-sm"
+                    size="sm"
+                  >
                     <SelectValue placeholder="Select action" />
                   </SelectTrigger>
                   <SelectContent>
@@ -930,7 +935,11 @@ export function AssignedToolsTable({
                     handleBulkAction("resultPolicyAction", value);
                   }}
                 >
-                  <SelectTrigger className="h-8 w-[150px] text-sm" size="sm">
+                  <SelectTrigger
+                    aria-label="Bulk result policy action"
+                    className="h-8 w-[150px] text-sm"
+                    size="sm"
+                  >
                     <SelectValue placeholder="Select action" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1023,7 +1032,11 @@ export function AssignedToolsTable({
                     handleBulkAction("callPolicy", value);
                   }}
                 >
-                  <SelectTrigger className="h-9 w-full text-sm" size="sm">
+                  <SelectTrigger
+                    aria-label="Bulk call policy action"
+                    className="h-9 w-full text-sm"
+                    size="sm"
+                  >
                     <SelectValue placeholder="Select action" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1064,7 +1077,11 @@ export function AssignedToolsTable({
                     handleBulkAction("resultPolicyAction", value);
                   }}
                 >
-                  <SelectTrigger className="h-9 w-full text-sm" size="sm">
+                  <SelectTrigger
+                    aria-label="Bulk result policy action"
+                    className="h-9 w-full text-sm"
+                    size="sm"
+                  >
                     <SelectValue placeholder="Select action" />
                   </SelectTrigger>
                   <SelectContent>

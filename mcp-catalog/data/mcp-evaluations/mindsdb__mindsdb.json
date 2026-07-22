@@ -1,0 +1,140 @@
+{
+  "name": "mindsdb__mindsdb",
+  "display_name": "mindsdb",
+  "description": "AI Analytics Engine that can answer questions over large scale data. - The only MCP Server you'll ever need",
+  "author": {
+    "name": "mindsdb"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "mindsdb"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "\n\n<a name=\"readme-top\"></a>\n\n<div align=\"center\">\n\t<a href=\"https://pypi.org/project/MindsDB/\" target=\"_blank\"><img src=\"https://badge.fury.io/py/MindsDB.svg\" alt=\"MindsDB Release\"></a>\n\t<a href=\"https://www.python.org/downloads/\" target=\"_blank\"><img src=\"https://img.shields.io/badge/python-3.10.x%7C%203.11.x-brightgreen.svg\" alt=\"Python supported\"></a>\n\t<a href=\"https://hub.docker.com/u/mindsdb\" target=\"_blank\"><img src=\"https://img.shields.io/docker/pulls/mindsdb/mindsdb\" alt=\"Docker pulls\"></a>\n\n  <br />\n  <br />\n\n  <a href=\"https://trendshift.io/repositories/3068\" target=\"_blank\"><img src=\"https://trendshift.io/api/badge/repositories/3068\" alt=\"mindsdb%2Fmindsdb | Trendshift\" style=\"width: 250px; height: 55px;\" width=\"250\" height=\"55\"/></a>\n\n  <a href=\"https://github.com/mindsdb/mindsdb\">\n    <img src=\"/docs/assets/mindsdb_logo.png\" alt=\"MindsDB\" width=\"300\">\n  </a>\n\n  <p align=\"center\">\n    <br />\n    <a href=\"https://www.mindsdb.com?utm_medium=community&utm_source=github&utm_campaign=mindsdb%20repo\">Website</a>\n    ·\n    <a href=\"https://docs.mindsdb.com?utm_medium=community&utm_source=github&utm_campaign=mindsdb%20repo\">Docs</a>\n    ·\n    <a href=\"https://mindsdb.com/contact\">Contact us for a Demo</a>\n    ·\n    <a href=\"https://mindsdb.com/joincommunity?utm_medium=community&utm_source=github&utm_campaign=mindsdb%20repo\">Community Slack</a>\n  </p>\n</div>\n\n----------------------------------------\n\n\nMindsDB enables humans, AI, agents, and applications to get highly accurate answers across large scale data sources.\n\n<a href=\"https://www.youtube.com/watch?v=MX3OKpnsoLM\" target=\"_blank\">\n  <img src=\"https://github.com/user-attachments/assets/119e7b82-f901-4214-a26f-ff7c5ad86064\" alt=\"MindsDB Demo\">\n\t\n</a>\n\n\n## Install MindsDB Server \n\nMindsDB is an open-source server that can be deployed anywhere - from your laptop to the cloud, and everywhere in between. And yes, you can customize it to your heart's content.\n\n  * [Using Docker Desktop](https://docs.mindsdb.com/setup/self-hosted/docker-desktop). This is the fastest and recommended way to get started and have it all running.\n  * [Using Docker](https://docs.mindsdb.com/setup/self-hosted/docker). This is also simple, but gives you more flexibility on how to further customize your server.\n\n[MindsDB has an MCP server built in](https://docs.mindsdb.com/mcp/overview) that enables your MCP applications to connect, unify and respond to questions over large-scale federated data—spanning databases, data warehouses, and SaaS applications.\n \n----------------------------------------\n\n# Core Philosophy: Connect, Unify, Respond\n\nMindsDB's architecture is built around three fundamental capabilities:\n\n## [Connect](https://docs.mindsdb.com/integrations/data-overview) Your Data\n\nYou can connect to hundreds of enterprise [data sources (learn more)](https://docs.mindsdb.com/integrations/data-overview). These integrations allow MindsDB to access data wherever it resides, forming the foundation for all other capabilities.\n\n## [Unify](https://docs.mindsdb.com/mindsdb_sql/overview) Your Data\n\n\nIn many situations, it’s important to be able to prepare and unify data before generating responses from it. MindsDB SQL offers knowledge bases and views that allow indexing and organizing structured and unstructured data as if it were unified in a single system.\n\n* [**KNOWLEDGE BASES**](https://docs.mindsdb.com/mindsdb_sql/knowledge-bases) – Index and organize unstructured data for efficient Q&A.\n* [**VIEWS**](https://docs.mindsdb.com/mindsdb_sql/sql/create/view) – Simplify data access by creating unified views across different sources (no-ETL).\n\n\nUnification of data can be automated using JOBs\n\n* [**JOBS**](https://docs.mindsdb.com/mindsdb_sql/sql/create/jobs) – Schedule synchronization and transformation tasks for real-time processing.\n\n\n## [Respond](https://docs.mindsdb.com/mindsdb_sql/agents/agent) From Your Data\n\nChat with Your Data\n\n* [**AGENTS**](https://docs.mindsdb.com/mindsdb_sql/agents/agent) – Configure built-in agents specialized in answering questions over your connected and unified data.\n* [**MCP**](https://docs.mindsdb.com/mcp/overview) – Connect to MindsDB through the MCP (Model Context Protocol) for seamless interaction.\n\n----------------------------------------\n\n## 🤝 Contribute\n\nInterested in contributing to MindsDB? Follow our [installation guide for development](https://docs.mindsdb.com/contribute/install?utm_medium=community&utm_source=github&utm_campaign=mindsdb%20repo).\n\nYou can find our [contribution guide here](https://docs.mindsdb.com/contribute/contribute?utm_medium=community&utm_source=github&utm_campaign=mindsdb%20repo).\n\nWe welcome suggestions! Feel free to open new issues with your ideas, and we’ll guide you.\n\nThis project adheres to a [Contributor Code of Conduct](https://github.com/mindsdb/mindsdb/blob/main/CODE_OF_CONDUCT.md). By participating, you agree to follow its terms.\n\nAlso, check out our [community rewards and programs](https://mindsdb.com/community?utm_medium=community&utm_source=github&utm_campaign=mindsdb%20repo).\n\n## 🤍 Support\n\nIf you find a bug, please submit an [issue on GitHub](https://github.com/mindsdb/mindsdb/issues/new/choose).\n\nHere’s how you can get community support:\n\n* Ask a question in our [Slack Community](https://mindsdb.com/joincommunity?utm_medium=community&utm_source=github&utm_campaign=mindsdb%20repo).\n* Join our [GitHub Discussions](https://github.com/mindsdb/mindsdb/discussions).\n* Post on [Stack Overflow](https://stackoverflow.com/questions/tagged/mindsdb) with the MindsDB tag.\n\nFor commercial support, please [contact the MindsDB team](https://mindsdb.com/contact?utm_medium=community&utm_source=github&utm_campaign=mindsdb%20repo).\n\n## 💚 Current Contributors\n\n<a href=\"https://github.com/mindsdb/mindsdb/graphs/contributors\">\n  <img src=\"https://contributors-img.web.app/image?repo=mindsdb/mindsdb\" />\n</a>\n\nGenerated with [contributors-img](https://contributors-img.web.app).\n\n## 🔔 Subscribe for Updates\n\nJoin our [Slack community](https://mindsdb.com/joincommunity)\n",
+  "category": "AI Tools",
+  "quality_score": 68,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mindsdb",
+    "repo": "mindsdb",
+    "url": "https://github.com/mindsdb/mindsdb",
+    "name": "mindsdb__mindsdb",
+    "path": null,
+    "stars": 35549,
+    "contributors": 878,
+    "issues": 4314,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "b3e68364b62dd8cfe1e21fa238260645db906703"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:10.006Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "flask",
+      "importance": 9
+    },
+    {
+      "name": "sqlalchemy",
+      "importance": 9
+    },
+    {
+      "name": "pandas",
+      "importance": 8
+    },
+    {
+      "name": "langchain",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "starlette",
+      "importance": 7
+    },
+    {
+      "name": "uvicorn",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "openai",
+      "importance": 6
+    },
+    {
+      "name": "boto3",
+      "importance": 6
+    },
+    {
+      "name": "psycopg2-binary",
+      "importance": 6
+    },
+    {
+      "name": "pymongo",
+      "importance": 6
+    },
+    {
+      "name": "redis",
+      "importance": 6
+    },
+    {
+      "name": "scikit-learn",
+      "importance": 5
+    },
+    {
+      "name": "numpy",
+      "importance": 5
+    },
+    {
+      "name": "cryptography",
+      "importance": 5
+    },
+    {
+      "name": "pyjwt",
+      "importance": 5
+    },
+    {
+      "name": "duckdb",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\n\n# @TODO: We should figure out version limitations for these\nrequires = [\n    \"setuptools\",\n    \"wheel\",\n]\n\n\n\n\n[tool.ruff]\nexclude = [\n  \".venv\",\n  \"build\",\n  \"tests/unused\"\n]\nline-length = 120\ntarget-version = \"py310\"\n\n[tool.ruff.lint]\nignore = [\n    \"E501\",     # Line too long\n    \"C901\",     # Function is too complex\n    \"E721\"      # Do not compare types, use 'isinstance()': https://www.flake8rules.com/rules/E721.html      \n]\n\n[tool.ruff.lint.per-file-ignores]\n\"mindsdb/__main__.py\" = [\"E402\"]\n\"mindsdb/api/http/start.py\" = [\"E402\"]\n\"mindsdb/api/mysql/mysql_proxy/libs/constants/mysql.py\" = [\"E241\"]\n\"mindsdb/integrations/handlers/lightwood_handler/tests/test_lightwood_handler.py\" = [\"E402\"]\n\n=== setup.py ===\nimport os\nimport glob\n\nfrom setuptools import find_packages, setup\n\n# A special env var that allows us to disable the installation of the default extras for advanced users / containers / etc\nMINDSDB_PIP_INSTALL_DEFAULT_EXTRAS = (\n    True if os.getenv(\"MINDSDB_PIP_INSTALL_DEFAULT_EXTRAS\", \"true\").lower() == \"true\" else False\n)\nDEFAULT_PIP_EXTRAS = [\n    line.split(\"#\")[0].rstrip()\n    for line in open(\"default_handlers.txt\").read().splitlines()\n    if not line.strip().startswith(\"#\")\n]\n\n\nclass Deps:\n    pkgs = []\n    pkgs_exclude = [\"tests\", \"tests.*\"]\n    new_links = []\n    extras = {}\n\n\nabout = {}\nwith open(\"mindsdb/__about__.py\") as fp:\n    exec(fp.read(), about)\n\n\nwith open(\"README.md\", \"r\", encoding=\"utf8\") as fh:\n    long_description = fh.read()\n\n\ndef expand_requirements_links(requirements: list) -> list:\n    \"\"\"Expand requirements that contain links to other requirement files\"\"\"\n    to_add = []\n    to_remove = []\n\n    for requirement in requirements:\n        if requirement.startswith(\"-r \"):\n            if os.path.exists(requirement.split()[1]):\n                with open(requirement.split()[1]) as fh:\n                    to_add += expand_requirements_links([req.strip() for req in fh.read().splitlines()])\n            to_remove.append(requirement)\n\n    for req in to_remove:\n        requirements.remove(req)\n    for req in to_add:\n        requirements.append(req)\n\n    return list(set(requirements))  # Remove duplicates\n\n\ndef define_deps():\n    \"\"\"Reads requirements.txt requirements-extra.txt files and preprocess it\n    to be feed into setuptools.\n\n    This is the only possible way (we found)\n    how requirements.txt can be reused in setup.py\n    using dependencies from private github repositories.\n\n    Links must be appendend by `-{StringWithAtLeastOneNumber}`\n    or something like that, so e.g. `-9231` works as well as\n    `1.1.0`. This is ignored by the setuptools, but has to be there.\n\n    Warnings:\n        to make pip respect the links, you have to use\n        `--process-dependency-links` switch. So e.g.:\n        `pip install --process-dependency-links {git-url}`\n\n    Returns:\n         list of packages, extras and dependency links.\n    \"\"\"\n    with open(os.path.normpath(\"requirements/requirements.txt\")) as req_file:\n        defaults = [req.strip() for req in req_file.read().splitlines()]\n\n    links = []\n    requirements = []\n    for r in defaults:\n        if \"git+https\" in r:\n            pkg = r.split(\"#\")[-1]\n            links.append(r + \"-9876543210\")\n            requirements.append(pkg.replace(\"egg=\", \"\"))\n        else:\n            requirements.append(r.strip())\n\n    extra_requirements = {}\n    full_requirements = []\n    for fn in os.listdir(os.path.normpath(\"./requirements\")):\n        extra = []\n        if fn.startswith(\"requirements-\") and fn.endswith(\".txt\"):\n            extra_name = fn.replace(\"requirements-\", \"\").replace(\".txt\", \"\")\n            with open(os.path.normpath(f\"./requirements/{fn}\")) as fp:\n                extra = [req.strip() for req in fp.read().splitlines()]\n            extra_requirements[extra_name] = extra\n            full_requirements += extra\n\n    extra_requirements[\"all_extras\"] = list(set(full_requirements))\n\n    full_handlers_requirements = []\n    handlers_dir_path = os.path.normpath(\"./mindsdb/integrations/handlers\")\n    for fn in os.listdir(handlers_dir_path):\n        if os.path.isdir(os.path.join(handlers_dir_path, fn)) and fn.endswith(\"_handler\"):\n            extra = []\n            for req_file_path in glob.glob(os.path.join(handlers_dir_path, fn, \"requirements*.txt\")):\n                extra_name = fn.replace(\"_handler\", \"\")\n                file_name = os.path.basename(req_file_path)\n                if file_name != \"requirements.txt\":\n                    extra_name += \"-\" + file_name.replace(\"requirements_\", \"\").replace(\".txt\", \"\")\n\n                # If requirements.txt in our handler folder, import them as our extra's requirements\n                if os.path.exists(req_file_path):\n                    with open(req_file_path) as fp:\n                        extra = expand_requirements_links([req.strip() for req in fp.read().splitlines()])\n\n                    extra_requirements[extra_name] = extra\n                    full_handlers_requirements += extra\n\n                # Even with no requirements in our handler, list the handler as an extra (with no reqs)\n                else:\n                    extra_requirements[extra_name] = []\n\n                # If this is a default extra and if we want to install defaults (enabled by default)\n                #   then add it to the default requirements needing to install\n                if MINDSDB_PIP_INSTALL_DEFAULT_EXTRAS and extra_name in DEFAULT_PIP_EXTRAS and extra:\n                    requirements += extra\n\n    extra_requirements[\"all_handlers_extras\"] = list(set(full_handlers_requirements))\n\n    with open(os.path.normpath(\"requirements/requirements-opentelemetry.txt\")) as req_file:\n        extra_requirements[\"opentelemetry\"] = [req.strip() for req in req_file.read().splitlines()]\n\n    with open(os.path.normpath(\"requirements/requirements-langfuse.txt\")) as req_file:\n        extra_requirements[\"langfuse\"] = [req.strip() for req in req_file.read().splitlines()]\n\n    Deps.pkgs = requirements\n    Deps.extras = extra_requirements\n    Deps.new_links = links\n\n    return Deps\n\n\ndeps = define_deps()\n\nsetup(\n    name=about[\"__title__\"],\n    version=about[\"__version__\"],\n    url=about[\"__github__\"],\n    download_url=about[\"__pypi__\"],\n    license=about[\"__license__\"],\n    author=about[\"__author__\"],\n    author_email=about[\"__email__\"],\n    description=about[\"__description__\"],\n    long_description=long_description,\n    long_description_content_type=\"text/markdown\",\n    packages=find_packages(exclude=deps.pkgs_exclude),\n    install_requires=deps.pkgs,\n    dependency_links=deps.new_links,\n    extras_require=deps.extras,\n    include_package_data=True,\n    classifiers=[\n        \"Programming Language :: Python :: 3\",\n        \"Operating System :: OS Independent\",\n    ],\n    python_requires=\">=3.10,<3.14\",\n)\n\n\n=== docs/package.json ===\n{\n  \"dependencies\": {\n    \"mintlify\": \"^4.2.103\",\n    \"sharp\": \"^0.33.2\"\n  }\n}\n\n\n=== requirements/requirements.txt ===\npackaging\nflask == 3.0.3\nwerkzeug == 3.0.6\nflask-restx >= 1.3.0, < 2.0.0\npandas == 2.2.3\npython-multipart == 0.0.20\ncryptography>=35.0\npsycopg[binary]\npsutil~=7.0\nsqlalchemy >= 2.0.0, < 3.0.0\npsycopg2-binary  # This is required for using sqlalchemy with postgres\nalembic >= 1.3.3\nredis >=5.0.0, < 6.0.0\nwalrus==0.9.3\nflask-compress >= 1.0.0\nappdirs >= 1.0.0\nmindsdb-sql-parser ~= 0.11.3\npydantic == 2.9.2\nmindsdb-evaluator == 0.0.20\nduckdb ~= 1.3.2\nrequests == 2.32.4\ndateparser==1.2.0\ndill == 0.3.6\nnumpy\npytz\nbotocore\nboto3 >= 1.34.131\npython-dateutil\nscikit-learn==1.5.2\nhierarchicalforecast~=0.4.0\nlangchain==0.3.7\nlangchain-community==0.3.5\nlangchain-core==0.3.35\nlangchain-experimental==0.3.3\nlangchain-nvidia-ai-endpoints==0.3.3\nlangchain-openai==0.3.6\nlangchain-anthropic==0.2.4\nlangchain-text-splitters==0.3.5\nlangchain-google-genai>=2.0.0\nlangchain_writer==0.3.0 # Required for Writer agent\nlark\nlxml==5.3.0 # Required for knowledge base webpage embeddings\npgvector==0.3.6 # Required for knowledge bases\nprometheus-client==0.20.0\nsentry-sdk[flask] == 2.14.0\nopenai<1.100.0,>=1.58.1\npyaml==23.12.0\nmcp~=1.10.1\nstarlette>=0.27     # Required for A2A, MCP servers\nfastapi>=0.110.0, <1.0.0  # Required for LiteLLM server\nuvicorn>=0.30.0, <1.0.0   # For all HTTP-based APIs\n\n# files reading\npymupdf==1.25.2\nfiletype\ncharset-normalizer\nopenpyxl # used by pandas to read txt and xlsx files\naipdf==0.0.5\npyarrow<=19.0.0 # used by pandas to read feather files in Files handler\n\n\n# A2A server\nhttpx==0.28.1\nsse-starlette==2.3.3\ntyping-extensions==4.13.2\njwcrypto==1.5.6\npyjwt==2.10.1\npydantic_core>=2.23.2\n"
+}

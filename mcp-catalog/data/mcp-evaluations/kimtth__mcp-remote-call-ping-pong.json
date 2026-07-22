@@ -1,0 +1,79 @@
+{
+  "name": "kimtth__mcp-remote-call-ping-pong",
+  "display_name": "mcp-remote-call-ping-pong",
+  "description": "🏓 An experimental and educational script for Ping-pong server demonstrating remote MCP (Model Context Protocol) calls",
+  "author": {
+    "name": "kimtth"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/mcp-api-server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# 🏓 MCP Ping-Pong Server by Remote Call\n\nAn experimental and educational Ping-Pong server demonstrating MCP (Model Context Protocol) calls via FastAPI.\n\n## Features\n\n- ✅ FastAPI/FastMCP backend for remote MCP calls through API endpoints or SSE\n- 🔄 MCP integration for command handling\n- 🔐 Thread-safe session management\n\n## Quick Start\n\n### Installation\n\nTo install the dependencies, run:\n\n```bash\npoetry install\n```\n\n### 1. Call MCP Tool through API\n\n#### Run the Server\n\nStart the FastAPI server with:\n\n```bash\npython mcp-api-server.py\n```\n\nThe server will start at `http://localhost:8080`.\n\n#### UI\n\nOpen `mcp-api-client.html` in a browser to interact with the UI.\n\n<img alt=\"ui\" src=\"doc/pingpong-ui.png\" width=\"400\"/>\n\n#### API Endpoints\n\n- `GET /ping-pong?prompt_name=<prompt_name>`: Retrieves the specified prompt.\n- `POST /ping-pong`: Invokes MCP tool commands (`ping`, `pong`, `count`).\n\n### 2. Call MCP Tool through SSE transport\n\nThe following example demonstrates using Server-Sent Events (SSE) for communication with the MCP server.\n\n#### Run the SSE Server\n\n```bash\npython mcp-sse-server.py\n```\n\n#### Run the SSE Client\n\n```bash\npython mcp-sse-client.py\n```\n\n#### Sample Output\n\n```bash\nType a command (e.g., 'ping', 'pong', 'count') or 'exit' to quit:\n>>> ping\nSending command: ping\nResult: pong\n>>> pong\nSending command: pong\nResult: ping\n>>> count\nSending command: count\nResult: 2\n```\n\n## References\n\n- [FastAPI SSE MCP](https://github.com/ragieai/fastapi-sse-mcp)\n- [MCP Weather SSE](https://github.com/justjoehere/mcp-weather-sse)\n- [MCP Chinese Getting Started Guide](https://github.com/liaokongVFX/MCP-Chinese-Getting-Started-Guide)\n\n## 📄 License\n\nMIT\n\n",
+  "category": "Development",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-api-server": {
+        "command": "python",
+        "args": ["mcp-api-server.py"],
+        "env": {}
+      },
+      "mcp-sse-server": {
+        "command": "python",
+        "args": ["mcp-sse-server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kimtth",
+    "repo": "mcp-remote-call-ping-pong",
+    "url": "https://github.com/kimtth/mcp-remote-call-ping-pong",
+    "name": "mcp-remote-call-ping-pong",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b014428fefc8d1d53726bbb4f6a9a8f7d9fa5d38"
+  },
+  "programming_language": "HTML",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:48.822Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-ping-pong\"\nversion = \"0.1.0\"\ndescription = \"\"\nauthors = [\n    {name = \"kimtth\"}\n]\nlicense = {text = \"MIT\"}\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"fastmcp (>=0.4.1,<0.5.0)\",\n    \"fastapi (>=0.115.12,<0.116.0)\"\n]\npackage-mode = false\n\n\n[build-system]\nrequires = [\"poetry-core>=2.0.0,<3.0.0\"]\nbuild-backend = \"poetry.core.masonry.api\"\n"
+}

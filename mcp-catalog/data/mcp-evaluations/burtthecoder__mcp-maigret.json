@@ -1,0 +1,89 @@
+{
+  "name": "burtthecoder__mcp-maigret",
+  "display_name": "mcp-maigret",
+  "description": "MCP server for maigret, a powerful OSINT tool that collects user account information from various public sources. ",
+  "author": {
+    "name": "BurtTheCoder"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "MAIGRET_REPORTS_DIR": "${user_config.maigret_reports_dir}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "maigret_reports_dir": {
+      "type": "directory",
+      "title": "Maigret Reports Directory",
+      "description": "The directory where Maigret will save its reports. Ensure this directory exists and your user has write permissions to it.",
+      "required": true,
+      "default": "${HOME}/MaigretReports"
+    }
+  },
+  "readme": "# Maigret MCP Server\n[![smithery badge](https://smithery.ai/badge/mcp-maigret)](https://smithery.ai/server/mcp-maigret)\n\nA Model Context Protocol (MCP) server for [maigret](https://github.com/soxoj/maigret), a powerful OSINT tool that collects user account information from various public sources. This server provides tools for searching usernames across social networks and analyzing URLs. It is designed to integrate seamlessly with MCP-compatible applications like [Claude Desktop](https://claude.ai).\n\n<a href=\"https://glama.ai/mcp/servers/knnpcz651x\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/knnpcz651x/badge\" alt=\"mcp-maigret MCP server\" /></a>\n\n\n## ⚠️ Warning\n\nThis tool is designed for legitimate OSINT research purposes. Please:\n- Only search for information that is publicly available\n- Respect privacy and data protection laws\n- Follow the terms of service of the platforms being searched\n- Use responsibly and ethically\n- Be aware that some sites may rate-limit or block automated searches\n\n## Requirements\n\n- Node.js (v18 or later)\n- Docker\n- macOS, Linux, or Windows with Docker Desktop installed\n- Write access to the reports directory\n\n## Quick Start\n\n### Installing via Smithery\n\nTo install Maigret for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-maigret):\n\n```bash\nnpx -y @smithery/cli install mcp-maigret --client claude\n```\n\n### Installing Manually\n1. Install Docker:\n   - macOS: Install [Docker Desktop](https://www.docker.com/products/docker-desktop)\n   - Linux: Follow the [Docker Engine installation guide](https://docs.docker.com/engine/install/)\n\n2. Install the server globally via npm:\n```bash\nnpm install -g mcp-maigret\n```\n\n3. Create a reports directory:\n```bash\nmkdir -p /path/to/reports/directory\n```\n\n4. Add to your Claude Desktop configuration file:\n```json\n{\n  \"mcpServers\": {\n    \"maigret\": {\n      \"command\": \"mcp-maigret\",\n      \"env\": {\n        \"MAIGRET_REPORTS_DIR\": \"/path/to/reports/directory\"\n      }\n    }\n  }\n}\n```\n\nConfiguration file location:\n- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n5. Restart Claude Desktop\n\n## Alternative Setup (From Source)\n\nIf you prefer to run from source or need to modify the code:\n\n1. Clone and build:\n```bash\ngit clone <repository_url>\ncd mcp-maigret\nnpm install\nnpm run build\n```\n\n2. Add to your Claude Desktop configuration:\n```json\n{\n  \"mcpServers\": {\n    \"maigret\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/mcp-maigret/build/index.js\"],\n      \"env\": {\n        \"MAIGRET_REPORTS_DIR\": \"/path/to/reports/directory\"\n      }\n    }\n  }\n}\n```\n\n## Features\n\n- **Username Search**: Search for a username across hundreds of social networks and websites\n- **URL Analysis**: Parse URLs to extract information and search for associated usernames\n- **Multiple Output Formats**: Support for txt, html, pdf, json, csv, and xmind formats\n- **Site Filtering**: Filter searches by site tags (e.g., photo, dating, us)\n- **Docker-based**: Reliable and consistent execution across environments\n\n## Tools\n\n### 1. Username Search Tool\n- Name: `search_username`\n- Description: Search for a username across social networks and sites\n- Parameters:\n  * `username` (required): Username to search for\n  * `format` (optional, default: \"pdf\"): Output format (txt, html, pdf, json, csv, xmind)\n  * `use_all_sites` (optional, default: false): Use all available sites instead of top 500\n  * `tags` (optional): Array of tags to filter sites (e.g., [\"photo\", \"dating\"])\n\nExample:\n```json\n{\n  \"username\": \"test_user123\",\n  \"format\": \"html\",\n  \"use_all_sites\": false,\n  \"tags\": [\"photo\"]\n}\n```\n\n### 2. URL Analysis Tool\n- Name: `parse_url`\n- Description: Parse a URL to extract information and search for associated usernames\n- Parameters:\n  * `url` (required): URL to analyze\n  * `format` (optional, default: \"pdf\"): Output format (txt, html, pdf, json, csv, xmind)\n\nExample:\n```json\n{\n  \"url\": \"https://example.com/profile\",\n  \"format\": \"txt\"\n}\n```\n\n## Troubleshooting\n\n### Docker Issues\n\n1. Verify Docker is installed and running:\n```bash\ndocker --version\ndocker ps\n```\n\n2. Check Docker permissions:\n   - Ensure your user has permissions to run Docker commands\n   - On Linux, add your user to the docker group: `sudo usermod -aG docker $USER`\n\n### Reports Directory Issues\n\n1. Verify the reports directory:\n   - The directory specified in MAIGRET_REPORTS_DIR must exist\n   - Your user must have write permissions to this directory\n   - Check permissions: `ls -la /path/to/reports/directory`\n\n2. Common configuration mistakes:\n   - Missing MAIGRET_REPORTS_DIR environment variable\n   - Directory doesn't exist\n   - Incorrect permissions\n   - Trailing slashes in the path\n\n3. After fixing any issues:\n   - Save the configuration file\n   - Restart Claude Desktop\n\n## Error Messages\n\n- \"Docker is not installed or not running\": Install Docker and start the Docker daemon\n- \"MAIGRET_REPORTS_DIR environment variable must be set\": Add the environment variable to your configuration\n- \"Error creating reports directory\": Check directory permissions and path\n- \"Error executing maigret\": Check Docker logs and ensure the container has proper permissions\n\n## Contributing\n\n1. Fork the repository\n2. Create a feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Security",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-maigret": {
+        "command": "mcp-maigret",
+        "args": [],
+        "env": {
+          "MAIGRET_REPORTS_DIR": "/path/to/reports/directory"
+        }
+      },
+      "mcp-maigret-from-source": {
+        "command": "node",
+        "args": ["/absolute/path/to/mcp-maigret/build/index.js"],
+        "env": {
+          "MAIGRET_REPORTS_DIR": "/path/to/reports/directory"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "BurtTheCoder",
+    "repo": "mcp-maigret",
+    "url": "https://github.com/BurtTheCoder/mcp-maigret",
+    "name": "mcp-maigret",
+    "path": null,
+    "stars": 172,
+    "contributors": 5,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "f086de5eb7d95af73ff8ba0de9eb3e8827ed4e1b"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:32.960Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-maigret\",\n  \"version\": \"1.0.12\",\n  \"description\": \"MCP server for maigret - OSINT username search across social networks\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-maigret\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && chmod +x build/index.js\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.4.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.17.12\",\n    \"typescript\": \"^5.0.0\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/burtthecoder/mcp-maigret.git\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"maigret\",\n    \"osint\",\n    \"social-networks\",\n    \"username-search\",\n    \"claude\",\n    \"claude-desktop\"\n  ],\n  \"author\": \"Burt The Coder\",\n  \"license\": \"MIT\",\n  \"engines\": {\n    \"node\": \">=18\"\n  }\n}\n"
+}

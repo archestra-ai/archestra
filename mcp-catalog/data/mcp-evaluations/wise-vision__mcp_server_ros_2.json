@@ -1,0 +1,88 @@
+{
+  "name": "wise-vision__mcp_server_ros_2",
+  "display_name": "mcp_server_ros_2",
+  "description": "Advanced MCP Server ROS 2 bridging AI agents straight into robotics",
+  "author": {
+    "name": "wise-vision"
+  },
+  "server": {
+    "command": "docker",
+    "args": ["run", "-i", "--rm", "wisevision/mcp_server_ros_2"],
+    "env": {},
+    "type": "local",
+    "docker_image": "wisevision/mcp_server_ros_2"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "\n# WiseVision ROS2 MCP Server\n\n[![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord)](https://discord.gg/9aSw6HbUaw)\n![ROS 2 Humble](https://img.shields.io/badge/ROS2-Humble-blue)\n![ROS 2 Jazzy](https://img.shields.io/badge/ROS2-Jazzy-purple)\n[![Pro Version](https://img.shields.io/badge/Pro%20Version-Upgrade-gold)](https://app.easy.tools/ec/wisevision/wisevision-mcp-ros-2-pro)\n\n![Flow graph](docs/assets/flow-graph.gif)\n\n**Python** server implementing **Model Context Protocol (MCP)** for **ROS2**.\n\n🚀 **Enjoying this project?**  \nYou’re welcome to try the **Pro version** with extra features and priority support.  \n👉 [Get Pro here](https://app.easy.tools/ec/wisevision/wisevision-mcp-ros-2-pro)\n\n\n# Real-world examples:\n![Demo](docs/assets/mcp-ros2-server.gif)\n\n# Features\n- List available topics \n- List available services \n- Call service\n- Get messages from [WiseVision Data Black Box](https://github.com/wise-vision/wisevision_data_black_box) ([influxDB](https://www.influxdata.com) alternative to [Rosbag2](https://github.com/ros2/rosbag2))\n- Subscribe topic to get messages\n- Publish message on topic\n- Echo message on topic\n- Get fields from message type\n\n\n**Note:** To call service with custom service source it before start server.\n\n\n### 🔧 ROS 2 Tools\n\n#### 📋 **Topics**\n| Tool | Description | Inputs | Outputs |\n|------|-------------|--------|---------|\n| **`ros2_topic_list`** | Returns list of available topics | – | `topic_name` (string): Topic name <br> `topic_type` (string): Message type |\n| **`ros2_topic_subscribe`** | Subscribes to a ROS 2 topic and collects messages for a duration or message limit | `topic_name` (string) <br> `duration` (float) <br> `message_limit` (int) <br> *(defaults: first msg, 5s)* | `messages` <br> `count` <br> `duration` |\n| **`ros2_get_messages`** | Retrieves past messages from a topic (data black box) | `topic_name` (string) <br> `message_type` (string) <br> `number_of_msg` (int) <br> `time_start` (str) <br> `time_end` (str) | `timestamps` <br> `messages` |\n| **`ros2_get_message_fields`** | Gets field names and types for a message type | `message_type` (string) | Field names + types |\n| **`ros2_topic_publish`** | Publishes message to a topic | `topic_name` (string) <br> `message_type` (string) <br> `data` (dict) | `status` |\n\n---\n\n#### 🛠 **Services**\n| Tool | Description | Inputs | Outputs |\n|------|-------------|--------|---------|\n| **`ros2_service_list`** | Returns list of available services | – | `service_name` (string) <br> `service_type` (string) <br> `request_fields` (array) |\n| **`ros2_service_call`** | Calls a ROS 2 service | `service_name` (string) <br> `service_type` (string) <br> `fields` (array) <br> `force_call` (bool, default: false) | `result` (string) <br> `error` (string, if any) |\n\n\n## Usage\n\n### MCP Server Configuration\n> [!NOTE]\n> The server is running inside a Docker container as the root user. To communicate with other ROS components, they must also be run as root.\n\n> [!NOTE]\n> Due to this [issue](https://github.com/microsoft/vscode-copilot-release/issues/7505), this MCP server doesn't work with Copilot in Visual Studio Code.\n\n**Docker run**\n\nSet MCP setting to mcp.json.\n```json\n\"mcp_server_ros_2\": {\n    \"command\": \"docker\",\n    \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"wisevision/mcp_server_ros_2\"\n    ],\n    }\n\n```\n\n### Build docker image locally\n```bash\ngit clone https://github.com/wise-vision/mcp_server_ros_2.git\ncd mcp_server_ros_2\ndocker build -t wisevision/mcp_server_ros_2 .\n```\n\n\nAdd  this to AI Agent prompt:\n```txt\nYou are an AI assistant that uses external tools via an MCP server.\nBefore calling any tool, always check your memory to see if the list of available tools is known.\n\t•\tIf you don’t have the current tool list in memory, your first action should be to call the list-tools tool.\n\t•\tNever guess tool names or parameters.\n\t•\tIf a user requests something that may require a tool and you don’t have the right tool info, ask them or call list-tools first.\nOnce the tool list is loaded, you may call tools directly using their documented names and schemas.\n```\n\n# Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\nYou can launch the MCP Inspector via [ `npm` ](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory /path/to/mcp_server_ros2 run mcp_ros_2_server\n```\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "wisevision-mcp_server_ros_2-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "wisevision/mcp_server_ros_2"],
+        "env": {},
+        "docker_image": "wisevision/mcp_server_ros_2"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "wise-vision",
+    "repo": "mcp_server_ros_2",
+    "url": "https://github.com/wise-vision/mcp_server_ros_2",
+    "name": "wise-vision__mcp_server_ros_2",
+    "path": null,
+    "stars": 34,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4ef1de4d74bb0619ee80672f7a59e00a0568de55"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:44.542Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "numpy",
+      "importance": 8
+    },
+    {
+      "name": "PyYAML",
+      "importance": 7
+    },
+    {
+      "name": "python-dateutil",
+      "importance": 6
+    },
+    {
+      "name": "lark",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"mcp_server_ros_2\"\nversion = \"0.1.0\"\ndescription = \"MCP Server for ROS 2\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.9.4\",\n    \"numpy>=1.21,<2.0\", \n    \"PyYAML\",\n    \"python-dateutil\",\n    \"lark\"\n]\n\n[tool.uv]\ndev-dependencies = [\n    \"pytest>=8.0\",\n]\n\n[project.scripts]\nmcp_ros_2_server = \"server.main:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"server\"]\n"
+}

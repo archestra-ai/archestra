@@ -1,0 +1,110 @@
+{
+  "name": "gaffx__volatility-mcp",
+  "display_name": "volatility-mcp",
+  "description": "This repo hosts an MCP server for volatility3.x",
+  "author": {
+    "name": "Gaffx"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/vol_mcp_server.py", "-i", "${user_config.memory_image_path}"],
+    "env": {
+      "VOLATILITY_BIN": "${user_config.volatility_bin}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "memory_image_path": {
+      "type": "file",
+      "title": "Memory Image Path",
+      "description": "The absolute path to your memory image file for analysis.",
+      "required": true
+    },
+    "volatility_bin": {
+      "type": "file",
+      "title": "Volatility 3 Binary Path",
+      "description": "The absolute path to the Volatility 3 binary. This should be set as VOLATILITY_BIN in your environment.",
+      "required": true
+    }
+  },
+  "readme": "![](https://img.shields.io/badge/License-Apache%202.0-blue?style=plastic&logo=adobefonts)\n<p align=\"center\">\n<img src=\"assets/logo.png\" height=\"300\">\n</p>\n<h1 align=\"center\">\nYour AI Assistant in Memory Forensics\n</h1>\n\n## Overview\nVolatility MCP seamlessly integrates Volatility 3's powerful memory analysis with FastAPI and the Model Context Protocol (MCP). Experience memory forensics without barriers as plugins like `pslist` and `netscan` become accessible through clean REST APIs, connecting memory artifacts directly to AI assistants and web applications\n\n## Features\n* **Volatility 3 Integration:** Leverages the Volatility 3 framework for memory image analysis.\n* **FastAPI Backend:** Provides RESTful APIs to interact with Volatility plugins.\n* **Web Front End Support (future feature):** Designed to connect with a web-based front end for interactive analysis.\n* **Model Context Protocol (MCP):** Enables standardized communication with MCP clients like Claude Desktop.\n* **Plugin Support:** Supports various Volatility plugins, including `pslist` for process listing and `netscan` for network connection analysis.\n\n\n## Architecture\n\nThe project architecture consists of the following components:\n\n* **MCP Client:** MCP client like Claude Desktop that interacts with the FastAPI backend.\n* **FastAPI Server:** A Python-based server that exposes Volatility plugins as API endpoints.\n* **Volatility 3:** The memory forensics framework performing the analysis.\n\nThis architecture allows users to analyze memory images through MCP clients like Claude Desktop. Users can use natural language prompts to perform memory forensics analysis such as\nshow me the list of the processes in memory image x, or show me all the external connections made\n\n## Getting Started\n\n### Prerequisites\n\n* Python 3.7+ installed on your system\n* Volatility 3 binary installed (see [Volatility 3 Installation Guide](https://github.com/volatilityfoundation/volatility3?tab=readme-ov-file#installing)) and added to your env path called **VOLATILITY_BIN**\n\n### Installation\n\n1. Clone the repository:\n\n    ```\n    git clone <repository_url>\n    cd <repository_directory>\n    ```\n\n2. Install the required Python dependencies:\n\n    ```\n    pip install -r requirements.txt\n    ```\n\n3. Start the FastAPI server to expose Volatility 3 APIs:\n\n    ```\n    uvicorn volatility_fastapi_server:app \n    ```\n4. Install Claude Desktop (see [Claude Desktop](https://claude.ai/download)\n5. To configure Claude Desktop as a volatility MCP client, navigate to Claude → Settings → Developer → Edit Config, locate the claude_desktop_config.json file, and insert the following configuration details\n6. Please note that the `-i` option in the config.json file specifies the directory path of your memory image file.\n\n   ```\n       {\n        \"mcpServers\": {\n          \"vol\": {\n            \"command\": \"python\",\n            \"args\": [\n              \"/ABSOLUTE_PATH_TO_MCP-SERVER/vol_mcp_server.py\", \"-i\",     \n              \"/ABSOLUTE_PATH_TO_MEMORY_IMAGE/<memory_image>\"\n            ]\n          }\n        }\n    }\n   ```\nAlternatively, update this file directly:\n\n`/Users/YOUR_USER/Library/Application Support/Claude/claude_desktop_config.json`\n\n### Usage\n\n1. Start the FastAPI server as described above.\n2. Connect an MCP client (e.g., Claude Desktop) to the FastAPI server.\n3. Start the prompt by asking questions regarding the memory image in scope, such as showing me the running processes, creating a tree relationship graph for process x, or showing me all external RFC1918 connections.\n\n![image](https://github.com/user-attachments/assets/23f6fd4f-76b4-4255-a0a6-534ed3459bb3)\n![image](https://github.com/user-attachments/assets/e5cd74ae-72ff-4c5b-8bd8-fbeb13488a70)\n![image](https://github.com/user-attachments/assets/779707ef-4910-4503-b6b0-43f6c37075ef)\n![image](https://github.com/user-attachments/assets/668e9b91-463a-424f-a3ef-ee2baf44308d)\n\n## Future Features and Enhancements\n\n*  **Native Volatility Python Integration:** Incorporate Volatility Python SDK directly in the code base as opposed to subprocess volatility binary\n*   **Yara Integration:** Implement functionality to dump a process from memory and scan it with Yara rules for malware analysis.\n*   **Multi-Image Analysis:** Enable the analysis of multiple memory images simultaneously to correlate events and identify patterns across different systems.\n*   **Adding more Volatility Plugins:** add more volatility plugins to expand the scope of memory analysis\n*   **GUI Enhancements:** Develop a user-friendly web interface for interactive memory analysis and visualization.\n*   **Automated Report Generation:** Automate the generation of detailed reports summarizing the findings of memory analysis.\n*   **Advanced Threat Detection:** Incorporate advanced techniques for detecting sophisticated threats and anomalies in memory.\n\n## Contributing\n\nContributions are welcome! Please follow these steps to contribute:\n\n1. Fork this repository.\n2. Create a new branch (`git checkout -b feature/my-feature`).\n3. Commit your changes (`git commit -m 'Add some feature'`).\n4. Push to your branch (`git push origin feature/my-feature`).\n5. Open a pull request.\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/gaffx-volatility-mcp-badge.png)](https://mseep.ai/app/gaffx-volatility-mcp)\n\n\n",
+  "category": "Security",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "volatility-fastapi-server": {
+        "command": "uvicorn",
+        "args": ["volatility_fastapi_server:app"],
+        "env": {}
+      },
+      "vol-mcp-server-configured": {
+        "command": "python",
+        "args": [
+          "/ABSOLUTE_PATH_TO_MCP-SERVER/vol_mcp_server.py",
+          "-i",
+          "/ABSOLUTE_PATH_TO_MEMORY_IMAGE/<memory_image>"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Gaffx",
+    "repo": "volatility-mcp",
+    "url": "https://github.com/Gaffx/volatility-mcp",
+    "name": "volatility-mcp",
+    "path": null,
+    "stars": 23,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "8c9aafcf530f73834ff014e36df09996f97688ef"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:33.614Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "fastmcp",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nrequests>=2.31.0\r\nfastapi>=0.104.0\r\nmcp[cli]>=0.1.0  # Required for CLI functionality\r\nfastmcp >=0.1.0 \r\nuvicorn>=0.24.0  # Required for running FastAPI server\r\nmcp>=1.10.0\r\n"
+}

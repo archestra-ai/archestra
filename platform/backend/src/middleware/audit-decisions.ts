@@ -242,6 +242,10 @@ export const AUDIT_DECISIONS = {
   // A2A protocol runtime
   // =========================================================================
   a2aContextsTable: { audited: false, reason: "A2A protocol runtime context" },
+  a2aContextCompactionsTable: {
+    audited: false,
+    reason: "A2A context history compaction summaries (runtime state)",
+  },
   a2aMessagesTable: { audited: false, reason: "A2A protocol message log" },
   a2aTasksTable: { audited: false, reason: "A2A protocol task state" },
   a2aTaskApprovalRequestsTable: {
@@ -538,6 +542,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ChatOps message dedup; runtime state",
   },
+  chatopsThreadContextsTable: {
+    audited: false,
+    reason: "ChatOps thread → A2A context mapping; runtime state",
+  },
 
   // =========================================================================
   // Email / messaging ingest
@@ -599,6 +607,11 @@ export const AUDIT_DECISIONS = {
   chatActiveRunEventsTable: {
     audited: false,
     reason: "chat active run event stream; child of chatActiveRunsTable",
+  },
+  chatToolExecutionClaimsTable: {
+    audited: false,
+    reason:
+      "per-tool-call idempotency ledger; runtime dedup state, mcp_tool_calls audits the execution",
   },
 
   // =========================================================================

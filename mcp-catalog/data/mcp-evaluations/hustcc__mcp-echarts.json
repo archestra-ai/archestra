@@ -1,0 +1,164 @@
+{
+  "name": "hustcc__mcp-echarts",
+  "display_name": "mcp-echarts",
+  "description": "🧬 Generate visual charts using ECharts with AI MCP dynamically, used for chart generation and data analysis.",
+  "author": {
+    "name": "hustcc"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-echarts"],
+    "env": {
+      "MINIO_ENDPOINT": "${user_config.minio_endpoint}",
+      "MINIO_PORT": "${user_config.minio_port}",
+      "MINIO_USE_SSL": "${user_config.minio_use_ssl}",
+      "MINIO_ACCESS_KEY": "${user_config.minio_access_key}",
+      "MINIO_SECRET_KEY": "${user_config.minio_secret_key}",
+      "MINIO_BUCKET_NAME": "${user_config.minio_bucket_name}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "minio_endpoint": {
+      "type": "string",
+      "title": "MinIO Endpoint",
+      "description": "The endpoint for your MinIO server or S3-compatible storage.",
+      "default": "localhost",
+      "required": false
+    },
+    "minio_port": {
+      "type": "number",
+      "title": "MinIO Port",
+      "description": "The port for your MinIO server.",
+      "default": 9000,
+      "required": false
+    },
+    "minio_use_ssl": {
+      "type": "boolean",
+      "title": "Use SSL for MinIO",
+      "description": "Whether to use SSL/TLS for connecting to MinIO.",
+      "default": false,
+      "required": false
+    },
+    "minio_access_key": {
+      "type": "string",
+      "title": "MinIO Access Key",
+      "description": "Your MinIO access key.",
+      "sensitive": true,
+      "required": false
+    },
+    "minio_secret_key": {
+      "type": "string",
+      "title": "MinIO Secret Key",
+      "description": "Your MinIO secret key.",
+      "sensitive": true,
+      "required": false
+    },
+    "minio_bucket_name": {
+      "type": "string",
+      "title": "MinIO Bucket Name",
+      "description": "The name of the MinIO bucket to store charts.",
+      "default": "mcp-echarts",
+      "required": false
+    }
+  },
+  "readme": "# <img src=\"https://echarts.apache.org/zh/images/favicon.png\" height=\"24\"/> MCP ECharts ![](https://badge.mcpx.dev?type=server 'MCP Server')  [![build](https://github.com/hustcc/mcp-echarts/actions/workflows/build.yml/badge.svg)](https://github.com/hustcc/mcp-echarts/actions/workflows/build.yml) [![npm Version](https://img.shields.io/npm/v/mcp-echarts.svg)](https://www.npmjs.com/package/mcp-echarts) [![smithery badge](https://smithery.ai/badge/@hustcc/mcp-echarts)](https://smithery.ai/server/@hustcc/mcp-echarts) [![npm License](https://img.shields.io/npm/l/mcp-echarts.svg)](https://www.npmjs.com/package/mcp-echarts) [![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/hustcc/mcp-echarts)](https://archestra.ai/mcp-catalog/hustcc__mcp-echarts)\n\nGenerate <img src=\"https://echarts.apache.org/zh/images/favicon.png\" height=\"14\"/> [Apache ECharts](https://echarts.apache.org/) with AI MCP dynamically for chart generation and data analysis. _Also you can use <img src=\"https://mdn.alipayobjects.com/huamei_qa8qxu/afts/img/A*ZFK8SrovcqgAAAAAAAAAAAAAemJ7AQ/original\" height=\"14\"/> [mcp-server-chart](https://github.com/antvis/mcp-server-chart) to generate chart, graph, map._\n\n<a href=\"https://glama.ai/mcp/servers/@hustcc/mcp-echarts\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@hustcc/mcp-echarts/badge\" alt=\"ECharts MCP server\" />\n</a>\n\n<div align=\"center\">\n  <img width=\"648\" alt=\"mcp-echarts\" src=\"https://mdn.alipayobjects.com/huamei_1gdzij/afts/img/A*s3w3SpMMPDQAAAAARzAAAAgAemB7AQ/original\" />\n</div>\n\n## ✨ Features\n\n- Fully support all features and syntax of `ECharts`, include data, style, theme and so on.\n- Support exporting to `png`, `svg`, and `option` formats, with validation for `ECharts` to facilitate the model's multi-round output of correct syntax and graphics.\n- MinIO Integration, store charts in `MinIO` object storage and return URLs instead of Base64 data for better performance and sharing capabilities.\n- Lightweight, we can install it easily with `zero dependence`.\n- Extremely `secure`, fully generated locally, without relying on any remote services.\n\n\n## 🤖 Usage\n\n### Desktop Applications (stdio transport)\n\nTo use with `Desktop APP`, such as Claude, VSCode, Cline, Cherry Studio, and so on, add the  MCP server config below. On Mac system:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-echarts\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-echarts\"\n      ]\n    }\n  }\n}\n```\n\nOn Window system:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-echarts\": {\n      \"command\": \"cmd\",\n      \"args\": [\n        \"/c\",\n        \"npx\",\n        \"-y\",\n        \"mcp-echarts\"\n      ]\n    }\n  }\n}\n```\n\nAlso, you can use it on [modelscope](https://www.modelscope.cn/mcp/servers/hustcc/MCP-ECharts), [glama.ai](https://glama.ai/mcp/servers/@hustcc/mcp-echarts), [smithery.ai](https://smithery.ai/server/@hustcc/mcp-echarts) or others with HTTP, SSE Protocol.\n\n\n## 🚰 Run with SSE or Streamable transport\n\nInstall the package globally.\n\n```bash\nnpm install -g mcp-echarts\n```\n\nRun the server with your preferred transport option:\n\n```bash\n# For SSE transport (default endpoint: /sse)\nmcp-echarts -t sse\n\n# For Streamable transport with custom endpoint\nmcp-echarts -t streamable\n```\n\nThen you can access the server at:\n- SSE transport: `http://localhost:3033/sse`\n- Streamable transport: `http://localhost:3033/mcp`\n\n\n## 🎮 CLI Options\n\nYou can also use the following CLI options when running the MCP server. Command options by run cli with `-h`.\n\n```plain\nMCP ECharts CLI\n\nOptions:\n  --transport, -t  Specify the transport protocol: \"stdio\", \"sse\", or \"streamable\" (default: \"stdio\")\n  --port, -p       Specify the port for SSE or streamable transport (default: 3033)\n  --endpoint, -e   Specify the endpoint for the transport:\n                    - For SSE: default is \"/sse\"\n                    - For streamable: default is \"/mcp\"\n  --help, -h       Show this help message\n```\n\n\n## 🗂️ MinIO Configuration (Optional)\n\nFor better performance and sharing capabilities, you can configure MinIO object storage to store chart images as URLs instead of Base64 data.\n\n> [!NOTE]\n> If MinIO is not configured or unavailable, the system automatically falls back to `Base64` data output, ensuring compatibility.\n\nWe can Integrate with `MinIO` object storage providers below.\n\n - [MinIO](https://min.io/): High-performance, S3-compatible object storage. Use [MinIO JavaScript Client](https://min.io/docs/minio/linux/developers/javascript/minio-javascript.html) for direct integration.\n - [Amazon S3](https://aws.amazon.com/s3/): Use [AWS SDK](https://aws.amazon.com/sdk-for-javascript/) with compatible API endpoint.\n - [Alibaba Cloud OSS](https://www.alibabacloud.com/product/object-storage-service): Use the [Alibaba Cloud SDK](https://www.alibabacloud.com/help/en/sdk) for OSS services.\n - [Google Cloud Storage](https://cloud.google.com/storage): Integrate using [Google Cloud SDK](https://cloud.google.com/sdk) or compatible API.\n - [Microsoft Azure Blob Storage](https://azure.microsoft.com/en-us/products/storage/blobs): Use [Azure SDK](https://azure.microsoft.com/en-us/downloads/) for Blob storage access.\n - [Tencent Cloud COS](https://intl.cloud.tencent.com/product/cos): Use the [Tencent Cloud SDK](https://intl.cloud.tencent.com/document/product/436/6474) for COS integration.\n\nAlso, we can setup MinIO locally for free.\n\n1. **Install and start MinIO locally:**\n\n   ```bash\n   # Download MinIO (macOS example)\n   brew install minio/stable/minio\n   \n   # Start MinIO server\n   minio server ~/minio-data --console-address :9001\n   ```\n\n3. **Configure environment variables:**\n\n   ```bash\n   # Copy the example environment file\n   cp .env.example .env\n   \n   # Edit .env with your MinIO settings\n   MINIO_ENDPOINT=localhost\n   MINIO_PORT=9000\n   MINIO_USE_SSL=false\n   MINIO_ACCESS_KEY=minioadmin\n   MINIO_SECRET_KEY=minioadmin\n   MINIO_BUCKET_NAME=mcp-echarts\n   ```\n\n\n## 🔨 Development\n\nInstall dependencies:\n\n```bash\nnpm install\n```\n\nBuild the server:\n\n```bash\nnpm run build\n```\n\nStart the MCP server:\n\n```bash\nnpm run start\n```\n\n\n## 🧑🏻‍💻 Contributors\n\n- [lyw405](https://github.com/lyw405): Supports `15+` charting MCP tool. [#2](https://github.com/hustcc/mcp-echarts/issues/2)\n- [2niuhe](https://github.com/2niuhe): Support MCP with SSE and Streaming HTTP. [#17](https://github.com/hustcc/mcp-echarts/issues/17)\n- [susuperli](https://github.com/susuperli): Use `MinIO` to save the chart image base64 and return the url. [#10](https://github.com/hustcc/mcp-echarts/issues/10)\n- [BQXBQX](https://github.com/BQXBQX): Use `@napi-rs/canvas` instead node-canvas. [#3](https://github.com/hustcc/mcp-echarts/issues/3)\n- [Meet-student](https://github.com/Meet-student): Add `outputType` schema for all chart tools. [#24](https://github.com/hustcc/mcp-echarts/issues/24)\n- [hustcc](https://github.com/hustcc): Initial the repo.\n\n\n## 📄 License\n\nMIT@[hustcc](https://github.com/hustcc).\n",
+  "category": "AI Tools",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-echarts-stdio": {
+        "command": "npx",
+        "args": ["-y", "mcp-echarts"],
+        "env": {}
+      },
+      "mcp-echarts-stdio-windows": {
+        "command": "cmd",
+        "args": ["/c", "npx", "-y", "mcp-echarts"],
+        "env": {}
+      },
+      "mcp-echarts-sse": {
+        "command": "mcp-echarts",
+        "args": ["-t", "sse"],
+        "env": {}
+      },
+      "mcp-echarts-streamable": {
+        "command": "mcp-echarts",
+        "args": ["-t", "streamable"],
+        "env": {}
+      },
+      "mcp-echarts-dev": {
+        "command": "npm",
+        "args": ["run", "start"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hustcc",
+    "repo": "mcp-echarts",
+    "url": "https://github.com/hustcc/mcp-echarts",
+    "name": "hustcc__mcp-echarts",
+    "path": null,
+    "stars": 73,
+    "contributors": 8,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "1792abf56cbbda81916f56f5022de2bf76a2dda3"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:24.870Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@napi-rs/canvas",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "echarts",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "minio",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-echarts\",\n  \"description\": \"❤️ Generate visual charts using Apache ECharts with AI MCP dynamically.\",\n  \"version\": \"0.6.1\",\n  \"main\": \"build/index.js\",\n  \"scripts\": {\n    \"test\": \"vitest\",\n    \"prebuild\": \"rm -rf build/*\",\n    \"build\": \"tsc && tsc-alias -p tsconfig.json\",\n    \"start\": \"npm run build && npx @modelcontextprotocol/inspector node build/index.js\",\n    \"prepare\": \"husky && npm run build\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"bin\": {\n    \"mcp-echarts\": \"./build/index.js\"\n  },\n  \"files\": [\"build\", \"fonts\"],\n  \"keywords\": [\"mcp\", \"echarts\", \"visualization\", \"chart\", \"mcp-echarts\"],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.0\",\n    \"@napi-rs/canvas\": \"^0.1.73\",\n    \"dotenv\": \"^17.2.1\",\n    \"echarts\": \"^6.0.0\",\n    \"express\": \"^5.1.0\",\n    \"minio\": \"^8.0.5\",\n    \"zod\": \"^3.25.16\"\n  },\n  \"devDependencies\": {\n    \"@biomejs/biome\": \"1.9.4\",\n    \"@modelcontextprotocol/inspector\": \"^0.15.0\",\n    \"@types/express\": \"^5.0.3\",\n    \"@types/node\": \"^22.15.21\",\n    \"@types/pixelmatch\": \"^5.2.6\",\n    \"@types/pngjs\": \"^6.0.5\",\n    \"husky\": \"^9.1.7\",\n    \"lint-staged\": \"^15.5.2\",\n    \"pixelmatch\": \"^7.1.0\",\n    \"pngjs\": \"^7.0.0\",\n    \"tsc-alias\": \"^1.8.16\",\n    \"typescript\": \"^5.8.3\",\n    \"vitest\": \"^3.1.4\",\n    \"zod-to-json-schema\": \"^3.24.5\"\n  },\n  \"lint-staged\": {\n    \"*.{ts,js,json}\": [\n      \"biome check --write\",\n      \"biome format --write\",\n      \"biome lint\"\n    ]\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/hustcc/mcp-echarts\"\n  },\n  \"license\": \"MIT\"\n}\n"
+}

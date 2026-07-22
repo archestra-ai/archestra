@@ -1,0 +1,115 @@
+{
+  "name": "aliyun__alibaba-cloud-ops-mcp-server",
+  "display_name": "alibaba-cloud-ops-mcp-server",
+  "description": "AlibabaCloud CloudOps MCP Server",
+  "author": {
+    "name": "aliyun"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["alibaba-cloud-ops-mcp-server@latest"],
+    "env": {
+      "ALIBABA_CLOUD_ACCESS_KEY_ID": "${user_config.alibaba_cloud_access_key_id}",
+      "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "${user_config.alibaba_cloud_access_key_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "alibaba_cloud_access_key_id": {
+      "type": "string",
+      "title": "Alibaba Cloud Access Key ID",
+      "description": "Your Alibaba Cloud Access Key ID for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "alibaba_cloud_access_key_secret": {
+      "type": "string",
+      "title": "Alibaba Cloud Access Key SECRET",
+      "description": "Your Alibaba Cloud Access Key SECRET for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Alibaba Cloud Ops MCP Server\n\n[![GitHub stars](https://img.shields.io/github/stars/aliyun/alibaba-cloud-ops-mcp-server?style=social)](https://github.com/aliyun/alibaba-cloud-ops-mcp-server)\n\n[中文版本](./README_zh.md)\n\nAlibaba Cloud Ops MCP Server is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server that provides seamless integration with Alibaba Cloud APIs, enabling AI assistants to operation resources on Alibaba Cloud, supporting ECS, Cloud Monitor, OOS andother widely used cloud products.\n\n## Prepare\n\nInstall [uv](https://github.com/astral-sh/uv)\n\n```bash\n# On macOS and Linux.\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n## Configuration\n\nUse [VS Code](https://code.visualstudio.com/) + [Cline](https://cline.bot/) to config MCP Server.\n\nTo use `alibaba-cloud-ops-mcp-server` MCP Server with any other MCP Client, you can manually add this configuration and restart for changes to take effect:\n\n```json\n{\n  \"mcpServers\": {\n    \"alibaba-cloud-ops-mcp-server\": {\n      \"timeout\": 600,\n      \"command\": \"uvx\",\n      \"args\": [\n        \"alibaba-cloud-ops-mcp-server@latest\"\n      ],\n      \"env\": {\n        \"ALIBABA_CLOUD_ACCESS_KEY_ID\": \"Your Access Key ID\",\n        \"ALIBABA_CLOUD_ACCESS_KEY_SECRET\": \"Your Access Key SECRET\"\n      }\n    }\n  }\n}\n```\n\n[For detailed parameter description, see MCP startup parameter document](./README_mcp_args.md)\n\n## MCP Maketplace Integration\n\n* [Cline](https://cline.bot/mcp-marketplace)\n* [Cursor](https://docs.cursor.com/tools) [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=alibaba-cloud-ops-mcp-server&config=eyJ0aW1lb3V0Ijo2MDAsImNvbW1hbmQiOiJ1dnggYWxpYmFiYS1jbG91ZC1vcHMtbWNwLXNlcnZlckBsYXRlc3QiLCJlbnYiOnsiQUxJQkFCQV9DTE9VRF9BQ0NFU1NfS0VZX0lEIjoiWW91ciBBY2Nlc3MgS2V5IElkIiwiQUxJQkFCQV9DTE9VRF9BQ0NFU1NfS0VZX1NFQ1JFVCI6IllvdXIgQWNjZXNzIEtleSBTZWNyZXQifX0%3D)\n* [ModelScope](https://www.modelscope.cn/mcp/servers/@aliyun/alibaba-cloud-ops-mcp-server?lang=en_US)\n* [Lingma](https://lingma.aliyun.com/)\n* [Smithery AI](https://smithery.ai/server/@aliyun/alibaba-cloud-ops-mcp-server)\n* [FC-Function AI](https://cap.console.aliyun.com/template-detail?template=237)\n* [Alibaba Cloud Model Studio](https://bailian.console.aliyun.com/?tab=mcp#/mcp-market/detail/alibaba-cloud-ops)\n\n## Know More\n\n* [Alibaba Cloud Ops MCP Server is ready to use out of the box!！](https://developer.aliyun.com/article/1661348)\n* [Setup Alibaba Cloud Ops MCP Server on Bailian](https://developer.aliyun.com/article/1662120)\n* [Build your own Alibaba Cloud OpenAPI MCP Server with 10 lines of code](https://developer.aliyun.com/article/1662202)\n* [Alibaba Cloud Ops MCP Server is officially available on the Alibaba Cloud Model Studio Platform MCP Marketplace](https://developer.aliyun.com/article/1665019)\n\n## Tools\n\n| **Product** | **Tool** | **Function** | **Implematation** | **Status** |\n| --- | --- | --- | --- | --- |\n| ECS | RunCommand | Run Command | OOS | Done |\n| | StartInstances | Start Instances | OOS | Done |\n| | StopInstances | Stop Instances | OOS | Done |\n| | RebootInstances | Reboot Instances | OOS | Done |\n| | DescribeInstances | View Instances | API | Done |\n| | DescribeRegions | View Regions | API | Done |\n| | DescribeZones | View Zones | API | Done |\n| | DescribeAvailableResource | View Resource Inventory | API | Done |\n| | DescribeImages | View Images | API | Done |\n| | DescribeSecurityGroups | View Security Groups | API | Done |\n| | RunInstances | Create Instances | OOS | Done |\n| | DeleteInstances | Delete Instances | API | Done |\n| | ResetPassword | Modify Password | OOS | Done |\n| | ReplaceSystemDisk | Replace Operating System | OOS | Done |\n| VPC | DescribeVpcs | View VPCs | API | Done |\n| | DescribeVSwitches | View VSwitches | API | Done |\n| RDS | DescribeDBInstances | List RDS Instances | API | Done |\n|  | StartDBInstances | Start the RDS instance | OOS | Done |\n|  | StopDBInstances | Stop the RDS instance | OOS | Done |\n|  | RestartDBInstances | Restart the RDS instance | OOS | Done |\n| OSS | ListBuckets | List Bucket | API | Done |\n|  | PutBucket | Create Bucket | API | Done |\n|  | DeleteBucket | Delete Bucket | API | Done |\n|  | ListObjects | View object information in the bucket | API | Done |\n| CloudMonitor | GetCpuUsageData | Get CPU Usage Data for ECS Instances | API | Done |\n| | GetCpuLoadavgData | Get CPU One-Minute Average Load Metric Data | API | Done |\n| | GetCpuloadavg5mData | Get CPU Five-Minute Average Load Metric Data | API | Done |\n| | GetCpuloadavg15mData | Get CPU Fifteen-Minute Average Load Metric Data | API | Done |\n| | GetMemUsedData | Get Memory Usage Metric Data | API | Done |\n| | GetMemUsageData | Get Memory Utilization Metric Data | API | Done |\n| | GetDiskUsageData | Get Disk Utilization Metric Data | API | Done |\n| | GetDiskTotalData | Get Total Disk Partition Capacity Metric Data | API | Done |\n| | GetDiskUsedData | Get Disk Partition Usage Metric Data | API | Done |\n\n## Contact us\n\nIf you have any questions, please join the [Alibaba Cloud Ops MCP discussion group](https://qr.dingtalk.com/action/joingroup?code=v1,k1,iFxYG4jjLVh1jfmNAkkclji7CN5DSIdT+jvFsLyI60I=&_dt_no_comment=1&origin=11) (DingTalk group: 113455011677) for discussion.\n\n<img src=\"https://oos-public-cn-hangzhou.oss-cn-hangzhou.aliyuncs.com/alibaba-cloud-ops-mcp-server/Alibaba-Cloud-Ops-MCP-User-Group-en.png\" width=\"500\">\n",
+  "category": "Cloud",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "alibaba-cloud-ops-mcp-server": {
+        "command": "uvx",
+        "args": ["alibaba-cloud-ops-mcp-server@latest"],
+        "env": {
+          "ALIBABA_CLOUD_ACCESS_KEY_ID": "Your Access Key ID",
+          "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "Your Access Key SECRET"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "aliyun",
+    "repo": "alibaba-cloud-ops-mcp-server",
+    "url": "https://github.com/aliyun/alibaba-cloud-ops-mcp-server",
+    "name": "aliyun__alibaba-cloud-ops-mcp-server",
+    "path": null,
+    "stars": 72,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "2b283e64ccd0fd521cd68e5b17d0e17f4094d0d0"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:15.735Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "alibabacloud-credentials",
+      "importance": 9
+    },
+    {
+      "name": "alibabacloud-cms20190101",
+      "importance": 8
+    },
+    {
+      "name": "alibabacloud-ecs20140526",
+      "importance": 8
+    },
+    {
+      "name": "alibabacloud-oos20190601",
+      "importance": 8
+    },
+    {
+      "name": "alibabacloud_oss_v2",
+      "importance": 8
+    },
+    {
+      "name": "click",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"alibaba-cloud-ops-mcp-server\"\nversion = \"0.9.6\"\ndescription = \"A MCP server for Alibaba Cloud\"\nreadme = \"README.md\"\nauthors = [\n    { name = \"Zheng Dayu\", email = \"dayu.zdy@alibaba-inc.com\" }\n]\nrequires-python = \">=3.10\"\ndependencies = [\n    \"alibabacloud-cms20190101>=3.1.4\",\n    \"alibabacloud-ecs20140526>=6.1.0\",\n    \"alibabacloud-oos20190601>=3.4.1\",\n    \"alibabacloud_oss_v2>=1.1.0\",\n    \"alibabacloud-credentials>=1.0.0\",\n    \"click>=8.1.8\",\n    \"fastmcp==2.8.0\"\n]\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\ndependencies = [\n    \"hatchling>=1.27.0\",\n]\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/alibaba_cloud_ops_mcp_server\"]\n\n[dependency-groups]\ndev = [\n    \"pytest>=8.4.0\",\n    \"pytest-cov>=6.1.1\",\n]\n\n[project.scripts]\nalibaba-cloud-ops-mcp-server = \"alibaba_cloud_ops_mcp_server:main\""
+}

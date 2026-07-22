@@ -1,0 +1,205 @@
+{
+  "name": "datalayer__jupyter-mcp-server",
+  "display_name": "jupyter-mcp-server",
+  "description": "🪐 ✨ Model Context Protocol (MCP) Server for Jupyter.",
+  "author": {
+    "name": "datalayer"
+  },
+  "server": {
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "-e",
+      "DOCUMENT_URL",
+      "-e",
+      "DOCUMENT_TOKEN",
+      "-e",
+      "DOCUMENT_ID",
+      "-e",
+      "RUNTIME_URL",
+      "-e",
+      "RUNTIME_TOKEN",
+      "--network=host",
+      "datalayer/jupyter-mcp-server:latest"
+    ],
+    "env": {
+      "DOCUMENT_URL": "${user_config.document_url}",
+      "DOCUMENT_TOKEN": "${user_config.document_token}",
+      "DOCUMENT_ID": "${user_config.document_id}",
+      "RUNTIME_URL": "${user_config.runtime_url}",
+      "RUNTIME_TOKEN": "${user_config.runtime_token}"
+    },
+    "type": "local",
+    "docker_image": "datalayer/jupyter-mcp-server:latest"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "document_url": {
+      "type": "string",
+      "title": "Jupyter Document URL",
+      "description": "The URL of the Jupyter server for document access. Ensure the port matches your JupyterLab instance.",
+      "required": true,
+      "default": "http://localhost:8888"
+    },
+    "document_token": {
+      "type": "string",
+      "title": "Jupyter Document Token",
+      "description": "The authentication token for document access. This should match the token used to start JupyterLab.",
+      "sensitive": true,
+      "required": true,
+      "default": "MY_TOKEN"
+    },
+    "document_id": {
+      "type": "string",
+      "title": "Jupyter Document ID",
+      "description": "The path to the notebook you want to connect to, relative to the directory where JupyterLab was started (e.g., notebook.ipynb).",
+      "required": true,
+      "default": "notebook.ipynb"
+    },
+    "runtime_url": {
+      "type": "string",
+      "title": "Jupyter Runtime URL",
+      "description": "The URL of the Jupyter server for runtime execution. Ensure the port matches your JupyterLab instance.",
+      "required": true,
+      "default": "http://localhost:8888"
+    },
+    "runtime_token": {
+      "type": "string",
+      "title": "Jupyter Runtime Token",
+      "description": "The authentication token for runtime execution. This should match the token used to start JupyterLab.",
+      "sensitive": true,
+      "required": true,
+      "default": "MY_TOKEN"
+    }
+  },
+  "readme": "<!--\n  ~ Copyright (c) 2023-2024 Datalayer, Inc.\n  ~\n  ~ BSD 3-Clause License\n-->\n\n[![Datalayer](https://assets.datalayer.tech/datalayer-25.svg)](https://datalayer.io)\n\n[![Become a Sponsor](https://img.shields.io/static/v1?label=Become%20a%20Sponsor&message=%E2%9D%A4&logo=GitHub&style=flat&color=1ABC9C)](https://github.com/sponsors/datalayer)\n\n# 🪐✨ Jupyter MCP Server\n\n[![PyPI - Version](https://img.shields.io/pypi/v/jupyter-mcp-server)](https://pypi.org/project/jupyter-mcp-server)\n<a href=\"https://mseep.ai/app/datalayer-jupyter-mcp-server\">\n<img src=\"https://mseep.net/pr/datalayer-jupyter-mcp-server-badge.png\" alt=\"MseeP.ai Security Assessment Badge\" width=\"100\" />\n</a>\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/datalayer/jupyter-mcp-server)](https://archestra.ai/mcp-catalog/datalayer__jupyter-mcp-server)\n\n> 🚨 **BREAKING CHANGE** For version `0.11.0+`, `room` has been renamed to `document`. [Read more in the release notes.](https://jupyter-mcp-server.datalayer.tech/releases)\n\n**Jupyter MCP Server** is a [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server implementation that enables **real-time** interaction with 📓 Jupyter Notebooks, allowing AI to edit, document and execute code for data analysis, visualization etc.\n\nCompatible with any Jupyter deployment (local, JupyterHub, ...) and with [Datalayer](https://datalayer.ai/) hosted Notebooks.\n\n## 🚀 Key Features\n\n- ⚡ **Real-time control:** Instantly view notebook changes as they happen.\n- 🔁 **Smart execution:** Automatically adjusts when a cell run fails thanks to cell output feedback.\n- 🤝 **MCP-Compatible:** Works with any MCP client, such as Claude Desktop, Cursor, Windsurf, and more.\n\n![Jupyter MCP Server Demo](https://assets.datalayer.tech/jupyter-mcp/jupyter-mcp-server-claude-demo.gif)\n\n🛠️ This MCP offers multiple tools such as `insert_execute_code_cell`, `append_markdown_cell`, `get_notebook_info`, `read_cell`, and more, enabling advanced interactions with Jupyter notebooks. Explore our [tools documentation](https://jupyter-mcp-server.datalayer.tech/tools) to learn about all the tools powering Jupyter MCP Server.\n\n## 🏁 Getting Started\n\nFor comprehensive setup instructions—including `Streamable HTTP` transport and advanced configuration—check out [our documentation](https://jupyter-mcp-server.datalayer.tech/). Or, get started quickly with `JupyterLab` and `stdio` transport here below.\n\n### 1. Set Up Your Environment\n\n```bash\npip install jupyterlab==4.4.1 jupyter-collaboration==4.0.2 ipykernel\npip uninstall -y pycrdt datalayer_pycrdt\npip install datalayer_pycrdt==0.12.17\n```\n\n### 2. Start JupyterLab\n\n```bash\n# make jupyterlab\njupyter lab --port 8888 --IdentityProvider.token MY_TOKEN --ip 0.0.0.0\n```\n\n### 3. Configure Your Preferred MCP Client\n\n> [!NOTE]\n>\n> Ensure the `port` of the `DOCUMENT_URL` and `RUNTIME_URL` match those used in the `jupyter lab` command.\n>\n> The `DOCUMENT_ID` which is the path to the notebook you want to connect to, should be relative to the directory where JupyterLab was started.\n>\n> In a basic setup, `DOCUMENT_URL` and `RUNTIME_URL` are the same. `DOCUMENT_TOKEN`, and `RUNTIME_TOKEN` are also the same and is actually the Jupyter Token.\n\n#### MacOS and Windows\n\n```json\n{\n  \"mcpServers\": {\n    \"jupyter\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"DOCUMENT_URL\",\n        \"-e\",\n        \"DOCUMENT_TOKEN\",\n        \"-e\",\n        \"DOCUMENT_ID\",\n        \"-e\",\n        \"RUNTIME_URL\",\n        \"-e\",\n        \"RUNTIME_TOKEN\",\n        \"datalayer/jupyter-mcp-server:latest\"\n      ],\n      \"env\": {\n        \"DOCUMENT_URL\": \"http://host.docker.internal:8888\",\n        \"DOCUMENT_TOKEN\": \"MY_TOKEN\",\n        \"DOCUMENT_ID\": \"notebook.ipynb\",\n        \"RUNTIME_URL\": \"http://host.docker.internal:8888\",\n        \"RUNTIME_TOKEN\": \"MY_TOKEN\"\n      }\n    }\n  }\n}\n```\n\n#### Linux\n\n```json\n{\n  \"mcpServers\": {\n    \"jupyter\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"DOCUMENT_URL\",\n        \"-e\",\n        \"DOCUMENT_TOKEN\",\n        \"-e\",\n        \"DOCUMENT_ID\",\n        \"-e\",\n        \"RUNTIME_URL\",\n        \"-e\",\n        \"RUNTIME_TOKEN\",\n        \"--network=host\",\n        \"datalayer/jupyter-mcp-server:latest\"\n      ],\n      \"env\": {\n        \"DOCUMENT_URL\": \"http://localhost:8888\",\n        \"DOCUMENT_TOKEN\": \"MY_TOKEN\",\n        \"DOCUMENT_ID\": \"notebook.ipynb\",\n        \"RUNTIME_URL\": \"http://localhost:8888\",\n        \"RUNTIME_TOKEN\": \"MY_TOKEN\"\n      }\n    }\n  }\n}\n```\n\nFor detailed instructions on configuring various MCP clients—including [Claude Desktop](https://jupyter-mcp-server.datalayer.tech/clients/claude_desktop), [VS Code](https://jupyter-mcp-server.datalayer.tech/clients/vscode), [Cursor](https://jupyter-mcp-server.datalayer.tech/clients/cursor), [Cline](https://jupyter-mcp-server.datalayer.tech/clients/cline), and [Windsurf](https://jupyter-mcp-server.datalayer.tech/clients/windsurf) — see the [Clients documentation](https://jupyter-mcp-server.datalayer.tech/clients).\n\n## 📚 Resources\n\nLooking for blog posts, videos, or other materials about Jupyter MCP Server?\n\n👉 Visit the [Resources section](https://jupyter-mcp-server.datalayer.tech/resources).\n",
+  "category": "AI Tools",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "datalayer-jupyter-mcp-server-docker-macos-windows": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "DOCUMENT_URL",
+          "-e",
+          "DOCUMENT_TOKEN",
+          "-e",
+          "DOCUMENT_ID",
+          "-e",
+          "RUNTIME_URL",
+          "-e",
+          "RUNTIME_TOKEN",
+          "datalayer/jupyter-mcp-server:latest"
+        ],
+        "env": {
+          "DOCUMENT_URL": "http://host.docker.internal:8888",
+          "DOCUMENT_TOKEN": "MY_TOKEN",
+          "DOCUMENT_ID": "notebook.ipynb",
+          "RUNTIME_URL": "http://host.docker.internal:8888",
+          "RUNTIME_TOKEN": "MY_TOKEN"
+        },
+        "docker_image": "datalayer/jupyter-mcp-server:latest"
+      },
+      "datalayer-jupyter-mcp-server-docker-linux": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "DOCUMENT_URL",
+          "-e",
+          "DOCUMENT_TOKEN",
+          "-e",
+          "DOCUMENT_ID",
+          "-e",
+          "RUNTIME_URL",
+          "-e",
+          "RUNTIME_TOKEN",
+          "--network=host",
+          "datalayer/jupyter-mcp-server:latest"
+        ],
+        "env": {
+          "DOCUMENT_URL": "http://localhost:8888",
+          "DOCUMENT_TOKEN": "MY_TOKEN",
+          "DOCUMENT_ID": "notebook.ipynb",
+          "RUNTIME_URL": "http://localhost:8888",
+          "RUNTIME_TOKEN": "MY_TOKEN"
+        },
+        "docker_image": "datalayer/jupyter-mcp-server:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "datalayer",
+    "repo": "jupyter-mcp-server",
+    "url": "https://github.com/datalayer/jupyter-mcp-server",
+    "name": "datalayer__jupyter-mcp-server",
+    "path": null,
+    "stars": 651,
+    "contributors": 11,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "05c20e69665dad47900f1be236ca1e874ff07856"
+  },
+  "programming_language": "Jupyter Notebook",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:05.065Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "jupyter-kernel-client",
+      "importance": 9
+    },
+    {
+      "name": "jupyter-nbmodel-client",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    },
+    {
+      "name": "click",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n# Copyright (c) 2023-2024 Datalayer, Inc.\n#\n# BSD 3-Clause License\n\n[build-system]\nrequires = [\"hatchling~=1.21\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"jupyter_mcp_server\"\nauthors = [{ name = \"Datalayer\", email = \"info@datalayer.io\" }]\ndynamic = [\"version\"]\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nkeywords = [\"Jupyter\"]\nclassifiers = [\n  \"Intended Audience :: Developers\",\n  \"Intended Audience :: System Administrators\",\n  \"License :: OSI Approved :: BSD License\",\n  \"Programming Language :: Python\",\n  \"Programming Language :: Python :: 3\",\n]\ndependencies = [\n    \"jupyter-kernel-client>=0.7.3\",\n    \"jupyter-nbmodel-client>=0.13.5\",\n    \"mcp[cli]>=1.10.1\",\n    \"pydantic\",\n    \"uvicorn\",\n    \"click\",\n    \"fastapi\"\n]\n\n[project.optional-dependencies]\ntest = [\n    \"ipykernel\", \n    \"jupyter_server>=1.6,<3\", \n    \"pytest>=7.0\", \n    \"pytest-asyncio\",\n    \"jupyterlab==4.4.1\",\n    \"jupyter-collaboration==4.0.2\",\n    \"datalayer_pycrdt==0.12.17\"\n]\nlint = [\"mdformat>0.7\", \"mdformat-gfm>=0.3.5\", \"ruff\"]\ntyping = [\"mypy>=0.990\"]\n\n[project.scripts]\njupyter-mcp-server = \"jupyter_mcp_server.server:server\"\n\n[project.license]\nfile = \"LICENSE\"\n\n[project.urls]\nHome = \"https://github.com/datalayer/jupyter-mcp-server\"\n\n[tool.hatch.version]\npath = \"jupyter_mcp_server/__version__.py\"\n\n[tool.pytest.ini_options]\nfilterwarnings = [\n  \"error\",\n  \"ignore:There is no current event loop:DeprecationWarning\",\n  \"module:make_current is deprecated:DeprecationWarning\",\n  \"module:clear_current is deprecated:DeprecationWarning\",\n  \"module:Jupyter is migrating its paths to use standard platformdirs:DeprecationWarning\",\n]\n\n[tool.mypy]\ncheck_untyped_defs = true\ndisallow_incomplete_defs = true\nno_implicit_optional = true\npretty = true\nshow_error_context = true\nshow_error_codes = true\nstrict_equality = true\nwarn_unused_configs = true\nwarn_unused_ignores = true\nwarn_redundant_casts = true\n\n[tool.ruff]\ntarget-version = \"py310\"\nline-length = 100\n\n[tool.ruff.lint]\nselect = [\n  \"A\",\n  \"B\",\n  \"C\",\n  \"E\",\n  \"F\",\n  \"FBT\",\n  \"I\",\n  \"N\",\n  \"Q\",\n  \"RUF\",\n  \"S\",\n  \"T\",\n  \"UP\",\n  \"W\",\n  \"YTT\",\n]\nignore = [\n  # FBT001 Boolean positional arg in function definition\n  \"FBT001\",\n  \"FBT002\",\n  \"FBT003\",\n]\n\n[tool.ruff.lint.per-file-ignores]\n# S101 Use of `assert` detected\n\"jupyter_mcp_server/tests/*\" = [\"S101\"]\n\n\n=== docs/package.json ===\n{\n  \"name\": \"@datalayer/jupyter-mcp-server-docs\",\n  \"version\": \"0.0.1\",\n  \"private\": true,\n  \"scripts\": {\n    \"docusaurus\": \"docusaurus\",\n    \"start\": \"docusaurus start\",\n    \"build\": \"docusaurus build\",\n    \"swizzle\": \"docusaurus swizzle\",\n    \"deploy\": \"docusaurus deploy\",\n    \"clear\": \"docusaurus clear\",\n    \"serve\": \"docusaurus serve\",\n    \"write-translations\": \"docusaurus write-translations\",\n    \"write-heading-ids\": \"docusaurus write-heading-ids\"\n  },\n  \"dependencies\": {\n    \"@datalayer/icons-react\": \"^1.0.0\",\n    \"@datalayer/primer-addons\": \"^1.0.3\",\n    \"@docusaurus/core\": \"^3.5.2\",\n    \"@docusaurus/preset-classic\": \"^3.5.2\",\n    \"@docusaurus/theme-live-codeblock\": \"^3.5.2\",\n    \"@docusaurus/theme-mermaid\": \"^3.5.2\",\n    \"@mdx-js/react\": \"^3.0.1\",\n    \"@primer/react-brand\": \"^0.51.0\",\n    \"clsx\": \"^2.1.1\",\n    \"docusaurus-lunr-search\": \"^3.5.0\",\n    \"react\": \"18.3.1\",\n    \"react-calendly\": \"^4.1.0\",\n    \"react-dom\": \"18.3.1\",\n    \"react-modal-image\": \"^2.6.0\"\n  },\n  \"browserslist\": {\n    \"production\": [\n      \">0.5%\",\n      \"not dead\",\n      \"not op_mini all\"\n    ],\n    \"development\": [\n      \"last 1 chrome version\",\n      \"last 1 firefox version\",\n      \"last 1 safari version\"\n    ]\n  }\n}\n"
+}

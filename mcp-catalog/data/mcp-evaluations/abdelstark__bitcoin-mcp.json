@@ -1,0 +1,119 @@
+{
+  "name": "abdelstark__bitcoin-mcp",
+  "display_name": "bitcoin-mcp",
+  "description": "Bitcoin & Lightning Network MCP Server.",
+  "author": {
+    "name": "AbdelStark"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "bitcoin-mcp@latest"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/abdelstark-bitcoin-mcp-badge.png)](https://mseep.ai/app/abdelstark-bitcoin-mcp)\n\n<div align=\"center\">\n\n<a href=\"https://github.com/AbdelStark/bitcoin-mcp/actions/workflows/ci.yml\"><img alt=\"GitHub Workflow Status\" src=\"https://img.shields.io/github/actions/workflow/status/AbdelStark/bitcoin-mcp/ci.yml?style=for-the-badge\" height=30></a>\n<a href=\"https://bitcoin.org/\"> <img alt=\"Bitcoin\" src=\"https://img.shields.io/badge/Bitcoin-000?style=for-the-badge&logo=bitcoin&logoColor=white\" height=30></a>\n<a href=\"https://modelcontextprotocol.com/\"> <img alt=\"MCP\" src=\"https://img.shields.io/badge/MCP-000?style=for-the-badge&logo=modelcontextprotocol&logoColor=white\" height=30></a>\n\n</div>\n\n# ₿itcoin & Lightning Network MCP Server\n\n<div align=\"center\">\n  <h3>\n    <a href=\"abdelstark.github.io/bitcoin-mcp/\">\n      Documentation\n    </a>\n    <span> | </span>\n    <a href=\"https://abdelstark.github.io/bitcoin-mcp/docs/integration/claude-desktop\">\n      Try with Claude\n    </a>\n    <span> | </span>\n    <a href=\"https://abdelstark.github.io/bitcoin-mcp/docs/integration/goose\">\n      Try with Goose\n    </a>\n  </h3>\n</div>\n\n<div align=\"center\">\n<a href=\"https://smithery.ai/server/@AbdelStark/bitcoin-mcp\"><img alt=\"Smithery Badge\" src=\"https://smithery.ai/badge/@AbdelStark/bitcoin-mcp\"></a>\n<a href=\"https://www.npmjs.com/package/bitcoin-mcp\"><img alt=\"NPM Version\" src=\"https://img.shields.io/npm/v/bitcoin-mcp\"></a>\n</div>\n\n## Overview\n\nA Model Context Protocol (MCP) server that enables AI models to interact with Bitcoin and Lightning Network, allowing them to generate keys, validate addresses, decode transactions, query the blockchain, and more.\n\n## 🎮 Demo\n\n| Claude Demo [Video](https://github.com/user-attachments/assets/ce7a2665-c276-4a54-a727-b29dd911f8af)         | Goose Demo [Video](https://github.com/user-attachments/assets/7c1e4a05-51cf-435f-bd34-39e8fba6635e) |\n| ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |\n| <img src=\"docs/static/img/bitcoin-mcp-claude-desktop-screenshot.png\" alt=\"Claude Desktop Demo\" width=\"400\"/> | <img src=\"docs/static/img/bitcoin-mcp-goose-screenshot.png\" alt=\"Goose Demo\" width=\"400\"/>          |\n\n## 💼 Table of Contents\n\n- [₿itcoin \\& Lightning Network MCP Server](#itcoin--lightning-network-mcp-server)\n  - [Overview](#overview)\n  - [🎮 Demo](#-demo)\n  - [💼 Table of Contents](#-table-of-contents)\n  - [🔧 Features](#-features)\n  - [🔑 Claude Desktop Integration](#-claude-desktop-integration)\n    - [Testing the Claude Desktop Integration](#testing-the-claude-desktop-integration)\n  - [🦆 Goose Integration](#-goose-integration)\n    - [Using STDIO (Local Extension)](#using-stdio-local-extension)\n      - [Using SSE (Remote Extension)](#using-sse-remote-extension)\n  - [📦 Development Setup](#-development-setup)\n    - [Lightning Network Configuration (Optional)](#lightning-network-configuration-optional)\n  - [📦 Available Tools](#-available-tools)\n  - [🚨 Error Handling](#-error-handling)\n  - [🤝 Contributing](#-contributing)\n  - [📝 License](#-license)\n\n## 🔧 Features\n\n- **Key Generation**: Create new Bitcoin key pairs — including address, public key, and private key (WIF).\n- **Address Validation**: Validate the correctness of a Bitcoin address.\n- **Transaction Decoding**: Parse a raw Bitcoin transaction and display its details in a human-readable format.\n- **Blockchain Queries**:\n  - **Latest Block**: Retrieve details about the most recent block (hash, height, timestamp, transaction count, etc.).\n  - **Transaction Details**: Fetch detailed information about a transaction using its TXID.\n- **Lightning Network**:\n  - **Invoice Decoding**: Parse a BOLT11 Lightning invoice and display human-readable information.\n  - **Payment**: Pay a Lightning invoice directly from your LNBits wallet.\n\n## 🔑 Claude Desktop Integration\n\nTo use the Bitcoin MCP server with Claude Desktop (Anthropic's desktop app for Claude), follow these steps:\n\n1. **Download and Install Claude Desktop:** Visit the official Claude Desktop downloads page and get the app for your operating system (macOS or Windows) ([Installing Claude for Desktop | Anthropic Help Center](https://support.anthropic.com/en/articles/10065433-installing-claude-for-desktop#:~:text=1,page)). Install the app and ensure you're using the latest version (you can check for updates in the app menu).\n\n2. **Configure Claude Desktop to use the Bitcoin MCP Server:** Open the Claude Desktop configuration file (it's created when you first edit settings in Claude Desktop):\n\n   - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - **Windows:** `%APPDATA%\\Claude\\claude_desktop_config.json`  \n     Add an entry for the Bitcoin MCP server in this JSON config under the `\"mcpServers\"` section. For example:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"bitcoin-mcp\": {\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"bitcoin-mcp@latest\"]\n       }\n     }\n   }\n   ```\n\n   In the snippet above, `\"bitcoin-mcp\"` is an identifier for the server (you can name it whatever you want). The `command` is set to run the `npx` command, and `args` points to the path of your Bitcoin MCP server script or the command to run the server.\n\n3. **Restart Claude Desktop:** Save the `claude_desktop_config.json` file and then **close and reopen Claude Desktop**. On the next launch, Claude will automatically start the Bitcoin MCP server as configured. If Claude Desktop was running, you need to restart it for the changes to take effect.\n\n### Testing the Claude Desktop Integration\n\nOnce Claude Desktop is restarted, you can test whether the Bitcoin MCP server is working correctly:\n\n- **Ask Claude a sample question related to Bitcoin.** For example, try asking: _\"What's the latest block on the Bitcoin network?\"_ If the integration is successful, Claude's response should include the latest block fetched via the MCP server, rather than an \"I don't know\" or a generic answer. You can also try other queries like _\"Give me information about the transaction with TXID abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890.\"_ Claude should use the MCP server's tools to retrieve the data and answer your query.\n\n- **Verify the response:** Claude should return a detailed answer (e.g. the latest block on the Bitcoin network) without errors. If you get an error message or no useful response, the MCP server might not be connected properly.\n\n- **Check Claude's logs (if needed):** Claude Desktop provides log files that can help debug MCP integrations. If the tool isn't responding, check the log files in:\n  - **macOS:** `~/Library/Logs/Claude/`\n  - **Windows:** `%APPDATA%\\Claude\\logs\\`  \n    Look for `mcp.log` for general MCP connection messages, and a file named `mcp-server-bitcoin-mcp.log` (or with whatever name you used) for the MCP server's output/errors. These logs will show if the server started up or if there were any errors (such as a wrong path or exceptions in the server). If you see errors, fix the configuration or environment as needed, then restart Claude Desktop and test again.\n\n## 🦆 Goose Integration\n\nGoose is an open-source AI agent framework by Block that supports extensions via the Model Context Protocol. You can integrate the Bitcoin MCP server as a Goose extension to allow Goose to interact with the Bitcoin blockchain. Goose supports two modes of integration for MCP servers: running the server as a local process (STDIO) or connecting to it as a remote service via Server-Sent Events (SSE). Below are instructions for both methods:\n\n### Using STDIO (Local Extension)\n\nThis method runs the Bitcoin MCP server locally as a subprocess of Goose, communicating through standard input/output.\n\n1. **Add a new extension in Goose:** Open Goose's configuration interface. You can do this via the command line by running `goose configure`, or in the Goose Desktop app by going to **Settings > Extensions**. From the menu, choose **\"Add Extension.\"** ([Using Extensions | goose](https://block.github.io/goose/docs/getting-started/using-extensions/#adding-extensions#:~:text=1))\n\n2. **Choose the extension type – Command-Line Extension:** When prompted for the type of extension, select **Command-Line Extension** (in the CLI menu or UI) so that Goose knows it should launch a local command ([Using Extensions | goose](https://block.github.io/goose/docs/getting-started/using-extensions/#adding-extensions#:~:text=3,extension%20you%E2%80%99d%20like%20to%20add)) (as opposed to a built-in or remote extension).\n\n3. **Enter the extension details:** Provide a name and command for the Bitcoin MCP server:\n\n   - **Name:** You can call it \"bitcoin\", or any identifier (this will be how you refer to the extension).\n   - **Command:** Specify how to run the MCP server. For example, if you have the Python script, enter the command to run it. In the CLI configurator, it might ask \"What command should be run?\" – you would enter:\n\n     ```bash\n     npx -y bitcoin-mcp@latest\n     ```\n\n     This tells Goose to launch the Bitcoin MCP server ([GitHub - AbdelStark/bitcoin-mcp: Bitcoin MCP Server](https://github.com/AbdelStark/bitcoin-mcp)). (Make sure to use the correct path to your server script or the correct command to run the server, just like in the Claude config.)\n\n   - You typically do not need to add any arguments beyond the script path (unless your server requires special flags). The above command uses the default STDIO transport, which Goose expects for a command-line extension. (In the Goose config file, this would correspond to an entry with `cmd: \"npx\"` and `args: [\"-y\", \"bitcoin-mcp@latest\"]`, with `type: stdio` indicating standard I/O mode ([Using Extensions | goose](https://block.github.io/goose/docs/getting-started/using-extensions/#adding-extensions#:~:text=extensions%3A%20fetch%3A%20name%3A%20GitHub%20cmd%3A,%7D%20type%3A%20stdio)).)\n\n4. **Finalize and enable:** Complete the extension addition. Goose will add this new extension to its configuration (usually `~/.config/goose/config.yaml`). Ensure the extension is **enabled** (if using the CLI wizard, it should be enabled by default once added; in the Goose Desktop app, you can check the Extensions list and toggle it on if it isn't already ([Using Extensions | goose](https://block.github.io/goose/docs/getting-started/using-extensions/#:~:text=%E2%97%87%20%20What%20would%20you,%E2%94%82%20%20%E2%97%BB%20fetch%20%E2%94%94)) ([Using Extensions | goose](https://block.github.io/goose/docs/getting-started/using-extensions/#:~:text=%E2%94%82%20%20%E2%97%BE%20developer%20%E2%94%82,%E2%97%BB%20fetch%20%E2%94%94))).\n\n5. **Start a Goose session with the new extension:** You can now use the extension in Goose. If you're running Goose via CLI, start a session that includes the extension by running:\n\n   ```bash\n   goose session --with-extension \"bitcoin\"\n   ```\n\nreplacing \"bitcoin\" with whatever name you gave the extension ([Using Extensions | goose](https://block.github.io/goose/docs/getting-started/using-extensions/#:~:text=Starting%20a%20Session%20with%20Extensions)). (This ensures the session loads the extension. Alternatively, if the extension is enabled globally, Goose Desktop or CLI will automatically have it available in all sessions.)\n\n#### Using SSE (Remote Extension)\n\nThis method connects Goose to an already-running MCP server via an HTTP SSE stream. Use this if you want to run the Bitcoin MCP server as a standalone service (possibly on another machine or just independently of Goose).\n\n1. **Launch the MCP server as a standalone service:** Run the Bitcoin MCP server so that it listens for connections. In practice, this means the server needs to be started in a mode that serves an HTTP endpoint for MCP. For example, you might run the server with a specific command or option to listen on a port (such as using an MCP library's built-in web server capabilities or running under a web framework). Ensure the server is reachable at a known URL (e.g., `http://localhost:9000`) and supports the MCP protocol over SSE.\n\n2. **Add a new extension in Goose (Remote):** As before, run `goose configure` or use the Goose UI to **Add Extension** ([Using Extensions | goose](https://block.github.io/goose/docs/getting-started/using-extensions/#adding-extensions#:~:text=1)). This time, choose **Remote Extension** when asked for the type of extension ([Using Extensions | goose](https://block.github.io/goose/docs/getting-started/using-extensions/#adding-extensions#:~:text=3,extension%20you%E2%80%99d%20like%20to%20add)). This tells Goose that it will connect to an external server via SSE.\n\n3. **Enter the remote extension details:** Give the extension a name (e.g., \"bitcoin\") and provide the server's URL. For the **URL**, enter the base address where the MCP server is running. For instance, if your server is listening on port 9000 on your local machine, you might enter `http://localhost:9000`. Goose will attempt to connect to the MCP server's SSE endpoint at that address. (Goose uses the standard MCP SSE path, which by convention is under the `/mcp/sse` route on the server, you usually just need to supply the host and port, and Goose handles the rest.)\n\n4. **Enable the extension:** After adding the remote extension, ensure it's enabled in Goose's settings (just like in the STDIO case). Only one of the STDIO or SSE extension (with the same tools) needs to be enabled – if you accidentally enable both a local and remote version of the same server, you may want to disable one to avoid confusion.\n\n**Using the Bitcoin MCP extension in Goose:** Once the extension is set up (via either method above) and enabled, you can interact with Goose and query Bitcoin data through it. In a new Goose chat or session, simply ask questions as you normally would. Goose will recognize when to use the Bitcoin MCP tools to fulfill your request. For example:\n\n- _\"What's the latest Bitcoin block?\"_\n- _\"Give me information about the transaction with TXID abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890.\"_\n\nWhen you ask these questions, Goose will invoke the MCP server's tools and return the answer (e.g., the latest Bitcoin block information). You should see Goose responding with up-to-date information pulled from the Bitcoin blockchain via the MCP server.\n\nIf Goose does not seem to use the extension (for instance, if it responds that it cannot find the information), make sure the extension is enabled and that the server is running (in SSE mode for remote). You can also run Goose's CLI with verbose logging to see if it attempted to call the extension. Generally, if configured correctly, Goose will automatically discover the MCP server's capabilities and use them when relevant.\n\n**Further Resources:** For more details on Goose extensions and the MCP, refer to the official Goose documentation ([Using Extensions | goose](https://block.github.io/goose/docs/getting-started/using-extensions/#adding-extensions#:~:text=MCP%20Server%20Directory)). The docs include a list of built-in and community extensions and explain how MCP servers integrate into Goose. You can also find a directory of available MCP servers and additional configuration tips in the Goose docs and the Model Context Protocol documentation. This can help if you want to explore more extensions or develop your own.\n\n## 📦 Development Setup\n\nFind the setup instructions in the [Development Setup](https://abdelstark.github.io/bitcoin-mcp/docs/getting-started/development-setup) guide.\n\n### Lightning Network Configuration (Optional)\n\nTo use Lightning Network features, you'll need to configure LNBits connection details. These are optional and only required if you plan to use the Lightning Network tools.\n\n```json\n{\n  \"lnbitsUrl\": \"https://demo.lnbits.com\",  \n  \"lnbitsAdminKey\": \"your_admin_key\",      // Required for making payments\n  \"lnbitsReadKey\": \"your_read_key\"         // Required for wallet information\n}\n```\n\nYou can obtain these values by:\n1. Creating an account at [LNBits](https://lnbits.com/)\n2. Creating a new wallet\n3. Going to API info to find your API keys\n\n## 📦 Available Tools\n\nFind the available tools in the [API Reference](https://abdelstark.github.io/bitcoin-mcp/docs/api/generate-key) guide.\n\n## 🚨 Error Handling\n\nThe server employs custom error types to handle Bitcoin operations and blockchain queries. Detailed error messages are logged using Pino and included in client responses for easier debugging.\n\n## 🤝 Contributing\n\nContributions and feature requests are welcome! Feel free to submit pull requests or open issues on GitHub.\n\n## 📝 License\n\nThis project is licensed under the [MIT License](LICENSE).\n",
+  "category": "Finance",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bitcoin-mcp": {
+        "command": "npx",
+        "args": ["-y", "bitcoin-mcp@latest"],
+        "env": {}
+      },
+      "bitcoin-mcp-stdio": {
+        "command": "npx",
+        "args": ["-y", "bitcoin-mcp@latest"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "AbdelStark",
+    "repo": "bitcoin-mcp",
+    "url": "https://github.com/AbdelStark/bitcoin-mcp",
+    "name": "bitcoin-mcp",
+    "path": null,
+    "stars": 56,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "0bedf2053d6ac9a3d6ec3860582736fcd3589658"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:41.594Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "bitcoinjs-lib",
+      "importance": 9
+    },
+    {
+      "name": "bolt11-decoder",
+      "importance": 8
+    },
+    {
+      "name": "ecpair",
+      "importance": 8
+    },
+    {
+      "name": "tiny-secp256k1",
+      "importance": 8
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "node-fetch",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "pino",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "pino-pretty",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"bitcoin-mcp\",\n  \"version\": \"0.0.6\",\n  \"description\": \"A Model Context Protocol server for interacting with Bitcoin.\",\n  \"type\": \"module\",\n  \"main\": \"./build/index.js\",\n  \"types\": \"./build/index.d.ts\",\n  \"bin\": {\n    \"bitcoin-mcp\": \"./build/cli.js\"\n  },\n  \"exports\": {\n    \".\": {\n      \"types\": \"./build/index.d.ts\",\n      \"import\": \"./build/index.js\"\n    }\n  },\n  \"files\": [\n    \"build\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"engines\": {\n    \"node\": \">=18\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node build/cli.js\",\n    \"dev\": \"tsx watch src/cli.ts\",\n    \"prepublishOnly\": \"npm run build\",\n    \"lint\": \"eslint . --ext .ts --cache\",\n    \"lint:fix\": \"eslint . --ext .ts --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\"\",\n    \"format:check\": \"prettier --check \\\"src/**/*.ts\\\"\",\n    \"test\": \"NODE_OPTIONS=--experimental-vm-modules jest\",\n    \"test:watch\": \"jest --watch\",\n    \"test:coverage\": \"NODE_OPTIONS=--experimental-vm-modules jest --coverage\",\n    \"clean\": \"rimraf build coverage .eslintcache\",\n    \"prebuild\": \"npm run clean\",\n    \"prepare\": \"husky install\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"modelcontextprotocol\",\n    \"server\",\n    \"nostr\",\n    \"claude\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"bitcoinjs-lib\": \"6.1.7\",\n    \"cors\": \"^2.8.5\",\n    \"dotenv\": \"^16.4.5\",\n    \"ecpair\": \"^2.1.0\",\n    \"express\": \"^4.18.3\",\n    \"husky\": \"^9.1.7\",\n    \"node-fetch\": \"^3.3.2\",\n    \"pino\": \"^8.19.0\",\n    \"pino-pretty\": \"^10.3.1\",\n    \"tiny-secp256k1\": \"^2.2.3\",\n    \"tsx\": \"^4.7.1\",\n    \"typescript\": \"^5.4.2\",\n    \"zod\": \"^3.24.0\",\n    \"bolt11-decoder\": \"^1.2.6\"\n  },\n  \"devDependencies\": {\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/debug\": \"^4.1.12\",\n    \"@types/express\": \"^4.17.21\",\n    \"@types/jest\": \"^29.5.12\",\n    \"@types/node\": \"^20.11.24\",\n    \"@types/node-fetch\": \"^2.6.11\",\n    \"@types/pino\": \"^7.0.5\",\n    \"@typescript-eslint/eslint-plugin\": \"^7.1.0\",\n    \"@typescript-eslint/parser\": \"^7.1.0\",\n    \"eslint\": \"^8.57.0\",\n    \"eslint-plugin-jest\": \"^27.9.0\",\n    \"husky\": \"^9.0.11\",\n    \"jest\": \"^29.7.0\",\n    \"lint-staged\": \"^15.2.2\",\n    \"prettier\": \"^3.2.5\",\n    \"rimraf\": \"^5.0.10\",\n    \"ts-jest\": \"^29.1.2\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n\n\n=== docs/package.json ===\n{\n  \"name\": \"docs\",\n  \"version\": \"0.0.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"docusaurus\": \"docusaurus\",\n    \"start\": \"docusaurus start\",\n    \"build\": \"docusaurus build\",\n    \"swizzle\": \"docusaurus swizzle\",\n    \"deploy\": \"docusaurus deploy\",\n    \"clear\": \"docusaurus clear\",\n    \"serve\": \"docusaurus serve\",\n    \"write-translations\": \"docusaurus write-translations\",\n    \"write-heading-ids\": \"docusaurus write-heading-ids\",\n    \"typecheck\": \"tsc\"\n  },\n  \"dependencies\": {\n    \"@docusaurus/core\": \"3.7.0\",\n    \"@docusaurus/preset-classic\": \"3.7.0\",\n    \"@mdx-js/react\": \"^3.0.0\",\n    \"clsx\": \"^2.0.0\",\n    \"prism-react-renderer\": \"^2.3.0\",\n    \"react\": \"^19.0.0\",\n    \"react-dom\": \"^19.0.0\"\n  },\n  \"devDependencies\": {\n    \"@docusaurus/module-type-aliases\": \"3.7.0\",\n    \"@docusaurus/tsconfig\": \"3.7.0\",\n    \"@docusaurus/types\": \"3.7.0\",\n    \"typescript\": \"~5.6.2\"\n  },\n  \"browserslist\": {\n    \"production\": [\n      \">0.5%\",\n      \"not dead\",\n      \"not op_mini all\"\n    ],\n    \"development\": [\n      \"last 3 chrome version\",\n      \"last 3 firefox version\",\n      \"last 5 safari version\"\n    ]\n  },\n  \"engines\": {\n    \"node\": \">=18.0\"\n  }\n}\n"
+}

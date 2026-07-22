@@ -1,0 +1,90 @@
+{
+  "name": "kukapay__etf-flow-mcp",
+  "display_name": "etf-flow-mcp",
+  "description": "An MCP server that delivers crypto ETF flow data to power AI agents' decision-making.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "etf-flow-mcp"],
+    "env": {
+      "COINGLASS_API_KEY": "${user_config.coinglass_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "coinglass_api_key": {
+      "type": "string",
+      "title": "CoinGlass API Key",
+      "description": "Your API key for accessing CoinGlass data. Obtain a key from CoinGlass.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# ETF Flow MCP\n\nAn MCP server that delivers crypto ETF flow data to power AI agents' decision-making.\n\n<a href=\"https://glama.ai/mcp/servers/@kukapay/etf-flow-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@kukapay/etf-flow-mcp/badge\" alt=\"etf-flow-mcp MCP server\" />\n</a>\n\n[![Discord](https://img.shields.io/discord/1353556181251133481?cacheSeconds=3600)](https://discord.gg/aRnuu2eJ)\n![Python](https://img.shields.io/badge/Python-3.10%2B-blue)\n![License](https://img.shields.io/badge/License-MIT-green)\n![Status](https://img.shields.io/badge/Status-Active-brightgreen)\n\n## Features\n\n- **Unified Tool**: The `get_etf_flow` tool dynamically fetches historical ETF flow data for BTC or ETH.\n- **Markdown Table Output**: Leverages pivot tables to present data with ETF tickers as columns, dates as rows, and a total column for summed flows.\n- **Prompt Guidance**: Includes a prompt (`etf_flow_prompt`) to streamline LLM interactions for user-friendly queries.\n\n## Prerequisites\n\n- **Python**: Version 3.10 or higher.\n- **uv**: A fast Python package and project manager ([install instructions](https://github.com/astral-sh/uv)).\n- **CoinGlass API Key**: Obtain a key from [CoinGlass](https://www.coinglass.com/).\n- **Claude Desktop**: Optional, for interactive querying.\n- **Git**: For cloning the repository.\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/etf-flow-mcp.git\n   cd etf-flow-mcp\n   ```\n\n2. **Set Up with uv**:\n   Install dependencies using `uv`:\n   ```bash\n   uv sync\n   ```\n\n## Usage\n\n### Integrating with Claude Desktop\n\n1. **Configure Claude Desktop**:\n   Add the server to `claude_desktop_config.json` (located in `~/Library/Application Support/Claude` on macOS or `%APPDATA%\\Claude` on Windows):\n   ```json\n   {\n     \"mcpServers\": {\n       \"etf-flow-mcp\": {\n         \"command\": \"uv\",\n         \"args\": [\"--directory\", \"/absolute/path/to/etf-flow-mcp\", \"run\", \"etf-flow-mcp\"],\n         \"env\": { \"COINGLASS_API_KEY\": \"your_coinglass_api_key_here\" }\n       }\n     }\n   }\n   ```\n   Replace `/absolute/path/to/etf-flow-mcp/cli.py` with the full path to `cli.py`.\n\n2. **Restart Claude Desktop**:\n   Verify the hammer icon appears in the Claude Desktop UI to confirm the server is loaded.\n\n3. **Query Examples**:\n   - \"Show me the latest BTC ETF flow data in a table\"\n   - \"Get the ETH ETF flow history\"\n\n### Example Output\n\n- **BTC ETF Flow**:\n  ```markdown\n  | Date       | GBTC      | IBIT      | FBTC      | ARKB      | BITB      | BTCO     | HODL     | BRRR     | EZBC     | BTCW     | Total     |\n  |------------|-----------|-----------|-----------|-----------|-----------|----------|----------|----------|----------|----------|-----------|\n  | 2025-04-24 | 0         | 327300000 | 0         | 97700000  | 10200000  | 7750000  | 0        | 0        | 0        | 0        | 442200000 |\n  | 2025-04-23 | 0         | 643200000 | 124400000 | 129500000 | -15200000 | 0        | 5300000  | 0        | 0        | 0        | 917700000 |\n  | 2025-04-22 | 65100000  | 193500000 | 253800000 | 267100000 | 76700000  | 18300000 | 6500000  | 0        | 10600000 | 0        | 912700000 |\n  | 2025-04-21 | 36600000  | 41600000  | 88100000  | 116100000 | 45100000  | 0        | 11700000 | 0        | 10100000 | 0        | 381300000 |\n  | 2025-04-18 | 0         | 0         | 0         | 0         | 0         | 0        | 0        | 0        | 0        | 0        | 0         |\n  ```\n\n- **ETH ETF Flow**:\n  ```markdown\n  | Date       | ETHE      | GETH     | ETHA      | ETHW     | FETH      | ETHV     | EZET     | CETH     | QETH     | Total     |\n  |------------|-----------|----------|-----------|----------|-----------|----------|----------|----------|----------|-----------|\n  | 2025-04-24 | -6600000  | 18300000 | 40000000  | 5100000  | 0         | 2600000  | 0        | 4100000  | 0        | 63550000  |\n  | 2025-04-23 | 0         | 6400000  | -30300000 | 0        | 0         | 0        | 0        | 0        | 0        | -23900000  |\n  | 2025-04-22 | 0         | 0        | 0         | 6100000  | 32700000  | 0        | 0        | 0        | 0        | 38800000  |\n  | 2025-04-21 | -25400000 | 0        | 0         | 0        | 0         | 0        | 0        | 0        | 0        | -25400000  |\n  | 2025-04-18 | 0         | 0        | 0         | 0        | 0         | 0        | 0        | 0        | 0        | 0         |\n  | 2025-04-17 | 0         | 0        | 0         | 0        | 0         | 0        | 0        | 0        | 0        | 0         |\n  ```\n\n## License\n\nThis project is licensed under the [MIT License](LICENSE).",
+  "category": "Finance",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "etf-flow-mcp": {
+        "command": "uv",
+        "args": ["--directory", "/absolute/path/to/etf-flow-mcp", "run", "etf-flow-mcp"],
+        "env": {
+          "COINGLASS_API_KEY": "your_coinglass_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "etf-flow-mcp",
+    "url": "https://github.com/kukapay/etf-flow-mcp",
+    "name": "etf-flow-mcp",
+    "path": null,
+    "stars": 4,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:14.331Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pandas",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": null
+}

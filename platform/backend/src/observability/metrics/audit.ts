@@ -30,7 +30,7 @@ export function initializeAuditMetrics(): void {
 }
 
 export function reportAuditWriteFailure(params: {
-  source: "http" | "auth";
+  source: "http" | "auth" | "mcp_tool";
   resourceType: string | null;
 }): void {
   if (!auditWriteFailuresTotal) return;

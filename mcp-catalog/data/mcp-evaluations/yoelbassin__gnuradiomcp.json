@@ -1,0 +1,82 @@
+{
+  "name": "yoelbassin__gnuradiomcp",
+  "display_name": "gnuradioMCP",
+  "description": "MCP server for GNU Radio",
+  "author": {
+    "name": "yoelbassin"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# GR-MCP: A gnuradio MCP Server\n\n[![Python Version](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/release/python-3130/)\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/yoelbassin/gnuradioMCP)](https://archestra.ai/mcp-catalog/yoelbassin__gnuradiomcp)\n\n\n**GNURadio MCP Server** is a modern, extensible Machine Control Protocol (MCP) server for [GNURadio](https://www.gnuradio.org/), enabling programmatic, automated, and AI-driven creation of GNURadio flowgraphs. Designed for seamless integration with Large Language Models (LLMs), automation frameworks, and custom clients, it empowers you to generate `.grc` files and control SDR workflows at scale.\n\n> **Why GNURadio MCP Server?**\n> - Automate SDR workflows and flowgraph generation\n> - Integrate with LLMs, bots, and custom tools\n> - Build, modify, and validate flowgraphs programmatically\n> - Save time and reduce manual errors in SDR prototyping\n\n\n## Features\n- 🌐 **MCP API**: Exposes a robust MCP interface for GNURadio\n- 🛠️ **Programmatic Flowgraph Creation**: Build, edit, and save `.grc` files from code or automation\n- 🤖 **LLM & Automation Ready**: Designed for AI and automation integration\n- 🧩 **Extensible**: Modular architecture for easy extension and customization\n- 📝 **Example Flowgraphs**: Includes ready-to-use `.grc` examples in the `misc/` directory\n- 🧪 **Tested**: Comprehensive unit tests with `pytest`\n\n\n## Quickstart\n\n### Requirements\n- Python >= 3.13\n- GNURadio (Tested with GNURadio Companion v3.10.12.0)\n- UV\n\n### Usage\n1. **Clone the repository**\n```bash\ngit clone https://github.com/yoelbassin/gr-mcp\n```\n\n2. [**Install GNURadio**](https://wiki.gnuradio.org/index.php/InstallingGR)\n\n3. **Set up a UV environment**\n```bash\ncd gr-mcp\nuv venv --system-site-packages\n```\n   > The `--system-site-packages` flag is required because GNURadio installs the `gnuradio` Python package globally.\n\n4. **Add the MCP server configuration to your client configuration.** For example, for Claude Desktop or Cursor:\n```json\n\"mcpServers\": {\n    \"gr-mcp\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/path/to/gr-mcp\",\n        \"run\",\n        \"main.py\"\n      ]\n    }\n  }\n```\n\n## Development\nInstall development dependencies and run tests with:\n```bash\npip install -e \".[dev]\"\npytest\n```\n\n\n## Project Status\n**In active development.** Core server functionality is available, but the API and features are evolving. Your feedback and contributions are highly valued!\n",
+  "category": "AI Tools",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gr-mcp": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/gr-mcp", "run", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "yoelbassin",
+    "repo": "gnuradioMCP",
+    "url": "https://github.com/yoelbassin/gnuradioMCP",
+    "name": "yoelbassin__gnuradiomcp",
+    "path": null,
+    "stars": 12,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "35067e9fec9809755fade445b2373445909d9b2e"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:06.696Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "mako",
+      "importance": 8
+    },
+    {
+      "name": "pyyaml",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"gnuradio-mcp\"\nversion = \"0.1.0\"\ndescription = \"A FastMCP server for gnuradio.\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"pydantic\",\n    \"fastmcp\",\n    # for gnuradio\n    \"mako\",\n    \"pyyaml\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest >= 7.0\",\n    \"pre-commit\"\n]\n\n[tool.pytest.ini_options]\n# Tell pytest where to find the package\npythonpath = [\"src\"]\n"
+}

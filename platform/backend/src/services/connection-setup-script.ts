@@ -1,8 +1,10 @@
 import {
   CLAUDE_CODE_CLIENT_ID,
+  CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
+  CLAUDE_CODE_PROXY_ENV_KEYS,
   CODEX_CLIENT_ID,
-  DEFAULT_APP_NAME,
   EXTERNAL_AGENT_ID_HEADER,
+  isDefaultBrandedAppName,
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
@@ -11,6 +13,10 @@ import type {
   ConnectionSetupPlatform,
   ConnectionSetupProxyAuth,
 } from "@/types";
+import {
+  buildClaudeCodeStartupGuardContext,
+  buildClaudeCodeStartupGuardInstallSection,
+} from "./claude-code-startup-guard";
 import { renderWindowsSetupScript } from "./connection-setup-script.windows";
 
 /**
@@ -290,9 +296,8 @@ function banner(ctx: SetupScriptContext): string {
   // A monospace rendition of the Archestra mark: a white tilted rounded bar
   // and dot on the terminal's dark field, echoing the real logo-icon.svg.
   // Block/quadrant glyphs (UTF-8) render as solid shapes in any modern terminal.
-  const logo =
-    ctx.appName === DEFAULT_APP_NAME
-      ? `   ╭──────────────────╮
+  const logo = isDefaultBrandedAppName(ctx.appName)
+    ? `   ╭──────────────────╮
    │                  │
    │        ▟██▙      │
    │        ████      │     ${ctx.appName}
@@ -301,7 +306,7 @@ function banner(ctx: SetupScriptContext): string {
    │      ▜██▛  ▜▛    │
    │                  │
    ╰──────────────────╯`
-      : `   ${ctx.appName}
+    : `   ${ctx.appName}
    Secure access to your AI tools`;
 
   const details = [
@@ -363,6 +368,11 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       if (ctx.skills) {
         steps.push(
           "The shared skills are installed for Claude Code — start `claude` and they load automatically.",
+        );
+      }
+      if (ctx.mcp || ctx.proxy || ctx.skills) {
+        steps.push(
+          "Open a new terminal (or `source` your shell profile) so the startup guard wrapper takes effect — it checks these remotes before every `claude` launch.",
         );
       }
       break;
@@ -441,12 +451,17 @@ function mergeJsonFileSnippet(params: {
     .map(([key, value]) => `export ${key}=${sh(value)}`)
     .join("\n");
 
+  // params.file is an internal constant like $HOME/.claude/settings.json and
+  // MUST render double-quoted: $HOME has to expand. sh()'s single quotes kept
+  // it literal, so mkdir dropped a junk ./'$HOME' dir in the cwd, the backup
+  // cp never matched, and on a machine without the config dir the python merge
+  // crashed and aborted the whole script under set -e.
   return `if command -v python3 >/dev/null 2>&1; then
-  mkdir -p "$(dirname ${sh(params.file)})"
+  mkdir -p "$(dirname "${params.file}")"
   # Back up once: a re-run must not overwrite the pristine pre-Archestra copy
   # with our already-modified file. The merge below is itself idempotent.
-  if [ -f ${sh(params.file)} ] && [ ! -f ${sh(`${params.file}.archestra-backup`)} ]; then
-    cp ${sh(params.file)} ${sh(`${params.file}.archestra-backup`)}
+  if [ -f "${params.file}" ] && [ ! -f "${params.file}.archestra-backup" ]; then
+    cp "${params.file}" "${params.file}.archestra-backup"
   fi
 ${indent(envAssignments, "  ")}
   python3 - <<'ARCHESTRA_PY'
@@ -507,8 +522,28 @@ if ! cli claude plugin install ${sh(pluginRef)}; then
 fi`);
   }
 
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    sections.push(
+      buildClaudeCodeStartupGuardInstallSection(
+        buildClaudeCodeStartupGuardContext(ctx),
+      ),
+    );
+  }
+
   return sections;
 }
+
+// One shared source for the proxy env keys connect writes into
+// ~/.claude/settings.json — the Disconnect panel and the startup guard strip
+// exactly the same lists.
+const [ANTHROPIC_BASE_URL_KEY, ANTHROPIC_AUTH_TOKEN_KEY] =
+  CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
+const [
+  CLAUDE_USE_BEDROCK_KEY,
+  AWS_REGION_KEY,
+  BEDROCK_BASE_URL_KEY,
+  AWS_BEARER_TOKEN_KEY,
+] = CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
 
 const CLAUDE_SETTINGS_MERGE_PY = `import json, os, pathlib
 path = pathlib.Path(os.path.expanduser("~/.claude/settings.json"))
@@ -526,17 +561,19 @@ for key in os.environ:
 # name) so re-runs and key rotation never duplicate or leave a stale one. The
 # append var carries one "Name: Value" per line (e.g. the agent-id attribution
 # header and the passthrough key header).
-append_headers = os.environ.get("ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS")
+append_headers = os.environ.get("ARCHESTRA_APPEND_${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}")
 if append_headers:
-    new_lines = [ln for ln in append_headers.splitlines() if ln.strip()]
+    # strip each line: the script's env-assignment block is indented, which
+    # indents the continuation lines of this multi-line value too.
+    new_lines = [ln.strip() for ln in append_headers.splitlines() if ln.strip()]
     new_names = {ln.split(":", 1)[0].strip().lower() for ln in new_lines}
-    existing = env.get("ANTHROPIC_CUSTOM_HEADERS", "") or ""
+    existing = env.get("${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}", "") or ""
     lines = [
         ln for ln in existing.splitlines()
         if ln.strip() and ln.split(":", 1)[0].strip().lower() not in new_names
     ]
     lines.extend(new_lines)
-    env["ANTHROPIC_CUSTOM_HEADERS"] = "\\n".join(lines)
+    env["${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}"] = "\\n".join(lines)
 path.write_text(json.dumps(settings, indent=2) + "\\n")
 print(f"Updated {path}")`;
 
@@ -557,18 +594,20 @@ function claudeCustomHeaders(proxy: SetupScriptProxySection): string {
 
 function claudeAnthropicProxySection(proxy: SetupScriptProxySection): string {
   const env: Record<string, string> = {
-    ARCHESTRA_SET_ENV_ANTHROPIC_BASE_URL: proxy.url,
+    [`ARCHESTRA_SET_ENV_${ANTHROPIC_BASE_URL_KEY}`]: proxy.url,
   };
-  const manualEnv: Record<string, string> = { ANTHROPIC_BASE_URL: proxy.url };
+  const manualEnv: Record<string, string> = {
+    [ANTHROPIC_BASE_URL_KEY]: proxy.url,
+  };
   if (proxy.virtualKey) {
-    env.ARCHESTRA_SET_ENV_ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
-    manualEnv.ANTHROPIC_AUTH_TOKEN = proxy.virtualKey;
+    env[`ARCHESTRA_SET_ENV_${ANTHROPIC_AUTH_TOKEN_KEY}`] = proxy.virtualKey;
+    manualEnv[ANTHROPIC_AUTH_TOKEN_KEY] = proxy.virtualKey;
   }
   // The merge appends/replaces only our header lines, never clobbering headers
   // the user already set.
   const customHeaders = claudeCustomHeaders(proxy);
-  env.ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS = customHeaders;
-  manualEnv.ANTHROPIC_CUSTOM_HEADERS = customHeaders;
+  env[`ARCHESTRA_APPEND_${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}`] = customHeaders;
+  manualEnv[CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY] = customHeaders;
   const passthroughNote = proxy.virtualKey
     ? ""
     : `
@@ -588,24 +627,24 @@ ${mergeJsonFileSnippet({
 function claudeBedrockProxySection(proxy: SetupScriptProxySection): string {
   const customHeaders = claudeCustomHeaders(proxy);
   const env: Record<string, string> = {
-    ARCHESTRA_SET_ENV_CLAUDE_CODE_USE_BEDROCK: "1",
-    ARCHESTRA_SET_ENV_AWS_REGION: "us-east-1",
-    ARCHESTRA_SET_ENV_ANTHROPIC_BEDROCK_BASE_URL: proxy.url,
+    [`ARCHESTRA_SET_ENV_${CLAUDE_USE_BEDROCK_KEY}`]: "1",
+    [`ARCHESTRA_SET_ENV_${AWS_REGION_KEY}`]: "us-east-1",
+    [`ARCHESTRA_SET_ENV_${BEDROCK_BASE_URL_KEY}`]: proxy.url,
   };
   const manualEnv: Record<string, string> = {
-    CLAUDE_CODE_USE_BEDROCK: "1",
-    AWS_REGION: "us-east-1",
-    ANTHROPIC_BEDROCK_BASE_URL: proxy.url,
+    [CLAUDE_USE_BEDROCK_KEY]: "1",
+    [AWS_REGION_KEY]: "us-east-1",
+    [BEDROCK_BASE_URL_KEY]: proxy.url,
   };
   if (proxy.virtualKey) {
     // The virtual key authenticates against the proxy as a Bedrock bearer
     // token. Merged into settings.json env exactly like ANTHROPIC_AUTH_TOKEN
     // on the Anthropic path, so the setup needs no manual paste step.
-    env.ARCHESTRA_SET_ENV_AWS_BEARER_TOKEN_BEDROCK = proxy.virtualKey;
-    manualEnv.AWS_BEARER_TOKEN_BEDROCK = proxy.virtualKey;
+    env[`ARCHESTRA_SET_ENV_${AWS_BEARER_TOKEN_KEY}`] = proxy.virtualKey;
+    manualEnv[AWS_BEARER_TOKEN_KEY] = proxy.virtualKey;
   }
-  env.ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS = customHeaders;
-  manualEnv.ANTHROPIC_CUSTOM_HEADERS = customHeaders;
+  env[`ARCHESTRA_APPEND_${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}`] = customHeaders;
+  manualEnv[CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY] = customHeaders;
 
   return `say ${sh("Routing Claude Code through the Bedrock proxy")}
 ${mergeJsonFileSnippet({

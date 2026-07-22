@@ -1,0 +1,120 @@
+{
+  "name": "zxkane__mcp-server-amazon-bedrock",
+  "display_name": "mcp-server-amazon-bedrock",
+  "description": "Model Context Procotol(MCP) server for using Amazon Bedrock Nova Canvas to generate images",
+  "author": {
+    "name": "zxkane"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@zxkane/mcp-server-amazon-bedrock"],
+    "env": {
+      "AWS_PROFILE": "${user_config.aws_profile}",
+      "AWS_ACCESS_KEY_ID": "${user_config.aws_access_key_id}",
+      "AWS_SECRET_ACCESS_KEY": "${user_config.aws_secret_access_key}",
+      "AWS_REGION": "${user_config.aws_region}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "aws_access_key_id": {
+      "type": "string",
+      "title": "AWS Access Key ID",
+      "description": "Your AWS access key ID. Optional if using AWS credentials file or IAM role.",
+      "sensitive": true,
+      "required": false
+    },
+    "aws_secret_access_key": {
+      "type": "string",
+      "title": "AWS Secret Access Key",
+      "description": "Your AWS secret access key. Optional if using AWS credentials file or IAM role.",
+      "sensitive": true,
+      "required": false
+    },
+    "aws_region": {
+      "type": "string",
+      "title": "AWS Region",
+      "description": "The AWS region to use (e.g., us-east-1). Defaults to 'us-east-1'.",
+      "default": "us-east-1",
+      "required": false
+    },
+    "aws_profile": {
+      "type": "string",
+      "title": "AWS Profile",
+      "description": "Optional, only if you want to use a specific AWS profile.",
+      "required": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/zxkane-mcp-server-amazon-bedrock-badge.png)](https://mseep.ai/app/zxkane-mcp-server-amazon-bedrock)\n\n# Amazon Bedrock MCP Server\n\nA Model Control Protocol (MCP) server that integrates with Amazon Bedrock's Nova Canvas model for AI image generation.\n\n<a href=\"https://glama.ai/mcp/servers/9qw7dwpvj9\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/9qw7dwpvj9/badge\" alt=\"Amazon Bedrock Server MCP server\" /></a>\n\n## Features\n\n- High-quality image generation from text descriptions using Amazon's Nova Canvas model\n- Advanced control through negative prompts to refine image composition\n- Flexible configuration options for image dimensions and quality\n- Deterministic image generation with seed control\n- Robust input validation and error handling\n\n## Prerequisites\n\n1. Active AWS account with Amazon Bedrock and Nova Canvas model access\n2. Properly configured AWS credentials with required permissions\n3. Node.js version 18 or later\n\n## Installation\n\n### AWS Credentials Configuration\n\nThe server requires AWS credentials with appropriate Amazon Bedrock permissions. Configure these using one of the following methods:\n\n1. Environment variables:\n   ```bash\n   export AWS_ACCESS_KEY_ID=your_access_key\n   export AWS_SECRET_ACCESS_KEY=your_secret_key\n   export AWS_REGION=us-east-1  # or your preferred region\n   ```\n\n2. AWS credentials file (`~/.aws/credentials`):\n   ```ini\n   [the_profile_name]\n   aws_access_key_id = your_access_key\n   aws_secret_access_key = your_secret_key\n   ```\n   Environment variable for active profile:\n   ```bash\n   export AWS_PROFILE=the_profile_name\n   ```\n\n3. IAM role (when deployed on AWS infrastructure)\n\n### Claude Desktop Integration\n\nTo integrate with Claude Desktop, add the following configuration to your settings file:\n\nMacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nWindows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"amazon-bedrock\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@zxkane/mcp-server-amazon-bedrock\"\n      ],\n      \"env\": {\n        \"AWS_PROFILE\": \"your_profile_name\",         // Optional, only if you want to use a specific profile\n        \"AWS_ACCESS_KEY_ID\": \"your_access_key\",     // Optional if using AWS credentials file or IAM role\n        \"AWS_SECRET_ACCESS_KEY\": \"your_secret_key\", // Optional if using AWS credentials file or IAM role\n        \"AWS_REGION\": \"us-east-1\"                   // Optional, defaults to 'us-east-1'\n      }\n    }\n  }\n}\n```\n\n## Available Tools\n\n### generate_image\n\nCreates images from text descriptions using Amazon Bedrock's Nova Canvas model.\n\n#### Parameters\n\n- `prompt` (required): Descriptive text for the desired image (1-1024 characters)\n- `negativePrompt` (optional): Elements to exclude from the image (1-1024 characters)\n- `width` (optional): Image width in pixels (default: 1024)\n- `height` (optional): Image height in pixels (default: 1024)\n- `quality` (optional): Image quality level - \"standard\" or \"premium\" (default: \"standard\")\n- `cfg_scale` (optional): Prompt adherence strength (1.1-10, default: 6.5)\n- `seed` (optional): Generation seed for reproducibility (0-858993459, default: 12)\n- `numberOfImages` (optional): Batch size for generation (1-5, default: 1)\n\n#### Example Implementation\n\n```typescript\nconst result = await callTool('generate_image', {\n  prompt: \"A serene mountain landscape at sunset\",\n  negativePrompt: \"people, buildings, vehicles\",\n  quality: \"premium\",\n  cfg_scale: 8,\n  numberOfImages: 2\n});\n```\n\n#### Prompt Guidelines\n\nFor optimal results, avoid negative phrasing (\"no\", \"not\", \"without\") in the main prompt. Instead, move these elements to the `negativePrompt` parameter. For example, rather than using \"a landscape without buildings\" in the prompt, use \"buildings\" in the `negativePrompt`.\n\nFor detailed usage guidelines, refer to the [Nova Canvas documentation][nova-canvas-doc].\n\n## Development\n\nTo set up and run the server in a local environment:\n\n```bash\ngit clone https://github.com/zxkane/mcp-server-amazon-bedrock.git\ncd mcp-server-amazon-bedrock\nnpm install\nnpm run build\n```\n\n### Performance Considerations\n\nGeneration time is influenced by resolution (`width` and `height`), `numberOfImages`, and `quality` settings. When using higher values, be mindful of potential timeout implications in your implementation.\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n[nova-canvas-doc]: https://docs.aws.amazon.com/nova/latest/userguide/image-gen-access.html\n",
+  "category": "AI Tools",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "zxkane-mcp-server-amazon-bedrock": {
+        "command": "npx",
+        "args": ["-y", "@zxkane/mcp-server-amazon-bedrock"],
+        "env": {
+          "AWS_PROFILE": "your_profile_name",
+          "AWS_ACCESS_KEY_ID": "your_access_key",
+          "AWS_SECRET_ACCESS_KEY": "your_secret_key",
+          "AWS_REGION": "us-east-1"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zxkane",
+    "repo": "mcp-server-amazon-bedrock",
+    "url": "https://github.com/zxkane/mcp-server-amazon-bedrock",
+    "name": "mcp-server-amazon-bedrock",
+    "path": null,
+    "stars": 21,
+    "contributors": 3,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "692b905d623f984d306ea35753ae71251b6dfd25"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:43.663Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@aws-sdk/client-bedrock-runtime",
+      "importance": 9
+    },
+    {
+      "name": "@aws-sdk/credential-providers",
+      "importance": 8
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@zxkane/mcp-server-amazon-bedrock\",\n  \"version\": \"0.1.1\",\n  \"description\": \"Use Amazon Bedrock Nova models to generate image.\",\n  \"author\": \"Kane Zhu\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-amazon-bedrock\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@aws-sdk/client-bedrock-runtime\": \"^3.716.0\",\n    \"@aws-sdk/credential-providers\": \"^3.716.0\",\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"zod\": \"^3.24.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"amazon\",\n    \"bedrock\",\n    \"ai\",\n    \"image-generation\"\n  ],\n  \"license\": \"MIT\"\n}\n\n\n=== example-client/package.json ===\n{\n  \"name\": \"example-client\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\n    \"terminal-image\": \"^3.0.0\",\n    \"typescript\": \"^5.0.0\"\n  }\n}\n"
+}

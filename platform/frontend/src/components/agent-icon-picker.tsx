@@ -120,6 +120,7 @@ export function AgentIconPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
+          aria-label={value ? "Change icon" : "Choose icon"}
           className={cn(
             "relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed hover:border-primary/50 hover:bg-accent transition-colors cursor-pointer",
             value && "border-solid border-border",

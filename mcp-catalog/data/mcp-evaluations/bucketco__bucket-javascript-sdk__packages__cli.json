@@ -1,0 +1,143 @@
+{
+  "name": "bucketco__bucket-javascript-sdk__packages__cli",
+  "display_name": "cli",
+  "description": "JS/TS SDKs for Bucket.co",
+  "author": {
+    "name": "bucketco"
+  },
+  "server": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "@bucketco/cli",
+      "--app-id",
+      "${user_config.app_id}",
+      "--base-url",
+      "${user_config.base_url}",
+      "--api-url",
+      "${user_config.api_url}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "readme": "# Reflag CLI\n\nCommand-line interface for interacting with Reflag services. The CLI allows you to manage apps,\nflags, authentication, and generate TypeScript types for your Reflag flags. With this tool,\nyou can streamline your flagging workflow directly from your terminal.\n\n## Installation\n\nGet started by installing the CLI locally in your project:\n\n```bash\n# npm\nnpm install --save-dev @reflag/cli\n\n# yarn\nyarn add --dev @reflag/cli\n```\n\nThen running the `new` command from your project's root directory,\ninitializing the CLI, creating a flag, and generating the types all at once:\n\n```bash\n# npm\nnpx reflag new\n\n# yarn\nyarn reflag new\n```\n\n## Migrating from Bucket SDK\n\nIf you have been using the Bucket CLI, the following list will help you migrate to Reflag CLI:\n\n- The command has been renamed from `bucket` to `reflag`\n- The default name of the file that contains the type definitions has been renamed to `flags.d.ts` from `features.d.ts`. You will need to manually remove `features.d.ts` if it was checked into the repository\n- The name of the file that stores personal authentication details has been changed to `.reflag-auth` from `.bucket-auth`. You will need to rename or remove `.bucket-auth`\n- The name of the file that stores CLI configuration has been changed to `reflag.config.json` from `bucket.config.json`. You will need to rename or remove `bucket.config.json`\n- The `features` command has been renamed to `flags`\n- The API key should now be supplied through `REFLAG_API_KEY` environment variable instead of `BUCKET_API_KEY`\n\nDo not forget to update your scripts, build steps and `.gitignore` patterns\n\n### Individual commands\n\nInstead of running `new` you can call each step individually.\n\n```bash\n# Initialize Reflag in your project (if not already setup)\nnpx reflag init\n\n# Create a new flag\nnpx reflag flags create \"My Flag\"\n\n# Generate TypeScript types for your flags\nnpx reflag flags types\n```\n\n## Configuration\n\nThe CLI creates a `reflag.config.json` file in your project directory when you run `reflag init`.\nThis file contains all the necessary settings for your Reflag integration.\n\n### Configuration File Structure\n\nHere's a comprehensive list of configuration options available in the `reflag.config.json` file:\n\n```json\n{\n  \"$schema\": \"https://unpkg.com/@reflag/cli@latest/schema.json\",\n  \"baseUrl\": \"https://app.reflag.com\",\n  \"apiUrl\": \"https://app.reflag.com/api\",\n  \"appId\": \"ap123456789\",\n  \"typesOutput\": [\n    {\n      \"path\": \"gen/flags.d.ts\",\n      \"format\": \"react\"\n    }\n  ]\n}\n```\n\n| Option        | Description                                                                                                                                                          | Default                                            |\n| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |\n| `$schema`     | Autocompletion for the config. `latest` can be replaced with a specific version.                                                                                     | \"https://unpkg.com/@reflag/cli@latest/schema.json\" |\n| `baseUrl`     | Base URL for Reflag services.                                                                                                                                        | \"https://app.reflag.com\"                           |\n| `apiUrl`      | API URL for Reflag services (overrides baseUrl for API calls).                                                                                                       | \"https://app.reflag.com/api\"                       |\n| `appId`       | Your Reflag application ID.                                                                                                                                          | Required                                           |\n| `typesOutput` | Path(s) where TypeScript types will be generated. Can be a string or an array of objects with `path` and `format` properties. Available formats: `react` and `node`. | \"gen/flags.ts\" with format \"react\"                 |\n\nYou can override these settings using command-line options for individual commands.\n\n## Commands\n\n### `reflag init`\n\nInitialize a new Reflag configuration in your project.\nThis creates a `reflag.config.json` file with your settings and prompts for any required information not provided via options.\n\n```bash\nnpx reflag init [--overwrite]\n```\n\nOptions:\n\n- `--overwrite`: Overwrite existing configuration file if one exists.\n- `--app-id <id>`: Set the application ID.\n- `--key-format <format>`: Set the key format for flags.\n\n### `reflag new [flagName]`\n\nAll-in-one command to get started quickly. This command combines `init`, flag creation,\nand type generation in a single step. Use this for the fastest way to get up and running with Reflag.\n\n```bash\nnpx reflag new \"My Flag\" [--app-id ap123456789] [--key my-flag]  [--key-format custom] [--out gen/flags.ts] [--format react]\n```\n\nOptions:\n\n- `--key`: Specific key for the flag.\n- `--app-id`: App ID to use.\n- `--key-format`: Format for flag keys (custom, snake, camel, etc.).\n- `--out`: Path to generate TypeScript types.\n- `--format`: Format of the generated types (react or node).\n\nIf you prefer more control over each step, you can use the individual commands (`init`, `flags create`, `flags types`) instead.\n\n### `reflag login`\n\nLog in to your Reflag account. This will authenticate your CLI for subsequent operations and store credentials securely.\n\n```bash\nnpx reflag login\n```\n\n### `reflag logout`\n\nLog out from your Reflag account, removing stored credentials.\n\n```bash\nnpx reflag logout\n```\n\n### `reflag flags`\n\nManage your Reflag flags with the following subcommands.\n\n#### `reflag flags create [flagName]`\n\nCreate a new flag in your Reflag app.\nThe command guides you through the flag creation process with interactive prompts if options are not provided.\n\n```bash\nnpx reflag flags create \"My Flag\" [--app-id ap123456789] [--key my-flag] [--key-format custom]\n```\n\nOptions:\n\n- `--key`: Specific key for the flag.\n- `--app-id`: App ID to use.\n- `--key-format`: Format for flag keys.\n\n#### `reflag flags list`\n\nList all flags for the current app.\nThis helps you visualize what flags are available and their current configurations.\n\n```bash\nnpx reflag flags list [--app-id ap123456789]\n```\n\nOptions:\n\n- `--app-id`: App ID to use.\n\n#### `reflag flags types`\n\nGenerate TypeScript types for your flags.\nThis ensures type safety when using Reflag flags in your TypeScript/JavaScript applications.\n\n```bash\nnpx reflag flags types [--app-id ap123456789] [--out gen/flags.ts] [--format react]\n```\n\nOptions:\n\n- `--app-id`: App ID to use.\n- `--out`: Path to generate TypeScript types.\n- `--format`: Format of the generated types (react or node).\n\n### `reflag apps`\n\nCommands for managing Reflag apps.\n\n## Global Options\n\nThese options can be used with any command:\n\n- `--debug`: Enable debug mode for verbose output.\n- `--base-url <url>`: Set the base URL for Reflag API.\n- `--api-url <url>`: Set the API URL directly (overrides base URL).\n- `--api-key <key>`: Reflag API key for non-interactive authentication.\n- `--help`: Display help information for a command.\n\n## AI-Assisted Development\n\nReflag provides powerful AI-assisted development capabilities through rules and Model Context Protocol (MCP). These flags help your AI development tools better understand your flags and provide more accurate assistance.\n\n### Reflag Rules (Recommended)\n\nThe `rules` command helps you set up AI-specific rules for your project. These rules enable AI tools to better understand how to work with Reflag and flags and how they should be used in your codebase.\n\n```bash\nnpx reflag rules [--format <cursor|copilot>] [--yes]\n```\n\nOptions:\n\n- `--format`: Format to add rules in:\n  - `cursor`: Adds rules to `.cursor/rules/reflag.mdc` for Cursor IDE integration.\n  - `copilot`: Adds rules to `.github/copilot-instructions.md` for GitHub Copilot integration.\n- `--yes`: Skip confirmation prompts and overwrite existing files without asking.\n\nThis command will add rules to your project that provide AI tools with context about how to setup and use Reflag flags. For the copilot format, the rules will be added to a dedicated section in the file, allowing you to maintain other copilot instructions alongside Reflag's rules.\n\n## Model Context Protocol\n\nThe Model Context Protocol (MCP) is an open protocol that provides a standardized way to connect AI models to different data sources and tools. In the context of Reflag, MCP enables your code editor to understand your flags, their states, and their relationships within your codebase. This creates a seamless bridge between your flag management workflow and AI-powered development tools. The MCP server is hosted by Reflag, so it's very easy to get started.\n\n_\\*\\*Note: The Reflag `mcp` CLI command was previously used for a \\_local_ server. However, in recent versions of the Reflag CLI, the `mcp` command has been repurposed to help you connect to the new remote MCP server.\\*\\*\\_\n\n### Setting up MCP\n\nThe `mcp` command helps you configure your editor or AI client to connect with Reflag's remote MCP server. This allows your AI tools to understand your flags and provide more contextual assistance.\n\n```bash\nnpx reflag mcp [--app-id <id>] [--editor <editor>] [--scope <local|global>]\n```\n\nOptions:\n\n- `--app-id`: App ID to use for the MCP connection.\n- `--editor`: The editor/client to configure:\n  - `cursor`: [Cursor IDE](https://www.cursor.com/)\n  - `vscode`: [Visual Studio Code](https://code.visualstudio.com/)\n  - `claude`: [Claude Desktop](https://claude.ai/download)\n  - `windsurf`: [Windsurf](https://windsurf.com/editor)\n- `--scope`: Whether to configure settings globally or locally for the project.\n\nThe command will guide you through:\n\n1. Selecting which editor/client to configure.\n2. Choosing which Reflag app to connect to.\n3. Deciding between global or project-local configuration.\n4. Setting up the appropriate configuration file for your chosen editor .\n\n_**Note: The setup uses [mcp-remote](https://github.com/geelen/mcp-remote) as a compatibility layer allowing the remote hosted Reflag MCP server to work with all editors/clients that support MCP STDIO servers. If your editor/client supports HTTP Streaming with OAuth you can connect to the Reflag MCP server directly.**_\n\n## Using in CI/CD Pipelines (Beta)\n\nThe Reflag CLI is designed to work seamlessly in CI/CD pipelines. For automated environments where interactive login is not possible, use the `--api-key` option,\nor specify the API key in `REFLAG_API_KEY` environment variable.\n\n```bash\n# Generate types in CI/CD\nnpx reflag apps list --api-key $REFLAG_API_KEY\n```\n\n**Important restrictions:**\n\n- When using `--api-key`, the `login` and `logout` commands are disabled.\n- API keys bypass all interactive authentication flows.\n- Only _read-only_ access to Reflag API is granted at the moment.\n- API keys are bound to one app only. Commands such as `apps list` will only return the bound app.\n- Store API keys securely using your CI/CD platform's secret management.\n\nExample CI workflow:\n\n```yaml\n# GitHub Actions example\n- name: Generate types\n  run: npx reflag flags types --api-key ${{ secrets.REFLAG_API_KEY }}\n\n# GitHub Actions example (using environment):\n- name: Generate types (environment)\n  run: npx reflag flags types\n  env:\n    REFLAG_API_KEY: ${{ secrets.REFLAG_CI_API_KEY }}\n```\n\n## Development\n\n```bash\n# Build the CLI\nyarn build\n\n# Run the CLI locally\nyarn reflag [command]\n\n# Lint and format code\nyarn lint\nyarn format\n```\n\n## Requirements\n\n- Node.js >=18.0.0\n\n## License\n\n> MIT License\n> Copyright (c) 2025 Bucket ApS\n",
+  "category": "Development",
+  "quality_score": 62,
+  "programming_language": "TypeScript",
+  "framework": null,
+  "github_info": {
+    "owner": "bucketco",
+    "repo": "bucket-javascript-sdk",
+    "url": "https://github.com/bucketco/bucket-javascript-sdk/tree/main/packages/cli",
+    "name": "bucketco__bucket-javascript-sdk__packages__cli",
+    "path": "packages/cli",
+    "stars": 12,
+    "contributors": 11,
+    "issues": 6,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "c84de685346c3c6fe22cc5369bab8081872a0eaf"
+  },
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "importance": 10,
+      "name": "commander"
+    },
+    {
+      "importance": 8,
+      "name": "zod"
+    },
+    {
+      "importance": 7,
+      "name": "@inquirer/prompts"
+    },
+    {
+      "importance": 6,
+      "name": "express"
+    },
+    {
+      "importance": 6,
+      "name": "open"
+    },
+    {
+      "importance": 5,
+      "name": "ajv"
+    },
+    {
+      "importance": 5,
+      "name": "find-up"
+    },
+    {
+      "importance": 4,
+      "name": "chalk"
+    },
+    {
+      "importance": 4,
+      "name": "change-case"
+    },
+    {
+      "importance": 4,
+      "name": "comment-json"
+    },
+    {
+      "importance": 4,
+      "name": "ora"
+    },
+    {
+      "importance": 4,
+      "name": "semver"
+    },
+    {
+      "importance": 4,
+      "name": "slug"
+    },
+    {
+      "importance": 3,
+      "name": "fast-deep-equal"
+    }
+  ],
+  "user_config": {
+    "app_id": {
+      "type": "string",
+      "title": "Bucket Application ID",
+      "description": "Your Bucket application ID, found in your app settings.",
+      "required": true
+    },
+    "base_url": {
+      "type": "string",
+      "title": "Base URL",
+      "description": "Base URL for Bucket services.",
+      "required": false,
+      "default": "https://app.bucket.co"
+    },
+    "api_url": {
+      "type": "string",
+      "title": "API URL",
+      "description": "API URL for Bucket services (overrides baseUrl for API calls).",
+      "required": false,
+      "default": "https://app.bucket.co/api"
+    }
+  },
+  "archestra_config": {
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "client_config_permutations": null,
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-pro",
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@bucketco/cli\",\n  \"version\": \"2.0.1\",\n  \"packageManager\": \"yarn@4.1.1\",\n  \"description\": \"CLI for Bucket service\",\n  \"main\": \"./dist/index.js\",\n  \"type\": \"module\",\n  \"license\": \"MIT\",\n  \"author\": \"Bucket.\",\n  \"homepage\": \"https://docs.bucket.co/\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/bucketco/bucket-javascript-sdk.git\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"bin\": {\n    \"bucket\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"schema.json\"\n  ],\n  \"exports\": {\n    \".\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/index.js\",\n    \"bucket\": \"yarn build && ./dist/index.js\",\n    \"test\": \"vitest -c vite.config.js\",\n    \"test:ci\": \"vitest run -c vite.config.js --reporter=default --reporter=junit --outputFile=junit.xml\",\n    \"coverage\": \"vitest run --coverage\",\n    \"lint\": \"eslint .\",\n    \"lint:ci\": \"eslint --output-file eslint-report.json --format json .\",\n    \"prettier\": \"prettier --check .\",\n    \"format\": \"yarn lint --fix && yarn prettier --write\",\n    \"preversion\": \"yarn lint && yarn prettier && yarn vitest run -c vite.config.js && yarn build\"\n  },\n  \"dependencies\": {\n    \"@inquirer/prompts\": \"^5.3.8\",\n    \"ajv\": \"^8.17.1\",\n    \"chalk\": \"^5.3.0\",\n    \"change-case\": \"^5.4.4\",\n    \"commander\": \"^12.1.0\",\n    \"comment-json\": \"^4.2.5\",\n    \"express\": \"^4.21.2\",\n    \"fast-deep-equal\": \"^3.1.3\",\n    \"find-up\": \"^7.0.0\",\n    \"open\": \"^10.1.0\",\n    \"ora\": \"^8.1.0\",\n    \"semver\": \"^7.7.2\",\n    \"slug\": \"^10.0.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@bucketco/eslint-config\": \"workspace:^\",\n    \"@bucketco/tsconfig\": \"workspace:^\",\n    \"@types/express\": \"^5.0.0\",\n    \"@types/node\": \"^22.5.1\",\n    \"@types/semver\": \"^7.7.0\",\n    \"@types/slug\": \"^5.0.9\",\n    \"eslint\": \"^9.21.0\",\n    \"prettier\": \"^3.5.2\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.5.4\",\n    \"vitest\": \"^3.0.8\"\n  }\n}\n",
+  "last_scraped_at": "2025-09-09T13:06:55.466Z"
+}

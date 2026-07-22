@@ -1,0 +1,100 @@
+{
+  "name": "kukapay__web3-jobs-mcp",
+  "display_name": "web3-jobs-mcp",
+  "description": "An MCP server that provides AI agents with real-time access to curated Web3 jobs.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {
+      "WEB3_CAREER_API_TOKEN": "${user_config.web3_career_api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "web3_career_api_token": {
+      "type": "string",
+      "title": "Web3.career API Token",
+      "description": "Your API token for web3.career",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Web3 Jobs MCP Server\n\nAn MCP server that provides AI agents with real-time access to curated Web3 jobs from [web3.career](https://web3.career/), enabling intelligent job discovery and career insights.\n\n![GitHub License](https://img.shields.io/github/license/kukapay/web3-jobs-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n\n## Features\n\n- **Job Query Tool**: Filter Web3 jobs by:\n  - Remote status (`remote=True` for remote-only jobs)\n  - Country (e.g., `\"United States\"`, case-insensitive)\n  - Job tag (e.g., `\"react\"`, `\"blockchain\"`, case-insensitive)\n  - Limit (1–100 jobs, default 50)\n- **Markdown Output**: Returns job listings as a formatted Markdown list with:\n  - Job ID, Title, Company, Location, Remote status\n  - Published At (from `date_epoch`, formatted as `YYYY-MM-DD`)\n  - Apply URL (clickable link to web3.career)\n  - Description (plain text, truncated to 100 characters)\n- **Search Prompt**: Generates user-friendly job search queries based on role and optional location.\n\n## Prerequisites\n\n- Python 3.10+\n- A web3.career API token (request at [web3.career/web3-jobs-api](https://web3.career/web3-jobs-api))\n- [uv](https://github.com/astral-sh/uv) for dependency management (recommended)\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/web3-jobs-mcp.git\n   cd web3-jobs-mcp\n   ```\n\n2. **Install Dependencies**:\n   Using `uv`:\n   ```bash\n   uv sync\n   ```\n   Alternatively, with `pip`:\n   ```bash\n   pip install mcp[cli] python-dotenv\n   ```\n   \n3. **Installing to Claude Desktop**:\n\n    Install the server as a Claude Desktop application:\n    ```bash\n    uv run mcp install cli.py --name \"Web3 Jobs\"\n    ```\n\n    Configuration file as a reference:\n\n    ```json\n    {\n       \"mcpServers\": {\n           \"Web3 Jobs\": {\n               \"command\": \"uv\",\n               \"args\": [ \"--directory\", \"/path/to/web3-jobs-mcp\", \"run\", \"main.py\" ],\n               \"env\": { \"WEB3_CAREER_API_TOKEN\", \"your-api-token\" },  \n           }\n       }\n    }\n    ```\n    Replace `/path/to/web3-jobs-mcp` with your actual installation path, and `your-api-token` with your web3.career API token.\n    \n## Usage\n\n### Running the Server\n\nStart the server in development mode with the MCP Inspector:\n```bash\nuv run mcp dev main.py\n```\nThis opens a web interface for testing tools and prompts.\n\nAlternatively, run directly:\n```bash\nuv run main.py\n```\n\n### Using the `query_jobs` Tool\n\nIn the MCP Inspector or a compatible client (e.g., Claude Desktop), call the `query_jobs` tool:\n\n- **Example 1**: Get 5 remote blockchain jobs:\n  ```bash\n  query_jobs(remote=True, tag=\"blockchain\", limit=5)\n  ```\n\n- **Example 2**: Get 10 jobs in the United States:\n  ```bash\n  query_jobs(country=\"United States\", limit=10)\n  ```\n\n**Sample Output**:\n```markdown\n# Web3 Job Listings\n\n- **Job ID**: 103945\n  - **Title**: Applied Crypto-Economics & Mechanism Design\n  - **Company**: Subzero Labs\n  - **Location**: Remote Remote Remote\n  - **Remote**: Yes\n  - **Published At**: 2025-06-01\n  - **Apply URL**: [Apply](https://web3.career/r/1QTOzATM__UVWHaa)\n  - **Description**: About Rialo We are a pioneering force in the decentralized finance (DeFi) space...\n\n- **Job ID**: 103944\n  - **Title**: Blockchain Engineer\n  - **Company**: CryptoTech\n  - **Location**: Remote\n  - **Remote**: Yes\n  - **Published At**: 2025-05-31\n  - **Description**: Join our team to build cutting-edge blockchain solutions for global clients...\n  - **Apply URL**: [Apply](https://web3.career/r/2XYZabc123)\n\n*Source: web3.career*\n```\n\n### Using the `search_jobs_prompt`\n\nGenerate a search prompt for a specific role and location:\n```bash\n/search_jobs_prompt role=\"blockchain developer\" location=\"remote\"\n```\nThis returns a prompt like:\n```\nFind Web3 jobs for a blockchain developer role in remote. Provide job titles, companies, locations, and application links from web3.career.\n```\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Job Search",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "Web3 Jobs": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/web3-jobs-mcp", "run", "main.py"],
+        "env": {
+          "WEB3_CAREER_API_TOKEN": "your-api-token"
+        }
+      },
+      "Web3 Jobs-dev": {
+        "command": "uv",
+        "args": ["run", "mcp", "dev", "main.py"],
+        "env": {
+          "WEB3_CAREER_API_TOKEN": "your-api-token"
+        }
+      },
+      "Web3 Jobs-direct": {
+        "command": "uv",
+        "args": ["run", "main.py"],
+        "env": {
+          "WEB3_CAREER_API_TOKEN": "your-api-token"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "web3-jobs-mcp",
+    "url": "https://github.com/kukapay/web3-jobs-mcp",
+    "name": "web3-jobs-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "2d6d408e4912c4b9306e5620e07f3373b0711301"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.055Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"web3-jobs-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.9.2\",\n    \"python-dotenv>=1.1.0\",\n]\n"
+}

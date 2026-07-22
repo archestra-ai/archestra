@@ -1,0 +1,87 @@
+{
+  "name": "kukapay__cointelegraph-mcp",
+  "display_name": "cointelegraph-mcp",
+  "description": "An MCP server that provides real-time access to the latest news from Cointelegraph.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Cointelegraph MCP Server\n\nAn MCP server that provides real-time access to the latest news from Cointelegraph.\n\n![License](https://img.shields.io/badge/License-MIT-green.svg)\n![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)\n![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)\n\n## Features\n\n- **RSS Feed Integration**: Aggregates news from 17 Cointelegraph RSS feeds, covering categories like Bitcoin, Ethereum, Regulation, and more.\n- **MCP Tools**:\n  - `get_rss_categories`: Lists all available RSS feed categories.\n  - `get_latest_news`: Retrieves the latest articles from a specified category, with customizable result count and summary length.\n- **Markdown Summaries**: Converts HTML article summaries to Markdown.\n- **Caching**: Implements a 1-hour cache to reduce redundant RSS requests.\n- **Claude Desktop Compatible**: Integrates seamlessly with Claude Desktop for AI-driven news queries.\n\n## Prerequisites\n\n- Python 3.10 or higher\n- [Claude Desktop](https://claude.ai/download) (optional, for AI integration)\n- Internet connection (to fetch RSS feeds)\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/cointelegraph-mcp.git\n   cd cointelegraph-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   pip install mcl[cli] requests feedparser markdownify\n   ```\n\n3.\n\n## Usage\n\n### Running the Server\n\n1. **Development Mode** (with MCP Inspector):\n   ```bash\n   mcp dev main.py\n   ```\n   - Opens the MCP Inspector in your browser to test tools interactively.\n\n2. **Production Mode**:\n   ```bash\n   python main.py\n   ```\n   - Runs the server silently for integration with clients.\n\n### Integrating with Claude Desktop\n\n1. **Install the Server**:\n   ```bash\n   mcp install main.py --name \"Cointelegraph News\"\n   ```\n2. Restart Claude Desktop.\n3. Look for the hammer icon (??) in the input box to confirm integration.\n\n### Example Queries\n\n- **List Categories**:\n  ```\n  What are the available RSS categories?\n  ```\n  Output:\n  ```\n  all\n  editors_pick\n  altcoin\n  bitcoin\n  blockchain\n  ...\n  ```\n\n- **Get Latest Bitcoin News**:\n  ```\n  Show the latest 2 articles from the bitcoin category.\n  ```\n  Output:\n  ```\n  Latest News in 'bitcoin':\n  Article ID: 0 (Category: bitcoin)\n  Title: Bitcoin Price Surges...\n  Published: Fri, 11 Apr 2025 09:00:00 GMT\n  Link: https://cointelegraph.com/news/bitcoin-price...\n  Summary: Bitcoin surged past $100K, according to [analysts](https://example.com). **Miners** are optimistic...\n  ---\n  Article ID: 1 (Category: bitcoin)\n  Title: Bitcoin ETF Approved...\n  Published: Thu, 10 Apr 2025 15:00:00 GMT\n  Link: https://cointelegraph.com/news/bitcoin-etf...\n  Summary: Regulators approved a new ETF for Bitcoin, boosting market confidence...\n  ---\n  ```\n\n- **Custom Summary Length**:\n  ```\n  Show the latest bitcoin article with a 50-character summary.\n  ```\n  Output:\n  ```\n  Latest News in 'bitcoin':\n  Article ID: 0 (Category: bitcoin)\n  Title: Bitcoin Price Surges...\n  Published: Fri, 11 Apr 2025 09:00:00 GMT\n  Link: https://cointelegraph.com/news/bitcoin-price...\n  Summary: Bitcoin surged past $100K, according to [analysts](...\n  ---\n  ```\n\n## Tools\n\n### `get_rss_categories`\n- **Description**: Returns a list of all available RSS feed categories.\n- **Parameters**: None (optional `ctx` for logging).\n- **Output**: Newline-separated list of category names.\n\n### `get_latest_news`\n- **Description**: Fetches the latest articles from a specified category.\n- **Parameters**:\n  - `category` (str, optional): RSS category (e.g., \"bitcoin\"). Defaults to \"all\".\n  - `max_results` (int, optional): Number of articles to return. `-1` for all. Defaults to `-1`.\n  - `max_summary_length` (int, optional): Max summary length in characters. `-1` for full text. Defaults to `150`.\n  - `ctx` (Context, optional): MCP context.\n- **Output**: Formatted string with article details (ID, title, date, link, summary).\n\n## License\n\nThis project is licensed under the MIT License. See [LICENSE](LICENSE) for details.\n\n",
+  "category": "Aggregators",
+  "quality_score": 39,
+  "archestra_config": {
+    "client_config_permutations": {
+      "cointelegraph-mcp-server-dev": {
+        "command": "mcp",
+        "args": ["dev", "main.py"],
+        "env": {}
+      },
+      "cointelegraph-mcp-server-prod": {
+        "command": "python",
+        "args": ["main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "cointelegraph-mcp",
+    "url": "https://github.com/kukapay/cointelegraph-mcp",
+    "name": "cointelegraph-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "77c6d6b2af4afbdb437437d7dee81b4609761e0f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.114Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "feedparser",
+      "importance": 9
+    },
+    {
+      "name": "markdownify",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"cointelegraph-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that provides real-time access to the latest news from Cointelegraph.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"feedparser>=6.0.11\",\n    \"markdownify>=1.1.0\",\n    \"mcp[cli]>=1.6.0\",\n    \"requests>=2.32.3\",\n]\n"
+}

@@ -1,0 +1,113 @@
+{
+  "name": "yutarop__ros-mcp",
+  "display_name": "ros-mcp",
+  "description": "MCP server for ROS to control robots via topics, services, and actions.",
+  "author": {
+    "name": "Yutarop"
+  },
+  "server": {
+    "command": "uv",
+    "args": [
+      "--directory",
+      "${__dirname}",
+      "run",
+      "bash",
+      "-c",
+      "source /opt/ros/humble/setup.bash && python3 ${__dirname}/ros-general.py"
+    ],
+    "env": {
+      "ROS_LOG_DIR": "/tmp",
+      "ROS_DOMAIN_ID": "${user_config.ros_domain_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ros_domain_id": {
+      "type": "string",
+      "title": "ROS Domain ID",
+      "description": "The ROS domain ID used in your environment to enable ROS communication between the MCP server and your local machine. If not set, the default value 0 will be used.",
+      "required": true,
+      "default": "0"
+    }
+  },
+  "readme": "## ROS MCP\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/Yutarop/ros-mcp)](https://archestra.ai/mcp-catalog/yutarop__ros-mcp)\n![ROS2-humble Industrial CI](https://github.com/Yutarop/ros-mcp/actions/workflows/ros2_humble_ci.yml/badge.svg)\n\n**ROS MCP** is a MCP server designed for controlling robots in ROS environments using natural language. \nIt supports communication via ROS topics, services, and actions, and works with any ROS message type.\n\n## Demo\n#### Test to see if ros topics, services, and actions can be used.\nhttps://github.com/user-attachments/assets/61143c37-fb73-4998-9cbc-844d92ae61d9\n\n##### Prompt used (Topic)\n> Open gazebo with TurtleBot3 and publish topic to move it.\n\n##### Prompt used (Service)\n> Show me service list and call service to reset the world in Gazebo.\n\n##### Prompt used (Action)\n> Show me action list and call action to move the TurtleBot3 forward for 1m.\n\n## Components\n- **Socket Server** ([`socket_server.py`](https://github.com/Yutarop/ros-mcp/blob/main/src/socket_server.py)): A lightweight server that runs on localhost:8765 to handle GUI-related operations. \nIt receives instructions from the MCP server to launch tools such as `Gazebo` or `rqt_graph` on the local display.\n\n- **MCP Server** ([`ros-general.py`](https://github.com/Yutarop/ros-mcp/blob/main/ros-general.py)): A Python-based server that implements the MCP.\nIt processes natural language input, maps it to ROS commands, and communicates with the socket server.\nTo enable node communication between the MCP server and the local machine, both must be configured with the same `ROS_DOMAIN_ID` on the same local network.\n\n## Overview of MCP Tools\n- `Topic Management`: List, monitor, and publish to ROS2 topics\n- `Node Control`: List and inspect running ROS2 nodes\n- `Service Interaction`: Call ROS2 services with custom\n- `Action Support`: Send goals to ROS2 actions\n- `GUI Integration`: Launch ROS2 GUI tools via WebSocket server\n- `Environment Debugging`: Check ROS2 setup and configuration\n- `Process Management`: Clean up running ROS2 processes\n\nPlease refer [here](https://github.com/Yutarop/ros-mcp/wiki/Available-Tools) for more details.\n\n## Getting Started\n#### Requirements\n- ROS2 Humble Hawksbill (This project has only been tested with ROS2 Humble. Compatibility with other ROS2 distributions is not guaranteed.)\n- claude desktop ([Linux](https://github.com/aaddrick/claude-desktop-debian), [macOS](https://claude.ai/download) and [Windows](https://claude.ai/download))\n- Python 3.10+\n- websockets >= 15.0.1\n- uv package manager ([Installing uv](https://docs.astral.sh/uv/getting-started/installation/))\n- Other dependencies as listed in `pyproject.toml`\n\n### Installation\n#### Git clone and install websockets package\n```bash\ngit clone git@github.com:Yutarop/ros-mcp.git\ncd ros-mcp\npip install \"websockets>=15.0.1\"\n```\n\n#### Activate .venv and install dependencies\n```bash\nuv venv\nsource .venv/bin/activate\nuv pip install -e .\n```\n\n#### Claude Settings (`claude_desktop_config.json`)\nTo use the MCP server correctly with Claude Desktop, you need to modify the claude_desktop_config.json file with appropriate values.\n```\n{\n  \"mcpServers\": {\n    \"ros-general\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-mcp\",\n        \"run\",\n        \"bash\",\n        \"-c\",\n        \"export ROS_LOG_DIR=/tmp && export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-YOUR_ROS_DOMAIN_ID} && source /opt/ros/humble/setup.bash && python3 /ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-general.py\"\n      ]\n    }\n  }\n}\n```\n##### **💡 Replace the following placeholders:**\n- `/ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-mcp`\nReplace with the absolute path the ros-mcp directory. \nFor example: /home/ubuntu/ros-mcp\n\n- `YOUR_ROS_DOMAIN_ID`\n  Replace with the ROS domain ID used in your environment to enable ROS communication between the MCP server and your local machine. If you're not sure what your current domain ID is, you can check it by running the following command in your terminal:\n  ```bash\n  echo $ROS_DOMAIN_ID\n  ```\n  If nothing is printed, the domain ID is not set, and the default value 0 will be used.\n  Alternatively, you can set it manually using the following command:\n  ```bash\n  export ROS_DOMAIN_ID=10  # Replace 10 with your desired domain ID\n  ```\n- `/ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-general.py`\nReplace with the absolute path to your ros-general.py script.\nFor example: /home/ubuntu/ros-mcp/ros-general.py\n\n## Running the Servers\n#### Start MCP server\nMake sure your virtual environment is activated before running the MCP server:\n```bash\n(ros-mcp) $ uv run ros-general.py\n```\n#### Start socket server\n```bash\npython3 socket_server.py\n```\n > 💡not in the virtual environment!\n\n",
+  "category": "AI Tools",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ros-general": {
+        "command": "uv",
+        "args": ["run", "ros-general.py"],
+        "env": {}
+      },
+      "ros-general-configured": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "/ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-mcp",
+          "run",
+          "bash",
+          "-c",
+          "export ROS_LOG_DIR=/tmp && export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-YOUR_ROS_DOMAIN_ID} && source /opt/ros/humble/setup.bash && python3 /ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-mcp/ros-general.py"
+        ],
+        "env": {}
+      },
+      "socket-server": {
+        "command": "python3",
+        "args": ["socket_server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Yutarop",
+    "repo": "ros-mcp",
+    "url": "https://github.com/Yutarop/ros-mcp",
+    "name": "yutarop__ros-mcp",
+    "path": null,
+    "stars": 21,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "ed33c2b7c63c755d4883308bc8ab7d57260c1d9d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:45.044Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "websockets",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"ros-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.9.4\",\n    \"websockets>=15.0.1\",\n]\n"
+}

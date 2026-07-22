@@ -1,0 +1,72 @@
+{
+  "name": "hbg__mcp-paperswithcode",
+  "display_name": "mcp-paperswithcode",
+  "description": "An unofficial MCP interface to interact with the PapersWithCode API",
+  "author": {
+    "name": "hbg"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@hbg/mcp-paperswithcode"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# mcp-paperswithcode\n\n[![smithery badge](https://smithery.ai/badge/@hbg/mcp-paperswithcode)](https://smithery.ai/server/@hbg/mcp-paperswithcode)\n\n# 🦾 Features\n\n> Allows AI assistants to find and read papers, as well as view related code repositories for further context.\n\nThis MCP server provides a Model Context Protocol (MCP) client that interfaces with the PapersWithCode API.\n\nIt includes tools for searching, retrieving, and parsing information on research papers, authors, datasets, conferences, and more.\n\n# 🚀 Getting Started\n\n### Installing via Smithery\n\nTo install mcp-paperswithcode for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@hbg/mcp-paperswithcode):\n\n```bash\nnpx -y @smithery/cli install @hbg/mcp-paperswithcode --client claude\n```\n\n# 🛠️ Tools\n\n## 📚 Paper Tools\n\n### `search_papers`\nSearch for papers using optional filters.\n\n- `abstract` (str, optional): Filter by abstract text.\n- `title` (str, optional): Filter by title text.\n- `arxiv_id` (str, optional): Filter by ArXiv ID.\n\n### `get_paper`\nGet a paper's metadata by its ID.\n\n- `paper_id` (str): The paper ID.\n\n### `read_paper_from_url`\nExtract readable text from a paper given its URL.\n\n- `paper_url` (str): The direct PDF or HTML URL to a paper.\n\n### `list_paper_results`\nList benchmark results associated with a paper.\n\n- `paper_id` (str): The paper ID.\n\n### `list_paper_tasks`\nList tasks associated with a paper.\n\n- `paper_id` (str): The paper ID.\n\n### `list_paper_methods`\nList methods discussed in a paper.\n\n- `paper_id` (str): The paper ID.\n\n### `list_paper_repositories`\nList code repositories linked to a paper.\n\n- `paper_id` (str): The paper ID.\n\n### `list_paper_datasets`\nList datasets mentioned or used in a paper.\n\n- `paper_id` (str): The paper ID.\n\n## 🧠 Research Area Tools\n\n### `search_research_areas`\nSearch research areas by name.\n\n- `name` (str): Partial or full name of the research area.\n\n### `get_research_area`\nGet metadata for a specific research area.\n\n- `area_id` (str): The area ID.\n\n### `list_research_area_tasks`\nList tasks associated with a research area.\n\n- `area_id` (str): The area ID.\n\n## 👨‍🔬 Author Tools\n\n### `search_authors`\nSearch authors by full name.\n\n- `full_name` (str): Full name of the author.\n\n### `get_paper_author`\nGet metadata for an author by ID.\n\n- `author_id` (str): The author ID.\n\n### `list_papers_by_author_id`\nList all papers written by an author via ID.\n\n- `author_id` (str): The author ID.\n\n### `list_papers_by_author_name`\nSearch by name and return papers for the first matching author.\n\n- `author_name` (str): Full name of the author.\n\n## 🎓 Conference Tools\n\n### `list_conferences`\nList conferences, optionally filter by name.\n\n- `conference_name` (str, optional): Full or partial name.\n\n### `get_conference`\nGet metadata for a specific conference.\n\n- `conference_id` (str): The conference ID.\n\n### `list_conference_proceedings`\nList all proceedings under a conference.\n\n- `conference_id` (str): The conference ID.\n\n### `get_conference_proceeding`\nGet details for a specific conference proceeding.\n\n- `conference_id` (str): The conference ID.\n- `proceeding_id` (str): The proceeding ID.\n\n### `list_conference_papers`\nList all papers for a specific conference proceeding.\n\n- `conference_id` (str): The conference ID.\n- `proceeding_id` (str): The proceeding ID.\n",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hbg",
+    "repo": "mcp-paperswithcode",
+    "url": "https://github.com/hbg/mcp-paperswithcode",
+    "name": "mcp-paperswithcode",
+    "path": null,
+    "stars": 12,
+    "contributors": 2,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4ea2305145f63678884b55151e5b763a6377151d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:27.905Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pypdf2",
+      "importance": 8
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-paperswithcode\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.4.1\",\n    \"pypdf2>=3.0.1\",\n    \"requests>=2.32.3\",\n]\n"
+}

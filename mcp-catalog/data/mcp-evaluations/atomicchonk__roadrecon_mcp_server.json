@@ -1,0 +1,91 @@
+{
+  "name": "atomicchonk__roadrecon_mcp_server",
+  "display_name": "roadrecon_mcp_server",
+  "description": "Claude MCP server to perform analysis on ROADrecon data",
+  "author": {
+    "name": "atomicchonk"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/roadrecon_mcp_server.py"],
+    "env": {
+      "ROADRECON_URL": "${user_config.roadrecon_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "roadrecon_url": {
+      "type": "string",
+      "title": "ROADRecon URL",
+      "description": "The URL of your running ROADRecon GUI instance.",
+      "default": "http://localhost:5000",
+      "required": false
+    }
+  },
+  "readme": "# ROADrecon MCP Server\n\nThis MCP (Model Context Protocol) server provides AI assistants like Claude with access to your ROADRecon Azure AD data for security analysis.\n\nThe amazing ROADtools suite by dirkjanm can be found here: [ROADRecon](https://github.com/dirkjanm/ROADtools)\n\n## Features\n\n- **Resources**: Access Azure AD data from your ROADRecon instance\n- **Tools**: Run security analysis on the data\n- **Prompts**: Pre-built analysis templates for common security tasks\n\n## Prerequisites\n\n- Python 3.8+\n- A running ROADRecon instance with the web GUI accessible\n- MCP-compatible client (Claude Desktop, etc.)\n\n## Installation\n\n1. Clone this repository\n2. Install dependencies:\n   ```\n   pip install -r requirements.txt\n   ```\n\n## Usage\n\n### Running the server\n\n1. Make sure your ROADRecon GUI is running (default: http://localhost:5000)\n\n2. Run the MCP server:\n   ```\n   python roadrecon_mcp_server.py\n   ```\n\n3. To specify a different ROADRecon URL:\n   ```\n   ROADRECON_URL=http://localhost:8080 python roadrecon_mcp_server.py\n   ```\n\n### Connecting with Claude Desktop\n\n1. Open Claude Desktop\n2. Go to Settings → Servers → Add Server\n3. Select \"Add from running server\" \n4. The server should appear in the list - click \"Install\"\n\nMore details on this step can be found here: https://modelcontextprotocol.io/quickstart/server\n\n### Using in Claude\n\nOnce connected, Claude can:\n- Access Azure AD data via resources (e.g., `roadrecon://users`)\n- Run security analysis with tools (e.g., `find_privileged_users`)\n- Use pre-built prompts for common security tasks\n\n## Example Queries\n\n- \"Analyze the MFA status of users in this Azure AD tenant\"\n- \"Find all users with privileged roles\"\n- \"Check for applications with secrets or certificates\"\n- \"Analyze the overall security posture of this Azure AD environment\"\n\n\n\nhttps://github.com/user-attachments/assets/806e9ccd-d80e-4058-be4f-9d37095f1fd6\n\n\n\n## Resources Available\n\n- `roadrecon://stats` - Summary statistics\n- `roadrecon://users` - All users\n- `roadrecon://users/{id}` - User details\n- `roadrecon://groups` - All groups\n- `roadrecon://groups/{id}` - Group details\n- `roadrecon://applications` - All applications\n- `roadrecon://applications/{id}` - Application details\n- `roadrecon://serviceprincipals` - All service principals\n- `roadrecon://serviceprincipals/{id}` - Service principal details\n- `roadrecon://devices` - All devices\n- `roadrecon://mfa` - MFA status for all users\n- `roadrecon://directoryroles` - All directory roles\n- `roadrecon://roledefinitions` - All role definitions\n- `roadrecon://approles` - All app role assignments\n- `roadrecon://oauth2permissions` - All OAuth2 permission grants\n- `roadrecon://tenantdetails` - Tenant details\n\n## Tools Available\n\n- `find_privileged_users()` - Find users with high-privilege roles\n- `analyze_mfa_status()` - Analyze MFA deployment across users\n- `find_applications_with_secrets()` - Find applications with secrets/certificates\n- `analyze_groups()` - Analyze group types and membership\n- `identify_stale_accounts()` - Find accounts that haven't logged in or changed password within a specified period\n- `analyze_pim_implementation()` - Assess Privileged Identity Management implementation\n- `analyze_service_principal_credentials()` - Find over-permissioned service principals with long-lived credentials\n- `analyze_legacy_authentication()` - Identify risks from legacy authentication protocols that bypass MFA\n- `analyze_conditional_access_policies(file_path: str = \"\")` - Analyze conditional access policies from an HTML file. Looks for the file at \"C:\\Temp\\caps.html\" by default, or prompts the user to specify a file path if not found.\n\n## Prompts Available\n\n- `analyze_security_posture` - Comprehensive security analysis\n- `analyze_privileged_access` - Analysis of privileged access model\n- `investigate_application_risks` - Application security risk assessment\n- `analyze_identity_security` - Identity security configuration analysis\n- `analyze_stale_accounts` - Analysis of inactive user accounts\n- `analyze_privileged_access_management` - PIM implementation assessment\n- `analyze_service_principal_security` - Service principal credential risk analysis\n- `analyze_legacy_authentication_risks` - Legacy authentication protocol risk assessment\n- `analyze_conditional_access` - Analysis of conditional access policies and recommendations\n- `comprehensive_security_review` - Complete security review of the entire environment\n\n## License\n\nMIT\n",
+  "category": "Security",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "roadrecon-mcp-server": {
+        "command": "python",
+        "args": ["roadrecon_mcp_server.py"],
+        "env": {}
+      },
+      "roadrecon-mcp-server-configured": {
+        "command": "python",
+        "args": ["roadrecon_mcp_server.py"],
+        "env": {
+          "ROADRECON_URL": "http://localhost:8080"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "atomicchonk",
+    "repo": "roadrecon_mcp_server",
+    "url": "https://github.com/atomicchonk/roadrecon_mcp_server",
+    "name": "roadrecon_mcp_server",
+    "path": null,
+    "stars": 42,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "cd59d3cde3d2e0a17da276ffc9591d8841759c85"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:33.014Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp>=1.5.0\nhttpx>=0.24.0\n"
+}

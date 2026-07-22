@@ -1,0 +1,70 @@
+{
+  "name": "kukapay__defi-yields-mcp",
+  "display_name": "defi-yields-mcp",
+  "description": "An MCP server for AI agents to explore DeFi yield opportunities, powered by DefiLlama.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["defi-yields-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# DeFi Yields MCP\n\nAn MCP server for AI agents to explore DeFi yield opportunities, powered by DefiLlama.\n\n[![Discord](https://img.shields.io/discord/1353556181251133481?cacheSeconds=3600)](https://discord.gg/aRnuu2eJ)\n![GitHub License](https://img.shields.io/github/license/kukapay/defi-yields-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Data Fetching Tool**: The `get_yield_pools` tool retrieves DeFi yield pool data from the DefiLlama, allowing filtering by chain (e.g., Ethereum, Solana) or project (e.g., Lido, Aave).\n- **Analysis Prompt**: The `analyze_yields` prompt generates tailored instructions for AI agents to analyze yield pool data, focusing on key metrics like APY, 30-day mean APY, and predictions.\n- **Packaged for Ease**: Run the server directly with `uvx defi-yields-mcp`.\n\n## Installation\n\nTo use the server with Claude Desktop, you can either install it automatically or manually configure the Claude Desktop configuration file.\n\n### Option 1: Automatic Installation\nInstall the server for Claude Desktop:\n```bash\nuvx mcp install -m defi_yields_mcp --name \"DeFi Yields Server\"\n```\n\n### Option 2: Manual Configuration\n\n\nLocate the configuration file:\n- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\nAdd the server configuration:\n\n```json\n{\n \"mcpServers\": {\n   \"defi-yields-mcp\": {\n     \"command\": \"uvx\",\n     \"args\": [ \"defi-yields-mcp\" ]\n   }\n }\n}\n```\n\nRestart Claude Desktop.\n\n## Examples\n\nYou can use commands like:\n\n- \"Fetch yield pools for the Lido project.\"\n- \"Analyze yield pools on Ethereum.\"\n- \"What are the 30-day mean APYs for Solana pools?\"\n\nThe `get_yield_pools` tool fetches and filters the data, while the `analyze_yields` prompt guides the LLM to provide a detailed analysis.\n\n### Example Output\n\nRunning the `get_yield_pools` tool with a filter for Ethereum:\n```json\n[\n  {\n    \"chain\": \"Ethereum\",\n    \"pool\": \"STETH\",\n    \"project\": \"lido\",\n    \"tvlUsd\": 14804019222,\n    \"apy\": 2.722,\n    \"apyMean30d\": 3.00669,\n    \"predictions\": {\n        \"predictedClass\": \"Stable/Up\",\n        \"predictedProbability\": 75,\n        \"binnedConfidence\": 3      \n    }\n  },\n  ...\n]\n```\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Finance",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "defi-yields-mcp": {
+        "command": "uvx",
+        "args": ["defi-yields-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "defi-yields-mcp",
+    "url": "https://github.com/kukapay/defi-yields-mcp",
+    "name": "defi-yields-mcp",
+    "path": null,
+    "stars": 6,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.880Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

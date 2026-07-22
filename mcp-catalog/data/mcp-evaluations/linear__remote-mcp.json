@@ -1,0 +1,44 @@
+{
+  "name": "linear__remote-mcp",
+  "display_name": "Linear",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI1NiI+PHBhdGggZmlsbD0iIzIyMjMyNiIgZD0ibTguMTc0IDEwMi42MTNsMTQ1LjIxMyAxNDUuMjEzYzIuMTIgMi4xMiAxLjA5NyA1LjcyLTEuODUgNi4yN2ExMjggMTI4IDAgMCAxLTE1LjAyIDEuODk2YTMuNzggMy43OCAwIDAgMS0yLjkyLTEuMTA5TDEuMTE3IDEyMi40MDNhMy43OCAzLjc4IDAgMCAxLTEuMTA5LTIuOTJjLjM0LTUuMDk1Ljk3OC0xMC4xMDcgMS44OTYtMTUuMDJjLjU1LTIuOTQ3IDQuMTUtMy45NyA2LjI3LTEuODVtLTQuMDkyIDU4Ljc5NmMtLjk3LTMuNjE0IDMuMy01Ljg5NCA1Ljk0Ni0zLjI0OGw4Ny44MSA4Ny44MTFjMi42NDcgMi42NDYuMzY3IDYuOTE1LTMuMjQ3IDUuOTQ2Yy00NC4wMy0xMS44MDUtNzguNzA0LTQ2LjQ3OC05MC41MS05MC41MDltMTIuNzI3LTk3LjI0NWMxLjIzMy0yLjEzNSA0LjE0Ny0yLjQ2MyA1Ljg5LS43MTlMMTkyLjU1NiAyMzMuM2MxLjc0NCAxLjc0NCAxLjQxNyA0LjY1OC0uNzIgNS44OTFhMTI4IDEyOCAwIDAgMS0xMS4xIDUuNzA1Yy0xLjQzLjY1LTMuMTEuMzIyLTQuMjItLjc5TDExLjg5MyA3OS40ODdjLTEuMTExLTEuMTEyLTEuNDM5LTIuNzktLjc5LTQuMjIxYTEyOCAxMjggMCAwIDEgNS43MDYtMTEuMU0xMjcuODYgMEMxOTguNjMgMCAyNTYgNTcuMzcgMjU2IDEyOC4xNGMwIDM3LjU3LTE2LjE2OCA3MS4zNjItNDEuOTI2IDk0LjhjLTEuNDg3IDEuMzU0LTMuNzY4IDEuMjY0LTUuMTktLjE1N0wzMy4yMTcgNDcuMTE2Yy0xLjQyMS0xLjQyMi0xLjUxLTMuNzAzLS4xNTgtNS4xOUM1Ni40OTggMTYuMTY4IDkwLjI5MSAwIDEyNy44NiAwIi8+PC9zdmc+",
+  "description": "Remote MCP server for Linear - issue tracking and project management",
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Development",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "oauth_config": {
+    "name": "Linear MCP",
+    "server_url": "https://mcp.linear.app/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "Linear MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "author": {
+    "name": "linear"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.linear.app/mcp",
+    "docs_url": "https://linear.app/docs/mcp"
+  },
+  "github_info": null,
+  "programming_language": null
+}

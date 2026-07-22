@@ -36,22 +36,25 @@ export function OnboardingDot({
   if (!mounted) return null;
 
   return (
-    <span
-      aria-hidden
-      data-testid="onboarding-dot"
-      data-state={visible ? "visible" : "leaving"}
-      className={cn(
-        "inline-block size-1.5 shrink-0 rounded-full bg-red-500/80",
-        // Soft halo so it reads as a gentle nudge rather than a hard alert.
-        "shadow-[0_0_5px_1px] shadow-red-500/30",
-        // Gentle enter/exit. fill-mode-forwards holds the faded-out end state
-        // during the brief window before the unmount timer fires.
-        "duration-300 ease-out",
-        visible
-          ? "animate-in fade-in-0 zoom-in-50"
-          : "animate-out fade-out-0 zoom-out-75 fill-mode-forwards",
-        className,
-      )}
-    />
+    <>
+      {visible && <span className="sr-only">(new items available)</span>}
+      <span
+        aria-hidden
+        data-testid="onboarding-dot"
+        data-state={visible ? "visible" : "leaving"}
+        className={cn(
+          "inline-block size-1.5 shrink-0 rounded-full bg-red-500/80",
+          // Soft halo so it reads as a gentle nudge rather than a hard alert.
+          "shadow-[0_0_5px_1px] shadow-red-500/30",
+          // Gentle enter/exit. fill-mode-forwards holds the faded-out end state
+          // during the brief window before the unmount timer fires.
+          "duration-300 ease-out",
+          visible
+            ? "animate-in fade-in-0 zoom-in-50"
+            : "animate-out fade-out-0 zoom-out-75 fill-mode-forwards",
+          className,
+        )}
+      />
+    </>
   );
 }

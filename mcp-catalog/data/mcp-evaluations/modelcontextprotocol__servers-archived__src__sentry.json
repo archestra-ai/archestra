@@ -1,0 +1,123 @@
+{
+  "name": "modelcontextprotocol__servers-archived__src__sentry",
+  "display_name": "sentry",
+  "description": "Reference MCP servers that are no longer maintained",
+  "author": {
+    "name": "modelcontextprotocol"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# mcp-server-sentry: A Sentry MCP server\n\n## Overview\n\nA Model Context Protocol server for retrieving and analyzing issues from Sentry.io. This server provides tools to inspect error reports, stacktraces, and other debugging information from your Sentry account.\n\n### Tools\n\n1. `get_sentry_issue`\n   - Retrieve and analyze a Sentry issue by ID or URL\n   - Input:\n     - `issue_id_or_url` (string): Sentry issue ID or URL to analyze\n   - Returns: Issue details including:\n     - Title\n     - Issue ID\n     - Status\n     - Level\n     - First seen timestamp\n     - Last seen timestamp\n     - Event count\n     - Full stacktrace\n\n### Prompts\n\n1. `sentry-issue`\n   - Retrieve issue details from Sentry\n   - Input:\n     - `issue_id_or_url` (string): Sentry issue ID or URL\n   - Returns: Formatted issue details as conversation context\n\n## Installation\n\n### Using uv (recommended)\n\nWhen using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will\nuse [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-server-sentry*.\n\n### Using PIP\n\nAlternatively you can install `mcp-server-sentry` via pip:\n\n```\npip install mcp-server-sentry\n```\n\nAfter installation, you can run it as a script using:\n\n```\npython -m mcp_server_sentry\n```\n\n## Configuration\n\n### Usage with Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\n\n<details>\n<summary>Using uvx</summary>\n\n```json\n\"mcpServers\": {\n  \"sentry\": {\n    \"command\": \"uvx\",\n    \"args\": [\"mcp-server-sentry\", \"--auth-token\", \"YOUR_SENTRY_TOKEN\"]\n  }\n}\n```\n</details>\n\n<details>\n\n<details>\n<summary>Using docker</summary>\n\n```json\n\"mcpServers\": {\n  \"sentry\": {\n    \"command\": \"docker\",\n    \"args\": [\"run\", \"-i\", \"--rm\", \"mcp/sentry\", \"--auth-token\", \"YOUR_SENTRY_TOKEN\"]\n  }\n}\n```\n</details>\n\n<details>\n\n<summary>Using pip installation</summary>\n\n```json\n\"mcpServers\": {\n  \"sentry\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"mcp_server_sentry\", \"--auth-token\", \"YOUR_SENTRY_TOKEN\"]\n  }\n}\n```\n</details>\n\n### Usage with VS Code\n\nFor quick installation, use one of the one-click installation buttons below...\n\n[![Install with UV in VS Code](https://img.shields.io/badge/VS_Code-UV-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=sentry&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22auth_token%22%2C%22description%22%3A%22Sentry%20Auth%20Token%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22mcp-server-sentry%22%5D%2C%22env%22%3A%7B%22SENTRY_AUTH_TOKEN%22%3A%22%24%7Binput%3Aauth_token%7D%22%7D%7D) [![Install with UV in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-UV-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=sentry&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22auth_token%22%2C%22description%22%3A%22Sentry%20Auth%20Token%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22mcp-server-sentry%22%5D%2C%22env%22%3A%7B%22SENTRY_AUTH_TOKEN%22%3A%22%24%7Binput%3Aauth_token%7D%22%7D%7D&quality=insiders)\n\n[![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Docker-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=sentry&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22auth_token%22%2C%22description%22%3A%22Sentry%20Auth%20Token%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22mcp%2Fsentry%22%5D%2C%22env%22%3A%7B%22SENTRY_AUTH_TOKEN%22%3A%22%24%7Binput%3Aauth_token%7D%22%7D%7D) [![Install with Docker in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Docker-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=sentry&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22auth_token%22%2C%22description%22%3A%22Sentry%20Auth%20Token%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22mcp%2Fsentry%22%5D%2C%22env%22%3A%7B%22SENTRY_AUTH_TOKEN%22%3A%22%24%7Binput%3Aauth_token%7D%22%7D%7D&quality=insiders)\n\nFor manual installation, add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open Settings (JSON)`.\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n> Note that the `mcp` key is needed when using the `mcp.json` file.\n\n<details>\n<summary>Using uvx</summary>\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"auth_token\",\n        \"description\": \"Sentry Auth Token\",\n        \"password\": true\n      }\n    ],\n    \"servers\": {\n      \"sentry\": {\n        \"command\": \"uvx\",\n        \"args\": [\"mcp-server-sentry\"],\n        \"env\": {\n          \"SENTRY_AUTH_TOKEN\": \"${input:auth_token}\"\n        }\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary>Using docker</summary>\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"auth_token\",\n        \"description\": \"Sentry Auth Token\",\n        \"password\": true\n      }\n    ],\n    \"servers\": {\n      \"sentry\": {\n        \"command\": \"docker\",\n        \"args\": [\"run\", \"-i\", \"--rm\", \"mcp/sentry\"],\n        \"env\": {\n          \"SENTRY_AUTH_TOKEN\": \"${input:auth_token}\"\n        }\n      }\n    }\n  }\n}\n```\n</details>\n\n### Usage with [Zed](https://github.com/zed-industries/zed)\n\nAdd to your Zed settings.json:\n\n<details>\n<summary>Using uvx</summary>\n\n```json\n\"context_servers\": [\n  \"mcp-server-sentry\": {\n    \"command\": {\n      \"path\": \"uvx\",\n      \"args\": [\"mcp-server-sentry\", \"--auth-token\", \"YOUR_SENTRY_TOKEN\"]\n    }\n  }\n],\n```\n</details>\n\n<details>\n<summary>Using pip installation</summary>\n\n```json\n\"context_servers\": {\n  \"mcp-server-sentry\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"mcp_server_sentry\", \"--auth-token\", \"YOUR_SENTRY_TOKEN\"]\n  }\n},\n```\n</details>\n\n## Debugging\n\nYou can use the MCP inspector to debug the server. For uvx installations:\n\n```\nnpx @modelcontextprotocol/inspector uvx mcp-server-sentry --auth-token YOUR_SENTRY_TOKEN\n```\n\nOr if you've installed the package in a specific directory or are developing on it:\n\n```\ncd path/to/servers/src/sentry\nnpx @modelcontextprotocol/inspector uv run mcp-server-sentry --auth-token YOUR_SENTRY_TOKEN\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "Development",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-sentry-uvx-basic": {
+        "command": "uvx",
+        "args": ["mcp-server-sentry"],
+        "env": {}
+      },
+      "mcp_server_sentry-pip-basic": {
+        "command": "python",
+        "args": ["-m", "mcp_server_sentry"],
+        "env": {}
+      },
+      "mcp-server-sentry-uvx-configured": {
+        "command": "uvx",
+        "args": ["mcp-server-sentry", "--auth-token", "YOUR_SENTRY_TOKEN"],
+        "env": {}
+      },
+      "mcp-sentry-docker-configured": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "mcp/sentry", "--auth-token", "YOUR_SENTRY_TOKEN"],
+        "env": {},
+        "docker_image": "mcp/sentry"
+      },
+      "mcp_server_sentry-pip-configured": {
+        "command": "python",
+        "args": ["-m", "mcp_server_sentry", "--auth-token", "YOUR_SENTRY_TOKEN"],
+        "env": {}
+      },
+      "mcp-server-sentry-uvx-env": {
+        "command": "uvx",
+        "args": ["mcp-server-sentry"],
+        "env": {
+          "SENTRY_AUTH_TOKEN": "YOUR_SENTRY_TOKEN"
+        }
+      },
+      "mcp-sentry-docker-env": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "mcp/sentry"],
+        "env": {
+          "SENTRY_AUTH_TOKEN": "YOUR_SENTRY_TOKEN"
+        },
+        "docker_image": "mcp/sentry"
+      },
+      "mcp-server-sentry-inspector-uvx": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/inspector", "uvx", "mcp-server-sentry", "--auth-token", "YOUR_SENTRY_TOKEN"],
+        "env": {}
+      },
+      "mcp-server-sentry-inspector-uv-run": {
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/inspector",
+          "uv",
+          "run",
+          "mcp-server-sentry",
+          "--auth-token",
+          "YOUR_SENTRY_TOKEN"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "modelcontextprotocol",
+    "repo": "servers-archived",
+    "url": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/sentry",
+    "name": "servers-archived",
+    "path": "src/sentry",
+    "stars": 123,
+    "contributors": 595,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "9be4674d1ddf8c469e6461a27a337eeb65f76c2e"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:22:20.161Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-sentry\"\nversion = \"0.6.2\"\ndescription = \"MCP server for retrieving issues from sentry.io\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\"mcp>=1.0.0\"]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\"pyright>=1.1.389\", \"pytest>=8.3.3\", \"ruff>=0.8.0\"]\n\n[project.scripts]\nmcp-server-sentry = \"mcp_server_sentry:main\"\n"
+}

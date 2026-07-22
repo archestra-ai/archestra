@@ -1,0 +1,91 @@
+{
+  "name": "zcaceres__fetch-mcp",
+  "display_name": "fetch-mcp",
+  "description": "A flexible HTTP fetching Model Context Protocol server.",
+  "author": {
+    "name": "zcaceres"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Fetch MCP Server\n\n![fetch mcp logo](logo.jpg)\n\nThis MCP server provides functionality to fetch web content in various formats, including HTML, JSON, plain text, and Markdown.\n\n[Available on NPM](https://www.npmjs.com/package/mcp-fetch-server)\n\n<a href=\"https://glama.ai/mcp/servers/nu09wf23ao\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/nu09wf23ao/badge\" alt=\"Fetch Server MCP server\" />\n</a>\n\n## Components\n\n### Tools\n\n- **fetch_html**\n  - Fetch a website and return the content as HTML\n  - Input:\n    - `url` (string, required): URL of the website to fetch\n    - `headers` (object, optional): Custom headers to include in the request\n    - `max_length` (number, optional): Maximum length to fetch (default 5000, can change via environment variable)\n    - `start_index` (number, optional): Used together with max_length to retrieve contents piece by piece, 0 by default\n  - Returns the raw HTML content of the webpage\n\n- **fetch_json**\n  - Fetch a JSON file from a URL\n  - Input:\n    - `url` (string, required): URL of the JSON to fetch\n    - `headers` (object, optional): Custom headers to include in the request\n    - `max_length` (number, optional): Maximum length to fetch (default 5000, can change via environment variable)\n    - `start_index` (number, optional): Used together with max_length to retrieve contents piece by piece, 0 by default\n  - Returns the parsed JSON content\n\n- **fetch_txt**\n  - Fetch a website and return the content as plain text (no HTML)\n  - Input:\n    - `url` (string, required): URL of the website to fetch\n    - `headers` (object, optional): Custom headers to include in the request\n    - `max_length` (number, optional): Maximum length to fetch (default 5000, can change via environment variable)\n    - `start_index` (number, optional): Used together with max_length to retrieve contents piece by piece, 0 by default\n  - Returns the text content of the webpage with HTML tags, scripts, and styles removed\n\n- **fetch_markdown**\n  - Fetch a website and return the content as Markdown\n  - Input:\n    - `url` (string, required): URL of the website to fetch\n    - `headers` (object, optional): Custom headers to include in the request\n    - `max_length` (number, optional): Maximum length to fetch (default 5000, can change via environment variable)\n    - `start_index` (number, optional): Used together with max_length to retrieve contents piece by piece, 0 by default\n  - Returns the content of the webpage converted to Markdown format\n\n### Resources\n\nThis server does not provide any persistent resources. It's designed to fetch and transform web content on demand.\n\n## Getting started\n\n1. Clone the repository\n2. Install dependencies: `npm install`\n3. Build the server: `npm run build`\n\n### Usage\n\nTo use the server, you can run it directly:\n\n```bash\nnpm start\n```\n\nThis will start the Fetch MCP Server running on stdio.\n\n### Environment variables\n\n- **DEFAULT_LIMIT** - sets the default size limit for the fetch (0 = no limit)\n\n### Usage with Desktop App\n\nTo integrate this server with a desktop app, add the following to your app's server configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"fetch\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"mcp-fetch-server\"\n      ], \n      \"env\": {\n        \"DEFAULT_LIMIT\": \"50000\" // optionally change default limit\n      }\n    }\n  }\n}\n```\n\n## Features\n\n- Fetches web content using modern fetch API\n- Supports custom headers for requests\n- Provides content in multiple formats: HTML, JSON, plain text, and Markdown\n- Uses JSDOM for HTML parsing and text extraction\n- Uses TurndownService for HTML to Markdown conversion\n\n## Development\n\n- Run `npm run dev` to start the TypeScript compiler in watch mode\n- Use `npm test` to run the test suite\n\n## License\n\nThis project is licensed under the MIT License.\n",
+  "category": "Browser Automation",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "fetch": {
+        "command": "node",
+        "args": ["{ABSOLUTE PATH TO FILE HERE}/dist/index.js"],
+        "env": {}
+      },
+      "fetch-stdio": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zcaceres",
+    "repo": "fetch-mcp",
+    "url": "https://github.com/zcaceres/fetch-mcp",
+    "name": "zcaceres__fetch-mcp",
+    "path": null,
+    "stars": 585,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "c662c8ac300f715e414a64766cd95cc9ec60a1b3"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:45.045Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "jsdom",
+      "importance": 8
+    },
+    {
+      "name": "private-ip",
+      "importance": 4
+    },
+    {
+      "name": "turndown",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-fetch-server\",\n  \"version\": \"1.0.2\",\n  \"description\": \"An MCP server offering simple HTTP fetch functionality\",\n  \"type\": \"module\",\n  \"main\": \"index.js\",\n  \"license\": \"MIT\",\n  \"author\": \"zcaceres (@zachcaceres zach.dev)\",\n  \"contributors\": [\"pwilkin (ilintar@gmail.com)\"],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"dev\": \"tsc --watch\",\n    \"start\": \"node dist/index.js\",\n    \"test\": \"jest\"\n  },\n  \"bin\": {\n    \"mcp-fetch-server\": \"dist/index.js\"\n  },\n  \"keywords\": [],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.4\",\n    \"jsdom\": \"^25.0.1\",\n    \"private-ip\": \"^3.0.2\",\n    \"turndown\": \"^7.2.0\",\n    \"zod\": \"^3.24.1\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/jsdom\": \"^21.1.7\",\n    \"@types/node\": \"^22.10.2\",\n    \"@types/turndown\": \"^5.0.5\",\n    \"jest\": \"^29.7.0\",\n    \"ts-jest\": \"^29.2.5\",\n    \"typescript\": \"^5.7.2\",\n    \"shx\": \"0.4.0\"\n  }\n}\n"
+}

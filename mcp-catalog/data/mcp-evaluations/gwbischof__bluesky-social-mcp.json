@@ -1,0 +1,118 @@
+{
+  "name": "gwbischof__bluesky-social-mcp",
+  "display_name": "bluesky-social-mcp",
+  "description": "A Bluesky MCP",
+  "author": {
+    "name": "gwbischof"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/gwbischof/bluesky-social-mcp@v0.1", "bluesky-social-mcp"],
+    "env": {
+      "BLUESKY_IDENTIFIER": "${user_config.bluesky_identifier}",
+      "BLUESKY_APP_PASSWORD": "${user_config.bluesky_app_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bluesky_identifier": {
+      "type": "string",
+      "title": "Bluesky Identifier",
+      "description": "Your Bluesky handle (e.g., your-handle.bsky.social)",
+      "required": true,
+      "sensitive": false,
+      "default": "your-handle.bsky.social"
+    },
+    "bluesky_app_password": {
+      "type": "string",
+      "title": "Bluesky App Password",
+      "description": "Your Bluesky app password (get it from bsky.app/settings/app-passwords)",
+      "required": true,
+      "sensitive": true,
+      "default": "your-app-password"
+    }
+  },
+  "readme": "# Bluesky Social MCP\n\nAn MCP server for interacting with the Bluesky social network via the [atproto](https://github.com/MarshalX/atproto) client.\n\n:wave: Leave an issue if you have any problems running this MCP. I should be able to push out fixes pretty quickly.\n\n## Quick Start\n\nGet your Bluesky app password at: https://bsky.app/settings/app-passwords\n\nAdd the following to your MCP config file (Note that the version is pinned):\n\n```json\n{\n  \"mcpServers\": {\n    \"bluesky-social\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"git+https://github.com/gwbischof/bluesky-social-mcp@v0.1\", \"bluesky-social-mcp\"],\n      \"env\": {\n        \"BLUESKY_IDENTIFIER\": \"your-handle.bsky.social\",\n        \"BLUESKY_APP_PASSWORD\": \"your-app-password\"\n      }\n    }\n  }\n}\n```\n- For security reasons, I think its best to keep it pinned and manually change your config to update the version.\n  \n## Tool Status\nAll tools have been implemented and tested ✅\n\n### Authentication & Setup\n- ✅ `check_auth_status` - Check if the current session is authenticated\n\n### Profile Operations\n- ✅ `get_profile` - Get a user profile (Client method: `get_profile`)\n- ✅ `get_follows` - Get users followed by an account (Client method: `get_follows`)\n- ✅ `get_followers` - Get users who follow an account (Client method: `get_followers`) \n- ✅ `follow_user` - Follow a user (Client method: `follow`)\n- ✅ `unfollow_user` - Unfollow a user (Client method: `unfollow`)\n- ✅ `mute_user` - Mute a user (Client method: `mute`)\n- ✅ `unmute_user` - Unmute a user (Client method: `unmute`)\n- ✅ `resolve_handle` - Resolve a handle to DID (Client method: `resolve_handle`)\n\n### Feed Operations\n- ✅ `get_timeline` - Get posts from your home timeline (Client method: `get_timeline`)\n- ✅ `get_author_feed` - Get posts from a specific user (Client method: `get_author_feed`)\n- ✅ `get_post_thread` - Get a full conversation thread (Client method: `get_post_thread`)\n\n### Post Interactions\n- ✅ `like_post` - Like a post (Client method: `like`)\n- ✅ `unlike_post` - Unlike a post (Client method: `unlike`)\n- ✅ `get_likes` - Get likes for a post (Client method: `get_likes`)\n- ✅ `repost` - Repost a post (Client method: `repost`)\n- ✅ `unrepost` - Remove a repost (Client method: `unrepost`)\n- ✅ `get_reposted_by` - Get users who reposted (Client method: `get_reposted_by`)\n\n### Post Creation & Management\n- ✅ `send_post` - Create a new text post (Client method: `send_post`)\n- ✅ `send_image` - Send a post with a single image (Client method: `send_image`)\n- ✅ `send_images` - Send a post with multiple images (Client method: `send_images`)\n- ✅ `send_video` - Send a post with a video (Client method: `send_video`)\n- ✅ `delete_post` - Delete a post (Client method: `delete_post`)\n- ✅ `get_post` - Get a specific post (Client method: `get_post`)\n- ✅ `get_posts` - Get multiple posts (Client method: `get_posts`)\n\n### Run from local clone of repo.\n```bash\n{\n    \"mcpServers\": {\n        \"bluesky-social\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"--directory\",\n                \"/ABSOLUTE/PATH/TO/PARENT/FOLDER/bluesky-social-mcp\",\n                \"run\",\n                \"server.py\"\n            ]\n            \"env\": {\n                \"BLUESKY_IDENTIFIER\": \"user-name.bsky.social‬\",\n                \"BLUESKY_APP_PASSWORD\": \"app-password-here\"\n            }\n        }\n    }\n}\n```\n\n# Dev Setup\n1. Install dependencies:\n   ```bash\n   uv sync\n   ```\n\n2. Run the server:\n   ```bash\n   uv run bluesky-social-mcp\n   ```\n\n### Debug with MCP Inspector\n```bash\nmcp dev server.py\nmcp dev server.py --with-editable .\n```\n\n### Run the tests\n- I run the tests against the actual Bluesky server.\n- The tests will use BLUESKY_IDENTIFIER, and BLUESKY_APP_PASSWORD env vars.\n```bash\nuv run pytest\n```\n",
+  "category": "Social Media",
+  "quality_score": 36,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bluesky-social": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/gwbischof/bluesky-social-mcp@v0.1", "bluesky-social-mcp"],
+        "env": {
+          "BLUESKY_IDENTIFIER": "your-handle.bsky.social",
+          "BLUESKY_APP_PASSWORD": "your-app-password"
+        }
+      },
+      "bluesky-social-local-clone": {
+        "command": "uv",
+        "args": ["--directory", "/ABSOLUTE/PATH/TO/PARENT/FOLDER/bluesky-social-mcp", "run", "server.py"],
+        "env": {
+          "BLUESKY_IDENTIFIER": "user-name.bsky.social‬",
+          "BLUESKY_APP_PASSWORD": "app-password-here"
+        }
+      },
+      "bluesky-social-mcp": {
+        "command": "uv",
+        "args": ["run", "bluesky-social-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gwbischof",
+    "repo": "bluesky-social-mcp",
+    "url": "https://github.com/gwbischof/bluesky-social-mcp",
+    "name": "bluesky-social-mcp",
+    "path": null,
+    "stars": 6,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "70a6c38bedc0398e139fb5028486c37c2e097112"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.847Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "atproto",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "trio",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"bluesky-social-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"atproto>=0.0.61\",\n    \"mcp[cli]>=1.9.0\",\n    \"pytest>=8.3.5\",\n    \"pytest-asyncio>=0.26.0\",\n    \"requests>=2.32.3\",\n    \"trio>=0.30.0\",\n]\n\n[dependency-groups]\ndev = [\n    \"black>=25.1.0\",\n    \"mypy>=1.15.0\",\n    \"pytest>=8.3.5\",\n    \"ruff>=0.11.10\",\n]\n\n[build-system]\nrequires = [\"setuptools>=45\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.setuptools]\npy-modules = [\"server\"]\n\n[project.scripts]\nbluesky-social-mcp = \"server:main\"\n"
+}

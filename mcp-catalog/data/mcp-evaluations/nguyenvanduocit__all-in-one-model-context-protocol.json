@@ -1,0 +1,218 @@
+{
+  "name": "nguyenvanduocit__all-in-one-model-context-protocol",
+  "display_name": "all-in-one-model-context-protocol",
+  "description": "🚀 All-in-one MCP server with AI search, RAG, and multi-service integrations (GitLab/Jira/Confluence/YouTube) for AI-enhanced development workflows",
+  "author": {
+    "name": "nguyenvanduocit"
+  },
+  "server": {
+    "command": "all-in-one-model-context-protocol",
+    "args": [],
+    "env": {
+      "ENABLE_TOOLS": "${user_config.enable_tools}",
+      "QDRANT_HOST": "${user_config.qdrant_host}",
+      "ATLASSIAN_HOST": "${user_config.atlassian_host}",
+      "ATLASSIAN_EMAIL": "${user_config.atlassian_email}",
+      "GITLAB_HOST": "${user_config.gitlab_host}",
+      "GITLAB_TOKEN": "${user_config.gitlab_token}",
+      "BRAVE_API_KEY": "${user_config.brave_api_key}",
+      "ATLASSIAN_TOKEN": "${user_config.atlassian_token}",
+      "GOOGLE_AI_API_KEY": "${user_config.google_ai_api_key}",
+      "PROXY_URL": "${user_config.proxy_url}",
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "DEEPSEEK_API_KEY": "${user_config.deepseek_api_key}",
+      "QDRANT_PORT": "${user_config.qdrant_port}",
+      "GOOGLE_TOKEN_FILE": "${user_config.google_token_file}",
+      "GOOGLE_CREDENTIALS_FILE": "${user_config.google_credentials_file}",
+      "QDRANT_API_KEY": "${user_config.qdrant_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "enable_tools": {
+      "type": "string",
+      "title": "Enabled Tools",
+      "description": "Comma-separated list of tool groups to enable. Leave empty to enable all tools. Available: gemini, fetch, confluence, youtube, jira, gitlab, script, rag, deepseek.",
+      "required": false,
+      "default": ""
+    },
+    "qdrant_host": {
+      "type": "string",
+      "title": "Qdrant Host",
+      "description": "Host for the Qdrant vector database.",
+      "required": false
+    },
+    "atlassian_host": {
+      "type": "string",
+      "title": "Atlassian Host",
+      "description": "Host for Atlassian services (Jira, Confluence).",
+      "required": false
+    },
+    "atlassian_email": {
+      "type": "string",
+      "title": "Atlassian Email",
+      "description": "Email associated with your Atlassian account.",
+      "required": false
+    },
+    "gitlab_host": {
+      "type": "string",
+      "title": "GitLab Host",
+      "description": "Host for GitLab services.",
+      "required": false
+    },
+    "gitlab_token": {
+      "type": "string",
+      "title": "GitLab Personal Access Token",
+      "description": "Personal access token for GitLab authentication.",
+      "sensitive": true,
+      "required": false
+    },
+    "brave_api_key": {
+      "type": "string",
+      "title": "Brave Search API Key",
+      "description": "API key for Brave Search integration.",
+      "sensitive": true,
+      "required": false
+    },
+    "atlassian_token": {
+      "type": "string",
+      "title": "Atlassian API Token",
+      "description": "API token for Atlassian services (Jira, Confluence).",
+      "sensitive": true,
+      "required": false
+    },
+    "google_ai_api_key": {
+      "type": "string",
+      "title": "Google AI API Key",
+      "description": "API key for Google AI services like Gemini.",
+      "sensitive": true,
+      "required": false
+    },
+    "proxy_url": {
+      "type": "string",
+      "title": "Proxy URL",
+      "description": "URL for an HTTP/HTTPS proxy.",
+      "required": false
+    },
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "API key for OpenAI services.",
+      "sensitive": true,
+      "required": false
+    },
+    "deepseek_api_key": {
+      "type": "string",
+      "title": "Deepseek API Key",
+      "description": "API key for Deepseek AI services.",
+      "sensitive": true,
+      "required": false
+    },
+    "qdrant_port": {
+      "type": "number",
+      "title": "Qdrant Port",
+      "description": "Port for the Qdrant vector database.",
+      "required": false
+    },
+    "google_token_file": {
+      "type": "file",
+      "title": "Google Token File Path",
+      "description": "Path to the Google token file for Google AI (Gemini, Search, Calendar). This is used for Google AI like Gemini, Google Search, Google Calendar, etc.",
+      "required": false,
+      "sensitive": true
+    },
+    "google_credentials_file": {
+      "type": "file",
+      "title": "Google Service Account Credentials File Path",
+      "description": "Path to the Google service account credentials file for advanced features like Google Chat. You need to create a project in Google Cloud Console and create a service account.",
+      "required": false,
+      "sensitive": true
+    },
+    "qdrant_api_key": {
+      "type": "string",
+      "title": "Qdrant API Key",
+      "description": "API key for Qdrant vector database authentication.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# THE PROJECT IS MOVED\n\nTHE PROJECT HAS BEEN SPLIT AND MOVED TO INDIVIDUAL REPOSITORIES.\n\n- [Google Kit](https://github.com/nguyenvanduocit/google-kit): Tools for Gmail, Google Calendar, Google Chat\n- [RAG Kit](https://github.com/nguyenvanduocit/rag-kit): Tools for RAG, Memory\n- [Dev Kit](https://github.com/nguyenvanduocit/dev-kit): Tools for developers, jira, confluence, gitlab, github, ...\n- [Fetch Kit](https://github.com/nguyenvanduocit/fetch-kit): Tools for fetch, scrape, ...\n- [Research Kit](https://github.com/nguyenvanduocit/research-kit): Tools for research, academic, reasoning, ...\n\n# MyMCP Server\n\n[![smithery badge](https://smithery.ai/badge/@nguyenvanduocit/all-in-one-model-context-protocol)](https://smithery.ai/server/@nguyenvanduocit/all-in-one-model-context-protocol)\nA powerful Model Context Protocol (MCP) server implementation with integrations for GitLab, Jira, Confluence, YouTube, and more. This server provides AI-powered search capabilities and various utility tools for development workflows.\n\n[Tutorial](https://www.youtube.com/watch?v=XnDFtYKU6xU)\n\n## Community\n\nFor community support, discussions, and updates, please visit our forum at [community.aiocean.io](https://community.aiocean.io/).\n\n\n## Prerequisites\n\n- Go 1.23.2 or higher\n- Various API keys and tokens for the services you want to use\n\n## Installation\n\n### Installing via Smithery\n\nTo install MyMCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@nguyenvanduocit/all-in-one-model-context-protocol) (will guide you through interactive CLI setup):\n\n```bash\nnpx -y @smithery/cli install @nguyenvanduocit/all-in-one-model-context-protocol --client claude\n```\n\n*Note: Smithery will interactively prompt you for required configuration values and handle environment setup automatically*\n\n### Installing via Go\n\n1. Install the server:\n```bash\ngo install github.com/nguyenvanduocit/all-in-one-model-context-protocol@latest\n```\n\n2. **Manual setup required** - Create a `.env` file with your configuration:\n```env\nENABLE_TOOLS=\nQDRANT_HOST=\nATLASSIAN_HOST=\nATLASSIAN_EMAIL=\nGITLAB_HOST=\nGITLAB_TOKEN=\nBRAVE_API_KEY=\nATLASSIAN_TOKEN=\nGOOGLE_AI_API_KEY=\nPROXY_URL=\nOPENAI_API_KEY=\nDEEPSEEK_API_KEY=\nQDRANT_PORT=\nGOOGLE_TOKEN_FILE=\nGOOGLE_CREDENTIALS_FILE=\nQDRANT_API_KEY=\n```\n\n3. Config your claude's config:\n\n```json{claude_desktop_config.json}\n{\n  \"mcpServers\": {\n    \"my_mcp_server\": {\n      \"command\": \"all-in-one-model-context-protocol\",\n      \"args\": [\"-env\", \"/path/to/.env\"],\n    }\n  }\n}\n```\n\n## Secret\n\n*GOOGLE_TOKEN_FILE* is using for Google AI like Gemini, Google Search, Google Calendar, etc.\n\n*GOOGLE_CREDENTIALS_FILE* is service account for advanced feature like Google Chat. You need to create project in Google Cloud Console and create service account. Then also need to create Google cloud bot chat for it. Ask any LLM model to create these for you.\n\n\n\n## Enable Tools\n\nThere are a hidden variable `ENABLE_TOOLS` in the environment variable. It is a comma separated list of tools group to enable. If not set, all tools will be enabled. Leave it empty to enable all tools.\n\n\nHere is the list of tools group:\n\n- `gemini`: Gemini-powered search\n- `fetch`: Fetch tools\n- `confluence`: Confluence tools\n- `youtube`: YouTube tools\n- `jira`: Jira tools\n- `gitlab`: GitLab tools\n- `script`: Script tools\n- `rag`: RAG tools\n- `deepseek`: Deepseek AI tools\n\n## Available Tools\n\n### calendar_create_event\n\nCreate a new event in Google Calendar\n\nArguments:\n\n- `summary` (String) (Required): Title of the event\n- `description` (String): Description of the event\n- `start_time` (String) (Required): Start time of the event in RFC3339 format (e.g., 2023-12-25T09:00:00Z)\n- `end_time` (String) (Required): End time of the event in RFC3339 format\n- `attendees` (String): Comma-separated list of attendee email addresses\n\n### calendar_list_events\n\nList upcoming events in Google Calendar\n\nArguments:\n\n- `time_min` (String): Start time for the search in RFC3339 format (default: now)\n- `time_max` (String): End time for the search in RFC3339 format (default: 1 week from now)\n- `max_results` (Number): Maximum number of events to return (default: 10)\n\n### calendar_update_event\n\nUpdate an existing event in Google Calendar\n\nArguments:\n\n- `event_id` (String) (Required): ID of the event to update\n- `summary` (String): New title of the event\n- `description` (String): New description of the event\n- `start_time` (String): New start time of the event in RFC3339 format\n- `end_time` (String): New end time of the event in RFC3339 format\n- `attendees` (String): Comma-separated list of new attendee email addresses\n\n### calendar_respond_to_event\n\nRespond to an event invitation in Google Calendar\n\nArguments:\n\n- `event_id` (String) (Required): ID of the event to respond to\n- `response` (String) (Required): Your response (accepted, declined, or tentative)\n\n### confluence_search\n\nSearch Confluence\n\nArguments:\n\n- `query` (String) (Required): Atlassian Confluence Query Language (CQL)\n\n### confluence_get_page\n\nGet Confluence page content\n\nArguments:\n\n- `page_id` (String) (Required): Confluence page ID\n\n### confluence_create_page\n\nCreate a new Confluence page\n\nArguments:\n\n- `space_key` (String) (Required): The key of the space where the page will be created\n- `title` (String) (Required): Title of the page\n- `content` (String) (Required): Content of the page in storage format (XHTML)\n- `parent_id` (String): ID of the parent page (optional)\n\n### confluence_update_page\n\nUpdate an existing Confluence page\n\nArguments:\n\n- `page_id` (String) (Required): ID of the page to update\n- `title` (String): New title of the page (optional)\n- `content` (String): New content of the page in storage format (XHTML)\n- `version_number` (String): Version number for optimistic locking (optional)\n\n### deepseek_reasoning\n\nadvanced reasoning engine using Deepseek's AI capabilities for multi-step problem solving, critical analysis, and strategic decision support\n\nArguments:\n\n- `question` (String) (Required): The structured query or problem statement requiring deep analysis and reasoning\n- `context` (String) (Required): Defines the operational context and purpose of the query within the MCP ecosystem\n- `knowledge` (String): Provides relevant chat history, knowledge base entries, and structured data context for MCP-aware reasoning\n\n### get_web_content\n\nFetches content from a given HTTP/HTTPS URL. This tool allows you to retrieve text content from web pages, APIs, or any accessible HTTP endpoints. Returns the raw content as text.\n\nArguments:\n\n- `url` (String) (Required): The complete HTTP/HTTPS URL to fetch content from (e.g., https://example.com)\n\n### gchat_list_spaces\n\nList all available Google Chat spaces/rooms\n\n### gchat_send_message\n\nSend a message to a Google Chat space or direct message\n\nArguments:\n\n- `space_name` (String) (Required): Name of the space to send the message to\n- `message` (String) (Required): Text message to send\n\n### ai_web_search\n\nsearch the web by using Google AI Search. Best tool to update realtime information\n\nArguments:\n\n- `question` (String) (Required): The question to ask. Should be a question\n- `context` (String) (Required): Context/purpose of the question, helps Gemini to understand the question better\n\n### gitlab_list_projects\n\nList GitLab projects\n\nArguments:\n\n- `group_id` (String) (Required): gitlab group ID\n- `search` (String): Multiple terms can be provided, separated by an escaped space, either + or %20, and will be ANDed together. Example: one+two will match substrings one and two (in any order).\n\n### gitlab_get_project\n\nGet GitLab project details\n\nArguments:\n\n- `project_path` (String) (Required): Project/repo path\n\n### gitlab_list_mrs\n\nList merge requests\n\nArguments:\n\n- `project_path` (String) (Required): Project/repo path\n- `state` (String) (Default: all): MR state (opened/closed/merged)\n\n### gitlab_get_mr_details\n\nGet merge request details\n\nArguments:\n\n- `project_path` (String) (Required): Project/repo path\n- `mr_iid` (String) (Required): Merge request IID\n\n### gitlab_create_MR_note\n\nCreate a note on a merge request\n\nArguments:\n\n- `project_path` (String) (Required): Project/repo path\n- `mr_iid` (String) (Required): Merge request IID\n- `comment` (String) (Required): Comment text\n\n### gitlab_get_file_content\n\nGet file content from a GitLab repository\n\nArguments:\n\n- `project_path` (String) (Required): Project/repo path\n- `file_path` (String) (Required): Path to the file in the repository\n- `ref` (String) (Required): Branch name, tag, or commit SHA\n\n### gitlab_list_pipelines\n\nList pipelines for a GitLab project\n\nArguments:\n\n- `project_path` (String) (Required): Project/repo path\n- `status` (String) (Default: all): Pipeline status (running/pending/success/failed/canceled/skipped/all)\n\n### gitlab_list_commits\n\nList commits in a GitLab project within a date range\n\nArguments:\n\n- `project_path` (String) (Required): Project/repo path\n- `since` (String) (Required): Start date (YYYY-MM-DD)\n- `until` (String): End date (YYYY-MM-DD). If not provided, defaults to current date\n- `ref` (String) (Required): Branch name, tag, or commit SHA\n\n### gitlab_get_commit_details\n\nGet details of a commit\n\nArguments:\n\n- `project_path` (String) (Required): Project/repo path\n- `commit_sha` (String) (Required): Commit SHA\n\n### gitlab_list_user_events\n\nList GitLab user events within a date range\n\nArguments:\n\n- `username` (String) (Required): GitLab username\n- `since` (String) (Required): Start date (YYYY-MM-DD)\n- `until` (String): End date (YYYY-MM-DD). If not provided, defaults to current date\n\n### gitlab_list_group_users\n\nList all users in a GitLab group\n\nArguments:\n\n- `group_id` (String) (Required): GitLab group ID\n\n### gitlab_create_mr\n\nCreate a new merge request\n\nArguments:\n\n- `project_path` (String) (Required): Project/repo path\n- `source_branch` (String) (Required): Source branch name\n- `target_branch` (String) (Required): Target branch name\n- `title` (String) (Required): Merge request title\n- `description` (String): Merge request description\n\n### gmail_search\n\nSearch emails in Gmail using Gmail's search syntax\n\nArguments:\n\n- `query` (String) (Required): Gmail search query. Follow Gmail's search syntax\n\n### gmail_move_to_spam\n\nMove specific emails to spam folder in Gmail by message IDs\n\nArguments:\n\n- `message_ids` (String) (Required): Comma-separated list of message IDs to move to spam\n\n### gmail_create_filter\n\nCreate a Gmail filter with specified criteria and actions\n\nArguments:\n\n- `from` (String): Filter emails from this sender\n- `to` (String): Filter emails to this recipient\n- `subject` (String): Filter emails with this subject\n- `query` (String): Additional search query criteria\n- `add_label` (Boolean): Add label to matching messages\n- `label_name` (String): Name of the label to add (required if add_label is true)\n- `mark_important` (Boolean): Mark matching messages as important\n- `mark_read` (Boolean): Mark matching messages as read\n- `archive` (Boolean): Archive matching messages\n\n### gmail_list_filters\n\nList all Gmail filters in the account\n\n### gmail_list_labels\n\nList all Gmail labels in the account\n\n### gmail_delete_filter\n\nDelete a Gmail filter by its ID\n\nArguments:\n\n- `filter_id` (String) (Required): The ID of the filter to delete\n\n### gmail_delete_label\n\nDelete a Gmail label by its ID\n\nArguments:\n\n- `label_id` (String) (Required): The ID of the label to delete\n\n### jira_get_issue\n\nRetrieve detailed information about a specific Jira issue including its status, assignee, description, subtasks, and available transitions\n\nArguments:\n\n- `issue_key` (String) (Required): The unique identifier of the Jira issue (e.g., KP-2, PROJ-123)\n\n### jira_search_issue\n\nSearch for Jira issues using JQL (Jira Query Language). Returns key details like summary, status, assignee, and priority for matching issues\n\nArguments:\n\n- `jql` (String) (Required): JQL query string (e.g., 'project = KP AND status = \\\"In Progress\\\"')\n\n### jira_list_sprints\n\nList all active and future sprints for a specific Jira board, including sprint IDs, names, states, and dates\n\nArguments:\n\n- `board_id` (String) (Required): Numeric ID of the Jira board (can be found in board URL)\n\n### jira_create_issue\n\nCreate a new Jira issue with specified details. Returns the created issue's key, ID, and URL\n\nArguments:\n\n- `project_key` (String) (Required): Project identifier where the issue will be created (e.g., KP, PROJ)\n- `summary` (String) (Required): Brief title or headline of the issue\n- `description` (String) (Required): Detailed explanation of the issue\n- `issue_type` (String) (Required): Type of issue to create (common types: Bug, Task, Story, Epic)\n\n### jira_update_issue\n\nModify an existing Jira issue's details. Supports partial updates - only specified fields will be changed\n\nArguments:\n\n- `issue_key` (String) (Required): The unique identifier of the issue to update (e.g., KP-2)\n- `summary` (String): New title for the issue (optional)\n- `description` (String): New description for the issue (optional)\n\n### jira_list_statuses\n\nRetrieve all available issue status IDs and their names for a specific Jira project\n\nArguments:\n\n- `project_key` (String) (Required): Project identifier (e.g., KP, PROJ)\n\n### jira_transition_issue\n\nTransition an issue through its workflow using a valid transition ID. Get available transitions from jira_get_issue\n\nArguments:\n\n- `issue_key` (String) (Required): The issue to transition (e.g., KP-123)\n- `transition_id` (String) (Required): Transition ID from available transitions list\n- `comment` (String): Optional comment to add with transition\n\n### RAG_memory_index_content\n\nIndex a content into memory, can be inserted or updated\n\nArguments:\n\n- `collection` (String) (Required): Memory collection name\n- `filePath` (String) (Required): content file path\n- `payload` (String) (Required): Plain text payload\n\n### RAG_memory_index_file\n\nIndex a local file into memory\n\nArguments:\n\n- `collection` (String) (Required): Memory collection name\n- `filePath` (String) (Required): Path to the local file to be indexed\n\n### RAG_memory_create_collection\n\nCreate a new vector collection in memory\n\nArguments:\n\n- `collection` (String) (Required): Memory collection name\n\n### RAG_memory_delete_collection\n\nDelete a vector collection in memory\n\nArguments:\n\n- `collection` (String) (Required): Memory collection name\n\n### RAG_memory_list_collections\n\nList all vector collections in memory\n\n### RAG_memory_search\n\nSearch for memory in a collection based on a query\n\nArguments:\n\n- `collection` (String) (Required): Memory collection name\n- `query` (String) (Required): search query, should be a keyword\n\n### RAG_memory_delete_index_by_filepath\n\nDelete a vector index by filePath\n\nArguments:\n\n- `collection` (String) (Required): Memory collection name\n- `filePath` (String) (Required): Path to the local file to be deleted\n\n### execute_comand_line_script\n\nSafely execute command line scripts on the user's system with security restrictions. Features sandboxed execution, timeout protection, and output capture. Supports cross-platform scripting with automatic environment detection.\n\nArguments:\n\n- `content` (String) (Required): \n- `interpreter` (String) (Default: /bin/sh): Path to interpreter binary (e.g. /bin/sh, /bin/bash, /usr/bin/python, cmd.exe). Validated against allowed list for security\n- `working_dir` (String): Execution directory path (default: user home). Validated to prevent unauthorized access to system locations\n\n### web_search\n\nSearch the web using Brave Search API\n\nArguments:\n\n- `query` (String) (Required): Query to search for (max 400 chars, 50 words)\n- `count` (Number) (Default: 5): Number of results (1-20, default 5)\n- `country` (String) (Default: ALL): Country code\n\n### sequentialthinking\n\n`A detailed tool for dynamic and reflective problem-solving through thoughts.\nThis tool helps analyze problems through a flexible thinking process that can adapt and evolve.\nEach thought can build on, question, or revise previous insights as understanding deepens.\n\nWhen to use this tool:\n- Breaking down complex problems into steps\n- Planning and design with room for revision\n- Analysis that might need course correction\n- Problems where the full scope might not be clear initially\n- Problems that require a multi-step solution\n- Tasks that need to maintain context over multiple steps\n- Situations where irrelevant information needs to be filtered out\n\nKey features:\n- You can adjust total_thoughts up or down as you progress\n- You can question or revise previous thoughts\n- You can add more thoughts even after reaching what seemed like the end\n- You can express uncertainty and explore alternative approaches\n- Not every thought needs to build linearly - you can branch or backtrack\n- Generates a solution hypothesis\n- Verifies the hypothesis based on the Chain of Thought steps\n- Repeats the process until satisfied\n- Provides a correct answer\n\nParameters explained:\n- thought: Your current thinking step, which can include:\n* Regular analytical steps\n* Revisions of previous thoughts\n* Questions about previous decisions\n* Realizations about needing more analysis\n* Changes in approach\n* Hypothesis generation\n* Hypothesis verification\n- next_thought_needed: True if you need more thinking, even if at what seemed like the end\n- thought_number: Current number in sequence (can go beyond initial total if needed)\n- total_thoughts: Current estimate of thoughts needed (can be adjusted up/down)\n- is_revision: A boolean indicating if this thought revises previous thinking\n- revises_thought: If is_revision is true, which thought number is being reconsidered\n- branch_from_thought: If branching, which thought number is the branching point\n- branch_id: Identifier for the current branch (if any)\n- needs_more_thoughts: If reaching end but realizing more thoughts needed\n\nYou should:\n1. Start with an initial estimate of needed thoughts, but be ready to adjust\n2. Feel free to question or revise previous thoughts\n3. Don't hesitate to add more thoughts if needed, even at the \"end\"\n4. Express uncertainty when present\n5. Mark thoughts that revise previous thinking or branch into new paths\n6. Ignore information that is irrelevant to the current step\n7. Generate a solution hypothesis when appropriate\n8. Verify the hypothesis based on the Chain of Thought steps\n9. Repeat the process until satisfied with the solution\n10. Provide a single, ideally correct answer as the final output\n11. Only set next_thought_needed to false when truly done and a satisfactory answer is reached`\n\nArguments:\n\n- `thought` (String) (Required): Your current thinking step\n- `nextThoughtNeeded` (Boolean) (Required): Whether another thought step is needed\n- `thoughtNumber` (Number) (Required): Current thought number\n- `totalThoughts` (Number) (Required): Estimated total thoughts needed\n- `isRevision` (Boolean): Whether this revises previous thinking\n- `revisesThought` (Number): Which thought is being reconsidered\n- `branchFromThought` (Number): Branching point thought number\n- `branchId` (String): Branch identifier\n- `needsMoreThoughts` (Boolean): If more thoughts are needed\n\n### tool_manager\n\nManage MCP tools - enable or disable tools\n\nArguments:\n\n- `action` (String) (Required): Action to perform: list, enable, disable\n- `tool_name` (String): Tool name to enable/disable\n\n### tool_use_plan\n\nTạo kế hoạch sử dụng các công cụ đang kích hoạt để giải quyết yêu cầu\n\nArguments:\n\n- `request` (String) (Required): Yêu cầu cần lập kế hoạch\n- `context` (String) (Required): Ngữ cảnh liên quan đến yêu cầu\n\n### youtube_transcript\n\nGet YouTube video transcript\n\nArguments:\n\n- `video_id` (String) (Required): YouTube video ID\n\n### youtube_update_video\n\nUpdate a video's title and description on YouTube\n\nArguments:\n\n- `video_id` (String) (Required): ID of the video to update\n- `title` (String) (Required): New title of the video\n- `description` (String) (Required): New description of the video\n- `keywords` (String) (Required): Comma-separated list of keywords for the video\n- `category` (String) (Required): Category ID for the video. See https://developers.google.com/youtube/v3/docs/videoCategories/list for more information.\n\n### youtube_get_video_details\n\nGet details (title, description, ...) for a specific video\n\nArguments:\n\n- `video_id` (String) (Required): ID of the video\n\n### youtube_list_videos\n\nList YouTube videos managed by the user\n\nArguments:\n\n- `channel_id` (String) (Required): ID of the channel to list videos for\n- `max_results` (Number) (Required): Maximum number of videos to return\n\n",
+  "category": "AI Tools",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "nguyenvanduocit-all-in-one-model-context-protocol-with-config": {
+        "command": "all-in-one-model-context-protocol",
+        "args": ["-env", "/path/to/.env"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "nguyenvanduocit",
+    "repo": "all-in-one-model-context-protocol",
+    "url": "https://github.com/nguyenvanduocit/all-in-one-model-context-protocol",
+    "name": "all-in-one-model-context-protocol",
+    "path": null,
+    "stars": 84,
+    "contributors": 5,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "342c09febf99330cc1e60fba0d5c104411781159"
+  },
+  "programming_language": "Unknown",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:49.869Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "google.golang.org/api",
+      "importance": 9
+    },
+    {
+      "name": "Atlassian API Client",
+      "importance": 9
+    },
+    {
+      "name": "xanzy/go-gitlab",
+      "importance": 9
+    },
+    {
+      "name": "qdrant/go-client",
+      "importance": 8
+    },
+    {
+      "name": "sashabaranov/go-openai",
+      "importance": 8
+    },
+    {
+      "name": "Deepseek AI Client",
+      "importance": 8
+    },
+    {
+      "name": "Brave Search Client",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": null
+}

@@ -1,0 +1,122 @@
+{
+  "name": "wowinter13__solscan-mcp",
+  "display_name": "solscan-mcp",
+  "description": "An MCP server for querying Solana transactions using natural language with Solscan API",
+  "author": {
+    "name": "wowinter13"
+  },
+  "server": {
+    "command": "${HOME}/.cargo/bin/solscan-mcp",
+    "args": [],
+    "env": {
+      "SOLSCAN_API_KEY": "${user_config.solscan_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "solscan_api_key": {
+      "type": "string",
+      "title": "Solscan API Key",
+      "description": "Your Solscan Pro API key. You can obtain one from Solscan APIs.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# 🟣🔎 solscan-mcp: A Solscan API MCP Server in Rust\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/wowinter13/solscan-mcp)](https://archestra.ai/mcp-catalog/wowinter13__solscan-mcp)\n\n## Overview\n\nA Model Context Protocol (MCP) server for interacting with the Solscan Pro API for Solana blockchain data. This server provides tools to query token information, account activities, and transaction details on the Solana blockchain via Large Language Models.\n\n\n## Examples\n\nSimple prompts: \n\n\nhttps://github.com/user-attachments/assets/2f2586b2-ed9d-4d4d-bda4-0154b9b98cde\n\n\n\n\n_You can also use it for much more complex queries, like analyzing criminal activity combining multiple MCPs and correct context._\n\n_For example, upload a csv list of suspected addresses, then using perplexity-mcp research tool LLM will add info to context window on how investigators define criminal wallets based on their activity (mev, dusting, poisoning, sandwiched, etc) -> solscan-mcp will use this context to investigate the wallets and provide a report._\n\n\n## Features\n\nFor detailed documentation of all available tools, see [TOOLS.md](TOOLS.md).\n\n## Installation\n\nPrerequisites:\n- Rust toolchain (install via [rustup](https://rustup.rs/)) – for regular usage\n- Docker – for Docker usage\n- Solscan Pro API key. You can obtain one from [Solscan APIs](https://solscan.io/apis).\n\n### Regular\n\n```bash\ncargo install solscan-mcp\n\nwhere solscan-mcp # -> /Users/$username/.cargo/bin/solscan-mcp\n```\n\nAdd the following to your `claude_desktop_config.json` or `claude_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"solscan-mcp\": {\n      \"command\": \"/Users/$username/.cargo/bin/solscan-mcp\",\n      \"args\": [],\n      \"env\": {\n        \"SOLSCAN_API_KEY\": \"your_solscan_api_key\"\n      }\n    }\n  }\n}\n```\n\n### Docker\n\nWIP, will be available soon.\n\n\n\n## Code quality Notes\n\nI treat MCPs like useful scripts, as the structure of the APIs they rely on can always change. So, api.rs could definitely be split into multiple APIs based on Solscan namespaces. My main goal was to make it work and be easy to maintain, while ensuring errors are ignored without breaking the flow (unlike many MCPs I've tested in Python/TS, which crash painfully when they don't gracefully handle simple errors).\n\n\n## License\n\nMIT\n",
+  "category": "Data Science",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "solscan-mcp": {
+        "command": "/Users/$username/.cargo/bin/solscan-mcp",
+        "args": [],
+        "env": {
+          "SOLSCAN_API_KEY": "your_solscan_api_key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "wowinter13",
+    "repo": "solscan-mcp",
+    "url": "https://github.com/wowinter13/solscan-mcp",
+    "name": "solscan-mcp",
+    "path": null,
+    "stars": 25,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f9ea26c6beff8d35cb55286ea10653ecfa7df57b"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:16.527Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "serde",
+      "importance": 8
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "reqwest",
+      "importance": 8
+    },
+    {
+      "name": "anyhow",
+      "importance": 4
+    },
+    {
+      "name": "tracing",
+      "importance": 6
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 5
+    },
+    {
+      "name": "thiserror",
+      "importance": 4
+    },
+    {
+      "name": "async-trait",
+      "importance": 7
+    },
+    {
+      "name": "schemars",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"solscan-mcp\"\nversion = \"0.1.0\"\nedition = \"2021\"\nauthors = [\"Vladislav Dyachenko\"]\ndescription = \"An MCP server for querying Solana transactions using natural language with Solscan API\"\nlicense = \"MIT\"\ndocumentation = \"https://docs.rs/solscan-mcp\"\nrepository = \"https://github.com/wowinter13/solscan-mcp\"\nhomepage = \"https://github.com/wowinter13/solscan-mcp\"\nreadme = \"README.md\"\nkeywords = [\"solana\", \"api\", \"mcp\", \"solscan\", \"blockchain\"]\ncategories = [\"api-bindings\", \"web-programming\"]\n\n[dependencies]\nrmcp = { version = \"0.1.0\", features = [\"server\", \"macros\", \"transport-io\"] }\ntokio = { version = \"1.35.1\", features = [\"full\"] }\nserde = { version = \"1.0.193\", features = [\"derive\"] }\nserde_json = \"1.0.108\"\nreqwest = { version = \"0.11.23\", features = [\"json\"] }\nanyhow = \"1.0.78\"\ntracing = \"0.1.40\"\ntracing-subscriber = { version = \"0.3.18\", features = [\"env-filter\"] }\nthiserror = \"1.0.51\"\nasync-trait = \"0.1.75\"\nschemars = \"0.8.16\"\n\n\n[badges]\nmaintenance = { status = \"actively-developed\" }\n"
+}

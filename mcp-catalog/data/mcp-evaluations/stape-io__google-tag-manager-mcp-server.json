@@ -1,0 +1,98 @@
+{
+  "name": "stape-io__google-tag-manager-mcp-server",
+  "display_name": "google-tag-manager-mcp-server",
+  "description": "MCP server for Google Tag Manager",
+  "author": {
+    "name": "stape-io"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-remote", "https://gtm-mcp.stape.ai/sse"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Server for Google Tag Manager\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/stape-io/google-tag-manager-mcp-server)](https://archestra.ai/mcp-catalog/stape-io__google-tag-manager-mcp-server)\n\nThis is a server that supports remote MCP connections, with Google OAuth built-in and provides an interface to the Google Tag Manager API.\n\n\n## Access the remote MCP server from Claude Desktop\n\nOpen Claude Desktop and navigate to Settings -> Developer -> Edit Config. This opens the configuration file that controls which MCP servers Claude can access.\n\nReplace the content with the following configuration. Once you restart Claude Desktop, a browser window will open showing your OAuth login page. Complete the authentication flow to grant Claude access to your MCP server. After you grant access, the tools will become available for you to use.\n\n```json\n{\n  \"mcpServers\": {\n    \"gtm-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-remote\",\n        \"https://gtm-mcp.stape.ai/sse\"\n      ]\n    }\n  }\n}\n```\n\n### Troubleshooting\n\n**MCP Server Name Length Limit**\n\nSome MCP clients (like Cursor AI) have a 60-character limit for the combined MCP server name + tool name length. If you use a longer server name in your configuration (e.g., `gtm-mcp-server-your-additional-long-name`), some tools may be filtered out.\n\nTo avoid this issue:\n- Use shorter server names in your MCP configuration (e.g., `gtm-mcp-server`)\n\n**Clearing MCP Cache**\n\n[mcp-remote](https://github.com/geelen/mcp-remote#readme) stores all the credential information inside ~/.mcp-auth (or wherever your MCP_REMOTE_CONFIG_DIR points to). If you're having persistent issues, try running:\nYou can run rm -rf ~/.mcp-auth to clear any locally stored state and tokens.\n```\nrm -rf ~/.mcp-auth\n```\nThen restarting your MCP client.\n",
+  "category": "Marketing",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-remote": {
+        "command": "npx",
+        "args": ["-y", "mcp-remote", "https://gtm-mcp.stape.ai/sse"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "stape-io",
+    "repo": "google-tag-manager-mcp-server",
+    "url": "https://github.com/stape-io/google-tag-manager-mcp-server",
+    "name": "google-tag-manager-mcp-server",
+    "path": null,
+    "stars": 28,
+    "contributors": 4,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "86a4d2608b9a77af24087969d8f41a17582a66d7"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:23.773Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@cloudflare/workers-oauth-provider",
+      "importance": 8
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "agents",
+      "importance": 3
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "google-auth-library",
+      "importance": 8
+    },
+    {
+      "name": "googleapis",
+      "importance": 8
+    },
+    {
+      "name": "hono",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"google-tag-manager-mcp-server\",\n  \"version\": \"3.0.0\",\n  \"description\": \"MCP server for Google Tag Manager\",\n  \"license\": \"Apache-2.0\",\n  \"author\": \"stape-io\",\n  \"homepage\": \"https://github.com/stape-io/google-tag-manager-mcp-server\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"google-tag-manager-mcp-server\": \"./dist/index.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"modelcontextprotocol\",\n    \"gtm\",\n    \"stape\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 dist/index.js\",\n    \"postinstall\": \"npm run build\",\n    \"lint\": \"eslint --ext .ts src\",\n    \"lint:fix\": \"eslint --ext .ts src --fix\",\n    \"prepublish\": \"npm run build\",\n    \"deploy\": \"wrangler deploy\",\n    \"dev\": \"wrangler dev\",\n    \"start\": \"wrangler dev\",\n    \"cf-typegen\": \"wrangler types --include-env=false\"\n  },\n  \"dependencies\": {\n    \"@cloudflare/workers-oauth-provider\": \"^0.0.5\",\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\n    \"agents\": \"^0.0.94\",\n    \"dotenv\": \"^16.3.1\",\n    \"google-auth-library\": \"^9.4.1\",\n    \"googleapis\": \"^128.0.0\",\n    \"hono\": \"^4.7.10\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.24.0\",\n    \"@types/node\": \"^20.11.19\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.30.1\",\n    \"@typescript-eslint/parser\": \"^8.30.1\",\n    \"eslint\": \"^9.24.0\",\n    \"eslint-config-prettier\": \"^10.1.2\",\n    \"eslint-plugin-prettier\": \"^5.2.6\",\n    \"prettier\": \"^3.5.3\",\n    \"ts-node\": \"^10.9.2\",\n    \"ts-node-dev\": \"^2.0.0\",\n    \"typescript\": \"^5.8.3\",\n    \"typescript-eslint\": \"^8.30.1\",\n    \"wrangler\": \"^4.16.0\"\n  }\n}\n"
+}

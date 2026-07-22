@@ -1,0 +1,79 @@
+{
+  "name": "jae-jae__g-search-mcp",
+  "display_name": "g-search-mcp",
+  "description": "A powerful MCP server for Google search that enables parallel searching with multiple keywords simultaneously.",
+  "author": {
+    "name": "jae-jae"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "g-search-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<div align=\"center\">\n  <img src=\"https://github.com/jae-jae/g-search-mcp/raw/main/icon.svg\" width=\"120\" height=\"120\" alt=\"g-search-mcp Logo\" />\n</div>\n\n# G-Search MCP\n\nA powerful MCP server for Google search that enables parallel searching with multiple keywords simultaneously.\n\n> This project is modified from [google-search](https://github.com/web-agent-master/google-search).\n\n> 🌟 **Recommended**: [OllaMan](https://ollaman.com/) - Powerful Ollama AI Model Manager.\n\n## Advantages\n\n- **Parallel Searching**: Supports searching with multiple keywords on Google simultaneously, improving search efficiency\n- **Browser Optimization**: Opens multiple tabs in a single browser instance for efficient parallel searching\n- **Automatic Verification Handling**: Intelligently detects CAPTCHA and enables visible browser mode for user verification when needed\n- **User Behavior Simulation**: Simulates real user browsing patterns to reduce the possibility of detection by search engines\n- **Structured Data**: Returns structured search results in JSON format for easy processing and analysis\n- **Configurable Parameters**: Supports various parameter configurations such as search result limits, timeout settings, locale settings, etc.\n\n## Quick Start\n\nRun directly with npx:\n\n```bash\nnpx -y g-search-mcp\n```\n\nFirst time setup - install the required browser by running the following command in your terminal:\n\n```bash\nnpx playwright install chromium\n```\n\n### Debug Mode\n\nUse the `--debug` option to run in debug mode (showing browser window):\n\n```bash\nnpx -y g-search-mcp --debug\n```\n\n## Configure MCP\n\nConfigure this MCP server in Claude Desktop:\n\nMacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nWindows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"g-search\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"g-search-mcp\"]\n    }\n  }\n}\n```\n\n## Features\n\n- `search` - Execute Google searches with multiple keywords and return results\n  - Uses Playwright browser to perform searches\n  - Supports the following parameters:\n    - `queries`: Array of search queries to execute (required parameter)\n    - `limit`: Maximum number of results to return per query, default is 10\n    - `timeout`: Page loading timeout in milliseconds, default is 60000 (60 seconds)\n    - `noSaveState`: Whether to avoid saving browser state, default is false\n    - `locale`: Locale setting for search results, default is en-US\n    - `debug`: Whether to enable debug mode (showing browser window), overrides the --debug flag in command line\n\n**Example usage**:\n\n```\nUse the search tool to search for \"machine learning\" and \"artificial intelligence\" on Google\n```\n\n**Example response**:\n\n```json\n{\n  \"searches\": [\n    {\n      \"query\": \"machine learning\",\n      \"results\": [\n        {\n          \"title\": \"What is Machine Learning? | IBM\",\n          \"link\": \"https://www.ibm.com/topics/machine-learning\",\n          \"snippet\": \"Machine learning is a branch of artificial intelligence (AI) and computer science which focuses on the use of data and algorithms to imitate the way that humans learn, gradually improving its accuracy.\"\n        },\n        ...\n      ]\n    },\n    {\n      \"query\": \"artificial intelligence\",\n      \"results\": [\n        {\n          \"title\": \"What is Artificial Intelligence (AI)? | IBM\",\n          \"link\": \"https://www.ibm.com/topics/artificial-intelligence\",\n          \"snippet\": \"Artificial intelligence leverages computers and machines to mimic the problem-solving and decision-making capabilities of the human mind.\"\n        },\n        ...\n      ]\n    }\n  ]\n}\n```\n\n## Usage Tips\n\n### Handling Special Website Scenarios\n\n#### Adjusting Search Parameters\n\n- **Search Result Quantity**: For more search results:\n\n  ```\n  Please return the top 20 search results for each keyword\n  ```\n\n  This will set the `limit: 20` parameter.\n\n- **Increase Timeout Duration**: For slow loading situations:\n  ```\n  Please set the page loading timeout to 120 seconds\n  ```\n  This will adjust the `timeout` parameter to 120000 milliseconds.\n\n#### Locale Settings Adjustment\n\n- **Change Search Region**: Specify a different locale setting:\n  ```\n  Please use Chinese locale (zh-CN) for searching\n  ```\n  This will set the `locale: \"zh-CN\"` parameter.\n\n### Debugging and Troubleshooting\n\n#### Enable Debug Mode\n\n- **Dynamic Debug Activation**: To display the browser window during a specific search operation:\n  ```\n  Please enable debug mode for this search operation\n  ```\n  This sets `debug: true` even if the server was started without the `--debug` flag.\n\n## Installation\n\n### Prerequisites\n\n- Node.js 18 or higher\n- NPM or Yarn\n\n### Install from Source\n\n1. Clone the repository:\n\n```bash\ngit clone https://github.com/jae-jae/g-search-mcp.git\ncd g-search-mcp\n```\n\n2. Install dependencies:\n\n```bash\nnpm install\n```\n\n3. Install Playwright browser:\n\n```bash\nnpm run install-browser\n```\n\n4. Build the server:\n\n```bash\nnpm run build\n```\n\n## Development\n\n### Auto Rebuild (Development Mode)\n\n```bash\nnpm run watch\n```\n\n### Using MCP Inspector for Debugging\n\n```bash\nnpm run inspector\n```\n\n## Related Projects\n\n- [fetcher-mcp](https://github.com/jae-jae/fetcher-mcp): A powerful MCP server for fetching web page content using Playwright headless browser. Features intelligent content extraction, parallel processing, resource optimization, and more, making it an ideal tool for web content scraping.\n\n## License\n\nLicensed under the [MIT License](https://choosealicense.com/licenses/mit/)\n",
+  "category": "Search",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "g-search": {
+        "command": "npx",
+        "args": ["-y", "g-search-mcp"],
+        "env": {}
+      },
+      "g-search-debug": {
+        "command": "npx",
+        "args": ["-y", "g-search-mcp", "--debug"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jae-jae",
+    "repo": "g-search-mcp",
+    "url": "https://github.com/jae-jae/g-search-mcp",
+    "name": "g-search-mcp",
+    "path": null,
+    "stars": 188,
+    "contributors": 1,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f30a702e3a5fd9ab1ac9ae35257a706ea4fff8f7"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:28.770Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "playwright",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"g-search-mcp\",\n  \"version\": \"0.1.5\",\n  \"description\": \"MCP server for Google search using Playwright browser\",\n  \"private\": false,\n  \"type\": \"module\",\n  \"bin\": {\n    \"g-search-mcp\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npm run build && npx @modelcontextprotocol/inspector build/index.js --debug\",\n    \"install-browser\": \"npx playwright install chromium\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.6.0\",\n    \"playwright\": \"^1.42.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.17.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"main\": \"index.js\",\n  \"keywords\": [\n    \"mcp\",\n    \"playwright\",\n    \"google-search\",\n    \"search-results\",\n    \"multi-search\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\"\n}"
+}

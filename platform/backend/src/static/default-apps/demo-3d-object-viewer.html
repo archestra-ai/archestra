@@ -22,6 +22,7 @@
       transition: opacity 1.2s ease;
     }
     #intro.hide { opacity: 0; pointer-events: none; }
+    #btn-skip { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 51; font-size: 0.8rem; padding: 0.5rem 1rem; }
     .intro-lines { max-width: 34rem; min-height: 4.5rem; display: flex; align-items: center; justify-content: center; }
     .intro-line {
       position: absolute; opacity: 0;
@@ -82,6 +83,7 @@
   <div id="intro">
     <div class="intro-lines" id="intro-lines"></div>
     <div class="intro-dot"></div>
+    <button class="hud-btn" id="btn-skip" type="button">Skip intro</button>
   </div>
 
   <script type="module">
@@ -105,22 +107,27 @@
 
     function runIntro() {
       return new Promise(resolve => {
+        const timers = [];
+        let done = false;
+        const finish = () => {
+          if (done) return; // guard against double-fire (timer end + skip)
+          done = true;
+          timers.forEach(clearTimeout);
+          document.getElementById('intro').classList.add('hide');
+          setTimeout(resolve, 1300);
+        };
         let i = 0;
         const showNext = () => {
-          if (i >= lineNodes.length) {
-            const intro = document.getElementById('intro');
-            intro.classList.add('hide');
-            setTimeout(resolve, 1300);
-            return;
-          }
+          if (i >= lineNodes.length) { finish(); return; }
           const node = lineNodes[i];
           node.classList.add('show');
-          setTimeout(() => {
+          timers.push(setTimeout(() => {
             node.classList.remove('show');
-            setTimeout(() => { i++; showNext(); }, 1000);
-          }, 2200);
+            timers.push(setTimeout(() => { i++; showNext(); }, 1000));
+          }, 2200));
         };
-        setTimeout(showNext, 500);
+        timers.push(setTimeout(showNext, 500));
+        document.getElementById('btn-skip').addEventListener('click', finish);
       });
     }
 

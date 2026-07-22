@@ -1,0 +1,210 @@
+{
+  "name": "alfonsograziano__node-code-sandbox-mcp",
+  "display_name": "node-code-sandbox-mcp",
+  "description": "A Node.js–based Model Context Protocol server that spins up disposable Docker containers to execute arbitrary JavaScript.",
+  "author": {
+    "name": "alfonsograziano"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "node-code-sandbox-mcp"],
+    "env": {
+      "FILES_DIR": "${user_config.files_dir}",
+      "SANDBOX_MEMORY_LIMIT": "${user_config.sandbox_memory_limit}",
+      "SANDBOX_CPU_LIMIT": "${user_config.sandbox_cpu_limit}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "files_dir": {
+      "type": "directory",
+      "title": "Files Directory",
+      "description": "Directory where sandbox output files will be saved.",
+      "required": true,
+      "default": "${HOME}/Desktop/sandbox-output"
+    },
+    "sandbox_memory_limit": {
+      "type": "string",
+      "title": "Sandbox Memory Limit",
+      "description": "Optional memory limit for sandbox containers (e.g., '512m', '1g').",
+      "required": false,
+      "default": "512m"
+    },
+    "sandbox_cpu_limit": {
+      "type": "string",
+      "title": "Sandbox CPU Limit",
+      "description": "Optional CPU limit for sandbox containers (e.g., '0.75', '1').",
+      "required": false,
+      "default": "0.75"
+    }
+  },
+  "readme": "# 🐢🚀 Node.js Sandbox MCP Server\n\nNode.js server implementing the Model Context Protocol (MCP) for running arbitrary JavaScript in ephemeral Docker containers with on‑the‑fly npm dependency installation.\n\n![Website Preview](https://raw.githubusercontent.com/alfonsograziano/node-code-sandbox-mcp/master/assets/images/website_homepage.png)\n\n👉 [Look at the official website](https://jsdevai.com/)\n\n📦 [Available on Docker Hub](https://hub.docker.com/r/mcp/node-code-sandbox)\n\n## Features\n\n- Start and manage isolated Node.js sandbox containers\n- Execute arbitrary shell commands inside containers\n- Install specified npm dependencies per job\n- Run ES module JavaScript snippets and capture stdout\n- Tear down containers cleanly\n- **Detached Mode:** Keep the container alive after script execution (e.g. for long-running servers)\n\n> Note: Containers run with controlled CPU/memory limits.\n\n## Explore Cool Use Cases\n\nIf you want ideas for cool and powerful ways to use this library, check out the [use cases section on the website](https://jsdevai.com/#use-cases)\nIt contains a curated list of prompts, examples, and creative experiments you can try with the Node.js Sandbox MCP Server.\n\n## ⚠️ Prerequisites\n\nTo use this MCP server, Docker must be installed and running on your machine.\n\n**Tip:** Pre-pull any Docker images you'll need to avoid delays during first execution.\n\nExample recommended images:\n\n- node:lts-slim\n- mcr.microsoft.com/playwright:v1.55.0-noble\n- alfonsograziano/node-chartjs-canvas:latest\n\n## Getting started\n\nIn order to get started with this MCP server, first of all you need to connect it to a client (for example Claude Desktop).\n\nOnce it's running, you can test that it's fully working with a couple of test prompts:\n\n- Validate that the tool can run:\n\n  ```markdown\n  Create and run a JS script with a console.log(\"Hello World\")\n  ```\n\n  This should run a console.log and in the tool response you should be able to see Hello World.\n\n- Validate that you can install dependencies and save files\n\n  ```markdown\n  Create and run a JS script that generates a QR code for the URL `https://nodejs.org/en`, and save it as `qrcode.png` **Tip:** Use the `qrcode` package.\n  ```\n\n  This should create a file in your mounted directory (for example the Desktop) called \"qrcode.png\"\n\n### Usage with Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\nYou can follow the [Official Guide](https://modelcontextprotocol.io/quickstart/user) to install this MCP server\n\n```json\n{\n  \"mcpServers\": {\n    \"js-sandbox\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-v\",\n        \"/var/run/docker.sock:/var/run/docker.sock\",\n        \"-v\",\n        \"$HOME/Desktop/sandbox-output:/root\",\n        \"-e\",\n        \"FILES_DIR=$HOME/Desktop/sandbox-output\",\n        \"-e\",\n        \"SANDBOX_MEMORY_LIMIT=512m\", // optional\n        \"-e\",\n        \"SANDBOX_CPU_LIMIT=0.75\", // optional\n        \"mcp/node-code-sandbox\"\n      ]\n    }\n  }\n}\n```\n\nor with NPX:\n\n```json\n{\n  \"mcpServers\": {\n    \"node-code-sandbox-mcp\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"node-code-sandbox-mcp\"],\n      \"env\": {\n        \"FILES_DIR\": \"/Users/alfonsograziano/Desktop/node-sandbox\",\n        \"SANDBOX_MEMORY_LIMIT\": \"512m\", // optional\n        \"SANDBOX_CPU_LIMIT\": \"0.75\" // optional\n      }\n    }\n  }\n}\n```\n\n> Note: Ensure your working directory points to the built server, and Docker is installed/running.\n\n### Docker\n\nRun the server in a container (mount Docker socket if needed), and pass through your desired host output directory as an env var:\n\n```shell\n# Build locally if necessary\n# docker build -t mcp/node-code-sandbox .\n\ndocker run --rm -it \\\n  -v /var/run/docker.sock:/var/run/docker.sock \\\n  -v \"$HOME/Desktop/sandbox-output\":\"/root\" \\\n  -e FILES_DIR=\"$HOME/Desktop/sandbox-output\" \\\n  -e SANDBOX_MEMORY_LIMIT=\"512m\" \\\n  -e SANDBOX_CPU_LIMIT=\"0.5\" \\\n  mcp/node-code-sandbox stdio\n```\n\nThis bind-mounts your host folder into the container at the **same absolute path** and makes `FILES_DIR` available inside the MCP server.\n\n#### Ephemeral usage – **no persistent storage**\n\n```bash\ndocker run --rm -it \\\n  -v /var/run/docker.sock:/var/run/docker.sock \\\n  alfonsograziano/node-code-sandbox-mcp stdio\n```\n\n### Usage with VS Code\n\n**Quick install** buttons (VS Code & Insiders):\n\nInstall js-sandbox-mcp (NPX) Install js-sandbox-mcp (Docker)\n\n**Manual configuration**: Add to your VS Code `settings.json` or `.vscode/mcp.json`:\n\n```json\n\"mcp\": {\n    \"servers\": {\n        \"js-sandbox\": {\n            \"command\": \"docker\",\n            \"args\": [\n                \"run\",\n                \"-i\",\n                \"--rm\",\n                \"-v\", \"/var/run/docker.sock:/var/run/docker.sock\",\n                \"-v\", \"$HOME/Desktop/sandbox-output:/root\", // optional\n                \"-e\", \"FILES_DIR=$HOME/Desktop/sandbox-output\",  // optional\n                \"-e\", \"SANDBOX_MEMORY_LIMIT=512m\",\n                \"-e\", \"SANDBOX_CPU_LIMIT=1\",\n                \"mcp/node-code-sandbox\"\n              ]\n        }\n    }\n}\n```\n\n## API\n\n## Tools\n\n### run_js_ephemeral\n\nRun a one-off JS script in a brand-new disposable container.\n\n**Inputs:**\n\n- `image` (string, optional): Docker image to use (default: `node:lts-slim`).\n- `code` (string, required): JavaScript source to execute.\n- `dependencies` (array of `{ name, version }`, optional): NPM packages and versions to install (default: `[]`).\n\n**Behavior:**\n\n1. Creates a fresh container.\n2. Writes your `index.js` and a minimal `package.json`.\n3. Installs the specified dependencies.\n4. Executes the script.\n5. Tears down (removes) the container.\n6. Returns the captured stdout.\n7. If your code saves any files in the current directory, these files will be returned automatically.\n   - Images (e.g., PNG, JPEG) are returned as `image` content.\n   - Other files (e.g., `.txt`, `.json`) are returned as `resource` content.\n   - Note: the file saving feature is currently available only in the ephemeral tool.\n\n> **Tip:** To get files back, simply save them during your script execution.\n\n**Example Call:**\n\n```jsonc\n{\n  \"name\": \"run_js_ephemeral\",\n  \"arguments\": {\n    \"image\": \"node:lts-slim\",\n    \"code\": \"console.log('One-shot run!');\",\n    \"dependencies\": [{ \"name\": \"lodash\", \"version\": \"^4.17.21\" }],\n  },\n}\n```\n\n**Example to save a file:**\n\n```javascript\nimport fs from 'fs/promises';\n\nawait fs.writeFile('hello.txt', 'Hello world!');\nconsole.log('Saved hello.txt');\n```\n\nThis will return the console output **and** the `hello.txt` file.\n\n### sandbox_initialize\n\nStart a fresh sandbox container.\n\n- **Input**:\n  - `image` (_string_, optional, default: `node:lts-slim`): Docker image for the sandbox\n  - `port` (_number_, optional): If set, maps this container port to the host\n- **Output**: Container ID string\n\n### sandbox_exec\n\nRun shell commands inside the running sandbox.\n\n- **Input**:\n  - `container_id` (_string_): ID from `sandbox_initialize`\n  - `commands` (_string[]_): Array of shell commands to execute\n- **Output**: Combined stdout of each command\n\n### run_js\n\nInstall npm dependencies and execute JavaScript code.\n\n- **Input**:\n  - `container_id` (_string_): ID from `sandbox_initialize`\n  - `code` (_string_): JS source to run (ES modules supported)\n  - `dependencies` (_array of `{ name, version }`_, optional, default: `[]`): npm package names → semver versions\n  - `listenOnPort` (_number_, optional): If set, leaves the process running and exposes this port to the host (**Detached Mode**)\n\n- **Behavior:**\n  1. Creates a temp workspace inside the container\n  2. Writes `index.js` and a minimal `package.json`\n  3. Runs `npm install --omit=dev --ignore-scripts --no-audit --loglevel=error`\n  4. Executes `node index.js` and captures stdout, or leaves process running in background if `listenOnPort` is set\n  5. Cleans up workspace unless running in detached mode\n\n- **Output**: Script stdout or background execution notice\n\n### sandbox_stop\n\nTerminate and remove the sandbox container.\n\n- **Input**:\n  - `container_id` (_string_): ID from `sandbox_initialize`\n- **Output**: Confirmation message\n\n### search_npm_packages\n\nSearch for npm packages by a search term and get their name, description, and a README snippet.\n\n- **Input**:\n  - `searchTerm` (_string_, required): The term to search for in npm packages. Should contain all relevant context. Use plus signs (+) to combine related terms (e.g., \"react+components\" for React component libraries).\n  - `qualifiers` (_object_, optional): Optional qualifiers to filter the search results:\n    - `author` (_string_, optional): Filter by package author name\n    - `maintainer` (_string_, optional): Filter by package maintainer name\n    - `scope` (_string_, optional): Filter by npm scope (e.g., \"@vue\" for Vue.js packages)\n    - `keywords` (_string_, optional): Filter by package keywords\n    - `not` (_string_, optional): Exclude packages matching this criteria (e.g., \"insecure\")\n    - `is` (_string_, optional): Include only packages matching this criteria (e.g., \"unstable\")\n    - `boostExact` (_string_, optional): Boost exact matches for this term in search results\n\n- **Behavior:**\n  1. Searches the npm registry using the provided search term and qualifiers\n  2. Returns up to 5 packages sorted by popularity\n  3. For each package, provides name, description, and README snippet (first 500 characters)\n\n- **Output**: JSON array containing package details with name, description, and README snippet\n\n## Usage Tips\n\n- **Session-based tools** (`sandbox_initialize` ➔ `run_js` ➔ `sandbox_stop`) are ideal when you want to:\n  - Keep a long-lived sandbox container open.\n  - Run multiple commands or scripts in the same environment.\n  - Incrementally install and reuse dependencies.\n- **One-shot execution** with `run_js_ephemeral` is perfect for:\n  - Quick experiments or simple scripts.\n  - Cases where you don't need to maintain state or cache dependencies.\n  - Clean, atomic runs without worrying about manual teardown.\n- **Detached mode** is useful when you want to:\n  - Spin up servers or long-lived services on-the-fly\n  - Expose and test endpoints from running containers\n\nChoose the workflow that best fits your use-case!\n\n## Build\n\nCompile and bundle:\n\n```shell\nnpm install\nnpm run build\n```\n\n## License\n\nMIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,\nDAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE\nOR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n",
+  "category": "AI Tools",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-node-code-sandbox-docker-claude": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-v",
+          "/var/run/docker.sock:/var/run/docker.sock",
+          "-v",
+          "$HOME/Desktop/sandbox-output:/root",
+          "-e",
+          "FILES_DIR=$HOME/Desktop/sandbox-output",
+          "-e",
+          "SANDBOX_MEMORY_LIMIT=512m",
+          "-e",
+          "SANDBOX_CPU_LIMIT=0.75",
+          "mcp/node-code-sandbox"
+        ],
+        "env": {
+          "FILES_DIR": "$HOME/Desktop/sandbox-output",
+          "SANDBOX_MEMORY_LIMIT": "512m",
+          "SANDBOX_CPU_LIMIT": "0.75"
+        },
+        "docker_image": "mcp/node-code-sandbox"
+      },
+      "node-code-sandbox-mcp": {
+        "command": "npx",
+        "args": ["-y", "node-code-sandbox-mcp"],
+        "env": {
+          "FILES_DIR": "/Users/alfonsograziano/Desktop/node-sandbox",
+          "SANDBOX_MEMORY_LIMIT": "512m",
+          "SANDBOX_CPU_LIMIT": "0.75"
+        }
+      },
+      "mcp-node-code-sandbox-docker-stdio": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-it",
+          "-v",
+          "/var/run/docker.sock:/var/run/docker.sock",
+          "-v",
+          "$HOME/Desktop/sandbox-output:/root",
+          "-e",
+          "FILES_DIR=$HOME/Desktop/sandbox-output",
+          "-e",
+          "SANDBOX_MEMORY_LIMIT=512m",
+          "-e",
+          "SANDBOX_CPU_LIMIT=0.5",
+          "mcp/node-code-sandbox",
+          "stdio"
+        ],
+        "env": {
+          "FILES_DIR": "$HOME/Desktop/sandbox-output",
+          "SANDBOX_MEMORY_LIMIT": "512m",
+          "SANDBOX_CPU_LIMIT": "0.5"
+        },
+        "docker_image": "mcp/node-code-sandbox"
+      },
+      "alfonsograziano-node-code-sandbox-mcp-docker-stdio": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-it",
+          "-v",
+          "/var/run/docker.sock:/var/run/docker.sock",
+          "alfonsograziano/node-code-sandbox-mcp",
+          "stdio"
+        ],
+        "env": {},
+        "docker_image": "alfonsograziano/node-code-sandbox-mcp"
+      },
+      "mcp-node-code-sandbox-docker-vscode": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-v",
+          "/var/run/docker.sock:/var/run/docker.sock",
+          "-v",
+          "$HOME/Desktop/sandbox-output:/root",
+          "-e",
+          "FILES_DIR=$HOME/Desktop/sandbox-output",
+          "-e",
+          "SANDBOX_MEMORY_LIMIT=512m",
+          "-e",
+          "SANDBOX_CPU_LIMIT=1",
+          "mcp/node-code-sandbox"
+        ],
+        "env": {
+          "FILES_DIR": "$HOME/Desktop/sandbox-output",
+          "SANDBOX_MEMORY_LIMIT": "512m",
+          "SANDBOX_CPU_LIMIT": "1"
+        },
+        "docker_image": "mcp/node-code-sandbox"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "alfonsograziano",
+    "repo": "node-code-sandbox-mcp",
+    "url": "https://github.com/alfonsograziano/node-code-sandbox-mcp",
+    "name": "alfonsograziano__node-code-sandbox-mcp",
+    "path": null,
+    "stars": 92,
+    "contributors": 7,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "f6727b3be251fbd24826ca961a16cd98bbfe6125"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:18.326Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "npm-registry-sdk",
+      "importance": 8
+    },
+    {
+      "name": "tmp",
+      "importance": 7
+    },
+    {
+      "name": "openai",
+      "importance": 6
+    },
+    {
+      "name": "mime-types",
+      "importance": 5
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"node-code-sandbox-mcp\",\n  \"description\": \"Run arbitrary JavaScript inside disposable Docker containers and install npm dependencies on the fly.\",\n  \"version\": \"1.3.0\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"node-code-sandbox-mcp\": \"dist/server.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"NODE_GUIDELINES.md\"\n  ],\n  \"scripts\": {\n    \"dev\": \"node --env-file .env --watch src/server.ts\",\n    \"dev:evals\": \"node evals/index.ts\",\n    \"build\": \"rimraf dist && tsc -p tsconfig.build.json && shx chmod +x dist/*.js\",\n    \"start\": \"node dist/server.js\",\n    \"test\": \"vitest\",\n    \"test:coverage\": \"vitest --coverage\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector npm run dev\",\n    \"lint\": \"eslint . --ext .ts --report-unused-disable-directives --max-warnings 0\",\n    \"format\": \"prettier --write .\",\n    \"check\": \"npm run lint && npm run format\",\n    \"pre-commit\": \"lint-staged\",\n    \"prepublishOnly\": \"npm run build\",\n    \"prepare\": \"husky\",\n    \"release\": \"standard-version\",\n    \"major\": \"npm run release -- --release-as major\",\n    \"minor\": \"npm run release -- --release-as minor\",\n    \"patch\": \"npm run release -- --release-as patch\",\n    \"push-release\": \"git push --follow-tags origin master\"\n  },\n  \"dependencies\": {\n    \"@eslint/eslintrc\": \"^3.1.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.17.3\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.40.0\",\n    \"@typescript-eslint/parser\": \"^8.40.0\",\n    \"dotenv\": \"^17.2.1\",\n    \"eslint\": \"^9.33.0\",\n    \"eslint-config-prettier\": \"^10.1.8\",\n    \"eslint-plugin-n\": \"^17.21.3\",\n    \"eslint-plugin-prettier\": \"^5.5.4\",\n    \"mime-types\": \"^3.0.1\",\n    \"npm-registry-sdk\": \"^1.2.1\",\n    \"openai\": \"^5.13.1\",\n    \"tmp\": \"^0.2.5\"\n  },\n  \"devDependencies\": {\n    \"@commitlint/cli\": \"^19.8.1\",\n    \"@commitlint/config-conventional\": \"^19.8.1\",\n    \"@types/lint-staged\": \"^14.0.0\",\n    \"@types/mime-types\": \"^3.0.1\",\n    \"@types/node\": \"^24.3.0\",\n    \"@types/tmp\": \"^0.2.6\",\n    \"@vitest/coverage-v8\": \"^3.2.4\",\n    \"husky\": \"^9.1.7\",\n    \"lint-staged\": \"^16.1.5\",\n    \"prettier\": \"^3.6.2\",\n    \"rimraf\": \"^6.0.1\",\n    \"shx\": \"^0.4.0\",\n    \"standard-version\": \"^9.5.0\",\n    \"typescript\": \"^5.9.2\",\n    \"vitest\": \"^3.2.4\"\n  },\n  \"engines\": {\n    \"node\": \">=23.10.0\"\n  }\n}\n\n\n=== website/package.json ===\n{\n  \"name\": \"my-project\",\n  \"private\": true,\n  \"version\": \"0.0.0\",\n  \"scripts\": {\n    \"dev\": \"vite\",\n    \"build\": \"tsc && vite build\",\n    \"preview\": \"vite preview\"\n  },\n  \"dependencies\": {\n    \"@types/react-router-dom\": \"^5.3.3\",\n    \"buffer\": \"^6.0.3\",\n    \"clsx\": \"^2.1.1\",\n    \"ethers\": \"^5.6.9\",\n    \"lucide-react\": \"^0.509.0\",\n    \"react\": \"^18.0.0\",\n    \"react-dom\": \"^18.0.0\",\n    \"react-icons\": \"^4.4.0\",\n    \"react-router-dom\": \"^7.8.1\"\n  },\n  \"devDependencies\": {\n    \"@types/react\": \"^18.0.0\",\n    \"@types/react-dom\": \"^18.0.0\",\n    \"@vitejs/plugin-react\": \"^1.3.0\",\n    \"autoprefixer\": \"^10.4.7\",\n    \"postcss\": \"^8.4.14\",\n    \"tailwindcss\": \"^3.1.4\",\n    \"typescript\": \"^4.6.3\",\n    \"vite\": \"^3.0.0\"\n  }\n}\n"
+}

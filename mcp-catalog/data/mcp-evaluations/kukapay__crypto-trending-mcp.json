@@ -1,0 +1,78 @@
+{
+  "name": "kukapay__crypto-trending-mcp",
+  "display_name": "crypto-trending-mcp",
+  "description": "An MCP server that tracks and monitors the latest trending tokens on CoinGecko.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Crypto Trending MCP Server\n\nAn MCP server that tracks and monitors the latest trending tokens on CoinGecko, providing real-time insights into the most popular cryptocurrencies.\n\n<a href=\"https://glama.ai/mcp/servers/@kukapay/crypto-trending-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@kukapay/crypto-trending-mcp/badge\" alt=\"crypto-trending-mcp MCP server\" />\n</a>\n\n[![Discord](https://img.shields.io/discord/1353556181251133481?cacheSeconds=3600)](https://discord.gg/aRnuu2eJ)\n![GitHub License](https://img.shields.io/github/license/kukapay/crypto-trending-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Tool: `get_trending_md_doc`**  \n  Returns a Markdown document of the full CoinGecko trending page, including a table of trending cryptocurrencies with columns: Rank, Name, Symbol, Price, 1h Change, 24h Change, 7d Change, 24h Volume, Market Cap.\n\n- **Prompt: `parse_trending_md_doc`**  \n  Guides MCP clients to extract the trending coins table from the Markdown document and parse it with an LLM, supporting analyses like identifying coins with positive price changes or ranking by market cap.\n\n- **Seamless Integration**  \n  Designed for use with Claude Desktop, allowing natural language queries to analyze trending crypto data via MCP tools and prompts.\n\n- **Lightweight & Extensible**  \n  Built with minimal dependencies and a simple architecture, making it easy to extend or deploy.\n\n## Installation\n\n### Prerequisites\n\n- **Python 3.10+**\n- **Node.js** (for Playwright browser dependencies)\n- **Claude Desktop** (optional, for testing with MCP client)\n\n### Steps\n\n1. **Clone the Repository**:\n\n   ```bash\n   git clone https://github.com/kukapay/crypto-trending-mcp.git\n   cd crypto-trending-mcp\n   ```\n\n2. **Install Dependencies with uv**:\n\n   ```bash\n   uv sync\n   playwright install\n   ```\n\n## Usage\n\n### Integrating with Claude Desktop\n\n1. **Configure Claude Desktop**:\n\n   - Edit the configuration file:\n     - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n     - **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n   - Add the server configuration:\n\n     ```json\n     {\n       \"mcpServers\": {\n         \"crypto-trending\": {\n           \"command\": \"uv\",\n           \"args\": [\n             \"--directory\",\n             \"/absolute/path/to/crypto-trending-mcp\",\n             \"run\",\n             \"main.py\"\n           ]\n         }\n       }\n     }\n     ```\n\n     Replace `/absolute/path/to/crypto-trending-mcp` with the absolute path to your `main.py`.\n\n2. **Restart Claude Desktop**:\n\n   - Close and reopen Claude Desktop.\n   - Look for the hammer icon (🔨) in the input box, indicating MCP tools are available.\n\n3. **Interact with the Server**:\n\n   - Ask natural language questions like:\n     - \"What are the trending cryptocurrencies with positive 24h price changes?\"\n     - \"Show the top 3 trending coins by market cap.\"\n   - Claude will use the `get_trending_md_doc` tool and `parse_trending_md_doc` prompt to fetch and analyze the data.\n\n### Example Output\n\nThe `get_trending_md_doc` tool returns a Markdown document like:\n\n```markdown\n# Trending Crypto\n\n...\n\n| Rank | Name        | Symbol | Price      | 1h Change | 24h Change | 7d Change | 24h Volume      | Market Cap         |\n|------|-------------|--------|------------|-----------|------------|-----------|-----------------|-------------------|\n| 1    | Bitcoin     | BTC    | $67,890.12 | +0.45%    | +2.34%     | +10.12%   | $45,123,456,789 | $1,345,678,901,234 |\n| 2    | Ethereum    | ETH    | $2,456.78  | -0.12%    | -1.12%     | +5.67%    | $20,987,654,321 | $295,123,456,789   |\n| 3    | Solana      | SOL    | $167.45    | +0.89%    | +5.67%     | +15.34%   | $3,456,789,123  | $78,901,234,567    |\n\n...\n\n*Data from CoinGecko*\n```\n\nThe `parse_trending_md_doc` prompt guides the LLM to extract the table and produce structured output, such as:\n\n```json\n[\n  {\n    \"rank\": 1,\n    \"name\": \"Bitcoin\",\n    \"symbol\": \"BTC\",\n    \"price\": \"$67,890.12\",\n    \"change_1h\": \"+0.45%\",\n    \"change_24h\": \"+2.34%\",\n    \"change_7d\": \"+10.12%\",\n    \"volume_24h\": \"$45,123,456,789\",\n    \"market_cap\": \"$1,345,678,901,234\"\n  },\n  ...\n]\n```\n\n## License\n\nThis project is licensed under the MIT License. See the LICENSE file for details.",
+  "category": "Monitoring",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "crypto-trending": {
+        "command": "uv",
+        "args": ["--directory", "/absolute/path/to/crypto-trending-mcp", "run", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-trending-mcp",
+    "url": "https://github.com/kukapay/crypto-trending-mcp",
+    "name": "crypto-trending-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.860Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "html2text",
+      "importance": 5
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pytest-playwright",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": null
+}

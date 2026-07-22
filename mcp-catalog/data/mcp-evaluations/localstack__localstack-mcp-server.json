@@ -1,0 +1,74 @@
+{
+  "name": "localstack__localstack-mcp-server",
+  "display_name": "localstack-mcp-server",
+  "description": "MCP server from localstack/localstack-mcp-server",
+  "author": {
+    "name": "unknown"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@localstack/localstack-mcp-server"],
+    "env": {
+      "LOCALSTACK_AUTH_TOKEN": "${user_config.localstack_auth_token}"
+    },
+    "type": "local"
+  },
+  "readme": "# LocalStack MCP Server\n\nA [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) server that provides tools to manage your LocalStack container and other assorted related tasks, to simplify local cloud development and testing. The LocalStack MCP Server provides simplified integration between Model Context Protocol-compatible apps and your local AWS development environment, enabling secure and direct communication with LocalStack's assortment of various features.\n\nThis server eliminates custom scripts and manual LocalStack management with direct access to:\n\n- Start, stop, restart, and monitor LocalStack container status with built-in auth.\n- Deploy CDK and Terraform projects with automatic configuration detection.\n- Parse logs, catch errors, and auto-generate IAM policies from violations.\n- Inject chaos faults and network effects into LocalStack to test system resilience.\n- Manage LocalStack state snapshots via Cloud Pods for development workflows.\n- Connect AI assistants and dev tools for automated cloud testing workflows.\n\n## Tools Reference\n\nThis server provides your AI with dedicated tools for managing your LocalStack environment:\n\n| Tool Name                                                                         | Description                                                                | Key Features                                                                                                                                                                                                                                                                                                                                                              |\n| :-------------------------------------------------------------------------------- | :------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |\n| [`localstack-management`](./src/tools/localstack-management.ts)                   | Manages LocalStack container operations and settings                       | - Execute start, stop, restart, and status checks<br/>- Integrate LocalStack Pro authentication tokens<br/>- Inject custom environment variables<br/>- Verify real-time status and perform health monitoring                                                                                                                                                              |\n| [`localstack-deployer`](./src/tools/localstack-deployer.ts)                       | Handles infrastructure deployment to LocalStack environments               | - Automatically run CDK and Terraform tooling to deploy infrastructure locally<br/>- Enable parameterized deployments with variable support<br/>- Process and present deployment results<br/>- Requires you to have [`cdklocal`](https://github.com/localstack/aws-cdk-local) or [`tflocal`](https://github.com/localstack/terraform-local) installed in your system path |\n| [`localstack-logs-analysis`](./src/tools/localstack-logs-analysis.ts)             | Analyzes LocalStack logs for troubleshooting and insights                  | - Offer multiple analysis options including summaries, errors, requests, and raw data<br/>- Filter by specific services and operations<br/>- Generate API call metrics and failure breakdowns<br/>- Group errors intelligently and identify patterns                                                                                                                      |\n| [`localstack-iam-policy-analyzer`](./src/tools/localstack-iam-policy-analyzer.ts) | Handles IAM policy management and violation remediation                    | - Set IAM enforcement levels including `enforced`, `soft`, and `disabled` modes<br/>- Search logs for permission-related violations<br/>- Generate IAM policies automatically from detected access failures<br/>- Requires a valid LocalStack Auth Token                                                                                                                  |\n| [`localstack-chaos-injector`](./src/tools/localstack-chaos-injector.ts)           | Injects and manages chaos engineering faults for system resilience testing | - Inject, add, remove, and clear service fault rules<br/>- Configure network latency effects<br/>- Comprehensive fault targeting by service, region, and operation<br/>- Built-in workflow guidance for chaos experiments                                                                                                                                                 |\n| [`localstack-cloud-pods`](./src/tools/localstack-cloud-pods.ts)                   | Manages LocalStack state snapshots for development workflows               | - Save current state as Cloud Pods<br/>- Load previously saved Cloud Pods instantly<br/>- Delete Cloud Pods or reset to a clean state<br/>- Requires a valid LocalStack Auth Token                                                                                                                                                                                        |\n| [`localstack-aws-client`](./src/tools/localstack-aws-client.ts)                   | Runs AWS CLI commands inside the LocalStack container                      | - Executes commands via `awslocal` inside the running container<br/>- Sanitizes commands to block shell chaining<br/>- Auto-detects LocalStack coverage errors and links to docs                                                                                                                                                                                            |\n\n## Installation\n\n|        Editor        | Installation                                                                                                                                                                                                                                                                                                                                                                          |\n| :------------------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |\n|      **Cursor**      | [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=localstack-mcp-server&config=eyJjb21tYW5kIjoibnB4IC15IEBsb2NhbHN0YWNrL2xvY2Fsc3RhY2stbWNwLXNlcnZlciJ9)                                                                                                                                                               |\nFor other MCP Clients, refer to the [configuration guide](#configuration).\n\n### Prerequisites\n\n- [LocalStack CLI](https://docs.localstack.cloud/getting-started/installation/#localstack-cli) and Docker installed in your system path\n- [`cdklocal`](https://github.com/localstack/aws-cdk-local) or [`tflocal`](https://github.com/localstack/terraform-local) installed in your system path for running infrastructure deployment tooling\n- A [valid LocalStack Auth Token](https://docs.localstack.cloud/aws/getting-started/auth-token/) to enable Pro services IAM Policy Analyzer, Cloud Pods, and Chaos Injector tools (**optional**)\n- [Node.js v22.x](https://nodejs.org/en/download/) installed in your system path\n\n### Configuration\n\nAdd the following to your MCP client's configuration file (e.g., `~/.cursor/mcp.json`). This configuration uses `npx` to run the server, which will automatically download & install the package if not already present:\n\n```json\n{\n  \"mcpServers\": {\n    \"localstack-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@localstack/localstack-mcp-server\"]\n    }\n  }\n}\n```\n\nIf you installed from source, change `command` and `args` to point to your local build:\n\n```json\n{\n  \"mcpServers\": {\n    \"localstack-mcp-server\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/your/localstack-mcp-server/dist/stdio.js\"]\n    }\n  }\n}\n```\n\n#### Enabling Licensed Features\n\nTo activate LocalStack licensed features, you need to add your LocalStack Auth Token to the environment variables. You can get your LocalStack Auth Token by following the official [documentation](https://docs.localstack.cloud/aws/getting-started/auth-token/).\n\nHere's how to add your LocalStack Auth Token to the environment variables:\n\n```json\n{\n  \"mcpServers\": {\n    \"localstack-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@localstack/localstack-mcp-server\"],\n      \"env\": {\n        \"LOCALSTACK_AUTH_TOKEN\": \"<YOUR_TOKEN>\"\n      }\n    }\n  }\n}\n```\n\n## Contributing\n\nPull requests are welcomed on GitHub! To get started:\n\n- Install Git and Node.js\n- Clone the repository\n- Install dependencies with `yarn`\n- Build with `yarn build`\n\nBuilt on the [XMCP](https://github.com/basementstudio/xmcp) framework, you can add new tools by adding a new file to the `src/tools` directory and documenting it in the `manifest.json` file.\n\n## License\n\n[Apache License 2.0](./LICENSE)\n",
+  "category": null,
+  "quality_score": null,
+  "framework": null,
+  "github_info": {
+    "owner": "localstack",
+    "repo": "localstack-mcp-server",
+    "url": "https://github.com/localstack/localstack-mcp-server",
+    "name": "localstack__localstack-mcp-server",
+    "path": null,
+    "stars": 0,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [],
+  "user_config": {
+    "localstack_auth_token": {
+      "type": "string",
+      "title": "LocalStack Auth Token",
+      "description": "LocalStack Auth Token",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "archestra_config": {
+    "client_config_permutations": {
+      "localstack-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "@localstack/localstack-mcp-server"],
+        "env": {
+          "LOCALSTACK_AUTH_TOKEN": "${user_config.localstack_auth_token}"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "last_scraped_at": "2025-09-09T13:06:56.840Z"
+}

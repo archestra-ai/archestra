@@ -1,0 +1,185 @@
+{
+  "name": "firecrawl__firecrawl-mcp-server",
+  "display_name": "Firecrawl",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjI4NCIgdmlld0JveD0iMCAwIDIwMCAyODQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xNjYuODYyIDkwLjc3MTZDMTU1LjgxMiA5NC4wNTE0IDE0Ny40ODMgMTAxLjQ3MSAxNDEuMzgzIDEwOS41M0MxNDAuMDczIDExMS4yNiAxMzcuMzQzIDEwOS45NiAxMzcuODYzIDEwNy44NDFDMTQ5LjU0MyA1OS44MTM2IDEzNC4xMTMgMTkuODk2IDg2LjAxNTcgMC4yNDcyNjlDODMuNTc1OCAtMC43NTI2NjkgODEuMDM1OSAxLjQzNzE5IDgxLjY3NTkgMy45OTcwNEMxMDMuNTU1IDkxLjg0MTYgMTEuNTI5NCA4NC40MzIgMjMuMTU4OCAxODQuMDE2QzIzLjM1ODggMTg1LjcyNiAyMS40Mzg5IDE4Ni44OTYgMjAuMDM5IDE4NS44OTZDMTUuNjc5MiAxODIuNzY2IDEwLjgwOTUgMTc2LjIzNiA3LjQ2OTYzIDE3MS42NDdDNi40ODk2OCAxNzAuMjk3IDQuMzY5NzggMTcwLjY3NyAzLjkxOTggMTcyLjI4N0MxLjI1OTk0IDE4MS45MDYgMCAxOTAuOTY1IDAgMTk5Ljk2NUMwIDIzNC45NjMgMTcuOTg5MSAyNjUuNzcxIDQ1LjIxNzcgMjgzLjYzQzQ2Ljc3NzcgMjg0LjY1IDQ4Ljc3NzYgMjgzLjE5IDQ4LjI0NzYgMjgxLjRDNDYuODQ3NyAyNzYuNyA0Ni4wNTc3IDI3MS43NCA0NS45OTc3IDI2Ni42MTFDNDUuOTk3NyAyNjMuNDYxIDQ2LjE5NzcgMjYwLjI0MSA0Ni42ODc3IDI1Ny4yNDFDNDcuODI3NiAyNDkuNzAyIDUwLjQ0NzUgMjQyLjUyMiA1NC44NDczIDIzNS45ODNDNjkuOTM2NSAyMTMuMzM0IDEwMC4xODUgMTkxLjQ1NSA5NS4zNTUyIDE2MS43NDdDOTUuMDQ1MyAxNTkuODY3IDk3LjI2NTEgMTU4LjYyNyA5OC42NjUxIDE1OS45MTdDMTE5Ljk3NCAxNzkuMzg2IDEyNC4xOTQgMjA1LjU3NSAxMjAuNjk0IDIyOS4wNjNDMTIwLjM5NCAyMzEuMTAzIDEyMi45NTQgMjMyLjE5MyAxMjQuMjQ0IDIzMC41OTNDMTI3LjUwNCAyMjYuNTEzIDEzMS40ODMgMjIyLjkzMyAxMzUuODEzIDIyMC4yNDRDMTM2Ljg5MyAyMTkuNTc0IDEzOC4zMzMgMjIwLjA4NCAxMzguNzQzIDIyMS4yODRDMTQxLjE1MyAyMjguMjkzIDE0NC43MzMgMjM0Ljg3MyAxNDguMTEzIDI0MS40NTJDMTUyLjE1MiAyNDkuMzYyIDE1NC4zMDIgMjU4LjM5MSAxNTMuOTYyIDI2Ny45NTFDMTUzLjc5MiAyNzIuNiAxNTMuMDIyIDI3Ny4xIDE1MS43MzIgMjgxLjM4QzE1MS4xODIgMjgzLjE5IDE1My4xNjIgMjg0LjcgMTU0Ljc1MiAyODMuNjZDMTgyLjAwMSAyNjUuODAxIDIwMCAyMzQuOTkzIDIwMCAxOTkuOTc1QzIwMCAxODcuODA2IDE5Ny44NyAxNzUuODc2IDE5My44NCAxNjQuNjk3QzE4NS4zOTEgMTQxLjI0OCAxNjMuOTUyIDEyMy42NCAxNjkuMzcyIDkzLjA4MTVDMTY5LjYzMiA5MS42MjE2IDE2OC4yODIgOTAuMzUxNyAxNjYuODYyIDkwLjc3MTZaIiBmaWxsPSIjRkE1RDE5IiBzdHlsZT0iZmlsbDojRkE1RDE5O2ZpbGw6Y29sb3IoZGlzcGxheS1wMyAwLjk4MTYgMC4zNjM0IDAuMDk4NCk7ZmlsbC1vcGFjaXR5OjE7Ii8+Cjwvc3ZnPgo=",
+  "description": "🔥 Official Firecrawl MCP Server - Adds powerful web scraping to Cursor, Claude and any other LLM clients.",
+  "author": {
+    "name": "firecrawl"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "firecrawl-mcp"],
+    "env": {
+      "FIRECRAWL_API_KEY": "${user_config.firecrawl_api_key}",
+      "FIRECRAWL_API_URL": "${user_config.firecrawl_api_url}",
+      "FIRECRAWL_RETRY_MAX_ATTEMPTS": "${user_config.firecrawl_retry_max_attempts}",
+      "FIRECRAWL_RETRY_INITIAL_DELAY": "${user_config.firecrawl_retry_initial_delay}",
+      "FIRECRAWL_RETRY_MAX_DELAY": "${user_config.firecrawl_retry_max_delay}",
+      "FIRECRAWL_RETRY_BACKOFF_FACTOR": "${user_config.firecrawl_retry_backoff_factor}",
+      "FIRECRAWL_CREDIT_WARNING_THRESHOLD": "${user_config.firecrawl_credit_warning_threshold}",
+      "FIRECRAWL_CREDIT_CRITICAL_THRESHOLD": "${user_config.firecrawl_credit_critical_threshold}",
+      "SSE_LOCAL": "${user_config.sse_local}"
+    },
+    "type": "local"
+  },
+  "readme": "# Firecrawl MCP Server\n\nA Model Context Protocol (MCP) server implementation that integrates with [Firecrawl](https://github.com/firecrawl/firecrawl) for web scraping capabilities.\n\n> Big thanks to [@vrknetha](https://github.com/vrknetha), [@knacklabs](https://www.knacklabs.ai) for the initial implementation!\n\n\n## Features\n\n- Web scraping, crawling, and discovery\n- Search and content extraction\n- Deep research and batch scraping\n- Automatic retries and rate limiting\n- Cloud and self-hosted support\n- SSE support\n\n> Play around with [our MCP Server on MCP.so's playground](https://mcp.so/playground?server=firecrawl-mcp-server) or on [Klavis AI](https://www.klavis.ai/mcp-servers).\n\n## Installation\n\n### Running with npx\n\n```bash\nenv FIRECRAWL_API_KEY=fc-YOUR_API_KEY npx -y firecrawl-mcp\n```\n\n### Manual Installation\n\n```bash\nnpm install -g firecrawl-mcp\n```\n\n### Running on Cursor\n\nConfiguring Cursor 🖥️\nNote: Requires Cursor version 0.45.6+\nFor the most up-to-date configuration instructions, please refer to the official Cursor documentation on configuring MCP servers:\n[Cursor MCP Server Configuration Guide](https://docs.cursor.com/context/model-context-protocol#configuring-mcp-servers)\n\nTo configure Firecrawl MCP in Cursor **v0.48.6**\n\n1. Open Cursor Settings\n2. Go to Features > MCP Servers\n3. Click \"+ Add new global MCP server\"\n4. Enter the following code:\n   ```json\n   {\n     \"mcpServers\": {\n       \"firecrawl-mcp\": {\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"firecrawl-mcp\"],\n         \"env\": {\n           \"FIRECRAWL_API_KEY\": \"YOUR-API-KEY\"\n         }\n       }\n     }\n   }\n   ```\n   \nTo configure Firecrawl MCP in Cursor **v0.45.6**\n\n1. Open Cursor Settings\n2. Go to Features > MCP Servers\n3. Click \"+ Add New MCP Server\"\n4. Enter the following:\n   - Name: \"firecrawl-mcp\" (or your preferred name)\n   - Type: \"command\"\n   - Command: `env FIRECRAWL_API_KEY=your-api-key npx -y firecrawl-mcp`\n\n\n\n> If you are using Windows and are running into issues, try `cmd /c \"set FIRECRAWL_API_KEY=your-api-key && npx -y firecrawl-mcp\"`\n\nReplace `your-api-key` with your Firecrawl API key. If you don't have one yet, you can create an account and get it from https://www.firecrawl.dev/app/api-keys\n\nAfter adding, refresh the MCP server list to see the new tools. The Composer Agent will automatically use Firecrawl MCP when appropriate, but you can explicitly request it by describing your web scraping needs. Access the Composer via Command+L (Mac), select \"Agent\" next to the submit button, and enter your query.\n\n### Running on Windsurf\n\nAdd this to your `./codeium/windsurf/model_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-server-firecrawl\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"firecrawl-mcp\"],\n      \"env\": {\n        \"FIRECRAWL_API_KEY\": \"YOUR_API_KEY\"\n      }\n    }\n  }\n}\n```\n\n### Running with SSE Local Mode\n\nTo run the server using Server-Sent Events (SSE) locally instead of the default stdio transport:\n\n```bash\nenv SSE_LOCAL=true FIRECRAWL_API_KEY=fc-YOUR_API_KEY npx -y firecrawl-mcp\n```\n\nUse the url: http://localhost:3000/sse\n\n### Installing via Smithery (Legacy)\n\nTo install Firecrawl for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@mendableai/mcp-server-firecrawl):\n\n```bash\nnpx -y @smithery/cli install @mendableai/mcp-server-firecrawl --client claude\n```\n\n### Running on VS Code\n\nFor one-click installation, click one of the install buttons below...\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=firecrawl&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22apiKey%22%2C%22description%22%3A%22Firecrawl%20API%20Key%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22firecrawl-mcp%22%5D%2C%22env%22%3A%7B%22FIRECRAWL_API_KEY%22%3A%22%24%7Binput%3AapiKey%7D%22%7D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=firecrawl&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22apiKey%22%2C%22description%22%3A%22Firecrawl%20API%20Key%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22firecrawl-mcp%22%5D%2C%22env%22%3A%7B%22FIRECRAWL_API_KEY%22%3A%22%24%7Binput%3AapiKey%7D%22%7D%7D&quality=insiders)\n\nFor manual installation, add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"apiKey\",\n        \"description\": \"Firecrawl API Key\",\n        \"password\": true\n      }\n    ],\n    \"servers\": {\n      \"firecrawl\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"firecrawl-mcp\"],\n        \"env\": {\n          \"FIRECRAWL_API_KEY\": \"${input:apiKey}\"\n        }\n      }\n    }\n  }\n}\n```\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others:\n\n```json\n{\n  \"inputs\": [\n    {\n      \"type\": \"promptString\",\n      \"id\": \"apiKey\",\n      \"description\": \"Firecrawl API Key\",\n      \"password\": true\n    }\n  ],\n  \"servers\": {\n    \"firecrawl\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"firecrawl-mcp\"],\n      \"env\": {\n        \"FIRECRAWL_API_KEY\": \"${input:apiKey}\"\n      }\n    }\n  }\n}\n```\n\n## Configuration\n\n### Environment Variables\n\n#### Required for Cloud API\n\n- `FIRECRAWL_API_KEY`: Your Firecrawl API key\n  - Required when using cloud API (default)\n  - Optional when using self-hosted instance with `FIRECRAWL_API_URL`\n- `FIRECRAWL_API_URL` (Optional): Custom API endpoint for self-hosted instances\n  - Example: `https://firecrawl.your-domain.com`\n  - If not provided, the cloud API will be used (requires API key)\n\n#### Optional Configuration\n\n##### Retry Configuration\n\n- `FIRECRAWL_RETRY_MAX_ATTEMPTS`: Maximum number of retry attempts (default: 3)\n- `FIRECRAWL_RETRY_INITIAL_DELAY`: Initial delay in milliseconds before first retry (default: 1000)\n- `FIRECRAWL_RETRY_MAX_DELAY`: Maximum delay in milliseconds between retries (default: 10000)\n- `FIRECRAWL_RETRY_BACKOFF_FACTOR`: Exponential backoff multiplier (default: 2)\n\n##### Credit Usage Monitoring\n\n- `FIRECRAWL_CREDIT_WARNING_THRESHOLD`: Credit usage warning threshold (default: 1000)\n- `FIRECRAWL_CREDIT_CRITICAL_THRESHOLD`: Credit usage critical threshold (default: 100)\n\n### Configuration Examples\n\nFor cloud API usage with custom retry and credit monitoring:\n\n```bash\n# Required for cloud API\nexport FIRECRAWL_API_KEY=your-api-key\n\n# Optional retry configuration\nexport FIRECRAWL_RETRY_MAX_ATTEMPTS=5        # Increase max retry attempts\nexport FIRECRAWL_RETRY_INITIAL_DELAY=2000    # Start with 2s delay\nexport FIRECRAWL_RETRY_MAX_DELAY=30000       # Maximum 30s delay\nexport FIRECRAWL_RETRY_BACKOFF_FACTOR=3      # More aggressive backoff\n\n# Optional credit monitoring\nexport FIRECRAWL_CREDIT_WARNING_THRESHOLD=2000    # Warning at 2000 credits\nexport FIRECRAWL_CREDIT_CRITICAL_THRESHOLD=500    # Critical at 500 credits\n```\n\nFor self-hosted instance:\n\n```bash\n# Required for self-hosted\nexport FIRECRAWL_API_URL=https://firecrawl.your-domain.com\n\n# Optional authentication for self-hosted\nexport FIRECRAWL_API_KEY=your-api-key  # If your instance requires auth\n\n# Custom retry configuration\nexport FIRECRAWL_RETRY_MAX_ATTEMPTS=10\nexport FIRECRAWL_RETRY_INITIAL_DELAY=500     # Start with faster retries\n```\n\n### Usage with Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-server-firecrawl\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"firecrawl-mcp\"],\n      \"env\": {\n        \"FIRECRAWL_API_KEY\": \"YOUR_API_KEY_HERE\",\n\n        \"FIRECRAWL_RETRY_MAX_ATTEMPTS\": \"5\",\n        \"FIRECRAWL_RETRY_INITIAL_DELAY\": \"2000\",\n        \"FIRECRAWL_RETRY_MAX_DELAY\": \"30000\",\n        \"FIRECRAWL_RETRY_BACKOFF_FACTOR\": \"3\",\n\n        \"FIRECRAWL_CREDIT_WARNING_THRESHOLD\": \"2000\",\n        \"FIRECRAWL_CREDIT_CRITICAL_THRESHOLD\": \"500\"\n      }\n    }\n  }\n}\n```\n\n### System Configuration\n\nThe server includes several configurable parameters that can be set via environment variables. Here are the default values if not configured:\n\n```typescript\nconst CONFIG = {\n  retry: {\n    maxAttempts: 3, // Number of retry attempts for rate-limited requests\n    initialDelay: 1000, // Initial delay before first retry (in milliseconds)\n    maxDelay: 10000, // Maximum delay between retries (in milliseconds)\n    backoffFactor: 2, // Multiplier for exponential backoff\n  },\n  credit: {\n    warningThreshold: 1000, // Warn when credit usage reaches this level\n    criticalThreshold: 100, // Critical alert when credit usage reaches this level\n  },\n};\n```\n\nThese configurations control:\n\n1. **Retry Behavior**\n\n   - Automatically retries failed requests due to rate limits\n   - Uses exponential backoff to avoid overwhelming the API\n   - Example: With default settings, retries will be attempted at:\n     - 1st retry: 1 second delay\n     - 2nd retry: 2 seconds delay\n     - 3rd retry: 4 seconds delay (capped at maxDelay)\n\n2. **Credit Usage Monitoring**\n   - Tracks API credit consumption for cloud API usage\n   - Provides warnings at specified thresholds\n   - Helps prevent unexpected service interruption\n   - Example: With default settings:\n     - Warning at 1000 credits remaining\n     - Critical alert at 100 credits remaining\n\n### Rate Limiting and Batch Processing\n\nThe server utilizes Firecrawl's built-in rate limiting and batch processing capabilities:\n\n- Automatic rate limit handling with exponential backoff\n- Efficient parallel processing for batch operations\n- Smart request queuing and throttling\n- Automatic retries for transient errors\n\n## How to Choose a Tool\n\nUse this guide to select the right tool for your task:\n\n- **If you know the exact URL(s) you want:**\n  - For one: use **scrape**\n  - For many: use **batch_scrape**\n- **If you need to discover URLs on a site:** use **map**\n- **If you want to search the web for info:** use **search**\n- **If you want to extract structured data:** use **extract**\n- **If you want to analyze a whole site or section:** use **crawl** (with limits!)\n\n### Quick Reference Table\n\n| Tool                | Best for                                 | Returns         |\n|---------------------|------------------------------------------|-----------------|\n| scrape              | Single page content                      | markdown/html   |\n| batch_scrape        | Multiple known URLs                      | markdown/html[] |\n| map                 | Discovering URLs on a site               | URL[]           |\n| crawl               | Multi-page extraction (with limits)      | markdown/html[] |\n| search              | Web search for info                      | results[]       |\n| extract             | Structured data from pages               | JSON            |\n\n## Available Tools\n\n### 1. Scrape Tool (`firecrawl_scrape`)\n\nScrape content from a single URL with advanced options.\n\n**Best for:**\n- Single page content extraction, when you know exactly which page contains the information.\n\n**Not recommended for:**\n- Extracting content from multiple pages (use batch_scrape for known URLs, or map + batch_scrape to discover URLs first, or crawl for full page content)\n- When you're unsure which page contains the information (use search)\n- When you need structured data (use extract)\n\n**Common mistakes:**\n- Using scrape for a list of URLs (use batch_scrape instead).\n\n**Prompt Example:**\n> \"Get the content of the page at https://example.com.\"\n\n**Usage Example:**\n```json\n{\n  \"name\": \"firecrawl_scrape\",\n  \"arguments\": {\n    \"url\": \"https://example.com\",\n    \"formats\": [\"markdown\"],\n    \"onlyMainContent\": true,\n    \"waitFor\": 1000,\n    \"timeout\": 30000,\n    \"mobile\": false,\n    \"includeTags\": [\"article\", \"main\"],\n    \"excludeTags\": [\"nav\", \"footer\"],\n    \"skipTlsVerification\": false\n  }\n}\n```\n\n**Returns:**\n- Markdown, HTML, or other formats as specified.\n\n### 2. Batch Scrape Tool (`firecrawl_batch_scrape`)\n\nScrape multiple URLs efficiently with built-in rate limiting and parallel processing.\n\n**Best for:**\n- Retrieving content from multiple pages, when you know exactly which pages to scrape.\n\n**Not recommended for:**\n- Discovering URLs (use map first if you don't know the URLs)\n- Scraping a single page (use scrape)\n\n**Common mistakes:**\n- Using batch_scrape with too many URLs at once (may hit rate limits or token overflow)\n\n**Prompt Example:**\n> \"Get the content of these three blog posts: [url1, url2, url3].\"\n\n**Usage Example:**\n```json\n{\n  \"name\": \"firecrawl_batch_scrape\",\n  \"arguments\": {\n    \"urls\": [\"https://example1.com\", \"https://example2.com\"],\n    \"options\": {\n      \"formats\": [\"markdown\"],\n      \"onlyMainContent\": true\n    }\n  }\n}\n```\n\n**Returns:**\n- Response includes operation ID for status checking:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"Batch operation queued with ID: batch_1. Use firecrawl_check_batch_status to check progress.\"\n    }\n  ],\n  \"isError\": false\n}\n```\n\n### 3. Check Batch Status (`firecrawl_check_batch_status`)\n\nCheck the status of a batch operation.\n\n```json\n{\n  \"name\": \"firecrawl_check_batch_status\",\n  \"arguments\": {\n    \"id\": \"batch_1\"\n  }\n}\n```\n\n### 4. Map Tool (`firecrawl_map`)\n\nMap a website to discover all indexed URLs on the site.\n\n**Best for:**\n- Discovering URLs on a website before deciding what to scrape\n- Finding specific sections of a website\n\n**Not recommended for:**\n- When you already know which specific URL you need (use scrape or batch_scrape)\n- When you need the content of the pages (use scrape after mapping)\n\n**Common mistakes:**\n- Using crawl to discover URLs instead of map\n\n**Prompt Example:**\n> \"List all URLs on example.com.\"\n\n**Usage Example:**\n```json\n{\n  \"name\": \"firecrawl_map\",\n  \"arguments\": {\n    \"url\": \"https://example.com\"\n  }\n}\n```\n\n**Returns:**\n- Array of URLs found on the site\n\n### 5. Search Tool (`firecrawl_search`)\n\nSearch the web and optionally extract content from search results.\n\n**Best for:**\n- Finding specific information across multiple websites, when you don't know which website has the information.\n- When you need the most relevant content for a query\n\n**Not recommended for:**\n- When you already know which website to scrape (use scrape)\n- When you need comprehensive coverage of a single website (use map or crawl)\n\n**Common mistakes:**\n- Using crawl or map for open-ended questions (use search instead)\n\n**Usage Example:**\n```json\n{\n  \"name\": \"firecrawl_search\",\n  \"arguments\": {\n    \"query\": \"latest AI research papers 2023\",\n    \"limit\": 5,\n    \"lang\": \"en\",\n    \"country\": \"us\",\n    \"scrapeOptions\": {\n      \"formats\": [\"markdown\"],\n      \"onlyMainContent\": true\n    }\n  }\n}\n```\n\n**Returns:**\n- Array of search results (with optional scraped content)\n\n**Prompt Example:**\n> \"Find the latest research papers on AI published in 2023.\"\n\n### 6. Crawl Tool (`firecrawl_crawl`)\n\nStarts an asynchronous crawl job on a website and extract content from all pages.\n\n**Best for:**\n- Extracting content from multiple related pages, when you need comprehensive coverage.\n\n**Not recommended for:**\n- Extracting content from a single page (use scrape)\n- When token limits are a concern (use map + batch_scrape)\n- When you need fast results (crawling can be slow)\n\n**Warning:** Crawl responses can be very large and may exceed token limits. Limit the crawl depth and number of pages, or use map + batch_scrape for better control.\n\n**Common mistakes:**\n- Setting limit or maxDepth too high (causes token overflow)\n- Using crawl for a single page (use scrape instead)\n\n**Prompt Example:**\n> \"Get all blog posts from the first two levels of example.com/blog.\"\n\n**Usage Example:**\n```json\n{\n  \"name\": \"firecrawl_crawl\",\n  \"arguments\": {\n    \"url\": \"https://example.com/blog/*\",\n    \"maxDepth\": 2,\n    \"limit\": 100,\n    \"allowExternalLinks\": false,\n    \"deduplicateSimilarURLs\": true\n  }\n}\n```\n\n**Returns:**\n- Response includes operation ID for status checking:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"Started crawl for: https://example.com/* with job ID: 550e8400-e29b-41d4-a716-446655440000. Use firecrawl_check_crawl_status to check progress.\"\n    }\n  ],\n  \"isError\": false\n}\n```\n\n### 7. Check Crawl Status (`firecrawl_check_crawl_status`)\n\nCheck the status of a crawl job.\n\n```json\n{\n  \"name\": \"firecrawl_check_crawl_status\",\n  \"arguments\": {\n    \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n  }\n}\n```\n\n**Returns:**\n- Response includes the status of the crawl job:\n  \n### 8. Extract Tool (`firecrawl_extract`)\n\nExtract structured information from web pages using LLM capabilities. Supports both cloud AI and self-hosted LLM extraction.\n\n**Best for:**\n- Extracting specific structured data like prices, names, details.\n\n**Not recommended for:**\n- When you need the full content of a page (use scrape)\n- When you're not looking for specific structured data\n\n**Arguments:**\n- `urls`: Array of URLs to extract information from\n- `prompt`: Custom prompt for the LLM extraction\n- `systemPrompt`: System prompt to guide the LLM\n- `schema`: JSON schema for structured data extraction\n- `allowExternalLinks`: Allow extraction from external links\n- `enableWebSearch`: Enable web search for additional context\n- `includeSubdomains`: Include subdomains in extraction\n\nWhen using a self-hosted instance, the extraction will use your configured LLM. For cloud API, it uses Firecrawl's managed LLM service.\n**Prompt Example:**\n> \"Extract the product name, price, and description from these product pages.\"\n\n**Usage Example:**\n```json\n{\n  \"name\": \"firecrawl_extract\",\n  \"arguments\": {\n    \"urls\": [\"https://example.com/page1\", \"https://example.com/page2\"],\n    \"prompt\": \"Extract product information including name, price, and description\",\n    \"systemPrompt\": \"You are a helpful assistant that extracts product information\",\n    \"schema\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"name\": { \"type\": \"string\" },\n        \"price\": { \"type\": \"number\" },\n        \"description\": { \"type\": \"string\" }\n      },\n      \"required\": [\"name\", \"price\"]\n    },\n    \"allowExternalLinks\": false,\n    \"enableWebSearch\": false,\n    \"includeSubdomains\": false\n  }\n}\n```\n\n**Returns:**\n- Extracted structured data as defined by your schema\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": {\n        \"name\": \"Example Product\",\n        \"price\": 99.99,\n        \"description\": \"This is an example product description\"\n      }\n    }\n  ],\n  \"isError\": false\n}\n```\n\n## Logging System\n\nThe server includes comprehensive logging:\n\n- Operation status and progress\n- Performance metrics\n- Credit usage monitoring\n- Rate limit tracking\n- Error conditions\n\nExample log messages:\n\n```\n[INFO] Firecrawl MCP Server initialized successfully\n[INFO] Starting scrape for URL: https://example.com\n[INFO] Batch operation queued with ID: batch_1\n[WARNING] Credit usage has reached warning threshold\n[ERROR] Rate limit exceeded, retrying in 2s...\n```\n\n## Error Handling\n\nThe server provides robust error handling:\n\n- Automatic retries for transient errors\n- Rate limit handling with backoff\n- Detailed error messages\n- Credit usage warnings\n- Network resilience\n\nExample error response:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"Error: Rate limit exceeded. Retrying in 2 seconds...\"\n    }\n  ],\n  \"isError\": true\n}\n```\n\n## Development\n\n```bash\n# Install dependencies\nnpm install\n\n# Build\nnpm run build\n\n# Run tests\nnpm test\n```\n\n### Contributing\n\n1. Fork the repository\n2. Create your feature branch\n3. Run tests: `npm test`\n4. Submit a pull request\n\n### Thanks to contributors\n\nThanks to [@vrknetha](https://github.com/vrknetha), [@cawstudios](https://caw.tech) for the initial implementation!\n\nThanks to MCP.so and Klavis AI for hosting and [@gstarwd](https://github.com/gstarwd), [@xiangkaiz](https://github.com/xiangkaiz) and [@zihaolin96](https://github.com/zihaolin96) for integrating our server.\n\n## License\n\nMIT License - see LICENSE file for details\n",
+  "category": "AI Tools",
+  "quality_score": 56,
+  "programming_language": "JavaScript",
+  "framework": null,
+  "github_info": {
+    "owner": "firecrawl",
+    "repo": "firecrawl-mcp-server",
+    "url": "https://github.com/firecrawl/firecrawl-mcp-server",
+    "name": "firecrawl__firecrawl-mcp-server",
+    "path": null,
+    "stars": 4253,
+    "contributors": 14,
+    "issues": 47,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "9837e19919172a5031226eb6fc4475bf3a44836c"
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "importance": 10,
+      "name": "@modelcontextprotocol/sdk"
+    },
+    {
+      "importance": 10,
+      "name": "express"
+    },
+    {
+      "importance": 9,
+      "name": "@mendable/firecrawl-js"
+    },
+    {
+      "importance": 7,
+      "name": "ws"
+    },
+    {
+      "importance": 4,
+      "name": "dotenv"
+    },
+    {
+      "importance": 3,
+      "name": "shx"
+    }
+  ],
+  "user_config": {
+    "firecrawl_api_key": {
+      "type": "string",
+      "title": "Firecrawl API Key",
+      "description": "Your Firecrawl API key. Required when using the cloud API, optional for self-hosted instances.",
+      "sensitive": true,
+      "required": false
+    },
+    "firecrawl_api_url": {
+      "type": "string",
+      "title": "Firecrawl API URL",
+      "description": "Custom API endpoint for self-hosted instances (e.g., https://firecrawl.your-domain.com). If not provided, the cloud API will be used.",
+      "required": false
+    },
+    "firecrawl_retry_max_attempts": {
+      "type": "number",
+      "title": "Retry Max Attempts",
+      "description": "Maximum number of retry attempts.",
+      "default": 3,
+      "required": false
+    },
+    "firecrawl_retry_initial_delay": {
+      "type": "number",
+      "title": "Retry Initial Delay (ms)",
+      "description": "Initial delay in milliseconds before the first retry.",
+      "default": 1000,
+      "required": false
+    },
+    "firecrawl_retry_max_delay": {
+      "type": "number",
+      "title": "Retry Max Delay (ms)",
+      "description": "Maximum delay in milliseconds between retries.",
+      "default": 10000,
+      "required": false
+    },
+    "firecrawl_retry_backoff_factor": {
+      "type": "number",
+      "title": "Retry Backoff Factor",
+      "description": "Exponential backoff multiplier for retries.",
+      "default": 2,
+      "required": false
+    },
+    "firecrawl_credit_warning_threshold": {
+      "type": "number",
+      "title": "Credit Warning Threshold",
+      "description": "Credit usage threshold to trigger a warning.",
+      "default": 1000,
+      "required": false
+    },
+    "firecrawl_credit_critical_threshold": {
+      "type": "number",
+      "title": "Credit Critical Threshold",
+      "description": "Credit usage threshold to trigger a critical alert.",
+      "default": 100,
+      "required": false
+    },
+    "sse_local": {
+      "type": "boolean",
+      "title": "Enable SSE Local Mode",
+      "description": "Run the server using Server-Sent Events (SSE) locally instead of the default stdio transport. The server will be available at http://localhost:3000/sse.",
+      "default": false,
+      "required": false
+    }
+  },
+  "archestra_config": {
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "client_config_permutations": {
+      "firecrawl-mcp": {
+        "command": "npx",
+        "args": ["-y", "firecrawl-mcp"],
+        "env": {
+          "FIRECRAWL_API_KEY": "fc-YOUR_API_KEY"
+        }
+      },
+      "firecrawl-mcp-sse-local": {
+        "command": "npx",
+        "args": ["-y", "firecrawl-mcp"],
+        "env": {
+          "SSE_LOCAL": "true",
+          "FIRECRAWL_API_KEY": "fc-YOUR_API_KEY"
+        }
+      },
+      "firecrawl-mcp-configured": {
+        "command": "npx",
+        "args": ["-y", "firecrawl-mcp"],
+        "env": {
+          "FIRECRAWL_API_KEY": "your-api-key",
+          "FIRECRAWL_API_URL": "https://firecrawl.your-domain.com",
+          "FIRECRAWL_RETRY_MAX_ATTEMPTS": "5",
+          "FIRECRAWL_RETRY_INITIAL_DELAY": "2000",
+          "FIRECRAWL_RETRY_MAX_DELAY": "30000",
+          "FIRECRAWL_RETRY_BACKOFF_FACTOR": "3",
+          "FIRECRAWL_CREDIT_WARNING_THRESHOLD": "2000",
+          "FIRECRAWL_CREDIT_CRITICAL_THRESHOLD": "500"
+        }
+      }
+    },
+    "works_in_archestra": true
+  },
+  "evaluation_model": "gemini-2.5-pro",
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"firecrawl-mcp\",\n  \"version\": \"1.12.0\",\n  \"description\": \"MCP server for Firecrawl web scraping integration. Supports both cloud and self-hosted instances. Features include web scraping, batch processing, structured data extraction, and LLM-powered content analysis.\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"firecrawl-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('dist/index.js', '755')\\\"\",\n    \"test\": \"node --experimental-vm-modules node_modules/jest/bin/jest.js\",\n    \"start\": \"node dist/index.js\",\n    \"lint\": \"eslint src/**/*.ts\",\n    \"lint:fix\": \"eslint src/**/*.ts --fix\",\n    \"format\": \"prettier --write .\",\n    \"prepare\": \"npm run build\",\n    \"publish\": \"npm run build && npm publish\"\n  },\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@mendable/firecrawl-js\": \"^1.19.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.4.1\",\n    \"dotenv\": \"^16.4.7\",\n    \"express\": \"^5.1.0\",\n    \"shx\": \"^0.3.4\",\n    \"ws\": \"^8.18.1\"\n  },\n  \"devDependencies\": {\n    \"@jest/globals\": \"^29.7.0\",\n    \"@types/express\": \"^5.0.1\",\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/node\": \"^20.10.5\",\n    \"@typescript-eslint/eslint-plugin\": \"^7.0.0\",\n    \"@typescript-eslint/parser\": \"^7.0.0\",\n    \"eslint\": \"^8.56.0\",\n    \"eslint-config-prettier\": \"^9.1.0\",\n    \"jest\": \"^29.7.0\",\n    \"jest-mock-extended\": \"^4.0.0-beta1\",\n    \"prettier\": \"^3.1.1\",\n    \"ts-jest\": \"^29.1.1\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"firecrawl\",\n    \"web-scraping\",\n    \"crawler\",\n    \"content-extraction\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/firecrawl/firecrawl-mcp-server.git\"\n  },\n  \"author\": \"vrknetha\",\n  \"bugs\": {\n    \"url\": \"https://github.com/firecrawl/firecrawl-mcp-server/issues\"\n  },\n  \"homepage\": \"https://github.com/firecrawl/firecrawl-mcp-server#readme\"\n}\n",
+  "last_scraped_at": "2025-09-09T13:06:54.441Z"
+}

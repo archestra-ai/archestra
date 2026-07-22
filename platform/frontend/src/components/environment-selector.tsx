@@ -107,6 +107,7 @@ export function EnvironmentSelector({
         }
       >
         <SelectTrigger
+          aria-label="Environment"
           className="w-full"
           data-testid={E2eTestId.SelectEnvironment}
         >

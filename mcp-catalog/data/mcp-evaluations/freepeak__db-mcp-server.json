@@ -1,0 +1,184 @@
+{
+  "name": "freepeak__db-mcp-server",
+  "display_name": "db-mcp-server",
+  "description": "A powerful multi-database server implementing the Model Context Protocol (MCP) to provide AI assistants with structured access to databases.",
+  "author": {
+    "name": "FreePeak"
+  },
+  "server": {
+    "command": "bin/server",
+    "args": [
+      "-t",
+      "${user_config.transport_mode}",
+      "-c",
+      "${user_config.config_path}",
+      "-host",
+      "${user_config.host}",
+      "-port",
+      "${user_config.port}"
+    ],
+    "env": {
+      "TRANSPORT_MODE": "${user_config.transport_mode}",
+      "CONFIG_PATH": "${user_config.config_path}",
+      "DB_CONFIG": "${user_config.db_config}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "config_path": {
+      "type": "file",
+      "title": "Database Configuration File Path",
+      "description": "Path to the JSON file containing database connection configurations.",
+      "required": true,
+      "default": "${HOME}/config.json"
+    },
+    "transport_mode": {
+      "type": "string",
+      "title": "Transport Mode",
+      "description": "The communication transport mode for the server (e.g., sse, stdio).",
+      "required": false,
+      "default": "sse"
+    },
+    "db_config": {
+      "type": "string",
+      "title": "Inline Database Configuration JSON",
+      "description": "JSON string containing inline database connection configurations. Overrides file if both are provided.",
+      "sensitive": true,
+      "required": false
+    },
+    "host": {
+      "type": "string",
+      "title": "Server Host Address",
+      "description": "The host address for the SSE server.",
+      "required": false,
+      "default": "localhost"
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port Number",
+      "description": "The port number for the SSE server.",
+      "required": false,
+      "default": 9092,
+      "min": 1,
+      "max": 65535
+    }
+  },
+  "readme": "<div align=\"center\">\n\n<img src=\"assets/logo.svg\" alt=\"DB MCP Server Logo\" width=\"300\" />\n\n# Multi Database MCP Server\n\n[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)\n[![Go Report Card](https://goreportcard.com/badge/github.com/FreePeak/db-mcp-server)](https://goreportcard.com/report/github.com/FreePeak/db-mcp-server)\n[![Go Reference](https://pkg.go.dev/badge/github.com/FreePeak/db-mcp-server.svg)](https://pkg.go.dev/github.com/FreePeak/db-mcp-server)\n[![Contributors](https://img.shields.io/github/contributors/FreePeak/db-mcp-server)](https://github.com/FreePeak/db-mcp-server/graphs/contributors)\n\n<h3>A powerful multi-database server implementing the Model Context Protocol (MCP) to provide AI assistants with structured access to databases.</h3>\n\n<div class=\"toc\">\n  <a href=\"#overview\">Overview</a> •\n  <a href=\"#core-concepts\">Core Concepts</a> •\n  <a href=\"#features\">Features</a> •\n  <a href=\"#supported-databases\">Supported Databases</a> •\n  <a href=\"#deployment-options\">Deployment Options</a> •\n  <a href=\"#configuration\">Configuration</a> •\n  <a href=\"#available-tools\">Available Tools</a> •\n  <a href=\"#examples\">Examples</a> •\n  <a href=\"#troubleshooting\">Troubleshooting</a> •\n  <a href=\"#contributing\">Contributing</a>\n</div>\n\n</div>\n\n## Overview\n\nThe DB MCP Server provides a standardized way for AI models to interact with multiple databases simultaneously. Built on the [FreePeak/cortex](https://github.com/FreePeak/cortex) framework, it enables AI assistants to execute SQL queries, manage transactions, explore schemas, and analyze performance across different database systems through a unified interface.\n\n## Core Concepts\n\n### Multi-Database Support\n\nUnlike traditional database connectors, DB MCP Server can connect to and interact with multiple databases concurrently:\n\n```json\n{\n  \"connections\": [\n    {\n      \"id\": \"mysql1\",\n      \"type\": \"mysql\",\n      \"host\": \"localhost\",\n      \"port\": 3306,\n      \"name\": \"db1\",\n      \"user\": \"user1\",\n      \"password\": \"password1\"\n    },\n    {\n      \"id\": \"postgres1\",\n      \"type\": \"postgres\",\n      \"host\": \"localhost\",\n      \"port\": 5432,\n      \"name\": \"db2\",\n      \"user\": \"user2\",\n      \"password\": \"password2\"\n    }\n  ]\n}\n```\n\n### Dynamic Tool Generation\n\nFor each connected database, the server automatically generates specialized tools:\n\n```go\n// For a database with ID \"mysql1\", these tools are generated:\nquery_mysql1       // Execute SQL queries\nexecute_mysql1     // Run data modification statements\ntransaction_mysql1 // Manage transactions\nschema_mysql1      // Explore database schema\nperformance_mysql1 // Analyze query performance\n```\n\n### Clean Architecture\n\nThe server follows Clean Architecture principles with these layers:\n\n1. **Domain Layer**: Core business entities and interfaces\n2. **Repository Layer**: Data access implementations\n3. **Use Case Layer**: Application business logic\n4. **Delivery Layer**: External interfaces (MCP tools)\n\n## Features\n\n- **Simultaneous Multi-Database Support**: Connect to multiple MySQL and PostgreSQL databases concurrently\n- **Database-Specific Tool Generation**: Auto-creates specialized tools for each connected database\n- **Clean Architecture**: Modular design with clear separation of concerns\n- **OpenAI Agents SDK Compatibility**: Full compatibility for seamless AI assistant integration\n- **Dynamic Database Tools**: Execute queries, run statements, manage transactions, explore schemas, analyze performance\n- **Unified Interface**: Consistent interaction patterns across different database types\n- **Connection Management**: Simple configuration for multiple database connections\n\n## Supported Databases\n\n| Database   | Status                    | Features                                                     |\n| ---------- | ------------------------- | ------------------------------------------------------------ |\n| MySQL      | ✅ Full Support           | Queries, Transactions, Schema Analysis, Performance Insights |\n| PostgreSQL | ✅ Full Support (v9.6-17) | Queries, Transactions, Schema Analysis, Performance Insights |\n| TimescaleDB| ✅ Full Support           | Hypertables, Time-Series Queries, Continuous Aggregates, Compression, Retention Policies |\n\n## Deployment Options\n\nThe DB MCP Server can be deployed in multiple ways to suit different environments and integration needs:\n\n### Docker Deployment\n\n```bash\n# Pull the latest image\ndocker pull freepeak/db-mcp-server:latest\n\n# Run with mounted config file\ndocker run -p 9092:9092 \\\n  -v $(pwd)/config.json:/app/my-config.json \\\n  -e TRANSPORT_MODE=sse \\\n  -e CONFIG_PATH=/app/my-config.json \\\n  freepeak/db-mcp-server\n```\n\n> **Note**: Mount to `/app/my-config.json` as the container has a default file at `/app/config.json`.\n\n### STDIO Mode (IDE Integration)\n\n```bash\n# Run the server in STDIO mode\n./bin/server -t stdio -c config.json\n```\n\nFor Cursor IDE integration, add to `.cursor/mcp.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"stdio-db-mcp-server\": {\n      \"command\": \"/path/to/db-mcp-server/server\",\n      \"args\": [\"-t\", \"stdio\", \"-c\", \"/path/to/config.json\"]\n    }\n  }\n}\n```\n\n### SSE Mode (Server-Sent Events)\n\n```bash\n# Default configuration (localhost:9092)\n./bin/server -t sse -c config.json\n\n# Custom host and port\n./bin/server -t sse -host 0.0.0.0 -port 8080 -c config.json\n```\n\nClient connection endpoint: `http://localhost:9092/sse`\n\n### Source Code Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/FreePeak/db-mcp-server.git\ncd db-mcp-server\n\n# Build the server\nmake build\n\n# Run the server\n./bin/server -t sse -c config.json\n```\n\n## Configuration\n\n### Database Configuration File\n\nCreate a `config.json` file with your database connections:\n\n```json\n{\n  \"connections\": [\n    {\n      \"id\": \"mysql1\",\n      \"type\": \"mysql\",\n      \"host\": \"mysql1\",\n      \"port\": 3306,\n      \"name\": \"db1\",\n      \"user\": \"user1\",\n      \"password\": \"password1\",\n      \"query_timeout\": 60,\n      \"max_open_conns\": 20,\n      \"max_idle_conns\": 5,\n      \"conn_max_lifetime_seconds\": 300,\n      \"conn_max_idle_time_seconds\": 60\n    },\n    {\n      \"id\": \"postgres1\",\n      \"type\": \"postgres\",\n      \"host\": \"postgres1\",\n      \"port\": 5432,\n      \"name\": \"db1\",\n      \"user\": \"user1\",\n      \"password\": \"password1\"\n    }\n  ]\n}\n```\n\n### Command-Line Options\n\n```bash\n# Basic syntax\n./bin/server -t <transport> -c <config-file>\n\n# SSE transport options\n./bin/server -t sse -host <hostname> -port <port> -c <config-file>\n\n# Inline database configuration\n./bin/server -t stdio -db-config '{\"connections\":[...]}'\n\n# Environment variable configuration\nexport DB_CONFIG='{\"connections\":[...]}'\n./bin/server -t stdio\n```\n\n## Available Tools\n\nFor each connected database, DB MCP Server automatically generates these specialized tools:\n\n### Query Tools\n\n| Tool Name | Description |\n|-----------|-------------|\n| `query_<db_id>` | Execute SELECT queries and get results as a tabular dataset |\n| `execute_<db_id>` | Run data manipulation statements (INSERT, UPDATE, DELETE) |\n| `transaction_<db_id>` | Begin, commit, and rollback transactions |\n\n### Schema Tools\n\n| Tool Name | Description |\n|-----------|-------------|\n| `schema_<db_id>` | Get information about tables, columns, indexes, and foreign keys |\n| `generate_schema_<db_id>` | Generate SQL or code from database schema |\n\n### Performance Tools\n\n| Tool Name | Description |\n|-----------|-------------|\n| `performance_<db_id>` | Analyze query performance and get optimization suggestions |\n\n### TimescaleDB Tools\n\nFor PostgreSQL databases with TimescaleDB extension, these additional specialized tools are available:\n\n| Tool Name | Description |\n|-----------|-------------|\n| `timescaledb_<db_id>` | Perform general TimescaleDB operations |\n| `create_hypertable_<db_id>` | Convert a standard table to a TimescaleDB hypertable |\n| `list_hypertables_<db_id>` | List all hypertables in the database |\n| `time_series_query_<db_id>` | Execute optimized time-series queries with bucketing |\n| `time_series_analyze_<db_id>` | Analyze time-series data patterns |\n| `continuous_aggregate_<db_id>` | Create materialized views that automatically update |\n| `refresh_continuous_aggregate_<db_id>` | Manually refresh continuous aggregates |\n\nFor detailed documentation on TimescaleDB tools, see [TIMESCALEDB_TOOLS.md](docs/TIMESCALEDB_TOOLS.md).\n\n## Examples\n\n### Querying Multiple Databases\n\n```sql\n-- Query the first database\nquery_mysql1(\"SELECT * FROM users LIMIT 10\")\n\n-- Query the second database in the same context\nquery_postgres1(\"SELECT * FROM products WHERE price > 100\")\n```\n\n### Managing Transactions\n\n```sql\n-- Start a transaction\ntransaction_mysql1(\"BEGIN\")\n\n-- Execute statements within the transaction\nexecute_mysql1(\"INSERT INTO orders (customer_id, product_id) VALUES (1, 2)\")\nexecute_mysql1(\"UPDATE inventory SET stock = stock - 1 WHERE product_id = 2\")\n\n-- Commit or rollback\ntransaction_mysql1(\"COMMIT\")\n-- OR\ntransaction_mysql1(\"ROLLBACK\")\n```\n\n### Exploring Database Schema\n\n```sql\n-- Get all tables in the database\nschema_mysql1(\"tables\")\n\n-- Get columns for a specific table\nschema_mysql1(\"columns\", \"users\")\n\n-- Get constraints\nschema_mysql1(\"constraints\", \"orders\")\n```\n\n## Troubleshooting\n\n### Common Issues\n\n- **Connection Failures**: Verify network connectivity and database credentials\n- **Permission Errors**: Ensure the database user has appropriate permissions\n- **Timeout Issues**: Check the `query_timeout` setting in your configuration\n\n### Logs\n\nEnable verbose logging for troubleshooting:\n\n```bash\n./bin/server -t sse -c config.json -v\n```\n\n## Contributing\n\nWe welcome contributions to the DB MCP Server project! To contribute:\n\n1. Fork the repository\n2. Create a feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'feat: add amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\nPlease see our [CONTRIBUTING.md](docs/CONTRIBUTING.md) file for detailed guidelines.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.",
+  "category": "AI Tools",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "freepeak-db-mcp-server-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-p",
+          "9092:9092",
+          "-v",
+          "$(pwd)/config.json:/app/my-config.json",
+          "-e",
+          "TRANSPORT_MODE=sse",
+          "-e",
+          "CONFIG_PATH=/app/my-config.json",
+          "freepeak/db-mcp-server"
+        ],
+        "env": {
+          "TRANSPORT_MODE": "sse",
+          "CONFIG_PATH": "/app/my-config.json"
+        },
+        "docker_image": "freepeak/db-mcp-server"
+      },
+      "db-mcp-server-stdio": {
+        "command": "./bin/server",
+        "args": ["-t", "stdio", "-c", "config.json"],
+        "env": {}
+      },
+      "db-mcp-server-stdio-cursor-config": {
+        "command": "/path/to/db-mcp-server/server",
+        "args": ["-t", "stdio", "-c", "/path/to/config.json"],
+        "env": {}
+      },
+      "db-mcp-server-sse": {
+        "command": "./bin/server",
+        "args": ["-t", "sse", "-c", "config.json"],
+        "env": {}
+      },
+      "db-mcp-server-sse-custom-host-port": {
+        "command": "./bin/server",
+        "args": ["-t", "sse", "-host", "0.0.0.0", "-port", "8080", "-c", "config.json"],
+        "env": {}
+      },
+      "db-mcp-server-stdio-inline-config": {
+        "command": "./bin/server",
+        "args": ["-t", "stdio", "-db-config", "{\"connections\":[...]}"],
+        "env": {}
+      },
+      "db-mcp-server-stdio-env-config": {
+        "command": "./bin/server",
+        "args": ["-t", "stdio"],
+        "env": {
+          "DB_CONFIG": "{\"connections\":[...]}"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "FreePeak",
+    "repo": "db-mcp-server",
+    "url": "https://github.com/FreePeak/db-mcp-server",
+    "name": "freepeak__db-mcp-server",
+    "path": null,
+    "stars": 284,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "5667275f0c48e3213d2fcd0e1bce7595e5e620b3"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:28.350Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "FreePeak/cortex",
+      "importance": 10
+    },
+    {
+      "name": "go-sql-driver/mysql",
+      "importance": 9
+    },
+    {
+      "name": "lib/pq",
+      "importance": 9
+    },
+    {
+      "name": "go.uber.org/zap",
+      "importance": 7
+    },
+    {
+      "name": "joho/godotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/FreePeak/db-mcp-server\n\ngo 1.23\n\ntoolchain go1.24.1\n\nrequire (\n\tgithub.com/FreePeak/cortex v1.0.5\n\tgithub.com/go-sql-driver/mysql v1.9.1\n\tgithub.com/joho/godotenv v1.5.1\n\tgithub.com/lib/pq v1.10.9\n\tgo.uber.org/zap v1.27.0\n)\n\nrequire (\n\tfilippo.io/edwards25519 v1.1.0 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/stretchr/objx v0.5.2 // indirect\n\tgo.uber.org/multierr v1.11.0 // indirect\n)\n\nrequire (\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/stretchr/testify v1.10.0\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

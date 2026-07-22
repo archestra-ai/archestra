@@ -1,0 +1,202 @@
+{
+  "name": "kashiwabyte__vikingdb-mcp-server",
+  "display_name": "vikingdb-mcp-server",
+  "description": "a mcp server for vikingdb store and search",
+  "author": {
+    "name": "KashiwaByte"
+  },
+  "server": {
+    "command": "uv",
+    "args": [
+      "--directory",
+      "${__dirname}",
+      "run",
+      "mcp-server-vikingdb",
+      "--vikingdb-host",
+      "${user_config.vikingdb_host}",
+      "--vikingdb-region",
+      "${user_config.vikingdb_region}",
+      "--vikingdb-ak",
+      "${user_config.vikingdb_ak}",
+      "--vikingdb-sk",
+      "${user_config.vikingdb_sk}",
+      "--collection-name",
+      "${user_config.collection_name}",
+      "--index-name",
+      "${user_config.index_name}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "vikingdb_host": {
+      "type": "string",
+      "title": "VikingDB Host",
+      "description": "The host to use for the VikingDB server.",
+      "required": true,
+      "sensitive": false
+    },
+    "vikingdb_region": {
+      "type": "string",
+      "title": "VikingDB Region",
+      "description": "The region to use for the VikingDB server.",
+      "required": true,
+      "sensitive": false
+    },
+    "vikingdb_ak": {
+      "type": "string",
+      "title": "VikingDB Access Key",
+      "description": "The Access Key to use for the VikingDB server.",
+      "required": true,
+      "sensitive": true
+    },
+    "vikingdb_sk": {
+      "type": "string",
+      "title": "VikingDB Secret Key",
+      "description": "The Secret Key to use for the VikingDB server.",
+      "required": true,
+      "sensitive": true
+    },
+    "collection_name": {
+      "type": "string",
+      "title": "Collection Name",
+      "description": "The name of the collection to use.",
+      "required": true,
+      "sensitive": false
+    },
+    "index_name": {
+      "type": "string",
+      "title": "Index Name",
+      "description": "The name of the index to use.",
+      "required": true,
+      "sensitive": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/kashiwabyte-vikingdb-mcp-server-badge.jpg)](https://mseep.ai/app/kashiwabyte-vikingdb-mcp-server)\n\n# VikingDB MCP server\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/KashiwaByte/vikingdb-mcp-server)](https://archestra.ai/mcp-catalog/kashiwabyte__vikingdb-mcp-server)\n\n[![smithery badge](https://smithery.ai/badge/mcp-server-vikingdb)](https://smithery.ai/server/mcp-server-vikingdb)\nan mcp server for vikingdb store and search\n\n## What is VikingDB\nVikingDB is a high-performance vector database developed by ByteDance. \n\nYou can easily use it following the doc bellow:\nhttps://www.volcengine.com/docs/84313/1254444\n\n\n\n### Tools\n\nThe server implements the following tools:\n\n- vikingdb-colleciton-intro: introduce the collection of vikingdb\n\n- vikingdb-index-intro: introduce the index of vikingdb\n\n- vikingdb-upsert-information: upsert information to vikingdb for later use\n\n- vikingdb-search-information: searche for information in the VikingDB\n  \n  \n## Configuration\n\n- vikingdb_host: The host to use for the VikingDB server.\n\n- vikingdb_region: The region to use for the VikingDB server.\n \n - vikingdb_ak: The Access Key to use for the VikingDB server.\n\n - vikingdb_sk: The Secret Key to use for the VikingDB server.\n \n- collection_name: The name of the collection to use.\n\n- index_name: The name of the index to use.\n\n\n## Quickstart\n\n### Install\n\n### Installing via Smithery\n\nTo install VikingDB MCP server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-server-vikingdb):\n\n```bash\nnpx -y @smithery/cli install mcp-server-vikingdb --client claude\n```\n\n#### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n\nDevelopment/Unpublished Servers Configuration\n```\n{\n  \"mcpServers\": {\n    \"mcp-server-vikingdb\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"dir to mcp-server-vikingdb\",\n        \"run\",\n        \"mcp-server-vikingdb\",\n        \"--vikingdb-host\", \n        \"your host\",\n        \"--vikingdb-region\", \n        \"your region\",\n        \"--vikingdb-ak\", \n        \"your access key\",\n        \"--vikingdb-sk\", \n        \"your secret key\",\n        \"--collection-name\",\n        \"your collection name\",\n        \"--index-name\",\n        \"your index name\"\n      ]\n    }\n  }\n}\n\n  ```\n\nPublished Servers Configuration\n  ```\n{\n    \"mcpServers\": {\n      \"mcp-server-vikingdb\": {\n        \"command\": \"uvx\",\n        \"args\": [\n          \"mcp-server-vikingdb\",\n          \"--vikingdb-host\", \n          \"your host\",\n          \"--vikingdb-region\", \n          \"your region\",\n          \"--vikingdb-ak\", \n          \"your access key\",\n          \"--vikingdb-sk\", \n          \"your secret key\",\n          \"--collection-name\",\n          \"your collection name\",\n          \"--index-name\",\n          \"your index name\"\n      ]\n     }\n    }\n  } \n  ```\n\n\n## Development\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n```bash\nuv sync\n```\n\n2. Build package distributions:\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n3. Publish to PyPI:\n```bash\nuv publish\n```\n\nNote: You'll need to set PyPI credentials via environment variables or command flags:\n- Token: `--token` or `UV_PUBLISH_TOKEN`\n- Or username/password: `--username`/`UV_PUBLISH_USERNAME` and `--password`/`UV_PUBLISH_PASSWORD`\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory dir_to_mcp_server_vikingdb run mcp-server-vikingdb --vikingdb-host your_host --vikingdb-region your_region --vikingdb-ak your_access_key --vikingdb-sk your_secret_key --collection-name your_collection_name --index-name your_index_name\n```\n\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n",
+  "category": "AI Tools",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-vikingdb-development": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "dir to mcp-server-vikingdb",
+          "run",
+          "mcp-server-vikingdb",
+          "--vikingdb-host",
+          "your host",
+          "--vikingdb-region",
+          "your region",
+          "--vikingdb-ak",
+          "your access key",
+          "--vikingdb-sk",
+          "your secret key",
+          "--collection-name",
+          "your collection name",
+          "--index-name",
+          "your index name"
+        ],
+        "env": {}
+      },
+      "mcp-server-vikingdb-published": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-vikingdb",
+          "--vikingdb-host",
+          "your host",
+          "--vikingdb-region",
+          "your region",
+          "--vikingdb-ak",
+          "your access key",
+          "--vikingdb-sk",
+          "your secret key",
+          "--collection-name",
+          "your collection name",
+          "--index-name",
+          "your index name"
+        ],
+        "env": {}
+      },
+      "mcp-server-vikingdb-debug-inspector": {
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/inspector",
+          "uv",
+          "--directory",
+          "dir_to_mcp_server_vikingdb",
+          "run",
+          "mcp-server-vikingdb",
+          "--vikingdb-host",
+          "your_host",
+          "--vikingdb-region",
+          "your_region",
+          "--vikingdb-ak",
+          "your_access_key",
+          "--vikingdb-sk",
+          "your_secret_key",
+          "--collection-name",
+          "your_collection_name",
+          "--index-name",
+          "your_index_name"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "KashiwaByte",
+    "repo": "vikingdb-mcp-server",
+    "url": "https://github.com/KashiwaByte/vikingdb-mcp-server",
+    "name": "kashiwabyte__vikingdb-mcp-server",
+    "path": null,
+    "stars": 3,
+    "contributors": 4,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "06707d9999f112c4ed19db439d1cc23c26df34e1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:29.763Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "volcengine",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-vikingdb\"\nversion = \"0.1.2\"\ndescription = \"a mcp server for vikingdb store and search\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n \"aiohttp>=3.11.10\",\n \"mcp>=1.1.0\",\n \"python-dotenv>=1.0.1\",\n \"volcengine>=1.0.164\",\n]\n[[project.authors]]\nname = \"KashiwaByte\"\nemail = \"471314513@qq.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-server-vikingdb = \"mcp_server_vikingdb:main\"\n"
+}

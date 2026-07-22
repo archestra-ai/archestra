@@ -1,0 +1,90 @@
+{
+  "name": "delano__postman-mcp-server",
+  "display_name": "postman-mcp-server",
+  "description": "An MCP server that provides access to Postman.",
+  "author": {
+    "name": "delano"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "POSTMAN_API_KEY": "${user_config.postman_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "postman_api_key": {
+      "type": "string",
+      "title": "Postman API Key",
+      "description": "Your API key for authentication with the Postman API. Generate it from Postman Account Settings (https://go.postman.co/settings/me/api-keys).",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Postman MCP Server\n[![smithery badge](https://smithery.ai/badge/postman-api-server)](https://smithery.ai/server/postman-api-server)\n**Version:** v0.2.0\n\nAn MCP server that provides access to the [Postman](https://www.postman.com/) API. Functionality is based on the [official OpenAPI specification](https://www.postman.com/postman/postman-public-workspace/documentation/i2uqzpp/postman-api). For more information, see the [Postman API documentation](https://www.postman.com/postman-public-workspace/).\n\nThis project is part of the Model Context Protocol (MCP) initiative from Anthropic. For more information, visit the [MCP GitHub repository](https://github.com/modelcontextprotocol) and the announcement on the [Anthropic blog](https://www.anthropic.com/news/model-context-protocol).\n\n**[Skip ahead to install instructions](#installation)**\n\n\n![postman-mcp-server - Cover Image](https://github.com/user-attachments/assets/e19d712f-ad97-4456-a414-d69b159a9ed2)\n\n\n> [!WARNING]\n> This project is currently under active development. Please use with caution and expect breaking changes.\n\n> [!NOTE]\n> AI Generated Code. I used Cline v2.2.2 with Claude 3.5 Sonnet (2024-10-22). See docs/README.md for prompts and details about how this code was generated.\n\n<a href=\"https://glama.ai/mcp/servers/zoig549xfd\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/zoig549xfd/badge\" alt=\"postman-mcp-server MCP server\" /></a>\n\n---\n\n* [Overview](#overview)\n* [Features](#features)\n  * [Collections](#collections)\n  * [Environments](#environments)\n  * [APIs](#apis)\n  * [Authentication \\& Authorization](#authentication--authorization)\n  * [Additional Features](#additional-features)\n* [Installation](#installation)\n  * [Prerequisites](#prerequisites)\n  * [Steps](#steps)\n* [Usage](#usage)\n  * [Setting up API Keys](#setting-up-api-keys)\n  * [Using Claude Desktop](#using-claude-desktop)\n  * [Using Cline](#using-cline)\n  * [Using Zed](#using-zed)\n* [Documentation](#documentation)\n  * [Project Overview](#project-overview)\n* [Rationale](#rationale)\n* [Development](#development)\n* [Debugging](#debugging)\n* [Other MCP Servers](#other-mcp-servers)\n* [License](#license)\n\n## Overview\n\nPostman MCP Server is a TypeScript-based MCP server that integrates with the Postman API, providing comprehensive management of Postman collections, environments, and APIs.\n\n## Features\n\n### Collections\n- **CRUD Operations**: Create, retrieve, update, and delete Postman collections.\n- **Folder Management**: Organize requests into folders within collections.\n- **Request Management**: Add, update, and delete requests within collections.\n- **Response Management**: Manage responses associated with requests.\n- **Version Control**: Fork, merge, and pull changes for collections.\n- **Comments**: Add and manage comments on collections.\n\n### Environments\n- **Manage Environments**: Create and retrieve environments for different setups.\n- **CRUD Operations**: Full support for creating, updating, and deleting environments.\n\n### APIs\n- **API Management**: Create, retrieve, update, and delete APIs.\n- **Schema Support**: Manage API schemas with multi-file support.\n- **Tagging**: Add and manage tags for APIs.\n- **Comments**: Add and manage comments on APIs.\n\n### Authentication & Authorization\n- **API Key Authentication**: Secure access using API keys.\n- **Role-Based Access Control**: Manage permissions at workspace and collection levels.\n- **Workspace Permissions**: Define permissions specific to workspaces.\n\n### Additional Features\n- **Private API Network**: Manage elements and folders within a private API network.\n- **Webhooks**: Create webhooks to trigger collections with custom payloads.\n- **Enterprise Features**: Advanced role controls and SCIM support for enterprise environments.\n\n## Installation\n\n### Installing via Smithery\n\nTo install Postman MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/postman-api-server):\n\n```bash\nnpx -y @smithery/cli install postman-api-server --client claude\n```\n\n### Prerequisites\n- [Node.js](https://nodejs.org/) installed.\n\n### Steps\n\n1. **Clone the repository:**\n    ```bash\n    git clone https://github.com/delano/postman-api-server.git\n    cd postman-api-server\n    ```\n\n2. **Install dependencies:**\n    ```bash\n    pnpm install\n    ```\n\n3. **Build the server:**\n    ```bash\n    pnpm run build\n    ```\n\n4. **Run in development mode with auto-rebuild:**\n    ```bash\n    pnpm run watch\n    ```\n\n## Usage\n\n### Setting up API Keys\n\n1. **Generate your API Key**\n   - Visit [Postman Account Settings](https://go.postman.co/settings/me/api-keys)\n   - Click \"Generate API Key\"\n   - Save the key securely - it won't be shown again\n\n2. **Configure the API Key**\n   - Add the key to your environment as `POSTMAN_API_KEY`\n   - For Claude Desktop or Cline, include it in your config file (see configuration examples below)\n   - Never commit API keys to version control\n\n3. **Verify Access**\n   - The API key provides access to all Postman resources you have permissions for\n   - Test access by running a simple query (e.g., list workspaces)\n\n> [!NOTE]\n> If you're using the [Postman API collection](https://www.postman.com/postman/postman-public-workspace/documentation/i2uqzpp/postman-api) directly, store your API key as a `postman-api-key` collection variable.\n\n### Using Claude Desktop\n\nTo use with Claude Desktop, add the server config:\n\n- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows:** `%APPDATA%/Claude/claude_desktop_config.json`\n\n> [!IMPORTANT]\n> If you're updating this provider, Claude must be restarted to pick up API changes from the input schema (i.e. When the MCP server's ToolDefinition elements have changed). This is because Claude caches the tool definitions when it starts up.\n\n<img width=\"480\" alt=\"claude-desktop-settings\" src=\"https://github.com/user-attachments/assets/7ea7cba2-e27e-413a-a50a-590054d51344\" />\n\n#### Example configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"postman\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/postman-api-server/build/index.js\"\n      ],\n      \"env\": {\n        \"POSTMAN_API_KEY\": \"CHANGEME\"\n      }\n    }\n  }\n}\n```\n\n### Using Cline\n\nUsing the same example configuration, add the server config to your Cline MCP Servers configuration:\n\n<img width=\"480\" alt=\"cline-settings\" src=\"https://github.com/user-attachments/assets/651ec517-9aa2-4314-84f5-bee716aa8889\" />\n\n\n#### Example configuration\n\n_Same as Claude above._\n\n### Using Zed\n\nI'm still trying to get this to work. From the [Zed docs](https://zed.dev/docs/assistant/model-context-protocol) it looks like it needs to be an extension ([also this issue #21455](https://github.com/zed-industries/zed/discussions/21455)).\n\n---\n\n## Documentation\n\nThe official [Postman API documentation](https://learning.postman.com/docs/developer/postman-api/intro-api/) is available in the [Postman Public Workspace](https://www.postman.com/postman/postman-public-workspace/).\n\n### Project Overview\n\n#### Postman API References & Summaries\n\nThis project leverages the Claude model and Cline extension to convert the OpenAPI specification into TypeScript code, enhancing type safety and integration within the MCP server.\n\nThis GitHub project includes [API References documentation](docs/api/references/README.md) that provides detailed guidance on utilizing the Postman platform programmatically. It covers both the Collection SDK for local development and the Postman API for cloud platform integration. Key topics include authentication mechanisms, rate limits, and in-depth documentation of all API endpoints, including workspaces, collections, environments, mock servers, monitors, and more. Additionally, the guide offers prerequisites and quick-start instructions to facilitate seamless API interactions.\n\nThe `docs/api/summaries` directory contains comprehensive Markdown summaries of the Postman API. These documents outline API endpoints, request/response formats, and implementation details essential for validating and ensuring the functionality of the MCP server. Refer to the [API Summaries README](docs/api/summaries/README.md) for an overview of the documentation structure and implementation strategies.\n\n#### Converting OpenAPI Spec to TypeScript Code with Claude\n\n\n\n#### Building the MCP Server\n\nRefer to the [Handlers Documentation](src/handlers/README.md) for detailed specifications on implementing MCP server handlers. This includes URI formats, prompt requirements, and resource handling patterns. This guide is crucial for developers working on integrating and enhancing the Postman API functionalities within the MCP server.\n\n\n---\n\n## Rationale\n\nThe MCP wrapper for Postman tools makes sense primarily as an AI interaction layer for complex, multi-step operations where structure and safety are paramount. However, it may be overengineered for simple operations where direct CLI or API usage would suffice. The MCP wrapper provides most value when:\n\n1. **Complex Operations**\n- Managing multiple collections\n- Coordinating environments\n- Generating comprehensive reports\n\n2. **AI-Driven Automation**\n- Automated testing workflows\n- API documentation maintenance\n- Environment management\n\n3. **Error-Sensitive Operations**\n- Critical API testing\n- Production deployments\n- Compliance checking\n\nIt provides less value for:\n\n1. **Simple Operations**\n- Basic collection runs\n- Single API calls\n- Quick environment checks\n2. **Direct CLI Usage**\n- Developer-driven operations\n- Local testing\n- Quick iterations\n\n\n## Development\n\nInstall dependencies:\n```bash\npnpm install\n```\n\nBuild the server:\n```bash\npnpm run build\n```\n\nFor development with auto-rebuild:\n```bash\npnpm run watch\n```\n\n## Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), available as a package script:\n\n```bash\npnpm run inspector\n```\n\n[Docs](https://modelcontextprotocol.io/docs/tools/inspector)\n\nThe Inspector will provide a URL to access debugging tools in your browser: http://localhost:5173. You will need to add the POSTMAN_API_KEY before connecting. Navigate to \"Tools\" to get started.\n\n## Other MCP Servers\n\n- [Awesome MCP Servers by AppCypher](https://github.com/appcypher/awesome-mcp-servers)\n- [Awesome MCP Servers by PunkPeye](https://github.com/punkpeye/awesome-mcp-servers)\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Development",
+  "quality_score": 68,
+  "archestra_config": {
+    "client_config_permutations": {
+      "postman-api-server": {
+        "command": "node",
+        "args": ["/path/to/postman-api-server/build/index.js"],
+        "env": {
+          "POSTMAN_API_KEY": "CHANGEME"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "delano",
+    "repo": "postman-mcp-server",
+    "url": "https://github.com/delano/postman-mcp-server",
+    "name": "delano__postman-mcp-server",
+    "path": null,
+    "stars": 130,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d29c2df5dedbb4f3384ebc0a71e8d256e04671a2"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.266Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"postman-api-server\",\n  \"version\": \"0.2.0\",\n  \"description\": \"an MCP server for Postman API\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"bin\": {\n    \"postman-api-server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"pnpm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"pnpx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"@types/axios\": \"^0.14.4\",\n    \"axios\": \"^1.7.9\",\n    \"zod\": \"^3.24.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

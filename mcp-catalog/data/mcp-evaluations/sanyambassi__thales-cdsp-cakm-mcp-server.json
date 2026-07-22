@@ -1,0 +1,121 @@
+{
+  "name": "sanyambassi__thales-cdsp-cakm-mcp-server",
+  "display_name": "thales-cdsp-cakm-mcp-server",
+  "description": "MCP Server to manage encryption for Ms SQL and Oracle databases using Thales CAKM connector",
+  "author": {
+    "name": "sanyambassi"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "python", "-m", "database_tde_server"],
+    "env": {
+      "DB_TDE_SERVER_NAME": "${user_config.db_tde_server_name}",
+      "DB_TDE_LOG_LEVEL": "${user_config.db_tde_log_level}",
+      "DB_TDE_DATABASE_CONNECTIONS": "${user_config.db_tde_database_connections}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "db_tde_server_name": {
+      "type": "string",
+      "title": "Database TDE Server Name",
+      "description": "Name for the MCP server instance.",
+      "default": "database-tde-mcp",
+      "required": false
+    },
+    "db_tde_log_level": {
+      "type": "string",
+      "title": "Database TDE Log Level",
+      "description": "Logging level for the MCP server (e.g., INFO, DEBUG, WARNING, ERROR).",
+      "default": "INFO",
+      "required": false
+    },
+    "db_tde_database_connections": {
+      "type": "string",
+      "title": "Database Connections",
+      "description": "JSON array of database connection configurations. Includes details for SQL Server and Oracle, potentially with SSH config.",
+      "sensitive": true,
+      "required": true,
+      "default": "[{\"name\":\"prod_sql\",\"db_type\":\"sqlserver\",\"host\":\"sql-prod.company.com\",\"port\":1433,\"username\":\"tde_admin\",\"password\":\"secure_password\"},{\"name\":\"oracle_cdb1\",\"db_type\":\"oracle\",\"host\":\"oracle-prod.company.com\",\"port\":1521,\"username\":\"sys\",\"password\":\"oracle_password\",\"oracle_config\":{\"oracle_home\":\"/u01/app/oracle/product/21.0.0/dbhome_1\",\"oracle_sid\":\"cdb1\",\"service_name\":\"orcl\",\"mode\":\"SYSDBA\",\"wallet_root\":\"/opt/oracle/wallet\"},\"ssh_config\":{\"host\":\"oracle-prod.company.com\",\"username\":\"oracle\",\"private_key_path\":\"/path/to/private-key.pem\",\"port\":22,\"timeout\":30}}]"
+    }
+  },
+  "readme": "# Thales CipherTrust Data Security Platform CAKM MCP Server\n\nA Model Context Protocol (MCP) server for Database EKM/TDE operations using CipherTrust Application Key Management (CAKM).\n\n## 🔑 Features\n\n- **Resource-Based Management**: Tools are organized by the database objects they manage (e.g., keys, encryption, wallets), not just by actions.\n- **Operational Grouping**: Each tool exposes multiple `operations` (e.g., `create`, `list`, `rotate`) for comprehensive lifecycle management.\n- **Unified Status & Auditing**: A single tool (`status_tde_ekm`) provides health, compliance, and configuration monitoring across all supported databases.\n- **Advanced Oracle TDE Detection**: Intelligent detection of Oracle TDE configurations including:\n  - **HSM-only TDE**: Direct HSM wallet usage\n  - **HSM with Auto-login**: Forward migrated configurations (HSM primary, auto-login secondary)  \n  - **FILE wallet TDE**: Password-based software wallets\n  - **FILE with Auto-login**: Standard or reverse migrated configurations\n  - **Migration Status Recognition**: Automatically identifies forward/reverse migration states based on wallet order and types\n- **Database TDE Operations**: Encrypt, decrypt, and manage TDE on multiple database types.\n- **CipherTrust Integration**: Seamless integration with CipherTrust Manager via CAKM EKM.\n- **Multi-Database Support**: SQL Server and Oracle Database.\n- **Key Rotation**: Automated encryption key rotation with key management on Thales CipherTrust Manager.\n\n> **🎥 [Watch Demo Video](https://www.youtube.com/watch?v=5GezP4_CEyY)** - See the MCP server in action managing database encryption\n\n## 🚀 Quick Start\n\n### Clone the Repository\n\n```bash\n# Clone the repository\ngit clone https://github.com/sanyambassi/thales-cdsp-cakm-mcp-server.git\ncd thales-cdsp-cakm-mcp-server\n```\n\n### Installation\n\n```bash\n# Install dependencies\nuv venv && source .venv/bin/activate  # Linux/Mac\n# uv venv && .venv\\Scripts\\activate   # Windows\nuv pip install -e .\n\n# Configure (copy the example configuration)\n# Note: Create your own .env file with database connection details\n# See docs/PREREQUISITES.md for configuration examples\n\n# Test connections\nuv run python -m database_tde_server --test-connections\n```\n\n### Usage\n\n```bash\n# Start the MCP server\nuv run python -m database_tde_server\n```\n\n## 📦 Installing `uv`\n\nThis project uses `uv` to manage dependencies and run scripts. Please install it using one of the methods below.\n\n**Windows (PowerShell):**\n```powershell\npowershell -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n```\n\n**Linux, macOS, and other shells:**\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\nFor more information, visit the [uv installation guide](https://github.com/astral-sh/uv#installation).\n\n\n## 🔧 Available Tools\n\n- **Core Tools**\n    - `list_database_connections()`: Lists all configured database connections.\n- **Unified Status & Auditing**\n    - `status_tde_ekm()`: Provides a unified interface to monitor the health, configuration, and compliance of TDE across both SQL Server and Oracle.\n- **SQL Server Tools**\n    - `manage_sql_ekm_objects()`: Manages EKM providers, credentials, and their associated server logins.\n    - `manage_sql_keys()`: Manages the lifecycle of cryptographic keys (Asymmetric Master Keys and DEKs), including creation, listing, dropping, and rotation.\n    - `manage_sql_encryption()`: Encrypts or decrypts one or more SQL Server databases.\n- **Oracle Tools**\n    - `manage_oracle_tde_deployment()`: Handles high-level TDE deployment workflows like initial setup or migration to/from an HSM.\n    - `manage_oracle_configuration()`: Manages TDE-related database parameters.\n    - `manage_oracle_wallet()`: Performs all wallet-specific actions (open, close, backup, manage auto-login).\n    - `manage_oracle_keys()`: Manages the lifecycle of Master Encryption Keys (MEKs), including rotation and listing.\n    - `manage_oracle_tablespace_encryption()`: Manages the encryption and decryption of specific tablespaces.\n\n## 🤖 AI Assistant Integration\n\nAdd to your AI assistant configuration:\n\n### Claude Desktop\n```json\n{\n  \"mcpServers\": {\n    \"database-tde\": {\n      \"command\": \"uv\",\n      \"args\": [\"run\", \"python\", \"-m\", \"database_tde_server\"],\n      \"cwd\": \"/path/to/cakm-mcp-server-sql-oracle\",\n      \"env\": {\n        \"DB_TDE_SERVER_NAME\": \"database-tde-mcp\",\n        \"DB_TDE_LOG_LEVEL\": \"INFO\",\n        \"DB_TDE_DATABASE_CONNECTIONS\": \"[{\\\"name\\\":\\\"prod_sql\\\",\\\"db_type\\\":\\\"sqlserver\\\",\\\"host\\\":\\\"sql-prod.company.com\\\",\\\"port\\\":1433,\\\"username\\\":\\\"tde_admin\\\",\\\"password\\\":\\\"secure_password\\\"},{\\\"name\\\":\\\"oracle_cdb1\\\",\\\"db_type\\\":\\\"oracle\\\",\\\"host\\\":\\\"oracle-prod.company.com\\\",\\\"port\\\":1521,\\\"username\\\":\\\"sys\\\",\\\"password\\\":\\\"oracle_password\\\",\\\"oracle_config\\\":{\\\"oracle_home\\\":\\\"/u01/app/oracle/product/21.0.0/dbhome_1\\\",\\\"oracle_sid\\\":\\\"cdb1\\\",\\\"service_name\\\":\\\"orcl\\\",\\\"mode\\\":\\\"SYSDBA\\\",\\\"wallet_root\\\":\\\"/opt/oracle/wallet\\\"},\\\"ssh_config\\\":{\\\"host\\\":\\\"oracle-prod.company.com\\\",\\\"username\\\":\\\"oracle\\\",\\\"private_key_path\\\":\\\"/path/to/private-key.pem\\\",\\\"port\\\":22,\\\"timeout\\\":30}}]\"\n      }\n    }\n  }\n}\n```\n\n### Cursor AI (mcp.json)\n```json\n{\n  \"mcpServers\": {\n    \"database-tde\": {\n      \"command\": \"uv\",\n      \"args\": [\"run\", \"python\", \"-m\", \"database_tde_server\"],\n      \"cwd\": \"/path/to/cakm-mcp-server-sql-oracle\",\n      \"env\": {\n        \"DB_TDE_SERVER_NAME\": \"database-tde-mcp\",\n        \"DB_TDE_LOG_LEVEL\": \"INFO\",\n        \"DB_TDE_DATABASE_CONNECTIONS\": \"[{\\\"name\\\":\\\"prod_sql\\\",\\\"db_type\\\":\\\"sqlserver\\\",\\\"host\\\":\\\"sql-prod.company.com\\\",\\\"port\\\":1433,\\\"username\\\":\\\"tde_admin\\\",\\\"password\\\":\\\"secure_password\\\"},{\\\"name\\\":\\\"oracle_cdb1\\\",\\\"db_type\\\":\\\"oracle\\\",\\\"host\\\":\\\"oracle-prod.company.com\\\",\\\"port\\\":1521,\\\"username\\\":\\\"sys\\\",\\\"password\\\":\\\"oracle_password\\\",\\\"oracle_config\\\":{\\\"oracle_home\\\":\\\"/u01/app/oracle/product/21.0.0/dbhome_1\\\",\\\"oracle_sid\\\":\\\"cdb1\\\",\\\"service_name\\\":\\\"orcl\\\",\\\"mode\\\":\\\"SYSDBA\\\",\\\"wallet_root\\\":\\\"/opt/oracle/wallet\\\"},\\\"ssh_config\\\":{\\\"host\\\":\\\"oracle-prod.company.com\\\",\\\"username\\\":\\\"oracle\\\",\\\"private_key_path\\\":\\\"/path/to/private-key.pem\\\",\\\"port\\\":22,\\\"timeout\\\":30}}]\"\n      }\n    }\n  }\n}\n```\n\n### Gemini CLI (settings.json)\n```json\n{\n  \"mcpServers\": {\n    \"database-tde\": {\n      \"command\": \"uv\",\n      \"args\": [\"run\", \"python\", \"-m\", \"database_tde_server\"],\n      \"cwd\": \"/path/to/cakm-mcp-server-sql-oracle\",\n      \"env\": {\n        \"DB_TDE_SERVER_NAME\": \"database-tde-mcp\",\n        \"DB_TDE_LOG_LEVEL\": \"INFO\",\n        \"DB_TDE_DATABASE_CONNECTIONS\": \"[{\\\"name\\\":\\\"prod_sql\\\",\\\"db_type\\\":\\\"sqlserver\\\",\\\"host\\\":\\\"sql-prod.company.com\\\",\\\"port\\\":1433,\\\"username\\\":\\\"tde_admin\\\",\\\"password\\\":\\\"secure_password\\\"},{\\\"name\\\":\\\"oracle_cdb1\\\",\\\"db_type\\\":\\\"oracle\\\",\\\"host\\\":\\\"oracle-prod.company.com\\\",\\\"port\\\":1521,\\\"username\\\":\\\"sys\\\",\\\"password\\\":\\\"oracle_password\\\",\\\"oracle_config\\\":{\\\"oracle_home\\\":\\\"/u01/app/oracle/product/21.0.0/dbhome_1\\\",\\\"oracle_sid\\\":\\\"cdb1\\\",\\\"service_name\\\":\\\"orcl\\\",\\\"mode\\\":\\\"SYSDBA\\\",\\\"wallet_root\\\":\\\"/opt/oracle/wallet\\\"},\\\"ssh_config\\\":{\\\"host\\\":\\\"oracle-prod.company.com\\\",\\\"username\\\":\\\"oracle\\\",\\\"private_key_path\\\":\\\"/path/to/private-key.pem\\\",\\\"port\\\":22,\\\"timeout\\\":30}}]\"\n      }\n    }\n  }\n}\n```\n\n### Architecture Overview\n```\nMCP Server ↔ Database Server ↔ CAKM Provider/Library ↔ CipherTrust Manager\n```\n\n**Note**: This MCP server communicates only with database servers. The CAKM providers installed on database servers handle all communication with CipherTrust Manager.\n\n### Oracle TDE Enablement Logic\n\nThe server uses Oracle-documented logic to determine TDE status based on wallet configurations and TDE parameters:\n\n**✅ TDE is ENABLED when:**\n- Any wallet shows `OPEN` status AND Master Encryption Keys (MEKs) exist\n\n**📊 Wallet Order Types (from Oracle V$ENCRYPTION_WALLET):**\n- **SINGLE**: Only one wallet type configured\n- **PRIMARY**: Primary wallet in a dual-wallet configuration  \n- **SECONDARY**: Secondary wallet in a dual-wallet configuration\n\n**🔧 TDE Configuration Parameter Values:**\n- **FILE**: TDE configured to use FILE wallets only\n- **HSM**: TDE configured to use HSM wallets only\n- **HSM|FILE**: TDE configured with HSM as primary, FILE as secondary\n- **FILE|HSM**: TDE configured with FILE as primary, HSM as secondary\n\n**📊 Supported TDE Scenarios:**\n1. **HSM-only TDE**: HSM wallet OPEN (SINGLE), TDE_CONFIGURATION=HSM\n2. **HSM with Auto-login (Migrated)**: HSM wallet OPEN (PRIMARY), auto-login wallet OPEN (SECONDARY), TDE_CONFIGURATION=HSM|FILE\n3. **HSM with Auto-login (Not Migrated)**: HSM wallet OPEN (PRIMARY), auto-login wallet OPEN_NO_MASTER_KEY (SECONDARY), TDE_CONFIGURATION=HSM|FILE\n4. **FILE wallet TDE**: PASSWORD wallet OPEN (SINGLE), TDE_CONFIGURATION=FILE\n5. **FILE with Auto-login (Reverse Migrated)**: PASSWORD wallet OPEN (PRIMARY), auto-login wallet OPEN (SECONDARY), TDE_CONFIGURATION=FILE|HSM\n6. **FILE with Auto-login**: PASSWORD wallet OPEN (PRIMARY), auto-login wallet OPEN (SECONDARY), TDE_CONFIGURATION=FILE\n\n**🔍 Migration Detection Logic:**\n- **Forward Migration**: HSM becomes PRIMARY (HSM|FILE configuration) → Database migrated from FILE to HSM\n- **Reverse Migration**: FILE becomes PRIMARY (FILE|HSM configuration) → Database migrated from HSM back to FILE\n- **WALLET_ORDER** and **TDE_CONFIGURATION** are correlated to determine the migration state\n\n**📋 Status Information:**\n- TDE configuration parameters validate the expected wallet hierarchy\n- Wallet order and TDE_CONFIGURATION together determine the deployment scenario\n\n## 🔧 Oracle TDE Operations Guide\n\nThe `oracle_tde_deployment` tool provides different operations for various TDE setup scenarios:\n\n### Operation Types & Use Cases\n\n**1. HSM-Only TDE Setup (No Auto-login)**\n```json\n{\n  \"oracle_connection\": \"oracle_cdb2\",\n  \"operation\": \"setup_hsm_only\",\n  \"ciphertrust_username\": \"tdeuser\",\n  \"ciphertrust_password\": \"Thales123!\",\n  \"ciphertrust_domain\": \"TDE\",\n  \"auto_restart\": true\n}\n```\n- **Use when**: \"Skip auto-login wallet creation\" or \"HSM only\"\n- **Creates**: HSM keystore only\n- **Result**: Manual wallet opening required after restarts\n- **No software_wallet_password needed**\n\n**2. Complete TDE Setup (HSM + Auto-login)**\n```json\n{\n  \"oracle_connection\": \"oracle_cdb2\",\n  \"operation\": \"setup_hsm_with_autologin\",\n  \"ciphertrust_username\": \"tdeuser\", \n  \"ciphertrust_password\": \"Thales123!\",\n  \"ciphertrust_domain\": \"TDE\",\n  \"software_wallet_password\": \"Thales123!\",\n  \"auto_restart\": true\n}\n```\n- **Use when**: \"Set up complete TDE with auto-login\"\n- **Creates**: HSM + software wallet + auto-login keystore\n- **Result**: Database starts automatically without manual intervention\n- **Requires software_wallet_password**\n\n**3. Add Auto-login to Existing TDE**\n```json\n{\n  \"oracle_connection\": \"oracle_cdb2\",\n  \"operation\": \"add_autologin\",\n  \"ciphertrust_username\": \"tdeuser\",\n  \"ciphertrust_password\": \"Thales123!\", \n  \"ciphertrust_domain\": \"TDE\",\n  \"software_wallet_password\": \"Thales123!\",\n  \"auto_restart\": true\n}\n```\n- **Use when**: Database has HSM TDE, want to add auto-login\n- **Creates**: Software wallet + auto-login for existing HSM setup\n- **Requires software_wallet_password**\n\n**4. Check TDE Status**\n```json\n{\n  \"oracle_connection\": \"oracle_cdb2\",\n  \"operation\": \"get_tde_status\"\n}\n```\n- **Use when**: Want to see current TDE configuration\n- **Returns**: Comprehensive wallet and TDE status\n- **No credentials needed**\n\n### Quick Reference\n- **\"Skip auto-login\"** → Use `setup_hsm_only`\n- **\"Complete TDE setup\"** → Use `setup_hsm_with_autologin`  \n- **\"Add auto-login to existing\"** → Use `add_autologin`\n- **\"Check what I have\"** → Use `get_tde_status`\n\n**📚 References:**\n- [Oracle V$ENCRYPTION_WALLET Documentation](https://docs.oracle.com/en/database/oracle/oracle-database/19/refrn/V-ENCRYPTION_WALLET.html)\n- [Oracle TDE_CONFIGURATION Parameter](https://docs.oracle.com/en/database/oracle/oracle-database/19/refrn/TDE_CONFIGURATION.html)\n\n### Example Prompts\n```\n\"Show me the TDE status of all my databases\"\n\"For my 'prod_sql' connection, list all the asymmetric keys using the 'manage_sql_keys' tool\"\n\"Rotate the master key on the 'Db05' database using the 'prod_sql' connection\"\n\"Encrypt the 'SalesDB' database on my 'prod_sql' server\"\n\"What is the wallet status for my 'oracle_cdb2' connection?\"\n```\n\n### Important Notes\n- **Automatic Database Restarts**: When specified in prompts, MCP tools can automatically restart Oracle databases as part of TDE operations\n- **SSH Authentication**: Oracle connections support both private key and password authentication\n  - Private key: Use `\"private_key_path\": \"/path/to/key.pem\"` in ssh_config\n  - Password: Use `\"password\": \"your_ssh_password\"` in ssh_config (instead of private_key_path)\n- **Supported Databases**: Microsoft SQL Server and Oracle Database are supported\n\n## 📚 Documentation\n\n- [Prerequisites](docs/PREREQUISITES.md) - System requirements and setup\n- [Testing Guide](docs/TESTING.md) - Comprehensive testing procedures\n- [Example Prompts](docs/EXAMPLE_PROMPTS.md) - Ready-to-use testing prompts for SQL Server and Oracle\n\n## 🤝 Contributing\n\n1. Fork the repository\n2. Create a feature branch\n3. Make your changes\n4. Add tests for new functionality\n5. Ensure all tests pass\n6. Submit a pull request\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Security",
+  "quality_score": 37,
+  "archestra_config": {
+    "client_config_permutations": {
+      "database-tde": {
+        "command": "uv",
+        "args": ["run", "python", "-m", "database_tde_server"],
+        "env": {
+          "DB_TDE_SERVER_NAME": "database-tde-mcp",
+          "DB_TDE_LOG_LEVEL": "INFO",
+          "DB_TDE_DATABASE_CONNECTIONS": "[{\"name\":\"prod_sql\",\"db_type\":\"sqlserver\",\"host\":\"sql-prod.company.com\",\"port\":1433,\"username\":\"tde_admin\",\"password\":\"secure_password\"},{\"name\":\"oracle_cdb1\",\"db_type\":\"oracle\",\"host\":\"oracle-prod.company.com\",\"port\":1521,\"username\":\"sys\",\"password\":\"oracle_password\",\"oracle_config\":{\"oracle_home\":\"/u01/app/oracle/product/21.0.0/dbhome_1\",\"oracle_sid\":\"cdb1\",\"service_name\":\"orcl\",\"mode\":\"SYSDBA\",\"wallet_root\":\"/opt/oracle/wallet\"},\"ssh_config\":{\"host\":\"oracle-prod.company.com\",\"username\":\"oracle\",\"private_key_path\":\"/path/to/private-key.pem\",\"port\":22,\"timeout\":30}}]"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sanyambassi",
+    "repo": "thales-cdsp-cakm-mcp-server",
+    "url": "https://github.com/sanyambassi/thales-cdsp-cakm-mcp-server",
+    "name": "thales-cdsp-cakm-mcp-server",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "c5f4785505d6d0c4b2152c9054479e04761852b0"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.083Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 8
+    },
+    {
+      "name": "pyodbc",
+      "importance": 9
+    },
+    {
+      "name": "oracledb",
+      "importance": 9
+    },
+    {
+      "name": "paramiko",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"database-tde-mcp-server\"\nversion = \"1.0.0\"\ndescription = \"Database TDE MCP Server for CipherTrust CAKM Integration\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\nauthors = [\n    {name = \"Your Organization\", email = \"admin@company.com\"},\n]\nkeywords = [\"mcp\", \"database\", \"tde\", \"encryption\", \"ciphertrust\", \"cakm\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Topic :: Database\",\n    \"Topic :: Security :: Cryptography\",\n]\n\ndependencies = [\n    \"mcp[cli]>=1.0.0\",\n    \"pydantic>=2.0.0\",\n    \"pydantic-settings>=2.0.0\",\n    \"pyodbc>=5.0.0\",\n    \"oracledb>=1.0.0\",\n    \"paramiko>=2.7.0\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"black>=23.0.0\",\n    \"isort>=5.12.0\",\n    \"flake8>=6.0.0\",\n    \"mypy>=1.0.0\",\n]\nmysql = [\n    \"PyMySQL>=1.0.0\",\n]\npostgresql = [\n    \"psycopg2-binary>=2.9.0\",\n]\n\n[project.scripts]\ndatabase-tde-mcp-server = \"database_tde_server.server:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/database_tde_server\"]\n\n[tool.black]\nline-length = 100\ntarget-version = ['py311']\n\n[tool.isort]\nprofile = \"black\"\nline_length = 100\n\n[tool.mypy]\npython_version = \"3.11\"\nwarn_return_any = true\nwarn_unused_configs = true\n"
+}

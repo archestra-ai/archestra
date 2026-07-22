@@ -1,0 +1,98 @@
+{
+  "name": "quarkiverse__quarkus-mcp-servers__jfx",
+  "display_name": "jfx",
+  "description": "Model Context Protocol Servers in Quarkus",
+  "author": {
+    "name": "quarkiverse"
+  },
+  "server": {
+    "command": "jbang",
+    "args": ["jfx@quarkiverse/quarkus-mcp-servers"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Model Context Protocol Server for JavaFX\n\nThis Model Context Protocol(MCP) server enables Large Language Models (LLMs) to make drawings using JavaFX primities.\n\nThe server is implemented using Quarkus MCP and JavaFX.\n\nInitial idea and implementation is from [@konczdev](https://gist.github.com/konczdev/5e6774d2d8640bf83baab88cb068bcc2)\n\n[![JFX Demo](images/jfx-demo.png)](https://www.youtube.com/watch?v=Wnh_-0dAaDI)\n\nSee video [here](https://www.youtube.com/watch?v=Wnh_-0dAaDI).\n\n## General Usage \n\n1. Install [jbang](https://www.jbang.dev/download/)\n2. Configure your MCP Client to run the server as `jbang jfx@quarkiverse/quarkus-mcp-servers` (see [Claude Desktop Config](#claude-desktop-config) below)\n\n## Claude Desktop Config and [mcp-cli](https://github.com/chrishayuk/mcp-cli)\n\nAdd this to your `claude_desktop_config.json` or `server_config.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"jfx\": {\n      \"command\": \"jbang\",\n      \"args\": [\n        \"jfx@quarkiverse/quarkus-mcp-servers\"\n      ]\n    }\n  }\n}\n```\n\n## Native Image/Executable\n\nAt this moment the jfx server cannot be compiled to a native executable given the JavaFX dependencies. \n\nIt should be possible to do this using GluonFX, but that is for now left up as an exercise to the reader. If you are interested in working on this, please open issue or PR. ",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "jfx": {
+        "command": "jbang",
+        "args": ["jfx@quarkiverse/quarkus-mcp-servers"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "quarkiverse",
+    "repo": "quarkus-mcp-servers",
+    "url": "https://github.com/quarkiverse/quarkus-mcp-servers/tree/main/jfx",
+    "name": "quarkus-mcp-servers",
+    "path": "jfx",
+    "stars": 159,
+    "contributors": 9,
+    "issues": 22,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d2c1caad14f71ba3995394ff2ae1e2971bad7125"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:51.144Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "io.quarkiverse.mcp.servers:mcp-server-shared",
+      "importance": 9
+    },
+    {
+      "name": "io.quarkus:quarkus-jackson",
+      "importance": 8
+    },
+    {
+      "name": "io.quarkus:quarkus-qute",
+      "importance": 7
+    },
+    {
+      "name": "io.quarkus:quarkus-arc",
+      "importance": 8
+    },
+    {
+      "name": "io.quarkiverse.fx:quarkus-fx",
+      "importance": 10
+    },
+    {
+      "name": "org.openjfx:javafx-swing",
+      "importance": 9
+    },
+    {
+      "name": "org.openjfx:javafx-controls",
+      "importance": 9
+    },
+    {
+      "name": "org.openjfx:javafx-graphics",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pom.xml ===\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd\">\n    <modelVersion>4.0.0</modelVersion>\n    <artifactId>mcp-server-jfx</artifactId>\n\n    <parent>\n        <groupId>io.quarkiverse.mcp.servers</groupId>\n        <artifactId>mcp-servers-parent</artifactId>\n        <version>999-SNAPSHOT</version>\n    </parent>\n\n    <name>MCP Servers :: JFX</name>\n\n    <properties>\n\n    </properties>\n\n    <dependencyManagement>\n        <dependencies>\n            <dependency>\n                <groupId>${quarkus.platform.group-id}</groupId>\n                <artifactId>${quarkus.platform.artifact-id}</artifactId>\n                <version>${quarkus.platform.version}</version>\n                <type>pom</type>\n                <scope>import</scope>\n            </dependency>\n\n        </dependencies>\n    </dependencyManagement>\n\n    <dependencies>\n        <dependency>\n            <groupId>io.quarkiverse.mcp.servers</groupId>\n            <artifactId>mcp-server-shared</artifactId>\n            <version>${project.version}</version>\n        </dependency>\n        <dependency>\n            <groupId>io.quarkus</groupId>\n            <artifactId>quarkus-jackson</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>io.quarkus</groupId>\n            <artifactId>quarkus-qute</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>io.quarkus</groupId>\n            <artifactId>quarkus-arc</artifactId>\n        </dependency>\n\n        <dependency>\n            <groupId>io.quarkiverse.fx</groupId>\n            <artifactId>quarkus-fx</artifactId>\n            <version>0.9.1</version>\n        </dependency>\n\n        <dependency>\n            <groupId>org.openjfx</groupId>\n            <artifactId>javafx-swing</artifactId>\n            <version>21</version>\n        </dependency>\n        <dependency>\n            <groupId>org.openjfx</groupId>\n            <artifactId>javafx-controls</artifactId>\n            <version>21</version>\n        </dependency>\n        <dependency>\n            <groupId>org.openjfx</groupId>\n            <artifactId>javafx-graphics</artifactId>\n            <version>21</version>\n        </dependency>\n        <dependency>\n            <groupId>io.quarkus</groupId>\n            <artifactId>quarkus-junit5</artifactId>\n            <scope>test</scope>\n        </dependency>\n        <dependency>\n            <groupId>org.assertj</groupId>\n            <artifactId>assertj-core</artifactId>\n            <scope>test</scope>\n        </dependency>\n        <dependency>\n            <groupId>dev.langchain4j</groupId>\n            <artifactId>langchain4j-mcp</artifactId>\n            <scope>test</scope>\n        </dependency>\n\n    </dependencies>\n\n    <build>\n        <plugins>\n            <plugin>\n                <groupId>${quarkus.platform.group-id}</groupId>\n                <artifactId>quarkus-maven-plugin</artifactId>\n                <version>${quarkus.platform.version}</version>\n                <extensions>true</extensions>\n                <executions>\n                    <execution>\n                        <goals>\n                            <goal>build</goal>\n                            <goal>generate-code</goal>\n                            <goal>generate-code-tests</goal>\n                            <goal>native-image-agent</goal>\n                        </goals>\n                    </execution>\n                </executions>\n            </plugin>\n            <plugin>\n                <artifactId>maven-compiler-plugin</artifactId>\n                <version>${compiler-plugin.version}</version>\n                <configuration>\n                    <parameters>true</parameters>\n                </configuration>\n            </plugin>\n            <plugin>\n                <artifactId>maven-surefire-plugin</artifactId>\n                <version>${surefire-plugin.version}</version>\n                <configuration>\n                    <systemPropertyVariables>\n                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>\n                        <maven.home>${maven.home}</maven.home>\n                    </systemPropertyVariables>\n                </configuration>\n            </plugin>\n            <plugin>\n                <artifactId>maven-failsafe-plugin</artifactId>\n                <version>${surefire-plugin.version}</version>\n                <executions>\n                    <execution>\n                        <goals>\n                            <goal>integration-test</goal>\n                            <goal>verify</goal>\n                        </goals>\n                    </execution>\n                </executions>\n                <configuration>\n                    <systemPropertyVariables>\n                        <native.image.path>\n                            ${project.build.directory}/${project.build.finalName}-runner\n                        </native.image.path>\n                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>\n                        <maven.home>${maven.home}</maven.home>\n                    </systemPropertyVariables>\n                </configuration>\n            </plugin>\n        </plugins>\n    </build>\n\n\n</project>\n"
+}

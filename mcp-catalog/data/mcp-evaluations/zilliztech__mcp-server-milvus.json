@@ -1,0 +1,167 @@
+{
+  "name": "zilliztech__mcp-server-milvus",
+  "display_name": "mcp-server-milvus",
+  "description": "Model Context Protocol Servers for Milvus",
+  "author": {
+    "name": "zilliztech"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}/src/mcp_server_milvus", "run", "server.py"],
+    "env": {
+      "MILVUS_URI": "${user_config.milvus_uri}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "milvus_uri": {
+      "type": "string",
+      "title": "Milvus URI",
+      "description": "The URI for the Milvus vector database instance.",
+      "required": true,
+      "default": "http://localhost:19530"
+    },
+    "sse_mode_enabled": {
+      "type": "boolean",
+      "title": "Enable SSE Mode",
+      "description": "Run the server in Server-Sent Events (SSE) mode instead of Stdio mode. Note: This configuration is for reference; the canonical server configuration provided here is for Stdio mode.",
+      "required": false,
+      "default": false
+    },
+    "sse_port": {
+      "type": "number",
+      "title": "SSE Server Port",
+      "description": "The port for the SSE server (only applicable if SSE mode is enabled). Note: This configuration is for reference; the canonical server configuration provided here is for Stdio mode.",
+      "required": false,
+      "default": 8000,
+      "min": 1,
+      "max": 65535
+    }
+  },
+  "readme": "# MCP Server for Milvus\n\n> The Model Context Protocol (MCP) is an open protocol that enables seamless integration between LLM applications and external data sources and tools. Whether you're building an AI-powered IDE, enhancing a chat interface, or creating custom AI workflows, MCP provides a standardized way to connect LLMs with the context they need.\n\nThis repository contains a MCP server that provides access to [Milvus](https://milvus.io/) vector database functionality.\n\n![MCP with Milvus](Claude_mcp+1080.gif)\n\n## Prerequisites\n\nBefore using this MCP server, ensure you have:\n\n- Python 3.10 or higher\n- A running [Milvus](https://milvus.io/) instance (local or remote)\n- [uv](https://github.com/astral-sh/uv) installed (recommended for running the server)\n\n## Usage\n\nThe recommended way to use this MCP server is to run it directly with `uv` without installation. This is how both Claude Desktop and Cursor are configured to use it in the examples below.\n\nIf you want to clone the repository:\n\n```bash\ngit clone https://github.com/zilliztech/mcp-server-milvus.git\ncd mcp-server-milvus\n```\n\nThen you can run the server directly:\n\n```bash\nuv run src/mcp_server_milvus/server.py --milvus-uri http://localhost:19530\n```\n\nAlternatively you can change the .env file in the `src/mcp_server_milvus/` directory to set the environment variables and run the server with the following command:\n\n```bash\nuv run src/mcp_server_milvus/server.py\n```\n\n### Important: the .env file will have higher priority than the command line arguments.\n\n### Running Modes\n\nThe server supports two running modes: **stdio** (default) and **SSE** (Server-Sent Events).\n\n### Stdio Mode (Default)\n\n- **Description**: Communicates with the client via standard input/output. This is the default mode if no mode is specified.\n\n- Usage:\n\n  ```bash\n  uv run src/mcp_server_milvus/server.py --milvus-uri http://localhost:19530\n  ```\n\n### SSE Mode\n\n- **Description**: Uses HTTP Server-Sent Events for communication. This mode allows multiple clients to connect via HTTP and is suitable for web-based applications.\n\n- **Usage:**\n\n  ```bash\n  uv run src/mcp_server_milvus/server.py --sse --milvus-uri http://localhost:19530 --port 8000\n  ```\n\n  - `--sse`: Enables SSE mode.\n  - `--port`: Specifies the port for the SSE server (default: 8000).\n\n- **Debugging in SSE Mode:**\n\n  If you want to debug in SSE mode, after starting the SSE service, enter the following command:\n\n  ```bash\n  mcp dev src/mcp_server_milvus/server.py\n  ```\n\n  The output will be similar to:\n\n  ```plaintext\n  % mcp dev src/mcp_server_milvus/merged_server.py\n  Starting MCP inspector...\n  ⚙️ Proxy server listening on port 6277\n  🔍 MCP Inspector is up and running at http://127.0.0.1:6274 🚀\n  ```\n\n  You can then access the MCP Inspector at `http://127.0.0.1:6274` for testing.\n\n## Supported Applications\n\nThis MCP server can be used with various LLM applications that support the Model Context Protocol:\n\n- **Claude Desktop**: Anthropic's desktop application for Claude\n- **Cursor**: AI-powered code editor with MCP support\n- **Custom MCP clients**: Any application implementing the MCP client specification\n\n## Usage with Claude Desktop\n\n### Configuration for Different Modes\n\n#### SSE Mode Configuration\n\nFollow these steps to configure Claude Desktop for SSE mode:\n\n1. Install Claude Desktop from https://claude.ai/download.\n2. Open your Claude Desktop configuration file:\n   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n3. Add the following configuration for SSE mode:\n\n```json\n{\n  \"mcpServers\": {\n    \"milvus-sse\": {\n      \"url\": \"http://your_sse_host:port/sse\",\n      \"disabled\": false,\n      \"autoApprove\": []\n    }\n  }\n}\n```\n\n4. Restart Claude Desktop to apply the changes.\n\n#### Stdio Mode Configuration\n\nFor stdio mode, follow these steps:\n\n1. Install Claude Desktop from https://claude.ai/download.\n2. Open your Claude Desktop configuration file:\n   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n3. Add the following configuration for stdio mode:\n\n```json\n{\n  \"mcpServers\": {\n    \"milvus\": {\n      \"command\": \"/PATH/TO/uv\",\n      \"args\": [\n        \"--directory\",\n        \"/path/to/mcp-server-milvus/src/mcp_server_milvus\",\n        \"run\",\n        \"server.py\",\n        \"--milvus-uri\",\n        \"http://localhost:19530\"\n      ]\n    }\n  }\n}\n```\n\n4. Restart Claude Desktop to apply the changes.\n\n## Usage with Cursor\n\n[Cursor also supports MCP](https://docs.cursor.com/context/model-context-protocol) tools. You can integrate your Milvus MCP server with Cursor by following these steps:\n\n### Integration Steps\n\n1. Open `Cursor Settings` > `MCP`\n2. Click on `Add new global MCP server`\n3. After clicking, it will automatically redirect you to the `mcp.json` file, which will be created if it doesn’t exist\n\n### Configuring the `mcp.json` File\n\n#### For Stdio Mode:\n\nOverwrite the `mcp.json` file with the following content:\n\n```json\n{\n  \"mcpServers\": {\n    \"milvus\": {\n      \"command\": \"/PATH/TO/uv\",\n      \"args\": [\n        \"--directory\",\n        \"/path/to/mcp-server-milvus/src/mcp_server_milvus\",\n        \"run\",\n        \"server.py\",\n        \"--milvus-uri\",\n        \"http://127.0.0.1:19530\"\n      ]\n    }\n  }\n}\n```\n\n#### For SSE Mode:\n\n1. Start the service by running the following command:\n\n   ```bash\n   uv run src/mcp_server_milvus/server.py --sse --milvus-uri http://your_sse_host --port port\n   ```\n\n   > **Note**: Replace `http://your_sse_host` with your actual SSE host address and `port` with the specific port number you’re using.\n\n2. Once the service is up and running, overwrite the `mcp.json` file with the following content:\n\n   ```json\n   {\n       \"mcpServers\": {\n         \"milvus-sse\": {\n           \"url\": \"http://your_sse_host:port/sse\",\n           \"disabled\": false,\n           \"autoApprove\": []\n         }\n       }\n   }\n   ```\n\n### Completing the Integration\n\nAfter completing the above steps, restart Cursor or reload the window to ensure the configuration takes effect.\n\n## Verifying the Integration\n\nTo verify that Cursor has successfully integrated with your Milvus MCP server:\n\n1. Open `Cursor Settings` > `MCP`\n2. Check if \"milvus\" or \"milvus-sse\" appear in the list（depending on the mode you have chosen）\n3. Confirm that the relevant tools are listed (e.g., milvus_list_collections, milvus_vector_search, etc.)\n4. If the server is enabled but shows an error, check the Troubleshooting section below\n\n## Available Tools\n\nThe server provides the following tools:\n\n### Search and Query Operations\n\n- `milvus_text_search`: Search for documents using full text search\n\n  - Parameters:\n    - `collection_name`: Name of collection to search\n    - `query_text`: Text to search for\n    - `limit`: The maximum number of results to return (default: 5)\n    - `output_fields`: Fields to include in results\n    - `drop_ratio`: Proportion of low-frequency terms to ignore (0.0-1.0)\n- `milvus_vector_search`: Perform vector similarity search on a collection\n  - Parameters:\n    - `collection_name`: Name of collection to search\n    - `vector`: Query vector\n    - `vector_field`: Field name for vector search (default: \"vector\")\n    - `limit`: The maximum number of results to return (default: 5)\n    - `output_fields`: Fields to include in results\n    - `filter_expr`: Filter expression\n    - `metric_type`: Distance metric (COSINE, L2, IP) (default: \"COSINE\")\n- `milvus_hybrid_search`: Perform hybrid search on a collection\n  - Parameters:\n    - `collection_name`: Name of collection to search\n    - `query_text`: Text query for search\n    - `text_field`: Field name for text search\n    - `vector`: Vector of the text query\n    - `vector_field`: Field name for vector search\n    - `limit`: The maximum number of results to return\n    - `output_fields`: Fields to include in results\n    - `filter_expr`: Filter expression\n- `milvus_query`: Query collection using filter expressions\n  - Parameters:\n    - `collection_name`: Name of collection to query\n    - `filter_expr`: Filter expression (e.g. 'age > 20')\n    - `output_fields`: Fields to include in results\n    - `limit`: The maximum number of results to return (default: 10)\n\n### Collection Management\n\n- `milvus_list_collections`: List all collections in the database\n\n- `milvus_create_collection`: Create a new collection with specified schema\n\n  - Parameters:\n    - `collection_name`: Name for the new collection\n    - `collection_schema`: Collection schema definition\n    - `index_params`: Optional index parameters\n\n- `milvus_load_collection`: Load a collection into memory for search and query\n\n  - Parameters:\n    - `collection_name`: Name of collection to load\n    - `replica_number`: Number of replicas (default: 1)\n\n- `milvus_release_collection`: Release a collection from memory\n  - Parameters:\n    - `collection_name`: Name of collection to release\n\n- `milvus_get_collection_info`: Lists detailed information like schema, properties, collection ID, and other metadata of a specific collection.\n  - Parameters:\n    - `collection_name`:  Name of the collection to get detailed information about\n\n### Data Operations\n\n- `milvus_insert_data`: Insert data into a collection\n\n  - Parameters:\n    - `collection_name`: Name of collection\n    - `data`: Dictionary mapping field names to lists of values\n\n- `milvus_delete_entities`: Delete entities from a collection based on filter expression\n  - Parameters:\n    - `collection_name`: Name of collection\n    - `filter_expr`: Filter expression to select entities to delete\n\n## Environment Variables\n\n- `MILVUS_URI`: Milvus server URI (can be set instead of --milvus-uri)\n- `MILVUS_TOKEN`: Optional authentication token\n- `MILVUS_DB`: Database name (defaults to \"default\")\n\n## Development\n\nTo run the server directly:\n\n```bash\nuv run server.py --milvus-uri http://localhost:19530\n```\n\n## Examples\n\n### Using Claude Desktop\n\n#### Example 1: Listing Collections\n\n```\nWhat are the collections I have in my Milvus DB?\n```\n\nClaude will then use MCP to check this information on your Milvus DB.\n\n```\nI'll check what collections are available in your Milvus database.\n\nHere are the collections in your Milvus database:\n\n1. rag_demo\n2. test\n3. chat_messages\n4. text_collection\n5. image_collection\n6. customized_setup\n7. streaming_rag_demo\n```\n\n#### Example 2: Searching for Documents\n\n```\nFind documents in my text_collection that mention \"machine learning\"\n```\n\nClaude will use the full-text search capabilities of Milvus to find relevant documents:\n\n```\nI'll search for documents about machine learning in your text_collection.\n\n> View result from milvus-text-search from milvus (local)\n\nHere are the documents I found that mention machine learning:\n[Results will appear here based on your actual data]\n```\n\n### Using Cursor\n\n#### Example: Creating a Collection\n\nIn Cursor, you can ask:\n\n```\nCreate a new collection called 'articles' in Milvus with fields for title (string), content (string), and a vector field (128 dimensions)\n```\n\nCursor will use the MCP server to execute this operation:\n\n```\nI'll create a new collection called 'articles' with the specified fields.\n\nCollection 'articles' has been created successfully with the following schema:\n- title: string\n- content: string\n- vector: float vector[128]\n```\n\n## Troubleshooting\n\n### Common Issues\n\n#### Connection Errors\n\nIf you see errors like \"Failed to connect to Milvus server\":\n\n1. Verify your Milvus instance is running: `docker ps` (if using Docker)\n2. Check the URI is correct in your configuration\n3. Ensure there are no firewall rules blocking the connection\n4. Try using `127.0.0.1` instead of `localhost` in the URI\n\n#### Authentication Issues\n\nIf you see authentication errors:\n\n1. Verify your `MILVUS_TOKEN` is correct\n2. Check if your Milvus instance requires authentication\n3. Ensure you have the correct permissions for the operations you're trying to perform\n\n#### Tool Not Found\n\nIf the MCP tools don't appear in Claude Desktop or Cursor:\n\n1. Restart the application\n2. Check the server logs for any errors\n3. Verify the MCP server is running correctly\n4. Press the refresh button in the MCP settings (for Cursor)\n\n### Getting Help\n\nIf you continue to experience issues:\n\n1. Check the [GitHub Issues](https://github.com/zilliztech/mcp-server-milvus/issues) for similar problems\n2. Join the [Zilliz Community Discord](https://discord.gg/zilliz) for support\n3. File a new issue with detailed information about your problem\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-milvus-stdio": {
+        "command": "uv",
+        "args": ["run", "src/mcp_server_milvus/server.py", "--milvus-uri", "http://localhost:19530"],
+        "env": {}
+      },
+      "mcp-server-milvus-stdio-env": {
+        "command": "uv",
+        "args": ["run", "src/mcp_server_milvus/server.py"],
+        "env": {}
+      },
+      "mcp-server-milvus-sse": {
+        "command": "uv",
+        "args": [
+          "run",
+          "src/mcp_server_milvus/server.py",
+          "--sse",
+          "--milvus-uri",
+          "http://localhost:19530",
+          "--port",
+          "8000"
+        ],
+        "env": {}
+      },
+      "mcp-server-milvus-claude-desktop-stdio-config": {
+        "command": "/PATH/TO/uv",
+        "args": [
+          "--directory",
+          "/path/to/mcp-server-milvus/src/mcp_server_milvus",
+          "run",
+          "server.py",
+          "--milvus-uri",
+          "http://localhost:19530"
+        ],
+        "env": {}
+      },
+      "mcp-server-milvus-cursor-stdio-config": {
+        "command": "/PATH/TO/uv",
+        "args": [
+          "--directory",
+          "/path/to/mcp-server-milvus/src/mcp_server_milvus",
+          "run",
+          "server.py",
+          "--milvus-uri",
+          "http://127.0.0.1:19530"
+        ],
+        "env": {}
+      },
+      "mcp-server-milvus-cursor-sse-manual-start": {
+        "command": "uv",
+        "args": [
+          "run",
+          "src/mcp_server_milvus/server.py",
+          "--sse",
+          "--milvus-uri",
+          "http://your_sse_host",
+          "--port",
+          "port"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zilliztech",
+    "repo": "mcp-server-milvus",
+    "url": "https://github.com/zilliztech/mcp-server-milvus",
+    "name": "zilliztech__mcp-server-milvus",
+    "path": null,
+    "stars": 173,
+    "contributors": 7,
+    "issues": 15,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "02fb0592513af3b3e05a12f948a35f98bd2f8447"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:33.682Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "pymilvus",
+      "importance": 9
+    },
+    {
+      "name": "click",
+      "importance": 5
+    },
+    {
+      "name": "ruff",
+      "importance": 2
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-milvus\"\nversion = \"0.1.1\"\ndescription = \"MCP server for Milvus\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"fastmcp>=2.6.1\",\n    \"pymilvus>=2.5.1\",\n    \"click>=8.0.0\",\n    \"ruff>=0.11.0\",\n    \"python-dotenv>=1.0.0\",\n]\n\n[project.scripts]\nmcp-server-milvus = \"mcp_server_milvus.server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/mcp_server_milvus\"]\n"
+}

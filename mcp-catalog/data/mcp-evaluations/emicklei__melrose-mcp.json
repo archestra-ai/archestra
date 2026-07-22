@@ -1,0 +1,102 @@
+{
+  "name": "emicklei__melrose-mcp",
+  "display_name": "melrose-mcp",
+  "description": "MCP server (STDIO) that uses melrose tool to play musical expressions",
+  "author": {
+    "name": "emicklei"
+  },
+  "server": {
+    "command": "${user_config.melrose_mcp_path}",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "melrose_mcp_path": {
+      "type": "file",
+      "title": "Melrose MCP Binary Path",
+      "description": "The absolute path to the 'melrose-mcp' executable installed by 'go install'.",
+      "required": true,
+      "default": "${HOME}/go/bin/melrose-mcp"
+    }
+  },
+  "readme": "## melrose-mcp \n\n[melrōse](https://melrōse.org) is a tool to create and play music by programming melodies. It uses a custom language to compose notes and create loops and tracks to play.\n\n`melrose-mcp` is an [MCP](http://modelcontextprotocol.io/) server (STDIO) that uses the packages from the `melrōse` tool.\n\n## installation\n\nThis mcp server requires the [Go SDK](https://go.dev) for installation.\nTo produce music, you need to setup a MIDI receiver such as a DAW or a hardware synthesizer.\n\n    go install github.com/emicklei/melrose-mcp@latest\n\n## tools\n\n- melrose_play\n- melrose_bpm\n- melrose_devices\n- melrose_change_output_device\n\n## session\n\n>   change the tempo in melrose to a lower value\n\n`melrose_bmp` request:\n```javascript\n{\n  `bpm`: `80`\n}\n```\n\n`llm` response:\n```\nI've reduced the tempo to 80 beats per minute from the default of 120 BPM. This creates a more relaxed and slower pace for any musical expressions we play.\n```\n\n>   play a tune from Claude Debussy\n\n`llm` response:\n```\nI'll create a small segment inspired by Claude Debussy's impressionist style using the Melrose language at our current tempo of 80 BPM.\n```\n\n`melrose_play` request:\n```javascript\n{\n  `expression`: `sequence('(F4 A4 D5) 4(F4 A4 D5) (G4 B4 E5) 4(G4 B4 E5) (A4 C5 F5) 4(A4 C5 F5) (G4 B4 E5) 4(G4 B4 E5) (F4 A4 D5) 8= 8(E4 G4 C5) 4(F4 A4 D5)')`\n}\n```\n`melrose_play` response:\n```javascript\n12.749963417s\n```\n\n## configuration in your client\n\nBelow an example to configure it in Claude Desktop.\n\n    {\n        \"mcpServers\": {\n            \"melrōse\": {\n              \"command\": \"<YOUR DIRECTORY TO THE BINARY>/melrose-mcp\",\n              \"args\": []\n            }\n        }\n    }\n\n## example prompts\n\n- play the music sequence  C D E\n- play the first bar of fur elise\n- play the famous tune from Mike Oldfield called Tubular Bells\n- play the notes of Frere Jacques\n- play the C# chord\n\nTo help your LLM understand the Melrōse language better, you can use this [context](resources/melrose_llm_context.txt).\n\n### Contributions\n\nFixes, suggestions, documentation improvements are all welcome.\nFork this project and submit small Pull requests. \nDiscuss larger ones in the Issues list.\nYou can also sponsor Melrōse via [Github Sponsors](https://github.com/sponsors/emicklei).\n\nSoftware is licensed under [MIT](LICENSE).\n&copy; 2025 [ernestmicklei.com](http://ernestmicklei.com)",
+  "category": "Audio",
+  "quality_score": 30,
+  "archestra_config": {
+    "client_config_permutations": {
+      "melrōse": {
+        "command": "melrose-mcp",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "emicklei",
+    "repo": "melrose-mcp",
+    "url": "https://github.com/emicklei/melrose-mcp",
+    "name": "melrose-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "93228d4b4357dde2bf0298b0e480d5e45091aac6"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:27.859Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "modelcontextprotocol/go-sdk",
+      "importance": 10
+    },
+    {
+      "name": "emicklei/melrose",
+      "importance": 10
+    },
+    {
+      "name": "gomidi/midi/v2",
+      "importance": 9
+    },
+    {
+      "name": "Try431/EasyMIDI",
+      "importance": 8
+    },
+    {
+      "name": "expr-lang/expr",
+      "importance": 8
+    },
+    {
+      "name": "emicklei/tre",
+      "importance": 7
+    },
+    {
+      "name": "yosida95/uritemplate/v3",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/emicklei/melrose-mcp\n\ngo 1.24.4\n\nrequire (\n\tgithub.com/emicklei/melrose v0.58.3\n\tgithub.com/modelcontextprotocol/go-sdk v0.2.0\n)\n\nrequire (\n\tgithub.com/Try431/EasyMIDI v1.0.3 // indirect\n\tgithub.com/emicklei/tre v1.7.0 // indirect\n\tgithub.com/expr-lang/expr v1.17.5 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgitlab.com/gomidi/midi/v2 v2.3.16 // indirect\n)\n"
+}

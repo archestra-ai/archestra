@@ -1,0 +1,74 @@
+{
+  "name": "yiwenlu66__piloty",
+  "display_name": "PiloTY",
+  "description": "PiloTY: AI pilot for PTY operations via MCP - enables AI agents to control interactive terminals like a human",
+  "author": {
+    "name": "yiwenlu66"
+  },
+  "server": {
+    "command": "piloty",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# PiloTY\n\n**AI Pilot for PTY Operations** - An MCP server that enables AI agents to control interactive terminals like a human.\n\n> **⚠️ Work in Progress**: This project is under active development and not ready for production use yet.\n\n> **🔴 Security Warning**: PiloTY provides unrestricted terminal access that can \"jailbreak\" permission controls. For example, while Claude Code requires approval for each bash command, PiloTY's `run` tool can execute ANY command without additional checks. Only use with trusted AI systems and understand the security implications.\n\nPiloTY (Pilot + PTY) bridges AI agents and terminal interfaces through the Model Context Protocol, providing stateful terminal sessions with support for interactive applications, SSH connections, and background processes.\n\n📖 **[Read the technical design document](TECHNICAL.md)** for detailed architecture and use cases.\n\n## What You Can Do\n\n**Transform natural language into powerful terminal workflows.** With PiloTY, AI agents can control terminals just like experienced developers - maintaining state, managing SSH sessions, and handling complex multi-step operations through simple conversation.\n\n### Stateful Development Workflows\n\n> \"Change to my project directory, activate the virtual environment, and run the tests\"\n\n> \"Install the dependencies, build the project, and run the linter\"\n\n### Remote Server Management  \n\n> \"SSH into my production server, check the logs in /var/log/, and restart the nginx service\"\n\n> \"Connect to my database server and show me the current connections\"\n\n### Background Process Monitoring\n\n> \"Start a long-running data processing script in the background and check on its progress every few minutes\"\n\n> \"Download a large file using wget in the background and let me know when it's done\"\n\n### Interactive Debugging\n\n> \"Run my Python script with ipdb and set a breakpoint at line 42\"\n\n> \"Start a tmux session on my remote server and attach to an existing session\"\n\n## Installation\n\n### Option 1: Install with uv (Recommended)\n\nThe fastest and most reliable way to install PiloTY:\n\n```bash\n# Install uv if you haven't already\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n\n# Install PiloTY globally\nuv tool install git+https://github.com/yiwenlu66/PiloTY.git\n\n# Update shell PATH if needed\nuv tool update-shell\n```\n\n### Option 2: Install with pipx\n\nAlternative installation using pipx:\n\n```bash\n# Install pipx if you haven't already\npython -m pip install --user pipx\npipx ensurepath\n\n# Install PiloTY\npipx install git+https://github.com/yiwenlu66/PiloTY.git\n```\n\n### Option 3: Install from source\n\nFor development or testing:\n\n```bash\ngit clone https://github.com/yiwenlu66/PiloTY.git\ncd PiloTY\n\n# Using uv (recommended)\nuv tool install .\n\n# Or using pip in development mode\npip install -e .\n```\n\nAfter installation, verify the `piloty` command is available:\n\n```bash\nwhich piloty  # Should show the installed location\n```\n\n## Setup with AI Agents\n\n### Claude Code\n\nAdd PiloTY to your Claude Code configuration in `~/.claude.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"piloty\": {\n      \"command\": \"piloty\"\n    }\n  }\n}\n```\n\n**Important**: Restart Claude Code completely after adding the configuration.\n\n### Claude Desktop\n\nAdd the following to your Claude Desktop configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"piloty\": {\n      \"command\": \"piloty\"\n    }\n  }\n}\n```\n\n## Features\n\n- **Stateful Terminal Sessions**: Maintains context across commands\n- **Interactive Program Support**: SSH, vim, less, and more coming soon\n- **Background Process Management**: Run and monitor long-running processes\n- **Handler Architecture**: Extensible system for adding new interactive programs\n- **PTY Control**: True terminal emulation for authentic interactions\n\n## Roadmap\n\n### ✅ Currently Supported\n- **Stateful shell sessions** - Commands maintain context and working directory\n- **SSH with public key authentication** - Seamless remote server access\n- **Background process management** - Start, monitor, and control long-running tasks\n- **Interactive program handling** - Basic support for SSH and shell interactions\n\n### 🚧 Coming Soon\n- **Password authentication** - Support for SSH and other tools requiring password input\n- **REPL support** - Interactive data analysis with Python, R, and other interpreters\n- **Advanced interactive tools** - Enhanced vim, tmux, and debugger integration\n- **Multi-session management** - Coordinate multiple terminal sessions simultaneously\n\n## Session Logging\n\nPiloTY automatically logs all terminal sessions to `~/.piloty/` for debugging and inspection:\n\n- **Active sessions**: `~/.piloty/active/` (symlinks to active sessions)\n- **Session history**: `~/.piloty/sessions/` (persistent logs for all sessions)\n- **Command history**: Timestamped commands and outputs\n- **Session state**: Working directory, background jobs, active handlers\n\nUse the [session viewer tool](tools/README.md) to inspect session logs, or browse the files directly with standard UNIX tools like `tail`, `grep`, and `cat`.\n\n## Testing Integration\n\nAfter configuration, test PiloTY in Claude Code by asking it to perform terminal tasks:\n\n> \"Please run 'echo Hello from PiloTY' in a terminal session\"\n\n> \"Change to the /tmp directory and show me the current working directory\"\n\n> \"SSH into my server and check the disk usage with df -h\"\n\n> \"Start a background process to download a file and monitor its progress\"\n\n> \"Check what background jobs are running in my session\"\n\nThe AI will automatically use PiloTY's MCP tools to execute these requests while maintaining session state across commands.\n\n## Developer Resources\n\n- **[Development Guide](DEVELOPMENT.md)**: Architecture details and how to extend PiloTY\n- **[Developer Tools](tools/README.md)**: Interactive PTY playground for testing\n- **[Technical Design](TECHNICAL.md)**: Detailed architecture and philosophy\n\n## Testing and Development\n\n### Manual Testing\n\nFor hands-on testing and development:\n\n```bash\npython tools/pty_playground.py\n```\n\n### Integration Testing\n\nUse PiloTY through AI agents (Claude Code, Claude Desktop, etc.) by asking them to perform terminal tasks in natural language.\n\n### Automated Tests\n\nRun the test suite:\n\n```bash\npython tests/test_background_processes.py\npython tests/test_poll_output.py\npython tests/test_ssh.py\n```\n\n## Acknowledgments\n\nPiloTY is built upon the foundational work of [pty-mcp](https://github.com/qodo-ai/pty-mcp) by [Qodo](https://github.com/qodo-ai). We extend our gratitude to the original authors for creating the initial MCP terminal server implementation that made this project possible.\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.",
+  "category": "AI Tools",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "piloty": {
+        "command": "piloty",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "yiwenlu66",
+    "repo": "PiloTY",
+    "url": "https://github.com/yiwenlu66/PiloTY",
+    "name": "yiwenlu66__piloty",
+    "path": null,
+    "stars": 6,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "c587facc1d0e4f050c057df6094d764a46870f8f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:45.053Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pexpect",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"piloty\"\ndynamic = [\"version\"] # Use dynamic version from package\ndescription = \"PiloTY: AI pilot for PTY operations via MCP - enables AI agents to control interactive terminals like a human.\"\nauthors = [{ name = \"David Wurtz\", email = \"david.w@qodo.ai\" }]\ndependencies = [\n  \"mcp>=1.2.1\",\n  \"pexpect>=4.9.0\",\n]\nrequires-python = \">=3.10\"\nreadme = \"README.md\"\nlicense = { text = \"Apache 2.0\" }\n\n[project.scripts]\npiloty = \"piloty.mcp_server:main\"\n\n[project.optional-dependencies]\ndev = [\"pytest\", \"pytest-mock\", \"pytest-cov\", \"black\", \"isort\", \"mypy\", \"ruff\"]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.version]\npath = \"piloty/__init__.py\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"piloty\"]\n\n[tool.hatch.metadata]\nallow-direct-references = true\n\n[tool.black]\nline-length = 100\ntarget-version = [\"py310\"]\ninclude = '\\.pyi?$'\nextend-exclude = '''\n# A regex preceded with ^/ will apply only to files and directories\n# in the root of the project.\n^/tests/\n'''\n\n[tool.ruff]\nline-length = 100\ntarget-version = \"py310\"\nselect = [\n  \"E\",  # pycodestyle errors\n  \"W\",  # pycodestyle warnings\n  \"F\",  # pyflakes\n  \"I\",  # isort\n  \"B\",  # flake8-bugbear\n  \"C4\", # flake8-comprehensions\n  \"UP\", # pyupgrade\n]\nextend-ignore = [\n  \"E501\", # Line too long (handled by black)\n]\n\n[tool.ruff.isort]\nknown-first-party = [\"piloty\"]\ncombine-as-imports = true\n\n[tool.mypy]\npython_version = \"3.10\"\nwarn_return_any = true\nwarn_unused_configs = true\ndisallow_untyped_defs = true\ncheck_untyped_defs = true\nplugins = [\"pydantic.mypy\"]\nexclude = [\n  \"tests/\", # Exclude test files\n]\n\n[tool.pytest.ini_options]\nminversion = \"7.0\"\naddopts = \"-ra -q --cov=piloty --cov-report=xml --cov-report=term-missing\"\ntestpaths = [\"tests\"]\npython_files = [\"test_*.py\", \"*_test.py\"]\n"
+}

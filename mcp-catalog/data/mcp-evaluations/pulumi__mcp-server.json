@@ -1,0 +1,121 @@
+{
+  "name": "pulumi__mcp-server",
+  "display_name": "mcp-server",
+  "description": "Pulumi MCP Server",
+  "author": {
+    "name": "pulumi"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@pulumi/mcp-server@latest", "stdio"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Pulumi MCP Server\n\n<a href=\"https://glama.ai/mcp/servers/@pulumi/mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@pulumi/mcp-server/badge\" />\n</a>\n\n> **Note:** This MCP server is currently under active development. Its API (including available commands and their arguments) is experimental and may introduce breaking changes without notice. Please file an issue on [GitHub](https://github.com/pulumi/mcp-server/issues) if you encounter bugs or need support for additional Pulumi commands.\n\nA server implementing the [Model Context Protocol](https://modelcontextprotocol.io) (MCP) for interacting with Pulumi CLI using the Pulumi Automation API and Pulumi Cloud API.\n\nThis package allows MCP clients to perform Pulumi operations like retrieving package information, previewing changes, deploying updates, and retrieving stack outputs programmatically without needing the Pulumi CLI installed directly in the client environment.\n\n## Usage\n\nThe Pulumi CLI has to be installed on you machine.\n\nThis package is primarily intended to be integrated into applications that can use MCP servers as AI tools.\n\n### Claude Code\n\nFor [Claude Code](https://claude.ai/code), you can install this MCP server using:\n\n```bash\nclaude mcp add -s user pulumi -- npx @pulumi/mcp-server@latest stdio\n```\n\n### Claude Desktop\n\nFor Claude Desktop, you can include Pulumi MCP Server in the MCP configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"pulumi\": {\n      \"command\": \"npx\",\n      \"args\": [\"@pulumi/mcp-server@latest\",\"stdio\"]\n    }\n  }\n}\n```\n\nOr if you prefer HTTP with Server-Sent Events (SSE) instead of `stdio`:\n\n```json\n{\n  \"mcpServers\": {\n    \"pulumi\": {\n      \"command\": \"npx\",\n      \"args\": [\"@pulumi/mcp-server@latest\",\"sse\"]\n    }\n  }\n}\n```\n\n### Devin\n\nFor [Devin](https://app.devin.ai), you can set up the Pulumi MCP Server by:\n\n1. Navigate to https://app.devin.ai/settings/mcp-marketplace/setup/pulumi\n2. Provide your Pulumi access token, which can be obtained from the Access tokens section in the sidebar of the Pulumi dashboard\n3. Click \"Enable\"\n\n## Docker Container\n\nYou can also run the Pulumi MCP Server as a Docker container. This approach eliminates the need to install Node.js and the package dependencies directly on your host machine.\n\n### Building the Container\n\nTo build the container:\n\n```bash\ndocker build -t pulumi/mcp-server:latest .\n```\n\n### Using with MCP Clients\n\nTo use the containerized server with MCP clients, you'll need to configure the client to use the Docker container. For example, in Claude desktop's MCP configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"pulumi\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"-i\", \"--rm\", \"pulumi/mcp-server:latest\", \"stdio\"]\n    }\n  }\n}\n```\n\n### Using with MCP Clients over HTTP (SSE)\n\nTo use the containerized server with MCP clients over HTTP (SSE), you can run the container with the following command:\n\n```json\n{\n  \"mcpServers\": {\n    \"pulumi\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"-i\", \"--rm\", \"-p\", \"3000:3000\", \"pulumi/mcp-server:latest\", \"sse\"]\n    }\n  }\n}\n```\n\n\n\nFor Pulumi operations that require access to local Pulumi projects, you'll need to mount the appropriate directories. For example, if your Pulumi project is in `~/projects/my-pulumi-app`:\n\n```json\n{\n  \"mcpServers\": {\n    \"pulumi\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"-i\", \"--rm\", \"-v\", \"~/projects/my-pulumi-app:/app/project\", \"pulumi/mcp-server:latest\"]\n    }\n  }\n}\n```\n\nThen when using the MCP tools, you would reference the project directory as `/app/project` in your requests.\n\n## Available Commands\n\nThe server exposes handlers for the following Pulumi operations, callable via MCP requests:\n\n*   **`preview`**: Runs `pulumi preview` on a specified stack.\n    *   `workDir` (string, required): The working directory containing the `Pulumi.yaml` project file.\n    *   `stackName` (string, optional): The stack name to operate on (defaults to 'dev').\n*   **`up`**: Runs `pulumi up` to deploy changes for a specified stack.\n    *   `workDir` (string, required): The working directory containing the `Pulumi.yaml` project file.\n    *   `stackName` (string, optional): The stack name to operate on (defaults to 'dev').\n*   **`stack-output`**: Retrieves outputs from a specified stack after a successful deployment.\n    *   `workDir` (string, required): The working directory containing the `Pulumi.yaml` project file.\n    *   `stackName` (string, optional): The stack name to retrieve outputs from (defaults to 'dev').\n    *   `outputName` (string, optional): The specific stack output name to retrieve. If omitted, all outputs for the stack are returned.\n*   **`get-resource`**: Returns information about a specific Pulumi Registry resource, including its inputs and outputs.\n    *   `provider` (string, required): The cloud provider (e.g., 'aws', 'azure', 'gcp', 'random') or `github.com/org/repo` for Git-hosted components.\n    *   `module` (string, optional): The module to query (e.g., 's3', 'ec2', 'lambda').\n    *   `resource` (string, required): The resource type name (e.g., 'Bucket', 'Function', 'Instance').\n*   **`list-resources`**: Lists available resources within a Pulumi provider package, optionally filtered by module.\n    *   `provider` (string, required): The cloud provider (e.g., 'aws', 'azure', 'gcp', 'random') or `github.com/org/repo` for Git-hosted components.\n    *   `module` (string, optional): The module to filter by (e.g., 's3', 'ec2', 'lambda').\n*   **`deploy-to-aws`**: Deploy application code to AWS by generating Pulumi infrastructure. Automatically provisions AWS resources (S3, Lambda, EC2, etc.) based on application type.\n    *   No parameters required - the tool analyzes the current working directory to understand the application structure and generate appropriate infrastructure code.\n\n## Available Prompts\n\nThe server also provides prompts that can be used by MCP clients:\n\n*   **`deploy-to-aws`**: AWS deployment guidance prompt that provides comprehensive instructions for analyzing application code and generating Pulumi infrastructure-as-code for AWS deployments. Includes best practices for security, cost optimization, and multi-environment setups.\n\n## Development\n\n1.  Clone the repository.\n2.  Install dependencies: `make ensure`\n3.  Build the project: `make build`\n4.  Test the project: `make test`\n\n### How to Install Locally\n\nFor local testing using Claude Code, you can use the provided scripts:\n\n```bash\n# Build the project\nnpm run build\n\n# Install the MCP server locally for testing\n./scripts/install-mcp.sh\n\n# Or install from a packed .tgz file (created with npm pack)\nnpm pack\n./scripts/install-mcp.sh pulumi-mcp-server-0.1.2.tgz\n\n# Remove the local installation\n./scripts/uninstall-mcp.sh\n```\n\nThe install script will remove any existing `pulumi-mcp-local` installation and install the current version from your local directory. Optionally, you can provide a `.tgz` file created with `npm pack` to test the packaged version. Run Claude Code and type the `/mcp` command to see it.\n\nFor other MCP clients like Claude Desktop or Windsurf, you can manually configure the local server:\n\n```json\n{\n  \"mcpServers\": {\n    \"pulumi-mcp-local\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/your/mcp-server/dist/index.js\", \"stdio\"]\n    }\n  }\n}\n```\n\nReplace `/path/to/your/mcp-server` with the absolute path to your local repository directory.\n\n### List existing tools\n\nUse MCP Inspector to list the existing tools and their metadata:\n\n```bash\nnpm run inspector -- --method tools/list\n```\n\nUse MCP Inspector to list the existing prompts and their metadata:\n\n```bash\nnpm run inspector -- --method prompts/list\n```\n\n## License\n\nThis project is licensed under the Apache-2.0 License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Cloud",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pulumi-mcp-server-stdio": {
+        "command": "npx",
+        "args": ["-y", "@pulumi/mcp-server@latest", "stdio"],
+        "env": {}
+      },
+      "pulumi-mcp-server-sse": {
+        "command": "npx",
+        "args": ["-y", "@pulumi/mcp-server@latest", "sse"],
+        "env": {}
+      },
+      "pulumi-mcp-server-docker-stdio": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "pulumi/mcp-server:latest", "stdio"],
+        "env": {},
+        "docker_image": "pulumi/mcp-server:latest"
+      },
+      "pulumi-mcp-server-docker-sse": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-p", "3000:3000", "pulumi/mcp-server:latest", "sse"],
+        "env": {},
+        "docker_image": "pulumi/mcp-server:latest"
+      },
+      "pulumi-mcp-server-docker-with-volume": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-v", "~/projects/my-pulumi-app:/app/project", "pulumi/mcp-server:latest"],
+        "env": {},
+        "docker_image": "pulumi/mcp-server:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pulumi",
+    "repo": "mcp-server",
+    "url": "https://github.com/pulumi/mcp-server",
+    "name": "pulumi__mcp-server",
+    "path": null,
+    "stars": 63,
+    "contributors": 9,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "93f634170f59a51d1b03cc001bb01e3c71fc80cd"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:16.483Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "@pulumi/pulumi",
+      "importance": 9
+    },
+    {
+      "name": "@anthropic-ai/claude-code",
+      "importance": 8
+    },
+    {
+      "name": "yargs",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "@modelcontextprotocol/inspector",
+      "importance": 5
+    },
+    {
+      "name": "pino",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@pulumi/mcp-server\",\n  \"version\": \"0.1.7\",\n  \"description\": \"A server implementing the Model Context Protocol for Pulumi.\",\n  \"author\": \"Pulumi Corporation\",\n  \"license\": \"Apache-2.0\",\n  \"homepage\": \"https://github.com/pulumi/mcp-server#readme\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/pulumi/mcp-server.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/pulumi/mcp-server/issues\"\n  },\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server\": \"dist/index.js\"\n  },\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"files\": [\n    \"dist\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"lint\": \"eslint src/**/*.ts --no-warn-ignored\",\n    \"lint:fix\": \"eslint src/**/*.ts --fix\",\n    \"dev\": \"tsx watch src/index.ts stdio\",\n    \"build\": \"tsup\",\n    \"build:watch\": \"tsup --watch\",\n    \"test\": \"NODE_OPTIONS='--loader ts-node/esm' mocha --timeout 30000 'test/**/*.test.ts'\",\n    \"test:watch\": \"NODE_OPTIONS='--loader ts-node/esm' mocha --watch --watch-files test 'test/**/*.test.ts'\",\n    \"test:unit\": \"NODE_OPTIONS='--loader ts-node/esm' mocha --timeout 30000 --grep '^(?!.*Claude Code SDK)' 'test/**/*.test.ts'\",\n    \"test:claude-code\": \"NODE_OPTIONS='--loader ts-node/esm' mocha --timeout 60000 --grep 'Claude Code SDK' 'test/**/*.test.ts'\",\n    \"inspector\": \"./node_modules/.bin/mcp-inspector-cli --cli node dist/index.js stdio\"\n  },\n  \"dependencies\": {\n    \"@anthropic-ai/claude-code\": \"^1.0.33\",\n    \"@modelcontextprotocol/inspector\": \"^0.15.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.13.1\",\n    \"@pulumi/pulumi\": \"^3.169.0\",\n    \"express\": \"^5.1.0\",\n    \"pino\": \"^9.6.0\",\n    \"yargs\": \"^17.7.2\",\n    \"zod\": \"^3.24.4\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.26.0\",\n    \"@types/chai\": \"^4.3.11\",\n    \"@types/express\": \"^5.0.1\",\n    \"@types/mocha\": \"^10.0.6\",\n    \"@types/node\": \"^22.14.1\",\n    \"@types/yargs\": \"^17.0.33\",\n    \"chai\": \"^5.1.0\",\n    \"eslint\": \"^9.26.0\",\n    \"eslint-config-prettier\": \"^10.1.5\",\n    \"eslint-plugin-prettier\": \"^5.4.0\",\n    \"mocha\": \"^10.3.0\",\n    \"prettier\": \"^3.5.3\",\n    \"ts-node\": \"^10.9.2\",\n    \"tsup\": \"^8.4.0\",\n    \"typescript\": \"^5.3.0\",\n    \"typescript-eslint\": \"^8.32.0\"\n  }\n}\n"
+}

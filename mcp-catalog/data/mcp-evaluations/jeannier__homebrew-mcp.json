@@ -1,0 +1,94 @@
+{
+  "name": "jeannier__homebrew-mcp",
+  "display_name": "homebrew-mcp",
+  "description": "Homebrew MCP : Comprehensive brew support for installing, upgrading, searching, and maintaining macOS packages.",
+  "author": {
+    "name": "jeannier"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "--directory", "${__dirname}", "homebrew_mcp.py"],
+    "env": {
+      "ANTHROPIC_API_KEY": "${user_config.anthropic_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "anthropic_api_key": {
+      "type": "string",
+      "title": "Anthropic API Key",
+      "description": "Your Anthropic Claude API key, required for running the interactive test script.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Homebrew MCP Python Server\n\nA Model Context Protocol (MCP) server for Homebrew package management **on macOS**, designed for seamless integration with Claude Desktop and other MCP-compatible clients.\n\n- **Language:** Python 3.13\n- **MCP:** [Model Context Protocol](https://github.com/modelcontextprotocol/python-sdk)\n- **Package Manager:** Homebrew (macOS)\n- **Venv/Dependency Manager:** [uv](https://github.com/astral-sh/uv)\n\n---\n\n## Features\n\n- Exposes Homebrew commands as MCP tools. The supported commands are grouped by function:\n  - **Package Management:** `install`, `uninstall`, `upgrade`, `cleanup`\n  - **Information & Discovery:** `list`, `search`, `info`, `outdated`, `deps`\n  - **System Health & Updates:** `doctor`, `update`\n  - **Tap & Source Management:** `tap`, `untap`\n  - **Version Management:** `pin`, `unpin`\n  - **Service Management:** `services`\n- Runs real `brew` commands via subprocess (requires Homebrew on macOS).\n- Fully MCP spec-compliant (stdio, JSON-RPC 2.0, MCP spec 2025-06-18).\n- Designed for Claude Desktop and other LLM clients.\n- Functional, declarative Python (no classes).\n- Logs all requests/results to `homebrew_mcp.log`.\n- Includes an interactive test script (`test_claude_homebrew_mcp.py`) that:\n    - Dynamically fetches available tools from the MCP server.\n    - Allows Claude to make multiple tool calls for a single user prompt.\n    - Demonstrates advanced interaction patterns with the Anthropic API.\n\n---\n\n## Installation\n\n1. **Clone this repository:**\n   ```sh\n   git clone https://github.com/jeannier/homebrew-mcp\n   cd homebrew-mcp\n   ```\n2. **Install [uv](https://github.com/astral-sh/uv) (if not already):**\n   ```sh\n   brew install uv\n   ```\n3. **Create a virtual environment and install dependencies:**\n   ```sh\n   uv venv\n   source .venv/bin/activate  # Activate the virtual environment\n   uv pip install -r requirements.txt\n   ```\n4. **Run the MCP Server (for Local Testing):**\n   To test the server locally or during development, you can run it directly:\n   ```sh\n   uv run python homebrew_mcp.py\n   ```\n   The server will then start. If successful, there will be no immediate output; it will silently listen for MCP requests over stdio. You can confirm it's running by checking the `homebrew_mcp.log` file.\n\n   > **Note:** If you are integrating with Claude Desktop, you do **not** need to run this command manually. Claude Desktop will start the server automatically based on the configuration provided in the \"Claude Desktop Integration\" section. This command is for direct testing or development purposes.\n\n---\n\n## Cursor Integration\n\n**Prerequisite:** Before adding the tool, please complete the steps in the **[Installation](#installation)** section to set up the project and its dependencies. The \"Add to Cursor\" button assumes the project is located at `~/Documents/GitHub/homebrew-mcp`.\n\n<a href=\"cursor://anysphere.cursor-deeplink/mcp/install?name=homebrew-mcp&config=eyJjb21tYW5kIjoidXYgcnVuIC0tZGlyZWN0b3J5IH4vRG9jdW1lbnRzL0dpdEh1Yi9ob21lYnJldy1tY3AgaG9tZWJyZXdfbWNwLnB5In0=\">\n  <img src=\"https://img.shields.io/badge/add%20to-cursor-4285f4\" alt=\"Add to Cursor\">\n</a>\n\n1. **Install Cursor via Homebrew (macOS):**\n   ```sh\n   brew install --cask cursor\n   ```\n\n2. **Add the Tool to Cursor**:\n   - Click the \"Add to Cursor\" button above. This will open Cursor and automatically install the tool.\n   - If your project is not at the location assumed by the button, you will need to edit the generated configuration. On macOS, this file is located at `~/.cursor/mcp.json`. Open it and update the path inside the `command` string for the `homebrew-mcp` entry. The `mcp.json` file in this repository can be used as a reference.\n\n3. **Restart Cursor**:\n   - For the tool to become active, restart Cursor after installation.\n\n---\n\n## Claude Desktop Integration\n\n1. **Install Claude Desktop via Homebrew (macOS):**\n   ```sh\n   brew install --cask claude\n   ```\n\n2. **Ensure `uv` is in your PATH and the project is accessible.**\n\n3. **Configure Claude Desktop to use this MCP server:**\n   - On macOS, edit or create your user-level MCP configuration file at: `~/Library/Application Support/Claude/claude_desktop.json`.\n   - Add the following server definition, replacing `/path/to/your/project/` with the **absolute path** to the directory where you cloned this project. You can refer to the `claude_desktop_config.json` file in this repository for an example.\n\n```json\n{\n  \"mcpServers\": {\n    \"homebrew-mcp\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--directory\",\n        \"/path/to/your/project/\",\n        \"homebrew_mcp.py\"\n      ],\n      \"type\": \"stdio\"\n    }\n  }\n}\n```\n   *The `--directory` argument tells `uv` where to find the `homebrew_mcp.py` script and its context (like the `.venv`).*\n\n4. **Restart Claude Desktop.**\n\n---\n\n## Project Structure\n\n- **Python Scripts**\n  - `homebrew_mcp.py` — Main MCP server script.\n  - `test_claude_homebrew_mcp.py` — Interactive Claude integration test script.\n- **Configuration**\n  - `claude_desktop_config.json` — Example configuration for Claude Desktop.\n  - `mcp.json` — Example configuration for Cursor.\n  - `requirements.txt` — Python project dependencies.\n- **Documentation & Metadata**\n  - `README.md` — This file.\n  - `LICENSE` — The project's MIT license.\n  - `.gitignore` — Specifies files for Git to ignore.\n- **Generated Files (Not in Git)**\n  - `.venv/` — Python virtual environment managed by `uv`.\n  - `homebrew_mcp.log` — Log file for the MCP server.\n\n---\n\n## Monitoring Logs\n\nTo watch the server log in real time and pretty-print each JSON line:\n\n```sh\ntail -f homebrew_mcp.log | jq .\n```\n\n---\n\n## Tested Environment\n\nThis MCP server and its integration with Claude have been primarily tested on the following environment:\n\n- **macOS:** Sonoma 14.7.5\n- **Homebrew:** 4.5.8\n- **Python:** 3.13 (managed via `uv`)\n  - **mcp module:** 1.9.4 (installed using `uv pip`)\n- **anthropic module:** 0.55.0 (installed using `uv pip`)\n- **Claude Desktop:** 0.10.38 (installed via Homebrew Cask on macOS).\n- **Cursor:** 1.1.4\n\n---\n\n## Example Prompts\n\nHere are some example prompts you can use with Claude (or another MCP client) when interacting with this Homebrew MCP server:\n\n- provide a summary of all installed packages\n- check which packages are installed, and provide suggestions for other packages to install\n- are there any problems with my homebrew setup? and how can I fix them ?\n- show me information about the python 3.13 package\n- install the wget package\n\n---\n\n## Interactive Claude Test Script\n\nTo run the Claude integration test (`test_claude_homebrew_mcp.py`), you need an Anthropic Claude API key. Set your API key in the `ANTHROPIC_API_KEY` variable at the top of the test script. This script allows you to interact with Claude, which in turn uses the `homebrew_mcp.py` server. It demonstrates dynamic tool discovery and Claude's ability to make multiple tool calls.\n\n```sh\nuv run python test_claude_homebrew_mcp.py\n```\n\n---\n\n## Example Test Run Output\n\nThis section shows an example of the output when running the `test_claude_homebrew_mcp.py` script.\nIt demonstrates the interaction between Claude and the Homebrew MCP server, including dynamic tool discovery, multiple tool calls, and final responses.\n\n```\n$ uv run python test_claude_homebrew_mcp.py\n\n============================== Claude Prompt 1/7 ===============================\ninstall wget if not installed, or uninstall if already installed\n================================================================================\n============================= Claude's Answer 1/7 ==============================\nI've successfully installed wget on your system. Now that wget is installed, if you'd like me to uninstall it instead (as per your request to either install if not present or uninstall if already installed), I can do that for you.\n\nWould you like me to proceed with uninstalling wget now? Please let me know.\n================================================================================\n\n============================== Claude Prompt 2/7 ===============================\nrestore initial state of wget\n================================================================================\n============================= Claude's Answer 2/7 ==============================\nI've successfully uninstalled wget, returning your system to its initial state before our conversation. The wget package has been completely removed from your system.\n================================================================================\n\n============================== Claude Prompt 3/7 ===============================\ncheck for outdated packages\n================================================================================\n============================= Claude's Answer 3/7 ==============================\nYou have 3 outdated packages:\n1. libnghttp2\n2. uv\n3. yt-dlp\n\nThese packages have newer versions available and can be upgraded if you wish.\n================================================================================\n\n============================== Claude Prompt 4/7 ===============================\nprovide a summary of all installed packages\n================================================================================\n============================= Claude's Answer 4/7 ==============================\nHere's a summary of all installed packages on your system:\n\n1. **Command Line Tools & Utilities**: bash, coreutils, curl, git, jq, nmap, grep, watch, etc.\n2. **Programming Languages & Tools**: python (multiple versions), node, go, lua\n3. **Media Tools & Libraries**: ffmpeg and its dependencies (x264, x265, etc.), yt-dlp\n4. **Development Tools**: neovim, tree-sitter, shellcheck\n5. **Applications (Casks)**:\n   - Browsers: google-chrome, firefox\n   - Development: visual-studio-code, iterm2, cursor, github\n   - Communication: discord, whatsapp\n   - Media: vlc, spotify, stremio\n   - Utilities: docker-desktop, keepassxc, alt-tab, disk-inventory-x\n   - AI/ML tools: chatgpt, claude, ollama, superwhisper\n\nYou have 3 outdated packages (libnghttp2, uv, and yt-dlp) that could be updated.\n================================================================================\n\n============================== Claude Prompt 5/7 ===============================\nprovide 5 suggestions of other packages to install\n================================================================================\n============================= Claude's Answer 5/7 ==============================\nBased on your installed packages and common developer tools, here are 5 suggested packages that would complement your setup:\n\n1. **tmux** - A terminal multiplexer that allows you to manage multiple terminal sessions within a single window. Great companion to your iterm2 and neovim setup.\n\n2. **htop** - An interactive process viewer and system monitor, much more feature-rich than the standard top command.\n\n3. **ripgrep** - A faster alternative to grep, designed for searching code. Works well with your development tools.\n\n4. **fzf** - A command-line fuzzy finder that can dramatically improve your terminal workflow for searching files, command history, and more.\n\n5. **tldr** - Simplified and community-driven man pages with practical examples. Perfect for quickly finding common command usage patterns.\n\nThese tools would enhance your command-line productivity and integrate well with your existing development environment. Would you like more information about any of these packages?\n================================================================================\n\n============================== Claude Prompt 6/7 ===============================\nuse brew doctor to see if there are any issues, try to find a fix for all of these issues\n================================================================================\n============================= Claude's Answer 6/7 ==============================\nBased on the complete analysis, here's my recommendation to fix the one minor warning:\n\nSince this is just a warning about having both the core and tap version of nextdns available, and you're actually using the core version (as shown by the info command), this isn't causing any functional problems with your system. The warning is simply informing you that if you want to specifically use the tap version, you need to use the full name.\n\nIf you want to fully resolve this warning, you have two options:\n\n1. Continue using the core version of nextdns (which you are currently using) and untap the nextdns tap to remove the ambiguity. This would require identifying the exact tap name and then using the untap command.\n\n2. Keep both versions available and just be aware that you need to use the full name when referring to the tap version.\n\nSince the warning isn't causing any actual issues with your Homebrew installation and everything is functioning correctly, I would recommend option 2 - simply being aware of the naming convention when you need to use the tap version.\n\nThe brew doctor results suggest your Homebrew installation is actually in good shape with no critical issues that need fixing!\n================================================================================\n\n============================== Claude Prompt 7/7 ===============================\nprovide a summary of what was done\n================================================================================\n============================= Claude's Answer 7/7 ==============================\n# Homebrew Session Summary\n\nHere's a summary of what was done during our session:\n\n1. **Checked and installed wget**:\n   - Initially verified that wget was not installed on your system\n   - Installed wget version 1.25.0\n\n2. **Restored initial state**:\n   - Uninstalled wget to return to the original system state\n\n3. **Checked for outdated packages**:\n   - Found 3 outdated packages: libnghttp2, uv, and yt-dlp\n\n4. **Listed all installed packages**:\n   - Displayed a complete list of installed formulae and casks\n   - Your system has numerous development tools, utilities, and applications installed\n\n5. **Suggested 5 additional packages**:\n   - tmux: Terminal multiplexer\n   - htop: Interactive process viewer\n   - ripgrep: Fast alternative to grep\n   - fzf: Command-line fuzzy finder\n   - tldr: Simplified man pages\n\n6. **Ran system diagnostics**:\n   - Executed brew doctor to check for issues\n   - Found only one minor warning related to the nextdns package having the same name in both core formulae and a custom tap\n   - This warning is informational only and doesn't require action unless you experience issues with nextdns\n\n7. **Examined package versions**:\n   - Listed all installed packages with their versions to get a better understanding of your system configuration\n\nOverall, your Homebrew installation appears to be in good health with only a minor naming conflict that doesn't impact functionality.\n================================================================================\n```\n\n---\n\n## License\n\nMIT License\n",
+  "category": "Development",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "homebrew-mcp-local": {
+        "command": "uv",
+        "args": ["run", "python", "homebrew_mcp.py"],
+        "env": {}
+      },
+      "homebrew-mcp-cursor": {
+        "command": "uv",
+        "args": ["run", "--directory", "~/Documents/GitHub/homebrew-mcp", "homebrew_mcp.py"],
+        "env": {}
+      },
+      "homebrew-mcp-claude-desktop": {
+        "command": "uv",
+        "args": ["run", "--directory", "/path/to/your/project/", "homebrew_mcp.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jeannier",
+    "repo": "homebrew-mcp",
+    "url": "https://github.com/jeannier/homebrew-mcp",
+    "name": "jeannier__homebrew-mcp",
+    "path": null,
+    "stars": 14,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "2784cfad6d4739085ab40e73437f75c405cb2ac1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:07.411Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "anthropic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp>=1.9.4\nanthropic>=0.55.0"
+}

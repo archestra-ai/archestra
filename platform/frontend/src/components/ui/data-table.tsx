@@ -215,10 +215,20 @@ export function DataTable<TData, TValue>({
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id} className="hover:bg-transparent">
                   {headerGroup.headers.map((header) => {
+                    const sorted = header.column.getIsSorted();
                     return (
                       <TableHead
                         key={header.id}
                         data-column-id={header.column.id}
+                        aria-sort={
+                          header.column.getCanSort()
+                            ? sorted === "asc"
+                              ? "ascending"
+                              : sorted === "desc"
+                                ? "descending"
+                                : "none"
+                            : undefined
+                        }
                         className={getColumnClassName(header.column.id)}
                         style={getColumnStyle({
                           columnId: header.column.id,

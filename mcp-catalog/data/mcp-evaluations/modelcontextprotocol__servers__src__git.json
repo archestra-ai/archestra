@@ -1,0 +1,117 @@
+{
+  "name": "modelcontextprotocol__servers__src__git",
+  "display_name": "git",
+  "description": "Model Context Protocol Servers",
+  "author": {
+    "name": "modelcontextprotocol"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-git", "--repository", "${user_config.repo_path}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "repo_path": {
+      "type": "directory",
+      "title": "Git Repository Path",
+      "description": "Path to the Git repository for the server to operate on.",
+      "required": true,
+      "default": "${workspaceFolder}"
+    }
+  },
+  "readme": "# mcp-server-git: A git MCP server\n\n## Overview\n\nA Model Context Protocol server for Git repository interaction and automation. This server provides tools to read, search, and manipulate Git repositories via Large Language Models.\n\nPlease note that mcp-server-git is currently in early development. The functionality and available tools are subject to change and expansion as we continue to develop and improve the server.\n\n### Tools\n\n1. `git_status`\n   - Shows the working tree status\n   - Input:\n     - `repo_path` (string): Path to Git repository\n   - Returns: Current status of working directory as text output\n\n2. `git_diff_unstaged`\n   - Shows changes in working directory not yet staged\n   - Inputs:\n     - `repo_path` (string): Path to Git repository\n     - `context_lines` (number, optional): Number of context lines to show (default: 3)\n   - Returns: Diff output of unstaged changes\n\n3. `git_diff_staged`\n   - Shows changes that are staged for commit\n   - Inputs:\n     - `repo_path` (string): Path to Git repository\n     - `context_lines` (number, optional): Number of context lines to show (default: 3)\n   - Returns: Diff output of staged changes\n\n4. `git_diff`\n   - Shows differences between branches or commits\n   - Inputs:\n     - `repo_path` (string): Path to Git repository\n     - `target` (string): Target branch or commit to compare with\n     - `context_lines` (number, optional): Number of context lines to show (default: 3)\n   - Returns: Diff output comparing current state with target\n\n5. `git_commit`\n   - Records changes to the repository\n   - Inputs:\n     - `repo_path` (string): Path to Git repository\n     - `message` (string): Commit message\n   - Returns: Confirmation with new commit hash\n\n6. `git_add`\n   - Adds file contents to the staging area\n   - Inputs:\n     - `repo_path` (string): Path to Git repository\n     - `files` (string[]): Array of file paths to stage\n   - Returns: Confirmation of staged files\n\n7. `git_reset`\n   - Unstages all staged changes\n   - Input:\n     - `repo_path` (string): Path to Git repository\n   - Returns: Confirmation of reset operation\n\n8. `git_log`\n   - Shows the commit logs with optional date filtering\n   - Inputs:\n     - `repo_path` (string): Path to Git repository\n     - `max_count` (number, optional): Maximum number of commits to show (default: 10)\n     - `start_timestamp` (string, optional): Start timestamp for filtering commits. Accepts ISO 8601 format (e.g., '2024-01-15T14:30:25'), relative dates (e.g., '2 weeks ago', 'yesterday'), or absolute dates (e.g., '2024-01-15', 'Jan 15 2024')\n     - `end_timestamp` (string, optional): End timestamp for filtering commits. Accepts ISO 8601 format (e.g., '2024-01-15T14:30:25'), relative dates (e.g., '2 weeks ago', 'yesterday'), or absolute dates (e.g., '2024-01-15', 'Jan 15 2024')\n   - Returns: Array of commit entries with hash, author, date, and message\n\n9. `git_create_branch`\n   - Creates a new branch\n   - Inputs:\n     - `repo_path` (string): Path to Git repository\n     - `branch_name` (string): Name of the new branch\n     - `start_point` (string, optional): Starting point for the new branch\n   - Returns: Confirmation of branch creation\n10. `git_checkout`\n   - Switches branches\n   - Inputs:\n     - `repo_path` (string): Path to Git repository\n     - `branch_name` (string): Name of branch to checkout\n   - Returns: Confirmation of branch switch\n11. `git_show`\n   - Shows the contents of a commit\n   - Inputs:\n     - `repo_path` (string): Path to Git repository\n     - `revision` (string): The revision (commit hash, branch name, tag) to show\n   - Returns: Contents of the specified commit\n12. `git_init`\n   - Initializes a Git repository\n   - Inputs:\n     - `repo_path` (string): Path to directory to initialize git repo\n   - Returns: Confirmation of repository initialization\n\n13. `git_branch`\n   - List Git branches\n   - Inputs:\n     - `repo_path` (string): Path to the Git repository.\n     - `branch_type` (string): Whether to list local branches ('local'), remote branches ('remote') or all branches('all').\n     - `contains` (string, optional): The commit sha that branch should contain. Do not pass anything to this param if no commit sha is specified\n     - `not_contains` (string, optional): The commit sha that branch should NOT contain. Do not pass anything to this param if no commit sha is specified\n   - Returns: List of branches\n\n## Installation\n\n### Using uv (recommended)\n\nWhen using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will\nuse [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-server-git*.\n\n### Using PIP\n\nAlternatively you can install `mcp-server-git` via pip:\n\n```\npip install mcp-server-git\n```\n\nAfter installation, you can run it as a script using:\n\n```\npython -m mcp_server_git\n```\n\n## Configuration\n\n### Usage with Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\n\n<details>\n<summary>Using uvx</summary>\n\n```json\n\"mcpServers\": {\n  \"git\": {\n    \"command\": \"uvx\",\n    \"args\": [\"mcp-server-git\", \"--repository\", \"path/to/git/repo\"]\n  }\n}\n```\n</details>\n\n<details>\n<summary>Using docker</summary>\n\n* Note: replace '/Users/username' with the a path that you want to be accessible by this tool\n\n```json\n\"mcpServers\": {\n  \"git\": {\n    \"command\": \"docker\",\n    \"args\": [\"run\", \"--rm\", \"-i\", \"--mount\", \"type=bind,src=/Users/username,dst=/Users/username\", \"mcp/git\"]\n  }\n}\n```\n</details>\n\n<details>\n<summary>Using pip installation</summary>\n\n```json\n\"mcpServers\": {\n  \"git\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"mcp_server_git\", \"--repository\", \"path/to/git/repo\"]\n  }\n}\n```\n</details>\n\n### Usage with VS Code\n\nFor quick installation, use one of the one-click install buttons below...\n\n[![Install with UV in VS Code](https://img.shields.io/badge/VS_Code-UV-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=git&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22mcp-server-git%22%5D%7D) [![Install with UV in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-UV-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=git&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22mcp-server-git%22%5D%7D&quality=insiders)\n\n[![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Docker-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=git&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22--rm%22%2C%22-i%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7BworkspaceFolder%7D%2Cdst%3D%2Fworkspace%22%2C%22mcp%2Fgit%22%5D%7D) [![Install with Docker in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Docker-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=git&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22--rm%22%2C%22-i%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7BworkspaceFolder%7D%2Cdst%3D%2Fworkspace%22%2C%22mcp%2Fgit%22%5D%7D&quality=insiders)\n\nFor manual installation, you can configure the MCP server using one of these methods:\n\n**Method 1: User Configuration (Recommended)**\nAdd the configuration to your user-level MCP configuration file. Open the Command Palette (`Ctrl + Shift + P`) and run `MCP: Open User Configuration`. This will open your user `mcp.json` file where you can add the server configuration.\n\n**Method 2: Workspace Configuration**\nAlternatively, you can add the configuration to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n> For more details about MCP configuration in VS Code, see the [official VS Code MCP documentation](https://code.visualstudio.com/docs/copilot/mcp).\n\n```json\n{\n  \"servers\": {\n    \"git\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-git\"]\n    }\n  }\n}\n```\n\nFor Docker installation:\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"git\": {\n        \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"--rm\",\n          \"-i\",\n          \"--mount\", \"type=bind,src=${workspaceFolder},dst=/workspace\",\n          \"mcp/git\"\n        ]\n      }\n    }\n  }\n}\n```\n\n### Usage with [Zed](https://github.com/zed-industries/zed)\n\nAdd to your Zed settings.json:\n\n<details>\n<summary>Using uvx</summary>\n\n```json\n\"context_servers\": [\n  \"mcp-server-git\": {\n    \"command\": {\n      \"path\": \"uvx\",\n      \"args\": [\"mcp-server-git\"]\n    }\n  }\n],\n```\n</details>\n\n<details>\n<summary>Using pip installation</summary>\n\n```json\n\"context_servers\": {\n  \"mcp-server-git\": {\n    \"command\": {\n      \"path\": \"python\",\n      \"args\": [\"-m\", \"mcp_server_git\"]\n    }\n  }\n},\n```\n</details>\n\n### Usage with [Zencoder](https://zencoder.ai)\n\n1. Go to the Zencoder menu (...)\n2. From the dropdown menu, select `Agent Tools`\n3. Click on the `Add Custom MCP`\n4. Add the name (i.e. git) and server configuration from below, and make sure to hit the `Install` button\n\n<details>\n<summary>Using uvx</summary>\n\n```json\n{\n    \"command\": \"uvx\",\n    \"args\": [\"mcp-server-git\", \"--repository\", \"path/to/git/repo\"]\n}\n```\n</details>\n\n## Debugging\n\nYou can use the MCP inspector to debug the server. For uvx installations:\n\n```\nnpx @modelcontextprotocol/inspector uvx mcp-server-git\n```\n\nOr if you've installed the package in a specific directory or are developing on it:\n\n```\ncd path/to/servers/src/git\nnpx @modelcontextprotocol/inspector uv run mcp-server-git\n```\n\nRunning `tail -n 20 -f ~/Library/Logs/Claude/mcp*.log` will show the logs from the server and may\nhelp you debug any issues.\n\n## Development\n\nIf you are doing local development, there are two ways to test your changes:\n\n1. Run the MCP inspector to test your changes. See [Debugging](#debugging) for run instructions.\n\n2. Test using the Claude desktop app. Add the following to your `claude_desktop_config.json`:\n\n### Docker\n\n```json\n{\n  \"mcpServers\": {\n    \"git\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"--mount\", \"type=bind,src=/Users/username/Desktop,dst=/projects/Desktop\",\n        \"--mount\", \"type=bind,src=/path/to/other/allowed/dir,dst=/projects/other/allowed/dir,ro\",\n        \"--mount\", \"type=bind,src=/path/to/file.txt,dst=/projects/path/to/file.txt\",\n        \"mcp/git\"\n      ]\n    }\n  }\n}\n```\n\n### UVX\n```json\n{\n\"mcpServers\": {\n  \"git\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"--directory\",\n      \"/<path to mcp-servers>/mcp-servers/src/git\",\n      \"run\",\n      \"mcp-server-git\"\n    ]\n    }\n  }\n}\n```\n\n## Build\n\nDocker build:\n\n```bash\ncd src/git\ndocker build -t mcp/git .\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "Development",
+  "quality_score": 71,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-git": {
+        "command": "uvx",
+        "args": ["mcp-server-git"],
+        "env": {}
+      },
+      "mcp-server-git-configured": {
+        "command": "uvx",
+        "args": ["mcp-server-git", "--repository", "path/to/git/repo"],
+        "env": {}
+      },
+      "mcp_server_git": {
+        "command": "python",
+        "args": ["-m", "mcp_server_git"],
+        "env": {}
+      },
+      "mcp_server_git-configured": {
+        "command": "python",
+        "args": ["-m", "mcp_server_git", "--repository", "path/to/git/repo"],
+        "env": {}
+      },
+      "mcp-git-docker-claude-desktop": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "--mount", "type=bind,src=/Users/username,dst=/Users/username", "mcp/git"],
+        "env": {},
+        "docker_image": "mcp/git"
+      },
+      "mcp-git-docker-vscode": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "--mount", "type=bind,src=${workspaceFolder},dst=/workspace", "mcp/git"],
+        "env": {},
+        "docker_image": "mcp/git"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "modelcontextprotocol",
+    "repo": "servers",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+    "name": "servers",
+    "path": "src/git",
+    "stars": 62694,
+    "contributors": 724,
+    "issues": 348,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4b6ce397924982a93f8af25390b1e7d45073b282"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:40.560Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "click",
+      "importance": 7
+    },
+    {
+      "name": "gitpython",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-git\"\nversion = \"0.6.2\"\ndescription = \"A Model Context Protocol server providing tools to read, search, and manipulate Git repositories programmatically via LLMs\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nauthors = [{ name = \"Anthropic, PBC.\" }]\nmaintainers = [{ name = \"David Soria Parra\", email = \"davidsp@anthropic.com\" }]\nkeywords = [\"git\", \"mcp\", \"llm\", \"automation\"]\nlicense = { text = \"MIT\" }\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n]\ndependencies = [\n    \"click>=8.1.7\",\n    \"gitpython>=3.1.43\",\n    \"mcp>=1.0.0\",\n    \"pydantic>=2.0.0\",\n]\n\n[project.scripts]\nmcp-server-git = \"mcp_server_git:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\"pyright>=1.1.389\", \"ruff>=0.7.3\", \"pytest>=8.0.0\"]\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_classes = \"Test*\"\npython_functions = \"test_*\"\n"
+}

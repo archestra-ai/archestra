@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -38,9 +39,12 @@ export function useApps(
   options?: { enabled?: boolean; toastOnError?: boolean },
 ) {
   const toastOnError = options?.toastOnError;
+  // The endpoint requires app:read; skip the request for users whose role
+  // lacks it (e.g. the chat sidebar mounts this for everyone) instead of 403ing.
+  const { data: canReadApps } = useHasPermissions({ app: ["read"] });
   return useQuery({
     queryKey: ["apps", "paginated", params],
-    enabled: options?.enabled ?? true,
+    enabled: (options?.enabled ?? true) && !!canReadApps,
     placeholderData: (previousData) => previousData,
     queryFn: async () => {
       const { data, error } = await getApps({ query: params });

@@ -1,0 +1,126 @@
+{
+  "name": "mcpdotdirect__evm-mcp-server",
+  "display_name": "evm-mcp-server",
+  "description": "MCP server that provides LLM with tools for interacting with EVM networks",
+  "author": {
+    "name": "mcpdotdirect"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@mcpdotdirect/evm-mcp-server"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# EVM MCP Server\n\n![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)\n![EVM Networks](https://img.shields.io/badge/Networks-30+-green)\n![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6)\n![Viem](https://img.shields.io/badge/Viem-1.0+-green)\n\nA comprehensive Model Context Protocol (MCP) server that provides blockchain services across multiple EVM-compatible networks. This server enables AI agents to interact with Ethereum, Optimism, Arbitrum, Base, Polygon, and many other EVM chains with a unified interface.\n\n## 📋 Contents\n\n- [Overview](#overview)\n- [Features](#features)\n- [Supported Networks](#supported-networks)\n- [Prerequisites](#prerequisites)\n- [Installation](#installation)\n- [Server Configuration](#server-configuration)\n- [Usage](#usage)\n- [API Reference](#api-reference)\n  - [Tools](#tools)\n  - [Resources](#resources)\n- [Security Considerations](#security-considerations)\n- [Project Structure](#project-structure)\n- [Development](#development)\n- [License](#license)\n\n## 🔭 Overview\n\nThe MCP EVM Server leverages the Model Context Protocol to provide blockchain services to AI agents. It supports a wide range of services including:\n\n- Reading blockchain state (balances, transactions, blocks, etc.)\n- Interacting with smart contracts\n- Transferring tokens (native, ERC20, ERC721, ERC1155)\n- Querying token metadata and balances\n- Chain-specific services across 30+ EVM networks\n- **ENS name resolution** for all address parameters (use human-readable names like 'vitalik.eth' instead of addresses)\n\nAll services are exposed through a consistent interface of MCP tools and resources, making it easy for AI agents to discover and use blockchain functionality. **Every tool that accepts Ethereum addresses also supports ENS names**, automatically resolving them to addresses behind the scenes.\n\n## ✨ Features\n\n### Blockchain Data Access\n\n- **Multi-chain support** for 30+ EVM-compatible networks\n- **Chain information** including blockNumber, chainId, and RPCs\n- **Block data** access by number, hash, or latest\n- **Transaction details** and receipts with decoded logs\n- **Address balances** for native tokens and all token standards\n- **ENS resolution** for human-readable Ethereum addresses (use 'vitalik.eth' instead of '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045')\n\n### Token services\n\n- **ERC20 Tokens**\n  - Get token metadata (name, symbol, decimals, supply)\n  - Check token balances\n  - Transfer tokens between addresses\n  - Approve spending allowances\n\n- **NFTs (ERC721)**\n  - Get collection and token metadata\n  - Verify token ownership\n  - Transfer NFTs between addresses\n  - Retrieve token URIs and count holdings\n\n- **Multi-tokens (ERC1155)**\n  - Get token balances and metadata\n  - Transfer tokens with quantity\n  - Access token URIs\n\n### Smart Contract Interactions\n\n- **Read contract state** through view/pure functions\n- **Write services** with private key signing\n- **Contract verification** to distinguish from EOAs\n- **Event logs** retrieval and filtering\n\n### Comprehensive Transaction Support\n\n- **Native token transfers** across all supported networks\n- **Gas estimation** for transaction planning\n- **Transaction status** and receipt information\n- **Error handling** with descriptive messages\n\n## 🌐 Supported Networks\n\n### Mainnets\n- Ethereum (ETH)\n- Optimism (OP)\n- Arbitrum (ARB)\n- Arbitrum Nova\n- Base\n- Polygon (MATIC)\n- Polygon zkEVM\n- Avalanche (AVAX)\n- Binance Smart Chain (BSC)\n- zkSync Era\n- Linea\n- Celo\n- Gnosis (xDai)\n- Fantom (FTM)\n- Filecoin (FIL)\n- Moonbeam\n- Moonriver\n- Cronos\n- Scroll\n- Mantle\n- Manta\n- Blast\n- Fraxtal\n- Mode\n- Metis\n- Kroma\n- Zora\n- Aurora\n- Canto\n- Flow\n- Lumia\n\n### Testnets\n- Sepolia\n- Optimism Sepolia\n- Arbitrum Sepolia\n- Base Sepolia\n- Polygon Amoy\n- Avalanche Fuji\n- BSC Testnet\n- zkSync Sepolia\n- Linea Sepolia\n- Scroll Sepolia\n- Mantle Sepolia\n- Manta Sepolia\n- Blast Sepolia\n- Fraxtal Testnet\n- Mode Testnet\n- Metis Sepolia\n- Kroma Sepolia\n- Zora Sepolia\n- Celo Alfajores\n- Goerli\n- Holesky\n- Flow Testnet\n- Filecoin Calibration\n- Lumia Testnet\n\n## 🛠️ Prerequisites\n\n- [Bun](https://bun.sh/) 1.0.0 or higher\n- Node.js 18.0.0 or higher (if not using Bun)\n\n## 📦 Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/mcpdotdirect/mcp-evm-server.git\ncd mcp-evm-server\n\n# Install dependencies with Bun\nbun install\n\n# Or with npm\nnpm install\n```\n\n## ⚙️ Server Configuration\n\nThe server uses the following default configuration:\n\n- **Default Chain ID**: 1 (Ethereum Mainnet)\n- **Server Port**: 3001\n- **Server Host**: 0.0.0.0 (accessible from any network interface)\n\nThese values are hardcoded in the application. If you need to modify them, you can edit the following files:\n\n- For chain configuration: `src/core/chains.ts`\n- For server configuration: `src/server/http-server.ts`\n\n## 🚀 Usage\n\n### Using npx (No Installation Required)\n\nYou can run the MCP EVM Server directly without installation using npx:\n\n```bash\n# Run the server in stdio mode (for CLI tools)\nnpx @mcpdotdirect/evm-mcp-server\n\n# Run the server in HTTP mode (for web applications)\nnpx @mcpdotdirect/evm-mcp-server --http\n```\n\n### Running the Server Locally\n\nStart the server using stdio (for embedding in CLI tools):\n\n```bash\n# Start the stdio server\nbun start\n\n# Development mode with auto-reload\nbun dev\n```\n\nOr start the HTTP server with SSE for web applications:\n\n```bash\n# Start the HTTP server\nbun start:http\n\n# Development mode with auto-reload\nbun dev:http\n```\n\n### Connecting to the Server\n\nConnect to this MCP server using any MCP-compatible client. For testing and debugging, you can use the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\n### Connecting from Cursor\n\nTo connect to the MCP server from Cursor:\n\n1. Open Cursor and go to Settings (gear icon in the bottom left)\n2. Click on \"Features\" in the left sidebar\n3. Scroll down to \"MCP Servers\" section\n4. Click \"Add new MCP server\"\n5. Enter the following details:\n   - Server name: `evm-mcp-server`\n   - Type: `command`\n   - Command: `npx @mcpdotdirect/evm-mcp-server`\n\n6. Click \"Save\"\n\nOnce connected, you can use the MCP server's capabilities directly within Cursor. The server will appear in the MCP Servers list and can be enabled/disabled as needed.\n\n### Using mcp.json with Cursor\n\nFor a more portable configuration that you can share with your team or use across projects, you can create an `.cursor/mcp.json` file in your project's root directory:\n\n```json\n{\n  \"mcpServers\": {\n    \"evm-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@mcpdotdirect/evm-mcp-server\"\n      ]\n    },\n    \"evm-mcp-http\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\", \n        \"@mcpdotdirect/evm-mcp-server\", \n        \"--http\"\n      ]\n    }\n  }\n}\n```\n\nPlace this file in your project's `.cursor` directory (create it if it doesn't exist), and Cursor will automatically detect and use these MCP server configurations when working in that project. This approach makes it easy to:\n\n1. Share MCP configurations with your team\n2. Version control your MCP setup\n3. Use different server configurations for different projects\n\n### Example: HTTP Mode with SSE\n\nIf you're developing a web application and want to connect to the HTTP server with Server-Sent Events (SSE), you can use this configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"evm-mcp-sse\": {\n      \"url\": \"http://localhost:3001/sse\"\n    }\n  }\n}\n```\n\nThis connects directly to the HTTP server's SSE endpoint, which is useful for:\n- Web applications that need to connect to the MCP server from the browser\n- Environments where running local commands isn't ideal\n- Sharing a single MCP server instance among multiple users or applications\n\nTo use this configuration:\n1. Create a `.cursor` directory in your project root if it doesn't exist\n2. Save the above JSON as `mcp.json` in the `.cursor` directory\n3. Restart Cursor or open your project\n4. Cursor will detect the configuration and offer to enable the server(s)\n\n### Example: Using the MCP Server in Cursor\n\nAfter configuring the MCP server with `mcp.json`, you can easily use it in Cursor. Here's an example workflow:\n\n1. Create a new JavaScript/TypeScript file in your project:\n\n```javascript\n// blockchain-example.js\nasync function main() {\n  try {\n    // Get ETH balance for an address using ENS\n    console.log(\"Getting ETH balance for vitalik.eth...\");\n    \n    // When using with Cursor, you can simply ask Cursor to:\n    // \"Check the ETH balance of vitalik.eth on mainnet\"\n    // Or \"Transfer 0.1 ETH from my wallet to vitalik.eth\"\n    \n    // Cursor will use the MCP server to execute these operations \n    // without requiring any additional code from you\n    \n    // This is the power of the MCP integration - your AI assistant\n    // can directly interact with blockchain data and operations\n  } catch (error) {\n    console.error(\"Error:\", error.message);\n  }\n}\n\nmain();\n```\n\n2. With the file open in Cursor, you can ask Cursor to:\n\n   - \"Check the current ETH balance of vitalik.eth\"\n   - \"Look up the price of USDC on Ethereum\"\n   - \"Show me the latest block on Optimism\"\n   - \"Check if 0x1234... is a contract address\"\n\n3. Cursor will use the MCP server to execute these operations and return the results directly in your conversation.\n\nThe MCP server handles all the blockchain communication while allowing Cursor to understand and execute blockchain-related tasks through natural language.\n\n### Connecting using Claude CLI\n\nIf you're using Claude CLI, you can connect to the MCP server with just two commands:\n\n```bash\n# Add the MCP server\nclaude mcp add evm-mcp-server npx @mcpdotdirect/evm-mcp-server\n\n# Start Claude with the MCP server enabled\nclaude\n```\n\n### Example: Getting a Token Balance with ENS\n\n```javascript\n// Example of using the MCP client to check a token balance using ENS\nconst mcp = new McpClient(\"http://localhost:3000\");\n\nconst result = await mcp.invokeTool(\"get-token-balance\", {\n  tokenAddress: \"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\", // USDC on Ethereum\n  ownerAddress: \"vitalik.eth\", // ENS name instead of address\n  network: \"ethereum\"\n});\n\nconsole.log(result);\n// {\n//   tokenAddress: \"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\n//   owner: \"0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045\",\n//   network: \"ethereum\",\n//   raw: \"1000000000\",\n//   formatted: \"1000\",\n//   symbol: \"USDC\",\n//   decimals: 6\n// }\n```\n\n### Example: Resolving an ENS Name\n\n```javascript\n// Example of using the MCP client to resolve an ENS name to an address\nconst mcp = new McpClient(\"http://localhost:3000\");\n\nconst result = await mcp.invokeTool(\"resolve-ens\", {\n  ensName: \"vitalik.eth\",\n  network: \"ethereum\"\n});\n\nconsole.log(result);\n// {\n//   ensName: \"vitalik.eth\",\n//   normalizedName: \"vitalik.eth\",\n//   resolvedAddress: \"0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045\",\n//   network: \"ethereum\"\n// }\n```\n\n## 📚 API Reference\n\n### Tools\n\nThe server provides the following MCP tools for agents. **All tools that accept address parameters support both Ethereum addresses and ENS names.**\n\n#### Token services\n\n| Tool Name | Description | Key Parameters |\n|-----------|-------------|----------------|\n| `get-token-info` | Get ERC20 token metadata | `tokenAddress` (address/ENS), `network` |\n| `get-token-balance` | Check ERC20 token balance | `tokenAddress` (address/ENS), `ownerAddress` (address/ENS), `network` |\n| `transfer-token` | Transfer ERC20 tokens | `privateKey`, `tokenAddress` (address/ENS), `toAddress` (address/ENS), `amount`, `network` |\n| `approve-token-spending` | Approve token allowances | `privateKey`, `tokenAddress` (address/ENS), `spenderAddress` (address/ENS), `amount`, `network` |\n| `get-nft-info` | Get NFT metadata | `tokenAddress` (address/ENS), `tokenId`, `network` |\n| `check-nft-ownership` | Verify NFT ownership | `tokenAddress` (address/ENS), `tokenId`, `ownerAddress` (address/ENS), `network` |\n| `transfer-nft` | Transfer an NFT | `privateKey`, `tokenAddress` (address/ENS), `tokenId`, `toAddress` (address/ENS), `network` |\n| `get-nft-balance` | Count NFTs owned | `tokenAddress` (address/ENS), `ownerAddress` (address/ENS), `network` |\n| `get-erc1155-token-uri` | Get ERC1155 metadata | `tokenAddress` (address/ENS), `tokenId`, `network` |\n| `get-erc1155-balance` | Check ERC1155 balance | `tokenAddress` (address/ENS), `tokenId`, `ownerAddress` (address/ENS), `network` |\n| `transfer-erc1155` | Transfer ERC1155 tokens | `privateKey`, `tokenAddress` (address/ENS), `tokenId`, `amount`, `toAddress` (address/ENS), `network` |\n\n#### Blockchain services\n\n| Tool Name | Description | Key Parameters |\n|-----------|-------------|----------------|\n| `get-chain-info` | Get network information | `network` |\n| `get-balance` | Get native token balance | `address` (address/ENS), `network` |\n| `transfer-eth` | Send native tokens | `privateKey`, `to` (address/ENS), `amount`, `network` |\n| `get-transaction` | Get transaction details | `txHash`, `network` |\n| `read-contract` | Read smart contract state | `contractAddress` (address/ENS), `abi`, `functionName`, `args`, `network` |\n| `write-contract` | Write to smart contract | `contractAddress` (address/ENS), `abi`, `functionName`, `args`, `privateKey`, `network` |\n| `is-contract` | Check if address is a contract | `address` (address/ENS), `network` |\n| `resolve-ens` | Resolve ENS name to address | `ensName`, `network` |\n\n### Resources\n\nThe server exposes blockchain data through the following MCP resource URIs. All resource URIs that accept addresses also support ENS names, which are automatically resolved to addresses.\n\n#### Blockchain Resources\n\n| Resource URI Pattern | Description |\n|-----------|-------------|\n| `evm://{network}/chain` | Chain information for a specific network |\n| `evm://chain` | Ethereum mainnet chain information |\n| `evm://{network}/block/{blockNumber}` | Block data by number |\n| `evm://{network}/block/latest` | Latest block data |\n| `evm://{network}/address/{address}/balance` | Native token balance |\n| `evm://{network}/tx/{txHash}` | Transaction details |\n| `evm://{network}/tx/{txHash}/receipt` | Transaction receipt with logs |\n\n#### Token Resources\n\n| Resource URI Pattern | Description |\n|-----------|-------------|\n| `evm://{network}/token/{tokenAddress}` | ERC20 token information |\n| `evm://{network}/token/{tokenAddress}/balanceOf/{address}` | ERC20 token balance |\n| `evm://{network}/nft/{tokenAddress}/{tokenId}` | NFT (ERC721) token information |\n| `evm://{network}/nft/{tokenAddress}/{tokenId}/isOwnedBy/{address}` | NFT ownership verification |\n| `evm://{network}/erc1155/{tokenAddress}/{tokenId}/uri` | ERC1155 token URI |\n| `evm://{network}/erc1155/{tokenAddress}/{tokenId}/balanceOf/{address}` | ERC1155 token balance |\n\n## 🔒 Security Considerations\n\n- **Private keys** are used only for transaction signing and are never stored by the server\n- Consider implementing additional authentication mechanisms for production use\n- Use HTTPS for the HTTP server in production environments\n- Implement rate limiting to prevent abuse\n- For high-value services, consider adding confirmation steps\n\n## 📁 Project Structure\n\n```\nmcp-evm-server/\n├── src/\n│   ├── index.ts                # Main stdio server entry point\n│   ├── server/                 # Server-related files\n│   │   ├── http-server.ts      # HTTP server with SSE\n│   │   └── server.ts           # General server setup\n│   ├── core/\n│   │   ├── chains.ts           # Chain definitions and utilities\n│   │   ├── resources.ts        # MCP resources implementation\n│   │   ├── tools.ts            # MCP tools implementation\n│   │   ├── prompts.ts          # MCP prompts implementation\n│   │   └── services/           # Core blockchain services\n│   │       ├── index.ts        # Operation exports\n│   │       ├── balance.ts      # Balance services\n│   │       ├── transfer.ts     # Token transfer services\n│   │       ├── utils.ts        # Utility functions\n│   │       ├── tokens.ts       # Token metadata services\n│   │       ├── contracts.ts    # Contract interactions\n│   │       ├── transactions.ts # Transaction services\n│   │       └── blocks.ts       # Block services\n│   │       └── clients.ts      # RPC client utilities\n├── package.json\n├── tsconfig.json\n└── README.md\n```\n\n## 🛠️ Development\n\nTo modify or extend the server:\n\n1. Add new services in the appropriate file under `src/core/services/`\n2. Register new tools in `src/core/tools.ts`\n3. Register new resources in `src/core/resources.ts`\n4. Add new network support in `src/core/chains.ts`\n5. To change server configuration, edit the hardcoded values in `src/server/http-server.ts`\n\n## 📄 License\n\nThis project is licensed under the terms of the [MIT License](./LICENSE).\n",
+  "category": "Development",
+  "quality_score": 70,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpdotdirect-evm-mcp-server-npx-stdio": {
+        "command": "npx",
+        "args": ["@mcpdotdirect/evm-mcp-server"],
+        "env": {}
+      },
+      "mcpdotdirect-evm-mcp-server-npx-http": {
+        "command": "npx",
+        "args": ["@mcpdotdirect/evm-mcp-server", "--http"],
+        "env": {}
+      },
+      "mcpdotdirect-evm-mcp-server-bun-stdio": {
+        "command": "bun",
+        "args": ["start"],
+        "env": {}
+      },
+      "mcpdotdirect-evm-mcp-server-bun-stdio-dev": {
+        "command": "bun",
+        "args": ["dev"],
+        "env": {}
+      },
+      "mcpdotdirect-evm-mcp-server-bun-http": {
+        "command": "bun",
+        "args": ["start:http"],
+        "env": {}
+      },
+      "mcpdotdirect-evm-mcp-server-bun-http-dev": {
+        "command": "bun",
+        "args": ["dev:http"],
+        "env": {}
+      },
+      "mcpdotdirect-evm-mcp-server-cursor-config": {
+        "command": "npx",
+        "args": ["@mcpdotdirect/evm-mcp-server"],
+        "env": {}
+      },
+      "mcpdotdirect-evm-mcp-server-mcpjson-stdio": {
+        "command": "npx",
+        "args": ["-y", "@mcpdotdirect/evm-mcp-server"],
+        "env": {}
+      },
+      "mcpdotdirect-evm-mcp-server-mcpjson-http": {
+        "command": "npx",
+        "args": ["-y", "@mcpdotdirect/evm-mcp-server", "--http"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mcpdotdirect",
+    "repo": "evm-mcp-server",
+    "url": "https://github.com/mcpdotdirect/evm-mcp-server",
+    "name": "evm-mcp-server",
+    "path": null,
+    "stars": 303,
+    "contributors": 7,
+    "issues": 5,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "b6d923b7ce5d716280efa7b8d4e36059a48b92b9"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.644Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "viem",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@mcpdotdirect/evm-mcp-server\",\n  \"module\": \"src/index.ts\",\n  \"type\": \"module\",\n  \"version\": \"1.2.0\",\n  \"description\": \"Model Context Protocol (MCP) server for interacting with EVM-compatible networks\",\n  \"bin\": {\n    \"evm-mcp-server\": \"./bin/cli.js\"\n  },\n  \"main\": \"build/index.js\",\n  \"files\": [\n    \"build/\",\n    \"bin/\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"start\": \"bun run src/index.ts\",\n    \"build\": \"bun build src/index.ts --outdir build --target node\",\n    \"build:http\": \"bun build src/server/http-server.ts --outdir build --target node --outfile http-server.js\",\n    \"dev\": \"bun --watch src/index.ts\",\n    \"start:http\": \"bun run src/server/http-server.ts\",\n    \"dev:http\": \"bun --watch src/server/http-server.ts\",\n    \"prepublishOnly\": \"bun run build && bun run build:http\",\n    \"version:patch\": \"npm version patch\",\n    \"version:minor\": \"npm version minor\",\n    \"version:major\": \"npm version major\",\n    \"release\": \"npm publish\",\n    \"changelog\": \"conventional-changelog -p angular -i CHANGELOG.md -s -r 0\",\n    \"changelog:latest\": \"conventional-changelog -p angular -r 1 > RELEASE_NOTES.md\"\n  },\n  \"devDependencies\": {\n    \"@types/bun\": \"latest\",\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/express\": \"^5.0.0\",\n    \"conventional-changelog-cli\": \"^5.0.0\"\n  },\n  \"peerDependencies\": {\n    \"typescript\": \"^5.8.2\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"cors\": \"^2.8.5\",\n    \"express\": \"^4.21.2\",\n    \"viem\": \"^2.23.9\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"evm\",\n    \"blockchain\",\n    \"ethereum\",\n    \"web3\",\n    \"smart-contracts\",\n    \"ai\",\n    \"agent\"\n  ],\n  \"author\": \"Etheral <etheral.eth.dev@gmail.com>\",\n  \"license\": \"MIT\",\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/mcpdotdirect/evm-mcp-server\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/mcpdotdirect/evm-mcp-server/issues\"\n  },\n  \"homepage\": \"https://github.com/mcpdotdirect/evm-mcp-server#readme\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  }\n}\n"
+}

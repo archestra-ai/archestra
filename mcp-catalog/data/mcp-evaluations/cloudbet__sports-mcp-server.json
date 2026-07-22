@@ -1,0 +1,65 @@
+{
+  "name": "cloudbet__sports-mcp-server",
+  "display_name": "sports-mcp-server",
+  "description": "Cloudbet Sports Data MCP Server",
+  "author": {
+    "name": "cloudbet"
+  },
+  "server": {
+    "command": "go",
+    "args": ["run", "."],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Cloudbet Sports MCP server\n\nSingle-file, minimal implementation of the [Model Context Protocol](https://modelcontextprotocol.io/introduction) (MCP) for sports data and betting tool exposure using the Cloudbet public API. This demo server follows the [MCP Server specification](https://modelcontextprotocol.io/specification/2025-03-26/server) and is designed for educational and demonstration purposes only. Please use responsibly and at your own risk.\n\n1. **Run the Server:**\n\n```sh\ngo run .\n```\n\n2. **List Tools (Describe):**\n\n```sh\ncurl -X POST http://localhost:8080/ -H \"Content-Type: application/json\" -d '{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/list\",\n  \"params\": {}\n}' | jq .\n```\n\n3. **Call a Tool:**\n\n```sh\ncurl -X POST http://localhost:8080/ -H \"Content-Type: application/json\" -d '{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"findEventsAndMarketsByCompetition\",\n    \"arguments\": {\n      \"competitionName\": \"Premier League\"\n    }\n  }\n}' | jq .\n```\n",
+  "category": "Sports",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "cloudbet-sports-mcp-server": {
+        "command": "go",
+        "args": ["run", "."],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "cloudbet",
+    "repo": "sports-mcp-server",
+    "url": "https://github.com/cloudbet/sports-mcp-server",
+    "name": "sports-mcp-server",
+    "path": null,
+    "stars": 3,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e1ff2faadd438c933e69f580b173d917eeb2da1d"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:36.677Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/cloudbet/sports-mcp-server\n\ngo 1.24\n"
+}

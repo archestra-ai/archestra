@@ -17,6 +17,7 @@ import { afterEach, vi } from "vitest";
 import { getArchestraToolInputSchema } from "@/archestra-mcp-server";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { ToolModel } from "@/models";
+import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import { metrics } from "@/observability";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -1401,5 +1402,210 @@ describe("getChatMcpTools failure and cache gating", () => {
     expect(clientB.listTools).toHaveBeenCalledTimes(1);
     expect(Object.keys(toolsA)).toEqual(["extsrv__a"]);
     expect(Object.keys(toolsB)).toEqual(["extsrv__b"]);
+  });
+});
+
+describe("getChatMcpTools approval-gated execution idempotency (#5132)", () => {
+  /** An approval-gated external tool assigned to the env's agent. */
+  async function setupApprovalGatedTool() {
+    const env = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__create_ticket")],
+    });
+    const catalog = await f.makeInternalMcpCatalog({
+      organizationId: env.org.id,
+    });
+    const gatedTool = await f.makeTool({
+      name: "extsrv__create_ticket",
+      catalogId: catalog.id,
+    });
+    await f.makeAgentTool(env.agent.id, gatedTool.id);
+    const policy = (await f.makeToolPolicy(gatedTool.id, {
+      action: "require_approval",
+      conditions: [],
+    })) as { id: string };
+    return { ...env, policy };
+  }
+
+  test("a replayed execute for the same approval-gated toolCallId dispatches once and returns the recorded result", async () => {
+    const { baseParams } = await setupApprovalGatedTool();
+    vi.mocked(mcpClient.executeToolCallForOwner)
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "Ticket created: TICKET-1" }],
+        isError: false,
+      } as never)
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "Ticket created: TICKET-2" }],
+        isError: false,
+      } as never);
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    const first = await tools.extsrv__create_ticket.execute?.(
+      { query: "Printer on fire" },
+      execOptions("call-1"),
+    );
+    const replay = await tools.extsrv__create_ticket.execute?.(
+      { query: "Printer on fire" },
+      execOptions("call-1"),
+    );
+
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
+    expect(toolResultContent(first)).toContain("TICKET-1");
+    expect(toolResultContent(replay)).toContain("TICKET-1");
+  });
+
+  test("concurrent duplicate executes dispatch once; the loser fails closed without re-dispatching", async () => {
+    const { baseParams } = await setupApprovalGatedTool();
+    let releaseGateway = () => {};
+    vi.mocked(mcpClient.executeToolCallForOwner).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseGateway = () =>
+            resolve({
+              content: [{ type: "text", text: "Ticket created: TICKET-1" }],
+              isError: false,
+            } as never);
+        }),
+    );
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    const winner = tools.extsrv__create_ticket.execute?.(
+      { query: "Printer on fire" },
+      execOptions("call-1"),
+    );
+    // The duplicate must resolve while the winner is still in flight — it can
+    // never wait for or trigger a second dispatch.
+    const loserResult = await tools.extsrv__create_ticket.execute?.(
+      { query: "Printer on fire" },
+      execOptions("call-1"),
+    );
+    releaseGateway();
+    const winnerResult = await winner;
+
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
+    expect(toolResultContent(winnerResult)).toContain("TICKET-1");
+    expect(toolResultContent(loserResult)).toContain("already");
+  });
+
+  test("a replay still dedups after the require_approval policy is removed", async () => {
+    const { baseParams, policy } = await setupApprovalGatedTool();
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "Ticket created: TICKET-1" }],
+      isError: false,
+    } as never);
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    await tools.extsrv__create_ticket.execute?.(
+      { query: "Printer on fire" },
+      execOptions("call-1"),
+    );
+    await ToolInvocationPolicyModel.delete(policy.id);
+
+    const replay = await tools.extsrv__create_ticket.execute?.(
+      { query: "Printer on fire" },
+      execOptions("call-1"),
+    );
+
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
+    expect(toolResultContent(replay)).toContain("TICKET-1");
+  });
+
+  test("a replay after a failed execution reports the failure without re-dispatching", async () => {
+    const { baseParams } = await setupApprovalGatedTool();
+    vi.mocked(mcpClient.executeToolCallForOwner).mockRejectedValueOnce(
+      new Error("gateway exploded"),
+    );
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    await expect(
+      tools.extsrv__create_ticket.execute?.(
+        { query: "Printer on fire" },
+        execOptions("call-1"),
+      ),
+    ).rejects.toThrow("gateway exploded");
+
+    const replay = await tools.extsrv__create_ticket.execute?.(
+      { query: "Printer on fire" },
+      execOptions("call-1"),
+    );
+
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
+    expect(toolResultContent(replay)).toContain("failed");
+    expect(toolResultContent(replay)).toContain("NOT re-executed");
+  });
+
+  test("an abort mid-dispatch leaves the claim executing, so a replay fails closed", async () => {
+    const { baseParams } = await setupApprovalGatedTool();
+    const controller = new AbortController();
+    vi.mocked(mcpClient.executeToolCallForOwner).mockImplementation(
+      async () => {
+        controller.abort();
+        throw new Error("MCP error -32001: The operation was aborted");
+      },
+    );
+
+    const abortableTools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      abortSignal: controller.signal,
+    });
+    await expect(
+      abortableTools.extsrv__create_ticket.execute?.(
+        { query: "Printer on fire" },
+        execOptions("call-1"),
+      ),
+    ).rejects.toThrow();
+
+    const replayTools = await chatClient.getChatMcpTools(baseParams);
+    const replay = await replayTools.extsrv__create_ticket.execute?.(
+      { query: "Printer on fire" },
+      execOptions("call-1"),
+    );
+
+    // The aborted dispatch may have committed externally — the replay must
+    // never re-dispatch.
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
+    expect(toolResultContent(replay)).toContain("already dispatched");
+    expect(toolResultContent(replay)).toContain("NOT re-executed");
+  });
+
+  test("a tool with no approval policy re-dispatches on a duplicate toolCallId (no claim gate)", async () => {
+    const { baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "data" }],
+      isError: false,
+    } as never);
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    await tools.extsrv__fetch_data.execute?.(
+      { query: "q" },
+      execOptions("call-1"),
+    );
+    await tools.extsrv__fetch_data.execute?.(
+      { query: "q" },
+      execOptions("call-1"),
+    );
+
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(2);
+  });
+
+  test("distinct toolCallIds on the same approval-gated tool each dispatch", async () => {
+    const { baseParams } = await setupApprovalGatedTool();
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "Ticket created" }],
+      isError: false,
+    } as never);
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    await tools.extsrv__create_ticket.execute?.(
+      { query: "a" },
+      execOptions("call-1"),
+    );
+    await tools.extsrv__create_ticket.execute?.(
+      { query: "b" },
+      execOptions("call-2"),
+    );
+
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(2);
   });
 });

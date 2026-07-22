@@ -1,0 +1,78 @@
+{
+  "name": "imprvhub__mcp-status-observer",
+  "display_name": "mcp-status-observer",
+  "description": "Model Context Protocol server for monitoring Operational Status of major digital platforms in Claude Desktop. ",
+  "author": {
+    "name": "imprvhub"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "\n\n# MCP Status Observer\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/d7d5a94b-3378-479b-b5a3-35efa8904d2e) [![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/imprvhub/mcp-status-observer)](https://archestra.ai/mcp-catalog/imprvhub__mcp-status-observer)\n[![smithery badge](https://smithery.ai/badge/@imprvhub/mcp-status-observer)](https://smithery.ai/server/@imprvhub/mcp-status-observer)\n\n<table style=\"border-collapse: collapse; width: 100%; table-layout: fixed;\">\n<tr>\n<td style=\"padding: 15px; vertical-align: middle; border: none; text-align: center;\">\n  <a href=\"https://mseep.ai/app/imprvhub-mcp-status-observer\">\n    <img src=\"https://mseep.net/pr/imprvhub-mcp-status-observer-badge.png\" alt=\"MseeP.ai Security Assessment Badge\" />\n  </a>\n</td>\n<td style=\"width: 40%; padding: 15px; vertical-align: middle; border: none;\">An integration that allows Claude Desktop to monitor and query the operational status of major digital platforms using the Model Context Protocol (MCP).</td>\n<td style=\"width: 60%; padding: 0; vertical-align: middle; border: none; min-width: 300px; text-align: center;\">\n  <a href=\"https://glama.ai/mcp/servers/@imprvhub/mcp-status-observer\">\n    <img style=\"max-width: 100%; height: auto; min-width: 300px;\" src=\"https://glama.ai/mcp/servers/@imprvhub/mcp-status-observer/badge\" alt=\"Status Observer MCP server\" />\n  </a>\n</td>\n\n</tr>\n</table>\n\n> [!IMPORTANT]\n> This project is continuously updated with new platform integrations. If you're not seeing a service that should be available, or if Claude doesn't recognize a platform, please update by running `npm run build` from a freshly cloned repository. \n> \n> **Last updated**: 2025-04-26T20:08:00Z (UTC) - Added Docker status integration\n\n## Features\n\n- Monitor world's most used digital platforms (GitHub, Slack, Discord, etc.)\n- Get detailed status information for specific services\n- Check status of specific components within each platform\n- Simple query interface with commands like `status --github`.\n- Real-time updates of service status\n\n## Demo\n\n<p>\n  <a href=\"https://www.youtube.com/watch?v=EV1ac0PMzKg\">\n    <img src=\"public/assets/preview.png\" width=\"600\" alt=\"Status Observer MCP Demo\">\n  </a>\n</p>\n\n<details>\n<summary> Timestamps </summary>\n\nClick on any timestamp to jump to that section of the video\n\n[**00:00**](https://www.youtube.com/watch?v=EV1ac0PMzKg&t=0s) - **LinkedIn Platform Status Assessment**  \nComprehensive analysis of LinkedIn's operational health, including detailed examination of core services such as LinkedIn.com, LinkedIn Learning, Campaign Manager, Sales Navigator, Recruiter, and Talent solutions. All systems confirmed fully operational with zero service disruptions.\n\n[**00:20**](https://www.youtube.com/watch?v=EV1ac0PMzKg&t=20s) - **GitHub Infrastructure Status Overview**  \nDetailed evaluation of GitHub's service availability, covering critical components including Git operations, API requests, Actions, Webhooks, Issues, Pull Requests, Packages, Pages, Codespaces, and Copilot functionality. Complete operational status confirmed across all GitHub services.\n\n[**00:40**](https://www.youtube.com/watch?v=EV1ac0PMzKg&t=40s) - **Vercel Platform Reliability Analysis**  \nIn-depth examination of Vercel's global edge network and deployment infrastructure, featuring comprehensive status reporting on core services such as API, Dashboard, Builds, Serverless Functions, Edge Functions, and global CDN locations. All Vercel services verified operational across all regions.\n\n[**01:08**](https://www.youtube.com/watch?v=EV1ac0PMzKg&t=68s) - **Cloudflare Network Status Examination**  \nExtensive analysis of Cloudflare's global infrastructure status, detailing service availability across geographic regions and specific service components. Identified performance degradation in multiple regions (Africa, Asia, Europe, Latin America, Middle East, North America) while core services remain functional. Includes detailed assessment of regional data centers under maintenance and technical impact analysis.\n\n[**01:46**](https://www.youtube.com/watch?v=EV1ac0PMzKg&t=106s) - **Global Operational Status Report**  \nConsolidated overview of operational status across all major technology platforms and service providers, highlighting both fully operational services (GitHub, Vercel, Netlify, Asana, Atlassian, etc.) and services experiencing degraded performance (Cloudflare, Twilio). Includes strategic recommendations for organizations with dependencies on affected services.\n</details>\n\n## Requirements\n\n- Node.js 16 or higher\n- Claude Desktop\n- Internet connection to access status APIs\n\n## Installation\n\n### Installing Manually\n1. Clone or download this repository:\n```bash\ngit clone https://github.com/imprvhub/mcp-status-observer\ncd mcp-status-observer\n```\n\n2. Install dependencies:\n```bash\nnpm install\n```\n\n3. Build the project:\n```bash\nnpm run build\n```\n\n## Running the MCP Server\n\nThere are two ways to run the MCP server:\n\n### Option 1: Running manually\n\n1. Open a terminal or command prompt\n2. Navigate to the project directory\n3. Run the server directly:\n\n```bash\nnode build/index.js\n```\n\nKeep this terminal window open while using Claude Desktop. The server will run until you close the terminal.\n\n### Option 2: Auto-starting with Claude Desktop (recommended for regular use)\n\nThe Claude Desktop can automatically start the MCP server when needed. To set this up:\n\n#### Configuration\n\nThe Claude Desktop configuration file is located at:\n\n- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n- **Linux**: `~/.config/Claude/claude_desktop_config.json`\n\nEdit this file to add the Status Observer MCP configuration. If the file doesn't exist, create it:\n\n```json\n{\n  \"mcpServers\": {\n    \"statusObserver\": {\n      \"command\": \"node\",\n      \"args\": [\"ABSOLUTE_PATH_TO_DIRECTORY/mcp-status-observer/build/index.js\"]\n    }\n  }\n}\n```\n\n**Important**: Replace `ABSOLUTE_PATH_TO_DIRECTORY` with the **complete absolute path** where you installed the MCP\n  - macOS/Linux example: `/Users/username/mcp-status-observer`\n  - Windows example: `C:\\\\Users\\\\username\\\\mcp-status-observer`\n\nIf you already have other MCPs configured, simply add the \"statusObserver\" section inside the \"mcpServers\" object. Here's an example of a configuration with multiple MCPs:\n\n```json\n{\n  \"mcpServers\": {\n    \"otherMcp1\": {\n      \"command\": \"...\",\n      \"args\": [\"...\"]\n    },\n    \"otherMcp2\": {\n      \"command\": \"...\",\n      \"args\": [\"...\"]\n    },\n    \"statusObserver\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"ABSOLUTE_PATH_TO_DIRECTORY/mcp-status-observer/build/index.js\"\n      ]\n    }\n  }\n}\n```\n\nThe MCP server will automatically start when Claude Desktop needs it, based on the configuration in your `claude_desktop_config.json` file.\n\n## Usage\n\n1. Restart Claude Desktop after modifying the configuration\n2. In Claude, use the `status` command to interact with the Status Observer MCP Server\n3. The MCP server runs as a subprocess managed by Claude Desktop\n\n## Available Commands\n\nThe Status Observer MCP provides a single tool named `status` with several commands:\n\n| Command | Description | Parameters | Example |\n|---------|-------------|------------|---------|\n| `list` | List all available platforms | None | `status list` |\n| `--[platform]` | Get status for a specific platform | Platform name | `status --github` |\n| `--all` | Get status for all platforms | None | `status --all` |\n\n## Example Usage\n\nHere are various examples of how to use the Status Observer with Claude:\n\n### Direct Commands:\n\n```\nstatus --all\nstatus --amplitude\nstatus --anthropic\nstatus --asana\nstatus --atlassian\nstatus --cloudflare\nstatus --digitalocean\nstatus --discord\nstatus --docker\nstatus --dropbox\nstatus --gcp\nstatus --gemini \nstatus --github\nstatus --linkedin\nstatus --netlify\nstatus --npm\nstatus --openai\nstatus --reddit\nstatus --slack\nstatus --twilio\nstatus --vercel\nstatus --x\nstatus list\n```\n\n### Preview\n![GCP Status Monitoring Preview](https://github.com/imprvhub/mcp-status-observer/raw/main/public/assets/gcp.png)\n\n### Natural Language Prompts:\n\nYou can also interact with the MCP using natural language. Claude will interpret these requests and use the appropriate commands:\n\n- \"Could you check if there are any issues with Google Cloud Platform services right now?\"\n- \"Has there been any recent issues with Claude or the Anthropic API?\"\n- \"Is OpenAI experiencing any outages at the moment?\"\n- \"What's the current status of LinkedIn?\"\n- \"Pull Requests are down? What's the status of GitHub?\"\n- \"Can you tell me if Google's Gemini AI is experiencing any service disruptions or outages right now?\"\n- \"Check if Docker Hub Automated Builds is experiencing any outages\"\n- \"Show me the status of all major platforms\"\n\n## Troubleshooting\n\n### \"Server disconnected\" error\nIf you see the error \"MCP Status Observer: Server disconnected\" in Claude Desktop:\n\n1. **Verify the server is running**:\n   - Open a terminal and manually run `node build/index.js` from the project directory\n   - If the server starts successfully, use Claude while keeping this terminal open\n\n2. **Check your configuration**:\n   - Ensure the absolute path in `claude_desktop_config.json` is correct for your system\n   - Double-check that you've used double backslashes (`\\\\`) for Windows paths\n   - Verify you're using the complete path from the root of your filesystem\n\n### Tools not appearing in Claude\nIf the Status Observer tools don't appear in Claude:\n- Make sure you've restarted Claude Desktop after configuration\n- Check the Claude Desktop logs for any MCP communication errors\n- Ensure the MCP server process is running (run it manually to confirm)\n- Verify that the MCP server is correctly registered in the Claude Desktop MCP registry\n\n### Checking if the server is running\nTo check if the server is running:\n\n- **Windows**: Open Task Manager, go to the \"Details\" tab, and look for \"node.exe\"\n- **macOS/Linux**: Open Terminal and run `ps aux | grep node`\n\nIf you don't see the server running, start it manually or use the auto-start method.\n\n## Contributing\n\n### Adding New Status APIs\n\nContributors can easily add support for additional platforms by modifying the `initializePlatforms` method in `src/index.ts`. The process is straightforward:\n\n1. Identify a platform's status API endpoint\n2. Add a new entry using the `addPlatform` method with the following parameters:\n   - `id`: A unique identifier for the platform (lowercase, no spaces)\n   - `name`: The display name of the platform\n   - `url`: The status API endpoint URL\n   - `description`: A brief description of the platform\n\nExample:\n```typescript\nthis.addPlatform('newservice', 'New Service', 'https://status.newservice.com/api/v2/summary.json', 'Description of the service');\n```\n\nDifferent status APIs may return data in different formats. If a new platform's API returns data in a format that isn't handled by the existing code, you might need to add specific parsing logic for that platform.\n\n## License\n\nThis project is licensed under the Mozilla Public License 2.0 - see the [LICENSE](https://github.com/imprvhub/mcp-claude-hackernews/blob/main/LICENSE) file for details.\n\n## Related Links\n\n- [Model Context Protocol](https://modelcontextprotocol.io/)\n- [Claude Desktop](https://claude.ai/download)\n- [MCP Series](https://github.com/mcp-series)\n\n",
+  "category": "Monitoring",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "statusObserver": {
+        "command": "node",
+        "args": ["/path/to/mcp-status-observer/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "imprvhub",
+    "repo": "mcp-status-observer",
+    "url": "https://github.com/imprvhub/mcp-status-observer",
+    "name": "mcp-status-observer",
+    "path": null,
+    "stars": 5,
+    "contributors": 3,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "277f4b5e2edcfe3ad5d613aa38da908c9bf8584a"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:24.411Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 7
+    },
+    {
+      "name": "cheerio",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-status-observer\",\n  \"version\": \"0.1.0\",\n  \"description\": \"Model Context Protocol Server for monitoring Operational Status of major digital platforms in Claude Desktop\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.1\",\n    \"axios\": \"^1.9.0\",\n    \"cheerio\": \"^1.0.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.1\",\n    \"typescript\": \"^5.2.2\"\n  }\n}\n"
+}

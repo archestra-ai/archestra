@@ -1,0 +1,130 @@
+{
+  "name": "shopify__dev-mcp",
+  "display_name": "dev-mcp",
+  "description": "Shopify.dev MCP server",
+  "author": {
+    "name": "Shopify"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@shopify/dev-mcp@latest"],
+    "env": {
+      "OPT_OUT_INSTRUMENTATION": "${user_config.opt_out_instrumentation}",
+      "POLARIS_UNIFIED": "${user_config.polaris_unified}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "opt_out_instrumentation": {
+      "type": "boolean",
+      "title": "Disable Instrumentation",
+      "description": "Set to true to disable instrumentation calls for improving the MCP server.",
+      "default": false
+    },
+    "polaris_unified": {
+      "type": "boolean",
+      "title": "Enable Polaris Support (Experimental)",
+      "description": "Set to true to enable experimental Polaris Web Components documentation support.",
+      "default": false
+    }
+  },
+  "readme": "# Shopify Dev MCP Server\n\nThis project implements a Model Context Protocol (MCP) server that interacts with Shopify Dev. This protocol supports various tools to interact with different Shopify APIs. At the moment the following APIs are supported:\n\n- Admin GraphQL API\n- Functions\n- (Optional) Polaris Web Components\n\n## Setup\n\nTo run the Shopify MCP server using npx, use the following command:\n\n```bash\nnpx -y @shopify/dev-mcp@latest\n```\n\n## Usage with Cursor or Claude Desktop\n\nAdd the following configuration. For more information, read the [Cursor MCP documentation](https://docs.cursor.com/context/model-context-protocol) or the [Claude Desktop MCP guide](https://modelcontextprotocol.io/quickstart/user).\n\n```json\n{\n  \"mcpServers\": {\n    \"shopify-dev-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@shopify/dev-mcp@latest\"]\n    }\n  }\n}\n```\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=shopify-dev-mcp&config=eyJjb21tYW5kIjoibnB4IC15IEBzaG9waWZ5L2Rldi1tY3BAbGF0ZXN0In0%3D)\n\nOn Windows, you might need to use this alternative configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"shopify-dev-mcp\": {\n      \"command\": \"cmd\",\n      \"args\": [\"/k\", \"npx\", \"-y\", \"@shopify/dev-mcp@latest\"]\n    }\n  }\n}\n```\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=shopify-dev-mcp&config=eyJjb21tYW5kIjoiY21kIC9rIG5weCAteSBAc2hvcGlmeS9kZXYtbWNwQGxhdGVzdCJ9)\n\n### Disable instrumentation\n\nIn order to better understand how to improve the MCP server, this package makes instrumentation calls. In order to disable them you can set the `OPT_OUT_INSTRUMENTATION` environment variable. In Cursor or Claude Desktop the configuration would look like this:\n\n```json\n{\n  \"mcpServers\": {\n    \"shopify-dev-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@shopify/dev-mcp@latest\"],\n      \"env\": {\n        \"OPT_OUT_INSTRUMENTATION\": \"true\"\n      }\n    }\n  }\n}\n```\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=shopify-dev-mcp&config=eyJjb21tYW5kIjoibnB4IC15IEBzaG9waWZ5L2Rldi1tY3BAbGF0ZXN0IiwiZW52Ijp7Ik9QVF9PVVRfSU5TVFJVTUVOVEFUSU9OIjoidHJ1ZSJ9fQ%3D%3D)\n\n### Opt-in Polaris support (experimental)\n\nIf you want Cursor or Claude Desktop to surface Polaris Web Components documentation, include an `env` block with the `POLARIS_UNIFIED` flag in your MCP server configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"shopify-dev-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@shopify/dev-mcp@latest\"],\n      \"env\": {\n        \"POLARIS_UNIFIED\": \"true\"\n      }\n    }\n  }\n}\n```\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=shopify-dev-mcp&config=eyJjb21tYW5kIjoibnB4IC15IEBzaG9waWZ5L2Rldi1tY3BAbGF0ZXN0IiwiZW52Ijp7IlBPTEFSSVNfVU5JRklFRCI6InRydWUifX0%3D)\n\n## Available tools\n\nThis MCP server provides the following tools:\n\n| Tool Name                   | Description                                                                                                                                                                                                                                                                                                           |\n| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |\n| learn_shopify_api           | **Start here first** - Teaches the LLM about supported Shopify APIs and how to use this MCP server's tools to generate valid code blocks for each API. This tool makes a request to shopify.dev to get the most up-to-date instruction for how to best work with the API the user would need to use for their prompt. |\n| search_docs_chunks          | Search across all shopify.dev documentation to find relevant chunks matching your query. Useful for getting content from many different documentation categories, but may have incomplete context due to chunking                                                                                                     |\n| fetch_full_docs             | Retrieve complete documentation for specific paths from shopify.dev. Provides full context without chunking loss, but requires knowing the exact path. Paths are provided via `learn_shopify_api`                                                                                                                     |\n| introspect_graphql_schema   | Explore and search Shopify GraphQL schemas to find specific types, queries, and mutations. Returns schema elements filtered by search terms, helping developers discover available fields, operations, and data structures for building GraphQL operations                                                            |\n| validate_graphql_codeblocks | Validate GraphQL code blocks against a specific GraphQL schema to ensure they don't contain hallucinated fields or operations                                                                                                                                                                                         |\n\n## Tool Usage Guidelines\n\n### When to use each documentation tool:\n\n- **`learn_shopify_api`**: Always call this first when working with Shopify APIs. It provides essential context about supported APIs and generates a conversation ID for tracking usage across tool calls.\n\n- **`search_docs_chunks`**: Use when you need to find relevant information across multiple documentation sections or when you don't know the specific path. This tool searches through chunked content which allows for better token matching within smaller content pieces, but may miss some context from individual pages.\n\n- **`fetch_full_docs`**: Use when you need complete documentation for a specific API resource and know the exact path (e.g., `/docs/api/admin-rest/resources/product`). This provides full context without any information loss from chunking.\n\n## Available prompts\n\nThis MCP server provides the following prompts:\n\n| Prompt Name           | Description                                                 |\n| --------------------- | ----------------------------------------------------------- |\n| shopify_admin_graphql | Help you write GraphQL operations for the Shopify Admin API |\n\n## Development\n\nThe server is built using the MCP SDK and communicates with Shopify Dev.\n\n1. `npm install`\n1. Modify source files\n1. Run `npm run build` to compile or `npm run build:watch` to watch for changes and compile\n1. Run `npm run test` to run tests\n1. Add an MCP server that runs this command: `node <absolute_path_of_project>/dist/index.js`\n\n## License\n\nISC\n",
+  "category": "AI Tools",
+  "quality_score": 81,
+  "archestra_config": {
+    "client_config_permutations": {
+      "shopify-dev-mcp": {
+        "command": "npx",
+        "args": ["-y", "@shopify/dev-mcp@latest"],
+        "env": {}
+      },
+      "shopify-dev-mcp-windows": {
+        "command": "cmd",
+        "args": ["/k", "npx", "-y", "@shopify/dev-mcp@latest"],
+        "env": {}
+      },
+      "shopify-dev-mcp-no-instrumentation": {
+        "command": "npx",
+        "args": ["-y", "@shopify/dev-mcp@latest"],
+        "env": {
+          "OPT_OUT_INSTRUMENTATION": "true"
+        }
+      },
+      "shopify-dev-mcp-polaris": {
+        "command": "npx",
+        "args": ["-y", "@shopify/dev-mcp@latest"],
+        "env": {
+          "POLARIS_UNIFIED": "true"
+        }
+      },
+      "shopify-dev-mcp-dev": {
+        "command": "node",
+        "args": ["<absolute_path_of_project>/dist/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Shopify",
+    "repo": "dev-mcp",
+    "url": "https://github.com/Shopify/dev-mcp",
+    "name": "dev-mcp",
+    "path": null,
+    "stars": 442,
+    "contributors": 16,
+    "issues": 25,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "f3449a57d740540efc3a2698c82bfac47336824d"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T21:04:12.141Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@shopify/theme-check-common",
+      "importance": 9
+    },
+    {
+      "name": "@shopify/theme-check-docs-updater",
+      "importance": 9
+    },
+    {
+      "name": "@shopify/theme-check-node",
+      "importance": 9
+    },
+    {
+      "name": "graphql",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@shopify/dev-mcp\",\n  \"version\": \"1.1.0\",\n  \"main\": \"dist/index.js\",\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('dist/index.js', '755')\\\"\",\n    \"build:watch\": \"tsc --watch\",\n    \"changeset\": \"changeset\",\n    \"test\": \"vitest run\",\n    \"test:watch\": \"vitest\",\n    \"lint:fix\": \"prettier --write --ignore-unknown .\",\n    \"lint\": \"prettier --check --cache --ignore-unknown .\",\n    \"inspector\": \"npm run build && npm exec @modelcontextprotocol/inspector dist/index.js\",\n    \"typecheck\": \"tsc --noEmit\"\n  },\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"A command line tool for setting up Shopify Dev MCP server\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.15.1\",\n    \"@shopify/theme-check-common\": \"^3.20.0\",\n    \"@shopify/theme-check-docs-updater\": \"^3.20.0\",\n    \"@shopify/theme-check-node\": \"^3.20.0\",\n    \"graphql\": \"^16.11.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@changesets/changelog-github\": \"^0.5.1\",\n    \"@changesets/cli\": \"^2.29.4\",\n    \"@jest/globals\": \"^29.7.0\",\n    \"@modelcontextprotocol/inspector\": \"^0.16.1\",\n    \"@types/graphql\": \"^14.2.3\",\n    \"@types/node\": \"^22.13.10\",\n    \"@vitest/coverage-v8\": \"^3.0.9\",\n    \"memfs\": \"^4.17.0\",\n    \"prettier\": \"^3.5.3\",\n    \"typescript\": \"^5.8.2\",\n    \"vitest\": \"^3.0.9\"\n  },\n  \"type\": \"module\",\n  \"bin\": {\n    \"shopify-dev-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist/**/*.js\",\n    \"!dist/**/*.test.*\",\n    \"data/**/*.json.gz\",\n    \"LICENSE\",\n    \"README.md\",\n    \"package.json\"\n  ],\n  \"keywords\": [\n    \"mcp\",\n    \"modelcontextprotocol\",\n    \"shopify\"\n  ],\n  \"prettier\": {\n    \"endOfLine\": \"auto\"\n  },\n  \"private\": false,\n  \"publishConfig\": {\n    \"access\": \"public\",\n    \"@shopify:registry\": \"https://registry.npmjs.org\"\n  }\n}\n"
+}

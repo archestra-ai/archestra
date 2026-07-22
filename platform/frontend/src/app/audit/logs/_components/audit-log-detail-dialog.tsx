@@ -198,11 +198,15 @@ function ResourceBlock({ event }: { event: AuditLog }) {
 function WhereBlock({ event }: { event: AuditLog }) {
   return (
     <div className="space-y-1 text-xs">
-      {event.httpMethod && event.httpPath && (
+      {/* MCP-tool rows carry a surface marker (`mcp-tool:<name>`) in httpPath
+          with no method — render the path alone so the origin stays visible. */}
+      {event.httpPath && (
         <div>
-          <Badge variant="outline" className="mr-2 font-mono">
-            {event.httpMethod}
-          </Badge>
+          {event.httpMethod && (
+            <Badge variant="outline" className="mr-2 font-mono">
+              {event.httpMethod}
+            </Badge>
+          )}
           <code className="break-all font-mono">{event.httpPath}</code>
         </div>
       )}

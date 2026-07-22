@@ -1,0 +1,194 @@
+{
+  "name": "promptexecution__cratedocs-mcp",
+  "display_name": "cratedocs-mcp",
+  "description": "MCP tools for Rust Context Engineering (rustdocs, rust analyzer)",
+  "author": {
+    "name": "promptexecution"
+  },
+  "server": {
+    "command": "cratedocs",
+    "args": ["stdio"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# CrateDocs MCP\n\nThis is an MCP (Model Context Protocol) server that provides tools for Rust crate documentation lookup. It allows LLMs to look up documentation for Rust crates they are unfamiliar with.\n\n## Features\n\n- Lookup crate documentation: Get general documentation for a Rust crate\n- Search crates: Search for crates on crates.io based on keywords\n- Lookup item documentation: Get documentation for a specific item (e.g., struct, function, trait) within a crate\n\n## Installation\n\n```bash\ngit clone https://github.com/promptexecution/cratedocs-mcp.git\ncd cratedocs-mcp\ncargo build --release\ncargo install --path .\n```\n\n## Running the Server\n\nThere are multiple ways to run the documentation server:\n\n### Using the Unified CLI\n\nThe unified command-line interface provides subcommands for all server modes:\n\n```bash\n# Run in STDIN/STDOUT mode\ncargo run --bin cratedocs stdio\n\n# Run in HTTP/SSE mode (default address: 127.0.0.1:8080)\ncargo run --bin cratedocs http\n\n# Run in HTTP/SSE mode with custom address\ncargo run --bin cratedocs http --address 0.0.0.0:3000\n\n# Enable debug logging\ncargo run --bin cratedocs http --debug\n```\n\n### Directly Testing Documentation Tools\n\nYou can directly test the documentation tools from the command line without starting a server:\n\n```bash\n# Get help for the test command\ncargo run --bin cratedocs test --tool help\n\n# Enumerate crate items (step by step)\ncargo run --bin cratedocs test --tool list_crate_items --crate-name serde --version 1.0.0 --item-type struct\ncargo run --bin cratedocs test --tool list_crate_items --crate-name tokio --version 1.28.0 --visibility pub --module tokio::sync\n\n# Look up crate documentation\ncargo run --bin cratedocs test --tool lookup_crate --crate-name tokio\n\n# Look up item documentation\ncargo run --bin cratedocs test --tool lookup_item --crate-name tokio --item-path sync::mpsc::Sender\n\n# Look up documentation for a specific version\ncargo run --bin cratedocs test --tool lookup_item --crate-name serde --item-path Serialize --version 1.0.147\n\n# Look up a trait in a crate (e.g., the Serialize trait in serde) & a specific version\ncargo run --bin cratedocs test --tool lookup_item --crate-name serde --item-path serde::Serialize --version 1.0.160\n\n# Search for crates\ncargo run --bin cratedocs test --tool search_crates --query logger --limit 5\n\n# Output in different formats (markdown, text, json)\ncargo run --bin cratedocs test --tool search_crates --query logger --format json\ncargo run --bin cratedocs test --tool lookup_crate --crate-name tokio --format text\n\n# Save output to a file\ncargo run --bin cratedocs test --tool lookup_crate --crate-name tokio --output tokio-docs.md\n\n# Summarize output by stripping LICENSE and VERSION sections, limits to xxxxx tokens (uses huggingface tokenizer)\ncargo run --bin cratedocs test --tool lookup_crate --crate-name tokio --tldr --max_tokens 48000\n\n\n\n```\n\nBy default, the HTTP server will listen on `http://127.0.0.1:8080/sse`.\n\n## Available Tools\n\nThe server provides the following tools:\n\n### 1. `lookup_crate`\n\nRetrieves documentation for a specified Rust crate.\n\nParameters:\n- `crate_name` (required): The name of the crate to look up\n- `version` (optional): The version of the crate (defaults to latest)\n\nExample:\n```json\n{\n  \"name\": \"lookup_crate\",\n  \"arguments\": {\n    \"crate_name\": \"tokio\",\n    \"version\": \"1.28.0\"\n  }\n}\n```\n\n### 2. `search_crates`\n\nSearches for Rust crates on crates.io.\n\nParameters:\n- `query` (required): The search query\n- `limit` (optional): Maximum number of results to return (defaults to 10, max 100)\n\nExample:\n```json\n{\n  \"name\": \"search_crates\",\n  \"arguments\": {\n    \"query\": \"async runtime\",\n    \"limit\": 5\n  }\n}\n```\n\n### 3. `lookup_item`\n\nRetrieves documentation for a specific item in a crate.\n\nParameters:\n- `crate_name` (required): The name of the crate\n- `item_path` (required): Path to the item (e.g., 'std::vec::Vec')\n- `version` (optional): The version of the crate (defaults to latest)\n\nExample:\n```json\n{\n  \"name\": \"lookup_item\",\n  \"arguments\": {\n    \"crate_name\": \"serde\",\n    \"item_path\": \"serde::Deserialize\",\n    \"version\": \"1.0.160\"\n  }\n}\n```\n\n## Implementation Notes\n\n- The server includes a caching mechanism to prevent redundant API calls for the same documentation\n- It interfaces with docs.rs for crate documentation and crates.io for search functionality\n- Results are returned as plain text/HTML content that can be parsed and presented by the client\n\n## MCP Protocol Integration\n\nThis server implements the Model Context Protocol (MCP) which allows it to be easily integrated with LLM clients that support the protocol. For more information about MCP, visit [the MCP repository](https://github.com/modelcontextprotocol/mcp).\n\n### Vscode MCP, RooCode local example\n\n```bash \n# compile & install cratedocs in ~/.cargo/bin\ncargo install --path . \n```\nin `mcp_settings.json`\n```json\n{\n  \"mcpServers\":{\n    \"rust-crate-local\": {\n      \"command\": \"cratedocs\",\n      \"args\": [\n        \"stdio\"\n      ],\n    }    \n  }\n}\n```\n\n### VScode MCP, RooCode hosted example\n\n```json\n// Roo Code, use bunx or npx, sessionId= \n{\n  \"mcpServers\":{\n    \"rust-crate-docs\": {\n      \"command\": \"bunx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-remote@latest\",\n        \"http://127.0.0.1:3000/sse?sessionId=\",\n        \"--allow-http\",\n        \"--transport sse-only\",\n        \"--debug\"\n      ]\n    }\n  }\n}\n```\n\n\n\n### 4. `list_crate_items`\n\nEnumerates all items in a specified Rust crate and version, optionally filtering by item type, visibility, or module path. Useful for exploring crate structure, generating concise listings for LLMs, or programmatically analyzing crate APIs.\n\n**Parameters:**\n- `crate_name` (required): The name of the crate\n- `version` (required): The version of the crate\n- `item_type` (optional): Filter by item type (struct, enum, trait, fn, macro, mod)\n- `visibility` (optional): Filter by visibility (pub, private)\n- `module` (optional): Filter by module path (e.g., serde::de)\n\n**Example:**\n```json\n{\n  \"name\": \"list_crate_items\",\n  \"arguments\": {\n    \"crate_name\": \"serde\",\n    \"version\": \"1.0.0\",\n    \"item_type\": \"struct\"\n  }\n}\n```\n\n**Example Output (stub):**\n```\nStub: list_crate_items for crate: serde, version: 1.0.0, filters: Some(ItemListFilters { item_type: Some(\"struct\"), visibility: None, module: None })\n```\n\nWhen implemented, the output will be a structured list of items matching the filters.\n\n\n## License\n\nMIT License\n",
+  "category": "Development",
+  "quality_score": 31,
+  "archestra_config": {
+    "client_config_permutations": {
+      "cratedocs-stdio": {
+        "command": "cratedocs",
+        "args": ["stdio"],
+        "env": {}
+      },
+      "cratedocs-http": {
+        "command": "cargo",
+        "args": ["run", "--bin", "cratedocs", "http"],
+        "env": {}
+      },
+      "cratedocs-http-custom-address": {
+        "command": "cargo",
+        "args": ["run", "--bin", "cratedocs", "http", "--address", "0.0.0.0:3000"],
+        "env": {}
+      },
+      "cratedocs-http-debug": {
+        "command": "cargo",
+        "args": ["run", "--bin", "cratedocs", "http", "--debug"],
+        "env": {}
+      },
+      "mcp-remote": {
+        "command": "bunx",
+        "args": [
+          "-y",
+          "mcp-remote@latest",
+          "http://127.0.0.1:3000/sse?sessionId=",
+          "--allow-http",
+          "--transport",
+          "sse-only",
+          "--debug"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "promptexecution",
+    "repo": "cratedocs-mcp",
+    "url": "https://github.com/promptexecution/cratedocs-mcp",
+    "name": "promptexecution__cratedocs-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 4,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "c48014e435e4d0304475c936505cb74f0e52e636"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:37.335Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp-server",
+      "importance": 10
+    },
+    {
+      "name": "mcp-core",
+      "importance": 10
+    },
+    {
+      "name": "mcp-macros",
+      "importance": 10
+    },
+    {
+      "name": "axum",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "serde",
+      "importance": 9
+    },
+    {
+      "name": "tokenizers",
+      "importance": 8
+    },
+    {
+      "name": "reqwest",
+      "importance": 8
+    },
+    {
+      "name": "serde_json",
+      "importance": 8
+    },
+    {
+      "name": "clap",
+      "importance": 8
+    },
+    {
+      "name": "html2md",
+      "importance": 8
+    },
+    {
+      "name": "syn",
+      "importance": 8
+    },
+    {
+      "name": "tower",
+      "importance": 7
+    },
+    {
+      "name": "hyper",
+      "importance": 7
+    },
+    {
+      "name": "tracing",
+      "importance": 7
+    },
+    {
+      "name": "regex",
+      "importance": 7
+    },
+    {
+      "name": "flate2",
+      "importance": 7
+    },
+    {
+      "name": "tar",
+      "importance": 7
+    },
+    {
+      "name": "tokio-util",
+      "importance": 6
+    },
+    {
+      "name": "tower-service",
+      "importance": 6
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 6
+    },
+    {
+      "name": "anyhow",
+      "importance": 6
+    },
+    {
+      "name": "futures",
+      "importance": 6
+    },
+    {
+      "name": "tracing-appender",
+      "importance": 5
+    },
+    {
+      "name": "rand",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"cratedocs-mcp\"\nversion = \"0.2.0\"\nedition = \"2021\"\ndescription = \"Rust Documentation MCP Server for LLM crate assistance\"\nauthors = [\"Brian Horakh <brianh@promptexecution.com>\",\n\"Claude <noreply@anthropic.com>\"]\nlicense = \"MIT\"\nrepository = \"https://github.com/d6e/cratedocs-mcp\"\n\n[workspace]\nmembers = [\n    \".\",\n]\n\n[dependencies]\n# MCP dependencies from GitHub\nmcp-server = { git = \"https://github.com/modelcontextprotocol/rust-sdk\", rev = \"c0bd94dd85a3535cb1580424465140d51bab2a17\", package = \"mcp-server\" }\nmcp-core = { git = \"https://github.com/modelcontextprotocol/rust-sdk\", rev = \"c0bd94dd85a3535cb1580424465140d51bab2a17\", package = \"mcp-core\" }\nmcp-macros = { git = \"https://github.com/modelcontextprotocol/rust-sdk\", rev = \"c0bd94dd85a3535cb1580424465140d51bab2a17\", package = \"mcp-macros\" }\n\n# Tokenizer dependency for token count functionality\ntokenizers = { version = \"0.21.2\", features = [\"http\"] }\n\n# HTTP and networking\ntokio = { version = \"1\", features = [\"full\"] }\nreqwest = { version = \"0.11\", features = [\"json\"] }\naxum = { version = \"0.8\", features = [\"macros\"] }\ntokio-util = { version = \"0.7\", features = [\"io\", \"codec\"]}\ntower = { version = \"0.4\", features = [\"util\"] }\ntower-service = \"0.3\"\nhyper = \"0.14\"\n\n# Serialization and data formats\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\n\n# Logging and tracing\ntracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\"env-filter\"] }\ntracing-appender = \"0.2\"\n\n# Utilities\nanyhow = \"1.0\"\nfutures = \"0.3\"\nrand = \"0.8\"\nclap = { version = \"4.4\", features = [\"derive\"] }\nhtml2md = \"0.2.14\"\nregex = \"1\"\nsyn = { version = \"2.0.104\", features = [\"full\"] }\nflate2 = \"1.1.2\"\ntar = \"0.4.44\"\n\n[dev-dependencies]\n# Testing utilities\nmockito = \"1.2\"\n\n# Main binary with subcommands\n[[bin]]\nname = \"cratedocs\"\npath = \"src/bin/cratedocs.rs\"\n"
+}

@@ -59,7 +59,12 @@ export const CodeBlock = ({
         )}
         {...props}
       >
-        <div className="relative">
+        {/* biome-ignore-start lint/a11y/noNoninteractiveTabindex: scrollable code regions must be keyboard focusable (WCAG 2.1.1) */}
+        <section
+          className="relative"
+          tabIndex={0}
+          aria-label={`Code sample, ${language}`}
+        >
           <SyntaxHighlighter
             className={cn("overflow-hidden", contentClassName)}
             codeTagProps={{
@@ -90,7 +95,8 @@ export const CodeBlock = ({
               {children}
             </div>
           )}
-        </div>
+        </section>
+        {/* biome-ignore-end lint/a11y/noNoninteractiveTabindex: scrollable code regions must be keyboard focusable (WCAG 2.1.1) */}
       </div>
     </CodeBlockContext.Provider>
   );

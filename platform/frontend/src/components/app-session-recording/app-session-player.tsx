@@ -4,6 +4,7 @@ import {
   APP_RECORDING_DESCRIPTION_MAX_CHARS,
   APP_RECORDING_MAX_EXPORT_MS,
   APP_RECORDING_RENDER_REGION_ATTR,
+  APP_RECORDING_VIEWPORT_ASPECT,
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolShortName,
   normalizeCuts,
@@ -25,6 +26,8 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import {
@@ -42,6 +45,7 @@ import {
 import { Loader } from "@/components/ai-elements/loader";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
+import { AppGalleryShareButton } from "@/components/app-session-recording/app-gallery-share-dialog";
 import { McpAppPill } from "@/components/mcp-app/mcp-app-chrome";
 import {
   buildReplayHostContext,
@@ -75,18 +79,31 @@ import {
   useIsRenderingAppRecordingVideo,
   useRenderAppRecordingVideo,
 } from "@/lib/app-session-recording/app-recording.query";
+import {
+  AudioPlaybackController,
+  buildPlaybackAudio,
+  type PlaybackAudio,
+  preparePlaybackAudio,
+  recordingHasAudio,
+} from "@/lib/app-session-recording/app-recording-audio";
+import {
+  type RuntimeRecordingEvent,
+  reviveRecordingEvents,
+} from "@/lib/app-session-recording/app-recording-binary";
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
+import { useMcpSandboxDomain } from "@/lib/config/config.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { cn } from "@/lib/utils";
 
 /**
  * The stored recording flattened for playback: the immutable capture plus the
  * app name and the viewer's edits (cuts), which layer over the capture without
- * ever modifying it.
+ * ever modifying it. Events are the REVIVED runtime form — frame payloads as
+ * Blobs/bytes; their base64 was decoded once when the bundle was opened.
  */
-type PlaybackRecording = AppRecordingBundle["recording"] & {
+type PlaybackRecording = Omit<AppRecordingBundle["recording"], "events"> & {
+  events: RuntimeRecordingEvent[];
   appName: string;
   /** The capture's own transcript, untouched — the chat editor's source. */
   originalTranscript: AppRecordingBundle["recording"]["transcript"];
@@ -100,12 +117,26 @@ type RecordingEnhancement = NonNullable<AppRecordingBundle["enhancement"]>;
 type TimelineEvent = PlaybackRecording["events"][number];
 type McpTimelineEvent = Extract<TimelineEvent, { kind: "mcp" }>;
 type TranscriptMessage = PlaybackRecording["transcript"][number];
+type PlayerAudioStatus =
+  | { status: "loading" }
+  | { status: "ready" }
+  | { status: "unsupported" }
+  | { status: "failed" };
 
 const REPLAY_CONTROL_TYPE = "mcp-apps:replay-control";
 /** How often the (rAF-driven) internal clock is mirrored into React state. */
 const DISPLAY_CLOCK_INTERVAL_MS = 100;
 /** Arrow-key seek step. */
 const SEEK_STEP_MS = 5_000;
+/**
+ * How often a drag-scrub may rewind. Scrubbing forward just applies the
+ * skipped events in place, so it follows every pointer move; a rewind remounts
+ * the app frame and replays its segment, which per move would be a remount
+ * storm that never gets a frame on screen. Rewinds coalesce onto this
+ * throttle — leading edge so the first backward tick is immediate, trailing
+ * edge so the scrub always settles on the latest point.
+ */
+const SCRUB_REWIND_THROTTLE_MS = 200;
 /**
  * How far ahead of an upcoming assistant message the chat shows a "thinking"
  * loader — the recording has no explicit generation-start marker, so the gap
@@ -225,12 +256,28 @@ export function revealSchedule(
   return { schedule: build(low).slots, revealScale: low };
 }
 
-// ── Dialog sizing: fixed by the SCREEN alone — never by the recorded app's
-// dimensions, and never by the user's side-panel width. The app renders at its
-// recorded viewport inside the stage and is scaled to fit the app column, so
-// pointer coordinates still map 1:1 and the mouse replays smoothly.
-const MAX_DIALOG_WIDTH = 1400;
-const MAX_DIALOG_HEIGHT = 1220;
+// ── Player geometry: the render region (chat card + app card) is the sizing
+// anchor — its height comes from the screen, each card's width from its
+// aspect, and the dialog shell shrink-wraps the result (see
+// replayRegionLayout). The user's side-panel width never enters.
+/**
+ * Vertical chrome around the render region — the dialog header above it plus
+ * the transport strip below. An estimate, not a measurement: it only tunes
+ * how close the dialog's total height lands to the screen fraction, and the
+ * dialog's max-height class still bounds the total.
+ */
+const REGION_CHROME_PX = 160;
+/** Tallest the render region grows on large screens. */
+const REGION_MAX_HEIGHT = 1060;
+/** Shortest the render region shrinks to before the player stops scaling. */
+const REGION_MIN_HEIGHT = 320;
+/**
+ * Bounds on the app card's width:height in the layout. A recording at a
+ * pathological shape (an extremely tall sliver, an ultrawide inline capture)
+ * gets a sane card and the stage contain-fits the recorded shape inside it.
+ */
+const STAGE_ASPECT_MIN = 1 / 3;
+const STAGE_ASPECT_MAX = 2;
 
 /**
  * The square "click to edit" chip that fades in over an editable surface — the
@@ -343,6 +390,9 @@ export function AppSessionPlayer({
       validBundle
         ? {
             ...validBundle.recording,
+            // Frame payloads leave base64 exactly once, here at bundle-open;
+            // every path after this handles Blobs/bytes only.
+            events: reviveRecordingEvents(validBundle.recording.events),
             // The replayed chat is the capture seen through the viewer's
             // presentation edits: the AI consolidation (unless disabled),
             // minus removed messages, with manual user-text overrides.
@@ -366,7 +416,6 @@ export function AppSessionPlayer({
   const renderVideo = useRenderAppRecordingVideo();
   // Survives closing and reopening the player mid-render.
   const rendering = useIsRenderingAppRecordingVideo();
-  const dialogSize = usePlayerDialogSize();
   // Generation results land async; the description row's handlers must apply
   // them against the LATEST enhancement, not the snapshot captured when the
   // request went out (a prompt edited mid-flight would be clobbered).
@@ -416,6 +465,35 @@ export function AppSessionPlayer({
   const tooLongToExport = finalCutMs > APP_RECORDING_MAX_EXPORT_MS;
   const exportBlocked = descriptionEditing || surfaceEditing || tooLongToExport;
 
+  // The quick action behind the tooltip pills (and the timeline's limit
+  // mark): one click shortens the current edit — mid cuts, trims and all —
+  // from the END of the edited cut down to exactly the allowed length, as
+  // one undoable step.
+  const trimToExportLimit = useCallback(() => {
+    if (!recording) return;
+    const next = trimCutsToExportLimit(recording, APP_RECORDING_MAX_EXPORT_MS);
+    if (!next) return;
+    editor.applyEdits({ cuts: next, chat: recording.edits?.chat });
+  }, [recording, editor]);
+  // The over-length tooltips end with the fix, not just the diagnosis.
+  // Quietly: an invitation to trim, not an alarm — neutral until hovered.
+  const trimPill = (
+    <button
+      type="button"
+      className="mt-1.5 flex w-fit items-center gap-1 rounded-full border bg-background px-2 py-0.5 font-medium text-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
+      // A tooltip dismisses on pointerdown — its content unmounts before a
+      // click can complete inside it — so the action fires on pointerdown
+      // alone. (Not also on click: the pair double-commits, because the
+      // second call still sees the pre-trim recording and stacks a duplicate
+      // undo step.) Keyboard users have the same action on the timeline's
+      // limit mark, a real button.
+      onPointerDown={trimToExportLimit}
+    >
+      <Scissors className="size-3" />
+      Trim to {MAX_EXPORT_SECONDS}s
+    </button>
+  );
+
   const closeTour = useCallback(() => {
     localStorage.setItem(PLAYER_TOUR_SEEN_KEY, "1");
     localStorage.removeItem(PLAYER_TOUR_STEP_KEY);
@@ -460,8 +538,17 @@ export function AppSessionPlayer({
         // lands directly against the app and reads as a stray light border
         // around it rather than as the dialog's own edge. The overlay and
         // shadow already separate the player from the page behind it.
-        className="flex max-h-[94vh] max-w-[96vw] flex-col gap-0 overflow-hidden border-0 p-0"
-        style={dialogSize ?? undefined}
+        // `w-fit`: the dialog shrink-wraps the render region — the chat and
+        // app cards' explicit widths are the only intrinsic contribution (the
+        // header and transport are `w-0 min-w-full`, so a long title can't
+        // drive the shell wide) — which keeps the player's shape a property
+        // of the recording, not of the viewer's screen width.
+        className="flex max-h-[94vh] w-fit max-w-[96vw] flex-col gap-0 overflow-hidden border-0 p-0"
+        // The player is an immersive surface: the page behind it drops to the
+        // same dim the tour's spotlight uses, so the replay is the one lit
+        // thing on screen — and when the tour IS up, its in-dialog scrim and
+        // this backdrop read as one uninterrupted dim across the whole page.
+        overlayClassName="bg-black/85"
         // The close control lives in the header's own button cluster so every
         // header action shares one size, style, and baseline — the floating
         // default X can't align with an in-flow row.
@@ -496,7 +583,9 @@ export function AppSessionPlayer({
         <DialogDescription className="sr-only">
           Read-only replay of a recorded app session.
         </DialogDescription>
-        <DialogHeader className="flex-row items-start gap-3 space-y-0 border-b px-4 py-4">
+        {/* `w-0 min-w-full`: span the shrink-wrapped dialog without
+            contributing intrinsic width — the render region alone sets it. */}
+        <DialogHeader className="w-0 min-w-full flex-row items-start gap-3 space-y-0 border-b px-4 py-4">
           <AppWindow className="mt-px size-4 shrink-0 text-muted-foreground" />
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <DialogTitle className="truncate">{title}</DialogTitle>
@@ -625,15 +714,42 @@ export function AppSessionPlayer({
                       </span>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[260px] text-xs">
-                      {rendering
-                        ? "Preparing your video — click to cancel."
-                        : tooLongToExport
-                          ? `This cut runs ${formatMs(finalCutMs)}. Trim it to ${MAX_EXPORT_SECONDS} seconds or less to export a video.`
-                          : descriptionEditing || surfaceEditing
-                            ? "Finish editing to export a video."
-                            : "Downloads a video of this session with your edits applied. Takes up to a minute."}
+                      {rendering ? (
+                        "Preparing your video — click to cancel."
+                      ) : tooLongToExport ? (
+                        <>
+                          This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
+                          {MAX_EXPORT_SECONDS} seconds or less to export a
+                          video.
+                          {trimPill}
+                        </>
+                      ) : descriptionEditing || surfaceEditing ? (
+                        "Finish editing to export a video."
+                      ) : (
+                        "Downloads a video of this session with your edits applied. Takes up to a minute."
+                      )}
                     </TooltipContent>
                   </Tooltip>
+
+                  {/* Renders nothing unless the deployment offers the gallery.
+                      Blocked exactly like the download — mid-edit AND over the
+                      export length cap: the gallery renders the submitted cut
+                      to video downstream, so the same 30-second bound applies. */}
+                  <AppGalleryShareButton
+                    conversationId={conversationId}
+                    disabled={exportBlocked}
+                    disabledReason={
+                      tooLongToExport ? (
+                        <>
+                          This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
+                          {MAX_EXPORT_SECONDS} seconds or less to submit.
+                          {trimPill}
+                        </>
+                      ) : (
+                        "Finish editing to submit."
+                      )
+                    }
+                  />
 
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -692,11 +808,13 @@ export function AppSessionPlayer({
             onEditingChange={setSurfaceEditing}
           />
         ) : validation && !validation.ok ? (
-          <div className="flex flex-1 items-center justify-center px-8 text-center text-sm text-muted-foreground">
+          // The shrink-wrapped dialog has no size of its own, so the
+          // placeholder states bring their own.
+          <div className="flex min-h-[40vh] min-w-[560px] flex-1 items-center justify-center px-8 text-center text-sm text-muted-foreground">
             This recording can't be replayed. {validation.reason}
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          <div className="flex min-h-[40vh] min-w-[560px] flex-1 items-center justify-center text-sm text-muted-foreground">
             Loading recording…
           </div>
         )}
@@ -772,23 +890,64 @@ function PlayerSurface({
   const [displayClock, setDisplayClock] = useState(0);
   const [segmentIndex, setSegmentIndex] = useState(0);
   const [runNonce, setRunNonce] = useState(0);
-  // The app renders at its dominant (longest-on-screen) recorded viewport for
-  // the whole replay, uniformly scaled into the stage with its aspect ratio
-  // preserved. Identical layout to the recording means pointer coordinates map
-  // 1:1 (the visual scale doesn't touch the frame's coordinate space), so the
-  // mouse replays smoothly with no remapping error.
+  // The app renders for the whole replay at the recorded viewport it was used
+  // at — the size that carried the actual interaction, not merely the one left
+  // on screen the longest (see dominantViewport) — uniformly scaled into the
+  // stage. Laying it out at its recorded size in both dimensions means pointer
+  // coordinates map 1:1 (the visual scale doesn't touch the frame's coordinate
+  // space) and a viewport-sized surface (a game, a WebGL canvas) keeps its
+  // recorded shape instead of reflowing to the stage's.
   const viewport = useMemo(() => dominantViewport(events), [events]);
+  // The region's two format cards — chat at the canonical recording aspect,
+  // app at the recorded one — sized from the screen height alone.
+  const layout = useReplayRegionLayout(viewport);
   // False while the (re)mounted app frame's SDK hasn't connected yet — the
   // clock and event dispatch hold until it does, so no event is lost to a
   // frame whose replay listener isn't attached (fresh play, restart, seek, or
   // a mid-timeline version switch that remounts the frame).
   const [frameReady, setFrameReady] = useState(false);
+  /**
+   * Bumped per replay-frame announcement. The sandbox can navigate its inner
+   * document more than once while settling, and each document announces for
+   * itself — every announcement gets its own full catch-up delivery, so the
+   * document that ends up on screen has everything regardless of how many
+   * came before it.
+   */
+  const [frameReadyNonce, setFrameReadyNonce] = useState(0);
+  /** Pending ready-fallback for a stale cached SDK without the announcement. */
+  const legacyReadyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const clockRef = useRef(0);
   const appliedRef = useRef(0);
   const segmentIndexRef = useRef(0);
   segmentIndexRef.current = segmentIndex;
   const iframeElRef = useRef<HTMLIFrameElement | null>(null);
+  /** `frameReady` for non-reactive readers: seeks and the filming driver. */
+  const frameReadyRef = useRef(frameReady);
+  frameReadyRef.current = frameReady;
+
+  // ── Captured audio (host-side). The recording's app sound is decoded once and
+  // scheduled against the same clock as the visuals; the offline renderer muxes
+  // it separately, so live audio is never driven while filming. Muting is the
+  // viewer's, defaulting to on (sound present) — hidden entirely when the
+  // recording captured no audio.
+  const hasAudio = useMemo(
+    () => !filming && recordingHasAudio(recording.events),
+    [filming, recording.events],
+  );
+  const [muted, setMuted] = useState(false);
+  const [audioStatus, setAudioStatus] = useState<PlayerAudioStatus>({
+    status: "loading",
+  });
+  const audioRef = useRef<AudioPlaybackController | null>(null);
+  /** Cached export-audio build, used only while filming (see the replay bridge). */
+  const renderAudioRef = useRef<Promise<PlaybackAudio | null> | null>(null);
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+  const playStateRef = useRef(playState);
+  playStateRef.current = playState;
 
   // A remount (version switch, restart, or seek) makes the frame not-ready
   // until its SDK reconnects. The deps ARE the remount triggers even though the
@@ -796,6 +955,10 @@ function PlayerSurface({
   // biome-ignore lint/correctness/useExhaustiveDependencies: segmentIndex/runNonce are the intended re-run triggers
   useEffect(() => {
     setFrameReady(false);
+    if (legacyReadyTimerRef.current) {
+      clearTimeout(legacyReadyTimerRef.current);
+      legacyReadyTimerRef.current = null;
+    }
   }, [segmentIndex, runNonce]);
 
   // Which recorded version segment is visible at a given clock time, by the
@@ -956,6 +1119,20 @@ function PlayerSurface({
       applyEdits,
     ],
   );
+  // The timeline's export-limit mark: where played time crosses the allowed
+  // length on the FULL strip, and the one-click trim down to it. Committed
+  // with the same optimistic-cuts bridge every other timeline edit uses.
+  const exportLimitBaseMs =
+    duration > APP_RECORDING_MAX_EXPORT_MS
+      ? basePlayback.toPlaybackMs(playback.toRawMs(APP_RECORDING_MAX_EXPORT_MS))
+      : null;
+  const trimToExportLimit = useCallback(() => {
+    const next = trimCutsToExportLimit(recording, APP_RECORDING_MAX_EXPORT_MS);
+    if (!next) return;
+    setPendingCuts(next);
+    applyEdits({ cuts: next, chat: chatEdits });
+  }, [recording, applyEdits, chatEdits]);
+
   // ── Chat edits: presentation-only operations over the captured transcript
   // (drop a message, override a user message's text, hide the AI-enhanced
   // consolidation), committed through the same undoable history as cuts.
@@ -1011,22 +1188,63 @@ function PlayerSurface({
       ? seekIntent.baseMs
       : basePlayback.toPlaybackMs(playback.toRawMs(displayClock));
 
+  // A drag-scrub's not-yet-performed rewind (see scrubBase): the latest point
+  // the cursor asked for, waiting out the rewind throttle.
+  const scrubRewindRef = useRef<{
+    timer: ReturnType<typeof setTimeout> | null;
+    pendingClock: number | null;
+    lastAt: number;
+  }>({ timer: null, pendingClock: null, lastAt: 0 });
+  const cancelPendingScrub = useCallback(() => {
+    const scrub = scrubRewindRef.current;
+    if (scrub.timer !== null) clearTimeout(scrub.timer);
+    scrub.timer = null;
+    scrub.pendingClock = null;
+  }, []);
+  useEffect(() => cancelPendingScrub, [cancelPendingScrub]);
+
   // An edit retimes the whole playback, so the applied-event cursor and MCP log
   // are positionally invalid for the new event list: restart the run from a
   // clean, paused frame whenever the playback identity changes after mount.
+  // The author's PLACE survives the restart: raw time is stable across edits,
+  // so their point maps into the new playback exactly — through a Cut the
+  // playhead visibly stays where the selection was released (the cut's
+  // collapse instant) instead of snapping to the start, and it holds there
+  // until playback resumes or the timeline is clicked anew.
   const playbackRef = useRef(playback);
   useEffect(() => {
     if (playbackRef.current === playback) return;
+    const rawMs = playbackRef.current.toRawMs(clockRef.current);
     playbackRef.current = playback;
-    clockRef.current = 0;
-    appliedRef.current = 0;
+    cancelPendingScrub();
+    const clock = Math.max(
+      0,
+      Math.min(playback.toPlaybackMs(rawMs), playback.duration),
+    );
+    const seg = segmentIndexForClock(clock);
+    const segStart = segments[seg]?.atMs ?? 0;
+    let idx = 0;
+    while (idx < events.length && events[idx].t < segStart) idx++;
+    clockRef.current = clock;
+    appliedRef.current = idx;
     resetMcpLog();
-    setDisplayClock(0);
-    segmentIndexRef.current = 0;
-    setSegmentIndex(0);
+    // Pin the playhead to the base-time spot it occupied, not to the far side
+    // of a collapse gap the raw round-trip would pick (see seekIntentRef).
+    seekIntentRef.current = { baseMs: basePlayback.toPlaybackMs(rawMs), clock };
+    setDisplayClock(clock);
+    segmentIndexRef.current = seg;
+    setSegmentIndex(seg);
     setRunNonce((nonce) => nonce + 1);
     setPlayState("paused");
-  }, [playback, resetMcpLog]);
+  }, [
+    playback,
+    basePlayback,
+    segments,
+    events,
+    segmentIndexForClock,
+    resetMcpLog,
+    cancelPendingScrub,
+  ]);
 
   // The replay owns the app's clock. The app's timers and animation frames fire
   // against this rather than the wall, so it advances exactly as far as the
@@ -1055,20 +1273,50 @@ function PlayerSurface({
    */
   const primeCanvases = useCallback(
     (clock: number) => {
-      const latest = new Map<string, TimelineEvent>();
-      for (const event of events) {
-        if (event.kind !== "canvas") continue;
-        // The newest frame this clock has reached, or failing that the oldest
-        // there is: before the first frame the app looked like its first frame,
-        // never like an empty canvas.
-        if (event.t <= clock || !latest.has(event.sel))
-          latest.set(event.sel, event);
-      }
-      for (const event of latest.values()) {
+      const paint = (event: PaintDispatch) => {
         iframeElRef.current?.contentWindow?.postMessage(
           { type: REPLAY_CONTROL_TYPE, action: "paint", event },
           "*",
         );
+      };
+      const latest = new Map<string, TimelineEvent>();
+      // Encoded streams whose first keyframe the clock hasn't reached yet:
+      // their poster is the stream's opening config + first keyframe — before
+      // the first frame the app looked like its first frame, never like an
+      // empty canvas. Streams the clock is inside were already fed by the
+      // catch-up walk (which re-sends the config and decodes from the last
+      // keyframe), so re-posting them here would only decode the span twice.
+      const posters = new Map<
+        string,
+        { config: TimelineEvent; key: TimelineEvent | null; reached: boolean }
+      >();
+      for (const event of events) {
+        if (event.kind === "canvas") {
+          // The newest frame this clock has reached, or failing that the
+          // oldest there is.
+          if (event.t <= clock || !latest.has(event.sel))
+            latest.set(event.sel, event);
+        } else if (event.kind === "video-config") {
+          if (!posters.has(event.sel))
+            posters.set(event.sel, {
+              config: event,
+              key: null,
+              reached: false,
+            });
+        } else if (event.kind === "video-chunk" && event.type === "key") {
+          const poster = posters.get(event.sel);
+          if (!poster) continue;
+          if (event.t <= clock) poster.reached = true;
+          else if (!poster.key) poster.key = event;
+        }
+      }
+      for (const event of latest.values()) paint(event);
+      for (const [sel, poster] of posters) {
+        if (poster.reached || !poster.key) continue;
+        paint(poster.config);
+        paint(poster.key);
+        // A lone keyframe sits inside the decoder until flushed out.
+        paint({ kind: "video-flush", sel });
       }
     },
     [events],
@@ -1077,12 +1325,27 @@ function PlayerSurface({
   const applyEventsUpTo = useCallback(
     (clock: number) => {
       sendAppClock(clock);
+      // Frame paints (stills and encoded-video events) are collected over the
+      // advanced range and flushed through `planPaintFlush` after the walk: a
+      // deep catch-up (a seek, a remount) spans hundreds of frames, and the
+      // plan reduces them to what actually needs decoding — the newest still
+      // per canvas, and for a video stream its config plus the span from the
+      // last keyframe. During normal playback the range is a frame or two
+      // wide and the plan passes it through. Flushing after the loop also
+      // lands the survivors on the range's final DOM.
+      const paints: TimelineEvent[] = [];
       while (
         appliedRef.current < events.length &&
         events[appliedRef.current].t <= clock
       ) {
         const event = events[appliedRef.current++];
-        if (event.kind === "canvas" || event.kind === "dom") {
+        if (
+          event.kind === "canvas" ||
+          event.kind === "video-config" ||
+          event.kind === "video-chunk"
+        ) {
+          paints.push(event);
+        } else if (event.kind === "dom") {
           // What the app produced, put back exactly. The replayed document runs
           // none of the app's own code, so these are not corrections applied
           // over a live app — they ARE the app, played back.
@@ -1110,6 +1373,12 @@ function PlayerSurface({
           );
         }
       }
+      for (const event of planPaintFlush(paints)) {
+        iframeElRef.current?.contentWindow?.postMessage(
+          { type: REPLAY_CONTROL_TYPE, action: "paint", event },
+          "*",
+        );
+      }
     },
     [events, sendAppClock],
   );
@@ -1118,12 +1387,31 @@ function PlayerSurface({
   // every event from the applied cursor up to `clock`, so a fresh play,
   // restart, seek, or version switch lands the app at the right state even
   // while paused.
+  /**
+   * A replay document announced its listener is live: reset the applied
+   * cursor to its segment's start and deliver everything up to the clock
+   * (the catch-up effect below). Runs once per announcing document.
+   */
+  const armReplayFrame = useCallback(() => {
+    if (legacyReadyTimerRef.current) {
+      clearTimeout(legacyReadyTimerRef.current);
+      legacyReadyTimerRef.current = null;
+    }
+    const segStart = segments[segmentIndexRef.current]?.atMs ?? 0;
+    let idx = 0;
+    while (idx < events.length && events[idx].t < segStart) idx++;
+    appliedRef.current = idx;
+    setFrameReady(true);
+    setFrameReadyNonce((nonce) => nonce + 1);
+  }, [segments, events]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: frameReadyNonce re-delivers to each announcing document
   useEffect(() => {
     if (!frameReady) return;
     applyEventsUpTo(clockRef.current);
     primeCanvases(clockRef.current);
     setDisplayClock(clockRef.current);
-  }, [frameReady, applyEventsUpTo, primeCanvases]);
+  }, [frameReady, frameReadyNonce, applyEventsUpTo, primeCanvases]);
 
   // Freeze the app frame when the replay is paused: the injected SDK halts the
   // app's own animations and timers so nothing keeps moving inside the frame.
@@ -1138,6 +1426,63 @@ function PlayerSurface({
       "*",
     );
   }, [playState, frameReady]);
+
+  // Decode the captured audio onto the current playback timeline (idle
+  // compression + cuts baked in) and hold a controller. Rebuilt whenever the
+  // playback identity changes — an edit retimes where audio lands — and torn
+  // down on unmount/filming. Unsupported codecs, decode errors, and audio-output
+  // failures all become an explicit muted-video state; visuals remain usable.
+  useEffect(() => {
+    if (!hasAudio) return;
+    setAudioStatus({ status: "loading" });
+    let cancelled = false;
+    let controller: AudioPlaybackController | null = null;
+    void preparePlaybackAudio({
+      events: recording.events,
+      cuts: recording.edits?.cuts ?? [],
+      durationMs: playback.duration,
+      toPlaybackMs: playback.toPlaybackMs,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.status !== "ready") {
+          setAudioStatus({
+            status: result.status === "unsupported" ? "unsupported" : "failed",
+          });
+          return;
+        }
+        controller = new AudioPlaybackController(result.audio, () => {
+          if (!cancelled) setAudioStatus({ status: "failed" });
+        });
+        controller.setMuted(mutedRef.current);
+        audioRef.current = controller;
+        setAudioStatus({ status: "ready" });
+        controller.sync(
+          clockRef.current,
+          playStateRef.current === "playing" && frameReadyRef.current,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setAudioStatus({ status: "failed" });
+      });
+    return () => {
+      cancelled = true;
+      controller?.dispose();
+      audioRef.current = null;
+    };
+  }, [hasAudio, recording, playback]);
+
+  // Keep the audio reconciled with the clock: one call handles play, pause, and
+  // seek (a large jump restarts; smooth advance is left to free-run in step).
+  // Driven by displayClock — the throttled mirror updates each tick and jumps on
+  // a seek, both well inside the controller's drift tolerance.
+  useEffect(() => {
+    audioRef.current?.sync(displayClock, playState === "playing" && frameReady);
+  }, [displayClock, playState, frameReady]);
+
+  useEffect(() => {
+    audioRef.current?.setMuted(muted);
+  }, [muted]);
 
   useEffect(() => {
     // Hold the clock until the current app frame's SDK has connected, so events
@@ -1176,6 +1521,7 @@ function PlayerSurface({
   }, [playState, frameReady, duration, applyEventsUpTo, segmentIndexForClock]);
 
   const restart = useCallback(() => {
+    cancelPendingScrub();
     clockRef.current = 0;
     appliedRef.current = 0;
     resetMcpLog();
@@ -1185,7 +1531,7 @@ function PlayerSurface({
     // remount the app frame so the demo restarts from a fresh app instance
     setRunNonce((nonce) => nonce + 1);
     setPlayState("playing");
-  }, [resetMcpLog]);
+  }, [resetMcpLog, cancelPendingScrub]);
 
   // Editing anything — the description, the chat, the one-shot prompt, or a
   // timeline selection — owns the moment: the replay pauses and the play
@@ -1230,7 +1576,16 @@ function PlayerSurface({
       setDisplayClock(target);
       if (playState === "ended" && target < duration) setPlayState("paused");
       if (!rewind) {
-        applyEventsUpTo(target);
+        // Only a READY frame can take the skipped events now. While the frame
+        // is still (re)connecting — the player just opened, or another seek's
+        // remount is in flight — posting would consume the events into a frame
+        // whose replay listener isn't attached yet: the proxy drops them and
+        // the applied cursor moves past them for good. The recording then
+        // looks broken from this point on (an intro-dismissal that never
+        // replays, an app that never appears). Moving only the clock leaves
+        // delivery to the frame-ready catch-up effect, which applies
+        // everything up to the latest clock once the frame connects.
+        if (frameReadyRef.current) applyEventsUpTo(target);
         return;
       }
       const segStart = segments[seg]?.atMs ?? 0;
@@ -1258,8 +1613,6 @@ function PlayerSurface({
   // It seeks to an exact millisecond per frame and screenshots the result, so
   // nothing here may depend on wall-clock time. Playback stays paused
   // throughout — the renderer advances the clock itself.
-  const frameReadyRef = useRef(frameReady);
-  frameReadyRef.current = frameReady;
   useEffect(() => {
     if (!filming) return;
     const settled = async () => {
@@ -1291,6 +1644,30 @@ function PlayerSurface({
       // usual cause is an origin the sandbox refuses to be framed by, so say
       // so rather than reporting a generic stall much later.
       ready: async () => {
+        // Renderer check: every codec this recording's video streams use must
+        // be decodable in THIS browser, or each affected canvas silently films
+        // as an empty rectangle. Recording sticks to VP9/VP8 exactly so any
+        // Chromium can decode it; this guards the contract (and any bundle
+        // recorded by a future codec) with a loud, immediate failure.
+        const codecs = new Set<string>();
+        for (const event of events) {
+          if (event.kind === "video-config") codecs.add(event.codec);
+        }
+        if (codecs.size > 0 && typeof VideoDecoder === "undefined") {
+          throw new Error(
+            "This recording carries encoded video, but the render browser has no WebCodecs decoder.",
+          );
+        }
+        for (const codec of codecs) {
+          const support = await VideoDecoder.isConfigSupported({
+            codec,
+          }).catch(() => null);
+          if (!support?.supported) {
+            throw new Error(
+              `This recording's video codec (${codec}) is not decodable in the render browser.`,
+            );
+          }
+        }
         for (
           let i = 0;
           i < APP_FRAME_READY_TRIES && !frameReadyRef.current;
@@ -1312,11 +1689,27 @@ function PlayerSurface({
         seekTo(ms);
         await settled();
       },
+      // The renderer can't hear the sandboxed frame, so the captured audio is
+      // decoded onto the export timeline here and muxed into the MP4 separately
+      // (the video is filmed frame by frame with playback paused). Built once,
+      // then reused if the renderer asks again.
+      audio: () => {
+        if (!renderAudioRef.current) {
+          renderAudioRef.current = buildPlaybackAudio({
+            events: recording.events,
+            cuts: recording.edits?.cuts ?? [],
+            durationMs: playback.duration,
+            toPlaybackMs: playback.toPlaybackMs,
+          }).catch(() => null);
+        }
+        return renderAudioRef.current;
+      },
     };
     return () => {
       window.__archestraReplay = undefined;
+      renderAudioRef.current = null;
     };
-  }, [filming, duration, seekTo]);
+  }, [filming, duration, seekTo, events, recording, playback]);
 
   // The single timeline runs on the FULL (uncut) session; a click there seeks
   // the cut playback to the same moment (a click inside a removed stretch
@@ -1324,11 +1717,54 @@ function PlayerSurface({
   // the plain round-trip is seek-complete over the whole strip.
   const seekBase = useCallback(
     (baseMs: number) => {
+      // A click-seek supersedes any scrub rewind still waiting out its
+      // throttle — the stale point must not land after this one.
+      cancelPendingScrub();
       const clock = playback.toPlaybackMs(basePlayback.toRawMs(baseMs));
       seekIntentRef.current = { baseMs, clock };
       seekTo(clock);
     },
-    [playback, basePlayback, seekTo],
+    [playback, basePlayback, seekTo, cancelPendingScrub],
+  );
+
+  // Live scrub while a selection is being drawn on the timeline: the replay —
+  // chat and app both — tracks the cursor's point. Forward motion applies the
+  // skipped events onto the running frame, cheap enough to follow every move;
+  // backward motion (or a segment change) needs the remount-and-replay rewind,
+  // so those coalesce onto SCRUB_REWIND_THROTTLE_MS, ticking backward as fast
+  // as the rebuild allows and always settling on the latest point — the
+  // release point included, which is exactly where the playhead then stays.
+  const scrubBase = useCallback(
+    (baseMs: number) => {
+      const clock = playback.toPlaybackMs(basePlayback.toRawMs(baseMs));
+      seekIntentRef.current = { baseMs, clock };
+      const scrub = scrubRewindRef.current;
+      const rewind =
+        clock < clockRef.current - 1 ||
+        segmentIndexForClock(clock) !== segmentIndexRef.current;
+      if (!rewind && scrub.timer === null) {
+        seekTo(clock);
+        return;
+      }
+      // A rewind — or one already pending, which a forward step must not
+      // overtake. The playhead and readout track the cursor immediately; the
+      // replay follows when the throttle fires.
+      scrub.pendingClock = clock;
+      setDisplayClock(clock);
+      if (scrub.timer !== null) return;
+      const wait = Math.max(
+        0,
+        SCRUB_REWIND_THROTTLE_MS - (performance.now() - scrub.lastAt),
+      );
+      scrub.timer = setTimeout(() => {
+        scrub.timer = null;
+        scrub.lastAt = performance.now();
+        const pending = scrub.pendingClock;
+        scrub.pendingClock = null;
+        if (pending !== null) seekTo(pending);
+      }, wait);
+    },
+    [playback, basePlayback, segmentIndexForClock, seekTo],
   );
 
   // ── The one-shot prompt bubble's editor. The bubble in the chat pane is the
@@ -1562,11 +1998,14 @@ function PlayerSurface({
   }, []);
 
   // Resolved BEFORE the bridge below, which keys on it: the sandbox origin is
-  // not known on first paint. `mcpSandboxDomain` arrives with the public
-  // config, so on a cold load this URL changes from same-origin to the
-  // dedicated sandbox subdomain once that request lands, and the app frame is
-  // pointed somewhere new.
-  const mcpSandboxDomain = useFeature("mcpSandboxDomain");
+  // not known on first paint. `mcpSandboxDomain` arrives with the config, so on
+  // a cold load this URL changes from same-origin to the dedicated sandbox
+  // subdomain once that request lands, and the app frame is pointed somewhere
+  // new. Read via useMcpSandboxDomain so the session-less offline video
+  // renderer gets it from the public config too — without that fallback the
+  // renderer stays on the same-origin URL, which the backend refuses with a 403
+  // sandbox-host check, and the app pane films empty.
+  const mcpSandboxDomain = useMcpSandboxDomain();
   const sandboxResult = useMemo(
     () =>
       getMcpSandboxBaseUrl(
@@ -1713,7 +2152,7 @@ function PlayerSurface({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-col">
       {/* Paused means fully frozen: halt every CSS animation/transition in the
           chat pane and app stage (the app's own frame is frozen via the SDK).
           Lifted while the prompt editor or a generation is live — their
@@ -1721,67 +2160,91 @@ function PlayerSurface({
       <div
         // The rendered region: the two viewports and nothing else — the
         // toolbar, description and timeline stay out of the exported video.
+        // Its explicit card widths are what the shrink-wrapped dialog sizes
+        // itself around.
         {...{ [APP_RECORDING_RENDER_REGION_ATTR]: "" }}
         className={cn(
-          "flex min-h-0 flex-1",
+          "flex min-h-0 shrink-0",
           playState !== "playing" &&
             promptDraft === null &&
             !chatEditing &&
             !generateEnhancement.isPending &&
             "[&_*]:![animation-play-state:paused] [&_*]:!transition-none",
         )}
+        style={layout ? { height: layout.regionHeight } : undefined}
       >
-        {chatEditing ||
-        tourStepKey === "chat-toggle" ||
-        tourStepKey === "chat-message" ? (
-          <ReplayChatEditPane
-            transcript={recording.originalTranscript}
-            enhancement={recording.enhancement ?? null}
-            chat={chatEdits}
-            saving={editor.isSaving}
-            promptEditor={promptEditor}
-            responseEditor={responseEditor}
-            // The tour's message stop demonstrates the original-chat view;
-            // display-only, the stored toggle state is untouched.
-            forceEnhancementOff={tourStepKey === "chat-message"}
-            highlightFirstMessage={tourStepKey === "chat-message"}
-            onToggleEnhancement={toggleEnhancementDisabled}
-            onRemove={removeChatMessage}
-            onRestore={restoreChatMessage}
-            onDone={() => setChatEditing(false)}
-          />
-        ) : (
-          <ReplayChatPane
-            transcript={transcript}
-            clockMs={displayClock}
-            durationMs={duration}
-            paused={playState !== "playing"}
-            filming={filming}
-            pending={pending}
-            promptEditor={promptEditor}
-            showEditHint={tourStepKey === "chat"}
-            // Idle at the very start, or spotlighted by the tour: show the
-            // finished conversation rather than an empty pane that says
-            // nothing about the recording. Never while filming — that is
-            // paused at every frame, so the first frame would open on the
-            // whole finished chat before the second one snapped back to the
-            // timed reveal and began building it up again.
-            preview={
-              !filming &&
-              ((playState !== "playing" && displayClock <= 0) ||
-                tourStepKey === "chat")
-            }
-            onEnterEdit={() => {
-              setChatEditing(true);
-              setPlayState((state) => (state === "playing" ? "paused" : state));
-            }}
-          />
-        )}
+        {/* The chat replays as a format card of its own — the canonical
+            recording aspect, the same shape the app card takes for a
+            locked-aspect session — so the player reads as two matched cards
+            whatever screen it opens on. */}
+        <div
+          className={cn("flex min-h-0", layout ? "shrink-0" : "min-w-0 flex-1")}
+          style={layout ? { width: layout.chatWidth } : undefined}
+        >
+          {chatEditing ||
+          tourStepKey === "chat-toggle" ||
+          tourStepKey === "chat-message" ? (
+            <ReplayChatEditPane
+              transcript={recording.originalTranscript}
+              enhancement={recording.enhancement ?? null}
+              chat={chatEdits}
+              saving={editor.isSaving}
+              promptEditor={promptEditor}
+              responseEditor={responseEditor}
+              // The tour's message stop demonstrates the original-chat view;
+              // display-only, the stored toggle state is untouched.
+              forceEnhancementOff={tourStepKey === "chat-message"}
+              highlightFirstMessage={tourStepKey === "chat-message"}
+              onToggleEnhancement={toggleEnhancementDisabled}
+              onRemove={removeChatMessage}
+              onRestore={restoreChatMessage}
+              onDone={() => setChatEditing(false)}
+            />
+          ) : (
+            <ReplayChatPane
+              transcript={transcript}
+              clockMs={displayClock}
+              durationMs={duration}
+              paused={playState !== "playing"}
+              filming={filming}
+              pending={pending}
+              promptEditor={promptEditor}
+              showEditHint={tourStepKey === "chat"}
+              // Idle at the very start, or spotlighted by the tour: show the
+              // finished conversation rather than an empty pane that says
+              // nothing about the recording. Never while filming — that is
+              // paused at every frame, so the first frame would open on the
+              // whole finished chat before the second one snapped back to the
+              // timed reveal and began building it up again.
+              preview={
+                !filming &&
+                ((playState !== "playing" && displayClock <= 0) ||
+                  tourStepKey === "chat")
+              }
+              onEnterEdit={() => {
+                setChatEditing(true);
+                setPlayState((state) =>
+                  state === "playing" ? "paused" : state,
+                );
+              }}
+            />
+          )}
+        </div>
         {/* The app view shares the dialog's single top bar (app icon + name);
             the only per-app chrome is the running-tool chip, floated over the
             stage so it doesn't reintroduce a second header. */}
+        {/* The app card takes the RECORDED shape (clamped to sane bounds —
+            see replayRegionLayout): a session recorded at the canonical
+            locked aspect fills its stage exactly, one uniform scale, no
+            margins, and sits as the chat card's twin; an off-shape recording
+            gets a sane card whose stage contain-fits it with neutral
+            margins. */}
         <div
-          className="relative flex min-w-0 flex-[55_1_0%] select-none flex-col bg-muted/20"
+          className={cn(
+            "relative flex select-none flex-col bg-muted/20",
+            layout ? "shrink-0" : "min-w-0 flex-1",
+          )}
+          style={layout ? { width: layout.appWidth } : undefined}
           data-tour="stage"
         >
           {activity && (
@@ -1839,7 +2302,23 @@ function PlayerSurface({
                     el.setAttribute("inert", "");
                   }
                 }}
-                onConnected={() => setFrameReady(true)}
+                // Readiness comes from the SDK's own announcement (relayed on
+                // the recording-event channel), NOT from the bridge connect:
+                // connect can resolve against a transient document while the
+                // sandbox settles, and paints delivered then die with it.
+                onRecordingEvents={(data) => {
+                  if ((data as { replayReady?: boolean } | null)?.replayReady) {
+                    armReplayFrame();
+                  }
+                }}
+                // Fallback for a stale cached SDK that predates the
+                // announcement: after a beat, treat connect as ready.
+                onConnected={() => {
+                  if (legacyReadyTimerRef.current) return;
+                  legacyReadyTimerRef.current = setTimeout(() => {
+                    if (!frameReadyRef.current) armReplayFrame();
+                  }, 1500);
+                }}
               />
             ) : null}
           </ReplayAppStage>
@@ -1858,7 +2337,19 @@ function PlayerSurface({
             standard border token draws a light hairline straight across the
             replayed app and reads as a stray white line around it. The strip's
             own filled bar already separates the transport from the stage. */}
-        <div className="flex shrink-0 items-end gap-3 px-4 py-2.5">
+        {/* `w-0 min-w-full`: span the shrink-wrapped dialog without
+            contributing intrinsic width — the render region alone sets it. */}
+        {/* Filming: invisible, not gone. The offline renderer composites the
+            whole viewport and skips frames without damage, so the transport's
+            per-seek ticks (readout, playhead pin) would mark every frame as
+            changed and defeat that. Visibility keeps the layout — the render
+            region must not move — while a hidden repaint is no damage. */}
+        <div
+          className={cn(
+            "flex w-0 min-w-full shrink-0 items-end gap-3 px-4 py-2.5",
+            filming && "invisible",
+          )}
+        >
           {(() => {
             const playButton = (
               <Button
@@ -1893,6 +2384,58 @@ function PlayerSurface({
               playButton
             );
           })()}
+          {/* Mute toggle — only when the recording captured sound. If this
+              browser cannot prepare or output it, keep video playback enabled
+              while showing an explicit, disabled silent state. */}
+          {hasAudio &&
+            (() => {
+              const audioReady = audioStatus.status === "ready";
+              const audioMuted = muted || !audioReady;
+              const label =
+                audioStatus.status === "loading"
+                  ? "Preparing audio"
+                  : audioStatus.status === "unsupported"
+                    ? "This browser can't play the recording's audio — video will play silently"
+                    : audioStatus.status === "failed"
+                      ? "Audio unavailable — video will play silently"
+                      : muted
+                        ? "Unmute"
+                        : "Mute";
+              const button = (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="-mb-0.5 size-9 rounded-md text-muted-foreground hover:text-foreground"
+                  aria-label={label}
+                  aria-pressed={audioMuted}
+                  disabled={!audioReady}
+                  onClick={() => setMuted((value) => !value)}
+                >
+                  {audioStatus.status === "loading" ? (
+                    <Loader size={16} />
+                  ) : audioMuted ? (
+                    <VolumeX className="h-4 w-4" />
+                  ) : (
+                    <Volume2 className="h-4 w-4" />
+                  )}
+                </Button>
+              );
+              return (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {audioReady ? (
+                      button
+                    ) : (
+                      <span className="-mb-0.5 inline-flex">{button}</span>
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-64 text-xs">
+                    {label}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })()}
           {/* No fixed-width reserve: tabular-nums keeps the readout stable,
               and a sized box would pad one side and break the row's even
               gap rhythm. */}
@@ -1915,11 +2458,14 @@ function PlayerSurface({
                     ? "resize"
                     : null
             }
+            exportLimit={exportLimitBaseMs}
             onSeek={seekBase}
+            onScrub={scrubBase}
             onCut={cutBaseRange}
             onResize={resizeCutBase}
             onRestore={restoreCut}
             onTrim={trimBase}
+            onTrimToLimit={trimToExportLimit}
           />
         </div>
       </TooltipProvider>
@@ -2294,6 +2840,61 @@ export function classifyCut(
   return "mid";
 }
 
+/**
+ * One-click "trim to the export limit": the cut list that keeps the CURRENT
+ * edit — mid cuts, head trim and all — and shortens it from the END of the
+ * edited playback until it runs exactly `limitMs`. Null when the cut already
+ * fits (nothing to do) or the recording is degenerate.
+ *
+ * The boundary is found by verification, never a single mapping pass: cut
+ * edges land on whole raw milliseconds, and the limit instant can fall
+ * inside an idle-compressed gap, where a mapped-and-rounded edge re-expands
+ * to MORE playback than the limit — and a cut even one millisecond over
+ * still displays as "30s" while the export refuses it. Duration grows
+ * monotonically with the trim boundary, so the largest fitting boundary is
+ * found by bisection, each candidate proven by rebuilding the playback it
+ * would produce.
+ */
+export function trimCutsToExportLimit(
+  recording: PlaybackRecording,
+  limitMs: number,
+): { fromMs: number; toMs: number }[] | null {
+  const playback = buildPlayback(recording);
+  if (playback.duration <= limitMs) return null;
+  const base = buildPlayback(uncutRecording(recording));
+  const rawStart = Math.round(base.toRawMs(0));
+  const rawEnd = Math.round(base.toRawMs(Math.max(base.duration, 1)));
+  const cuts = recording.edits?.cuts ?? [];
+  const trial = (fromMs: number) => {
+    // Existing end trims are replaced by the new one, and mid cuts swallowed
+    // whole by it are dropped — the same rule the end bracket's drag applies,
+    // so the stored list stays clean.
+    const kept = cuts.filter((cut) => {
+      const kind = classifyCut(cut, rawStart, rawEnd);
+      return kind !== "end" && !(kind === "mid" && cut.fromMs >= fromMs);
+    });
+    const next = [...kept, { fromMs, toMs: rawEnd }];
+    const duration = buildPlayback({
+      ...recording,
+      edits: { ...recording.edits, cuts: next },
+    }).duration;
+    return { next, fits: duration <= limitMs };
+  };
+  // The natural candidate: the raw instant currently playing at the limit.
+  let hi = Math.round(playback.toRawMs(limitMs));
+  if (hi - rawStart < 1 || rawEnd - hi < 1) return null;
+  const first = trial(hi);
+  if (first.fits) return first.next;
+  let lo = rawStart + 1; // a whole-session trim always fits
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (trial(mid).fits) lo = mid;
+    else hi = mid;
+  }
+  const best = trial(lo);
+  return best.fits ? best.next : null;
+}
+
 type TimelineDrag =
   | {
       kind: "select";
@@ -2301,6 +2902,7 @@ type TimelineDrag =
       anchorClientX: number;
       anchorTime: number;
       currentMs: number;
+      currentClientX: number;
     }
   | {
       kind: "resize";
@@ -2309,6 +2911,7 @@ type TimelineDrag =
       anchorClientX: number;
       anchorMs: number;
       currentMs: number;
+      currentClientX: number;
     }
   | {
       kind: "trim";
@@ -2316,6 +2919,7 @@ type TimelineDrag =
       anchorClientX: number;
       anchorMs: number;
       currentMs: number;
+      currentClientX: number;
     };
 
 /**
@@ -2335,13 +2939,16 @@ function ReplayTimeline({
   playheadMs,
   contentStartMs,
   saving,
+  exportLimit,
   onSeek,
+  onScrub,
   demo,
   onEditingChange,
   onCut,
   onResize,
   onRestore,
   onTrim,
+  onTrimToLimit,
 }: {
   durationMs: number;
   /** Existing cuts in full-timeline ms, in stored order, pre-classified. */
@@ -2355,9 +2962,16 @@ function ReplayTimeline({
   /** Tour demo: illustrate one timeline gesture over the strip. Illustration
    * only — non-interactive, and no edit state is touched. */
   demo?: TimelineTourGesture | null;
+  /** Where played time crosses the export cap on this strip — the clickable
+   * "trim to the limit" mark; null while the cut already fits. */
+  exportLimit: number | null;
   /** Editing anything pauses the replay and locks the play controls. */
   onEditingChange?: (editing: boolean) => void;
   onSeek: (ms: number) => void;
+  /** Live scrub while a selection is drawn: the replay follows the cursor. */
+  onScrub: (ms: number) => void;
+  /** One click cuts the edit down to exactly the export limit. */
+  onTrimToLimit: () => void;
   onCut: (range: { fromMs: number; toMs: number }) => void;
   onResize: (index: number, range: { fromMs: number; toMs: number }) => void;
   onRestore: (index: number) => void;
@@ -2372,6 +2986,11 @@ function ReplayTimeline({
   // Where a click would land playback: tracks the cursor over the strip and
   // the ruler band, rendered as the playhead's quiet grey twin.
   const [hoverMs, setHoverMs] = useState<number | null>(null);
+  // Whether the current select-drag has crossed the click threshold and become
+  // a scrubbing selection. Latched for the rest of the drag: a cursor that
+  // doubles back over its own anchor keeps scrubbing rather than going quiet
+  // inside the click-sized dead zone.
+  const scrubLatchedRef = useRef(false);
 
   // Committing an edit re-times the timeline; a stale selection would point at
   // the wrong stretch, so any change to the cut list clears it.
@@ -2381,9 +3000,18 @@ function ReplayTimeline({
     setDrag(null);
   }, [cuts]);
 
+  // A press alone is not yet an edit: it may resolve to a click-seek, which
+  // must leave a running replay running (pausing it here would strand playback
+  // at the clicked point, never resuming). So a drag owns the moment only once
+  // it has travelled past the click threshold into a genuine selection, resize
+  // or trim — the same line the release handler draws between seek and select.
+  // A committed selection (its Cut/Dismiss prompt showing) always counts.
+  const dragEditing =
+    drag !== null &&
+    Math.abs(drag.currentClientX - drag.anchorClientX) >= CLICK_DRAG_PX;
   useEffect(() => {
-    onEditingChange?.(selection !== null || drag !== null);
-  }, [selection, drag, onEditingChange]);
+    onEditingChange?.(selection !== null || dragEditing);
+  }, [selection, dragEditing, onEditingChange]);
 
   const msAtClientX = (clientX: number): number => {
     const rect = trackRef.current?.getBoundingClientRect();
@@ -2462,6 +3090,7 @@ function ReplayTimeline({
         anchorClientX: event.clientX,
         anchorMs,
         currentMs: anchorMs,
+        currentClientX: event.clientX,
       });
     };
 
@@ -2478,6 +3107,7 @@ function ReplayTimeline({
         anchorClientX: event.clientX,
         anchorMs,
         currentMs: anchorMs,
+        currentClientX: event.clientX,
       });
     };
 
@@ -2486,12 +3116,14 @@ function ReplayTimeline({
     trackRef.current?.setPointerCapture(event.pointerId);
     const at = msAtClientX(event.clientX);
     setSelection(null);
+    scrubLatchedRef.current = false;
     setDrag({
       kind: "select",
       anchorMs: at,
       anchorClientX: event.clientX,
       anchorTime: performance.now(),
       currentMs: at,
+      currentClientX: event.clientX,
     });
   };
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -2504,9 +3136,21 @@ function ReplayTimeline({
       drag.kind === "select"
         ? at
         : drag.anchorMs + (at - msAtClientX(drag.anchorClientX));
-    setDrag({ ...drag, currentMs });
+    setDrag({ ...drag, currentMs, currentClientX: event.clientX });
+    // A selection drag scrubs as it draws: past the click threshold the
+    // replay follows the cursor point for point, forward and back.
+    if (drag.kind === "select") {
+      if (
+        scrubLatchedRef.current ||
+        Math.abs(event.clientX - drag.anchorClientX) >= CLICK_DRAG_PX
+      ) {
+        scrubLatchedRef.current = true;
+        onScrub(at);
+      }
+    }
   };
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    scrubLatchedRef.current = false;
     if (!drag) return;
     if (trackRef.current?.hasPointerCapture(event.pointerId)) {
       trackRef.current.releasePointerCapture(event.pointerId);
@@ -2832,6 +3476,41 @@ function ReplayTimeline({
           <div className="h-0 w-0 border-x-[5px] border-t-[6px] border-x-transparent border-t-destructive" />
           <div className="w-0.5 flex-1 rounded-full bg-destructive/90" />
         </div>
+        {/* Export-limit mark: where played time crosses the allowed length —
+            everything right of it is what the video export and the gallery
+            refuse to take. One click trims the edit down to exactly this
+            point (the same end trim the bracket drag makes, one undoable
+            step). The mark's position is played time mapped onto the full
+            strip, so it moves as cuts change — on COMMITTED cuts only, so it
+            holds still through a drag (blinking out mid-gesture uncovered
+            the ruler's own 0:30 label underneath and read as a glitch).
+            Deliberately QUIET: a badge in the ruler band only — muted until
+            hovered, no line through the strip (that would read as a second
+            playhead), and no hit area over the strip itself, where an end
+            bracket dragged to ~30s must stay grabbable. */}
+        {exportLimit !== null && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Trim to the maximum allowed length"
+                className="group absolute top-0 z-30 flex h-2.5 -translate-x-1/2 cursor-pointer items-center"
+                style={{ left: leftPct(exportLimit) }}
+                disabled={saving}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={onTrimToLimit}
+              >
+                <span className="flex h-4 items-center gap-0.5 rounded-full border bg-background px-1 font-medium text-[10px] text-muted-foreground shadow-sm transition-colors group-hover:border-destructive/50 group-hover:text-destructive">
+                  <Scissors className="size-2.5" />
+                  {MAX_EXPORT_SECONDS}s
+                </span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="text-xs">
+              Trim to the max allowed length ({MAX_EXPORT_SECONDS}s)
+            </TooltipContent>
+          </Tooltip>
+        )}
         {demo && <TimelineTourSamples gesture={demo} />}
       </div>
     </>
@@ -3169,7 +3848,7 @@ function ReplayChatPane({
   return (
     <div
       className={cn(
-        "group/pane relative isolate flex min-h-0 min-w-0 flex-[45_1_0%] flex-col border-r bg-background select-none [&_*]:pointer-events-none",
+        "group/pane relative isolate flex min-h-0 min-w-0 flex-1 flex-col border-r bg-background select-none [&_*]:pointer-events-none",
         // A message caught mid-reveal must freeze with the rest of the replay:
         // its stream is clock-driven and stops on its own, but the CSS enter
         // animations and pulses around it would otherwise play on. Never while
@@ -3317,7 +3996,7 @@ function ReplayChatEditPane({
   return (
     <TooltipProvider delayDuration={300}>
       <div
-        className="flex min-h-0 min-w-0 flex-[45_1_0%] flex-col border-r bg-background"
+        className="flex min-h-0 min-w-0 flex-1 flex-col border-r bg-background"
         data-tour="chat"
       >
         <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
@@ -3990,19 +4669,18 @@ function ReplayToolPill({
 }
 
 /**
- * Fills the stage with the app, no letterbox margins, while keeping captured
- * pointer coordinates valid. The frame's layout WIDTH is locked to the
- * recorded viewport — width drives an app's reflow, so recorded x/y positions
- * only hold at the recorded width — and the whole frame is uniformly scaled
- * so that width exactly fills the stage. The frame's layout HEIGHT is then
- * whatever fills the stage's remaining aspect at that scale: an app's content
- * flows vertically, so a taller-or-shorter viewport shows more or less of the
- * page below the recorded fold without moving anything within it (and each
- * replayed event's target anchor lets the SDK self-correct any app that does
- * lay out against viewport height). The CSS transform is purely visual and
- * never touches the frame's coordinate space. A transparent overlay makes the
- * frame read-only — real clicks, scrolls, and keystrokes never reach the app,
- * which responds only to the replayed events.
+ * Shows the app exactly as it was recorded. The frame is laid out at the
+ * recorded viewport in BOTH dimensions and uniformly scaled to fit the stage,
+ * centered — so recorded x/y positions hold (width drives an app's reflow,
+ * height drives a viewport-sized canvas), and a WebGL scene or game keeps its
+ * recorded shape instead of stretching to the stage's. A recording made at the
+ * canonical locked aspect (APP_RECORDING_VIEWPORT_ASPECT — the side panel's
+ * shape while recording) fills the stage edge to edge, because the stage
+ * column takes the recorded shape too; any other recording sits centered with
+ * the surface's own background as the margin. The CSS transform is purely
+ * visual and never touches the frame's coordinate space. A transparent overlay
+ * makes the frame read-only — real clicks, scrolls, and keystrokes never reach
+ * the app, which responds only to the replayed events.
  */
 function ReplayAppStage({
   viewport,
@@ -4012,7 +4690,8 @@ function ReplayAppStage({
   children: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState({ scale: 1, height: viewport.height });
+  const [fit, setFit] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
+  const { width: recordedWidth, height: recordedHeight } = viewport;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -4024,33 +4703,33 @@ function ReplayAppStage({
       // short, and no ResizeObserver callback would ever correct it — the
       // layout size never changes, only the transform — leaving the app
       // letterboxed inside the stage for the rest of the session.
-      const width = el.clientWidth;
-      const height = el.clientHeight;
-      if (width <= 0 || height <= 0) return;
-      const scale = width / viewport.width;
-      setFit({ scale, height: height / scale });
+      const next = replayStageFit({
+        stageWidth: el.clientWidth,
+        stageHeight: el.clientHeight,
+        viewport: { width: recordedWidth, height: recordedHeight },
+      });
+      if (next) setFit(next);
     };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [viewport.width]);
+  }, [recordedWidth, recordedHeight]);
 
   return (
     <div
       ref={containerRef}
-      // The scaled app is anchored top-left, so whatever the fit leaves over
-      // sits along the right and bottom edges. A tinted letterbox reads there
-      // as a stray light border around the app rather than as empty stage, so
-      // the leftover is the surface's own background.
+      // The margins the fit leaves are the surface's own background: a tinted
+      // letterbox would read as a stray border around the app rather than as
+      // empty stage.
       className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
     >
       <div
         className="absolute left-0 top-0 origin-top-left [&>div]:!h-full [&>div]:!w-full [&_iframe]:!h-full [&_iframe]:!max-h-none [&_iframe]:!min-h-0 [&_iframe]:!w-full"
         style={{
-          width: viewport.width,
-          height: fit.height,
-          transform: `scale(${fit.scale})`,
+          width: recordedWidth,
+          height: recordedHeight,
+          transform: `translate(${fit.offsetX}px, ${fit.offsetY}px) scale(${fit.scale})`,
         }}
       >
         {children}
@@ -4312,6 +4991,69 @@ export function buildPlayback(recording: PlaybackRecording): {
 }
 
 /**
+ * Reduce one applied range's frame paints to what actually needs decoding.
+ *
+ * Stills coalesce to the newest per canvas — every earlier frame would be
+ * decoded only for the replay's paint-order guard to discard it. An encoded
+ * video stream can't coalesce that way (a delta chunk is meaningless without
+ * its predecessors), so it follows decoder semantics instead: a range that
+ * crossed the stream's config event is a stream (re)build — post the config,
+ * then only from the last keyframe in the range, since everything before it
+ * decodes to pixels a later frame fully replaces. A range with no config is a
+ * mid-stream continuation whose decoder holds state — every chunk passes
+ * through in order.
+ *
+ * A rebuilt stream's feed ends with a synthetic `video-flush` marker. The
+ * burst is fed to a FRESH decoder and then stops, and a decoder may hold
+ * decoded frames until more input or a flush arrives — verified live: without
+ * the flush a backward seek painted nothing, the canvas simply stayed black.
+ * A continuation never flushes: flushing mid-stream would reimpose the
+ * decoder's key-chunk requirement and stall playback until the next keyframe.
+ *
+ * @public — exported for testability
+ */
+export type PaintDispatch =
+  | TimelineEvent
+  | { kind: "video-flush"; sel: string };
+export function planPaintFlush(paints: TimelineEvent[]): PaintDispatch[] {
+  const stills = new Map<string, TimelineEvent>();
+  const streams = new Map<
+    string,
+    { config: TimelineEvent | null; chunks: TimelineEvent[]; rebuilt: boolean }
+  >();
+  for (const event of paints) {
+    if (event.kind === "canvas") {
+      stills.set(event.sel, event);
+      continue;
+    }
+    if (event.kind !== "video-config" && event.kind !== "video-chunk") continue;
+    let stream = streams.get(event.sel);
+    if (!stream) {
+      stream = { config: null, chunks: [], rebuilt: false };
+      streams.set(event.sel, stream);
+    }
+    if (event.kind === "video-config") {
+      stream.config = event;
+      stream.chunks = [];
+      stream.rebuilt = true;
+    } else if (stream.rebuilt && event.type === "key") {
+      stream.chunks = [event];
+    } else {
+      stream.chunks.push(event);
+    }
+  }
+  const flush: PaintDispatch[] = [...stills.values()];
+  for (const [sel, stream] of streams) {
+    if (stream.config) flush.push(stream.config);
+    flush.push(...stream.chunks);
+    if (stream.rebuilt && stream.chunks.length > 0) {
+      flush.push({ kind: "video-flush", sel });
+    }
+  }
+  return flush;
+}
+
+/**
  * The recording the uncut timeline strip measures: this session with its cuts
  * removed and nothing else touched.
  *
@@ -4471,35 +5213,84 @@ export function partEditId(messageId: string, partIndex: number): string {
 }
 
 /**
- * Size the dialog from the screen alone — the recorded app's dimensions never
- * influence the player's size or aspect, so every recording (inline, side
- * panel, any surface) opens in the same, predictable player. Recomputed on
- * window resize; returns null only during SSR (the dialog opens client-side).
+ * The render region's geometry: two FORMAT CARDS cut from one cloth — the
+ * chat card at the canonical recording aspect, the app card at the
+ * recording's own (clamped) aspect — with the region height anchored to the
+ * screen. The dialog shell shrink-wraps this region plus its chrome, so the
+ * player's shape follows the recording, never the viewer's screen width or
+ * the width the user happens to have dragged their side panel to: a session
+ * recorded at the locked aspect opens as two matching cards on any machine,
+ * and the exported video keeps that shape too. When the natural width would
+ * overflow a narrow screen, the whole region scales down uniformly, so the
+ * cards keep their aspects.
+ *
+ * @public — exported for testability
  */
-function usePlayerDialogSize() {
-  const [size, setSize] = useState(() => measureDialog());
+export function replayRegionLayout({
+  screenWidth,
+  screenHeight,
+  viewport,
+}: {
+  screenWidth: number;
+  screenHeight: number;
+  viewport: { width: number; height: number };
+}): { regionHeight: number; chatWidth: number; appWidth: number } {
+  const naturalHeight = Math.max(
+    REGION_MIN_HEIGHT,
+    Math.min(
+      Math.round(screenHeight * 0.82) - REGION_CHROME_PX,
+      REGION_MAX_HEIGHT,
+    ),
+  );
+  const recordedAspect =
+    viewport.width > 0 && viewport.height > 0
+      ? viewport.width / viewport.height
+      : APP_RECORDING_VIEWPORT_ASPECT;
+  const appAspect = Math.min(
+    STAGE_ASPECT_MAX,
+    Math.max(STAGE_ASPECT_MIN, recordedAspect),
+  );
+  const naturalWidth =
+    naturalHeight * (APP_RECORDING_VIEWPORT_ASPECT + appAspect);
+  const scale = Math.min(1, (screenWidth * 0.94) / naturalWidth);
+  const regionHeight = Math.round(naturalHeight * scale);
+  return {
+    regionHeight,
+    chatWidth: Math.round(regionHeight * APP_RECORDING_VIEWPORT_ASPECT),
+    appWidth: Math.round(regionHeight * appAspect),
+  };
+}
+
+/**
+ * {@link replayRegionLayout} against the live window, recomputed on resize.
+ * Null only during SSR — the dialog opens client-side, so every real render
+ * has a layout from the first frame.
+ */
+function useReplayRegionLayout(viewport: { width: number; height: number }) {
+  const [screen, setScreen] = useState(() =>
+    typeof window === "undefined"
+      ? null
+      : { width: window.innerWidth, height: window.innerHeight },
+  );
   useEffect(() => {
-    const onResize = () => setSize(measureDialog());
+    const onResize = () =>
+      setScreen({ width: window.innerWidth, height: window.innerHeight });
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
-  return size;
-}
-
-/**
- * The player's size is a property of the SCREEN and nothing else — not the
- * recorded app's viewport, and not the width the user happens to have dragged
- * their side panel to. Deriving it from the panel made the same app replay in a
- * different-sized player depending on how the session was recorded. The app
- * column instead scales the recorded viewport to fit whatever width it gets.
- */
-function measureDialog() {
-  if (typeof window === "undefined") return null;
-  return {
-    width: Math.round(Math.min(window.innerWidth * 0.66, MAX_DIALOG_WIDTH)),
-    height: Math.round(Math.min(window.innerHeight * 0.82, MAX_DIALOG_HEIGHT)),
-  };
+  const { width: recordedWidth, height: recordedHeight } = viewport;
+  return useMemo(
+    () =>
+      screen
+        ? replayRegionLayout({
+            screenWidth: screen.width,
+            screenHeight: screen.height,
+            viewport: { width: recordedWidth, height: recordedHeight },
+          })
+        : null,
+    [screen, recordedWidth, recordedHeight],
+  );
 }
 
 /**
@@ -4589,13 +5380,32 @@ function takeRecordedToolResult(
 const DEFAULT_VIEWPORT = { width: 800, height: 600 };
 
 /**
- * The recording's representative viewport: the recorded size that was on screen
- * for the longest total time. An app card that mounts collapsed and then grows
- * to its content height emits a transient first viewport followed by the
- * settled one — sizing to the first would give the frame the wrong shape, so we
- * pick the size the app actually spent the demo at (ties break to larger area).
+ * The recording's representative viewport: the recorded size the app was being
+ * INTERACTED with at, not merely the size left on screen the longest.
+ *
+ * A recording routinely spans more than one size. The app card sits narrow and
+ * inline through a long build conversation, then opens wide in the side panel
+ * for the part being shown off; an app card that mounts collapsed emits a
+ * transient first size before it settles to its content height. Sizing to
+ * whichever size accrued the most wall-clock time picks the idle one — the
+ * minutes an app spends parked at a narrow width while the user types outweigh
+ * the seconds of actual use — so the replay would lay the app out narrower than
+ * it was ever really used, and any width-driven layout breaks (a game's start
+ * overlay that a small screen refuses to dismiss stays up over the whole replay,
+ * hiding the recorded session behind it). The player can't run the app to work
+ * around its own responsive quirks, so it must give the app back the viewport it
+ * was recorded at.
+ *
+ * So each distinct size is weighted by the pointer/keyboard/scroll/input events
+ * that landed while it was on screen — the moments the user was actually driving
+ * the app — and the most-used size wins. Ties, and recordings with no user
+ * interaction at all, fall back to longest-on-screen time and then to the larger
+ * area (the transient collapsed-mount size carries neither the interaction nor
+ * the dwell time, so it loses either way).
+ *
+ * @public — exported for testability
  */
-function dominantViewport(events: TimelineEvent[]) {
+export function dominantViewport(events: TimelineEvent[]) {
   const viewports = events.filter(
     (event): event is Extract<TimelineEvent, { kind: "viewport" }> =>
       event.kind === "viewport",
@@ -4603,28 +5413,96 @@ function dominantViewport(events: TimelineEvent[]) {
   if (viewports.length === 0) return DEFAULT_VIEWPORT;
   const endT = events.reduce((max, event) => Math.max(max, event.t), 0);
   const sorted = [...viewports].sort((a, b) => a.t - b.t);
+  const sizeKey = (size: { width: number; height: number }) =>
+    `${size.width}x${size.height}`;
+
+  // Per distinct size: the wall-clock time it was on screen, and how many
+  // user-driven events landed during it.
   const bySize = new Map<
     string,
-    { width: number; height: number; ms: number }
+    { width: number; height: number; ms: number; hits: number }
   >();
   for (let i = 0; i < sorted.length; i++) {
     const current = sorted[i];
     const until = i + 1 < sorted.length ? sorted[i + 1].t : endT;
-    const key = `${current.width}x${current.height}`;
+    const key = sizeKey(current);
     const entry = bySize.get(key) ?? {
       width: current.width,
       height: current.height,
       ms: 0,
+      hits: 0,
     };
     entry.ms += Math.max(0, until - current.t);
     bySize.set(key, entry);
   }
-  let best = { width: sorted[0].width, height: sorted[0].height, ms: -1 };
+
+  // Attribute each user-driven event to the size that was on screen at its time
+  // (the last viewport at or before it; the first for anything earlier).
+  for (const event of events) {
+    if (
+      event.kind !== "pointer" &&
+      event.kind !== "key" &&
+      event.kind !== "input" &&
+      event.kind !== "scroll"
+    )
+      continue;
+    let active = sorted[0];
+    for (const viewport of sorted) {
+      if (viewport.t <= event.t) active = viewport;
+      else break;
+    }
+    const entry = bySize.get(sizeKey(active));
+    if (entry) entry.hits++;
+  }
+
+  // Rank by interaction, then dwell time, then area. With no interaction
+  // anywhere every `hits` is 0, so this reduces to the longest-on-screen
+  // fallback.
+  let best = [...bySize.values()][0];
   for (const entry of bySize.values()) {
-    const larger = entry.width * entry.height > best.width * best.height;
-    if (entry.ms > best.ms || (entry.ms === best.ms && larger)) best = entry;
+    const beats =
+      entry.hits !== best.hits
+        ? entry.hits > best.hits
+        : entry.ms !== best.ms
+          ? entry.ms > best.ms
+          : entry.width * entry.height > best.width * best.height;
+    if (beats) best = entry;
   }
   return { width: best.width, height: best.height };
+}
+
+/**
+ * Uniform contain-fit of the recorded viewport inside the stage: one scale
+ * for both dimensions — the smaller of the two ratios, so nothing is cropped
+ * and nothing is stretched — and the offsets that center the scaled frame,
+ * splitting the leftover evenly on whichever axis the shapes disagree.
+ * A stage shaped exactly like the recording (the canonical locked-aspect
+ * case) fits with zero offsets and fills edge to edge. Null while either box
+ * has no size yet (mid-mount, display:none), so the caller keeps its previous
+ * fit instead of collapsing to nothing.
+ *
+ * @public — exported for testability
+ */
+export function replayStageFit({
+  stageWidth,
+  stageHeight,
+  viewport,
+}: {
+  stageWidth: number;
+  stageHeight: number;
+  viewport: { width: number; height: number };
+}): { scale: number; offsetX: number; offsetY: number } | null {
+  if (stageWidth <= 0 || stageHeight <= 0) return null;
+  if (viewport.width <= 0 || viewport.height <= 0) return null;
+  const scale = Math.min(
+    stageWidth / viewport.width,
+    stageHeight / viewport.height,
+  );
+  return {
+    scale,
+    offsetX: (stageWidth - viewport.width * scale) / 2,
+    offsetY: (stageHeight - viewport.height * scale) / 2,
+  };
 }
 
 function stableStringify(value: unknown): string {
@@ -4668,20 +5546,29 @@ const MAX_EXPORT_SECONDS = Math.round(APP_RECORDING_MAX_EXPORT_MS / 1000);
 export function neutralizeAppScripts(html: string): string {
   return (
     REPLAY_CHROME_CSS +
-    html.replace(/<script\b([^>]*)>/gi, (tag: string, attrs: string) =>
-      /data-archestra-app-(sdk|bootstrap)/i.test(attrs)
-        ? tag
-        : `<script${attrs} type="application/archestra-replayed-script">`,
-    )
+    html.replace(/<script\b([^>]*)>/gi, (tag: string, attrs: string) => {
+      if (/data-archestra-app-(sdk|bootstrap)/i.test(attrs)) return tag;
+      // Any `type` the app set must be REMOVED, not merely followed by the
+      // replay type: the HTML parser drops duplicate attributes and keeps the
+      // FIRST, so `<script type="module" type="application/…">` still parses
+      // as a module — and executes. That is how a module-based app re-ran
+      // itself inside its own replay, rolling fresh Math.random state and
+      // repainting its canvas over the recorded frames.
+      const rest = attrs.replace(
+        /\stype(\s*=\s*("[^"]*"|'[^']*'|[^\s]*))?(?=\s|$)/gi,
+        "",
+      );
+      return `<script${rest} type="application/archestra-replayed-script">`;
+    })
   );
 }
 
 /**
  * Hide the replayed app's scrollbars.
  *
- * The stage gives the app its recorded WIDTH and whatever height the window
- * leaves, so on a shorter window the recorded content overflows and the app
- * draws scrollbars — in the browser's default light scheme, which against a
+ * The stage lays the app out at its exact recorded viewport, so scrollbars
+ * appear only when the app's own content overflowed that viewport during the
+ * session — and then in the browser's default light scheme, which against a
  * dark app reads as light strips down the right and along the bottom. They
  * also mean nothing here: a replay is a playback surface, scrolling is driven
  * by the recorded scroll events, and a pointer shield already stops the viewer
@@ -4770,6 +5657,14 @@ const playerTourSteps = (modKey: "Cmd" | "Ctrl") => [
     key: "download",
     title: "Video download",
     text: "Final cut with all your edits applied.",
+    note: `Keep your final cut under ${MAX_EXPORT_SECONDS} seconds.`,
+  },
+  // Absent (and skipped) on deployments that don't offer the gallery — the
+  // share button renders nothing there.
+  {
+    key: "share",
+    title: "Submit to Archestra for review!",
+    text: "Authorize Archestra to Create a Pull Request to Apps Hackathon repository on GitHub for you.\nFinal cut with all your edits applied.",
     note: `Keep your final cut under ${MAX_EXPORT_SECONDS} seconds.`,
   },
   {
@@ -4942,7 +5837,12 @@ function PlayerTour({
           left: spot.left - 4,
           width: spot.width + 8,
           height: spot.height + (step.padTop ?? 4) + 4,
-          boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.55)",
+          // 0.85, not the usual 0.5-ish scrim: the player is itself a dark
+          // surface over a dark app, so anything lighter barely reads and the
+          // spotlight doesn't pop. Matches the player dialog's own backdrop
+          // (`overlayClassName`), so during the tour the dialog interior and
+          // the page behind it dim as one surface.
+          boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.85)",
         }}
       />
       {/* The way out lives on the dimmed page itself, not in the bubble. */}
@@ -4959,9 +5859,10 @@ function PlayerTour({
         style={{ top: bubbleTop, left: bubbleLeft }}
       >
         <div className="text-sm font-medium">{step.title}</div>
-        {/* A stop whose spotlight speaks for itself carries no body text. */}
+        {/* A stop whose spotlight speaks for itself carries no body text.
+            pre-line: a stop's text may hold blank-line paragraph breaks. */}
         {step.text && (
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
             {step.text}
           </p>
         )}

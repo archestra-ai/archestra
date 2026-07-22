@@ -1,0 +1,97 @@
+{
+  "name": "apinetwork__piapi-mcp-server",
+  "display_name": "piapi-mcp-server",
+  "description": "A TypeScript implementation of a Model Context Protocol (MCP) server that integrates with PiAPI's API. PiAPI makes user able to generate media content with Midjourney/Flux/Kling/LumaLabs/Udio/Chrip/Trellis directly from Claude or any other MCP-compatible apps.",
+  "author": {
+    "name": "apinetwork"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {
+      "PIAPI_API_KEY": "${user_config.piapi_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "piapi_api_key": {
+      "type": "string",
+      "title": "PiAPI API Key",
+      "description": "Your API key for authentication with PiAPI. Get one at piapi.ai/workspace/key",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# piapi-mcp-server\n\n[![Website](https://img.shields.io/badge/Website-piapi.ai-blue?style=flat-square&logo=internet-explorer)](https://piapi.ai)\n[![Documentation](https://img.shields.io/badge/Documentation-docs-green?style=flat-square&logo=bookstack)](https://piapi.ai/docs)\n[![Discord](https://img.shields.io/badge/Discord-Join%20chat-7289da?style=flat-square&logo=discord)](https://discord.gg/qRRvcGa7Wb)\n\n[![smithery badge](https://smithery.ai/badge/piapi-mcp-server)](https://smithery.ai/server/piapi-mcp-server)\n\nA TypeScript implementation of a Model Context Protocol (MCP) server that integrates with PiAPI's API. PiAPI makes user able to generate media content with Midjourney/Flux/Kling/LumaLabs/Udio/Chrip/Trellis directly from Claude or any other MCP-compatible apps.\n\n<a href=\"https://glama.ai/mcp/servers/ywvke8xruo\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/ywvke8xruo/badge\" alt=\"PiAPI-Server MCP server\" /></a>\n\n## Features (more coming soon)\n\nNote: Time-consuming tools like video generation may not complete due to Claude's timeout limitations\n\n- [x] Base Image toolkit\n- [x] Base Video toolkit\n- [x] Flux Image generation from text/image prompt\n- [x] Hunyuan Video generation from text/image prompt\n- [x] Skyreels Video generation from image prompt\n- [x] Wan Video generation from text/image prompt\n- [x] MMAudio Music generation from video\n- [x] TTS Zero-Shot voice generation\n- [ ] Midjourney Image generation\n  - [x] imagine\n  - [ ] other\n- [x] Kling Video and Effects generation\n- [x] Luma Dream Machine video generation\n- [x] Suno Music generation\n- [ ] Suno Lyrics generation\n- [ ] Udio Music and Lyrics generation\n- [x] Trellis 3D model generation from image\n- [ ] Workflow planning inside LLMs\n\n## Working with Claude Desktop Example\n\n![image](./assets/Claude-desktop.png)\n\n## Prerequisites\n\n- Node.js 16.x or higher\n- npm or yarn\n- A PiAPI API key (get one at [piapi.ai](https://piapi.ai/workspace/key))\n\n## Installation\n\n### Installing via Smithery\n\nTo install PiAPI MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/piapi-mcp-server):\n\n```bash\nnpx -y @smithery/cli install piapi-mcp-server --client claude\n```\n\n### Manual Installation\n1. Clone the repository:\n\n```bash\ngit clone https://github.com/apinetwork/piapi-mcp-server\ncd piapi-mcp-server\n```\n\n2. Install dependencies:\n\n```bash\nnpm install\n```\n\n3. Build the project:\n\n```bash\nnpm run build\n```\n\nAfter building, a `dist/index.js` file will be generated. You can then configure this file with Claude Desktop and other applications. For detailed configuration instructions, please refer to the Usage section.\n\n4. (Optional) Test server with MCP Inspector:\n\nFirst, create a `.env` file in the project root directory with your API key:\n\n```bash\nPIAPI_API_KEY=your_api_key_here\n```\n\nThen run the following command to start the MCP Inspector:\n\n```bash\nnpm run inspect\n```\n\nAfter running the command, MCP Inspector will be available at http://localhost:5173 (default port: 5173). Open this URL in your browser to start testing. The default timeout for inspector operations is 10000ms (10 seconds), which may not be sufficient for image generation tasks. It's recommended to increase the timeout when testing image generation or other time-consuming operations. You can adjust the timeout by adding a timeout parameter to the URL, for example: http://localhost:5173?timeout=60000 (sets timeout to 60 seconds)\n\nThe MCP Inspector is a powerful development tool that helps you test and debug your MCP server implementation. Key features include:\n\n- **Interactive Testing**: Test your server's functions directly through a web interface\n- **Real-time Feedback**: See immediate results of your function calls and any errors that occur\n- **Request/Response Inspection**: View detailed information about requests and responses\n- **Function Documentation**: Browse available functions and their parameters\n- **Custom Parameters**: Set custom timeout values and other configuration options\n- **History Tracking**: Keep track of your previous function calls and their results\n\nFor detailed information about using the MCP Inspector and its features, visit the [official MCP documentation](https://modelcontextprotocol.io/docs/tools/inspector).\n\n## Usage\n\n### Connecting to Claude Desktop\n\nAdd this to your Claude Desktop configuration file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\\Claude\\claude_desktop_config.json` on Windows):\n\n```json\n{\n  \"mcpServers\": {\n    \"piapi\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/piapi-mcp-server/dist/index.js\"],\n      \"env\": {\n        \"PIAPI_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\nAfter updating your configuration file, you need to restart Claude for Desktop. Upon restarting, you should see a hammer icon in the bottom right corner of the input box.\nFor more detailed information, visit the [official MCP documentation](https://modelcontextprotocol.io/quickstart/user)\n\n### Connecting to Cursor\n\nNote: Following guide is based on Cursor 0.47.5. Features and behaviors may vary in different versions.\n\nTo configure the MCP server:\n\n1. Navigate to: File > Preferences > Cursor Settings, or use the shortcut key `Ctrl+Shift+J`\n2. Select \"MCP\" tab on the left panel\n3. Click \"Add new global MCP server\" button in the top right\n4. Add your configuration in the opened mcp.json file\n\n```json\n{\n  \"mcpServers\": {\n    \"piapi\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/piapi-mcp-server/dist/index.js\"],\n      \"env\": {\n        \"PIAPI_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\n5. After configuration, you'll see a \"piapi\" entry in MCP Servers page\n6. Click the Refresh button on the entry or restart Cursor to connect to the piapi server\n\nTo test the piapi image generation:\n\n1. Open and select \"Agent mode\" in Cursor Chat, or use the shortcut key `Ctrl+I`\n2. Enter a test prompt, for example: \"generate image of a dog\"\n3. The image will be generated based on your prompt using piapi server\n\nTo disable the piapi server:\n\n1. Navigate to the MCP Servers page in Cursor Settings\n2. Find the \"piapi\" entry in the server list\n3. Click the \"Enabled\" toggle button to switch it to \"Disabled\"\n\n## Development\n\n### Project Structure\n\n```\npiapi-mcp-server/\n├── assets/\n├── src/\n│   ├── index.ts        # Main server entry point\n├── package.json\n├── tsconfig.json\n└── .env.example\n```\n\n## License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "piapi-mcp-server-configured": {
+        "command": "node",
+        "args": ["/absolute/path/to/piapi-mcp-server/dist/index.js"],
+        "env": {
+          "PIAPI_API_KEY": "your_api_key_here"
+        }
+      },
+      "piapi-mcp-server-inspect": {
+        "command": "npm",
+        "args": ["run", "inspect"],
+        "env": {
+          "PIAPI_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "apinetwork",
+    "repo": "piapi-mcp-server",
+    "url": "https://github.com/apinetwork/piapi-mcp-server",
+    "name": "piapi-mcp-server",
+    "path": null,
+    "stars": 54,
+    "contributors": 4,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e397579e4fe818cce32b4fc3d571d32e44ef6914"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:43.635Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"piapi-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP Server for PiAPI image generation\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"engines\": {\n    \"node\": \">=18.15.0\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"inspect\": \"npx fastmcp inspect dist/index.js\"\n  },\n  \"dependencies\": {\n    \"dotenv\": \"^16.3.1\",\n    \"fastmcp\": \"^1.1.0\",\n    \"zod\": \"^3.24.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^18.19.0\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

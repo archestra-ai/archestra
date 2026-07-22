@@ -1,6 +1,6 @@
 "use client";
 
-import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@archestra/shared";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { Server } from "lucide-react";
 import Image from "next/image";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
@@ -21,11 +21,13 @@ export function McpCatalogIcon({
 }: McpCatalogIconProps) {
   const appIconLogo = useAppIconLogo();
 
+  // All variants are decorative: the icon always sits next to the server's
+  // visible name, so it is hidden from assistive technologies.
   if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
     return (
       <Image
         src={appIconLogo}
-        alt={DEFAULT_APP_NAME}
+        alt=""
         width={size}
         height={size}
         className={cn("shrink-0 rounded-sm object-contain", className)}
@@ -46,7 +48,7 @@ export function McpCatalogIcon({
     return (
       <Image
         src={icon}
-        alt="MCP server icon"
+        alt=""
         width={size}
         height={size}
         className={cn("shrink-0 rounded-sm object-contain", className)}
@@ -56,6 +58,7 @@ export function McpCatalogIcon({
 
   return (
     <span
+      aria-hidden
       className={cn("shrink-0 leading-none", className)}
       style={{ fontSize: size }}
     >

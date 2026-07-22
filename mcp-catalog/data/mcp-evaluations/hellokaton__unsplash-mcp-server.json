@@ -1,0 +1,90 @@
+{
+  "name": "hellokaton__unsplash-mcp-server",
+  "display_name": "unsplash-mcp-server",
+  "description": "🔎 A MCP server for Unsplash image search.",
+  "author": {
+    "name": "hellokaton"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "--with", "fastmcp", "fastmcp", "run", "./server.py"],
+    "env": {
+      "UNSPLASH_ACCESS_KEY": "${user_config.unsplash_access_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "unsplash_access_key": {
+      "type": "string",
+      "title": "Unsplash Access Key",
+      "description": "Your Unsplash API Access Key obtained from the Unsplash developer portal.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/hellokaton-unsplash-mcp-server-badge.png)](https://mseep.ai/app/hellokaton-unsplash-mcp-server)\n\n# Unsplash MCP Server\n\nEnglish | [简体中文](README_zh.md)\n\n> A simple MCP server for seamless Unsplash image integration and search capabilities.\n\n[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![smithery badge](https://smithery.ai/badge/@hellokaton/unsplash-mcp-server)](https://smithery.ai/server/@hellokaton/unsplash-mcp-server)\n\n## 📋 Overview\n\nUnsplash MCP Server is used for searching rich, high-quality images. It's ideal for developers who want to integrate Unsplash functionality into their own applications.\n\n## ✨ Features\n\n- **Advanced Image Search**: Search Unsplash's extensive photo library with filters for:\n  - Keyword relevance\n  - Color schemes\n  - Orientation options\n  - Custom sorting and pagination\n\n## 🔑 Obtaining Unsplash Access Key\n\nBefore installing this server, you'll need to obtain an Unsplash API Access Key:\n\n1. Create a developer account at [Unsplash](https://unsplash.com/developers)\n2. Register a new application\n3. Get your Access Key from the application details page\n4. Use this key in the configuration steps below\n\nFor more details, refer to the [official Unsplash API documentation](https://unsplash.com/documentation).\n\n## 🚀 Installation\n\nTo install Unsplash Image Integration Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@hellokaton/unsplash-mcp-server):\n\n### IDE Setup\n\n**Cursor IDE**\n\n```bash\nnpx -y @smithery/cli@latest install @hellokaton/unsplash-mcp-server --client cursor --key 7558c683-****-****\n```\n\n**Windsurf**\n\n```bash\nnpx -y @smithery/cli@latest install @hellokaton/unsplash-mcp-server --client windsurf --key 7558c683-****-****\n```\n\n**Cline**\n\n```bash\nnpx -y @smithery/cli@latest install @hellokaton/unsplash-mcp-server --client cline --key 7558c683-****-****\n```\n\n### Manual Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/hellokaton/unsplash-mcp-server.git\n\n# Navigate to project directory\ncd unsplash-mcp-server\n\n# Create virtual environment\nuv venv\n\n# Install dependencies\nuv pip install .\n```\n\n**Cursor Editor Integration**\n\nAdd the following configuration to your Cursor editor's `settings.json`:\n\n⚠️ **Note:** Please adjust the following configuration according to your actual installation:\n\n- If `uv` is not in your system PATH, use an absolute path (e.g., `/path/to/uv`)\n- `./server.py` should be modified to the actual location of your server script (can use absolute path or path relative to workspace)\n\n<img src=\"screenshots/Snipaste_1.png\" alt=\"Cursor Configuration Screenshot\" />\n\n```json\n{\n  \"mcpServers\": {\n    \"unsplash\": {\n      \"command\": \"uv\",\n      \"args\": [\"run\", \"--with\", \"fastmcp\", \"fastmcp\", \"run\", \"./server.py\"],\n      \"env\": {\n        \"UNSPLASH_ACCESS_KEY\": \"${YOUR_ACCESS_KEY}\"\n      }\n    }\n  }\n}\n```\n\n### Using in Cursor\n\n<img src=\"screenshots/Snipaste_2.png\" alt=\"Unsplash MCP in Cursor\" />\n\n## 🛠️ Available Tools\n\n### Search Photos\n\n```json\n{\n  \"tool\": \"search_photos\",\n  \"query\": \"mountain\",\n  \"per_page\": 5,\n  \"orientation\": \"landscape\"\n}\n```\n\n## 🔄 Other Implementations\n\n- Golang: [unsplash-mcp-server](https://github.com/douglarek/unsplash-mcp-server)\n- Java: [unsplash-mcp-server](https://github.com/JavaProgrammerLB/unsplash-mcp-server)\n\n## 📄 License\n\n[MIT License](LICENSE)\n\n## 📬 Contact\n\n- [Twitter/X](https://x.com/hellokaton)\n- [GitHub Issues](https://github.com/hellokaton/unsplash-mcp-server/issues)\n",
+  "category": "Development",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "unsplash-mcp-server": {
+        "command": "uv",
+        "args": ["run", "--with", "fastmcp", "fastmcp", "run", "./server.py"],
+        "env": {
+          "UNSPLASH_ACCESS_KEY": "${YOUR_ACCESS_KEY}"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hellokaton",
+    "repo": "unsplash-mcp-server",
+    "url": "https://github.com/hellokaton/unsplash-mcp-server",
+    "name": "unsplash-mcp-server",
+    "path": null,
+    "stars": 151,
+    "contributors": 3,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "856b89e2ac2925f9d50ebc2e2b22186c48225002"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:27.910Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"unsplash-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"fastmcp>=2.2.0\",\n    \"httpx>=0.26.0\",\n    \"python-dotenv>=1.1.0\",\n]\n"
+}

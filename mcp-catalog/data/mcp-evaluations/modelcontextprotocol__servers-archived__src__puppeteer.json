@@ -1,0 +1,90 @@
+{
+  "name": "modelcontextprotocol__servers-archived__src__puppeteer",
+  "display_name": "puppeteer",
+  "description": "Reference MCP servers that are no longer maintained",
+  "author": {
+    "name": "modelcontextprotocol"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Puppeteer\n\nA Model Context Protocol server that provides browser automation capabilities using Puppeteer. This server enables LLMs to interact with web pages, take screenshots, and execute JavaScript in a real browser environment.\n\n> [!CAUTION]\n> This server can access local files and local/internal IP addresses since it runs a browser on your machine. Exercise caution when using this MCP server to ensure this does not expose any sensitive data.\n\n## Components\n\n### Tools\n\n- **puppeteer_navigate**\n\n  - Navigate to any URL in the browser\n  - Inputs:\n    - `url` (string, required): URL to navigate to\n    - `launchOptions` (object, optional): PuppeteerJS LaunchOptions. Default null. If changed and not null, browser restarts. Example: `{ headless: true, args: ['--user-data-dir=\"C:/Data\"'] }`\n    - `allowDangerous` (boolean, optional): Allow dangerous LaunchOptions that reduce security. When false, dangerous args like `--no-sandbox`, `--disable-web-security` will throw errors. Default false.\n\n- **puppeteer_screenshot**\n\n  - Capture screenshots of the entire page or specific elements\n  - Inputs:\n    - `name` (string, required): Name for the screenshot\n    - `selector` (string, optional): CSS selector for element to screenshot\n    - `width` (number, optional, default: 800): Screenshot width\n    - `height` (number, optional, default: 600): Screenshot height\n    - `encoded` (boolean, optional): If true, capture the screenshot as a base64-encoded data URI (as text) instead of binary image content. Default false.\n\n- **puppeteer_click**\n\n  - Click elements on the page\n  - Input: `selector` (string): CSS selector for element to click\n\n- **puppeteer_hover**\n\n  - Hover elements on the page\n  - Input: `selector` (string): CSS selector for element to hover\n\n- **puppeteer_fill**\n\n  - Fill out input fields\n  - Inputs:\n    - `selector` (string): CSS selector for input field\n    - `value` (string): Value to fill\n\n- **puppeteer_select**\n\n  - Select an element with SELECT tag\n  - Inputs:\n    - `selector` (string): CSS selector for element to select\n    - `value` (string): Value to select\n\n- **puppeteer_evaluate**\n  - Execute JavaScript in the browser console\n  - Input: `script` (string): JavaScript code to execute\n\n### Resources\n\nThe server provides access to two types of resources:\n\n1. **Console Logs** (`console://logs`)\n\n   - Browser console output in text format\n   - Includes all console messages from the browser\n\n2. **Screenshots** (`screenshot://<name>`)\n   - PNG images of captured screenshots\n   - Accessible via the screenshot name specified during capture\n\n## Key Features\n\n- Browser automation\n- Console log monitoring\n- Screenshot capabilities\n- JavaScript execution\n- Basic web interaction (navigation, clicking, form filling)\n- Customizable Puppeteer launch options\n\n## Configuration to use Puppeteer Server\n\n### Usage with Claude Desktop\n\nHere's the Claude Desktop configuration to use the Puppeter server:\n\n### Docker\n\n**NOTE** The docker implementation will use headless chromium, where as the NPX version will open a browser window.\n\n```json\n{\n  \"mcpServers\": {\n    \"puppeteer\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"--init\",\n        \"-e\",\n        \"DOCKER_CONTAINER=true\",\n        \"mcp/puppeteer\"\n      ]\n    }\n  }\n}\n```\n\n### NPX\n\n```json\n{\n  \"mcpServers\": {\n    \"puppeteer\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@modelcontextprotocol/server-puppeteer\"]\n    }\n  }\n}\n```\n\n### Usage with VS Code\n\nFor quick installation, use one of the one-click install buttons below...\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=puppeteer&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-puppeteer%22%5D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=puppeteer&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-puppeteer%22%5D%7D&quality=insiders)\n\n[![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Docker-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=puppeteer&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22--init%22%2C%22-e%22%2C%22DOCKER_CONTAINER%3Dtrue%22%2C%22mcp%2Fpuppeteer%22%5D%7D) [![Install with Docker in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Docker-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=puppeteer&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22--init%22%2C%22-e%22%2C%22DOCKER_CONTAINER%3Dtrue%22%2C%22mcp%2Fpuppeteer%22%5D%7D&quality=insiders)\n\nFor manual installation, add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n> Note that the `mcp` key is not needed in the `.vscode/mcp.json` file.\n\nFor NPX installation (opens a browser window):\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"puppeteer\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"@modelcontextprotocol/server-puppeteer\"]\n      }\n    }\n  }\n}\n```\n\nFor Docker installation (uses headless chromium):\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"puppeteer\": {\n        \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"-i\",\n          \"--rm\",\n          \"--init\",\n          \"-e\",\n          \"DOCKER_CONTAINER=true\",\n          \"mcp/puppeteer\"\n        ]\n      }\n    }\n  }\n}\n```\n\n### Launch Options\n\nYou can customize Puppeteer's browser behavior in two ways:\n\n1. **Environment Variable**: Set `PUPPETEER_LAUNCH_OPTIONS` with a JSON-encoded string in the MCP configuration's `env` parameter:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"mcp-puppeteer\": {\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"@modelcontextprotocol/server-puppeteer\"],\n         \"env\": {\n           \"PUPPETEER_LAUNCH_OPTIONS\": \"{ \\\"headless\\\": false, \\\"executablePath\\\": \\\"C:/Program Files/Google/Chrome/Application/chrome.exe\\\", \\\"args\\\": [] }\",\n           \"ALLOW_DANGEROUS\": \"true\"\n         }\n       }\n     }\n   }\n   ```\n\n2. **Tool Call Arguments**: Pass `launchOptions` and `allowDangerous` parameters to the `puppeteer_navigate` tool:\n\n   ```json\n   {\n     \"url\": \"https://example.com\",\n     \"launchOptions\": {\n       \"headless\": false,\n       \"defaultViewport\": { \"width\": 1280, \"height\": 720 }\n     }\n   }\n   ```\n\n## Build\n\nDocker build:\n\n```bash\ndocker build -t mcp/puppeteer -f src/puppeteer/Dockerfile .\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "Browser Automation",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-puppeteer-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "--init", "-e", "DOCKER_CONTAINER=true", "mcp/puppeteer"],
+        "env": {
+          "DOCKER_CONTAINER": "true"
+        },
+        "docker_image": "mcp/puppeteer"
+      },
+      "modelcontextprotocol-server-puppeteer": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-puppeteer"],
+        "env": {}
+      },
+      "modelcontextprotocol-server-puppeteer-configured": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-puppeteer"],
+        "env": {
+          "PUPPETEER_LAUNCH_OPTIONS": "{ \"headless\": false, \"executablePath\": \"C:/Program Files/Google/Chrome/Application/chrome.exe\", \"args\": [] }",
+          "ALLOW_DANGEROUS": "true"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "modelcontextprotocol",
+    "repo": "servers-archived",
+    "url": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/puppeteer",
+    "name": "servers-archived",
+    "path": "src/puppeteer",
+    "stars": 123,
+    "contributors": 595,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "9be4674d1ddf8c469e6461a27a337eeb65f76c2e"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:32:36.364Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "puppeteer",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@modelcontextprotocol/server-puppeteer\",\n  \"version\": \"0.6.2\",\n  \"description\": \"MCP server for browser automation using Puppeteer\",\n  \"license\": \"MIT\",\n  \"author\": \"Anthropic, PBC (https://anthropic.com)\",\n  \"homepage\": \"https://modelcontextprotocol.io\",\n  \"bugs\": \"https://github.com/modelcontextprotocol/servers/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-puppeteer\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.1\",\n    \"puppeteer\": \"^23.4.0\"\n  },\n  \"devDependencies\": {\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}"
+}

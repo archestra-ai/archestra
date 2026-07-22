@@ -1431,6 +1431,8 @@ export const PromptInputSpeechButton = ({
 
   return (
     <PromptInputButton
+      aria-label={isListening ? "Stop voice input" : "Start voice input"}
+      aria-pressed={isListening}
       className={cn(
         "relative transition-all duration-200",
         isListening && "animate-pulse bg-accent text-accent-foreground",

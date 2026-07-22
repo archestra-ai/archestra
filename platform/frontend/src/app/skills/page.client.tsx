@@ -430,7 +430,7 @@ function SkillsList() {
         ];
         return (
           <div className="flex justify-end">
-            <TableRowActions actions={actions} />
+            <TableRowActions actions={actions} itemName={skill.name} />
           </div>
         );
       },
@@ -479,7 +479,10 @@ function SkillsList() {
                   setSourceRepoFilter(value === "all" ? "" : value)
                 }
               >
-                <SelectTrigger className="w-[260px]">
+                <SelectTrigger
+                  aria-label="Filter by repository"
+                  className="w-[260px]"
+                >
                   <SelectValue placeholder="All repositories" />
                 </SelectTrigger>
                 <SelectContent>
@@ -572,7 +575,7 @@ function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
     return downArrow;
   }
   return (
-    <div className="text-muted-foreground/50 flex flex-col items-center">
+    <div className="text-muted-foreground flex flex-col items-center">
       {upArrow}
       <span className="mt-[-4px]">{downArrow}</span>
     </div>

@@ -89,6 +89,37 @@ describe("createOpenAiCodexResponsesClient", () => {
     expect(types).toContain("response.completed");
   });
 
+  it("strips max_output_tokens, which the Codex backend rejects as unsupported", async () => {
+    let capturedBody: Record<string, unknown> | undefined;
+    const innerFetch = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        capturedBody = JSON.parse(init?.body as string);
+        return sseResponse([
+          { type: "response.completed", response: { id: "resp_3" } },
+        ]);
+      },
+    );
+
+    const client = createOpenAiCodexResponsesClient({
+      credential: CREDENTIAL,
+      options: { source: "api" },
+      innerFetch,
+    }) as unknown as CodexResponsesClient;
+
+    const stream = (await client.responses.create({
+      model: "gpt-5.6-sol",
+      input: "hi",
+      stream: true,
+      max_output_tokens: 32768,
+    })) as AsyncIterable<unknown>;
+    for await (const _event of stream) {
+      // drain
+    }
+
+    expect(capturedBody).toBeDefined();
+    expect("max_output_tokens" in (capturedBody ?? {})).toBe(false);
+  });
+
   it("folds the stream into the final response for a non-streaming caller", async () => {
     const innerFetch = vi.fn(async () =>
       sseResponse([

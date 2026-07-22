@@ -1,0 +1,180 @@
+{
+  "name": "inkbytefo__screenmonitormcp",
+  "display_name": "screenmonitormcp",
+  "description": "A REVOLUTIONARY Model Context Protocol (MCP) server! Gives AI real-time vision capabilities and enhanced UI intelligence power. This isn't just screen capture - it gives AI the power to truly \"see\" and understand your digital world!",
+  "author": {
+    "name": "inkbytefo"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "screenmonitormcp_v2.mcp_main"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "OPENAI_MODEL": "${user_config.openai_model}",
+      "OPENAI_BASE_URL": "${user_config.openai_base_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your API key for OpenAI or a compatible service.",
+      "sensitive": true,
+      "required": true
+    },
+    "openai_model": {
+      "type": "string",
+      "title": "OpenAI Model",
+      "description": "The AI model to use for screen analysis (e.g., gpt-4o, qwen/qwen2.5-vl-32b-instruct:free).",
+      "default": "gpt-4o",
+      "required": false
+    },
+    "openai_base_url": {
+      "type": "string",
+      "title": "OpenAI Base URL",
+      "description": "The base URL for the OpenAI-compatible API service.",
+      "default": "https://openrouter.ai/api/v1",
+      "required": false
+    }
+  },
+  "readme": "# ScreenMonitorMCP v2\n\n[![Version](https://img.shields.io/badge/version-2.0.7-blue.svg)](https://github.com/inkbytefo/ScreenMonitorMCP/releases/tag/v2.0.7)\n[![PyPI](https://img.shields.io/pypi/v/screenmonitormcp-v2.svg)](https://pypi.org/project/screenmonitormcp-v2/)\n[![Python](https://img.shields.io/pypi/pyversions/screenmonitormcp-v2.svg)](https://pypi.org/project/screenmonitormcp-v2/)\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/a2dbda0f-f46d-40e1-9c13-0b47eff9df3a)\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/inkbytefo-screenmonitormcp-badge.png)](https://mseep.ai/app/inkbytefo-screenmonitormcp)\nA powerful Model Context Protocol (MCP) server that gives AI real-time vision capabilities and enhanced UI intelligence. Transform your AI assistant into a visual powerhouse that can see, analyze, and interact with your screen content.\n\n## What is ScreenMonitorMCP?\n\nScreenMonitorMCP v2 is a revolutionary MCP server that bridges the gap between AI and visual computing. It enables AI assistants to capture screenshots, analyze screen content, and provide intelligent insights about what's happening on your display.\n\n## Key Features\n\n- **Real-time Screen Capture**: Instant screenshot capabilities across multiple monitors\n- **AI-Powered Analysis**: Advanced screen content analysis using state-of-the-art vision models\n- **Streaming Support**: Live screen streaming for continuous monitoring\n- **Performance Monitoring**: Built-in system health and performance metrics\n- **Multi-Platform**: Works seamlessly on Windows, macOS, and Linux\n- **Easy Integration**: Simple setup with Claude Desktop and other MCP clients\n\n## Quick Start\n\n### Installation\n\n```bash\n# Install from PyPI\npip install screenmonitormcp\n\n# Or install from source\ngit clone https://github.com/inkbytefo/screenmonitormcp.git\ncd screenmonitormcp\npip install -e .\n```\n\n### Configuration\n\n1. Create a `.env` file with your AI service credentials:\n\n```env\nOPENAI_API_KEY=your-api-key-here\nOPENAI_MODEL=gpt-4o\n```\n\n2. Add to your Claude Desktop config:\n\n```json\n{\n  \"mcpServers\": {\n    \"screenmonitormcp-v2\": {\n      \"command\": \"python\",\n      \"args\": [\"-m\", \"screenmonitormcp_v2.mcp_main\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-openai-api-key-here\",\n        \"OPENAI_BASE_URL\": \"https://openrouter.ai/api/v1\",\n        \"OPENAI_MODEL\": \"qwen/qwen2.5-vl-32b-instruct:free\"\n      }\n    }\n  }\n}\n```\n\n3. Restart Claude Desktop and start capturing!\n\n## Available Tools\n\n- `capture_screen` - Take screenshots of any monitor\n- `analyze_screen` - AI-powered screen content analysis\n- `analyze_image` - Analyze any image with AI vision\n- `create_stream` - Start live screen streaming\n- `get_performance_metrics` - System health monitoring\n\n## Use Cases\n\n- **UI/UX Analysis**: Get AI insights on interface design and usability\n- **Debugging Assistance**: Visual debugging with AI-powered error detection\n- **Content Creation**: Automated screenshot documentation and analysis\n- **Accessibility Testing**: Screen reader and accessibility compliance checking\n- **System Monitoring**: Visual system health and performance tracking\n\n## Documentation\n\nFor detailed setup instructions and advanced configuration, see our [MCP Setup Guide](MCP_SETUP_GUIDE.md).\n\n## Requirements\n\n- Python 3.8+\n- OpenAI API key (or compatible service)\n- MCP-compatible client (Claude Desktop, etc.)\n\n## Contributing\n\nWe welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.\n\n## License\n\nMIT License - see [LICENSE](LICENSE) for details.\n\n## Previous Version\n\nLooking for v1? Check the [v1 branch](https://github.com/inkbytefo/ScreenMonitorMCP/tree/v1) for the previous version.\n\n---\n\n**Built with ❤️ by [inkbytefo](https://github.com/inkbytefo)**\n",
+  "category": "AI Tools",
+  "quality_score": 34,
+  "archestra_config": {
+    "client_config_permutations": {
+      "screenmonitormcp-v2": {
+        "command": "python",
+        "args": ["-m", "screenmonitormcp_v2.mcp_main"],
+        "env": {
+          "OPENAI_API_KEY": "your-openai-api-key-here",
+          "OPENAI_BASE_URL": "https://openrouter.ai/api/v1",
+          "OPENAI_MODEL": "qwen/qwen2.5-vl-32b-instruct:free"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "inkbytefo",
+    "repo": "screenmonitormcp",
+    "url": "https://github.com/inkbytefo/screenmonitormcp",
+    "name": "screenmonitormcp",
+    "path": null,
+    "stars": 46,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "f1c166183929f5ff22ae2a18031bab63ef6b3537"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:51.846Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 7
+    },
+    {
+      "name": "python-socketio",
+      "importance": 7
+    },
+    {
+      "name": "mss",
+      "importance": 9
+    },
+    {
+      "name": "Pillow",
+      "importance": 8
+    },
+    {
+      "name": "opencv-python",
+      "importance": 9
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    },
+    {
+      "name": "pytesseract",
+      "importance": 8
+    },
+    {
+      "name": "easyocr",
+      "importance": 8
+    },
+    {
+      "name": "pygetwindow",
+      "importance": 8
+    },
+    {
+      "name": "pyautogui",
+      "importance": 8
+    },
+    {
+      "name": "psutil",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    },
+    {
+      "name": "structlog",
+      "importance": 6
+    },
+    {
+      "name": "prometheus-client",
+      "importance": 7
+    },
+    {
+      "name": "tenacity",
+      "importance": 5
+    },
+    {
+      "name": "pandas",
+      "importance": 7
+    },
+    {
+      "name": "scikit-learn",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"screenmonitormcp-v2\"\nversion = \"2.0.3\"\ndescription = \"A revolutionary Model Context Protocol (MCP) server that gives AI real-time vision capabilities and enhanced UI intelligence power\"\nreadme = \"README.md\"\nrequires-python = \">=3.8\"\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.8\",\n    \"Programming Language :: Python :: 3.9\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n    \"Topic :: System :: Monitoring\",\n    \"Topic :: Multimedia :: Graphics :: Capture :: Screen Capture\",\n]\nkeywords = [\"mcp\", \"screen\", \"monitor\", \"capture\", \"ai\", \"vision\", \"automation\"]\nauthors = [{name = \"inkbytefo\", email = \"inkbytefo@gmail.com\"}]\nmaintainers = [{name = \"inkbytefo\", email = \"inkbytefo@gmail.com\"}]\nlicense = {text = \"MIT\"}\ndependencies = [\n    \"fastapi>=0.104.0\",\n    \"uvicorn[standard]>=0.24.0\",\n    \"sse-starlette>=1.6.5\",\n    \"python-socketio>=5.10.0\",\n    \"mss>=9.0.1\",\n    \"Pillow>=10.0.0\",\n    \"opencv-python>=4.8.0\",\n    \"openai>=1.3.0\",\n    \"pytesseract>=0.3.10\",\n    \"easyocr>=1.7.0\",\n    \"pygetwindow>=0.0.9\",\n    \"pyautogui>=0.9.54\",\n    \"psutil>=5.9.0\",\n    \"python-dotenv>=1.0.0\",\n    \"pydantic>=2.0.0\",\n    \"structlog>=23.1.0\",\n    \"prometheus-client>=0.17.0\",\n    \"tenacity>=8.2.0\",\n    \"pandas>=2.0.0\",\n    \"scikit-learn>=1.3.0\",\n    \"mcp>=1.0.0\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-cov>=4.0.0\",\n    \"black>=23.0.0\",\n    \"isort>=5.12.0\",\n    \"flake8>=6.0.0\",\n    \"mypy>=1.5.0\",\n    \"pre-commit>=3.0.0\",\n]\ntesting = [\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-cov>=4.0.0\",\n    \"httpx>=0.24.0\",\n]\ndocs = [\n    \"sphinx>=7.0.0\",\n    \"sphinx-rtd-theme>=1.3.0\",\n    \"myst-parser>=2.0.0\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/inkbytefo/ScreenMonitorMCP\"\nRepository = \"https://github.com/inkbytefo/ScreenMonitorMCP\"\nDocumentation = \"https://github.com/inkbytefo/ScreenMonitorMCP/blob/main/README.md\"\n\"Bug Tracker\" = \"https://github.com/inkbytefo/ScreenMonitorMCP/issues\"\nChangelog = \"https://github.com/inkbytefo/ScreenMonitorMCP/blob/main/CHANGELOG.md\"\n\n[project.scripts]\nscreenmonitormcp-v2-mcp = \"screenmonitormcp_v2.mcp_main:main\"\nscreenmonitormcp-v2-server = \"screenmonitormcp_v2.server.main:main\"\nscreenmonitormcp-v2-cli = \"screenmonitormcp_v2.cli:main\"\n\n[tool.setuptools.packages.find]\nwhere = [\".\"]\ninclude = [\"screenmonitormcp_v2*\"]\n\n[tool.setuptools.package-data]\n\"*\" = [\"py.typed\", \"*.pyi\"]\n\n[tool.black]\nline-length = 88\ntarget-version = ['py38']\ninclude = '\\.pyi?$'\nextend-exclude = '''\n(\n  /(\n      \\.eggs\n    | \\.git\n    | \\.hg\n    | \\.mypy_cache\n    | \\.tox\n    | \\.venv\n    | _build\n    | buck-out\n    | build\n    | dist\n  )/\n)\n'''\n\n[tool.isort]\nprofile = \"black\"\nline_length = 88\nmulti_line_output = 3\ninclude_trailing_comma = true\nforce_grid_wrap = 0\nuse_parentheses = true\nensure_newline_before_comments = true\n\n[tool.mypy]\npython_version = \"3.8\"\nwarn_return_any = true\nwarn_unused_configs = true\ndisallow_untyped_defs = true\ndisallow_incomplete_defs = true\ncheck_untyped_defs = true\ndisallow_untyped_decorators = true\nno_implicit_optional = true\nwarn_redundant_casts = true\nwarn_unused_ignores = true\nwarn_no_return = true\nwarn_unreachable = true\nstrict_equality = true\n\n[tool.pytest.ini_options]\nminversion = \"7.0\"\naddopts = \"-ra -q --strict-markers --strict-config\"\ntestpaths = [\"tests\"]\npython_files = [\"test_*.py\", \"*_test.py\"]\npython_classes = [\"Test*\"]\npython_functions = [\"test_*\"]\nmarkers = [\n    \"slow: marks tests as slow (deselect with '-m \\\"not slow\\\"')\",\n    \"integration: marks tests as integration tests\",\n    \"unit: marks tests as unit tests\",\n]\n\n[tool.coverage.run]\nsource = [\"screenmonitormcp\"]\nomit = [\n    \"*/tests/*\",\n    \"*/test_*\",\n    \"setup.py\",\n]\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"if self.debug:\",\n    \"if settings.DEBUG\",\n    \"raise AssertionError\",\n    \"raise NotImplementedError\",\n    \"if 0:\",\n    \"if __name__ == .__main__.:\",\n    \"class .*\\\\bProtocol\\\\):\",\n    \"@(abc\\\\.)?abstractmethod\",\n]\n\n\n=== requirements.txt ===\nfastapi\nuvicorn\nmss\nPillow\npython-multipart\npygetwindow\npython-dotenv\nopenai\nmcp[cli]\n# Real-time monitoring dependencies\nopencv-python\nnumpy\n# UI Detection dependencies (for future phases)\npytesseract\neasyocr\npyautogui\n# Machine learning dependencies (for future phases)\nscikit-learn\npandas\n# Logging and utilities\nstructlog\ntenacity\n# System monitoring dependencies\npsutil\n"
+}

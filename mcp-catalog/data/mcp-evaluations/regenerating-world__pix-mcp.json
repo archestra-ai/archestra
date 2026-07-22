@@ -1,0 +1,131 @@
+{
+  "name": "regenerating-world__pix-mcp",
+  "display_name": "pix-mcp",
+  "description": "MCP server from Regenerating-World/pix-mcp",
+  "author": {
+    "name": "Regenerating-World"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["pix-mcp"],
+    "env": {
+      "MCP_MODE": "${user_config.mcp_mode}",
+      "NODE_ENV": "${user_config.node_env}",
+      "PORT": "${user_config.port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mcp_mode": {
+      "type": "string",
+      "title": "Server Mode",
+      "description": "Server mode (stdio for MCP, http for HTTP API)",
+      "required": false,
+      "default": "stdio"
+    },
+    "node_env": {
+      "type": "string",
+      "title": "Node Environment",
+      "description": "Environment (development/production)",
+      "required": false,
+      "default": "development"
+    },
+    "port": {
+      "type": "number",
+      "title": "HTTP Port",
+      "description": "HTTP port when in HTTP mode",
+      "required": false,
+      "default": 3000,
+      "min": 1,
+      "max": 65535
+    }
+  },
+  "readme": "# Pix MCP Server v2.1.0\n\nA lightweight Model Context Protocol (MCP) server that enables AI agents (Claude, Cursor, Windsurf) to generate static Pix QR codes via natural-language prompts.\n\n## 🚀 Features\n\n- **🔧 MCP Tool**:\n  - `generateStaticPix` - Generate static Pix QR codes for any Pix key (no API required)\n- **🚀 Production-ready**: Comprehensive error handling and logging\n- **🔒 Type-safe**: Full TypeScript implementation with Zod validation\n- **📱 QR Code generation**: Automatic QR code creation for Pix payments\n- **📦 Zero Dependencies**: No external API keys or services required\n- **🌍 Open & Accessible**: Works without any registration or credentials\n- **✅ EMV 4.0 Compliant**: Follows BACEN PIX standards with proper CRC16-CCITT validation\n\n## 🚀 Quick Start\n\n```bash\n# Install globally\nnpm install -g pix-mcp\n\n# Run in MCP mode (for Claude Desktop)\npix-mcp\n\n# Run in HTTP mode (for web services)\nMCP_MODE=http pix-mcp\n```\n\n## 🔧 Usage\n\n### MCP Mode (Default)\n\n```bash\n# Start in MCP mode for Claude Desktop integration\npix-mcp\n```\n\n### HTTP Mode\n\n```bash\n# Start in HTTP mode on port 3000\nMCP_MODE=http pix-mcp\n```\n\n### Making Requests\n\n#### HTTP API\n\n```bash\ncurl -X POST http://localhost:3000/tools/call \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"name\": \"generateStaticPix\",\n    \"arguments\": {\n      \"pixKey\": \"10891990909\",\n      \"amount\": 100.50,\n      \"recipientName\": \"Franco Camelo Aguzzi\",\n      \"recipientCity\": \"Florianopolis\"\n    }\n  }'\n```\n\n#### MCP Tool\n\n```typescript\nconst result = await mcpClient.callTool('generateStaticPix', {\n  pixKey: '10891990909',\n  amount: 100.5,\n  recipientName: 'Franco Camelo Aguzzi',\n  recipientCity: 'Florianopolis',\n});\n```\n\n## 🚀 Deployment\n\n### Railway\n\n[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https%3A%2F%2Fgithub.com%2FRegenerating-World%2Fpix-mcp)\n\n**⚠️ Important:** After deploying to Railway, add these environment variables in the Railway dashboard:\n\n- `MCP_MODE=http`\n- `NODE_ENV=production` (optional)\n\n### Manual Deployment\n\n```bash\n# Clone the repository\ngit clone https://github.com/Regenerating-World/pix-mcp.git\ncd pix-mcp\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n\n# Start the server in HTTP mode\nMCP_MODE=http NODE_ENV=production node dist/index.js\n```\n\n## 📝 License\n\nMIT\n\n## 🔧 Configuration\n\n### Environment Variables\n\n- `MCP_MODE`: Server mode (`stdio` for MCP, `http` for HTTP API) - Default: `stdio`\n- `NODE_ENV`: Environment (`development`/`production`) - Default: `development`\n- `PORT`: HTTP port when in HTTP mode - Default: `3000`\n\n## 🤖 Usage with AI Tools\n\n### Claude Desktop\n\n1. Install the package globally:\n\n```bash\nnpm install -g pix-mcp\n```\n\n2. Add to your Claude Desktop MCP configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%/Claude/claude_desktop_config.json` on Windows):\n\n```json\n{\n  \"mcpServers\": {\n    \"pix-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"pix-mcp\"],\n      \"env\": {\n        \"MCP_MODE\": \"stdio\"\n      }\n    }\n  }\n}\n```\n\n3. Restart Claude Desktop and start using:\n\n```\nCreate a Pix charge for R$25.50 to Maria Silva for lunch\n```\n\n### Cursor (with MCP support)\n\nAdd to your Cursor MCP settings:\n\n```json\n{\n  \"mcpServers\": {\n    \"pix-mcp\": {\n      \"command\": \"pix-mcp\"\n    }\n  }\n}\n```\n\n### Windsurf (with MCP support)\n\nConfigure in Windsurf MCP settings:\n\n```json\n{\n  \"pix-mcp\": {\n    \"command\": \"npx pix-mcp\",\n    \"args\": []\n  }\n}\n```\n\n### Any MCP-compatible tool\n\nYour tool should support MCP servers. Configure using:\n\n- **Command**: `npx pix-mcp` or `pix-mcp` (if installed globally)\n- **Protocol**: stdio\n- **Environment**: `MCP_MODE=stdio`\n\n## 🔨 Available Tools\n\n### `generateStaticPix`\n\nCreates a static Pix payment QR code following BACEN EMV 4.0 standards.\n\n**Parameters:**\n\n- `pixKey` (string): Valid Pix key (email, phone, CPF, CNPJ, or random key)\n- `amount` (number): Payment amount in BRL (0.01 to 999,999.99)\n- `recipientName` (string): Name of the payment recipient (max 25 chars)\n- `recipientCity` (string): City of the payment recipient (max 15 chars)\n\n**Returns:**\n\n- Payment details (amount, recipient, city)\n- Pix copy-paste code (EMV format)\n- QR code image (base64 data URL)\n- Success status and message\n\n**Supported Pix Key Types:**\n\n- 📧 Email: `example@email.com`\n- 📱 Phone: `+5511999999999`\n- 👤 CPF: `12345678901` (11 digits)\n- 🏢 CNPJ: `12345678000195` (14 digits)\n- 🔑 Random Key: `123e4567-e89b-12d3-a456-426614174000` (UUID format)\n\n## 🏗️ Development\n\n```bash\n# Development mode with hot reload\nnpm run dev\n\n# Run tests\nnpm test\n\n# Build for production\nnpm run build\n\n# Lint code\nnpm run lint\n\n# Format code\nnpm run format\n```\n\n## 🗺️ Roadmap\n\n### Phase 1: MVP ✅\n\n- [x] `generateStaticPix` tool\n- [x] Static Pix QR code generation\n- [x] QR code generation\n- [x] Claude Desktop compatibility\n- [x] EMV 4.0 compliance\n- [x] CRC16-CCITT validation\n- [x] All Pix key types support\n- [x] Public deployment\n- [x] MCP server configuration files\n- [x] Multi-tool compatibility\n\n### Phase 2: MCP Discovery\n\n- [ ] Register with MCP registry\n- [ ] Add to community MCP directories\n- [ ] Integration examples for more tools\n\n## 🔒 Security & Validation\n\n- ✅ EMV 4.0 standard compliance\n- ✅ CRC16-CCITT checksum validation\n- ✅ Input validation with Zod schemas\n- ✅ Pix key format validation\n- ✅ Comprehensive error handling\n- ✅ Type-safe TypeScript implementation\n\n## ⚠️ Important Notes\n\n- **CPF/CNPJ Keys**: Must be valid and registered as Pix keys\n- **Test Data**: Avoid using fake CPFs like `12345678900` - they will be rejected by banks\n- **Static Codes**: No expiration, recipient must check payments manually\n- **Validation**: All codes are EMV-compliant and pass bank validation\n\n## 📝 License\n\nMIT License - see [LICENSE](LICENSE) file for details.\n\n## 🤝 Contributing\n\n1. Fork the repository\n2. Create a feature branch\n3. Make your changes\n4. Add tests if applicable\n5. Submit a pull request\n\n## 📞 Support\n\n- GitHub Issues: [Report bugs or request features](https://github.com/Regenerating-World/pix-mcp/issues)\n- Documentation: Available in this README\n\n---\n\nMade with ❤️ for the Brazilian Pix ecosystem\n",
+  "category": "Finance",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pix-mcp-stdio": {
+        "command": "npx",
+        "args": ["pix-mcp"],
+        "env": {
+          "MCP_MODE": "stdio"
+        }
+      },
+      "pix-mcp-http": {
+        "command": "npx",
+        "args": ["pix-mcp"],
+        "env": {
+          "MCP_MODE": "http"
+        }
+      },
+      "pix-mcp-manual-deployment-http": {
+        "command": "node",
+        "args": ["dist/index.js"],
+        "env": {
+          "MCP_MODE": "http",
+          "NODE_ENV": "production"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Regenerating-World",
+    "repo": "pix-mcp",
+    "url": "https://github.com/Regenerating-World/pix-mcp",
+    "name": "regenerating-world__pix-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "fbed893f4e42e0a0ca98b11a6b5d796f4be1e0ab"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:08.617Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "qrcode",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"pix-mcp\",\n  \"version\": \"2.1.1\",\n  \"description\": \"Standalone MCP server for generating static Pix QR codes without external dependencies\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"pix-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist/**/*\",\n    \"README.md\",\n    \"LICENSE\",\n    \".env.example\",\n    \"mcp-server.json\",\n    \"claude_desktop_config.example.json\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"MCP_MODE=http node dist/index.js\",\n    \"start:local\": \"node dist/index.js\",\n    \"dev\": \"tsx src/index.ts\",\n    \"dev:http\": \"MCP_MODE=http tsx src/index.ts\",\n    \"test\": \"jest\",\n    \"lint\": \"eslint src/**/*.ts\",\n    \"format\": \"prettier --write src/**/*.ts\",\n    \"validate\": \"node scripts/setup-validator.js\",\n    \"setup\": \"npm install && npm run build && npm run validate\",\n    \"wizard\": \"node scripts/setup-wizard.js\",\n    \"prepublishOnly\": \"npm run test && npm run build\",\n    \"postinstall\": \"echo '\\n🎉 Pix MCP installed! Run \\\"npm run wizard\\\" for guided setup or \\\"npm run validate\\\" to check your configuration.'\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"pix\",\n    \"payments\",\n    \"brazil\",\n    \"ai\",\n    \"claude\",\n    \"model-context-protocol\",\n    \"gerencianet\"\n  ],\n  \"author\": \"Pix MCP Team\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/Regenerating-World/pix-mcp.git\"\n  },\n  \"homepage\": \"https://github.com/Regenerating-World/pix-mcp#readme\",\n  \"bugs\": {\n    \"url\": \"https://github.com/Regenerating-World/pix-mcp/issues\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.5.0\",\n    \"axios\": \"^1.6.0\",\n    \"dotenv\": \"^16.3.0\",\n    \"qrcode\": \"^1.5.3\",\n    \"zod\": \"^3.22.0\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^30.0.0\",\n    \"@types/node\": \"^20.0.0\",\n    \"@types/qrcode\": \"^1.5.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^6.0.0\",\n    \"@typescript-eslint/parser\": \"^6.0.0\",\n    \"eslint\": \"^8.0.0\",\n    \"jest\": \"^29.0.0\",\n    \"prettier\": \"^3.0.0\",\n    \"ts-jest\": \"^29.4.0\",\n    \"tsx\": \"^4.0.0\",\n    \"typescript\": \"^5.0.0\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"packageManager\": \"pnpm@10.7.0+sha512.6b865ad4b62a1d9842b61d674a393903b871d9244954f652b8842c2b553c72176b278f64c463e52d40fff8aba385c235c8c9ecf5cc7de4fd78b8bb6d49633ab6\"\n}\n"
+}

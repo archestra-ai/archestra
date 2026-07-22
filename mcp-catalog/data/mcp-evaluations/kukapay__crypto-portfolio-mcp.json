@@ -1,0 +1,78 @@
+{
+  "name": "kukapay__crypto-portfolio-mcp",
+  "display_name": "crypto-portfolio-mcp",
+  "description": "An MCP server for tracking and managing cryptocurrency portfolio allocations.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Crypto Portfolio MCP\n\nAn MCP server for tracking and managing cryptocurrency portfolio allocations, enabling AI agents to query and optimize portfolio strategies in real time.\n\n![GitHub License](https://img.shields.io/github/license/kukapay/crypto-portfolio-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n\n## Features\n\n- **Portfolio Management**: Add and track cryptocurrency holdings with real-time Binance prices.\n- **Price Retrieval**: Fetch current prices for any Binance trading pair (e.g., BTC/USDT).\n- **Value History**: Generate visual charts of portfolio value over time.\n- **Analysis Prompt**: Pre-built prompt for portfolio analysis with diversification and risk suggestions.\n- **SQLite Storage**: Persistent storage of holdings in a local database.\n\n## Installation\n\n### Prerequisites\n- Python 3.10+\n- Git (optional, for cloning the repo)\n- A compatible MCP client (e.g., [Claude Desktop](https://www.anthropic.com/claude))\n\n\n### Setup\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/crypto-portfolio-mcp.git\n   cd crypto-portfolio-mcp\n   ```\n\n2. **Install requirements**:\n   ```bash\n   pip install mcp[cli] ccxt matplotlib\n   ```\n\n3. **Install for Claude Desktop**:\n   ```bash\n   mcp install main.py --name \"CryptoPortfolioMCP\"\n   ```\n  \n    Or update the configuration file manually:\n  \n    ```\n    {\n      \"mcpServers\": {\n        \"crypto-portfolio-mcp\": {\n          \"command\": \"python\",\n          \"args\": [ \"path/to/crypto-portfolio-mcp/main.py\" ]\n        }\n      }\n    }\n    ```      \n\n## Usage\n\nOnce installed, interact with the server through an MCP client like Claude Desktop. Below are example commands:\n\n### Add a Holding\n- **Prompt**: \"Add 0.1 BTC to my portfolio\"\n- **Result**: Adds 0.1 BTC/USDT to your portfolio and confirms with \"Added 0.1 BTC/USDT to portfolio\".\n\n### Get Current Price\n- **Prompt**: \"What's the current price of ETH on Binance?\"\n- **Result**: Returns \"Current price of ETH/USDT on Binance: $2000.50\" (example price).\n\n### Portfolio Summary\n- **Prompt**: \"What's my current portfolio summary?\"\n- **Result**: Displays a formatted summary, e.g.:\n  ```\n  Portfolio Summary:\n  BTC/USDT: 0.1 @ $60000.00 = $6000.00\n  ETH/USDT: 2.0 @ $2000.00 = $4000.00\n  Total Value: $10000.00\n  ```\n\n### Portfolio Value History\n- **Prompt**: \"Show me my portfolio value history\"\n- **Result**: Generates and displays a PNG chart of your portfolio value over time.\n\n### Analyze Portfolio\n- **Prompt**: \"Analyze my crypto portfolio\"\n- **Result**: Provides an analysis with suggestions based on current holdings and Binance market trends.\n\n## Tools\n\nThe server exposes the following tools:\n\n- **`get_portfolio_summary`**: Retrieves a text summary of your current portfolio.\n- **`add_holding(coin_symbol: str, amount: float)`**: Adds a cryptocurrency holding (e.g., \"BTC\", 0.1).\n- **`get_price(coin_symbol: str)`**: Fetches the current price of a trading pair from Binance.\n- **`portfolio_value_history()`**: Generates a PNG chart of portfolio value history.\n\nSee the source code docstrings for detailed parameter descriptions.\n\n## Database\n\nHoldings are stored in a SQLite database (`portfolio.db`) with the following schema:\n```sql\nCREATE TABLE holdings (\n    id INTEGER PRIMARY KEY,\n    coin_symbol TEXT,       -- e.g., \"BTC/USDT\"\n    amount REAL,           -- Quantity of the asset\n    purchase_date TEXT     -- ISO format timestamp\n)\n```\n\n## License\n\nThis project is licensed under the MIT License. See [LICENSE](LICENSE) for details.\n",
+  "category": "AI Tools",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "crypto-portfolio-mcp": {
+        "command": "python",
+        "args": ["path/to/crypto-portfolio-mcp/main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-portfolio-mcp",
+    "url": "https://github.com/kukapay/crypto-portfolio-mcp",
+    "name": "crypto-portfolio-mcp",
+    "path": null,
+    "stars": 7,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ec909abd8b055e83062ee0857b44e1aa7e409173"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.809Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "ccxt",
+      "importance": 9
+    },
+    {
+      "name": "matplotlib",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"crypto-portfolio-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server for tracking and managing cryptocurrency portfolio allocations.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"ccxt>=4.4.72\",\n    \"matplotlib>=3.10.1\",\n    \"mcp[cli]>=1.6.0\",\n]\n"
+}

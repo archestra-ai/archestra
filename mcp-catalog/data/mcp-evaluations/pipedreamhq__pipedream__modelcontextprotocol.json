@@ -1,0 +1,195 @@
+{
+  "name": "pipedreamhq__pipedream__modelcontextprotocol",
+  "display_name": "modelcontextprotocol",
+  "description": "Connect APIs, remarkably fast.  Free for developers.",
+  "author": {
+    "name": "PipedreamHQ"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@pipedream/mcp"],
+    "env": {
+      "PIPEDREAM_CLIENT_ID": "${user_config.pipedream_client_id}",
+      "PIPEDREAM_CLIENT_SECRET": "${user_config.pipedream_client_secret}",
+      "PIPEDREAM_PROJECT_ID": "${user_config.pipedream_project_id}",
+      "PIPEDREAM_PROJECT_ENVIRONMENT": "${user_config.pipedream_project_environment}",
+      "PD_SDK_DEBUG": "${user_config.pd_sdk_debug}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "pipedream_client_id": {
+      "type": "string",
+      "title": "Pipedream Client ID",
+      "description": "Your Pipedream OAuth client ID.",
+      "required": true,
+      "sensitive": false
+    },
+    "pipedream_client_secret": {
+      "type": "string",
+      "title": "Pipedream Client Secret",
+      "description": "Your Pipedream OAuth client secret.",
+      "required": true,
+      "sensitive": true
+    },
+    "pipedream_project_id": {
+      "type": "string",
+      "title": "Pipedream Project ID",
+      "description": "The ID of the Pipedream project where connected accounts will be stored.",
+      "required": true,
+      "sensitive": false
+    },
+    "pipedream_project_environment": {
+      "type": "string",
+      "title": "Pipedream Project Environment",
+      "description": "The Pipedream project environment to use.",
+      "required": true,
+      "default": "development"
+    },
+    "pd_sdk_debug": {
+      "type": "boolean",
+      "title": "Enable SDK Debugging",
+      "description": "If true, prints all requests and responses going to the Pipedream Connect API.",
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "# Pipedream MCP Server\n\n> **⚠️ Important Notice**: This MCP server is a **reference implementation only** and is no longer actively maintained. For production use, we recommend using Pipedream's **remote MCP server** instead.\n\n## Recommended: Use Pipedream's Remote MCP Server\n\nFor the best experience, use Pipedream's hosted MCP server which provides:\n\n- **2,800+ APIs and 10,000+ tools** through a single server\n- **Built-in authentication**: no manual token management required\n- **Multiple tool modes**: sub-agent and full configuration\n- **Automatic app discovery**\n- **Enterprise-grade reliability and security**\n\n**🚀 Get started**: [Pipedream MCP Documentation](https://pipedream.com/docs/connect/mcp/developers)\n\n> **🎮 Try it now**: Check out our [open source chat app](https://github.com/PipedreamHQ/mcp) at [chat.pipedream.com](https://chat.pipedream.com/)\n\n---\n\n## Self-Hosting (Reference Implementation)\n\nThis reference implementation shows how you can:\n\n- [Run the servers locally](#running-the-server-via-npx) with `npx @pipedream/mcp`\n- [Host the servers yourself](#hosting-your-own-server) to use them within your app or company\n\nSee the consumer-facing MCP server in action at [mcp.pipedream.com](https://mcp.pipedream.com) and check out a demo of the developer-facing product at [chat.pipedream.com](https://chat.pipedream.com).\n\nWe published this code as a reference, so you can better understand how to use Pipedream Connect for such an application. This is a reference implementation specifically for self-hosting the server and may not be fully documented.\n\n**For production use, we strongly recommend using our [remote MCP server](https://pipedream.com/docs/connect/mcp/developers) instead.**\n\n## ⭐ Reference Implementation Features\n\n- Run **your own MCP server** for [over 2,800 apps and APIs](https://mcp.pipedream.com)\n- Manage servers **for your users**, in your own app\n- Connect accounts, configure params, and make API requests, all via tools\n- Fully-managed OAuth and credential storage ([see security docs](https://pipedream.com/docs/privacy-and-security/#third-party-oauth-grants-api-keys-and-environment-variables))\n\n## 🚀 Getting Started\n\nPipedream's MCP servers use the [Pipedream Connect API](https://pipedream.com/docs/connect/) to manage auth and make API requests. To run an MCP server, you'll need a Pipedream project and Pipedream API credentials.\n\n1. [Sign up for Pipedream](https://pipedream.com/auth/signup)\n2. [Create a project](https://pipedream.com/docs/workflows/projects/#creating-projects). Any accounts connected via MCP will be stored here.\n3. [Create a Pipedream OAuth client](https://pipedream.com/docs/rest-api/auth/#creating-an-oauth-client)\n4. Set the environment variables (See `.env.example`) (directly in your shell session, dot files, etc.):\n\n```bash\nPIPEDREAM_CLIENT_ID=your_client_id\nPIPEDREAM_CLIENT_SECRET=your_client_secret\nPIPEDREAM_PROJECT_ID=your_project_id\nPIPEDREAM_PROJECT_ENVIRONMENT=development\n```\n\n### Pipedream concepts to understand\n\nIf you're running MCP servers for your app, you'll likely want to use the [SSE interface](#sse). The SSE server accepts two route params:\n\n1. `external_user_id` — This is your user’s ID, in your system — whatever you use to uniquely identify them. Any requests made to that route are coupled to that end user, and would use the auth Pipedream stores for that user. [See the docs](https://pipedream.com/docs/connect/api/#external-users) for more detail.\n2. `app` — The app's \"name slug\" (the unique identifier for the app), found in the **Authentication** section of [any Pipedream app](https://pipedream.com/apps). For example, the app slug for [Slack](https://pipedream.com/apps/slack) is `slack`.\n\nIf your user `123` wants to connect to the `slack` MCP server, your MCP client would make a request to the `/123/slack` route. [See the SSE docs below](#sse) for more detail.\n\n## Server overview\n\nThere are two ways to use this MCP server.\n\n1 - App specific\n`/{external_user_id}/{app}`\nThis is currently available at [mcp.pipedream.com](https://mcp.pipedream.com). You can use an endpoint for each app.\nAll the tools available for that app will be available at that endpoint.\n\n2 - Dynamic\n`/{external_user_id}`\nThis is an experimental version, since it relies on tools being able to update dynamically.\nWe use this server to power the tools on [chat.pipedream.com](https://chat.pipedream.com).\n\n> [!NOTE] > [Check out the docs](https://pipedream.com/docs/connect/mcp/app-discovery) to learn more about enabling app discovery with the MCP server.\n\n## Hosting your own server\n\n### Using the `Dockerfile`\n\nIf you have Docker installed locally, you can build and run the container:\n\n```console\n> docker build -t pipedream-connect .\n> docker run -d --name pd-mcp -p 3010:3010 --env-file .env pipedream-connect:latest\n```\n\nThis exposes a generic MCP server at [http://localhost:3010/:external_user_id/:app](http://localhost:3010/:external_user_id/:app).\n\n## Development\n\n`cp .env.example .env` and fill in the details of your dev project.\n\n```bash\npnpm install\n```\n\n### Start the server with Streamable HTTP Transport\n\n```bash\npnpm dev:http\n```\n\nYou can use the optional env var `PD_SDK_DEBUG` to print out all the requests and responses going to the Connect API\n\n```bash\nPD_SDK_DEBUG=true pnpm dev:http\n```\n\nThen run the inspector:\n\n```bash\nnpx @modelcontextprotocol/inspector\n```\n\nUse `http://localhost:3010/v1/{external_user_id}/{app}` for Streamable HTTP Transport or `http://localhost:3010/{external_user_id}/{app}` for SSE Transport.\n\nThese URLs can also be used by other clients (e.g. Cursor).\n\n### Stdio Transport setup\n\nStdio has only been tested with the MCP Inspector.\n\n```bash\nnpx @modelcontextprotocol/inspector bun src/stdio.ts\n```\n\nSee the logs for the inspector URL.\n\nEnsure the left side of the inspector matches this:\n\n![Screenshot 2025-03-12 at 1 05 37 PM](https://github.com/user-attachments/assets/cc650999-353c-45da-add8-7d8de867d6ed)\n\nThen press \"List Tools\" to fetch the list of MCP tools.\n\n## License\n\nPipedream Source Available License Version 1.0 - See https://github.com/PipedreamHQ/pipedream/blob/master/LICENSE\n",
+  "category": "Development",
+  "quality_score": 68,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pipedream-mcp": {
+        "command": "npx",
+        "args": ["-y", "@pipedream/mcp"],
+        "env": {
+          "PIPEDREAM_CLIENT_ID": "your_client_id",
+          "PIPEDREAM_CLIENT_SECRET": "your_client_secret",
+          "PIPEDREAM_PROJECT_ID": "your_project_id",
+          "PIPEDREAM_PROJECT_ENVIRONMENT": "development"
+        }
+      },
+      "pipedream-connect-docker": {
+        "command": "docker",
+        "args": ["run", "-d", "--name", "pd-mcp", "-p", "3010:3010", "--env-file", ".env", "pipedream-connect:latest"],
+        "env": {
+          "PIPEDREAM_CLIENT_ID": "your_client_id",
+          "PIPEDREAM_CLIENT_SECRET": "your_client_secret",
+          "PIPEDREAM_PROJECT_ID": "your_project_id",
+          "PIPEDREAM_PROJECT_ENVIRONMENT": "development"
+        },
+        "docker_image": ".env"
+      },
+      "pipedream-mcp-http": {
+        "command": "pnpm",
+        "args": ["dev:http"],
+        "env": {
+          "PIPEDREAM_CLIENT_ID": "your_client_id",
+          "PIPEDREAM_CLIENT_SECRET": "your_client_secret",
+          "PIPEDREAM_PROJECT_ID": "your_project_id",
+          "PIPEDREAM_PROJECT_ENVIRONMENT": "development"
+        }
+      },
+      "pipedream-mcp-http-debug": {
+        "command": "pnpm",
+        "args": ["dev:http"],
+        "env": {
+          "PD_SDK_DEBUG": "true",
+          "PIPEDREAM_CLIENT_ID": "your_client_id",
+          "PIPEDREAM_CLIENT_SECRET": "your_client_secret",
+          "PIPEDREAM_PROJECT_ID": "your_project_id",
+          "PIPEDREAM_PROJECT_ENVIRONMENT": "development"
+        }
+      },
+      "pipedream-mcp-stdio": {
+        "command": "bun",
+        "args": ["src/stdio.ts"],
+        "env": {
+          "PIPEDREAM_CLIENT_ID": "your_client_id",
+          "PIPEDREAM_CLIENT_SECRET": "your_client_secret",
+          "PIPEDREAM_PROJECT_ID": "your_project_id",
+          "PIPEDREAM_PROJECT_ENVIRONMENT": "development"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "PipedreamHQ",
+    "repo": "pipedream",
+    "url": "https://github.com/PipedreamHQ/pipedream/tree/master/modelcontextprotocol",
+    "name": "pipedreamhq__pipedream__modelcontextprotocol",
+    "path": "modelcontextprotocol",
+    "stars": 10536,
+    "contributors": 201,
+    "issues": 11676,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "1725ae699fe34c75a3e6a666fdb3c050ff659ee2"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:10.349Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "@pipedream/sdk",
+      "importance": 9
+    },
+    {
+      "name": "openai",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 6
+    },
+    {
+      "name": "@supabase/supabase-js",
+      "importance": 6
+    },
+    {
+      "name": "cors",
+      "importance": 5
+    },
+    {
+      "name": "dd-trace",
+      "importance": 5
+    },
+    {
+      "name": "tsx",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"description\": \"Pipedream stdio and HTTP MCP servers\",\n  \"scripts\": {\n    \"dev:stdio\": \"bun --watch src/stdio.ts\",\n    \"dev:http\": \"tsx watch -r dotenv/config src/http.ts\",\n    \"prod:http\": \"tsx src/http.ts\",\n    \"dev:sse\": \"pnpm run dev:http\",\n    \"prod:sse\": \"pnpm run prod:http\"\n  },\n  \"type\": \"module\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.2\",\n    \"@pipedream/sdk\": \"^1.5.4\",\n    \"@supabase/supabase-js\": \"^2.49.1\",\n    \"cors\": \"^2.8.5\",\n    \"dd-trace\": \"^3.58.0\",\n    \"express\": \"^4.21.2\",\n    \"openai\": \"^4.87.3\",\n    \"tsx\": \"^4.19.3\",\n    \"zod\": \"^3.24.2\",\n    \"zod-to-json-schema\": \"^3.24.5\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"^5.0.0\",\n    \"@types/node\": \"^22.15.3\",\n    \"dotenv\": \"^6.0.0\"\n  }\n}\n"
+}

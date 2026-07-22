@@ -283,6 +283,7 @@ function SidebarTrigger({
       data-slot="sidebar-trigger"
       variant="ghost"
       size="icon"
+      aria-expanded={!isCollapsed}
       className={cn("relative size-7", className)}
       onClick={(event) => {
         onClick?.(event);
@@ -292,7 +293,9 @@ function SidebarTrigger({
     >
       <PanelLeftIcon />
       <OnboardingDot visible={showDot} className="absolute right-0.5 top-0.5" />
-      <span className="sr-only">Toggle Sidebar</span>
+      <span className="sr-only">
+        {isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+      </span>
     </Button>
   );
 
@@ -347,7 +350,8 @@ function SidebarCircleToggle({
           type="button"
           data-sidebar="circle-toggle"
           data-slot="sidebar-circle-toggle"
-          aria-label="Toggle Sidebar"
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!isCollapsed}
           onClick={toggleSidebar}
           style={{
             left: isCollapsed
@@ -357,6 +361,9 @@ function SidebarCircleToggle({
           className={cn(
             "group/circle-toggle hidden md:flex items-center justify-center",
             "fixed top-1/2 z-30 h-10 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full",
+            // Extend the hit area beyond the 14px-wide pill to meet the 24px
+            // minimum target size (WCAG 2.5.8).
+            "after:absolute after:-inset-x-1.5 after:inset-y-0 after:content-['']",
             "border shadow-sm cursor-pointer text-muted-foreground",
             // Offset fill while collapsed so the expand affordance stands out;
             // mixed opaquely so the sidebar border doesn't show through, with a
@@ -396,7 +403,6 @@ function SidebarCircleToggle({
             visible={showDot && isCollapsed}
             className="absolute -right-0.5 -top-0.5"
           />
-          <span className="sr-only">Toggle Sidebar</span>
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">

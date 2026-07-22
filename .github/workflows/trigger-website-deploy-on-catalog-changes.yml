@@ -1,0 +1,20 @@
+name: Trigger Website Deploy on Catalog Changes
+
+# The website (archestra.ai) pulls mcp-catalog/data from this repository at
+# build time, so catalog changes only become visible after a redeploy.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "mcp-catalog/data/**"
+
+permissions: {}
+
+jobs:
+  trigger-website-deploy:
+    name: Trigger Website Deploy
+    uses: ./.github/workflows/trigger-website-deploy.yml
+    secrets:
+      WEBSITE_VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}

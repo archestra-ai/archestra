@@ -1,0 +1,185 @@
+{
+  "name": "memgraph__ai-toolkit__integrations__mcp-memgraph",
+  "display_name": "mcp-memgraph",
+  "description": "Toolkit for building AI-driven graph apps on Memgraph, with LangChain, MCP, and agent implementations. ",
+  "author": {
+    "name": "memgraph"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "--with", "mcp-memgraph", "--python", "3.13", "mcp-memgraph"],
+    "env": {
+      "MEMGRAPH_URL": "${user_config.memgraph_url}",
+      "MEMGRAPH_USER": "${user_config.memgraph_user}",
+      "MEMGRAPH_PASSWORD": "${user_config.memgraph_password}",
+      "MEMGRAPH_DATABASE": "${user_config.memgraph_database}",
+      "MCP_TRANSPORT": "${user_config.mcp_transport}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "memgraph_url": {
+      "type": "string",
+      "title": "Memgraph URL",
+      "description": "The Bolt URL of the Memgraph instance to connect to.",
+      "default": "bolt://host.docker.internal:7687",
+      "required": false
+    },
+    "memgraph_user": {
+      "type": "string",
+      "title": "Memgraph Username",
+      "description": "The username for authentication.",
+      "default": "memgraph",
+      "required": false
+    },
+    "memgraph_password": {
+      "type": "string",
+      "title": "Memgraph Password",
+      "description": "The password for authentication.",
+      "sensitive": true,
+      "default": "",
+      "required": false
+    },
+    "memgraph_database": {
+      "type": "string",
+      "title": "Memgraph Database",
+      "description": "The database name to connect to.",
+      "default": "memgraph",
+      "required": false
+    },
+    "mcp_transport": {
+      "type": "string",
+      "title": "MCP Transport Protocol",
+      "description": "The transport protocol to use. Options: http, stdio.",
+      "default": "http",
+      "required": false
+    }
+  },
+  "readme": "# 🚀 Memgraph MCP Server\n\nMemgraph MCP Server is a lightweight server implementation of the Model Context Protocol (MCP) designed to connect Memgraph with LLMs.\n\n![mcp-server](./mcp-server.png)\n\n## Run Memgraph MCP server with Claude\n\n1. Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/)\n2. Install [Claude for Desktop](https://claude.ai/download).\n3. Add the Memgraph server to Claude config\n\nYou can do it in the UI, by opening your Claude desktop app navigate to `Settings`, under the `Developer` section, click on `Edit Config` and add the\nfollowing content:\n\n```\n{\n    \"mcpServers\": {\n      \"mpc-memgraph\": {\n        \"command\": \"uv\",\n        \"args\": [\n            \"run\",\n            \"--with\",\n            \"mcp-memgraph\",\n            \"--python\",\n            \"3.13\",\n            \"mcp-memgraph\"\n        ]\n     }\n   }\n}\n```\n\nOr you can open the config file in your favorite text editor. The location of the config file depends on your operating system:\n\n**MacOS/Linux**\n\n```\n~/Library/Application\\ Support/Claude/claude_desktop_config.json\n```\n\n**Windows**\n\n```\n%APPDATA%/Claude/claude_desktop_config.json\n```\n\n> [!NOTE]  \n> You may need to put the full path to the uv executable in the command field. You can get this by running `which uv` on MacOS/Linux or `where uv` on Windows. Make sure you pass in the absolute path to your server.\n\n### Chat with the database\n\n1. Run Memgraph MAGE:\n   ```\n   docker run -p 7687:7687 memgraph/memgraph-mage --schema-info-enabled=True\n   ```\n   The `--schema-info-enabled` configuration setting is set to `True` to allow LLM to run `SHOW SCHEMA INFO` query.\n2. Open Claude Desktop and see the Memgraph tools and resources listed. Try it out! (You can load dummy data from [Memgraph Lab](https://memgraph.com/docs/data-visualization) Datasets)\n\n## 🔧Tools\n\nThe Memgraph MCP Server exposes the following tools over MCP. Each tool runs a Memgraph‐toolbox operation and returns a list of records (dictionaries).\n\n### run_query(query: str)\n\nRun any arbitrary Cypher query against the connected Memgraph database.  \nParameters:\n\n- `query`: A valid Cypher query string.\n\n### get_configuration()\n\nFetch the current Memgraph configuration settings.  \nEquivalent to running `SHOW CONFIGURATION`.\n\n### get_index()\n\nRetrieve information about existing indexes.  \nEquivalent to running `SHOW INDEX INFO`.\n\n### get_constraint()\n\nRetrieve information about existing constraints.  \nEquivalent to running `SHOW CONSTRAINT INFO`.\n\n### get_schema()\n\nFetch the graph schema (labels, relationships, property keys).  \nEquivalent to running `SHOW SCHEMA INFO`.\n\n### get_storage()\n\nRetrieve storage usage metrics for nodes, relationships, and properties.  \nEquivalent to running `SHOW STORAGE INFO`.\n\n### get_triggers()\n\nList all database triggers.  \nEquivalent to running `SHOW TRIGGERS`.\n\n### get_betweenness_centrality()\n\nCompute betweenness centrality on the entire graph.  \nUses `BetweennessCentralityTool` under the hood.\n\n### get_page_rank()\n\nCompute PageRank scores for all nodes.  \nUses `PageRankTool` under the hood.\n\n## 🐳 Run Memgraph MCP server with Docker\n\n### Building Memgraph MCP image\n\nTo build the Docker image using your local `memgraph-toolbox` code, run from the root of the monorepo:\n\n```bash\ncd /path/to/ai-toolkit\ndocker build -f integrations/mcp-memgraph/Dockerfile -t mcp-memgraph:latest .\n```\n\nThis will include your local `memgraph-toolbox` and install it inside the image.\n\n### Running the Docker image\n\n#### 1. Streamable HTTP mode (recommended for most users)\n\nTo connect to local Memgraph containers, by default the MCP server will be available at `http://localhost:8000/mcp/`:\n\n```bash\ndocker run --rm mcp-memgraph:latest\n```\n\n#### 2. Stdio mode (for integration with MCP stdio clients)\n\nConfigure your MCP host to run the docker command and utilize stdio:\n\n```bash\ndocker run --rm -i -e MCP_TRANSPORT=stdio mcp-memgraph:latest\n```\n\n> 📄 Note: By default, the server will connect to a Memgraph instance running on localhost docker network `bolt://host.docker.internal:7687`. If you have a Memgraph instance running on a different host or port, you can specify it using environment variables.\n\n#### 3. Custom Memgraph connection (external instance, no host network)\n\nTo avoid using host networking, or to connect to an external Memgraph instance:\n\n```bash\ndocker run --rm \\\n  -p 8000:8000 \\\n  -e MEMGRAPH_URL=bolt://memgraph:7687 \\\n  -e MEMGRAPH_USER=myuser \\\n  -e MEMGRAPH_PASSWORD=password \\\n  mcp-memgraph:latest\n```\n\n\n## ⚙️ Configuration\n\n### Environment Variables\n\nThe following environment variables can be used to configure the Memgraph MCP Server, whether running with Docker or directly (e.g., with `uv` or `python`).\n\n- `MEMGRAPH_URL`: The Bolt URL of the Memgraph instance to connect to. Default: `bolt://host.docker.internal:7687`\n    - The default value allows you to connect to a Memgraph instance running on your host machine from within the Docker container.\n- `MEMGRAPH_USER`: The username for authentication. Default: `memgraph`\n- `MEMGRAPH_PASSWORD`: The password for authentication. Default: empty\n- `MEMGRAPH_DATABASE`: The database name to connect to. Default: `memgraph`\n- `MCP_TRANSPORT`: The transport protocol to use. Options: `http` (default), `stdio`\n\nYou can set these environment variables in your shell, in your Docker run command, or in your deployment environment. \n\n### Connecting from VS Code (HTTP server)\n\nIf you are using VS Code MCP extension or similar, your configuration for an HTTP server would look like:\n\n```json\n{\n    \"servers\": {\n        \"mcp-memgraph-http\": {\n            \"url\": \"http://localhost:8000/mcp/\"\n        }\n    }\n}\n```\n\n> **Note:** The URL must end with `/mcp/`.\n\n---\n\n#### Running the Docker image in Visual Studio Code using stdio\n\nYou can also run the server using stdio for integration with MCP stdio clients:\n\n1. Open Visual Studio Code, open Command Palette (Ctrl+Shift+P or Cmd+Shift+P on Mac), and select `MCP: Add server...`.\n2. Choose `Command (stdio)`\n3. Enter `docker` as the command to run.\n4. For Server ID enter `mcp-memgraph`.\n5. Choose \"User\" (adds to user-space `settings.json`) or \"Workspace\" (adds to `.vscode/mcp.json`).\n\nWhen the settings open, enhance the args as follows:\n\n```json\n{\n    \"servers\": {\n        \"mcp-memgraph\": {\n            \"type\": \"stdio\",\n            \"command\": \"docker\",\n            \"args\": [\n                \"run\",\n                \"--rm\",\n                \"-i\",\n                \"-e\", \"MCP_TRANSPORT=stdio\",\n                \"mcp-memgraph:latest\"\n            ]\n        }\n    }\n}\n```\n\nTo connect to a remote Memgraph instance with authentication, add environment variables to the `args` list:\n\n```json\n{\n    \"servers\": {\n        \"mcp-memgraph\": {\n            \"type\": \"stdio\",\n            \"command\": \"docker\",\n            \"args\": [\n                \"run\",\n                \"--rm\",\n                \"-i\",\n                \"-e\", \"MCP_TRANSPORT=stdio\",\n                \"-e\", \"MEMGRAPH_URL=bolt://memgraph:7687\",\n                \"-e\", \"MEMGRAPH_USER=myuser\",\n                \"-e\", \"MEMGRAPH_PASSWORD=mypassword\",\n                \"mcp-memgraph:latest\"\n            ]\n        }\n    }\n}\n```\n\n---\n\nOpen GitHub Copilot in Agent mode and you'll be able to interact with the Memgraph MCP server.",
+  "category": "AI Tools",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-memgraph": {
+        "command": "uv",
+        "args": ["run", "--with", "mcp-memgraph", "--python", "3.13", "mcp-memgraph"],
+        "env": {}
+      },
+      "mcp-memgraph-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "mcp-memgraph:latest"],
+        "env": {},
+        "docker_image": "mcp-memgraph:latest"
+      },
+      "mcp-memgraph-docker-stdio": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "-e", "MCP_TRANSPORT=stdio", "mcp-memgraph:latest"],
+        "env": {
+          "MCP_TRANSPORT": "stdio"
+        },
+        "docker_image": "mcp-memgraph:latest"
+      },
+      "mcp-memgraph-docker-configured": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-p",
+          "8000:8000",
+          "-e",
+          "MEMGRAPH_URL=bolt://memgraph:7687",
+          "-e",
+          "MEMGRAPH_USER=myuser",
+          "-e",
+          "MEMGRAPH_PASSWORD=password",
+          "mcp-memgraph:latest"
+        ],
+        "env": {
+          "MEMGRAPH_URL": "bolt://memgraph:7687",
+          "MEMGRAPH_USER": "myuser",
+          "MEMGRAPH_PASSWORD": "password"
+        },
+        "docker_image": "mcp-memgraph:latest"
+      },
+      "mcp-memgraph-docker-stdio-configured": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "-e",
+          "MCP_TRANSPORT=stdio",
+          "-e",
+          "MEMGRAPH_URL=bolt://memgraph:7687",
+          "-e",
+          "MEMGRAPH_USER=myuser",
+          "-e",
+          "MEMGRAPH_PASSWORD=mypassword",
+          "mcp-memgraph:latest"
+        ],
+        "env": {
+          "MCP_TRANSPORT": "stdio",
+          "MEMGRAPH_URL": "bolt://memgraph:7687",
+          "MEMGRAPH_USER": "myuser",
+          "MEMGRAPH_PASSWORD": "mypassword"
+        },
+        "docker_image": "mcp-memgraph:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "memgraph",
+    "repo": "ai-toolkit",
+    "url": "https://github.com/memgraph/ai-toolkit/tree/main/integrations/mcp-memgraph",
+    "name": "memgraph__ai-toolkit__integrations__mcp-memgraph",
+    "path": "integrations/mcp-memgraph",
+    "stars": 35,
+    "contributors": 5,
+    "issues": 32,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "a5091421a3553111c2ef486a62a2151a01af1823"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:30.078Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "neo4j",
+      "importance": 9
+    },
+    {
+      "name": "memgraph-toolbox",
+      "importance": 9
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-memgraph\"\nversion = \"0.1.4\"\ndescription = \"MCP integration and utilities for Memgraph MCP server\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\n\nauthors = [\n  { name = \"antejavor\", email = \"ante.javor@memgraph.io\" }\n]\n\nlicense = { text = \"MIT\" }\n\nkeywords = [\"memgraph\", \"mcp\", \"graph\", \"integration\", \"toolkit\"]\n\nclassifiers = [\n  \"Intended Audience :: Developers\",\n  \"License :: OSI Approved :: MIT License\",\n  \"Programming Language :: Python :: 3\",\n  \"Programming Language :: Python :: 3.13\",\n]\n\ndependencies = [\n  \"httpx>=0.28.1\",\n  \"mcp[cli]>=1.9.3\",\n  \"neo4j>=5.28.1\",\n  \"memgraph-toolbox>=0.1.4\",\n]\n\n[project.optional-dependencies]\ntest = [\n  \"pytest>=8.3.5\",\n  \"python-dotenv>=1.0.1\",\n  \"anthropic\",\n  \"mcp[cli]>=1.3.0\",\n  \"pytest-asyncio>=0.20.3\"\n]\n\n[project.scripts]\nmcp-memgraph = \"mcp_memgraph.main:main\"\n\n[project.urls]\n\"Homepage\" = \"https://github.com/memgraph/ai-toolkit\"\n\"Source\" = \"https://github.com/memgraph/ai-toolkit/tree/main/integrations/mcp-memgraph\"\n\"Issues\" = \"https://github.com/memgraph/ai-toolkit/issues\"\n\n[tool.pytest.ini_options]\npythonpath = [\"src\"]\nasyncio_mode = \"strict\"\nasyncio_default_fixture_loop_scope = \"function\"\n\n[build-system]\nrequires = [\"hatchling\", \"build\", \"setuptools\"]\nbuild-backend = \"hatchling.build\"\n\n\n[tool.hatch.metadata]\nallow-direct-references = true"
+}

@@ -26,6 +26,8 @@ export type FormDialogProps = {
   size?: DialogSize;
   children: React.ReactNode;
   preventCloseOnInteractOutside?: boolean;
+  /** Block Esc from closing — the X button stays the only dismissal. */
+  preventCloseOnEscape?: boolean;
   /**
    * When the form holds unsaved data, closing it (Esc, outside-click, or the
    * X button) shows a "Discard unsaved changes?" confirmation instead of
@@ -34,6 +36,8 @@ export type FormDialogProps = {
    */
   isDirty?: boolean;
   className?: string;
+  /** Extra classes for the header block, e.g. `border-b-0` to drop its rule. */
+  headerClassName?: string;
 };
 
 // Flex column + overflow-hidden come from the base DialogContent.
@@ -51,8 +55,10 @@ export function FormDialog({
   size = "medium",
   children,
   preventCloseOnInteractOutside,
+  preventCloseOnEscape,
   isDirty = false,
   className,
+  headerClassName,
 }: FormDialogProps) {
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
 
@@ -66,9 +72,12 @@ export function FormDialog({
               ? (e) => e.preventDefault()
               : undefined
           }
+          onEscapeKeyDown={
+            preventCloseOnEscape ? (e) => e.preventDefault() : undefined
+          }
         >
           <DialogDismissProvider requestClose={guard.requestClose}>
-            <DialogHeader>
+            <DialogHeader className={headerClassName}>
               <DialogTitle>{title}</DialogTitle>
               {description && (
                 <DialogDescription>{description}</DialogDescription>

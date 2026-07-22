@@ -1,0 +1,151 @@
+{
+  "name": "pab1it0__prometheus-mcp-server",
+  "display_name": "prometheus-mcp-server",
+  "description": "A Model Context Protocol (MCP) server that enables AI agents and LLMs to query and analyze Prometheus metrics through standardized interfaces.",
+  "author": {
+    "name": "pab1it0"
+  },
+  "server": {
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "-e",
+      "PROMETHEUS_URL",
+      "-e",
+      "PROMETHEUS_USERNAME",
+      "-e",
+      "PROMETHEUS_PASSWORD",
+      "-e",
+      "PROMETHEUS_TOKEN",
+      "-e",
+      "ORG_ID",
+      "ghcr.io/pab1it0/prometheus-mcp-server:latest"
+    ],
+    "env": {
+      "PROMETHEUS_URL": "${user_config.prometheus_url}",
+      "PROMETHEUS_USERNAME": "${user_config.prometheus_username}",
+      "PROMETHEUS_PASSWORD": "${user_config.prometheus_password}",
+      "PROMETHEUS_TOKEN": "${user_config.prometheus_token}",
+      "ORG_ID": "${user_config.org_id}"
+    },
+    "type": "local",
+    "docker_image": "ghcr.io/pab1it0/prometheus-mcp-server:latest"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "prometheus_url": {
+      "type": "string",
+      "title": "Prometheus Server URL",
+      "description": "The URL of your Prometheus server, e.g., http://your-prometheus-server:9090",
+      "required": true,
+      "sensitive": false
+    },
+    "prometheus_username": {
+      "type": "string",
+      "title": "Prometheus Basic Auth Username",
+      "description": "Username for basic authentication to Prometheus (if required)",
+      "sensitive": true,
+      "required": false
+    },
+    "prometheus_password": {
+      "type": "string",
+      "title": "Prometheus Basic Auth Password",
+      "description": "Password for basic authentication to Prometheus (if required)",
+      "sensitive": true,
+      "required": false
+    },
+    "prometheus_token": {
+      "type": "string",
+      "title": "Prometheus Bearer Token",
+      "description": "Bearer token for authentication to Prometheus (if required)",
+      "sensitive": true,
+      "required": false
+    },
+    "org_id": {
+      "type": "string",
+      "title": "Organization ID",
+      "description": "Organization ID for multi-tenant setups like Cortex, Mimir, or Thanos (if required)",
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "readme": "# Prometheus MCP Server\n[![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-pab1it0%2Fprometheus--mcp--server-blue?logo=docker)](https://github.com/users/pab1it0/packages/container/package/prometheus-mcp-server)\n[![GitHub Release](https://img.shields.io/github/v/release/pab1it0/prometheus-mcp-server)](https://github.com/pab1it0/prometheus-mcp-server/releases)\n[![Codecov](https://codecov.io/gh/pab1it0/prometheus-mcp-server/branch/main/graph/badge.svg)](https://codecov.io/gh/pab1it0/prometheus-mcp-server)\n![Python](https://img.shields.io/badge/python-3.10%2B-blue)\n[![License](https://img.shields.io/github/license/pab1it0/prometheus-mcp-server)](https://github.com/pab1it0/prometheus-mcp-server/blob/main/LICENSE)\n\nA [Model Context Protocol][mcp] (MCP) server for Prometheus.\n\nThis provides access to your Prometheus metrics and queries through standardized MCP interfaces, allowing AI assistants to execute PromQL queries and analyze your metrics data.\n\n[mcp]: https://modelcontextprotocol.io\n\n## Features\n\n- [x] Execute PromQL queries against Prometheus\n- [x] Discover and explore metrics\n  - [x] List available metrics\n  - [x] Get metadata for specific metrics\n  - [x] View instant query results\n  - [x] View range query results with different step intervals\n- [x] Authentication support\n  - [x] Basic auth from environment variables\n  - [x] Bearer token auth from environment variables\n- [x] Docker containerization support\n\n- [x] Provide interactive tools for AI assistants\n\nThe list of tools is configurable, so you can choose which tools you want to make available to the MCP client.\nThis is useful if you don't use certain functionality or if you don't want to take up too much of the context window.\n\n## Getting Started\n\n### Prerequisites\n\n- Prometheus server accessible from your environment\n- Docker Desktop (recommended) or Docker CLI\n- MCP-compatible client (Claude Desktop, VS Code, Cursor, Windsurf, etc.)\n\n### Installation Methods\n\n<details>\n<summary><b>Claude Desktop</b></summary>\n\nAdd to your Claude Desktop configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"prometheus\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"PROMETHEUS_URL\",\n        \"ghcr.io/pab1it0/prometheus-mcp-server:latest\"\n      ],\n      \"env\": {\n        \"PROMETHEUS_URL\": \"<your-prometheus-url>\"\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary><b>Claude Code</b></summary>\n\nInstall via the Claude Code CLI:\n\n```bash\nclaude mcp add prometheus --env PROMETHEUS_URL=http://your-prometheus:9090 -- docker run -i --rm -e PROMETHEUS_URL ghcr.io/pab1it0/prometheus-mcp-server:latest\n```\n</details>\n\n<details>\n<summary><b>VS Code / Cursor / Windsurf</b></summary>\n\nAdd to your MCP settings in the respective IDE:\n\n```json\n{\n  \"prometheus\": {\n    \"command\": \"docker\",\n    \"args\": [\n      \"run\",\n      \"-i\",\n      \"--rm\",\n      \"-e\",\n      \"PROMETHEUS_URL\",\n      \"ghcr.io/pab1it0/prometheus-mcp-server:latest\"\n    ],\n    \"env\": {\n      \"PROMETHEUS_URL\": \"<your-prometheus-url>\"\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary><b>Docker Desktop</b></summary>\n\nThe easiest way to run the Prometheus MCP server is through Docker Desktop:\n\n<a href=\"https://hub.docker.com/open-desktop?url=https://open.docker.com/dashboard/mcp/servers/id/prometheus/config?enable=true\">\n  <img src=\"https://img.shields.io/badge/+%20Add%20to-Docker%20Desktop-2496ED?style=for-the-badge&logo=docker&logoColor=white\" alt=\"Add to Docker Desktop\" />\n</a>\n\n1. **Via MCP Catalog**: Visit the [Prometheus MCP Server on Docker Hub](https://hub.docker.com/mcp/server/prometheus/overview) and click the button above\n   \n2. **Via MCP Toolkit**: Use Docker Desktop's MCP Toolkit extension to discover and install the server\n\n3. Configure your connection using environment variables (see Configuration Options below)\n\n</details>\n\n<details>\n<summary><b>Manual Docker Setup</b></summary>\n\nRun directly with Docker:\n\n```bash\n# With environment variables\ndocker run -i --rm \\\n  -e PROMETHEUS_URL=\"http://your-prometheus:9090\" \\\n  ghcr.io/pab1it0/prometheus-mcp-server:latest\n\n# With authentication\ndocker run -i --rm \\\n  -e PROMETHEUS_URL=\"http://your-prometheus:9090\" \\\n  -e PROMETHEUS_USERNAME=\"admin\" \\\n  -e PROMETHEUS_PASSWORD=\"password\" \\\n  ghcr.io/pab1it0/prometheus-mcp-server:latest\n```\n</details>\n\n### Configuration Options\n\n| Variable | Description | Required |\n|----------|-------------|----------|\n| `PROMETHEUS_URL` | URL of your Prometheus server | Yes |\n| `PROMETHEUS_USERNAME` | Username for basic authentication | No |\n| `PROMETHEUS_PASSWORD` | Password for basic authentication | No |\n| `PROMETHEUS_TOKEN` | Bearer token for authentication | No |\n| `ORG_ID` | Organization ID for multi-tenant setups | No |\n| `PROMETHEUS_MCP_SERVER_TRANSPORT` | Transport mode (stdio, http, sse) | No (default: stdio) |\n| `PROMETHEUS_MCP_BIND_HOST` | Host for HTTP transport | No (default: 127.0.0.1) |\n| `PROMETHEUS_MCP_BIND_PORT` | Port for HTTP transport | No (default: 8080) |\n\n\n## Development\n\nContributions are welcome! Please open an issue or submit a pull request if you have any suggestions or improvements.\n\nThis project uses [`uv`](https://github.com/astral-sh/uv) to manage dependencies. Install `uv` following the instructions for your platform:\n\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\nYou can then create a virtual environment and install the dependencies with:\n\n```bash\nuv venv\nsource .venv/bin/activate  # On Unix/macOS\n.venv\\Scripts\\activate     # On Windows\nuv pip install -e .\n```\n\n### Testing\n\nThe project includes a comprehensive test suite that ensures functionality and helps prevent regressions.\n\nRun the tests with pytest:\n\n```bash\n# Install development dependencies\nuv pip install -e \".[dev]\"\n\n# Run the tests\npytest\n\n# Run with coverage report\npytest --cov=src --cov-report=term-missing\n```\n\nWhen adding new features, please also add corresponding tests.\n\n### Tools\n\n| Tool | Category | Description |\n| --- | --- | --- |\n| `execute_query` | Query | Execute a PromQL instant query against Prometheus |\n| `execute_range_query` | Query | Execute a PromQL range query with start time, end time, and step interval |\n| `list_metrics` | Discovery | List all available metrics in Prometheus |\n| `get_metric_metadata` | Discovery | Get metadata for a specific metric |\n| `get_targets` | Discovery | Get information about all scrape targets |\n\n## License\n\nMIT\n\n---\n\n[mcp]: https://modelcontextprotocol.io",
+  "category": "Monitoring",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "prometheus-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "PROMETHEUS_URL", "ghcr.io/pab1it0/prometheus-mcp-server:latest"],
+        "env": {
+          "PROMETHEUS_URL": "<url>"
+        },
+        "docker_image": "ghcr.io/pab1it0/prometheus-mcp-server:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pab1it0",
+    "repo": "prometheus-mcp-server",
+    "url": "https://github.com/pab1it0/prometheus-mcp-server",
+    "name": "pab1it0__prometheus-mcp-server",
+    "path": null,
+    "stars": 201,
+    "contributors": 7,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "5cc0bcad712b4e3e60d1661ee030def8b81b470f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.086Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "prometheus-api-client",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "pyproject-toml",
+      "importance": 6
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "structlog",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"prometheus_mcp_server\"\nversion = \"1.2.5\"\ndescription = \"MCP server for Prometheus integration\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]\",\n    \"prometheus-api-client\",\n    \"python-dotenv\",\n    \"pyproject-toml>=0.1.0\",\n    \"requests\",\n    \"structlog>=23.0.0\",\n    \"fastmcp>=2.11.3\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.0.0\",\n    \"pytest-cov>=4.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-mock>=3.10.0\",\n    \"docker>=7.0.0\",\n    \"requests>=2.31.0\",\n]\n\n[project.scripts]\nprometheus-mcp-server = \"prometheus_mcp_server.main:run_server\"\n\n[tool.setuptools]\npackages = [\"prometheus_mcp_server\"]\npackage-dir = {\"\" = \"src\"}\n\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_functions = \"test_*\"\npython_classes = \"Test*\"\naddopts = \"--cov=src --cov-report=term-missing\"\n\n[tool.coverage.run]\nsource = [\"src/prometheus_mcp_server\"]\nomit = [\"*/__pycache__/*\", \"*/tests/*\", \"*/.venv/*\", \"*/venv/*\"]\nbranch = true\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"if self.debug:\",\n    \"raise NotImplementedError\",\n    \"if __name__ == .__main__.:\",\n    \"pass\",\n    \"raise ImportError\"\n]\nprecision = 1\nshow_missing = true\nskip_covered = false\nfail_under = 89\n\n[tool.coverage.json]\nshow_contexts = true\n\n[tool.coverage.xml]\noutput = \"coverage.xml\"\n"
+}

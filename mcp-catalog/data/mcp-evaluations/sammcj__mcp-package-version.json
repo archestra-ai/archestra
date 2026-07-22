@@ -1,0 +1,133 @@
+{
+  "name": "sammcj__mcp-package-version",
+  "display_name": "mcp-package-version",
+  "description": "An MCP server that provides LLMs with the latest stable package versions when coding",
+  "author": {
+    "name": "sammcj"
+  },
+  "server": {
+    "command": "${__dirname}/server/mcp-package-version",
+    "args": [
+      "--transport",
+      "${user_config.transport}",
+      "--port",
+      "${user_config.port}",
+      "--base-url",
+      "${user_config.base_url}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "transport": {
+      "type": "string",
+      "title": "Transport Type",
+      "description": "Transport type (stdio or sse). Default: stdio",
+      "default": "stdio",
+      "required": false
+    },
+    "port": {
+      "type": "number",
+      "title": "Port for SSE Transport",
+      "description": "Port to use for SSE transport. Default: 18080",
+      "default": 18080,
+      "required": false,
+      "min": 1,
+      "max": 65535
+    },
+    "base_url": {
+      "type": "string",
+      "title": "Base URL for SSE Transport",
+      "description": "Base URL for SSE transport. Default: http://localhost",
+      "default": "http://localhost",
+      "required": false
+    }
+  },
+  "readme": "# Package Version MCP Server\n\n[![smithery badge](https://smithery.ai/badge/mcp-package-version)](https://smithery.ai/server/mcp-package-version)\n\nAn MCP server that provides tools for checking latest stable package versions from multiple package registries:\n\n- npm (Node.js/JavaScript)\n- PyPI (Python)\n- Maven Central (Java)\n- Go Proxy (Go)\n- Swift Packages (Swift)\n- AWS Bedrock (AI Models)\n- Docker Hub (Container Images)\n- GitHub Container Registry (Container Images)\n- GitHub Actions\n\nThis server helps LLMs ensure they're recommending up-to-date package versions when writing code.\n\n**IMPORTANT: I'm slowly moving across this tool to a component of my [mcp-devtools](https://github.com/sammcj/mcp-devtools) server**\n\n<a href=\"https://glama.ai/mcp/servers/zkts2w92ba\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/zkts2w92ba/badge\" alt=\"https://github.com/sammcj/mcp-package-version MCP server\" /></a>\n\n## Screenshot\n\n![tooling with and without mcp-package-version](images/with-without.jpg)\n\n- [Package Version MCP Server](#package-version-mcp-server)\n  - [Screenshot](#screenshot)\n  - [Installation](#installation)\n  - [Usage](#usage)\n  - [Tools](#tools)\n  - [Releases and CI/CD](#releases-and-cicd)\n  - [License](#license)\n\n## Installation\n\nRequirements:\n\n- A modern go version installed (See [Go Installation](https://go.dev/doc/install))\n\nUsing `go install` (Recommended for MCP Client Setup):\n\n```bash\ngo install github.com/sammcj/mcp-package-version/v2@HEAD\n```\n\nThen setup your client to use the MCP server. Assuming you've installed the binary with `go install github.com/sammcj/mcp-package-version/v2@HEAD` and your `$GOPATH` is `/Users/sammcj/go/bin`, you can provide the full path to the binary:\n\n```json\n{\n  \"mcpServers\": {\n    \"package-version\": {\n      \"command\": \"/Users/sammcj/go/bin/mcp-package-version\"\n    }\n  }\n}\n```\n\n- For the Cline VSCode Extension this will be `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`\n- For Claude Desktop `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n- For GoMCP `~/.config/gomcp/config.yaml`\n\n### Other Installation Methods\n\nOr clone the repository and build it:\n\n```bash\ngit clone https://github.com/sammcj/mcp-package-version.git\ncd mcp-package-version\nmake\n```\n\nYou can also run the server in a container:\n\n```bash\ndocker run -p 18080:18080 ghcr.io/sammcj/mcp-package-version:main\n```\n\nNote: If running in a container, you'll need to configure the client to use the URL instead of command, e.g.:\n\n```json\n{\n  \"mcpServers\": {\n    \"package-version\": {\n      \"url\": \"http://localhost:18080\",\n    }\n  }\n}\n```\n\n#### Tip: Go Path\n\nIf `$GOPATH/bin` is not in your `PATH`, you'll need to provide the full path to the binary when configuring your MCP client (e.g. `/Users/sammcj/go/bin/mcp-package-version`).\n\nIf you haven't used go applications before and have only just installed go, you may not have a `$GOPATH` set up in your environment. This is important for any `go install` command to work correctly.\n\n> **Understanding `$GOPATH`**\n>\n> The `go install` command downloads and compiles Go packages, placing the resulting binary executable in the `bin` subdirectory of your `$GOPATH`. By default, `$GOPATH` is > usually located at `$HOME/go` on Unix-like systems (including macOS). If you haven't configured `$GOPATH` explicitly, Go uses this default.\n>\n> The location `$GOPATH/bin` (e.g., `/Users/your_username/go/bin`) needs to be included in your system's `PATH` environment variable if you want to run installed Go binaries directly by name from any terminal location.\n>\n> You can add the following line to your shell configuration file (e.g., `~/.zshrc`, `~/.bashrc`) to set `$GOPATH` to the default if it's not already set, and ensure `$GOPATH/bin` is in your `PATH`:\n>\n> ```bash\n> [ -z \"$GOPATH\" ] && export GOPATH=\"$HOME/go\"; echo \"$PATH\" | grep -q \":$GOPATH/bin\" || export PATH=\"$PATH:$GOPATH/bin\"\n> ```\n>\n> After adding this line, restart your terminal or MCP client.\n\n## Usage\n\nThe server supports two transport modes: stdio (default) and SSE (Server-Sent Events).\n\n### STDIO Transport (Default)\n\n```bash\nmcp-package-version\n```\n\n### SSE Transport\n\n```bash\nmcp-package-version --transport sse --port 18080 --base-url \"http://localhost:18080\"\n```\n\nThis would make the server available to clients at `http://localhost:18080/sse` (Note the `/sse` suffix!).\n\n#### Command-line Options\n\n- `--transport`, `-t`: Transport type (stdio or sse). Default: stdio\n- `--port`: Port to use for SSE transport. Default: 18080\n- `--base-url`: Base URL for SSE transport. Default: http://localhost\n\n### Docker Images\n\nDocker images are available from GitHub Container Registry:\n\n```bash\ndocker pull ghcr.io/sammcj/mcp-package-version:main\n```\n\nYou can also see the example [docker-compose.yaml](docker-compose.yaml).\n\n## Tools\n\n### NPM Packages\n\nCheck the latest versions of NPM packages:\n\n```json\n{\n  \"name\": \"check_npm_versions\",\n  \"arguments\": {\n    \"dependencies\": {\n      \"react\": \"^17.0.2\",\n      \"react-dom\": \"^17.0.2\",\n      \"lodash\": \"4.17.21\"\n    },\n    \"constraints\": {\n      \"react\": {\n        \"majorVersion\": 17\n      }\n    }\n  }\n}\n```\n\n### Python Packages (requirements.txt)\n\nCheck the latest versions of Python packages from requirements.txt:\n\n```json\n{\n  \"name\": \"check_python_versions\",\n  \"arguments\": {\n    \"requirements\": [\n      \"requests==2.28.1\",\n      \"flask>=2.0.0\",\n      \"numpy\"\n    ]\n  }\n}\n```\n\n### Python Packages (pyproject.toml)\n\nCheck the latest versions of Python packages from pyproject.toml:\n\n```json\n{\n  \"name\": \"check_pyproject_versions\",\n  \"arguments\": {\n    \"dependencies\": {\n      \"dependencies\": {\n        \"requests\": \"^2.28.1\",\n        \"flask\": \">=2.0.0\"\n      },\n      \"optional-dependencies\": {\n        \"dev\": {\n          \"pytest\": \"^7.0.0\"\n        }\n      },\n      \"dev-dependencies\": {\n        \"black\": \"^22.6.0\"\n      }\n    }\n  }\n}\n```\n\n### Java Packages (Maven)\n\nCheck the latest versions of Java packages from Maven:\n\n```json\n{\n  \"name\": \"check_maven_versions\",\n  \"arguments\": {\n    \"dependencies\": [\n      {\n        \"groupId\": \"org.springframework.boot\",\n        \"artifactId\": \"spring-boot-starter-web\",\n        \"version\": \"2.7.0\"\n      },\n      {\n        \"groupId\": \"com.google.guava\",\n        \"artifactId\": \"guava\",\n        \"version\": \"31.1-jre\"\n      }\n    ]\n  }\n}\n```\n\n### Java Packages (Gradle)\n\nCheck the latest versions of Java packages from Gradle:\n\n```json\n{\n  \"name\": \"check_gradle_versions\",\n  \"arguments\": {\n    \"dependencies\": [\n      {\n        \"configuration\": \"implementation\",\n        \"group\": \"org.springframework.boot\",\n        \"name\": \"spring-boot-starter-web\",\n        \"version\": \"2.7.0\"\n      },\n      {\n        \"configuration\": \"testImplementation\",\n        \"group\": \"junit\",\n        \"name\": \"junit\",\n        \"version\": \"4.13.2\"\n      }\n    ]\n  }\n}\n```\n\n### Go Packages\n\nCheck the latest versions of Go packages from go.mod:\n\n```json\n{\n  \"name\": \"check_go_versions\",\n  \"arguments\": {\n    \"dependencies\": {\n      \"module\": \"github.com/example/mymodule\",\n      \"require\": [\n        {\n          \"path\": \"github.com/gorilla/mux\",\n          \"version\": \"v1.8.0\"\n        },\n        {\n          \"path\": \"github.com/spf13/cobra\",\n          \"version\": \"v1.5.0\"\n        }\n      ]\n    }\n  }\n}\n```\n\n### Docker Images\n\nCheck available tags for Docker images:\n\n```json\n{\n  \"name\": \"check_docker_tags\",\n  \"arguments\": {\n    \"image\": \"nginx\",\n    \"registry\": \"dockerhub\",\n    \"limit\": 5,\n    \"filterTags\": [\"^1\\\\.\"],\n    \"includeDigest\": true\n  }\n}\n```\n\n### AWS Bedrock Models\n\nList all AWS Bedrock models:\n\n```json\n{\n  \"name\": \"check_bedrock_models\",\n  \"arguments\": {\n    \"action\": \"list\"\n  }\n}\n```\n\nSearch for specific AWS Bedrock models:\n\n```json\n{\n  \"name\": \"check_bedrock_models\",\n  \"arguments\": {\n    \"action\": \"search\",\n    \"query\": \"claude\",\n    \"provider\": \"anthropic\"\n  }\n}\n```\n\nGet the latest Claude Sonnet model:\n\n```json\n{\n  \"name\": \"get_latest_bedrock_model\",\n  \"arguments\": {}\n}\n```\n\n### Swift Packages\n\nCheck the latest versions of Swift packages:\n\n```json\n{\n  \"name\": \"check_swift_versions\",\n  \"arguments\": {\n    \"dependencies\": [\n      {\n        \"url\": \"https://github.com/apple/swift-argument-parser\",\n        \"version\": \"1.1.4\"\n      },\n      {\n        \"url\": \"https://github.com/vapor/vapor\",\n        \"version\": \"4.65.1\"\n      }\n    ],\n    \"constraints\": {\n      \"https://github.com/apple/swift-argument-parser\": {\n        \"majorVersion\": 1\n      }\n    }\n  }\n}\n```\n\n### GitHub Actions\n\nCheck the latest versions of GitHub Actions:\n\n```json\n{\n  \"name\": \"check_github_actions\",\n  \"arguments\": {\n    \"actions\": [\n      {\n        \"owner\": \"actions\",\n        \"repo\": \"checkout\",\n        \"currentVersion\": \"v3\"\n      },\n      {\n        \"owner\": \"actions\",\n        \"repo\": \"setup-node\",\n        \"currentVersion\": \"v3\"\n      }\n    ],\n    \"includeDetails\": true\n  }\n}\n```\n\n## Releases and CI/CD\n\nThis project uses GitHub Actions for continuous integration and deployment. The workflow automatically:\n\n1. Builds and tests the application on every push to the main branch and pull requests\n2. Creates a release when a tag with the format `v*` (e.g., `v1.0.0`) is pushed\n3. Builds and pushes Docker images to GitHub Container Registry\n\n## License\n\n[MIT](LICENSE)\n",
+  "category": "Development",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-package-version-stdio": {
+        "command": "mcp-package-version",
+        "args": [],
+        "env": {}
+      },
+      "mcp-package-version-sse": {
+        "command": "mcp-package-version",
+        "args": ["--transport", "sse", "--port", "18080", "--base-url", "http://localhost:18080"],
+        "env": {}
+      },
+      "mcp-package-version-configured": {
+        "command": "/Users/sammcj/go/bin/mcp-package-version",
+        "args": [],
+        "env": {}
+      },
+      "mcp-package-version-docker": {
+        "command": "docker",
+        "args": ["run", "-p", "18080:18080", "ghcr.io/sammcj/mcp-package-version:main"],
+        "env": {},
+        "docker_image": "ghcr.io/sammcj/mcp-package-version:main"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sammcj",
+    "repo": "mcp-package-version",
+    "url": "https://github.com/sammcj/mcp-package-version",
+    "name": "sammcj__mcp-package-version",
+    "path": null,
+    "stars": 113,
+    "contributors": 5,
+    "issues": 4,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "223d406fa1a8338459452eab1299bc65c976e280"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:41.876Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "sirupsen/logrus",
+      "importance": 7
+    },
+    {
+      "name": "urfave/cli",
+      "importance": 8
+    },
+    {
+      "name": "xeipuuv/gojsonschema",
+      "importance": 8
+    },
+    {
+      "name": "natefinch/lumberjack",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/sammcj/mcp-package-version/v2\n\ngo 1.24.2\n\nrequire (\n\tgithub.com/mark3labs/mcp-go v0.23.1\n\tgithub.com/sirupsen/logrus v1.9.3\n\tgithub.com/stretchr/testify v1.9.0\n\tgithub.com/urfave/cli/v2 v2.27.6\n\tgithub.com/xeipuuv/gojsonschema v1.2.0\n\tgopkg.in/natefinch/lumberjack.v2 v2.2.1\n)\n\nrequire (\n\tgithub.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/russross/blackfriday/v2 v2.1.0 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect\n\tgithub.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect\n\tgithub.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgolang.org/x/sys v0.32.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

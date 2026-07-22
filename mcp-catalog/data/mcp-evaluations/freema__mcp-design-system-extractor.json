@@ -1,0 +1,86 @@
+{
+  "name": "freema__mcp-design-system-extractor",
+  "display_name": "mcp-design-system-extractor",
+  "description": "MCP (Model Context Protocol) server that enables AI assistants to interact with Storybook design systems. Extract component HTML, analyze styles, and help with design system adoption and refactoring.",
+  "author": {
+    "name": "freema"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@freema/mcp-design-system-extractor"],
+    "env": {
+      "STORYBOOK_URL": "${user_config.storybook_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "storybook_url": {
+      "type": "string",
+      "title": "Storybook URL",
+      "description": "The URL of the Storybook instance to connect to.",
+      "required": true,
+      "default": "http://localhost:6006"
+    }
+  },
+  "readme": "# MCP Design System Extractor\n\nA Model Context Protocol (MCP) server that extracts component information from Storybook design systems. Connects to Storybook instances (including https://storybook.js.org distributions) and extracts HTML, styles, and component metadata.\n\n## Key Dependencies\n\n- **Puppeteer**: Uses headless Chrome for dynamic JavaScript component rendering\n- **Chrome/Chromium**: Required for Puppeteer (automatically handled in Docker)\n- Works with built Storybook distributions from https://storybook.js.org\n\n<a href=\"https://glama.ai/mcp/servers/@freema/mcp-design-system-extractor\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@freema/mcp-design-system-extractor/badge\" alt=\"Design System Extractor MCP server\" />\n</a>\n\n## Features\n\n- 🔍 **List Components**: Get all available components from your Storybook\n- 📄 **Extract HTML**: Get the rendered HTML of any component variant with dynamic JavaScript support\n- 🔎 **Search Components**: Find components by name, title, or category\n- 🎛️ **Component Props**: Get component props/API documentation including types and defaults\n- 🔗 **Component Dependencies**: Analyze which components are used within other components\n- 📐 **Layout Components**: Get all layout components (Grid, Container, Stack, etc.) with examples\n- 🎨 **Theme Information**: Extract design system theme (colors, spacing, typography, breakpoints)\n- 🎯 **Search by Purpose**: Find components by their purpose (form inputs, navigation, feedback)\n- 🧩 **Composition Examples**: Get examples of how components are combined together\n- 📝 **External CSS Analysis**: Fetch and analyze CSS files to extract design tokens and variables\n\n## Quick Start\n\n```bash\nnpm install && npm run build\nnpm run setup  # Interactive setup for Claude Desktop\n```\n\nOr set manually:\n```bash\nexport STORYBOOK_URL=http://localhost:6006\n```\n\n## Usage\n\nSee [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed setup instructions.\n\n## Available Tools\n\n### Core Tools\n\n1. **list_components**\n   - Lists all available components from the Storybook instance\n   - Returns components with their names, categories, and associated stories\n   - Use `category: \"all\"` or omit category parameter to list all components\n   - Filter by specific category path (e.g., \"Components/Buttons\", \"Layout\")\n   - Supports pagination with `page` and `pageSize` parameters (default: 50 per page)\n\n2. **get_component_html**\n   - Extracts HTML from a specific component story in Storybook\n   - Requires story ID format: \"component-name--story-name\" (e.g., \"button--primary\")\n   - Use list_components or get_component_variants first to find valid story IDs\n   - Optional CSS style extraction for understanding component styling\n   - Supports dynamic JavaScript-rendered content\n\n3. **get_component_variants**\n   - Gets all story variants/states for a specific component\n   - Returns all stories (variants) for a component with their IDs, names, and parameters\n   - Component name must match exactly as shown in list_components (case-sensitive)\n\n4. **search_components**\n   - Search components by name, title, or category using case-insensitive partial matching\n   - Name is component name only (e.g., \"Button\")\n   - Title is full story path (e.g., \"Components/Forms/Button\")  \n   - Category is the grouping (e.g., \"Components/Forms\")\n   - Use `query: \"*\"` to list all components\n   - Search in specific fields: \"name\", \"title\", \"category\", or \"all\" (default)\n   - Supports pagination with `page` and `pageSize` parameters (default: 50 per page)\n\n### Component Analysis Tools\n\n5. **get_component_props**\n   - Extracts component props/API documentation from Storybook's argTypes configuration\n   - Includes prop names, types, default values, required status, and control options\n   - Requires story ID format: \"component-name--story-name\"\n\n6. **get_component_dependencies**\n   - Analyzes rendered HTML to find which other components a given component internally uses\n   - Detects React components, web components, and CSS class patterns\n   - Helps understand component relationships and composition\n   - Requires story ID format: \"component-name--story-name\"\n\n### Design System Tools\n\n7. **get_layout_components**\n   - Gets all layout components (Grid, Container, Stack, Box) with usage examples\n   - Optional HTML examples for each layout component\n   - Useful for understanding page structure and composition patterns\n\n8. **get_theme_info**\n   - Gets design system theme information (colors, spacing, typography, breakpoints)\n   - Extracts CSS custom properties/variables from the design system\n   - Categorizes tokens by type for better organization\n   - Optional parameter to include all CSS custom properties found\n\n### Discovery Tools\n\n9. **get_component_by_purpose**\n   - Search for components by their purpose or function\n   - Available purposes: \"form inputs\" (input fields, selects, checkboxes), \"navigation\" (menus, breadcrumbs, tabs), \"feedback\" (alerts, toasts, modals), \"data display\" (tables, cards, lists), \"layout\" (grids, containers, dividers), \"buttons\" (all button types), \"progress\" (loaders, spinners), \"media\" (images, videos, carousels)\n   - Flexible pattern matching for finding components by use case\n   - Supports pagination with `page` and `pageSize` parameters (default: 50 per page)\n\n10. **get_component_composition_examples**\n    - Gets examples of how components are combined together in real-world patterns and layouts\n    - Returns HTML examples showing the component used with other components in forms, cards, layouts, or complex UI patterns\n    - Helps understand how components work together in practice\n    - Optional limit parameter to control number of examples returned\n\n11. **get_external_css** ⚠️ **TOKEN-OPTIMIZED**\n    - **DEFAULT**: Returns ONLY design tokens + file stats (avoids token limits)\n    - **Does NOT return CSS content** by default (prevents 25K token limit errors)\n    - Extracts & categorizes tokens: colors, spacing, typography, shadows, breakpoints\n    - Use `includeFullCSS: true` only when you specifically need CSS content\n    - Security-protected: only accepts URLs from the same domain as your Storybook\n    - **Perfect for design token extraction without hitting response size limits**\n\n## Example Usage\n\n```typescript\n// List all components (recommended first step)\nawait listComponents({ category: \"all\" });\n\n// Search for all components using wildcard\nawait searchComponents({ query: \"*\", searchIn: \"all\" });\n\n// Search for specific components\nawait searchComponents({ query: \"button\", searchIn: \"name\" });\n\n// Get all variants of a specific component\nawait getComponentVariants({ componentName: \"Button\" });\n\n// Get HTML for a specific button variant (use exact story ID from above)\nawait getComponentHTML({ \n  componentId: \"button--primary\",\n  includeStyles: true \n});\n\n// Get component props documentation\nawait getComponentProps({\n  componentId: \"button--primary\"\n});\n\n// Find components by purpose\nawait getComponentByPurpose({\n  purpose: \"form inputs\"\n});\n\n// Get layout components with examples\nawait getLayoutComponents({\n  includeExamples: true\n});\n\n// Extract theme information\nawait getThemeInfo({\n  includeAll: false\n});\n\n// Analyze component dependencies\nawait getComponentDependencies({\n  componentId: \"card--default\"\n});\n\n// Get composition examples\nawait getComponentCompositionExamples({\n  componentId: \"button--primary\",\n  limit: 3\n});\n\n// RECOMMENDED: Extract design tokens only (small response, avoids token limits)\nawait getExternalCSS({\n  cssUrl: \"https://my-storybook.com/assets/main.css\"\n  // extractTokens: true (default), includeFullCSS: false (default)\n});\n\n// ONLY when you specifically need CSS content (may hit token limits)\nawait getExternalCSS({\n  cssUrl: \"./assets/tokens.css\",\n  includeFullCSS: true,\n  maxContentSize: 10000\n});\n\n// Search with pagination\nawait searchComponents({\n  query: \"button\",\n  page: 1,\n  pageSize: 10\n});\n```\n\n### AI Assistant Usage Tips\n\nWhen using with Claude or other AI assistants:\n\n1. **Start with discovery**: Use `list_components` with `category: \"all\"` or `search_components` with `query: \"*\"` to see all available components\n2. **Get story IDs**: Use `get_component_variants` to find exact story IDs needed for other tools\n3. **Use exact IDs**: Story IDs must be in format \"component-name--story-name\" (e.g., \"button--primary\")\n4. **Explore by purpose**: Use `get_component_by_purpose` to find components by their function\n5. **Debug issues**: Tools now include debug information when no results are found\n\n## How It Works\n\nConnects to Storybook via `/index.json` and `/iframe.html` endpoints. Uses Puppeteer with headless Chrome for dynamic JavaScript rendering. Extracts component HTML, styles, props, dependencies, and design tokens with smart caching and timeout protection.\n\n## Troubleshooting\n\n- Ensure Storybook is running and `STORYBOOK_URL` is correct\n- Use exact story ID format: \"component-name--story-name\"\n- Try `list_components` first to see available components\n- Check `/index.json` endpoint directly in browser\n- See [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed troubleshooting\n\n## Requirements\n\n- Node.js 18+\n- Chrome/Chromium (for Puppeteer)\n- Running Storybook instance\n\n## Development\n\nSee [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed development instructions.\n\n## License\n\nMIT",
+  "category": "Development",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "freema",
+    "repo": "mcp-design-system-extractor",
+    "url": "https://github.com/freema/mcp-design-system-extractor",
+    "name": "freema__mcp-design-system-extractor",
+    "path": null,
+    "stars": 22,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "0142aaa3b550f43a9a536c946f66433f19695872"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.234Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "puppeteer",
+      "importance": 9
+    },
+    {
+      "name": "node-html-parser",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-design-system-extractor\",\n  \"version\": \"1.0.1\",\n  \"description\": \"Simplified MCP server for Storybook design system extraction with component analysis tools\",\n  \"author\": \"graslt\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"bin\": {\n    \"mcp-design-system-extractor\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"dev\": \"tsx watch src/index.ts\",\n    \"build\": \"tsup\",\n    \"start\": \"node dist/index.js\",\n    \"setup\": \"node scripts/setup-mcp-config.js\",\n    \"clean\": \"rm -rf dist\",\n    \"typecheck\": \"tsc --noEmit\",\n    \"lint\": \"eslint src --ext .ts\",\n    \"lint:fix\": \"eslint src --ext .ts --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\"\",\n    \"format:check\": \"prettier --check \\\"src/**/*.ts\\\"\",\n    \"check\": \"npm run typecheck && npm run lint && npm run format:check\",\n    \"check:all\": \"npm run check && npm run test:run && npm run build\",\n    \"prepublishOnly\": \"npm run clean && npm run build\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector node dist/index.js\",\n    \"inspector:dev\": \"NODE_ENV=development npx @modelcontextprotocol/inspector npx tsx src/index.ts\",\n    \"test\": \"vitest\",\n    \"test:run\": \"vitest run\",\n    \"test:coverage\": \"vitest run --coverage\",\n    \"test:watch\": \"vitest watch\",\n    \"test:ui\": \"vitest --ui\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"storybook\",\n    \"design-system\",\n    \"component-extraction\",\n    \"web-components\",\n    \"claude\",\n    \"ai\"\n  ],\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.5.0\",\n    \"node-html-parser\": \"^6.1.11\",\n    \"puppeteer\": \"^24.10.1\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^6.21.0\",\n    \"@typescript-eslint/parser\": \"^6.21.0\",\n    \"@vitest/coverage-v8\": \"^3.1.4\",\n    \"@vitest/ui\": \"^3.1.4\",\n    \"eslint\": \"^8.57.1\",\n    \"eslint-config-prettier\": \"^10.1.5\",\n    \"eslint-plugin-prettier\": \"^5.4.0\",\n    \"prettier\": \"^3.5.3\",\n    \"tsup\": \"^8.0.0\",\n    \"tsx\": \"^4.7.0\",\n    \"typescript\": \"^5.3.3\",\n    \"vitest\": \"^3.1.4\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\",\n    \"LICENSE\",\n    \"scripts\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/freema/mcp-design-system-extractor.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/freema/mcp-design-system-extractor/issues\"\n  },\n  \"homepage\": \"https://github.com/freema/mcp-design-system-extractor#readme\"\n}\n"
+}

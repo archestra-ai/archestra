@@ -3,7 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { usePinApp } from "@/lib/app.query";
+import { useApps, usePinApp } from "@/lib/app.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
@@ -82,6 +85,77 @@ const pinnedOf = (queryClient: QueryClient, key: unknown[]) =>
       data: Array<{ pinnedAt: string | null }>;
     }
   ).data.map((app) => app.pinnedAt);
+
+describe("useApps", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function renderApps(options?: Parameters<typeof useApps>[1]) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    return renderHook(() => useApps({ limit: 100, offset: 0 }, options), {
+      wrapper,
+    });
+  }
+
+  it("does not request apps for a role without app:read", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({ data: false } as never);
+    vi.mocked(archestraApiSdk.getApps).mockResolvedValue({
+      error: undefined,
+      data: listResponse([]),
+    } as never);
+
+    renderApps();
+
+    // Flush a macrotask so a wrongly-enabled query would have fired.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(vi.mocked(archestraApiSdk.getApps)).not.toHaveBeenCalled();
+  });
+
+  it("does not request apps while permissions are still loading", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({ data: undefined } as never);
+    vi.mocked(archestraApiSdk.getApps).mockResolvedValue({
+      error: undefined,
+      data: listResponse([]),
+    } as never);
+
+    renderApps();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(vi.mocked(archestraApiSdk.getApps)).not.toHaveBeenCalled();
+  });
+
+  it("keeps a caller's enabled:false even when the role has app:read", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as never);
+    vi.mocked(archestraApiSdk.getApps).mockResolvedValue({
+      error: undefined,
+      data: listResponse([]),
+    } as never);
+
+    renderApps({ enabled: false });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(vi.mocked(archestraApiSdk.getApps)).not.toHaveBeenCalled();
+  });
+
+  it("fetches apps for a role with app:read", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as never);
+    vi.mocked(archestraApiSdk.getApps).mockResolvedValue({
+      error: undefined,
+      data: listResponse([ownedApp(null)]),
+    } as never);
+
+    const { result } = renderApps();
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual(listResponse([ownedApp(null)])),
+    );
+  });
+});
 
 describe("usePinApp", () => {
   beforeEach(() => {

@@ -88,6 +88,25 @@ class A2AMessageModel {
       .where(eq(schema.a2aMessagesTable.id, id));
   }
 
+  /**
+   * Attach a context-level message to a task after the fact. Used when the
+   * user turn was persisted before execution (stateful pre-persist) and the
+   * run then created an approval task — the triggering message belongs to
+   * that task's history.
+   */
+  static async assignTask(
+    id: string,
+    taskId: string,
+  ): Promise<A2AMessage | null> {
+    const [updated] = await db
+      .update(schema.a2aMessagesTable)
+      .set({ taskId, updatedAt: new Date() })
+      .where(eq(schema.a2aMessagesTable.id, id))
+      .returning();
+
+    return updated ?? null;
+  }
+
   static async findById(id: string): Promise<A2AMessage | null> {
     const [message] = await db
       .select()

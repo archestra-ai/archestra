@@ -1,0 +1,171 @@
+{
+  "name": "spacecode-ai__spacebridge-mcp",
+  "display_name": "SpaceBridge-MCP",
+  "description": "MCP server that turbocharges vibe coding by automating issue tracking",
+  "author": {
+    "name": "spacecode-ai"
+  },
+  "server": {
+    "command": "spacebridge-mcp-server",
+    "args": [],
+    "env": {
+      "SPACEBRIDGE_API_KEY": "${user_config.spacebridge_api_key}",
+      "SPACEBRIDGE_ORG_NAME": "${user_config.spacebridge_org_name}",
+      "SPACEBRIDGE_PROJECT_NAME": "${user_config.spacebridge_project_name}",
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "DUPLICATE_SIMILARITY_THRESHOLD": "${user_config.duplicate_similarity_threshold}",
+      "OPENAI_API_BASE": "${user_config.openai_api_base}",
+      "OPENAI_MODEL": "${user_config.openai_model}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "spacebridge_api_key": {
+      "type": "string",
+      "title": "SpaceBridge API Key",
+      "description": "Your API key for authenticating with SpaceBridge.",
+      "sensitive": true,
+      "required": true
+    },
+    "spacebridge_org_name": {
+      "type": "string",
+      "title": "SpaceBridge Organization Name",
+      "description": "Explicitly sets the organization context.",
+      "required": false
+    },
+    "spacebridge_project_name": {
+      "type": "string",
+      "title": "SpaceBridge Project Name",
+      "description": "Explicitly sets the project context.",
+      "required": false
+    },
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key. Required if you want to use OpenAI for duplicate checking.",
+      "sensitive": true,
+      "required": false
+    },
+    "duplicate_similarity_threshold": {
+      "type": "number",
+      "title": "Duplicate Similarity Threshold",
+      "description": "Similarity score threshold (0.0 to 1.0) for duplicate detection when OpenAI API key is not provided.",
+      "default": 0.75,
+      "min": 0,
+      "max": 1,
+      "required": false
+    },
+    "openai_api_base": {
+      "type": "string",
+      "title": "OpenAI API Base URL",
+      "description": "Specifies a custom base URL for the OpenAI API (e.g., for local models or other providers).",
+      "required": false
+    },
+    "openai_model": {
+      "type": "string",
+      "title": "OpenAI Model Name",
+      "description": "Specifies the OpenAI model name to use for duplicate checks.",
+      "default": "gpt-4o",
+      "required": false
+    }
+  },
+  "readme": "# SpaceBridge-MCP\n\nA Model Context Protocol (MCP) server that integrates with the SpaceBridge REST API (https://spacebridge.io/docs) to automate issue management across connected issue trackers.\n\n![SpaceBridge-MCP Overview](assets/diagram.png)\n\n## Overview\n\nSpaceBridge-MCP is a Model Context Protocol (MCP) server designed to integrate AI development tools (like Claude code, Windsurf, Cursor) with the SpaceBridge issue aggregation platform. It allows developers to interact with their issue trackers directly from their coding environment via their AI assistant.\n\n**Core Benefits:**\n\n*   **Reduced Context Switching:** Manage issues (search, create, view) without leaving the development environment.\n*   **Automated Issue Tracking:** Facilitates workflows where AI assistants can automatically find or create relevant issues associated with code changes (e.g., for commit messages).\n*   **Enhanced AI Context:** Provides AI assistants with access to issue details (via `get_issue_by_id`), enabling more context-aware code generation and analysis.\n*   **Centralized Interaction:** Leverages SpaceBridge to interact with multiple underlying issue trackers (Jira, GitHub Issues, etc.) through a single interface.\n\n**Functionality:**\n\nThe server exposes MCP tools and resources that translate natural language requests from an AI assistant into SpaceBridge API calls. Key features include intelligent duplicate checking (using similarity search and LLM comparison) before issue creation and flexible handling of organization/project context.\n\n## Features\n\n*   **Resource:** `get_issue_by_id`: Retrieves details for a specific issue using its SpaceBridge ID.\n*   **Tool:** `search_issues`: Searches for issues based on a query string using either full-text or similarity search.\n*   **Tool:** `create_issue`: Creates a new issue. Before creation, it performs a similarity search for potentially duplicate issues and uses an LLM to compare the top results against the new issue's content. If a likely duplicate is found, it returns the existing issue's ID; otherwise, it creates the new issue.\n*   **Tool:** `update_issue`: Updates an existing issue.\n\n## Getting Started\n\n### Prerequisites\n\n*   Python 3.9+\n*   pip (Python package installer)\n*   Access to a SpaceBridge instance and API key.\n*   OpenAI API Key (for the `create_issue` tool's duplicate check).\n\n### Installation using pip\n\n1.  Install the package:\n    ```bash\n    pip install spacebridge-mcp\n    ```\n\n### Installation from source\n\n1.  Clone the repository:\n    ```bash\n    git clone <repository-url>\n    cd spacebridge-mcp\n    ```\n2.  Create and activate a virtual environment (recommended):\n    ```bash\n    # Use .venv as requested by user\n    python -m venv .venv\n    source .venv/bin/activate  # On Windows use `.venv\\Scripts\\activate`\n    ```\n3.  Install the package in editable mode, including development dependencies (for testing):\n    ```bash\n    # Use the specific python from your virtual env if 'pip' isn't found directly\n    .venv/bin/python -m pip install -e \".[dev]\"\n    # Or if 'pip' is correctly on PATH for the venv:\n    # pip install -e \".[dev]\"\n    ```\n    *Note: This installs the package such that changes to the source code are immediately reflected without reinstalling. Including `[dev]` installs packages needed for running tests, like `pytest` and `respx`.*\n\n### Configuration\n\nThe server requires the following configuration values:\n\n*   **Required:**\n    *   `SPACEBRIDGE_API_KEY`: Your API key for authenticating with SpaceBridge.\n*   **Optional (Configuration & Context):**\n    *   `SPACEBRIDGE_ORG_NAME`: Explicitly sets the organization context. (Optional).\n    *   `SPACEBRIDGE_PROJECT_NAME`: Explicitly sets the project context. (Optional).\n*   **Optional (Duplicate Detection Behavior):**\n    *   `OPENAI_API_KEY`: Your OpenAI API key. *Required* if you want to use OpenAI for duplicate checking. If not provided, the server falls back to threshold-based checking.\n    *   `DUPLICATE_SIMILARITY_THRESHOLD`: Sets the similarity score threshold (0.0 to 1.0) used for duplicate detection when `OPENAI_API_KEY` is *not* provided. (Default: `0.75`).\n    *   `OPENAI_API_BASE`: Specifies a custom base URL for the OpenAI API (e.g., for local models or other providers). (Used only if `OPENAI_API_KEY` is set).\n    *   `OPENAI_MODEL`: Specifies the OpenAI model name to use for duplicate checks. (Default: `gpt-4o`). (Used only if `OPENAI_API_KEY` is set).\n\nThese values, along with organization/project context, can be provided in multiple ways. The server determines the final values based on the following order of precedence (highest first):\n\n1.  **Command-line Arguments:** Pass arguments when running the server. These override all other methods.\n    ```bash\n    spacebridge-mcp-server \\\n      --spacebridge-api-key \"YOUR_SB_KEY\" \\\n      --openai-api-key \"YOUR_OPENAI_KEY\" \\\n      --org-name \"YOUR_ORG\" \\        # Explicit Org Name\n      --project-name \"YOUR_PROJECT\"  # Explicit Project Name\n      # --project-dir \"/path/to/your/project\" # Optional: Specify dir for Git detection\n    ```\n    *(Use `spacebridge-mcp-server --help` to see all available arguments.)*\n\n2.  **Environment Variables:** Set standard environment variables. These override `.env` files and Git detection.\n    ```bash\n    # Example setting required and some optional vars\n    export SPACEBRIDGE_API_KEY=\"YOUR_SB_KEY\"\n    export OPENAI_API_KEY=\"YOUR_OPENAI_KEY\" # If using OpenAI duplicate check\n    export SPACEBRIDGE_ORG_NAME=\"YOUR_ORG\"\n    export SPACEBRIDGE_PROJECT_NAME=\"YOUR_PROJECT\"\n    # Then run:\n    spacebridge-mcp-server\n    ```\n\n3.  **.env File:** Create a file named `.env` in the directory where you run the server. Environment variables and command-line arguments override values in this file.\n    ```dotenv\n    # .env file content\n    SPACEBRIDGE_API_KEY=\"YOUR_SB_KEY\"\n    OPENAI_API_KEY=\"YOUR_OPENAI_KEY\"\n    SPACEBRIDGE_ORG_NAME=\"YOUR_ORG\"\n    SPACEBRIDGE_PROJECT_NAME=\"YOUR_PROJECT\"\n    ```\n    The server automatically loads values from this file if it exists.\n\n4.  **Git Configuration Detection:** If organization and project are not set via arguments or environment variables, the server attempts to detect them from the `.git/config` file.\n    *   It first checks in the directory specified by the `--project-dir` argument (if provided).\n    *   If `--project-dir` is not used, it checks the current working directory where the server was started.\n\n**Context Handling Priority:**\n\nThe organization and project context used for API calls is determined as follows:\n\n1.  **Startup Context:** The context determined during server startup (using the precedence above: Args > Env Vars > Git Detection) is used by default.\n2.  **Tool Parameter Fallback:** If (and only if) the server could *not* determine the context during startup (e.g., no explicit config provided and not running in a Git repository), the optional `org_name` and `project_name` parameters provided in a tool call (`search_issues`, `create_issue`, `update_issue`) will be used as a fallback.\n\n**Note on Client Configuration:** When configuring MCP clients like Claude code (see \"Connecting MCP Clients\" section), passing credentials or context via the client's `--env` flags effectively sets them as environment variables for the server process (Priority 2). This is the recommended way to provide explicit context in environments where Git detection might fail (like Windsurf or Cursor).\n\n### Running the Server\n\nOnce installed and configured, you can run the server using the command defined in `pyproject.toml`:\n\n```bash\nspacebridge-mcp-server\n```\n\nThe server will start listening for MCP connections via standard input/output (stdio) by default.\n\n## Connecting MCP Clients\n\nThis server uses standard input/output (stdio) for communication. You need to configure your MCP client (e.g., Claude code, Windsurf, Cursor) to launch the `spacebridge-mcp-server` command and pass the required environment variables.\n\n**Configuration Steps:**\n\n1.  **Install:** Ensure `spacebridge-mcp` is installed (see Installation section). The `spacebridge-mcp-server` command should be available in your environment's path (e.g., inside your virtual environment's `bin` directory if installed from source, or globally if installed via `pip install spacebridge-mcp`).\n2.  **Find Server Path:** Determine the full path to the `spacebridge-mcp-server` executable. If you installed in a virtual environment `.venv`, it might be `/path/to/your/project/.venv/bin/spacebridge-mcp-server`. If installed globally, you can often find it with `which spacebridge-mcp-server` (Linux/macOS) or `where spacebridge-mcp-server` (Windows).\n3.  **Add Server to Client:** Use your MCP client's command for adding a new server.\n\n**Example using `claude mcp add` (Claude code):**\n\n```bash\nclaude mcp add spacebridge \\\n  /full/path/to/your/spacebridge-mcp-server \\\n  --scope user \\\n  --env SPACEBRIDGE_API_KEY=\"your-spacebridge-api-key\" \\\n  --env OPENAI_API_KEY=\"your-openai-api-key\" \\\n```\n\n*   Replace `/full/path/to/your/spacebridge-mcp-server` with the actual path found in step 2.\n*   Replace the placeholder API URL and keys with your actual credentials.\n*   `--scope user` makes the server available across all your projects in Claude code. Use `--scope project` to limit it to the current project.\n\n**Other Clients (Windsurf, Cursor, etc.):**\n\nRefer to the specific documentation for your client. The general principle is the same: provide a name for the server and the command to execute it, ensuring the necessary environment variables (`SPACEBRIDGE_API_KEY`, `OPENAI_API_KEY`, and optionally `SPACEBRIDGE_ORG_NAME`, `SPACEBRIDGE_PROJECT_NAME`) are passed to the command's environment. Some clients might have dedicated fields for environment variables, while others might require a wrapper script. Passing `SPACEBRIDGE_ORG_NAME` and `SPACEBRIDGE_PROJECT_NAME` is recommended for clients where the server's working directory might not match the actual project directory (e.g., Windsurf, Cursor).\n\n## Usage Tips & Agentic Workflows\n\n*   **Automated Commit Messages:** Configure your AI tool (e.g., via custom instructions or rules in Claude code, Windsurf, Cursor) to automatically reference relevant issue IDs when generating commit messages.\n    *   *Example Rule/Instruction:* \"When generating a commit message, always ask the SpaceBridge-MCP tool to find or create an issue related to the changes and include the resulting issue ID (e.g., `SB-123`) in the commit message footer.\"\n    *   The AI can then use the `search_issues` or `create_issue` tool via this MCP server. If an issue exists, it gets the ID; if not, `create_issue` makes one and returns the new ID.\n*   **Context Augmentation:** When asking your AI assistant to work on a feature or bug, provide the SpaceBridge issue ID. The assistant can then use the `get_issue_by_id` resource via this MCP server to fetch the full context (description, comments, status) directly from your tracker, leading to more informed code generation or analysis.\n*   **Quick Issue Creation:** Simply ask your assistant \"Create an issue about [brief description]\" while coding. The `create_issue` tool will handle the similarity search and creation process.\n\n## Where to Find Us\n\n*   [MCP Review](https://mcpreview.com/mcp-servers/spacecode-ai/SpaceBridge-MCP)\n\n## Development\n\n### Running Tests\n\n1.  Ensure you have installed the development dependencies:\n    ```bash\n    .venv/bin/python -m pip install -e \".[dev]\"\n    ```\n2.  Run pytest from the project root directory:\n    ```bash\n    .venv/bin/python -m pytest -vvv\n    ```\n\n## Contributing\n\nContributions are welcome! Please follow these steps:\n\n1.  **Find an Issue or Suggest an Idea:**\n    *   Check the [GitHub Issues](https://github.com/spacecode-ai/SpaceBridge-MCP/issues) to see if your issue or idea is already being tracked.\n    *   If not, open a new issue to discuss your proposed change or report a bug.\n\n2.  **Fork the Repository:** Create your own fork of the project on GitHub.\n\n3.  **Create a Branch:** Create a new branch in your fork for your changes:\n    ```bash\n    git checkout -b feature/your-feature-name\n    ```\n\n4.  **Set Up Development Environment:**\n    *   Ensure you have Python 3.8+ installed.\n    *   Create and activate a virtual environment (e.g., using `venv`):\n        ```bash\n        python -m venv .venv\n        source .venv/bin/activate  # Linux/macOS\n        # .\\.venv\\Scripts\\activate # Windows\n        ```\n    *   Install the project with development dependencies:\n        ```bash\n        python -m pip install -e \".[dev]\"\n        ```\n\n5.  **Make Your Changes:** Implement your feature or bug fix.\n\n6.  **Run Tests:** Ensure all tests pass:\n    ```bash\n    python -m pytest -vvv\n    ```\n\n7.  **Lint and Format:** Ensure code style consistency (assuming Ruff is used, adjust if needed):\n    ```bash\n    ruff check . --fix\n    ruff format .\n    ```\n\n8.  **Commit Your Changes:** Commit your changes with a clear and descriptive message.\n    ```bash\n    git commit -m \"feat: Add feature X\" # Or fix:, chore:, etc.\n    ```\n\n9.  **Push to Your Fork:**\n    ```bash\n    git push origin feature/your-feature-name\n    ```\n\n10. **Open a Pull Request:** Go to the original repository on GitHub and open a Pull Request from your fork's branch to the `main` branch of the original repository. Provide a clear description of your changes in the PR.\n\n11. **Code Review:** Wait for maintainers to review your PR. Address any feedback provided.\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Development",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "spacebridge-mcp-server-stdio": {
+        "command": "spacebridge-mcp-server",
+        "args": [],
+        "env": {}
+      },
+      "spacebridge-mcp-server-configured": {
+        "command": "spacebridge-mcp-server",
+        "args": [
+          "--spacebridge-api-key",
+          "YOUR_SB_KEY",
+          "--openai-api-key",
+          "YOUR_OPENAI_KEY",
+          "--org-name",
+          "YOUR_ORG",
+          "--project-name",
+          "YOUR_PROJECT"
+        ],
+        "env": {}
+      },
+      "spacebridge-mcp-server-env-configured": {
+        "command": "spacebridge-mcp-server",
+        "args": [],
+        "env": {
+          "SPACEBRIDGE_API_KEY": "YOUR_SB_KEY",
+          "OPENAI_API_KEY": "YOUR_OPENAI_KEY",
+          "SPACEBRIDGE_ORG_NAME": "YOUR_ORG",
+          "SPACEBRIDGE_PROJECT_NAME": "YOUR_PROJECT"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "spacecode-ai",
+    "repo": "SpaceBridge-MCP",
+    "url": "https://github.com/spacecode-ai/SpaceBridge-MCP",
+    "name": "spacecode-ai__spacebridge-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1aad80d8308ecdfbc05e03b92b9ad39b0a5f5c12"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:43.510Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "mcp-sdk",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "openai",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "packaging",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"spacebridge-mcp\"\nversion = \"0.3.0\" # Match version in server.py\nauthors = [\n  { name=\"Spacecode AI Inc\", email=\"hello@spacecode.ai\" },\n]\ndescription = \"SpaceBridge MCP Server for issue tracker automation.\"\nreadme = \"README.md\"\nrequires-python = \">=3.9\"\nlicense = \"MIT\"\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"Operating System :: OS Independent\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n    \"Topic :: Communications\",\n]\ndependencies = [\n    # Install mcp-sdk directly from GitHub as it might not be on PyPI\n    # Install mcp directly from GitHub as it might not be on PyPI, and its package name is 'mcp'\n    \"mcp[cli]>=1.6.0\",\n    \"requests>=2.20.0\",\n    \"openai>=1.0.0\",\n    \"python-dotenv>=0.19.0\", # For loading .env files\n    \"packaging>=21.0\",       # For version comparison\n    # Add other dependencies here if needed\n]\n\n[project.urls]\n\"Homepage\" = \"https://github.com/spacecode-ai/SpaceBridge-MCP\"\n\"Bug Tracker\" = \"https://github.com/spacecode-ai/SpaceBridge-MCP/issues\"\n\"Documentation\" = \"https://spacebridge.io/docs\"\n\n[project.scripts]\nspacebridge-mcp-server = \"spacebridge_mcp.server:main_sync\" # Define the entry point\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.20.0\", # For testing async functions\n    \"respx>=0.20.0\",          # For mocking HTTP requests (requests library)\n    \"httpx>=0.23.0\",          # Required by respx and openai\n    \"pre-commit>=4.2.0\",\n    \"ruff>=0.11.3\",\n]\n\n\n=== requirements.txt ===\n# Core dependencies for SpaceBridge-MCP\nmcp-sdk>=0.1.0 # Replace with actual version constraint if known\nrequests>=2.20.0\nopenai>=1.0.0 # For LLM comparison\n\n# Add other LLM client libraries here if needed (e.g., anthropic)\n# Add LLM client libraries here later (e.g., openai, anthropic)\n"
+}

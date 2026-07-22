@@ -160,6 +160,9 @@ describe("chat active-run routes", () => {
       id: conversationId,
       userId: sharee.id,
       organizationId,
+      // Access here is via the conversation share, which is not gated by
+      // project:read-all; the predicate is never reached.
+      canReadOthersViaProject: () => Promise.resolve(true),
     });
     expect(accessibleAsSharee).not.toBeNull();
 

@@ -1,0 +1,90 @@
+{
+  "name": "kukapay__crypto-news-mcp",
+  "display_name": "crypto-news-mcp",
+  "description": "An MCP server that provides real-time cryptocurrency news sourced from NewsData for AI agents.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {
+      "NEWS_API_KEY": "${user_config.news_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "news_api_key": {
+      "type": "string",
+      "title": "NewsData.io API Key",
+      "description": "Your API key from NewsData.io, required for fetching cryptocurrency news.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Crypto News MCP Server\n\nAn MCP server that provides real-time cryptocurrency news sourced from [NewsData](https://newsdata.io/) for AI agents.\n\n![GitHub](https://img.shields.io/github/license/kukapay/crypto-news-mcp) \n![GitHub last commit](https://img.shields.io/github/last-commit/kukapay/crypto-news-mcp) \n![Python](https://img.shields.io/badge/python-3.10%2B-blue)\n[![smithery badge](https://smithery.ai/badge/@kukapay/crypto-news-mcp)](https://smithery.ai/server/@kukapay/crypto-news-mcp)\n\n## Features\n\n- **Tool: Latest News Headlines** - Fetch the most recent cryptocurrency news headlines.\n- **Tool: Crypto News Search** - Search for news articles by cryptocurrency or keyword with pagination support using the `nextPage` API feature.\n- **Prompt: News Summary** - Generate a prompt to summarize news for a given cryptocurrency or topic.\n\n## Prerequisites\n\n- Python 3.10+\n- A [Newsdata.io API key](https://newsdata.io/register?ref=kukapay) \n- Git (for cloning the repository)\n\n## Installation\n\n### Installing via Smithery\n\nTo install Crypto News for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kukapay/crypto-news-mcp):\n\n```bash\nnpx -y @smithery/cli install @kukapay/crypto-news-mcp --client claude\n```\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/crypto-news-mcp.git\n   cd crypto-news-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   pip install mcp[cli] httpx python-dotenv\n   ```\n   \n4. **Install the server as a plugin for Claude Desktop**:\n    ```bash\n    mcp install main.py --name \"CryptoNews\"\n    ```\n\n    Or configure MCP-compatible clients manually:\n    ```\n    {\n      \"mcpServers\": { \n        \"Crypto News\": { \n          \"command\": \"python\", \n          \"args\": [ \"path/to/crypto-news-mcp/main.py\"],\n          \"env\": {\n            \"NEWS_API_KEY\": \"your_newsdata_api_key_here\"\n          }\n        } \n      }\n    }\n    ```\n\n## Available Tools and Prompts\n\n1. **Tool: `get_latest_news`**  \n   Fetches the latest cryptocurrency news headlines.\n   - **Usage**: Call `get_latest_news()` in an MCP client.\n   - **Output**: A string of headlines with publication dates.\n   - **Example**:\n     ```\n     Bitcoin Price Surges to New High (Published: 2025-04-06T12:00:00Z)\n     Ethereum ETF Approval Rumors Grow (Published: 2025-04-06T10:30:00Z)\n     ```\n\n2. **Tool: `get_crypto_news`**  \n   Searches for news articles by keyword with pagination support.\n   - **Parameters**:\n     - `query (str)`: The cryptocurrency or keyword (e.g., \"bitcoin\").\n     - `max_pages (int, optional)`: Number of pages to fetch (default: 1).\n   - **Usage**: Call `get_crypto_news(query=\"bitcoin\", max_pages=2)`.\n   - **Output**: A formatted string with article titles, dates, and descriptions.\n   - **Example**:\n     ```\n     Title: Bitcoin Hits $70K\n     Date: 2025-04-06T12:00:00Z\n     Description: Bitcoin surged past $70,000 amid bullish market trends.\n\n     Title: Bitcoin Mining Report\n     Date: 2025-04-06T09:00:00Z\n     Description: New report highlights energy usage in BTC mining.\n     ```\n\n3. **Prompt: `summarize_news`**  \n   Generates a prompt for summarizing news about a specific topic.\n   - **Parameters**:\n     - `query (str)`: The cryptocurrency or keyword.\n   - **Usage**: Call `summarize_news(query=\"ethereum\")`.\n   - **Output**: A prompt string for an LLM to process.\n   - **Example**:\n     ```\n     Please summarize the latest news about ethereum based on the following data:\n\n     {{{{ get_crypto_news(\"ethereum\") }}}}\n     ```\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Finance",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "Crypto News": {
+        "command": "python",
+        "args": ["path/to/crypto-news-mcp/main.py"],
+        "env": {
+          "NEWS_API_KEY": "your_newsdata_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-news-mcp",
+    "url": "https://github.com/kukapay/crypto-news-mcp",
+    "name": "crypto-news-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a6221c01cc1f88d6889eabb286268f07a00f56e1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.103Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"crypto-news-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.6.0\",\n    \"python-dotenv>=1.1.0\",\n]\n"
+}

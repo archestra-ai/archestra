@@ -1,0 +1,82 @@
+{
+  "name": "kukapay__crypto-pegmon-mcp",
+  "display_name": "crypto-pegmon-mcp",
+  "description": "An MCP server that tracks stablecoin peg integrity across multiple blockchains.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Crypto-Pegmon-MCP\n\nAn MCP server that tracks stablecoin peg integrity across multiple blockchains, helping AI agents detect depegging risks before they escalate.\n\n<a href=\"https://glama.ai/mcp/servers/@kukapay/crypto-pegmon-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@kukapay/crypto-pegmon-mcp/badge\" alt=\"crypto-pegmon-mcp MCP server\" />\n</a>\n\n![License](https://img.shields.io/badge/license-MIT-green)\n![Python](https://img.shields.io/badge/python-3.10%2B-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Stability Reports**: Generate detailed reports assessing stablecoin peg stability, including maximum deviation and status (Stable, Moderately Stable, Unstable).\n- **Real-Time Price Monitoring**: Fetch current prices and calculate peg deviation from $1 for USD-pegged stablecoins.\n- **Historical Data Analysis**: Retrieve historical price data (up to 7 days by default) in Markdown table format.\n- **Supported Stablecoins**: Monitor 17 USD-pegged stablecoins, such as Tether (USDT), USD Coin (USDC), Dai (DAI), and yield-bearing tokens like Ethena Staked USDe (eUSDe).\n- **User-Friendly Output**: All data is presented in clean Markdown format for easy integration into reports or dashboards.\n\n## Supported Stablecoins\n\nThe server supports the following USD-pegged stablecoins:\n\n| Symbol     | Description                                            |\n|------------|--------------------------------------------------------|\n| USDT       | Tether's USD-pegged stablecoin, centrally issued.      |\n| USDC       | Circle's USD-backed stablecoin, widely used in DeFi.   |\n| DAI        | Decentralized stablecoin by MakerDAO, collateralized by crypto. |\n| BUSD       | Binance's USD-pegged stablecoin, centrally managed.    |\n| TUSD       | TrueUSD, a USD-backed stablecoin by TrustToken.        |\n| FRAX       | Fractional-algorithmic USD stablecoin by Frax Finance. |\n| USDD       | TRON's USD-pegged stablecoin, centrally issued.        |\n| USDS       | USD-pegged stablecoin, focused on stability.           |\n| SUSDS      | Staked USDS, yield-bearing stablecoin.                 |\n| EUSDE      | Ethena's staked USD stablecoin, yield-bearing.         |\n| USDY       | Ondo's USD yield stablecoin, designed for returns.     |\n| PYUSD      | PayPal's USD-pegged stablecoin for payments.           |\n| GUSD       | Gemini Dollar, USD-backed by Gemini Trust.             |\n| USDP       | Paxos Standard, a regulated USD stablecoin.            |\n| AAVE-USDC  | Aave's USD-pegged stablecoin for lending.              |\n| CURVE-USD  | Curve Finance's USD stablecoin for DeFi pools.         |\n| MIM        | Magic Internet Money, a decentralized USD stablecoin.  |\n\n## Installation\n\n### Prerequisites\n\n- Python 3.10 or higher\n- [uv](https://github.com/astral-sh/uv) (recommended for dependency management and running)\n\n### Steps\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/crypto-pegmon-mcp.git\n   cd crypto-pegmon-mcp\n   ```\n\n2. **Install Dependencies**:\n   Using uv (recommended):\n   ```bash\n   uv sync\n   ```\n\n3. **Run the Server**:\n   Using uv (recommended):\n   ```bash\n   uv run main.py\n   ```\n\n## Usage\n\nThe server provides four tools, accessible via the MCP interface. Below are examples for each tool and prompt.\n\n### 1. List Supported Stablecoins\nRetrieve a list of supported stablecoins with their descriptions.\n\n- **Prompt**:\n  ```plaintext\n  List all supported stablecoins with their descriptions.\n  ```\n- **Output**:\n  ```markdown\n  **Supported USD-Pegged Stablecoins**:\n\n  | Symbol     | Description                                            |\n  |------------|--------------------------------------------------------|\n  | USDT       | Tether's USD-pegged stablecoin, centrally issued.      |\n  | USDC       | Circle's USD-backed stablecoin, widely used in DeFi.   |\n  | ...        | ...                                                    |\n  ```\n\n### 2. Fetch Current Price\nGet the current price and peg deviation for a specific stablecoin.\n\n- **Prompt**:\n  ```plaintext\n  Get the current price of USDT.\n  ```\n- **Output**:\n  ```markdown\n  **USDT Current Price**: $1.0002, Peg Deviation: 0.02%\n  ```\n\n### 3. Fetch Historical Data\nRetrieve historical price data for a stablecoin over a specified number of days (default: 7).\n\n- **Prompt**:\n  ```plaintext\n  Show the price history of USDC for the last 7 days.\n  ```\n- **Output**:\n  ```markdown\n  **USDC Historical Data (Last 7 Days)**:\n\n  | Date       | Price  | Deviation (%) |\n  |------------|--------|---------------|\n  | 2025-04-29 | 1.0001 | 0.0100        |\n  | 2025-04-30 | 0.9998 | -0.0200       |\n  | ...        | ...    | ...           |\n  ```\n\n### 4. Analyze Peg Stability\nGenerate a comprehensive stability report for a stablecoin, including historical data, current price, and analysis.\n\n- **Prompt**:\n  ```plaintext\n  Analyze the peg stability of DAI over the past week.\n  ```\n- **Output**:\n  ```markdown\n  - **DAI Historical Data (Last 7 Days)**:\n    | Date       | Price  | Deviation (%) |\n    |------------|--------|---------------|\n    | 2025-04-29 | 1.0003 | 0.0300        |\n    | ...        | ...    | ...           |\n  - **DAI Current Price**: $1.0000, Peg Deviation: 0.00%\n  - **Stability Analysis for DAI**:\n    - Maximum Deviation: 0.15%\n    - Stability Status: Stable\n    - Note: Deviations > 3% indicate potential depegging risks.\n  ```\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "crypto-pegmon-mcp": {
+        "command": "uv",
+        "args": ["run", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-pegmon-mcp",
+    "url": "https://github.com/kukapay/crypto-pegmon-mcp",
+    "name": "crypto-pegmon-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4617619f7fcde447c88636bc4fc637fbb352fad1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.271Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pandas",
+      "importance": 8
+    },
+    {
+      "name": "pycoingecko",
+      "importance": 9
+    },
+    {
+      "name": "tabulate",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"crypto-pegmon-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that tracks stablecoin peg integrity across multiple blockchains\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.7.1\",\n    \"pandas>=2.2.3\",\n    \"pycoingecko>=3.2.0\",\n    \"tabulate>=0.9.0\",\n]\n"
+}

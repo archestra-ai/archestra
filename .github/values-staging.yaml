@@ -64,6 +64,13 @@ archestra:
     # separate override, which exists for exactly this deployment and is
     # deliberately absent from .env.example and the deployment docs.
     ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE: "true"
+    # Apps Hackathon gallery share (test phase): the recorder's "Submit to
+    # Archestra for review" flow files PRs against this repository via GitHub
+    # device flow. The client id is a public identifier by design (device flow
+    # is secretless), so neither value is a secret. Swap both for the real
+    # org OAuth app + gallery repository when it exists.
+    ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID: "Ov23li4dlceOvXupmaU3"
+    ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO: "piercypixel/app-gallery-test"
     # Offload video rendering to the dedicated single-replica renderer Service
     # (see renderer.enabled above), so a render's status polls and download land
     # on the one pod that holds its in-memory job instead of scattering across

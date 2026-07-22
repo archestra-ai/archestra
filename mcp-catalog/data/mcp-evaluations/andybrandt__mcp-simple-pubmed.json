@@ -1,0 +1,102 @@
+{
+  "name": "andybrandt__mcp-simple-pubmed",
+  "display_name": "mcp-simple-pubmed",
+  "description": "MCP server for searching and querying PubMed medical papers/research database",
+  "author": {
+    "name": "andybrandt"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "mcp_simple_pubmed"],
+    "env": {
+      "PUBMED_EMAIL": "${user_config.pubmed_email}",
+      "PUBMED_API_KEY": "${user_config.pubmed_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "pubmed_email": {
+      "type": "string",
+      "title": "PubMed Email",
+      "description": "Your email address (required by NCBI)",
+      "required": true
+    },
+    "pubmed_api_key": {
+      "type": "string",
+      "title": "PubMed API Key",
+      "description": "Optional API key for higher rate limits",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "[![MseeP Badge](https://mseep.net/pr/andybrandt-mcp-simple-pubmed-badge.jpg)](https://mseep.ai/app/andybrandt-mcp-simple-pubmed)\n\n# MCP Simple PubMed\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/andybrandt/mcp-simple-pubmed)](https://archestra.ai/mcp-catalog/andybrandt__mcp-simple-pubmed)\n[![smithery badge](https://smithery.ai/badge/mcp-simple-pubmed)](https://smithery.ai/server/mcp-simple-pubmed)\n\nAn MCP server that provides access to PubMed articles through the Entrez API.\n\n<a href=\"https://glama.ai/mcp/servers/5wlfb8i6bj\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/5wlfb8i6bj/badge\" alt=\"mcp-simple-pubmed MCP server\" /></a>\n\n## Features\n\n- Search PubMed database using keywords\n- Access article abstracts\n- Download full text when available (for open access articles available directly on PubMed) \n\nPlease note that the tool returns XML-ized version of full text. It is however more useful for AIs than a \"human readable\" text would have been as it gives them additional information about document's structure. At least, this is what Claude 3.5 Sonnet said he prefers. \n\nPlease also note that inability of this tool and possibly other tools to deliver a paper's full text may not be due to the fact that it is not available. When testing this tool I came across a paper that did not have full text on PubMed and when Claude accessed the publication URL (which we did get through DOI) using fetch he did get a \"forbidden” error. However, I was able to access the very same page using a regular browser. \n\nIn other words if your AI assistant is not able to get the full text of a paper using this tool it is worth trying manually with a regular web browser.\n\nFinally, this tool of course can’t give you access to paywalled/paid papers. You may be able to read them through your library access or – as a last resort – through a certain site that strives to make publicly funded research freely available. \n\n## Installation\n\n### Installing via Smithery\n\nTo install Simple PubMed for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-simple-pubmed):\n\n```bash\nnpx -y @smithery/cli install mcp-simple-pubmed --client claude\n```\n\n### Manual Installation\n```bash\npip install mcp-simple-pubmed\n```\n\n## Configuration\n\nThe server requires the following environment variables:\n\n- `PUBMED_EMAIL`: Your email address (required by NCBI)\n- `PUBMED_API_KEY`: Optional API key for higher rate limits \n\nThe standard rate limit is 3 requests / second. No rate limiting was implemented, as it is highly unlikely in the typical usage scenario that your AI would generate more traffic. If you need it, you can [register for an API key](https://www.ncbi.nlm.nih.gov/account/) which will give you 10 requests / second. Read about [this on NCBI pages](https://www.ncbi.nlm.nih.gov/books/NBK25497/#chapter2.Usage_Guidelines_and_Requiremen).\n\n## Usage with Claude Desktop\n\nAdd to your Claude Desktop configuration (`claude_desktop_config.json`):\n\n(Mac OS)\n\n```json\n{\n  \"mcpServers\": {\n    \"simple-pubmed\": {\n      \"command\": \"python\",\n      \"args\": [\"-m\", \"mcp_simple_pubmed\"],\n      \"env\": {\n        \"PUBMED_EMAIL\": \"your-email@example.com\",\n        \"PUBMED_API_KEY\": \"your-api-key\" \n      }\n    }\n  }\n}\n```\n\n(Windows)\n\n\n```json\n{\n  \"mcpServers\": {\n    \"simple-pubmed\": {\n      \"command\": \"C:\\\\Users\\\\YOUR_USERNAME\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe\",\n      \"args\": [\n        \"-m\",\n        \"mcp_simple_pubmed\"\n      ],\n      \"env\": {\n        \"PUBMED_EMAIL\": \"your-email@example.com\",\n        \"PUBMED_API_KEY\": \"your-api-key\" \n      }\n    }\n  }\n}\n```\n\n### macOS SSL Certificate Fix\n\nIf you encounter SSL certificate verification errors on macOS (such as `[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain`), you need to install the proper certificate bundle:\n\n```bash\n/Applications/Python\\ 3.13/Install\\ Certificates.command\n```\nReplace `3.13` with your Python version number. This script comes with Python installations from python.org.\n\nYou can also run it from the Finder:\n\n![image](MacOs_certificates_solution.jpg)\n\nIf you perform this change while Claude Desktop is open you will need to quit it and start it again for it to take effect. \n\n## License\n\nMIT License\n",
+  "category": "Healthcare",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "simple-pubmed": {
+        "command": "python",
+        "args": ["-m", "mcp_simple_pubmed"],
+        "env": {
+          "PUBMED_EMAIL": "your-email@example.com",
+          "PUBMED_API_KEY": "your-api-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "andybrandt",
+    "repo": "mcp-simple-pubmed",
+    "url": "https://github.com/andybrandt/mcp-simple-pubmed",
+    "name": "mcp-simple-pubmed",
+    "path": null,
+    "stars": 115,
+    "contributors": 5,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f3ce88c6fe1d68f77246e3182502b5dcb76ea0e2"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:25.363Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "biopython",
+      "importance": 8
+    },
+    {
+      "name": "metapub",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"mcp-simple-pubmed\"\nversion = \"0.1.13\"\ndescription = \"An MCP server that provides access to PubMed articles through Entrez API.\"\nreadme = \"README.md\"\nauthors = [\n    {name = \"Andy Brandt\", email = \"andy@codesprinters.com\"}\n]\nrequires-python = \">=3.11\"\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n]\ndependencies = [\n    \"fastmcp>=2.10.0\",\n    \"biopython\",  # for PubMed/Entrez API access\n    \"metapub\",    # for full-text paper access\n    \"httpx\",      # for making HTTP requests with async support\n]\n\n[project.urls]\nHomepage = \"https://github.com/andybrandt/mcp-simple-pubmed\"\n\n[project.scripts]\nmcp-simple-pubmed = \"mcp_simple_pubmed.__main__:main\""
+}

@@ -1,0 +1,105 @@
+{
+  "name": "doggybee__mcp-server-leetcode",
+  "display_name": "mcp-server-leetcode",
+  "description": "A Model Context Protocol (MCP) server for LeetCode that provides access to problems, user data, and contest information through GraphQL",
+  "author": {
+    "name": "doggybee"
+  },
+  "server": {
+    "command": "mcp-server-leetcode",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Server LeetCode\n\n[![npm version](https://img.shields.io/npm/v/@mcpfun/mcp-server-leetcode.svg)](https://www.npmjs.com/package/@mcpfun/mcp-server-leetcode)\n[![GitHub license](https://img.shields.io/github/license/doggybee/mcp-server-leetcode.svg)](https://github.com/doggybee/mcp-server-leetcode/blob/main/LICENSE)\n[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](https://github.com/doggybee/mcp-server-leetcode/releases)\n[![smithery badge](https://smithery.ai/badge/@doggybee/mcp-server-leetcode)](https://smithery.ai/server/@doggybee/mcp-server-leetcode)\n\nA Model Context Protocol (MCP) server for LeetCode that enables AI assistants to access LeetCode problems, user information, and contest data.\n\n## Features\n\n- 🚀 Fast access to LeetCode API\n- 🔍 Search problems, retrieve daily challenges, and check user profiles\n- 🏆 Query contest data and rankings\n- 🧩 Full support for MCP tools and resources\n- 📦 Provides both CLI and programmable API\n\n## Installation\n\n### Installing via Smithery\n\nTo install mcp-server-leetcode for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@doggybee/mcp-server-leetcode):\n\n```bash\nnpx -y @smithery/cli install @doggybee/mcp-server-leetcode --client claude\n```\n\n### Global Installation\n\n```bash\nnpm install -g @mcpfun/mcp-server-leetcode\n```\n\nOnce installed, you can run it directly from the command line:\n\n```bash\nmcp-server-leetcode\n```\n\n### Local Installation\n\n```bash\nnpm install @mcpfun/mcp-server-leetcode\n```\n\n## Usage\n\n### Integration with Claude for Desktop\n\nAdd the following to your Claude for Desktop `claude_desktop_config.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"leetcode\": {\n      \"command\": \"mcp-server-leetcode\"\n    }\n  }\n}\n```\n\nFor local development:\n\n```json\n{\n  \"mcpServers\": {\n    \"leetcode\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/dist/index.js\"]\n    }\n  }\n}\n```\n\n### Use as a Library\n\n```javascript\nimport { LeetCodeService } from '@mcpfun/mcp-server-leetcode';\n\n// Initialize the service\nconst leetcodeService = new LeetCodeService();\n\n// Get daily challenge\nconst dailyChallenge = await leetcodeService.getDailyChallenge();\n\n// Search problems\nconst problems = await leetcodeService.searchProblems({\n  difficulty: 'MEDIUM',\n  tags: 'array+dynamic-programming'\n});\n```\n\n## Available Tools\n\n### Problem-related Tools\n\n| Tool Name | Description | Parameters |\n|--------|------|------|\n| `get-daily-challenge` | Get the daily challenge | None |\n| `get-problem` | Get details for a specific problem | `titleSlug` (string) |\n| `search-problems` | Search for problems based on criteria | `tags` (optional), `difficulty` (optional), `limit` (default 20), `skip` (default 0) |\n\n### User-related Tools\n\n| Tool Name | Description | Parameters |\n|--------|------|------|\n| `get-user-profile` | Get user information | `username` (string) |\n| `get-user-submissions` | Get user submission history | `username` (string), `limit` (optional, default 20) |\n| `get-user-contest-ranking` | Get user contest rankings | `username` (string) |\n\n### Contest-related Tools\n\n| Tool Name | Description | Parameters |\n|--------|------|------|\n| `get-contest-details` | Get contest details | `contestSlug` (string) |\n\n## Available Resources\n\n### Problem Resources\n\n- `leetcode://daily-challenge`: Daily challenge\n- `leetcode://problem/{titleSlug}`: Problem details\n- `leetcode://problems{?tags,difficulty,limit,skip}`: Problem list\n\n### User Resources\n\n- `leetcode://user/{username}/profile`: User profile\n- `leetcode://user/{username}/submissions{?limit}`: User submissions\n- `leetcode://user/{username}/contest-ranking`: User contest ranking\n\n## Local Development\n\nClone the repository and install dependencies:\n\n```bash\ngit clone https://github.com/doggybee/mcp-server-leetcode.git\ncd mcp-server-leetcode\nnpm install\n```\n\nRun in development mode:\n\n```bash\nnpm run dev\n```\n\nBuild the project:\n\n```bash\nnpm run build\n```\n\n## License\n\nMIT\n\n## Related Projects\n\n- [Model Context Protocol](https://modelcontextprotocol.io) - MCP specifications and documentation\n- [Claude for Desktop](https://claude.ai/download) - AI assistant with MCP support\n\n## Acknowledgements\n\n- This project was inspired by [alfa-leetcode-api](https://github.com/alfaarghya/alfa-leetcode-api)\n",
+  "category": "AI Tools",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpfun-mcp-server-leetcode": {
+        "command": "mcp-server-leetcode",
+        "args": [],
+        "env": {}
+      },
+      "mcpfun-mcp-server-leetcode-cli-config": {
+        "command": "mcp-server-leetcode",
+        "args": [],
+        "env": {}
+      },
+      "mcpfun-mcp-server-leetcode-node-config": {
+        "command": "node",
+        "args": ["/path/to/dist/index.js"],
+        "env": {}
+      },
+      "mcpfun-mcp-server-leetcode-dev": {
+        "command": "npm",
+        "args": ["run", "dev"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "doggybee",
+    "repo": "mcp-server-leetcode",
+    "url": "https://github.com/doggybee/mcp-server-leetcode",
+    "name": "doggybee__mcp-server-leetcode",
+    "path": null,
+    "stars": 25,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "eedc0c8681ce94f6bee90c604a921c9b1f01c0ec"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:19.628Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "apicache",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "glob",
+      "importance": 4
+    },
+    {
+      "name": "rimraf",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@mcpfun/mcp-server-leetcode\",\n  \"version\": \"1.0.1\",\n  \"description\": \"Model Context Protocol server for LeetCode using GraphQL\",\n  \"type\": \"module\",\n  \"main\": \"index.js\",\n  \"bin\": {\n    \"mcp-server-leetcode\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"index.js\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && chmod +x dist/index.js\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"tsc-watch --onSuccess \\\"node dist/index.js\\\"\",\n    \"lint\": \"eslint src --ext .ts\",\n    \"test\": \"jest\",\n    \"prepublishOnly\": \"npm run build\",\n    \"prepare\": \"npm run build\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"axios\": \"^1.7.2\",\n    \"apicache\": \"^1.6.3\",\n    \"zod\": \"^3.22.4\",\n    \"glob\": \"^10.3.10\",\n    \"rimraf\": \"^5.0.5\"\n  },\n  \"devDependencies\": {\n    \"@types/apicache\": \"^1.6.6\",\n    \"@types/node\": \"^20.11.27\",\n    \"@typescript-eslint/eslint-plugin\": \"^7.3.1\",\n    \"@typescript-eslint/parser\": \"^7.3.1\",\n    \"eslint\": \"^8.56.0\",\n    \"jest\": \"^29.7.0\",\n    \"ts-jest\": \"^29.1.2\",\n    \"tsc-watch\": \"^6.0.4\",\n    \"typescript\": \"^5.4.3\"\n  },\n  \"keywords\": [\n    \"leetcode\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"ai\",\n    \"tools\",\n    \"llm\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/doggybee/mcp-server-leetcode.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/doggybee/mcp-server-leetcode/issues\"\n  },\n  \"homepage\": \"https://github.com/doggybee/mcp-server-leetcode#readme\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"engines\": {\n    \"node\": \">=18\"\n  }\n}"
+}

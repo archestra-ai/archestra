@@ -1,0 +1,140 @@
+{
+  "name": "posthog__remote-mcp",
+  "display_name": "PostHog",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxLjgxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDE0MiI+PHBhdGggZmlsbD0iI2Y5YmQyYiIgZD0iTTAgMTEyLjAxMmMwLTQuNzUzIDUuNzQ2LTcuMTMzIDkuMTA3LTMuNzcybDI0LjQ1MiAyNC40NTJjMy4zNjEgMy4zNjEuOTggOS4xMDctMy43NzIgOS4xMDdINS4zMzVBNS4zMzUgNS4zMzUgMCAwIDEgMCAxMzYuNDY0em0wLTI1Ljc1NmMwIDEuNDE1LjU2MiAyLjc3MiAxLjU2MyAzLjc3M2w1MC4yMDggNTAuMjA4YzEgMSAyLjM1NyAxLjU2MiAzLjc3MiAxLjU2Mkg4My4xMmM0Ljc1MyAwIDcuMTM0LTUuNzQ2IDMuNzczLTkuMTA3TDkuMTA3IDU0LjkwN0M1Ljc0NyA1MS41NDYgMCA1My45MjYgMCA1OC42Nzl6bTAtNTMuMzMzYzAgMS40MTUuNTYyIDIuNzcyIDEuNTYzIDMuNzcybDEwMy41NDEgMTAzLjU0MmMxIDEgMi4zNTggMS41NjIgMy43NzIgMS41NjJoMjcuNTc4YzQuNzUzIDAgNy4xMzMtNS43NDYgMy43NzItOS4xMDdMOS4xMDcgMS41NzNDNS43NDctMS43ODcgMCAuNTkzIDAgNS4zNDZ6bTUzLjMzMyAwYzAgMS40MTUuNTYzIDIuNzcyIDEuNTYzIDMuNzcybDk1Ljk5NyA5NS45OTdjMy4zNiAzLjM2MSA5LjEwNy45OCA5LjEwNy0zLjc3MnYtMjcuNTc4YTUuMzQgNS4zNCAwIDAgMC0xLjU2My0zLjc3Mkw2Mi40NDEgMS41NzNjLTMuMzYxLTMuMzYtOS4xMDgtLjk4LTkuMTA4IDMuNzczem02Mi40NC0zMS4zNWMtMy4zNi0zLjM2LTkuMTA2LS45OC05LjEwNiAzLjc3M3YyNy41NzdjMCAxLjQxNS41NjIgMi43NzIgMS41NjIgMy43NzJsNDIuNjY0IDQyLjY2NGMzLjM2IDMuMzYgOS4xMDcuOTggOS4xMDctMy43NzNWNDguMDFhNS4zNCA1LjM0IDAgMCAwLTEuNTYzLTMuNzcyeiIvPjxwYXRoIGQ9Ik0yMjYuODY3IDExMi42NjZMMTc2LjY1MSA2Mi40NWMtMy4zNjEtMy4zNjEtOS4xMDctLjk4LTkuMTA3IDMuNzcydjcwLjI0MmE1LjMzNSA1LjMzNSAwIDAgMCA1LjMzNSA1LjMzNWg3Ny43ODZhNS4zMzUgNS4zMzUgMCAwIDAgNS4zMzUtNS4zMzV2LTYuMzk3YzAtMi45NDYtMi4zOTktNS4yOTktNS4zMi01LjY4YTQxLjIgNDEuMiAwIDAgMS0yMy44MTMtMTEuNzJtLTMzLjcyNCAxMi4wNjZhOC41MzcgOC41MzcgMCAwIDEtOC41MzMtOC41MzNjMC00LjcxIDMuODIzLTguNTM0IDguNTMzLTguNTM0YTguNTM3IDguNTM3IDAgMCAxIDguNTM0IDguNTM0YTguNTM3IDguNTM3IDAgMCAxLTguNTM0IDguNTMzIi8+PHBhdGggZmlsbD0iIzFkNGFmZiIgZD0ibTguNjU2IDEwNy44MzNsLjQ1MS40MDZsMjQuNDUyIDI0LjQ1M2MzLjIxNSAzLjIxNCAxLjE3NyA4LjYxMi0zLjE2NiA5LjA3NWwtLjYwNi4wMzJINS4zMzVhNS4zMzYgNS4zMzYgMCAwIDEtNS4zLTQuNzEzTDAgMTM2LjQ2NHYtMjQuNDUyYzAtNC41NDcgNS4yNTgtNi45MjIgOC42NTYtNC4xNzltMC01My4zMzJsLjQ1MS40MDZsNDQuMjI2IDQ0LjIyNlYxNDEuOEwxLjU2MyA5MC4wM2E1LjM0IDUuMzQgMCAwIDEtMS41MTctMy4wNzJMMCA4Ni4yNTdWNTguNjc5YzAtNC41NDYgNS4yNTgtNi45MjEgOC42NTYtNC4xNzhNMCA1LjM0NkMwIC43OTkgNS4yNTgtMS41NzYgOC42NTYgMS4xNjdsLjQ1MS40MDZMNTMuMzMzIDQ1Ljh2NDIuNjY3bC01MS43Ny01MS43N2E1LjM0IDUuMzQgMCAwIDEtMS41MTctMy4wNzJMMCAzMi45MjN6Ii8+PHBhdGggZmlsbD0iI2Y1NGUwMCIgZD0ibTUzLjMzMyA0NS44bDUxLjc3MSA1MS43N2E1LjMzIDUuMzMgMCAwIDEgMS41MTYgMy4wNzJsLjA0Ny43VjE0MS44TDU0Ljg5NiA5MC4wM2E1LjM0IDUuMzQgMCAwIDEtMS41MTYtMy4wNzJsLS4wNDctLjcwMXptMCA1My4zMzJsMzMuNTYgMzMuNTZjMy4yMTUgMy4yMTQgMS4xNzYgOC42MTItMy4xNjYgOS4wNzVsLS42MDcuMDMySDUzLjMzM3pNNjEuOTkgMS4xNjdsLjQ1Mi40MDZsNDIuNjYzIDQyLjY2NGE1LjMzIDUuMzMgMCAwIDEgMS41MTYgMy4wN2wuMDQ3LjcwMnY0MC40NTdsLTUxLjc3MS01MS43N2E1LjM0IDUuMzQgMCAwIDEtMS41MTYtMy4wNzJsLS4wNDctLjcwMVY1LjM0NmMwLTQuNTQ3IDUuMjU4LTYuOTIyIDguNjU2LTQuMTc5Ii8+PC9zdmc+",
+  "description": "Remote MCP server for PostHog - product analytics, feature flags, experiments, error tracking, session replay, and LLM observability",
+  "homepage": "https://posthog.com",
+  "instructions": "⚠️ **Data region**: PostHog runs regional Cloud endpoints — US: `https://mcp.posthog.com/mcp`, EU: `https://mcp-eu.posthog.com/mcp`. With OAuth, PostHog automatically routes you to the correct region based on the account you sign in with, so the default URL works for both regions. If you authenticate with a personal API key and your organization is on EU Cloud, change the Server URL to `https://mcp-eu.posthog.com/mcp`.\n\n⚠️ **AI-powered tools** (sentiment analysis, trace summarization, etc.) only appear when AI data processing is enabled in your PostHog organization settings, and their usage may be billed as PostHog AI spend.\n\n## Authentication\n\n1. **OAuth (recommended)** — works out of the box: the server supports dynamic client registration, so no client ID or secret is needed. Sign in to PostHog in the browser and grant the per-product scopes you want (dashboards, insights, feature flags, experiments, error tracking, ...).\n2. **Personal API key (alternative)** — if your client can't do OAuth, create a personal API key with the **MCP Server** preset (it scopes access to a specific project) and send it as an `Authorization: Bearer phx_...` header.\n\n## Useful options (headers or query parameters)\n\n- `?readonly=true` — hide all tools that create, update, or delete data.\n- `?features=flags,dashboards,insights` — expose only specific product areas.\n- `x-posthog-organization-id` / `x-posthog-project-id` headers (or `organization_id` / `project_id` query parameters) — pin the session to one organization or project.\n- `x-posthog-mcp-mode` (`cli` or `tools`) — in CLI mode (the default for most clients) the server ships a single token-optimized `exec` tool instead of registering hundreds of tools; `tools` mode registers every tool individually.\n\nDocs: https://posthog.com/docs/model-context-protocol",
+  "tools": [
+    {
+      "name": "docs-search",
+      "description": "Search PostHog documentation"
+    },
+    {
+      "name": "read-data-schema",
+      "description": "Explore the project's events, actions, properties, and property values"
+    },
+    {
+      "name": "query-trends",
+      "description": "Run a trends query"
+    },
+    {
+      "name": "query-funnel",
+      "description": "Run a funnel query"
+    },
+    {
+      "name": "query-retention",
+      "description": "Run a retention query"
+    },
+    {
+      "name": "query-web-overview",
+      "description": "Run a web analytics overview query"
+    },
+    {
+      "name": "insights-list",
+      "description": "Get all insights"
+    },
+    {
+      "name": "insight-create",
+      "description": "Create an insight"
+    },
+    {
+      "name": "insight-query",
+      "description": "Run a saved insight's query and return results"
+    },
+    {
+      "name": "dashboards-get-all",
+      "description": "Get all dashboards"
+    },
+    {
+      "name": "dashboard-create",
+      "description": "Create a dashboard"
+    },
+    {
+      "name": "feature-flag-get-all",
+      "description": "Get all feature flags"
+    },
+    {
+      "name": "create-feature-flag",
+      "description": "Create a feature flag"
+    },
+    {
+      "name": "update-feature-flag",
+      "description": "Update a feature flag"
+    },
+    {
+      "name": "experiment-list",
+      "description": "Get all experiments"
+    },
+    {
+      "name": "experiment-create",
+      "description": "Create an experiment"
+    },
+    {
+      "name": "experiment-results-get",
+      "description": "Get experiment metric and exposure results"
+    },
+    {
+      "name": "query-error-tracking-issues-list",
+      "description": "Query error tracking issues"
+    },
+    {
+      "name": "query-llm-traces-list",
+      "description": "List LLM observability traces"
+    },
+    {
+      "name": "query-logs",
+      "description": "Query logs"
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "posthog",
+    "analytics",
+    "product analytics",
+    "feature flags",
+    "experiments",
+    "a/b testing",
+    "error tracking",
+    "session replay",
+    "llm observability",
+    "web analytics",
+    "oauth"
+  ],
+  "user_config": {},
+  "oauth_config": {
+    "name": "PostHog MCP",
+    "server_url": "https://mcp.posthog.com/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "PostHog MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "readme": null,
+  "category": "Monitoring",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "posthog"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.posthog.com/mcp",
+    "docs_url": "https://posthog.com/docs/model-context-protocol"
+  },
+  "github_info": null,
+  "programming_language": null
+}

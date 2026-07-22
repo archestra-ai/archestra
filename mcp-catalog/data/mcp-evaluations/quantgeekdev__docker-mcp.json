@@ -1,0 +1,91 @@
+{
+  "name": "quantgeekdev__docker-mcp",
+  "display_name": "docker-mcp",
+  "description": "A docker MCP Server (modelcontextprotocol)",
+  "author": {
+    "name": "QuantGeekDev"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["docker-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# 🐳 docker-mcp\n\n[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)\n[![smithery badge](https://smithery.ai/badge/docker-mcp)](https://smithery.ai/protocol/docker-mcp)\n\nA powerful Model Context Protocol (MCP) server for Docker operations, enabling seamless container and compose stack management through Claude AI.\n\n## ✨ Features\n\n- 🚀 Container creation and instantiation\n- 📦 Docker Compose stack deployment\n- 🔍 Container logs retrieval\n- 📊 Container listing and status monitoring\n\n### 🎬 Demos\n#### Deploying a Docker Compose Stack\n\n\nhttps://github.com/user-attachments/assets/b5f6e40a-542b-4a39-ba12-7fdf803ee278\n\n\n\n#### Analyzing Container Logs\n\n\n\nhttps://github.com/user-attachments/assets/da386eea-2fab-4835-82ae-896de955d934\n\n\n\n## 🚀 Quickstart\n\nTo try this in Claude Desktop app, add this to your claude config files:\n```json\n{\n  \"mcpServers\": {\n    \"docker-mcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"docker-mcp\"\n      ]\n    }\n  }\n}\n```\n\n### Installing via Smithery\n\nTo install Docker MCP for Claude Desktop automatically via [Smithery](https://smithery.ai/protocol/docker-mcp):\n\n```bash\nnpx @smithery/cli install docker-mcp --client claude\n```\n\n### Prerequisites\n\n- UV (package manager)\n- Python 3.12+\n- Docker Desktop or Docker Engine\n- Claude Desktop\n\n### Installation\n\n#### Claude Desktop Configuration\n\nAdd the server configuration to your Claude Desktop config file:\n\n**MacOS**: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`  \n**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`\n\n<details>\n  <summary>💻 Development Configuration</summary>\n\n```json\n{\n  \"mcpServers\": {\n    \"docker-mcp\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"<path-to-docker-mcp>\",\n        \"run\",\n        \"docker-mcp\"\n      ]\n    }\n  }\n}\n```\n</details>\n\n<details>\n  <summary>🚀 Production Configuration</summary>\n\n```json\n{\n  \"mcpServers\": {\n    \"docker-mcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"docker-mcp\"\n      ]\n    }\n  }\n}\n```\n</details>\n\n## 🛠️ Development\n\n### Local Setup\n\n1. Clone the repository:\n```bash\ngit clone https://github.com/QuantGeekDev/docker-mcp.git\ncd docker-mcp\n```\n\n2. Create and activate a virtual environment:\n```bash\npython -m venv venv\nsource venv/bin/activate  # On Windows: venv\\Scripts\\activate\n```\n\n3. Install dependencies:\n```bash\nuv sync\n```\n\n### 🔍 Debugging\n\nLaunch the MCP Inspector for debugging:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory <path-to-docker-mcp> run docker-mcp\n```\n\nThe Inspector will provide a URL to access the debugging interface.\n\n## 📝 Available Tools\n\nThe server provides the following tools:\n\n### create-container\nCreates a standalone Docker container\n```json\n{\n    \"image\": \"image-name\",\n    \"name\": \"container-name\",\n    \"ports\": {\"80\": \"80\"},\n    \"environment\": {\"ENV_VAR\": \"value\"}\n}\n```\n\n### deploy-compose\nDeploys a Docker Compose stack\n```json\n{\n    \"project_name\": \"example-stack\",\n    \"compose_yaml\": \"version: '3.8'\\nservices:\\n  service1:\\n    image: image1:latest\\n    ports:\\n      - '8080:80'\"\n}\n```\n\n### get-logs\nRetrieves logs from a specific container\n```json\n{\n    \"container_name\": \"my-container\"\n}\n```\n\n### list-containers\nLists all Docker containers\n```json\n{}\n```\n\n## 🚧 Current Limitations\n\n- No built-in environment variable support for containers\n- No volume management\n- No network management\n- No container health checks\n- No container restart policies\n- No container resource limits\n\n## 🤝 Contributing\n\n1. Fork the repository from [docker-mcp](https://github.com/QuantGeekDev/docker-mcp)\n2. Create your feature branch\n3. Commit your changes\n4. Push to the branch\n5. Open a Pull Request\n\n## 📜 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## ✨ Authors\n\n- **Alex Andru** - *Initial work | Core contributor* - [@QuantGeekDev](https://github.com/QuantGeekDev)\n- **Ali Sadykov** - *Initial work  | Core contributor* - [@md-archive](https://github.com/md-archive)\n\n---\nMade with ❤️\n",
+  "category": "Development",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "docker-mcp": {
+        "command": "uvx",
+        "args": ["docker-mcp"],
+        "env": {}
+      },
+      "docker-mcp-configured": {
+        "command": "uv",
+        "args": ["--directory", "<path-to-docker-mcp>", "run", "docker-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "QuantGeekDev",
+    "repo": "docker-mcp",
+    "url": "https://github.com/QuantGeekDev/docker-mcp",
+    "name": "quantgeekdev__docker-mcp",
+    "path": null,
+    "stars": 382,
+    "contributors": 2,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "6dada7feb35543c0d335b84a02559b5d55fe4b85"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:41.804Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 3
+    },
+    {
+      "name": "python-on-whales",
+      "importance": 9
+    },
+    {
+      "name": "pyyaml",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"docker-mcp\"\nversion = \"0.1.0\"\ndescription = \"A docker MCP server\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"httpx>=0.28.0\",\n    \"mcp>=1.0.0\",\n    \"python-dotenv>=1.0.1\",\n    \"python-on-whales>=0.67.0\",\n    \"pyyaml>=6.0.1\"\n]\n\n[[project.authors]]\nname = \"Alex Andru\"\nemail = \"alex007d@gmail.com\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\ndocker-mcp = \"docker_mcp:main\""
+}

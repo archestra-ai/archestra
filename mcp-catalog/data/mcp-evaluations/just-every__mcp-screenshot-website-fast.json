@@ -1,0 +1,91 @@
+{
+  "name": "just-every__mcp-screenshot-website-fast",
+  "display_name": "mcp-screenshot-website-fast",
+  "description": "Quickly screenshots webpages and converts to an LLM friendly size",
+  "author": {
+    "name": "just-every"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@just-every/mcp-screenshot-website-fast"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# @just-every/mcp-screenshot-website-fast\n\nFast, efficient screenshot capture of web pages - optimized for CLI coding tools. Automatically tiles full pages into 1072x1072 chunks for optimal processing.\n\n<a href=\"https://glama.ai/mcp/servers/@just-every/mcp-screenshot-website-fast\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@just-every/mcp-screenshot-website-fast/badge\" alt=\"Screenshot Website Fast MCP server\" />\n</a>\n\n[![npm version](https://badge.fury.io/js/@just-every%2Fmcp-screenshot-website-fast.svg)](https://www.npmjs.com/package/@just-every/mcp-screenshot-website-fast)\n[![GitHub Actions](https://github.com/just-every/mcp-screenshot-website-fast/workflows/Release/badge.svg)](https://github.com/just-every/mcp-screenshot-website-fast/actions)\n\n## Overview\n\nBuilt specifically for AI vision workflows, this tool captures high-quality screenshots with automatic resolution limiting and tiling for optimal processing by Claude Vision API and other AI models. It ensures screenshots are perfectly sized at 1072x1072 pixels (1.15 megapixels) for maximum compatibility.\n\n## Features\n\n- 📸 **Fast screenshot capture** using Puppeteer headless browser\n- 🎯 **Claude Vision optimized** with automatic resolution limiting (1072x1072 for optimal 1.15 megapixels)\n- 🔲 **Automatic tiling** - Full pages are automatically split into 1072x1072 tiles\n- 🎬 **Screencast capture** - Record series of screenshots over time with configurable intervals\n- 🔄 **Always fresh content** - No caching ensures up-to-date screenshots\n- 📱 **Configurable viewports** for responsive testing\n- ⏱️ **Wait strategies** for dynamic content (networkidle, custom delays)\n- 📄 **Full page capture** by default for complete page screenshots\n- 🎥 **Animated WebP export** - Save screencasts as high-quality animated WebP files\n- 💉 **JavaScript injection** - Execute custom JS before screencast capture\n- 📦 **Minimal dependencies** for fast npm installs\n- 🔌 **MCP integration** for seamless AI workflows\n- 🔋 **Resource efficient** - Automatic browser cleanup after 60 seconds of inactivity\n- 🧹 **Memory management** - Pages are closed after each screenshot to prevent leaks\n\n## Installation\n\n### Claude Code\n\n```bash\nclaude mcp add screenshot-website-fast -s user -- npx -y @just-every/mcp-screenshot-website-fast\n```\n\n### VS Code\n\n```bash\ncode --add-mcp '{\"name\":\"screenshot-website-fast\",\"command\":\"npx\",\"args\":[\"-y\",\"@just-every/mcp-screenshot-website-fast\"]}'\n```\n\n### Cursor\n\n```bash\ncursor://anysphere.cursor-deeplink/mcp/install?name=screenshot-website-fast&config=eyJzY3JlZW5zaG90LXdlYnNpdGUtZmFzdCI6eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBqdXN0LWV2ZXJ5L21jcC1zY3JlZW5zaG90LXdlYnNpdGUtZmFzdCJdfX0=\n```\n\n### JetBrains IDEs\n\nSettings → Tools → AI Assistant → Model Context Protocol (MCP) → Add\n\nChoose \"As JSON\" and paste:\n\n```json\n{\"command\":\"npx\",\"args\":[\"-y\",\"@just-every/mcp-screenshot-website-fast\"]}\n```\n\n### Raw JSON (works in any MCP client)\n\n```json\n{\n  \"mcpServers\": {\n    \"screenshot-website-fast\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@just-every/mcp-screenshot-website-fast\"]\n    }\n  }\n}\n```\n\nDrop this into your client's mcp.json (e.g. .vscode/mcp.json, ~/.cursor/mcp.json, or .mcp.json for Claude).\n\n## Prerequisites\n\n- Node.js 20.x or higher\n- npm or npx\n- Chrome/Chromium (automatically downloaded by Puppeteer)\n\n## Quick Start\n\n### MCP Server Usage\n\nOnce installed in your IDE, the following tools are available:\n\n#### Available Tools\n\n- `take_screenshot` - Captures a high-quality screenshot of a webpage\n  - Parameters:\n    - `url` (required): The HTTP/HTTPS URL to capture\n    - `width` (optional): Viewport width in pixels (max 1072, default: 1072)\n    - `height` (optional): Viewport height in pixels (max 1072, default: 1072)\n    - `fullPage` (optional): Capture full page screenshot with tiling (default: true)\n    - `waitUntil` (optional): Wait until event: load, domcontentloaded, networkidle0, networkidle2 (default: domcontentloaded)\n    - `waitFor` (optional): Additional wait time in milliseconds\n    - `directory` (optional): Directory to save screenshots - returns file paths instead of base64 images\n\n#### Usage Examples\n\n**Default usage (returns base64 images):**\n```\ntake_screenshot(url=\"https://example.com\")\n```\n\n**Save to directory (returns file paths):**\n```\ntake_screenshot(url=\"https://example.com\", directory=\"/path/to/screenshots\")\n```\n\nWhen using the `directory` parameter:\n- Screenshots are saved as PNG files with timestamps\n- File paths are returned instead of base64 data\n- For tiled screenshots, each tile is saved as a separate file\n- Directory is created automatically if it doesn't exist\n\n### take_screencast\n\nCaptures a series of screenshots over time to create a screencast. Only captures the top tile (1072x1072) of the viewport.\n\n#### Parameters\n- `url` (required): The URL to capture\n- `duration` (optional): Total duration in seconds (default: 10)\n- `interval` (optional): Interval between screenshots in seconds (default: 2)\n- `jsEvaluate` (optional): JavaScript code to execute at the start\n- `waitUntil` (optional): Wait strategy: 'load', 'domcontentloaded', 'networkidle0', 'networkidle2'\n- `waitForMS` (optional): Additional wait time before starting\n- `directory` (optional): Save as animated WebP to directory (captures every 1 second)\n\n#### Usage Examples\n\n**Basic screencast (5 frames over 10 seconds):**\n```\ntake_screencast(url=\"https://example.com\")\n```\n\n**Custom timing:**\n```\ntake_screencast(url=\"https://example.com\", duration=15, interval=3)\n```\n\n**With JavaScript execution:**\n```\ntake_screencast(\n  url=\"https://example.com\",\n  jsEvaluate=\"document.body.style.backgroundColor = 'red';\"\n)\n```\n\n**Save as animated WebP:**\n```\ntake_screencast(url=\"https://example.com\", directory=\"/path/to/output\")\n```\n\nWhen using the `directory` parameter:\n- An animated WebP is created with 1-second intervals\n- Individual frames are also saved as PNG files\n- The animation loops forever by default\n- WebP provides excellent quality:\n  - Full color support (no 256 color limitation)\n  - Efficient compression for web animations\n  - Perfect for gradient backgrounds and smooth animations\n  - Smaller file sizes compared to GIF with better quality\n\n## Development Usage\n\n### Install\n\n```bash\nnpm install\nnpm run build\n```\n\n### Capture screenshot\n```bash\n# Full page with automatic tiling (default)\nnpm run dev capture https://example.com -o screenshot.png\n\n# Viewport-only screenshot  \nnpm run dev capture https://example.com --no-full-page -o screenshot.png\n\n# Wait for specific conditions\nnpm run dev capture https://example.com --wait-until networkidle0 --wait-for 2000 -o screenshot.png\n```\n\n### CLI Options\n\n- `-w, --width <pixels>` - Viewport width (max 1072, default: 1072)\n- `-h, --height <pixels>` - Viewport height (max 1072, default: 1072)\n- `--no-full-page` - Disable full page capture and tiling\n- `--wait-until <event>` - Wait until event: load, domcontentloaded, networkidle0, networkidle2\n- `--wait-for <ms>` - Additional wait time in milliseconds\n- `-o, --output <path>` - Output file path (required for tiled output)\n\n## Auto-Restart Feature\n\nThe MCP server includes automatic restart capability by default for improved reliability:\n\n- Automatically restarts the server if it crashes\n- Handles unhandled exceptions and promise rejections\n- Implements exponential backoff (max 10 attempts in 1 minute)\n- Logs all restart attempts for monitoring\n- Gracefully handles shutdown signals (SIGINT, SIGTERM)\n\nFor development/debugging without auto-restart:\n```bash\n# Run directly without restart wrapper\nnpm run serve:dev\n```\n\n## Architecture\n\n```\nmcp-screenshot-website-fast/\n├── src/\n│   ├── internal/       # Core screenshot capture logic\n│   ├── utils/          # Logger and utilities\n│   ├── index.ts        # CLI entry point\n│   ├── serve.ts        # MCP server entry point\n│   └── serve-restart.ts # Auto-restart wrapper\n```\n\n## Development\n\n```bash\n# Run in development mode\nnpm run dev capture https://example.com -o screenshot.png\n\n# Build for production\nnpm run build\n\n# Run tests\nnpm test\n\n# Type checking\nnpm run typecheck\n\n# Linting\nnpm run lint\n```\n\n## Why This Tool?\n\nBuilt specifically for AI vision workflows:\n\n1. **Optimized for Claude Vision API** - Automatic resolution limiting to 1072x1072 pixels (1.15 megapixels)\n2. **Automatic tiling** - Full pages split into perfect chunks for AI processing\n3. **Always fresh** - No caching ensures you get the latest content\n4. **MCP native** - First-class integration with AI development tools\n5. **Simple API** - Clean, straightforward interface for capturing screenshots\n\n## Contributing\n\nContributions are welcome! Please:\n\n1. Fork the repository\n2. Create a feature branch\n3. Add tests for new functionality\n4. Submit a pull request\n\n## Troubleshooting\n\n### Puppeteer Issues\n- Ensure Chrome/Chromium can be downloaded\n- Check firewall settings\n- Try setting `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true` and provide custom executable\n\n### Screenshot Quality\n- Adjust viewport dimensions\n- Use appropriate wait strategies\n- Check if site requires authentication\n\n### Timeout Errors\n- Increase wait time with `--wait-for` flag\n- Use different `--wait-until` strategies\n- Check if site is accessible\n\n## License\n\nMIT",
+  "category": "Browser Automation",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "just-every-mcp-screenshot-website-fast": {
+        "command": "npx",
+        "args": ["-y", "@just-every/mcp-screenshot-website-fast"],
+        "env": {}
+      },
+      "just-every-mcp-screenshot-website-fast-dev": {
+        "command": "npm",
+        "args": ["run", "serve:dev"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "just-every",
+    "repo": "mcp-screenshot-website-fast",
+    "url": "https://github.com/just-every/mcp-screenshot-website-fast",
+    "name": "mcp-screenshot-website-fast",
+    "path": null,
+    "stars": 68,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "9c5d46d23c04d77b5c712b5932c1bc02eafd8c1b"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:29.146Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    },
+    {
+      "name": "execa",
+      "importance": 7
+    },
+    {
+      "name": "puppeteer",
+      "importance": 9
+    },
+    {
+      "name": "sharp",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@just-every/mcp-screenshot-website-fast\",\n  \"version\": \"0.1.25\",\n  \"description\": \"Fast screenshot capture tool for web pages - optimized for Claude Vision API\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"mcp-screenshot-website-fast\": \"bin/mcp-screenshot-website.js\"\n  },\n  \"files\": [\n    \"dist/**/*\",\n    \"bin/**/*\",\n    \"scripts/**/*\",\n    \"README.md\",\n    \"LICENSE\",\n    \"package.json\"\n  ],\n  \"scripts\": {\n    \"prebuild\": \"node scripts/download-img2webp.js\",\n    \"build\": \"tsc -p tsconfig.prod.json\",\n    \"build:dev\": \"tsc\",\n    \"build:full\": \"npm run download-binaries && npm run build\",\n    \"download-binaries\": \"node scripts/download-img2webp.js\",\n    \"dev\": \"tsx src/index.ts\",\n    \"start\": \"node dist/index.js\",\n    \"serve\": \"node dist/serve-restart.js\",\n    \"serve:dev\": \"LOG_LEVEL=debug tsx src/serve.ts\",\n    \"serve:debug\": \"LOG_LEVEL=debug node --inspect dist/serve.js\",\n    \"test\": \"vitest\",\n    \"test:deploy\": \"vitest run test/deployment.test.ts\",\n    \"lint\": \"eslint src\",\n    \"typecheck\": \"tsc --noEmit\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"mcp-server\",\n    \"model-context-protocol\",\n    \"screenshot\",\n    \"web-capture\",\n    \"puppeteer\",\n    \"headless\",\n    \"vision\",\n    \"llm\",\n    \"claude\",\n    \"cursor\",\n    \"vscode\"\n  ],\n  \"author\": \"Just Every\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/just-every/mcp-screenshot-website-fast.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/just-every/mcp-screenshot-website-fast/issues\"\n  },\n  \"homepage\": \"https://github.com/just-every/mcp-screenshot-website-fast#readme\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"commander\": \"^14.0.0\",\n    \"execa\": \"^9.6.0\",\n    \"puppeteer\": \"^24.0.0\",\n    \"sharp\": \"^0.34.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.0.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.34.0\",\n    \"@typescript-eslint/parser\": \"^8.34.0\",\n    \"eslint\": \"^9.28.0\",\n    \"eslint-config-prettier\": \"^10.1.5\",\n    \"eslint-plugin-prettier\": \"^5.5.1\",\n    \"prettier\": \"^3.6.2\",\n    \"tsx\": \"^4.7.0\",\n    \"typescript\": \"^5.8.3\",\n    \"typescript-eslint\": \"^8.35.1\",\n    \"vitest\": \"^3.2.3\"\n  },\n  \"optionalDependencies\": {\n    \"@rollup/rollup-darwin-x64\": \"^4.43.0\",\n    \"@rollup/rollup-linux-x64-gnu\": \"^4.43.0\",\n    \"@rollup/rollup-linux-x64-musl\": \"^4.43.0\",\n    \"@rollup/rollup-win32-x64-msvc\": \"^4.43.0\"\n  },\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"type\": \"module\"\n}\n"
+}

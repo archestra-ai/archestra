@@ -1,0 +1,142 @@
+{
+  "name": "mattijsdp__dbt-docs-mcp",
+  "display_name": "dbt-docs-mcp",
+  "description": "MCP (model context protocol) server for interacting with dbt Docs",
+  "author": {
+    "name": "mattijsdp"
+  },
+  "server": {
+    "command": "uv",
+    "args": [
+      "run",
+      "--with",
+      "networkx,mcp[cli],rapidfuzz,dbt-core,python-decouple,sqlglot,tqdm",
+      "mcp",
+      "run",
+      "${__dirname}/src/mcp_server.py"
+    ],
+    "env": {
+      "MANIFEST_PATH": "${user_config.manifest_path}",
+      "SCHEMA_MAPPING_PATH": "${user_config.schema_mapping_path}",
+      "MANIFEST_CL_PATH": "${user_config.manifest_cl_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "manifest_path": {
+      "type": "file",
+      "title": "dbt Manifest Path",
+      "description": "Path to your dbt manifest.json file.",
+      "required": true,
+      "default": "${__dirname}/inputs/manifest.json"
+    },
+    "schema_mapping_path": {
+      "type": "file",
+      "title": "Schema Mapping Path",
+      "description": "Path to the generated schema mapping JSON file.",
+      "required": true,
+      "default": "${__dirname}/outputs/schema_mapping.json"
+    },
+    "manifest_cl_path": {
+      "type": "file",
+      "title": "Manifest Column Lineage Path",
+      "description": "Path to the generated manifest column lineage JSON file.",
+      "required": true,
+      "default": "${__dirname}/outputs/manifest_column_lineage.json"
+    }
+  },
+  "readme": "[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/ad4aaf73-63ce-42e0-b27c-8541ae1fbab8)\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/mattijsdp/dbt-docs-mcp)](https://archestra.ai/mcp-catalog/mattijsdp__dbt-docs-mcp)\n\n# dbt-docs-mcp\n\nModel Context Protocol (MCP) server for interacting with dbt project metadata, including dbt Docs artifacts (`manifest.json`, `catalog.json`). This server exposes dbt graph information and allows querying node details, model/column lineage, and related metadata.\n\n## Key Functionality\n\nThis server provides tools to:\n\n*   **Search dbt Nodes:**\n    *   Find nodes (models, sources, tests, etc.) by name (`search_dbt_node_names`).\n    *   Locate nodes based on column names (`search_dbt_column_names`).\n    *   Search within the compiled SQL code of nodes (`search_dbt_sql_code`).\n*   **Inspect Nodes:**\n    *   Retrieve detailed attributes for any given node unique ID (`get_dbt_node_attributes`).\n*   **Explore Lineage:**\n    *   Find direct upstream dependencies (predecessors) of a node (`get_dbt_predecessors`).\n    *   Find direct downstream dependents (successors) of a node (`get_dbt_successors`).\n*   **Column-Level Lineage:**\n    *   Trace all upstream sources for a specific column in a model (`get_column_ancestors`).\n    *   Trace all downstream dependents of a specific column in a model (`get_column_descendants`).\n*   **Suggested extensions:**\n    *   Tool that allows executing SQL queries.\n    *   Tool that retrieves table/view/column metadata directly from the database.\n    *   Tool to search knowledge-base.\n\n## Getting Started\n\n1.  **Prerequisites:** Ensure you have Python installed and [uv](https://docs.astral.sh/uv/)\n2.  **Clone the repo:**\n    ```bash\n    git clone <repository-url>\n    cd dbt-docs-mcp\n    ```\n3.  **Optional: parse dbt manifest for column-level lineage:**\n    - Setup the required Python environment, e.g.:\n    ```bash\n    uv sync\n    ```\n    - Use the provided script `scripts/create_manifest_cl.py` and simply provide the path to your dbt manifest, dbt catalog and the desired output paths for your schema and column lineage file:\n    ```bash\n    python scripts/create_manifest_cl.py --manifest-path PATH_TO_YOUR_MANIFEST_FILE --catalog-path PATH_TO_YOUR_CATALOG_FILE --schema-mapping-path DESIRED_OUTPUT_PATH_FOR_SCHEMA_MAPPING --manifest-cl-path DESIRED_OUTPUT_PATH_FOR_MANIFEST_CL\n    ```\n    - Depending on your dbt project size, creating column-lineage can take a while (hours)\n4.  **Run the Server:**\n    - If your desired MCP client (Claude desktop, Cursor, etc.) supports mcp.json it would look as below:\n    ```json\n    {\n        \"mcpServers\": {\n            \"DBT Docs MCP\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"run\",\n                \"--with\",\n                \"networkx,mcp[cli],rapidfuzz,dbt-core,python-decouple,sqlglot,tqdm\",\n                \"mcp\",\n                \"run\",\n                \"/Users/mattijs/repos/dbt-docs-mcp/src/mcp_server.py\"\n            ],\n            \"env\": {\n                \"MANIFEST_PATH\": \"/Users/mattijs/repos/dbt-docs-mcp/inputs/manifest.json\",\n                \"SCHEMA_MAPPING_PATH\": \"/Users/mattijs/repos/dbt-docs-mcp/outputs/schema_mapping.json\",\n                \"MANIFEST_CL_PATH\": \"/Users/mattijs/repos/dbt-docs-mcp/outputs/manifest_column_lineage.json\"\n            }\n            }\n        }\n    }\n    ```\n",
+  "category": "Data",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "dbt-docs-mcp": {
+        "command": "uv",
+        "args": [
+          "run",
+          "--with",
+          "networkx,mcp[cli],rapidfuzz,dbt-core,python-decouple,sqlglot,tqdm",
+          "mcp",
+          "run",
+          "/Users/mattijs/repos/dbt-docs-mcp/src/mcp_server.py"
+        ],
+        "env": {
+          "MANIFEST_PATH": "/Users/mattijs/repos/dbt-docs-mcp/inputs/manifest.json",
+          "SCHEMA_MAPPING_PATH": "/Users/mattijs/repos/dbt-docs-mcp/outputs/schema_mapping.json",
+          "MANIFEST_CL_PATH": "/Users/mattijs/repos/dbt-docs-mcp/outputs/manifest_column_lineage.json"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mattijsdp",
+    "repo": "dbt-docs-mcp",
+    "url": "https://github.com/mattijsdp/dbt-docs-mcp",
+    "name": "mattijsdp__dbt-docs-mcp",
+    "path": null,
+    "stars": 18,
+    "contributors": 3,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "54ab694c6b71343b6c0c1e71268bde80dd5c6569"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:33.364Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "dbt-core",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "networkx",
+      "importance": 8
+    },
+    {
+      "name": "python-decouple",
+      "importance": 6
+    },
+    {
+      "name": "rapidfuzz",
+      "importance": 7
+    },
+    {
+      "name": "snowplow-tracker",
+      "importance": 5
+    },
+    {
+      "name": "sqlglot",
+      "importance": 8
+    },
+    {
+      "name": "tqdm",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"dbt-docs-mcp\"\ndynamic = [\"version\"]\ndescription = \"Model Context Protocol (MCP) server for dbt docs\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nauthors = [\n    { name = \"Mattijs De Paepe\", email = \"mattijsdepaepe@hotmail.com\" },\n]\ndependencies = [\n    \"dbt-core>=1.8\",\n    \"mcp[cli]>=1.2.0\",\n    \"networkx\",\n    \"python-decouple\",\n    \"rapidfuzz\",\n    \"snowplow-tracker<1.1.0\",\n    \"sqlglot>=26.12.0\",\n    \"tqdm\",\n]\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"Operating System :: OS Independent\",\n]\nlicense = \"MIT\"\n\n[project.urls]\nCode = \"https://github.com/mattijsdp/dbt-docs-mcp\"\n\n[build-system]\nrequires = [\"hatchling>=1.21.0\", \"hatch-vcs>=0.4.0\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.version]\nsource = \"vcs\"\n\n[dependency-groups]\ndev = [\n    \"ipykernel>=6.29.5\",\n    \"pre-commit>=4.2.0\",\n    \"ruff>=0.11.4\",\n]\n\n[tool.ruff]\nline-length = 120\n\n[tool.ruff.lint]\nselect = [\"E\", \"W\", \"F\", \"I\", \"PL\", \"C90\"]\nfixable = [\"ALL\"]\n\n[tool.ruff.lint.pydocstyle]\nconvention = \"google\"\n\n[tool.ruff.format]\ndocstring-code-format = false\n\n"
+}

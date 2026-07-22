@@ -1,0 +1,126 @@
+{
+  "name": "joshuarileydev__app-store-connect-mcp-server",
+  "display_name": "app-store-connect-mcp-server",
+  "description": "MCP server from JoshuaRileyDev/app-store-connect-mcp-server",
+  "author": {
+    "name": "JoshuaRileyDev"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@joshuarileydev/app-store-connect-mcp-server"],
+    "env": {
+      "APP_STORE_CONNECT_KEY_ID": "${user_config.app_store_connect_key_id}",
+      "APP_STORE_CONNECT_ISSUER_ID": "${user_config.app_store_connect_issuer_id}",
+      "APP_STORE_CONNECT_P8_PATH": "${user_config.app_store_connect_p8_path}",
+      "APP_STORE_CONNECT_VENDOR_NUMBER": "${user_config.app_store_connect_vendor_number}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "app_store_connect_key_id": {
+      "type": "string",
+      "title": "App Store Connect Key ID",
+      "description": "Your API Key ID from App Store Connect.",
+      "sensitive": true,
+      "required": true
+    },
+    "app_store_connect_issuer_id": {
+      "type": "string",
+      "title": "App Store Connect Issuer ID",
+      "description": "Your Issuer ID from App Store Connect.",
+      "sensitive": true,
+      "required": true
+    },
+    "app_store_connect_p8_path": {
+      "type": "file",
+      "title": "App Store Connect Private Key Path",
+      "description": "Path to your .p8 private key file downloaded from App Store Connect.",
+      "sensitive": true,
+      "required": true
+    },
+    "app_store_connect_vendor_number": {
+      "type": "string",
+      "title": "App Store Connect Vendor Number",
+      "description": "Your vendor number from App Store Connect (optional, required for sales and finance reports).",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# App Store Connect MCP Server\n\nA Model Context Protocol (MCP) server for interacting with the App Store Connect API. This server provides tools for managing apps, beta testers, bundle IDs, devices, app metadata, and capabilities in App Store Connect.\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=app-store-connect&config=JTdCJTIyY29tbWFuZCUyMiUzQSUyMm5weCUyMC15JTIwYXBwc3RvcmUtY29ubmVjdC1tY3Atc2VydmVyJTIyJTdE)\n\n## Overview\n\nThe App Store Connect MCP Server is a comprehensive tool that bridges the gap between AI and Apple's App Store Connect ecosystem. Built on the Model Context Protocol (MCP), this server enables developers to interact with their App Store Connect data directly through conversational AI, making app management, beta testing, and analytics more accessible than ever.\n\n**Key Benefits:**\n- 🤖 **AI-Powered App Management**: Use natural language to manage your iOS and macOS apps\n- 📊 **Comprehensive Analytics**: Access detailed app performance, sales, and user engagement data\n- 👥 **Streamlined Beta Testing**: Efficiently manage beta groups and testers\n- 🌍 **Localization Management**: Update app descriptions, keywords, and metadata across all languages\n- 🔧 **Developer Tools Integration**: List Xcode project schemes and integrate with development workflows\n- 🔐 **Secure Authentication**: Uses official App Store Connect API with JWT authentication\n- 🚀 **Real-time Data**: Access up-to-date information directly from Apple's systems\n\n**Who This Is For:**\n- iOS/macOS developers managing apps in App Store Connect\n- Development teams coordinating beta testing programs\n- Product managers analyzing app performance and user engagement\n- Marketing teams managing app metadata and localizations\n- DevOps engineers automating app store workflows\n- Anyone looking to streamline their Apple developer experience\n\nThis server transforms complex App Store Connect operations into simple conversational commands, whether you're checking app analytics, managing beta testers, updating app descriptions, or exploring your development pipeline.\n\n<a href=\"https://glama.ai/mcp/servers/z4j2smln34\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/z4j2smln34/badge\" alt=\"app-store-connect-mcp-server MCP server\" /></a>\n<a href=\"https://smithery.ai/server/appstore-connect-mcp-server\" style=\"text-decoration: none;\">\n  <img alt=\"Smithery Installations\" src=\"https://smithery.ai/badge/appstore-connect-mcp-server\" />\n</a>\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/joshuarileydev-app-store-connect-mcp-server-badge.png)](https://mseep.ai/app/joshuarileydev-app-store-connect-mcp-server)\n\n## Features\n\n- **App Management**\n  - List all apps\n  - Get detailed app information\n  - View app metadata and relationships\n\n- **Beta Testing**\n  - List beta groups\n  - List beta testers\n  - Add/remove testers from groups\n  - Manage beta test configurations\n  - View beta feedback with screenshots and device information\n\n- **App Store Version Localizations** ✨ **NEW**\n  - Create new app store versions with release scheduling\n  - List all app store versions for an app\n  - List all localizations for an app version\n  - Get specific localization details\n  - Update app descriptions, keywords, and promotional text\n  - Manage marketing and support URLs\n  - Update \"What's New\" text for releases\n\n- **Bundle ID Management**\n  - List bundle IDs\n  - Create new bundle IDs\n  - Get bundle ID details\n  - Enable/disable capabilities\n\n- **Device Management**\n  - List registered devices\n  - Filter by device type, platform, status\n  - View device details\n\n- **User Management**\n  - List team members\n  - View user roles and permissions\n  - Filter users by role and access\n\n- **Analytics & Reports**\n  - Create analytics report requests for apps\n  - Download App Store engagement, commerce, and usage analytics\n  - Access performance and frameworks usage reports\n  - Download sales and trends reports (daily, weekly, monthly, yearly)\n  - Download finance reports by region\n\n- **Xcode Development Tools**\n  - List available schemes in Xcode projects and workspaces\n  - Integrate with development workflows and CI/CD pipelines\n\n## Installation\n\n### Using Smithery\n\nTo install App Store Connect Server for Claude Desktop automatically:\n\n```bash\nnpx @smithery/cli install appstore-connect-mcp-server --client claude\n```\n\n### Manual Installation\n\n```bash\nnpm install @joshuarileydev/app-store-connect-mcp-server\n```\n\n## Configuration\n\nAdd the following to your Claude Desktop configuration file:\n\n### macOS\n```bash\n~/Library/Application Support/Claude/claude_desktop_config.json\n```\n\n### Windows\n```bash\n%APPDATA%\\Claude\\claude_desktop_config.json\n```\n\n```json\n{\n  \"mcpServers\": {\n    \"app-store-connect\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"appstore-connect-mcp-server\"\n      ],\n      \"env\": {\n        \"APP_STORE_CONNECT_KEY_ID\": \"YOUR_KEY_ID\",\n        \"APP_STORE_CONNECT_ISSUER_ID\": \"YOUR_ISSUER_ID\",\n        \"APP_STORE_CONNECT_P8_PATH\": \"/path/to/your/auth-key.p8\",\n        \"APP_STORE_CONNECT_VENDOR_NUMBER\": \"YOUR_VENDOR_NUMBER_OPTIONAL\"\n      }\n    }\n  }\n}\n```\n\n## Authentication\n\n### Required Configuration\n1. Generate an App Store Connect API Key from [App Store Connect](https://appstoreconnect.apple.com/access/integrations/api)\n2. Download the .p8 private key file\n3. Note your Key ID and Issuer ID\n4. Set the required environment variables in your configuration:\n   - `APP_STORE_CONNECT_KEY_ID`: Your API Key ID\n   - `APP_STORE_CONNECT_ISSUER_ID`: Your Issuer ID  \n   - `APP_STORE_CONNECT_P8_PATH`: Path to your .p8 private key file\n\n### Optional Configuration for Sales & Finance Reports\nTo enable sales and finance reporting tools, you'll also need:\n- `APP_STORE_CONNECT_VENDOR_NUMBER`: Your vendor number from App Store Connect\n\n**Note**: Sales and finance report tools (`download_sales_report`, `download_finance_report`) will only be available if the vendor number is configured. You can find your vendor number in App Store Connect under \"Sales and Trends\" or \"Payments and Financial Reports\".\n\n## Complete Tool Reference\n\n### 📱 App Management Tools\n\n#### `list_apps`\nGet a list of all apps in App Store Connect.\n\n**Parameters:**\n- `limit` (optional): Maximum number of apps to return (default: 100, max: 200)\n- `bundleId` (optional): Filter by bundle identifier\n\n**Example:**\n```\n\"List all my apps\"\n\"Show me apps with bundle ID com.example.myapp\"\n\"Get the first 50 apps\"\n```\n\n#### `get_app_info`\nGet detailed information about a specific app.\n\n**Parameters:**\n- `appId` (required): The ID of the app\n- `include` (optional): Related resources to include (e.g., appClips, appInfos, appStoreVersions, betaGroups, builds)\n\n**Example:**\n```\n\"Get info for app ID 123456789\"\n\"Show me app 123456789 with beta groups and builds\"\n\"Get detailed information about my app including app store versions\"\n```\n\n### 👥 Beta Testing Tools\n\n#### `list_beta_groups`\nList all beta testing groups (internal and external).\n\n**Parameters:**\n- `limit` (optional): Maximum number of groups to return (default: 100, max: 200)\n- `appId` (optional): Filter by app ID\n\n**Example:**\n```\n\"Show all beta groups\"\n\"List beta groups for app 123456789\"\n\"Get the first 20 beta groups\"\n```\n\n#### `list_group_testers`\nList testers in a specific beta group.\n\n**Parameters:**\n- `groupId` (required): The ID of the beta group\n- `limit` (optional): Maximum number of testers to return (default: 100, max: 200)\n\n**Example:**\n```\n\"List all testers in group ABC123\"\n\"Show me the first 50 testers in beta group ABC123\"\n```\n\n#### `add_tester_to_group`\nAdd a new tester to a beta group.\n\n**Parameters:**\n- `groupId` (required): The ID of the beta group\n- `email` (required): Email address of the tester\n- `firstName` (optional): Tester's first name\n- `lastName` (optional): Tester's last name\n\n**Example:**\n```\n\"Add john@example.com to beta group ABC123\"\n\"Add John Smith (john@example.com) to group ABC123\"\n```\n\n#### `remove_tester_from_group`\nRemove a tester from a beta group.\n\n**Parameters:**\n- `groupId` (required): The ID of the beta group\n- `testerId` (required): The ID of the tester\n\n**Example:**\n```\n\"Remove tester XYZ789 from group ABC123\"\n\"Delete tester XYZ789 from beta group ABC123\"\n```\n\n#### `list_beta_feedback_screenshots`\nList beta feedback screenshot submissions.\n\n**Parameters:**\n- `appId` (optional): Filter by app ID\n- `bundleId` (optional): Filter by bundle identifier\n- `buildId` (optional): Filter by build ID\n- `limit` (optional): Maximum results (default: 100)\n- `includeBuilds` (optional): Include build information\n- `includeTesters` (optional): Include tester information\n\n**Example:**\n```\n\"Show beta feedback screenshots for app 123456789\"\n\"List feedback screenshots for bundle ID com.example.app\"\n\"Get feedback with tester info for build XYZ\"\n```\n\n#### `get_beta_feedback_screenshot`\nGet detailed information about a specific beta feedback screenshot.\n\n**Parameters:**\n- `feedbackId` (required): The ID of the feedback\n- `includeBuilds` (optional): Include build information\n- `includeTesters` (optional): Include tester information\n- `downloadScreenshot` (optional): Download the screenshot image (default: true)\n\n**Example:**\n```\n\"Get feedback screenshot FEEDBACK123\"\n\"Show me feedback FEEDBACK123 with tester details\"\n\"Download screenshot from feedback FEEDBACK123\"\n```\n\n### 🌍 App Store Version Localization Tools\n\n#### `create_app_store_version`\nCreate a new app store version for an app.\n\n**Parameters:**\n- `appId` (required): The ID of the app\n- `platform` (required): The platform (IOS, MAC_OS, TV_OS, VISION_OS)\n- `versionString` (required): Version string in format X.Y or X.Y.Z (e.g., '1.0' or '1.0.0')\n- `copyright` (optional): Copyright text for this version\n- `releaseType` (optional): How the app should be released (MANUAL, AFTER_APPROVAL, SCHEDULED)\n- `earliestReleaseDate` (optional): ISO 8601 date string (required when releaseType is SCHEDULED)\n- `buildId` (optional): ID of the build to associate with this version\n\n**Example:**\n```\n\"Create iOS version 2.0.0 for app 123456789\"\n\"Create macOS version 1.5.0 for app 123456789 with manual release\"\n\"Create scheduled iOS version 2.1.0 for app 123456789 releasing on 2024-02-01\"\n\"Create version 1.2.0 for app 123456789 with build BUILD456 and copyright '2024 My Company'\"\n```\n\n#### `list_app_store_versions`\nGet all app store versions for a specific app.\n\n**Parameters:**\n- `appId` (required): The ID of the app\n- `limit` (optional): Maximum number of versions to return (default: 100, max: 200)\n- `filter` (optional): Filter options\n  - `platform`: Filter by platform (IOS, MAC_OS, TV_OS)\n  - `versionString`: Filter by version string (e.g., '1.0.0')\n  - `appStoreState`: Filter by state (e.g., READY_FOR_SALE, PREPARE_FOR_SUBMISSION)\n\n**Example:**\n```\n\"List all versions for app 123456789\"\n\"Show iOS versions for app 123456789\"\n\"Find version 2.0.0 for app 123456789\"\n\"List versions in review for app 123456789\"\n```\n\n#### `list_app_store_version_localizations`\nGet all localizations for a specific app store version.\n\n**Parameters:**\n- `appStoreVersionId` (required): The ID of the app store version\n- `limit` (optional): Maximum number of localizations (default: 100, max: 200)\n\n**Example:**\n```\n\"List all localizations for app version VERSION123\"\n\"Show me language versions for app store version VERSION123\"\n```\n\n#### `get_app_store_version_localization`\nGet detailed information about a specific localization.\n\n**Parameters:**\n- `localizationId` (required): The ID of the localization\n\n**Example:**\n```\n\"Get localization details for LOCALE123\"\n\"Show me the French localization LOCALE123\"\n```\n\n#### `update_app_store_version_localization`\nUpdate a specific field in an app store version localization.\n\n**Parameters:**\n- `localizationId` (required): The ID of the localization\n- `field` (required): Field to update (description, keywords, marketingUrl, promotionalText, supportUrl, whatsNew)\n- `value` (required): New value for the field\n\n**Example:**\n```\n\"Update description for localization LOCALE123 to 'Amazing new app description'\"\n\"Change keywords for LOCALE123 to 'productivity, tasks, organize'\"\n\"Update what's new text for LOCALE123 to 'Bug fixes and performance improvements'\"\n```\n\n### 🔤 Bundle ID Management Tools\n\n#### `create_bundle_id`\nRegister a new bundle ID for app development.\n\n**Parameters:**\n- `identifier` (required): The bundle ID string (e.g., 'com.example.app')\n- `name` (required): A name for the bundle ID\n- `platform` (required): Platform (IOS, MAC_OS, or UNIVERSAL)\n- `seedId` (optional): Your team's seed ID\n\n**Example:**\n```\n\"Create bundle ID com.mycompany.newapp for iOS named 'My New App'\"\n\"Register universal bundle ID com.example.app called 'Example App'\"\n```\n\n#### `list_bundle_ids`\nFind and list bundle IDs registered to your team.\n\n**Parameters:**\n- `limit` (optional): Maximum results (default: 100, max: 200)\n- `sort` (optional): Sort order (name, -name, platform, -platform, identifier, -identifier)\n- `filter` (optional): Filter by identifier, name, platform, or seedId\n- `include` (optional): Include related resources (profiles, bundleIdCapabilities, app)\n\n**Example:**\n```\n\"List all bundle IDs\"\n\"Show iOS bundle IDs sorted by name\"\n\"Find bundle IDs containing 'example'\"\n```\n\n#### `get_bundle_id_info`\nGet detailed information about a specific bundle ID.\n\n**Parameters:**\n- `bundleIdId` (required): The ID of the bundle ID\n- `include` (optional): Related resources to include\n- `fields` (optional): Specific fields to include\n\n**Example:**\n```\n\"Get info for bundle ID BUNDLE123\"\n\"Show bundle ID BUNDLE123 with capabilities\"\n```\n\n#### `enable_bundle_capability`\nEnable a capability for a bundle ID.\n\n**Parameters:**\n- `bundleIdId` (required): The ID of the bundle ID\n- `capabilityType` (required): Type of capability (e.g., PUSH_NOTIFICATIONS, ICLOUD, GAME_CENTER)\n- `settings` (optional): Capability-specific settings\n\n**Example:**\n```\n\"Enable push notifications for bundle ID BUNDLE123\"\n\"Add iCloud capability to bundle BUNDLE123\"\n\"Enable Game Center for bundle ID BUNDLE123\"\n```\n\n#### `disable_bundle_capability`\nDisable a capability for a bundle ID.\n\n**Parameters:**\n- `capabilityId` (required): The ID of the capability to disable\n\n**Example:**\n```\n\"Disable capability CAP123\"\n\"Remove capability CAP123 from bundle ID\"\n```\n\n### 📱 Device Management Tools\n\n#### `list_devices`\nGet a list of all devices registered to your team.\n\n**Parameters:**\n- `limit` (optional): Maximum results (default: 100, max: 200)\n- `sort` (optional): Sort order (name, platform, status, udid, deviceClass, model, addedDate)\n- `filter` (optional): Filter by name, platform, status, udid, or deviceClass\n- `fields` (optional): Specific fields to include\n\n**Example:**\n```\n\"List all devices\"\n\"Show enabled iOS devices\"\n\"Find devices with name containing 'John'\"\n\"List iPhones sorted by date added\"\n```\n\n### 👤 User Management Tools\n\n#### `list_users`\nGet a list of all users on your App Store Connect team.\n\n**Parameters:**\n- `limit` (optional): Maximum results (default: 100, max: 200)\n- `sort` (optional): Sort order (username, firstName, lastName, roles)\n- `filter` (optional): Filter by username or roles\n- `fields` (optional): Specific fields to include\n- `include` (optional): Include visibleApps relationship\n\n**Example:**\n```\n\"List all team members\"\n\"Show users with admin role\"\n\"Find developers sorted by last name\"\n\"List users with their visible apps\"\n```\n\n### 📊 Analytics & Reports Tools\n\n#### `create_analytics_report_request`\nCreate a new analytics report request for an app.\n\n**Parameters:**\n- `appId` (required): The app ID\n- `accessType` (required): Type of analytics (ONGOING or ONE_TIME_SNAPSHOT)\n- `frequency` (optional): Report frequency for ongoing reports (DAILY, WEEKLY, MONTHLY)\n- `startDate` (optional): Start date (YYYY-MM-DD)\n- `endDate` (optional): End date (YYYY-MM-DD)\n\n**Example:**\n```\n\"Create daily analytics report for app 123456789\"\n\"Generate one-time snapshot report for app 123456789 from 2024-01-01 to 2024-01-31\"\n```\n\n#### `list_analytics_reports`\nGet available analytics reports for a request.\n\n**Parameters:**\n- `reportRequestId` (required): The report request ID\n- `limit` (optional): Maximum results (default: 100, max: 200)\n- `filter` (optional): Filter by category, name, or date\n\n**Example:**\n```\n\"List reports for request REQ123\"\n\"Show app usage reports for request REQ123\"\n```\n\n#### `list_analytics_report_segments`\nGet segments for a specific analytics report.\n\n**Parameters:**\n- `reportId` (required): The analytics report ID\n- `limit` (optional): Maximum results (default: 100, max: 200)\n\n**Example:**\n```\n\"List segments for report REPORT123\"\n\"Get download URLs for report REPORT123\"\n```\n\n#### `download_analytics_report_segment`\nDownload data from an analytics report segment.\n\n**Parameters:**\n- `url` (required): The segment download URL\n\n**Example:**\n```\n\"Download data from https://api.appstoreconnect.apple.com/...\"\n```\n\n### 💰 Sales & Finance Reports Tools (Requires Vendor Number)\n\n#### `download_sales_report`\nDownload sales and trends reports.\n\n**Parameters:**\n- `frequency` (required): Report frequency (DAILY, WEEKLY, MONTHLY, YEARLY)\n- `reportDate` (required): Date in appropriate format\n- `reportType` (required): Type of report (SALES, SUBSCRIPTION, SUBSCRIPTION_EVENT, SUBSCRIBER, NEWSSTAND, PREORDER)\n- `reportSubType` (required): SUMMARY or DETAILED\n- `vendorNumber` (optional): Override default vendor number\n- `version` (optional): Report version (default: 1_0)\n\n**Example:**\n```\n\"Download daily sales summary for 2024-01-15\"\n\"Get monthly subscription detailed report for 2024-01\"\n\"Download yearly sales summary for 2023\"\n```\n\n#### `download_finance_report`\nDownload finance reports for a specific region.\n\n**Parameters:**\n- `reportDate` (required): Report date (YYYY-MM)\n- `regionCode` (required): Region code (e.g., 'Z1' for worldwide)\n- `vendorNumber` (optional): Override default vendor number\n\n**Example:**\n```\n\"Download finance report for January 2024 worldwide\"\n\"Get finance report for 2024-01 region Z1\"\n```\n\n### 🔧 Xcode Development Tools\n\n#### `list_schemes`\nList all available schemes in an Xcode project or workspace.\n\n**Parameters:**\n- `projectPath` (required): Path to .xcodeproj or .xcworkspace file\n\n**Example:**\n```\n\"List schemes in /Users/john/MyApp/MyApp.xcodeproj\"\n\"Show available schemes for MyApp.xcworkspace\"\n```\n\n## Error Handling\n\nThe server implements proper error handling for:\n- Invalid authentication\n- Missing required parameters\n- API rate limits\n- Network issues\n- Invalid operations\n\n## Development\n\n```bash\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n\n# Run tests\nnpm test\n\n# Run type checking\nnpm run type-check\n```\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Related Links\n- [Model Context Protocol Documentation](https://modelcontextprotocol.io)\n- [App Store Connect API Documentation](https://developer.apple.com/documentation/appstoreconnectapi)\n- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)",
+  "category": "Development",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "joshuarileydev-app-store-connect-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "@joshuarileydev/app-store-connect-mcp-server"],
+        "env": {
+          "APP_STORE_CONNECT_KEY_ID": "YOUR_KEY_ID",
+          "APP_STORE_CONNECT_ISSUER_ID": "YOUR_ISSUER_ID",
+          "APP_STORE_CONNECT_P8_PATH": "/path/to/your/auth-key.p8",
+          "APP_STORE_CONNECT_VENDOR_NUMBER": "YOUR_VENDOR_NUMBER_OPTIONAL"
+        }
+      },
+      "appstore-connect-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "appstore-connect-mcp-server"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "JoshuaRileyDev",
+    "repo": "app-store-connect-mcp-server",
+    "url": "https://github.com/JoshuaRileyDev/app-store-connect-mcp-server",
+    "name": "joshuarileydev__app-store-connect-mcp-server",
+    "path": null,
+    "stars": 106,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "62a2a3eb23d8108d2e0b18d5f71fdd3ad89aeb85"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:38.623Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "jsonwebtoken",
+      "importance": 8
+    },
+    {
+      "name": "sharp",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"appstore-connect-mcp-server\",\n  \"version\": \"1.1.2\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/src/*.js\",\n    \"start\": \"node dist/src/index.js\"\n  },\n  \"bin\": {\n    \"appstore-connect-mcp\": \"./dist/src/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.15.0\",\n    \"axios\": \"^1.6.0\",\n    \"jsonwebtoken\": \"^9.0.0\",\n    \"sharp\": \"^0.32.0\"\n  },\n  \"devDependencies\": {\n    \"@types/jsonwebtoken\": \"^9.0.0\",\n    \"@types/node\": \"^18.0.0\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}\n"
+}

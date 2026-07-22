@@ -1,0 +1,134 @@
+{
+  "name": "cjo4m06__mcp-shrimp-task-manager",
+  "display_name": "mcp-shrimp-task-manager",
+  "description": "Shrimp Task Manager is a task tool built for AI Agents, emphasizing chain-of-thought, reflection, and style consistency. It converts natural language into structured dev tasks with dependency tracking and iterative refinement, enabling agent-like developer behavior in reasoning AI systems.",
+  "author": {
+    "name": "cjo4m06"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@cjo4m06/mcp-shrimp-task-manager"],
+    "env": {
+      "ENABLE_GUI": "${user_config.enable_gui}",
+      "DATA_DIR": "${user_config.data_dir}",
+      "WEB_PORT": "${user_config.web_port}",
+      "TEMPLATES_USE": "${user_config.templates_use}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "enable_gui": {
+      "type": "boolean",
+      "title": "Enable Web GUI",
+      "description": "Set to true to enable the optional web-based graphical user interface.",
+      "required": false,
+      "default": false
+    },
+    "data_dir": {
+      "type": "directory",
+      "title": "Data Directory",
+      "description": "Directory for storing task data, Web GUI access file, and custom prompt templates.",
+      "required": false
+    },
+    "web_port": {
+      "type": "number",
+      "title": "Web GUI Port",
+      "description": "Custom port for the Web GUI. If not specified, an available port will be automatically selected.",
+      "required": false
+    },
+    "templates_use": {
+      "type": "string",
+      "title": "Prompt Templates Language",
+      "description": "Sets the language for system prompts. Supports 'en' (English) and 'zh' (Traditional Chinese), or a custom template directory name.",
+      "required": false,
+      "default": "en"
+    }
+  },
+  "readme": "[🇺🇸 English](README.md) | [🇩🇪 Deutsch](docs/de/README.md) | [🇪🇸 Español](docs/es/README.md) | [🇫🇷 Français](docs/fr/README.md) | [🇮🇹 Italiano](docs/it/README.md) | [🇮🇳 हिन्दी](docs/hi/README.md) | [🇰🇷 한국어](docs/ko/README.md) | [🇧🇷 Português](docs/pt/README.md) | [🇷🇺 Русский](docs/ru/README.md) | [🇨🇳 中文](docs/zh/README.md)\n\n# MCP Shrimp Task Manager\n\n> 🦐 **Intelligent task management for AI-powered development** - Break down complex projects into manageable tasks, maintain context across sessions, and accelerate your development workflow.\n\n<div align=\"center\">\n  \n[![Shrimp Task Manager Demo](docs/yt.png)](https://www.youtube.com/watch?v=Arzu0lV09so)\n\n**[Watch Demo Video](https://www.youtube.com/watch?v=Arzu0lV09so)** • **[Quick Start](#-quick-start)** • **[Documentation](#-documentation)**\n\n[![smithery badge](https://smithery.ai/badge/@cjo4m06/mcp-shrimp-task-manager)](https://smithery.ai/server/@cjo4m06/mcp-shrimp-task-manager)\n<a href=\"https://glama.ai/mcp/servers/@cjo4m06/mcp-shrimp-task-manager\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@cjo4m06/mcp-shrimp-task-manager/badge\" alt=\"Shrimp Task Manager MCP server\" /></a>\n\n</div>\n\n## 🚀 Quick Start\n\n### Prerequisites\n- Node.js 18+ \n- npm or yarn\n- MCP-compatible AI client (Claude Code, etc.)\n\n### Installation\n\n#### Installing Claude Code\n\n**Windows 11 (with WSL2):**\n```bash\n# First, ensure WSL2 is installed (in PowerShell as Administrator)\nwsl --install\n\n# Enter Ubuntu/WSL environment\nwsl -d Ubuntu\n\n# Install Claude Code globally\nnpm install -g @anthropic-ai/claude-code\n\n# Start Claude Code\nclaude\n```\n\n**macOS/Linux:**\n```bash\n# Install Claude Code globally\nnpm install -g @anthropic-ai/claude-code\n\n# Start Claude Code\nclaude\n```\n\n#### Installing Shrimp Task Manager\n\n```bash\n# Clone the repository\ngit clone https://github.com/cjo4m06/mcp-shrimp-task-manager.git\ncd mcp-shrimp-task-manager\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n\n### Configure Claude Code\n\nCreate a `.mcp.json` file in your project directory:\n\n```json\n{\n  \"mcpServers\": {\n    \"shrimp-task-manager\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/mcp-shrimp-task-manager/dist/index.js\"],\n      \"env\": {\n        \"DATA_DIR\": \"/path/to/your/shrimp_data\",\n        \"TEMPLATES_USE\": \"en\",\n        \"ENABLE_GUI\": \"false\"\n      }\n    }\n  }\n}\n```\n\nExample configuration:\n```json\n{\n  \"mcpServers\": {\n    \"shrimp-task-manager\": {\n      \"command\": \"node\",\n      \"args\": [\"/home/fire/claude/mcp-shrimp-task-manager/dist/index.js\"],\n      \"env\": {\n        \"DATA_DIR\": \"/home/fire/claude/project/shrimp_data\",\n        \"TEMPLATES_USE\": \"en\",\n        \"ENABLE_GUI\": \"false\"\n      }\n    }\n  }\n}\n```\n\nThen start Claude Code with your custom MCP configuration:\n\n```bash\nclaude --dangerously-skip-permissions --mcp-config .mcp.json\n```\n\n<details>\n<summary><b>Other AI Clients</b></summary>\n\n**Cline (VS Code Extension)**: A VS Code extension for AI-assisted coding. Add to VS Code settings.json under `cline.mcpServers`\n\n**Claude Desktop**: Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\\Claude\\claude_desktop_config.json` (Windows)\n</details>\n\n### Start Using\n\n1. **Initialize your project**: `\"init project rules\"`\n2. **Plan a task**: `\"plan task: implement user authentication\"`\n3. **Execute tasks**: `\"execute task\"` or `\"continuous mode\"`\n\n## 💡 What is Shrimp?\n\nShrimp Task Manager is an MCP (Model Context Protocol) server that transforms how AI agents approach software development. Instead of losing context or repeating work, Shrimp provides:\n\n- **🧠 Persistent Memory**: Tasks and progress persist across sessions\n- **📋 Structured Workflows**: Guided processes for planning, execution, and verification\n- **🔄 Smart Decomposition**: Automatically breaks complex tasks into manageable subtasks\n- **🎯 Context Preservation**: Never lose your place, even with token limits\n\n## ✨ Core Features\n\n### Task Management\n- **Intelligent Planning**: Deep analysis of requirements before implementation\n- **Task Decomposition**: Break down large projects into atomic, testable units\n- **Dependency Tracking**: Automatic management of task relationships\n- **Progress Monitoring**: Real-time status tracking and updates\n\n### Advanced Capabilities\n- **🔬 Research Mode**: Systematic exploration of technologies and solutions\n- **🤖 Agent System**: Assign specialized AI agents to specific tasks ([Learn more](docs/agents.md))\n- **📏 Project Rules**: Define and maintain coding standards across your project\n- **💾 Task Memory**: Automatic backup and restoration of task history\n\n### Web Interfaces\n\n#### 🖥️ Task Viewer\nModern React interface for visual task management with drag-and-drop, real-time search, and multi-profile support.\n\n**Quick Setup:**\n```bash\ncd tools/task-viewer\nnpm install\nnpm run start:all\n# Access at http://localhost:5173\n```\n\n[📖 Full Task Viewer Documentation](tools/task-viewer/README.md)\n\n<kbd><img src=\"tools/task-viewer/task-viewer-interface.png\" alt=\"Task Viewer Interface\" width=\"600\"/></kbd>\n\n#### 🌐 Web GUI\nOptional lightweight web interface for quick task overview.\n\nEnable in `.env`: `ENABLE_GUI=true`\n\n## 📚 Documentation\n\n- [📖 Full Documentation](docs/README.md)\n- [🛠️ Available Tools](docs/tools.md)\n- [🤖 Agent Management](docs/agents.md)\n- [🎨 Prompt Customization](docs/en/prompt-customization.md)\n- [🔧 API Reference](docs/api.md)\n\n## 🎯 Common Use Cases\n\n<details>\n<summary><b>Feature Development</b></summary>\n\n```\nAgent: \"plan task: add user authentication with JWT\"\n# Agent analyzes codebase, creates subtasks\n\nAgent: \"execute task\"\n# Implements authentication step by step\n```\n</details>\n\n<details>\n<summary><b>Bug Fixing</b></summary>\n\n```\nAgent: \"plan task: fix memory leak in data processing\"\n# Agent researches issue, creates fix plan\n\nAgent: \"continuous mode\"\n# Executes all fix tasks automatically\n```\n</details>\n\n<details>\n<summary><b>Research & Learning</b></summary>\n\n```\nAgent: \"research: compare React vs Vue for this project\"\n# Systematic analysis with pros/cons\n\nAgent: \"plan task: migrate component to chosen framework\"\n# Creates migration plan based on research\n```\n</details>\n\n## 🛠️ Configuration\n\n### Environment Variables\n\nCreate a `.env` file:\n\n```bash\n# Required\nDATA_DIR=/path/to/data/storage\n\n# Optional\nENABLE_GUI=true          # Enable web GUI\nWEB_PORT=3000           # Custom web port\nPROMPT_LANGUAGE=en      # Prompt language (en, zh, etc.)\n```\n\n### Available Commands\n\n| Command | Description |\n|---------|-------------|\n| `init project rules` | Initialize project standards |\n| `plan task [description]` | Create a task plan |\n| `execute task [id]` | Execute specific task |\n| `continuous mode` | Execute all tasks sequentially |\n| `list tasks` | Show all tasks |\n| `research [topic]` | Enter research mode |\n| `reflect task [id]` | Review and improve task |\n\n## 🤝 Contributing\n\nWe welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## 🌟 Credits\n\nCreated by [cjo4m06](https://github.com/cjo4m06) and maintained by the community.\n\n---\n\n<p align=\"center\">\n  <a href=\"https://github.com/cjo4m06/mcp-shrimp-task-manager\">GitHub</a> •\n  <a href=\"https://github.com/cjo4m06/mcp-shrimp-task-manager/issues\">Issues</a> •\n  <a href=\"https://github.com/cjo4m06/mcp-shrimp-task-manager/discussions\">Discussions</a>\n</p>",
+  "category": "AI Tools",
+  "quality_score": 88,
+  "archestra_config": {
+    "client_config_permutations": {
+      "cjo4m06-mcp-shrimp-task-manager": {
+        "command": "npx",
+        "args": ["-y", "@cjo4m06/mcp-shrimp-task-manager"]
+      },
+      "cjo4m06-mcp-shrimp-task-manager-configured": {
+        "command": "npx",
+        "args": ["-y", "@cjo4m06/mcp-shrimp-task-manager"],
+        "env": {
+          "ENABLE_GUI": "true",
+          "WEB_PORT": "<YOUR_PORT_HERE>",
+          "TEMPLATES_USE": "en"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "cjo4m06",
+    "repo": "mcp-shrimp-task-manager",
+    "url": "https://github.com/cjo4m06/mcp-shrimp-task-manager",
+    "name": "cjo4m06__mcp-shrimp-task-manager",
+    "path": null,
+    "stars": 1684,
+    "contributors": 9,
+    "issues": 66,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "8a3be6bced310c7b660e5cfc3f42e4e5e45f2f61"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:35.486Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "get-port",
+      "importance": 3
+    },
+    {
+      "name": "uuid",
+      "importance": 3
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-shrimp-task-manager\",\n  \"version\": \"1.0.21\",\n  \"description\": \"Shrimp Task Manager is a task tool built for AI Agents, emphasizing chain-of-thought, reflection, and style consistency. It converts natural language into structured dev tasks with dependency tracking and iterative refinement, enabling agent-like developer behavior in reasoning AI systems\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/cjo4m06/mcp-shrimp-task-manager\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/cjo4m06/mcp-shrimp-task-manager/issues\"\n  },\n  \"homepage\": \"https://cjo4m06.github.io/mcp-shrimp-task-manager\",\n  \"bin\": {\n    \"mcp-shrimp-task-manager\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && copyfiles -u 1 \\\"src/**/*.md\\\" dist && copyfiles -u 1 \\\"src/public/**/*\\\" dist && node scripts/add-shebang.js\",\n    \"dev\": \"ts-node src/index.ts\",\n    \"start\": \"node dist/index.js\",\n    \"test\": \"vitest\",\n    \"test:coverage\": \"vitest --coverage\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"task-manager\",\n    \"agent\",\n    \"workflow\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\n    \"dotenv\": \"^16.5.0\",\n    \"express\": \"^5.1.0\",\n    \"get-port\": \"^7.1.0\",\n    \"uuid\": \"^9.0.1\",\n    \"zod\": \"^3.22.4\",\n    \"zod-to-json-schema\": \"^3.24.5\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"^5.0.1\",\n    \"@types/node\": \"^20.8.2\",\n    \"@types/uuid\": \"^9.0.6\",\n    \"copyfiles\": \"^2.4.1\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.2.2\",\n    \"vitest\": \"^1.0.0\"\n  }\n}\n"
+}

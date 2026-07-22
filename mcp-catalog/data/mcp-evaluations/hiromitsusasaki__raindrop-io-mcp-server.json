@@ -1,0 +1,94 @@
+{
+  "name": "hiromitsusasaki__raindrop-io-mcp-server",
+  "display_name": "raindrop-io-mcp-server",
+  "description": "An integration that allows LLMs to interact with Raindrop.io bookmarks using the Model Context Protocol (MCP).",
+  "author": {
+    "name": "hiromitsusasaki"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {
+      "RAINDROP_TOKEN": "${user_config.raindrop_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "raindrop_token": {
+      "type": "string",
+      "title": "Raindrop.io API Token",
+      "description": "Your Raindrop.io API token for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Raindrop.io MCP Server\n[![smithery badge](https://smithery.ai/badge/@hiromitsusasaki/raindrop-io-mcp-server)](https://smithery.ai/server/@hiromitsusasaki/raindrop-io-mcp-server)\n\nAn integration that allows LLMs to interact with Raindrop.io bookmarks using the Model Context Protocol (MCP).\n\n<a href=\"https://glama.ai/mcp/servers/@hiromitsusasaki/raindrop-io-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@hiromitsusasaki/raindrop-io-mcp-server/badge\" alt=\"Raindrop.io Server MCP server\" />\n</a>\n\n## Features\n\n- Create bookmarks\n- Search bookmarks\n- Filter by tags\n\n## Requirements\n\n- Node.js 16 or higher\n- Raindrop.io account and API token\n\n## Setup\n\n### Installing via Smithery\n\nTo install Raindrop.io Integration for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@hiromitsusasaki/raindrop-io-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @hiromitsusasaki/raindrop-io-mcp-server --client claude\n```\n\n### Manual Installation\n\n1. Clone the repository:\n```bash\ngit clone https://github.com/hiromitsusasaki/raindrop-io-mcp-server\ncd raindrop-io-mcp-server\n```\n\n2. Install dependencies:\n```bash\nnpm install\n```\n\n3. Set up environment variables:\n- Create a `.env` file and set your Raindrop.io API token\n```\nRAINDROP_TOKEN=your_access_token_here\n```\n\n4. Build:\n```bash\nnpm run build\n```\n\n## Using with Claude for Desktop\n\n1. Open Claude for Desktop configuration file:\n- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n2. Add the following configuration:\n```json\n{\n  \"mcpServers\": {\n    \"raindrop\": {\n      \"command\": \"node\",\n      \"args\": [\"PATH_TO_BUILD/index.js\"],\n      \"env\": {\n        \"RAINDROP_TOKEN\": \"your_access_token_here\"\n      }\n    }\n  }\n}\n```\n\n3. Restart Claude for Desktop\n\n## Available Tools\n\n### create-bookmark\nCreates a new bookmark.\n\n**Parameters:**\n- `url`: URL to bookmark (required)\n- `title`: Title for the bookmark (optional)\n- `tags`: Array of tags (optional)\n- `collection`: Collection ID (optional)\n\n### search-bookmarks\nSearches through bookmarks.\n\n**Parameters:**\n- `query`: Search query (required)\n- `tags`: Array of tags to filter by (optional)\n\n## Development\n\n```bash\n# Build for development\nnpm run build\n\n# Start server\nnpm start\n```\n\n## Security Notes\n\n- Always manage API tokens using environment variables\n- Set appropriate permissions for Claude for Desktop configuration files\n- Restrict unnecessary file access\n\n## Open Source\n\nThis is an open source MCP server that anyone can use and contribute to. The project is released under the MIT License.\n\n## Contributing\n\nContributions are welcome! Feel free to submit issues, feature requests, or pull requests to help improve this project.\n\n## Related Links\n\n- [Model Context Protocol](https://modelcontextprotocol.io/)\n- [Raindrop.io API Documentation](https://developer.raindrop.io/)",
+  "category": "Knowledge",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "hiromitsusasaki-raindrop-io-mcp-server": {
+        "command": "node",
+        "args": ["PATH_TO_BUILD/index.js"],
+        "env": {
+          "RAINDROP_TOKEN": "your_access_token_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hiromitsusasaki",
+    "repo": "raindrop-io-mcp-server",
+    "url": "https://github.com/hiromitsusasaki/raindrop-io-mcp-server",
+    "name": "raindrop-io-mcp-server",
+    "path": null,
+    "stars": 49,
+    "contributors": 4,
+    "issues": 16,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "7d529593aca3be795ad0425296b561ffd7d7a0aa"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.325Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"raindrop-io-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node build/index.js\",\n    \"test\": \"jest\",\n    \"test:watch\": \"jest --watch\",\n    \"lint\": \"eslint src/**/*.ts\",\n    \"lint:fix\": \"eslint src/**/*.ts --fix\",\n    \"format\": \"prettier --write src/**/*.ts\",\n    \"format:check\": \"prettier --check src/**/*.ts\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.12\",\n    \"@types/node\": \"^20.0.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^7.18.0\",\n    \"@typescript-eslint/parser\": \"^7.18.0\",\n    \"eslint\": \"^8.57.0\",\n    \"eslint-config-prettier\": \"^9.1.0\",\n    \"jest\": \"^29.7.0\",\n    \"prettier\": \"^3.2.5\",\n    \"ts-jest\": \"^29.1.2\",\n    \"typescript\": \"^5.5.0\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.1\",\n    \"dotenv\": \"^16.0.0\",\n    \"node-fetch\": \"^3.3.0\",\n    \"zod\": \"^3.0.0\"\n  }\n}\n"
+}

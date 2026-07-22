@@ -122,7 +122,7 @@ describe("ConnectorDocumentsTable", () => {
     const user = userEvent.setup();
     render(<ConnectorDocumentsTable connectorId="connector-1" />);
 
-    await user.click(screen.getAllByLabelText("Preview")[0]);
+    await user.click(screen.getAllByLabelText(/^Preview/)[0]);
 
     expect(screen.getByText("Detailed content preview")).toBeInTheDocument();
   });
@@ -140,10 +140,10 @@ describe("ConnectorDocumentsTable", () => {
     const user = userEvent.setup();
     render(<ConnectorDocumentsTable connectorId="connector-1" />);
 
-    await user.click(screen.getAllByLabelText("Delete")[0]);
+    await user.click(screen.getAllByLabelText(/^Delete/)[0]);
 
     const confirmButtons = await screen.findAllByRole("button", {
-      name: "Delete Document",
+      name: /^Delete Document/,
       hidden: true,
     });
     fireEvent.click(confirmButtons[confirmButtons.length - 1]);

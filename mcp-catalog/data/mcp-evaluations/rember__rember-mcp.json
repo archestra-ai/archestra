@@ -1,0 +1,102 @@
+{
+  "name": "rember__rember-mcp",
+  "display_name": "rember-mcp",
+  "description": "A Model Context Protocol (MCP) server for Rember.",
+  "author": {
+    "name": "rember"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@getrember/mcp", "--api-key=${user_config.rember_api_key}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "rember_api_key": {
+      "type": "string",
+      "title": "Rember API Key",
+      "description": "Your Rember API key, which you can find in your Rember Settings page. The API key should follow the format `rember_` followed by 32 random characters.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Rember MCP\n\nAllow Claude to create flashcards for you with the official [Model Context Protocol (MCP)](https://modelcontextprotocol.com/) for [Rember](https://rember.com/). Rember helps you study and remember anything you care about by scheduling spaced repetition reviews.\n\nFeatures and examples:\n\n- **Create flashcards from your chats** _\"... I like your answer, help me remember it\"_\n- **Create flashcards from your PDFs** _\"Create flashcards from chapter 2 of this PDF\"_\n\n![Rember MCP Demo](https://github.com/rember/rember-mcp/blob/main/assets/what-is-active-recall.gif?raw=true)\n\n## Setup\n\nTo run the Rember MCP server using `npx`, use the following command:\n\n```\nnpx -y @getrember/mcp --api-key=YOUR_REMBER_API_KEY\n```\n\nMake sure to replace `YOUR_REMBER_API_KEY` with your actual Rember api key, which you can find in your [Settings page](https://rember.com/settings/mcp-api). The API key should follow the format `rember_` followed by 32 random characters.\n\n### Usage with Claude Desktop\n\nAdd the following to your `claude_desktop_config.json`. See [here](https://modelcontextprotocol.io/quickstart/user) for more details.\n\n```json\n{\n  \"mcpServers\": {\n    \"rember\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@getrember/mcp\", \"--api-key=YOUR_REMBER_API_KEY\"]\n    }\n  }\n}\n```\n\n## Available tools\n\n- `create_flashcards`: Create flashcards with AI. This tool takes a list of notes from Claude, it calls the Rember API to generate a few flashcards for each note. After learning something new in your chat with Claude, you can ask \"help me remember this\" or \"create a few flashcards\" or \"add to Rember\".\n\n## Best practices for building MCP servers\n\nHere's a collection of lessons we learned while developing the Rember MCP server:\n\n- Set up logging to `stderr` as early as possible, it's essential for debugging\n- Create a simple MCP tool first and verify Claude can call it properly\n- Invest time in iterating on the tool description:\n\n  - Include details about your product and its URL. This serves two purposes: it helps Claude use the tool properly and allows Claude to answer user questions about the product\n  - Clearly explain what MCP is, in a few instances Claude hallucinated that MCP stands for \"Multiple Choice Prompts\", yikes\n  - Describe the tool inputs thoroughly\n  - Explain what happens after Claude calls the tool, we clarify that the input notes array is sent to the Rember API, which generates flashcards for each note\n  - Provide examples of how the tool can be used (e.g., \"create flashcards from a conversation with Claude,\" \"create flashcards from PDFs\"), and give Claude specific instructions for each use case\n  - List examples of how users might invoke the tool (e.g., \"help me remember this,\" \"add to Rember,\" \"create a few flashcards\")\n  - Include a list of rules to guide Claude in using the tool appropriately\n\n- Use the tool call response strategically, it's not shown directly to users but interpreted by Claude:\n  - On success, the Rember API does not return the number of created flashcards, all Claude knows is the number of created rembs. We specify this to Claude because otherwise it tends to hallucinate the number of created flashcards\n  - For users who've reached their monthly limit, we instruct Claude to inform them about the Rember Pro subscription option with the relevant URL\n- Implement retries for transient errors with suitable timeouts\n- We collected enough edge cases that testing manually on Claude Desktop (our main target MCP client) became cumbersome. We created a suite of unit tests by simulating Claude Desktop behavior by calling the Claude API with the system prompt from claude.ai. In the current iteration, each test simulates a chat with Claude Desktop for manual inspection and includes a few simple assertions\n\nWhat's missing:\n\n- Telemetry and observability, currently we are blind if something goes wrong\n- More exhaustive error handling\n- More iterations on the tool description\n- More automated tests\n",
+  "category": "Knowledge",
+  "quality_score": 35,
+  "archestra_config": {
+    "client_config_permutations": {
+      "getrember-mcp": {
+        "command": "npx",
+        "args": ["-y", "@getrember/mcp", "--api-key=YOUR_REMBER_API_KEY"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "rember",
+    "repo": "rember-mcp",
+    "url": "https://github.com/rember/rember-mcp",
+    "name": "rember-mcp",
+    "path": null,
+    "stars": 48,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "02f7f5316558ca868f088a853a801922b13ed186"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:51.883Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@effect/ai",
+      "importance": 8
+    },
+    {
+      "name": "@effect/cli",
+      "importance": 8
+    },
+    {
+      "name": "@effect/platform-node",
+      "importance": 8
+    },
+    {
+      "name": "@effect/platform",
+      "importance": 8
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "effect",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@getrember/mcp\",\n  \"version\": \"1.1.3\",\n  \"description\": \"A command line tool for setting up Rember MCP server\",\n  \"author\": \"Rember <support@rember.com> (https://rember.com/)\",\n  \"license\": \"MIT\",\n  \"homepage\": \"https://rember.com/\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/rember/rember-mcp\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"modelcontextprotocol\",\n    \"rember\",\n    \"spaced-repetition\",\n    \"flashcards\"\n  ],\n  \"publishConfig\": {\n    \"access\": \"public\",\n    \"directory\": \"dist\"\n  },\n  \"type\": \"module\",\n  \"packageManager\": \"pnpm@10.3.0\",\n  \"scripts\": {\n    \"build\": \"tsup && pnpm copy-package-json && cp ./README.md ./LICENSE ./dist/\",\n    \"build:ts\": \"tsup\",\n    \"clean\": \"rimraf dist/*\",\n    \"check\": \"tsc -b tsconfig.json\",\n    \"inspector\": \"mcp-inspector node ./dist/bin.cjs\",\n    \"lint\": \"eslint \\\"**/{src,examples,scripts,dtslint}/**/*.{ts,mjs}\\\"\",\n    \"lint-fix\": \"pnpm lint --fix\",\n    \"test\": \"vitest run\",\n    \"copy-package-json\": \"tsx scripts/copy-package-json.ts\"\n  },\n  \"dependencies\": {\n    \"@effect/ai\": \"^0.12.1\",\n    \"@effect/cli\": \"^0.58.1\",\n    \"@effect/platform-node\": \"^0.75.1\",\n    \"@effect/platform\": \"^0.79.1\",\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"effect\": \"^3.13.10\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@effect/ai-anthropic\": \"^0.2.1\",\n    \"@effect/eslint-plugin\": \"^0.2.0\",\n    \"@effect/language-service\": \"^0.4.0\",\n    \"@effect/vitest\": \"^0.19.8\",\n    \"@eslint/compat\": \"1.1.1\",\n    \"@eslint/eslintrc\": \"3.1.0\",\n    \"@eslint/js\": \"9.10.0\",\n    \"@modelcontextprotocol/inspector\": \"^0.6.0\",\n    \"@types/node\": \"^22.13.10\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.26.1\",\n    \"@typescript-eslint/parser\": \"^8.26.1\",\n    \"eslint-import-resolver-typescript\": \"^3.8.6\",\n    \"eslint-plugin-codegen\": \"0.28.0\",\n    \"eslint-plugin-deprecation\": \"^3.0.0\",\n    \"eslint-plugin-import\": \"^2.31.0\",\n    \"eslint-plugin-simple-import-sort\": \"^12.1.1\",\n    \"eslint-plugin-sort-destructure-keys\": \"^2.0.0\",\n    \"eslint\": \"^9.22.0\",\n    \"tailwindcss\": \"^4.0.13\",\n    \"tsup\": \"^8.4.0\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"^5.8.2\",\n    \"vitest\": \"^3.0.8\"\n  },\n  \"pnpm\": {\n    \"patchedDependencies\": {}\n  }\n}\n"
+}

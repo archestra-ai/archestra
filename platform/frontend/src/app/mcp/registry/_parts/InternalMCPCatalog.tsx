@@ -17,6 +17,7 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
+import { ListViewToggle, useListViewMode } from "@/components/list-view-toggle";
 import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
@@ -63,6 +64,7 @@ import {
   type InstalledServer,
   McpServerCard,
 } from "./mcp-server-card";
+import { McpServerTable } from "./mcp-server-table";
 import {
   emptyRegistryFilters,
   type FilterGroup,
@@ -132,6 +134,9 @@ export function InternalMCPCatalog({
   const defaultEnvironment = useDefaultEnvironment();
 
   const [sort, setSort] = useState<SortKey>("name-asc");
+  const [viewMode, setViewMode] = useListViewMode(
+    "archestra-mcp-registry-view",
+  );
   const [filters, setFilters] = useState<RegistryFilters>(emptyRegistryFilters);
   const toggleFilter = useCallback((group: FilterGroup, value: string) => {
     setFilters((prev) => {
@@ -846,6 +851,15 @@ export function InternalMCPCatalog({
     };
   };
 
+  // Install entry point for the table view, which has no per-variant card
+  // buttons: route to the same flows the cards use.
+  const handleTableInstall = (item: CatalogItem) => {
+    if (item.serverType === "remote") return install.installRemote(item);
+    if (isPlaywrightCatalogItem(item.id))
+      return install.installPlaywright(item);
+    return install.installLocal(item);
+  };
+
   const handleRemoveLabel = useCallback(
     (key: string, value: string) => {
       if (!parsedLabels) return;
@@ -914,6 +928,7 @@ export function InternalMCPCatalog({
           />
         )}
         <RegistrySortMenu value={sort} onChange={setSort} />
+        <ListViewToggle value={viewMode} onChange={setViewMode} />
       </div>
       {hasLabelFilters && (
         <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
@@ -929,42 +944,54 @@ export function InternalMCPCatalog({
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
               Personal
             </h3>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {personalItems.map((item) => {
-                const serverInfo = getInstalledServerInfo(item);
-                return (
-                  <McpServerCard
-                    variant={
-                      item.serverType === "builtin"
-                        ? "builtin"
-                        : item.serverType === "remote"
-                          ? "remote"
-                          : "local"
-                    }
-                    key={item.id}
-                    item={item}
-                    installedServer={serverInfo.installedServer}
-                    installingItemId={installingItemId}
-                    installationStatus={
-                      serverInfo.installedServer?.localInstallationStatus ||
-                      undefined
-                    }
-                    deploymentStatuses={deploymentStatuses}
-                    onInstallRemoteServer={() => install.installRemote(item)}
-                    onInstallLocalServer={() =>
-                      isPlaywrightCatalogItem(item.id)
-                        ? install.installPlaywright(item)
-                        : install.installLocal(item)
-                    }
-                    onReinstall={(flagged, options) =>
-                      handleReinstall(item, flagged, options)
-                    }
-                    onCancelInstallation={install.cancelInstallation}
-                    isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
-                  />
-                );
-              })}
-            </div>
+            {viewMode === "table" ? (
+              <McpServerTable
+                items={personalItems}
+                getServerInfo={getInstalledServerInfo}
+                envLabelByCatalog={envLabelByCatalog}
+                installingItemId={installingItemId}
+                onInstall={handleTableInstall}
+                onReinstall={handleReinstall}
+                onCancelInstallation={install.cancelInstallation}
+              />
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {personalItems.map((item) => {
+                  const serverInfo = getInstalledServerInfo(item);
+                  return (
+                    <McpServerCard
+                      variant={
+                        item.serverType === "builtin"
+                          ? "builtin"
+                          : item.serverType === "remote"
+                            ? "remote"
+                            : "local"
+                      }
+                      key={item.id}
+                      item={item}
+                      installedServer={serverInfo.installedServer}
+                      installingItemId={installingItemId}
+                      installationStatus={
+                        serverInfo.installedServer?.localInstallationStatus ||
+                        undefined
+                      }
+                      deploymentStatuses={deploymentStatuses}
+                      onInstallRemoteServer={() => install.installRemote(item)}
+                      onInstallLocalServer={() =>
+                        isPlaywrightCatalogItem(item.id)
+                          ? install.installPlaywright(item)
+                          : install.installLocal(item)
+                      }
+                      onReinstall={(flagged, options) =>
+                        handleReinstall(item, flagged, options)
+                      }
+                      onCancelInstallation={install.cancelInstallation}
+                      isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -975,42 +1002,54 @@ export function InternalMCPCatalog({
                 Shared
               </h3>
             )}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {sharedItems.map((item) => {
-                const serverInfo = getInstalledServerInfo(item);
-                return (
-                  <McpServerCard
-                    variant={
-                      item.serverType === "builtin"
-                        ? "builtin"
-                        : item.serverType === "remote"
-                          ? "remote"
-                          : "local"
-                    }
-                    key={item.id}
-                    item={item}
-                    installedServer={serverInfo.installedServer}
-                    installingItemId={installingItemId}
-                    installationStatus={
-                      serverInfo.installedServer?.localInstallationStatus ||
-                      undefined
-                    }
-                    deploymentStatuses={deploymentStatuses}
-                    onInstallRemoteServer={() => install.installRemote(item)}
-                    onInstallLocalServer={() =>
-                      isPlaywrightCatalogItem(item.id)
-                        ? install.installPlaywright(item)
-                        : install.installLocal(item)
-                    }
-                    onReinstall={(flagged, options) =>
-                      handleReinstall(item, flagged, options)
-                    }
-                    onCancelInstallation={install.cancelInstallation}
-                    isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
-                  />
-                );
-              })}
-            </div>
+            {viewMode === "table" ? (
+              <McpServerTable
+                items={sharedItems}
+                getServerInfo={getInstalledServerInfo}
+                envLabelByCatalog={envLabelByCatalog}
+                installingItemId={installingItemId}
+                onInstall={handleTableInstall}
+                onReinstall={handleReinstall}
+                onCancelInstallation={install.cancelInstallation}
+              />
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {sharedItems.map((item) => {
+                  const serverInfo = getInstalledServerInfo(item);
+                  return (
+                    <McpServerCard
+                      variant={
+                        item.serverType === "builtin"
+                          ? "builtin"
+                          : item.serverType === "remote"
+                            ? "remote"
+                            : "local"
+                      }
+                      key={item.id}
+                      item={item}
+                      installedServer={serverInfo.installedServer}
+                      installingItemId={installingItemId}
+                      installationStatus={
+                        serverInfo.installedServer?.localInstallationStatus ||
+                        undefined
+                      }
+                      deploymentStatuses={deploymentStatuses}
+                      onInstallRemoteServer={() => install.installRemote(item)}
+                      onInstallLocalServer={() =>
+                        isPlaywrightCatalogItem(item.id)
+                          ? install.installPlaywright(item)
+                          : install.installLocal(item)
+                      }
+                      onReinstall={(flagged, options) =>
+                        handleReinstall(item, flagged, options)
+                      }
+                      onCancelInstallation={install.cancelInstallation}
+                      isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
         ) : (
           personalItems.length === 0 && (

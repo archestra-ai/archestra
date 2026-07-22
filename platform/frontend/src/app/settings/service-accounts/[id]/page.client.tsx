@@ -193,6 +193,7 @@ export default function ServiceAccountDetailPage({
               header: "Actions",
               cell: ({ row }) => (
                 <TableRowActions
+                  itemName={row.original.name}
                   actions={[
                     {
                       icon: row.original.disabled ? (

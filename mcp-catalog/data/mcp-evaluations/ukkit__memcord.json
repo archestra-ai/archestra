@@ -1,0 +1,125 @@
+{
+  "name": "ukkit__memcord",
+  "display_name": "memcord",
+  "description": "🧠 AI Memory Management for Claude Desktop. Save, search & organize chat history with intelligent   summarization. MCP server.",
+  "author": {
+    "name": "ukkit"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "memcord"],
+    "env": {
+      "PYTHONPATH": "${user_config.pythonpath}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "pythonpath": {
+      "type": "string",
+      "title": "Python Source Path",
+      "description": "Path to the Memcord Python source directory. This is typically the 'src' folder within the Memcord installation.",
+      "default": "${__dirname}/src",
+      "required": true
+    }
+  },
+  "readme": "<table>\n  <tr>\n    <td>\n      <img src=\"assets/image/memcord_1024.png\" width=\"256\">\n    </td>\n    <td>\n      <h3>MEMCORD v2.2 (mcp server)</h3>\n      <p>\n        This privacy-first, self-hosted MCP server helps you organize chat history, summarize messages, search across past chats with AI — and keeps everything secure and fully under your control.\n      </p>\n    </td>\n  </tr>\n</table>\n\n[![MCP Server](https://img.shields.io/badge/MCP-Server-blue)](https://github.com/modelcontextprotocol)\n  [![Claude Code](https://img.shields.io/badge/Claude-Code-purple)](https://docs.anthropic.com/claude/docs/claude-code)\n  [![Claude Desktop](https://img.shields.io/badge/Claude-Desktop-orange)](https://claude.ai/desktop)\n  [![VSCode](https://img.shields.io/badge/Visual_Studio-Code-orange)](https://code.visualstudio.com/)\n  [![Python](https://img.shields.io/badge/Python-3.10+-green)](https://python.org)\n  [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)\n  [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20A-Coffee-white)](https://buymeacoffee.com/ukkit)\n\n### Never Lose Context Again\n\nTransform your Claude conversations into a searchable, organized knowledge base that grows with you\n\n## ✨ Core Benefits\n\n* **🧠 Infinite Memory** - Claude remembers everything across unlimited conversations with intelligent auto-summarization\n* **🔒 Your Data, Your Control** - 100% local storage with zero cloud dependencies or privacy concerns\n* **🎯 Effortless Organization** - Smart tags and folders that organize themselves around your workflow\n* **🔗 Intelligent Merging** - Automatically combines related conversations while eliminating duplicates\n\n## 🆕 What's new in v2.2.0\n\n- ✅ Timeline Navigation - ```memcord_select_entry```\n- ✅ ESimplified Slot Activation - ```memcord_use```\n- ✅  Memory Integration Promoted - ```memcord_merge```\n\n## 🚀 Quick Start\n\n```bash\ncurl -fsSL https://github.com/ukkit/memcord/raw/main/install.sh | bash\n```\n\nThis will:\n- Download and setup **memcord**\n- Set Up Python Virtual Environment using uv\n- Update claude_desktop_config.json & README.md with Installation Path\n\n### Claude Desktop/VSCode\n\n```json\n{\n  \"mcpServers\": {\n    \"memcord\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"</path/to/memcord>\",\n        \"run\",\n        \"memcord\"\n      ],\n      \"env\": {\n        \"PYTHONPATH\": \"</path/to/memcord/>/src\"\n      }\n    }\n  }\n}\n```\n\n### Claude Code MCP\n\nAdd MCP server for your project - check README.md for installation path\n\n```bash\nclaude mcp add-json memcord '{\"type\":\"stdio\",\"command\":\"uv\",\"args\":[\"--directory\",\"</path/to/memcord>\",\"run\",\"memcord\"],\"env\":{\"PYTHONPATH\":\"</path/to/memcord>/src\"}}'\n```\n\nVerify installation\n\n```bash\nclaude mcp list\nclaude mcp get memcord\n```\n\nAdd at top of your CLAUDE.md file\n\n```bash\nmemcord_name \"NAME_OF_YOUR_PROJECT\"\n```\n\n### Manual Installaion\n\n```bash\n# Traditional installation method\ngit clone https://github.com/ukkit/memcord.git\ncd memcord\nuv venv\nsource .venv/bin/activate\nuv pip install -e .\n\n# Replace </path/to/memcord/> in claude_desktop_config.json to the path where you installed it manually\n```\n\n**[Complete Installation Guide](docs/installation.md)** - Detailed setup for Claude Code, Claude Desktop, and other MCP applications.\n\n## 💻 Basic Usage\n\n```bash\n# Create a memory slot and save conversation\nmemcord_name \"project_meeting\"\nmemcord_save \"Our discussion about the new API design...\"\nmemcord_save_progress\n\n# Use existing memory slot\nmemcord_use \"project_meeting\" 🆕\n\n# Navigate timeline - select specific entries\nmemcord_select_entry \"2 hours ago\"  # or \"latest\", index, timestamp 🆕\n\n# Privacy control - activate zero mode (no saving)\nmemcord_zero  # No memory will be saved until switched to another slot\n\n# Search and query your memories\nmemcord_search \"API design decisions\"\nmemcord_query \"What did we decide about authentication?\"\n\n# Merge related conversations\nmemcord_merge [\"project_meeting\", \"api_notes\"] \"consolidated_project\" 🆕\n\n```\nRefer to **📖 [Complete Tools Reference](docs/tools-reference.md)** for Advanced Mode and detailed documentation for all 19 tools with examples and parameters.\n\n## 📚 Documentation\n<details><summary>⚠️ Documentation updates in progress </summary>\n\n- **📚 [Installation Guide](docs/installation.md)** - Complete setup instructions for all MCP applications\n- **📃 [Feature Guide](docs/features-guide.md)** - Complete list of features\n- **📖 [Tools Reference](docs/tools-reference.md)** - Detailed documentation for all 19 tools\n- **📥 [Import & Merge Guide](docs/import-and-merge.md)** - Comprehensive guide for Phase 3 features 🆕\n- **🔍 [Search & Query Guide](docs/search-and-query.md)** - Advanced search features and natural language queries\n- **🗂️ [Usage Examples](docs/examples.md)** - Real-world workflows and practical use cases\n- **⚙️ [Data Format Specification](docs/data-format.md)** - Technical details and file formats\n- **🛠️ [Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions\n\n</details>\n\n---\n\n💎 If you find this project helpful, consider:\n\n - 🌟 Starring the repository on GitHub\n - 🤝 [Support Development](https://buymeacoffee.com/ukkit)\n - 🐛 Reporting bugs and suggesting features\n\n___\n\n**MIT License** - see LICENSE file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "memcord-desktop-config": {
+        "command": "uv",
+        "args": ["--directory", "</path/to/memcord>", "run", "memcord"],
+        "env": {
+          "PYTHONPATH": "</path/to/memcord/>/src"
+        }
+      },
+      "memcord-stdio": {
+        "command": "uv",
+        "args": ["--directory", "</path/to/memcord>", "run", "memcord"],
+        "env": {
+          "PYTHONPATH": "</path/to/memcord>/src"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ukkit",
+    "repo": "memcord",
+    "url": "https://github.com/ukkit/memcord",
+    "name": "ukkit__memcord",
+    "path": null,
+    "stars": 10,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "0cc4b36d79c05cf3f1583b001b4dde8b9b0fe249"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:39.809Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "nltk",
+      "importance": 9
+    },
+    {
+      "name": "aiofiles",
+      "importance": 7
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "requests",
+      "importance": 7
+    },
+    {
+      "name": "beautifulsoup4",
+      "importance": 7
+    },
+    {
+      "name": "pdfplumber",
+      "importance": 8
+    },
+    {
+      "name": "pandas",
+      "importance": 8
+    },
+    {
+      "name": "trafilatura",
+      "importance": 7
+    },
+    {
+      "name": "python-magic",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"memcord\"\nversion = \"2.2.0\"\ndescription = \"MCP server for chat memory management with summarization and file sharing\"\nauthors = [\n    {name = \"MemCord\", email = \"memcord@casiphia.com\"}\n]\nlicense = {text = \"MIT\"}\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp>=0.3.0\",\n    \"nltk>=3.8\",\n    \"aiofiles>=23.0\",\n    \"pydantic>=2.0.0\",\n    \"requests>=2.31.0\",\n    \"beautifulsoup4>=4.12.0\",\n    \"pdfplumber>=0.10.0\",\n    \"pandas>=2.0.0\",\n    \"trafilatura>=1.8.0\",\n    \"python-magic>=0.4.27\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-mock>=3.10.0\",\n    \"pytest-cov>=4.0.0\",\n    \"pytest-benchmark>=4.0.0\",\n    \"factory-boy>=3.3.0\",\n    \"selenium>=4.15.0\",\n    \"webdriver-manager>=4.0.0\",\n    \"black>=23.0.0\",\n    \"ruff>=0.1.0\",\n    \"psutil>=5.9.0\",\n]\n\n[project.scripts]\nmemcord = \"memcord.server:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/memcord\"]\n\n[tool.hatch.build.targets.sdist]\ninclude = [\n    \"src/\",\n    \"README.md\",\n    \"pyproject.toml\",\n]\n\n[tool.black]\nline-length = 88\ntarget-version = ['py38']\n\n[tool.ruff]\nline-length = 88\ntarget-version = \"py38\"\nselect = [\n    \"E\",  # pycodestyle errors\n    \"W\",  # pycodestyle warnings\n    \"F\",  # pyflakes\n    \"I\",  # isort\n    \"B\",  # flake8-bugbear\n    \"C4\", # flake8-comprehensions\n    \"UP\", # pyupgrade\n]\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = [\"test_*.py\", \"*_test.py\"]\npython_classes = [\"Test*\"]\npython_functions = [\"test_*\"]\naddopts = [\n    \"--strict-markers\",\n    \"--disable-warnings\",\n    \"--tb=short\",\n    \"-v\"\n]\nmarkers = [\n    \"unit: Unit tests\",\n    \"integration: Integration tests\",\n    \"mcp: MCP protocol tests\",\n    \"ui: UI automation tests\",\n    \"slow: Slow running tests\",\n    \"requires_external: Tests requiring external services\",\n    \"requires_claude_desktop: Tests requiring Claude Desktop\",\n    \"requires_claude_desktop_ui: Tests requiring Claude Desktop UI access\",\n    \"selenium: Browser automation tests\"\n]\nasyncio_mode = \"auto\"\n\n[tool.coverage.run]\nsource = [\"src/memcord\"]\nomit = [\"tests/*\", \"src/memcord/__pycache__/*\"]\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"raise AssertionError\",\n    \"raise NotImplementedError\",\n    \"if __name__ == .__main__.:\",\n]\n\n[dependency-groups]\ndev = [\n    \"factory-boy>=3.3.3\",\n    \"psutil>=7.0.0\",\n    \"pytest>=8.4.1\",\n    \"pytest-asyncio>=1.0.0\",\n    \"pytest-benchmark>=5.1.0\",\n    \"pytest-cov>=6.2.1\",\n    \"pytest-mock>=3.14.1\",\n    \"selenium>=4.34.0\",\n]\n"
+}

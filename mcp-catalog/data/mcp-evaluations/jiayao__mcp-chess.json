@@ -1,0 +1,86 @@
+{
+  "name": "jiayao__mcp-chess",
+  "display_name": "mcp-chess",
+  "description": "MCP server for playing chess against AI",
+  "author": {
+    "name": "jiayao"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-chess"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Chess Server\n\nThis MCP let's you play chess against any LLM.\n\n## Installation\n\nTo use this chess server, add the following configuration to your MCP config:\n\n```json\n{\n  \"mcpServers\": {\n    \"chess\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"mcp-chess\"\n      ]\n    }\n  }\n}\n```\n\n## Usage\n\nPlay a game:\n![Chess starting position with black pieces](screenshots/start_black.png)\n\n![A few moves later](screenshots/acc_dragon.png)\n\nFind a position in a PGN for game analysis:\n\n![Find a position in a PGN](screenshots/find_position.png)\n\n## Available Tools\n\nThe server provides the following tools:\n\n*   `get_board_visualization()`: Provides the current state of the chessboard as an image. The board orientation automatically flips based on the user's assigned color.\n*   `get_turn()`: Indicates whose turn it is ('white' or 'black').\n*   `get_valid_moves()`: Lists all legal moves for the current player in UCI notation (e.g., 'e2e4', 'g1f3'). Returns an empty list if the game is over.\n*   `make_move(move_san: str)`: Makes a move on the board using Standard Algebraic Notation (SAN) (e.g., 'e4', 'Nf3', 'Bxe5'). Returns the move in SAN and UCI, the new board FEN, and game status.\n*   `new_game(user_plays_white: bool = True)`: Starts a new game, resetting the board. By default, the user plays white. Sets the user's color for board orientation. Returns a confirmation message.\n*   `find_position_in_pgn(pgn_string: str, condition: str)`: Finds the first board position in a PGN string matching a condition (e.g., \"bishop on a3\") and returns an image of that board state. The condition format is \"piece_type on square_name\". Valid piece types are \"pawn\", \"knight\", \"bishop\", \"rook\", \"queen\", \"king\".\n\n",
+  "category": "Gaming",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-chess": {
+        "command": "uvx",
+        "args": ["mcp-chess"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jiayao",
+    "repo": "mcp-chess",
+    "url": "https://github.com/jiayao/mcp-chess",
+    "name": "mcp-chess",
+    "path": null,
+    "stars": 13,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e439d4653513443e7f3219f500cdc980fb60ff89"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:17.233Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "chess",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "cairosvg",
+      "importance": 7
+    },
+    {
+      "name": "Pillow",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-chess\"\nversion = \"0.1.9\"\ndescription = \"MCP server for playing chess against AI\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"mcp[cli]>=1.7.1\",\n    \"chess==1.9.4\",\n    \"uvicorn>=0.29.0\",\n    \"cairosvg>=2.5.1\",\n    \"Pillow>=10.0.0\"\n]\n\n[project.scripts]\nmcp-chess = \"mcp_chess.server:main\"\n\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.setuptools]\npackages = [\"mcp_chess\"]\n"
+}

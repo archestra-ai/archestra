@@ -1,0 +1,136 @@
+{
+  "name": "abrinsmead__mindpilot-mcp",
+  "display_name": "mindpilot-mcp",
+  "description": "See through your agent's eyes. Visualize legacy code, architect new systems, understand everything.",
+  "author": {
+    "name": "abrinsmead"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@mindpilot/mcp@latest", "--port", "${user_config.port}", "--data-path", "${user_config.data_path}"],
+    "env": {
+      "MIND_PILOT_DISABLE_ANALYTICS": "${user_config.disable_analytics}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port the Mindpilot MCP server will listen on. Defaults to 4000.",
+      "default": 4000,
+      "required": false,
+      "min": 1024,
+      "max": 65535
+    },
+    "data_path": {
+      "type": "directory",
+      "title": "Data Path",
+      "description": "Custom location to save diagrams. Defaults to ~/.mindpilot/data/.",
+      "default": "${HOME}/.mindpilot/data/",
+      "required": false
+    },
+    "disable_analytics": {
+      "type": "boolean",
+      "title": "Disable Anonymous Usage Tracking",
+      "description": "If enabled, Mindpilot MCP will not collect anonymous usage data.",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# Mindpilot MCP\n[![GitHub Repo stars](https://img.shields.io/github/stars/abrinsmead/mindpilot-mcp)](https://github.com/abrinsmead/mindpilot-mcp)\n[![NPM Version](https://img.shields.io/npm/v/@mindpilot/mcp)](https://www.npmjs.com/package/@mindpilot/mcp)\n[![GitHub License](https://img.shields.io/github/license/abrinsmead/mindpilot-mcp)](https://github.com/abrinsmead/mindpilot-mcp/blob/main/LICENSE)\n\nSee through your agent's eyes. Visualize legacy code, inspect complex flows, understand everything.\n\n![Screenshot](https://raw.githubusercontent.com/abrinsmead/mindpilot-mcp/main/mindpilot-mcp-latest.png)\n\n## Why Mindpilot?\n- **Visualize Anything**: Use your coding agent to generate on-demand architecture, code, and process diagrams to view your code from different perspectives.\n- **Vibe Checks**: AI-generated code can accumulate unused and redundant constructs. Use visualizations to spot areas that need cleanup.\n- **Local Processing**: Diagrams are never sent to the cloud. Everything stays between you, your agent, and your agent's LLM provider(s).\n- **Export & Share**: Export any diagram as a vector image.\n\n## Prerequisites\n\nNode.js v20.0.0 or higher.\n\n## Quickstart\n\n### Claude Code\n`claude mcp add mindpilot -- npx @mindpilot/mcp@latest`\n\n### Cursor\n\nUnder `Settings` > `Cursor Settings` > `MCP` > Click `Add new global MCP server` and configure mindpilot in the `mcpServers` object.\n\n```\n{\n  \"mcpServers\": {\n    \"mindpilot\": {\n      \"command\": \"npx\",\n      \"args\": [\"@mindpilot/mcp@latest\"]\n    }\n  }\n}\n```\n\n### VS Code\nFollow the instructions here for enabling MCPs in VS Code:  https://code.visualstudio.com/docs/copilot/chat/mcp-servers\n\nGo to `Settings` > `Features` > `MCP`, then click `Edit in settings json`\n\nThen add mindpilot to your MCP configuration:\n\n```\n{\n  \"mcp\": {\n    \"servers\": {\n      \"mindpilot\": {\n        \"type\": \"stdio\",\n        \"command\": \"npx\",\n        \"args\": [\"@mindpilot/mcp@latest\"]\n      }\n    }\n  }\n}\n```\n\n### Windsurf\n\nUnder `Settings` > `Windsurf Settings` > `Manage Plugins`, click `view raw config` and configure mindpilot in the `mcpServers` object:\n\n```\n{\n  \"mcpServers\": {\n    \"mindpilot\": {\n      \"command\": \"npx\",\n      \"args\": [\"@mindpilot/mcp@latest\"]\n    }\n  }\n}\n```\n\n### Zed\nIn the AI Thread panel click on the three dots `...`, then click `Add Custom Server...`\n\nIn the `Command to run MCPserver` field enter `npx @mindpilot/mcp@latest` and click `Add Server`.\n\n## Configuration Options\n- **Port**: The server defaults to port 4000 but can be configured using the `--port` command line switch.\n- **Data Path**: By default, diagrams are saved to `~/.mindpilot/data/`. You can specify a custom location using the `--data-path` command line switch.\n\n## Multi-Client Support\n\nMindpilot intelligently handles multiple AI assistants running simultaneously. When you have multiple Claude Desktop windows or IDE instances open:\n\n- The first mcp client to use Mindpilot starts a shared web server\n- Additional assistants automatically connect to the existing server\n- All assistants share the same diagram history and web interface\n- The server will automatically shuts down a minute after the last MCP clinet disconnects\n\nThis means you can work with multiple MCP hosts at once without port conflicts, and they'll all contribute to the same collection of diagrams.\n\n## Anonymous Usage Tracking\n\nMindpilot MCP collects anonymous usage data to help us understand how the product is being used and improve the user experience.\n\n### Disabling Analytics\nIf you prefer not to share anonymous usage data, you can disable analytics by adding the `--disable-analytics` flag to your MCP configuration:\n\n**Claude Code:**\n```bash\nclaude mcp add mindpilot -- npx @mindpilot/mcp@latest --disable-analytics\n```\n\n**Other IDEs:**\nAdd `\"--disable-analytics\"` to the args array in your configuration:\n```json\n{\n  \"command\": \"npx\",\n  \"args\": [\"@mindpilot/mcp@latest\", \"--disable-analytics\"]\n}\n```\n\n## Using the MCP server\nAfter configuring the MCP in your coding agent you can make requests like \"create a diagram about x\" and it should use the MCP server to render Mermaid diagrams for you in a browser connected to the MCP server.\n\nYou can optionally update your agent's rules file to give specific instructions about when to use mindpilot-mcp.\n\n### Example requests\n- \"Show me the state machine for WebSocket connection logic\"\n- \"Create a C4 context diagram of this project's architecture.\"\n- \"Show me the OAuth flow as a sequence diagram\"\n\n## How it works\nFrontier LLMs are well trained to generate valid Mermaid syntax. The MCP is designed to accept Mermaid syntax and render diagrams in a web app running on http://localhost:4000 (default port).\n\n## Troubleshooting\n\n### Port Conflicts\nIf you use port 4000 for another service you can configure the MCP to use a different port.\n\nClaude Code example:\n`claude mcp add mindpilot -- npx @mindpilot/mcp@latest --port 5555`\n\n### Custom Data Path\nTo save diagrams to a custom location (e.g., for syncing with cloud storage):\n\nClaude Code example:\n`claude mcp add mindpilot -- npx @mindpilot/mcp@latest --data-path /path/to/custom/location`\n\nOther IDEs:\n```json\n{\n  \"command\": \"npx\",\n  \"args\": [\"@mindpilot/mcp@latest\", \"--data-path\", \"/path/to/custom/location\"]\n}\n```\n\n### asdf Issues\nIf you use `asdf` as a version manager and have trouble getting MCPs to work (not just mindpilot), you may need to set a \"global\" nodejs version from your home directory.\n\n```\ncd\nasdf set nodejs x.x.x\n```\n\n## Development Configuration\nConfigure the MCP in your coding agent (using `claude` in this example)\n\n`claude mcp add mindpilot -- npx tsx <path to...>/src/server/server.ts`\n\nRun `claude` with the `--debug` flag if you need to see MCP errors\n\nStart the development client (Vite) to get hot module reloading while developing.\n\n`npm run dev`\n\nOpen the development client\n`localhost:5173`\n",
+  "category": "Development",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mindpilot-mcp": {
+        "command": "npx",
+        "args": ["@mindpilot/mcp@latest"],
+        "env": {}
+      },
+      "mindpilot-mcp-disable-analytics": {
+        "command": "npx",
+        "args": ["@mindpilot/mcp@latest", "--disable-analytics"],
+        "env": {}
+      },
+      "mindpilot-mcp-port-5555": {
+        "command": "npx",
+        "args": ["@mindpilot/mcp@latest", "--port", "5555"],
+        "env": {}
+      },
+      "mindpilot-mcp-custom-data-path": {
+        "command": "npx",
+        "args": ["@mindpilot/mcp@latest", "--data-path", "/path/to/custom/location"],
+        "env": {}
+      },
+      "mindpilot-mcp-dev": {
+        "command": "npx",
+        "args": ["tsx", "<path to...>/src/server/server.ts"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "abrinsmead",
+    "repo": "mindpilot-mcp",
+    "url": "https://github.com/abrinsmead/mindpilot-mcp",
+    "name": "abrinsmead__mindpilot-mcp",
+    "path": null,
+    "stars": 31,
+    "contributors": 2,
+    "issues": 12,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d2f6dd888f496b256d960b7640d1fb926bfea9a7"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:34.968Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@fastify/static",
+      "importance": 7
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "fastify",
+      "importance": 10
+    },
+    {
+      "name": "mermaid",
+      "importance": 9
+    },
+    {
+      "name": "open",
+      "importance": 6
+    },
+    {
+      "name": "posthog-js",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@mindpilot/mcp\",\n  \"version\": \"0.5.0\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"description\": \"See through your agent's eyes. Visualize legacy code, architect new systems, understand everything.\",\n  \"type\": \"module\",\n  \"main\": \"dist/mcp/server.js\",\n  \"files\": [\n    \"dist/\"\n  ],\n  \"bin\": {\n    \"mindpilot-mcp\": \"dist/mcp/server.js\"\n  },\n  \"scripts\": {\n    \"build\": \"npm run build:client && npm run build:server\",\n    \"build:client\": \"cd src/client && npm run build\",\n    \"build:server\": \"tsc\",\n    \"build:dxt\": \"npm run clean:dxt && npm run build && cp dxt/manifest.json . && cp dxt/.dxtignore . && npx dxt pack && rm -f manifest.json .dxtignore && mv mindpilot-*.dxt dxt/\",\n    \"clean:dxt\": \"rm -f dxt/*.dxt && rm -rf dxt/mindpilot.dxt/\",\n    \"dev\": \"NODE_ENV=development concurrently \\\"tsx src/http/server.ts\\\" \\\"cd src/client && npm run dev\\\"\",\n    \"start\": \"NODE_ENV=production node dist/http/server.js\",\n    \"start:mcp\": \"NODE_ENV=production node dist/mcp/server.js\",\n    \"prepare\": \"npm run build\",\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"mermaid\",\n    \"diagram\",\n    \"rendering\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"Alex Brinsmead\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@fastify/static\": \"^7.0.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\n    \"fastify\": \"^4.26.0\",\n    \"mermaid\": \"11.6.0\",\n    \"open\": \"^9.1.0\",\n    \"posthog-js\": \"^1.257.0\"\n  },\n  \"devDependencies\": {\n    \"@anthropic-ai/dxt\": \"^0.1.0\",\n    \"@types/node\": \"^20.0.0\",\n    \"@types/ws\": \"^8.18.1\",\n    \"concurrently\": \"^9.1.2\",\n    \"tsx\": \"^4.6.0\",\n    \"typescript\": \"^5.3.0\"\n  },\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"workspaces\": [\n    \"src/client\"\n  ]\n}\n"
+}

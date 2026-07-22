@@ -215,7 +215,13 @@ class ProjectModel {
   }
 
   /** All chats of one project, newest activity first, with author names. */
-  static async listConversations(projectId: string): Promise<
+  static async listConversations(
+    projectId: string,
+    // When set, restricts the result to chats authored by this user. The
+    // service passes it for callers lacking `project:read-all`, so the filter
+    // runs in SQL instead of pulling every project chat into memory.
+    authorUserId?: string,
+  ): Promise<
     {
       id: string;
       title: string | null;
@@ -268,7 +274,14 @@ class ProjectModel {
             schema.scheduleTriggerRunsTable.triggerId,
           ),
         )
-        .where(eq(schema.conversationsTable.projectId, projectId))
+        .where(
+          and(
+            eq(schema.conversationsTable.projectId, projectId),
+            authorUserId
+              ? eq(schema.conversationsTable.userId, authorUserId)
+              : undefined,
+          ),
+        )
         .orderBy(desc(schema.conversationsTable.lastMessageAt))
     );
   }

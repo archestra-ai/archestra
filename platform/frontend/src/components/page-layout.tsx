@@ -3,13 +3,14 @@
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 
 // Helper to determine if a tab is active
@@ -50,6 +51,15 @@ export function PageLayout({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const appName = useAppName();
+
+  // Keep the browser tab title in sync with the page so screen reader and
+  // switcher users can tell client-side navigated pages apart (WCAG 2.4.2).
+  useEffect(() => {
+    if (typeof title === "string" && title && appName) {
+      document.title = `${title} - ${appName}`;
+    }
+  }, [title, appName]);
   const currentUrl = searchParams.toString()
     ? `${pathname}?${searchParams.toString()}`
     : pathname;
@@ -88,6 +98,7 @@ export function PageLayout({
                     <Link
                       key={tab.href}
                       href={tab.href}
+                      aria-current={isActive ? "page" : undefined}
                       className={cn(
                         "relative cursor-pointer pb-3 text-sm font-medium transition-colors hover:text-foreground",
                         isActive ? "text-foreground" : "text-muted-foreground",
@@ -110,6 +121,7 @@ export function PageLayout({
                     <Link
                       key={tab.href}
                       href={tab.href}
+                      aria-current={isActive ? "page" : undefined}
                       className={cn(
                         "relative cursor-pointer pb-1 text-sm font-medium transition-colors hover:text-foreground",
                         isActive ? "text-foreground" : "text-muted-foreground",
@@ -158,6 +170,7 @@ export function PageLayout({
                             <Link
                               key={tab.href}
                               href={tab.href}
+                              aria-current={isActive ? "page" : undefined}
                               onClick={() => setOverflowOpen(false)}
                               className={cn(
                                 "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",

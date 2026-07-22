@@ -1,0 +1,105 @@
+{
+  "name": "imprvhub__mcp-domain-availability",
+  "display_name": "mcp-domain-availability",
+  "description": "A Model Context Protocol (MCP) server that enables Claude Desktop to check domain availability across 50+ TLDs. Features DNS/WHOIS verification, bulk checking, and smart suggestions. Zero-clone installation via uvx.",
+  "author": {
+    "name": "imprvhub"
+  },
+  "server": {
+    "command": "uvx",
+    "args": [
+      "--python=3.10",
+      "--from",
+      "git+https://github.com/imprvhub/mcp-domain-availability",
+      "mcp-domain-availability"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "## MCP Domain Availability Checker\n\n[![smithery badge](https://smithery.ai/badge/@imprvhub/mcp-domain-availability)](https://smithery.ai/server/@imprvhub/mcp-domain-availability)\n\n<table style=\"border-collapse: collapse; width: 100%; table-layout: fixed;\">\n<tr>\n<td style=\"width: 40%; padding: 15px; vertical-align: middle; border: none;\">A Model Context Protocol (MCP) integration that provides Claude Desktop with domain availability checking across popular TLDs.</td>\n<td style=\"width: 60%; padding: 0; vertical-align: middle; border: none; min-width: 300px; text-align: center;\"><a href=\"https://glama.ai/mcp/servers/@imprvhub/mcp-domain-availability\">\n  <img style=\"max-width: 100%; height: auto; min-width: 300px;\" src=\"https://glama.ai/mcp/servers/@imprvhub/mcp-domain-availability/badge\" alt=\"Domain Availability MCP server\" />\n</a></td>\n</tr>\n</table>\n\n### Features\n\n- **Domain Availability Checking**\n  - Check availability across 50+ popular TLD extensions\n  - Support for popular (.com, .io, .ai), country (.us, .uk, .de), and new TLDs (.app, .dev, .tech)\n  - Dual verification using DNS and WHOIS for accuracy\n  - Smart TLD suggestions organized by popularity\n\n- **Search Capabilities**\n  - Check specific domains with exact TLD matching\n  - Bulk checking across supported extensions for a given name\n  - Parallel processing for faster domain queries\n  - Organized results by TLD categories\n\n- **MCP Integration**\n  - Easy setup with uvx package management\n  - Seamless integration with Claude Desktop\n  - Real-time availability status updates\n  - Performance metrics and timing information\n\n- **AI Assistant Features**\n  - Natural language domain queries through Claude\n  - Automated domain suggestion workflows\n  - Smart recommendations based on availability\n\n### Demo\n<p>\n <a href=\"https://www.youtube.com/watch?v=pJjrkEihlWE\">\n   <img src=\"assets/preview.png\" width=\"600\" alt=\"Domain Availability MCP server demo\" />\n </a>\n</p>\n\n<details>\n<summary>Timestamps:</summary>\nClick on any timestamp to jump to that section of the video\n\n[**00:00**](https://www.youtube.com/watch?v=pJjrkEihlWE&t=0s) - **Checking google.com availability**  \nTesting a well-known premium domain to demonstrate the domain checking functionality and alternative TLD suggestions.\n\n[**00:20**](https://www.youtube.com/watch?v=pJjrkEihlWE&t=20s) - **Testing myawesomesite.com**  \nVerifying availability for a custom domain name and exploring alternative extension options.\n\n[**00:40**](https://www.youtube.com/watch?v=pJjrkEihlWE&t=40s) - **Verifying techstartup2026.io**  \nExploring tech startup domain options and checking availability across multiple TLD extensions.\n\n[**01:00**](https://www.youtube.com/watch?v=pJjrkEihlWE&t=60s) - **Analyzing aitools domain**  \nChecking competitive AI industry domains and analyzing market availability for startup naming.\n</details>\n\n### Requirements\n\n- Python 3.10 or higher\n- Claude Desktop\n- [uv](https://docs.astral.sh/uv/) package manager\n\n#### Dependencies Installation\n\nInstall uv package manager using one of these methods:\n\n**Official installer (recommended):**\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n**Homebrew (macOS/Linux):**\n```bash\nbrew install uv\n```\n\n**Install Homebrew (if needed):**\n- Visit [https://brew.sh](https://brew.sh) for installation instructions on all operating systems\n- Or run: `/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"`\n\nThe MCP server automatically manages Python dependencies through uvx.\n\n### Installation\n\n#### Zero-Clone Installation (Recommended)\n\nThe MCP Domain Availability Checker supports direct installation without cloning repositories, using uvx for package management.\n\n#### Configuration\n\nThe Claude Desktop configuration file is located at:\n\n- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n- **Linux**: `~/.config/Claude/claude_desktop_config.json`\n\nEdit this file to add the Domain Availability MCP configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-domain-availability\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--python=3.10\",\n        \"--from\",\n        \"git+https://github.com/imprvhub/mcp-domain-availability\",\n        \"mcp-domain-availability\"\n      ]\n    }\n  }\n}\n```\n\nIf you already have other MCPs configured, simply add the \"mcp-domain-availability\" section inside the \"mcpServers\" object:\n\n```json\n{\n  \"mcpServers\": {\n    \"otherMcp\": {\n      \"command\": \"...\",\n      \"args\": [\"...\"]\n    },\n    \"mcp-domain-availability\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--python=3.10\",\n        \"--from\",\n        \"git+https://github.com/imprvhub/mcp-domain-availability\",\n        \"mcp-domain-availability\"\n      ]\n    }\n  }\n}\n```\n\n### Installing via Smithery\n\nTo install mcp-domain-availability for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@imprvhub/mcp-domain-availability):\n\n```bash\nnpx -y @smithery/cli install @imprvhub/mcp-domain-availability --client claude\n```\n\n#### Manual Installation\n\nFor development or local testing:\n\n1. Clone the repository:\n```bash\ngit clone https://github.com/imprvhub/mcp-domain-availability\ncd mcp-domain-availability\n```\n\n2. Install dependencies:\n```bash\nuv sync\n```\n\n3. Run locally:\n```bash\nuv run src/mcp_domain_availability/main.py\n```\n\n### How It Works\n\nThe MCP Domain Availability Checker uses multiple verification methods to determine domain availability:\n\n1. **DNS Resolution**: Checks if the domain resolves to an IP address\n2. **WHOIS Lookup**: Queries WHOIS databases for registration information\n3. **Socket Connection**: Falls back to socket-based checking when other methods aren't available\n\nThe tool combines results from these methods to provide accurate availability status, with parallel processing for checking multiple domains simultaneously.\n\n### Available Tools\n\n#### Domain Checking\n\n| Tool Name | Description | Usage |\n|-----------|-------------|-------|\n| `check_domain` | Check domain availability with --domain flag | `mysite.com --domain` or `mysite --domain` |\n\n### Supported TLD Categories\n\n#### Popular TLDs (12)\ncom, net, org, io, ai, app, dev, co, xyz, me, info, biz\n\n#### Country TLDs (35)\nus, uk, ca, au, de, fr, it, es, nl, jp, kr, cn, in, br, mx, ar, cl, co, pe, ru, pl, cz, ch, at, se, no, dk, fi, be, pt, gr, tr, za, eg, ma, ng, ke\n\n#### New TLDs\ntech, online, site, website, store, shop, cloud, digital, blog, news & more.\n\n### Example Usage\n\nHere are examples of how to use the MCP Domain Availability Checker with Claude:\n\n#### Single Domain Check\n\n```\nCheck if mysite.com is available using --domain\n```\n\n#### Domain Name Research\n\n```\nCheck availability for \"startup\" across all TLDs using --domain\n```\n\n#### Specific Domain Verification\n\n```\nIs awesome.io available? Use --domain to check\n```\n\n### Output Format\n\nThe tool provides comprehensive results including:\n\n- **Requested Domain**: Status of the exact domain queried (if specific TLD provided)\n- **Available Domains**: List of available domains sorted alphabetically\n- **Unavailable Domains**: List of registered domains\n- **Summary Statistics**: Breakdown by TLD categories (Popular, Country, New TLDs)\n- **Performance Metrics**: Check duration for each domain\n\n### Troubleshooting\n\n#### \"Server disconnected\" error\nIf you see connection errors in Claude Desktop:\n\n1. **Verify uvx installation**:\n   - Run `uvx --version` to ensure uvx is properly installed\n   - Reinstall uv if necessary: `curl -LsSf https://astral.sh/uv/install.sh | sh`\n\n2. **Check Python version**:\n   - Ensure Python 3.10+ is available: `python3 --version`\n\n### DNS resolution issues\nIf domain checks are failing:\n\n1. **Network connectivity**:\n   - Verify internet connection is stable\n   - Check if DNS servers are accessible\n\n2. **Rate limiting**:\n   - Large bulk checks may hit rate limits from DNS/WHOIS services\n   - The tool uses a semaphore to limit concurrent requests to 20\n\n#### Configuration issues\nIf the MCP server isn't starting:\n\n1. **Verify configuration syntax**:\n   - Ensure JSON syntax is valid in `claude_desktop_config.json`\n   - Check that all brackets and quotes are properly matched\n\n2. **Restart Claude Desktop**:\n   - Close and restart Claude Desktop after configuration changes\n\n## Development\n\n#### Project Structure\n\n- `main.py`: Main entry point with MCP server and domain checking logic\n- Domain checking functions with DNS, WHOIS, and socket fallback methods\n- TLD management with categorized lists\n- Async processing for parallel domain checks\n\n#### Building\n\n```bash\nuv build\n```\n\n### Testing\n\n```bash\nuv run pytest\n```\n\n#### Local Development\n\n```bash\nuv run main.py\n```\n\n### Security Considerations\n\nThe MCP Domain Availability Checker makes external network requests to DNS servers and WHOIS services. Users should be aware that:\n\n- Domain queries may be logged by DNS providers\n- WHOIS queries are typically logged and may be rate-limited\n- No personal information is transmitted beyond the domain names being checked\n- All queries are read-only and do not modify any external systems\n\n### Contributing\n\nContributions are welcome! Areas for improvement include:\n\n- Adding support for additional TLD categories\n- Implementing caching mechanisms for faster repeated queries\n- Enhancing WHOIS parsing for more detailed domain information\n- Improving error handling and retry mechanisms\n\n### License\n\nThis project is licensed under the Mozilla Public License 2.0 - see the [LICENSE](https://github.com/imprvhub/mcp-domain-availability/blob/main/LICENSE) file for details.\n\n\n## Related Links\n\n- [Model Context Protocol](https://modelcontextprotocol.io/)\n- [Claude Desktop](https://claude.ai/download)\n- [uv Package Manager](https://docs.astral.sh/uv/)\n- [MCP Series](https://github.com/mcp-series)\n",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-domain-availability": {
+        "command": "uvx",
+        "args": [
+          "--python=3.10",
+          "--from",
+          "git+https://github.com/imprvhub/mcp-domain-availability",
+          "mcp-domain-availability"
+        ],
+        "env": {}
+      },
+      "mcp-domain-availability-local": {
+        "command": "uv",
+        "args": ["run", "src/mcp_domain_availability/main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "imprvhub",
+    "repo": "mcp-domain-availability",
+    "url": "https://github.com/imprvhub/mcp-domain-availability",
+    "name": "mcp-domain-availability",
+    "path": null,
+    "stars": 10,
+    "contributors": 1,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "a182b5425206c394a8d70b4fc3aa99511898d614"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:31.948Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 7
+    },
+    {
+      "name": "aiohttp",
+      "importance": 7
+    },
+    {
+      "name": "asyncio",
+      "importance": 8
+    },
+    {
+      "name": "dnspython",
+      "importance": 8
+    },
+    {
+      "name": "whois",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-domain-availability\"\nversion = \"0.1.0\"\ndescription = \"MCP server for checking domain availability across multiple TLDs\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.3.0\",\n    \"requests>=2.32.3\",\n    \"aiohttp>=3.11.13\",\n    \"asyncio\",\n    \"dnspython>=2.4.0\",\n    \"whois>=0.9.27\",\n]\n\n[[project.authors]]\nname = \"Ivan Luna\"\nemail = \"ivan@imprvhub.com\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-domain-availability = \"mcp_domain_availability.main:mcp.run\"\nmcp-domain-availability-cli = \"mcp_domain_availability.cli:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/mcp_domain_availability\"]\n\n\n=== setup.py ===\nfrom setuptools import setup, find_packages\n\nsetup(\n    name=\"mcp-domain-availability\",\n    version=\"0.1.0\",\n    description=\"MCP server for checking domain availability across multiple TLDs\",\n    long_description=open(\"README.md\").read(),\n    long_description_content_type=\"text/markdown\",\n    author=\"Ivan Luna\",\n    author_email=\"ivan@imprvhub.com\",\n    url=\"https://github.com/imprvhub/mcp-domain-availability\",\n    packages=find_packages(where=\"src\"),\n    package_dir={\"\": \"src\"},\n    python_requires=\">=3.10\",\n    install_requires=[\n        \"mcp[cli]>=1.3.0\",\n        \"requests>=2.32.3\", \n        \"aiohttp>=3.11.13\",\n        \"dnspython>=2.4.0\",\n        \"whois>=0.9.27\",\n    ],\n    entry_points={\n        \"console_scripts\": [\n            \"mcp-domain-availability=mcp_domain_availability.main:mcp.run\",\n        ],\n    },\n    classifiers=[\n        \"Development Status :: 4 - Beta\",\n        \"Intended Audience :: Developers\",\n        \"License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)\",\n        \"Programming Language :: Python :: 3\",\n        \"Programming Language :: Python :: 3.10\",\n        \"Programming Language :: Python :: 3.11\",\n        \"Programming Language :: Python :: 3.12\",\n    ],\n)\n"
+}

@@ -1,0 +1,88 @@
+{
+  "name": "narumiruna__yfinance-mcp",
+  "display_name": "yfinance-mcp",
+  "description": "MCP server from narumiruna/yfinance-mcp",
+  "author": {
+    "name": "narumiruna"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["yfmcp@latest"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Yahoo Finance MCP Server\n\nA simple MCP server for Yahoo Finance using [yfinance](https://github.com/ranaroussi/yfinance). This server provides a set of tools to fetch stock data, news, and other financial information.\n\n<a href=\"https://glama.ai/mcp/servers/@narumiruna/yfinance-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@narumiruna/yfinance-mcp/badge\" />\n</a>\n\n## Tools\n\n- **get_ticker_info**\n\n  - Retrieve stock data including company info, financials, trading metrics and governance data.\n  - Inputs:\n    - `symbol` (string): The stock symbol.\n\n- **get_ticker_news**\n\n  - Fetches recent news articles related to a specific stock symbol with title, content, and source details.\n  - Inputs:\n    - `symbol` (string): The stock symbol.\n\n- **search**\n\n  - Fetches and organizes search results from Yahoo Finance, including stock quotes and news articles.\n  - Inputs:\n    - `query` (string): The search query (ticker symbol or company name).\n    - `search_type` (string): Type of search results to retrieve (options: \"all\", \"quotes\", \"news\").\n\n- **get_top**\n\n  - Get top entities (ETFs, mutual funds, companies, growth companies, or performing companies) in a sector.\n  - Inputs:\n    - `sector` (string): The sector to get.\n    - `top_type` (string): Type of top companies to retrieve (options: \"top_etfs\", \"top_mutual_funds\", \"top_companies\", \"top_growth_companies\", \"top_performing_companies\").\n    - `top_n` (number, optional): Number of top entities to retrieve (default 10).\n\n- **get_price_history**\n\n  - Fetch historical price data for a given stock symbol over a specified period and interval.\n  - Inputs:\n    - `symbol` (string): The stock symbol.\n    - `period` (string, optional): Time period to retrieve data for (e.g. '1d', '1mo', '1y'). Default is '1mo'.\n    - `interval` (string, optional): Data interval frequency (e.g. '1d', '1h', '1m'). Default is '1d'.\n\n## Usage\n\nYou can use this MCP server either via uv (Python package installer) or Docker.\n\n### Via uv\n\n1. [Install uv](https://docs.astral.sh/uv/getting-started/installation/)\n2. Add the following configuration to your MCP server configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"yfmcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\"yfmcp@latest\"]\n    }\n  }\n}\n```\n\n### Via Docker\n\nAdd the following configuration to your MCP server configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"yfmcp\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"-i\", \"--rm\", \"narumi/yfinance-mcp\"]\n    }\n  }\n}\n",
+  "category": "Finance",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "yfmcp": {
+        "command": "uvx",
+        "args": ["yfmcp@latest"],
+        "env": {}
+      },
+      "narumi-yfinance-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "narumi/yfinance-mcp"],
+        "env": {},
+        "docker_image": "narumi/yfinance-mcp"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "narumiruna",
+    "repo": "yfinance-mcp",
+    "url": "https://github.com/narumiruna/yfinance-mcp",
+    "name": "yfinance-mcp",
+    "path": null,
+    "stars": 40,
+    "contributors": 3,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "202b732f873059673f73a2f2271e59280c9f503f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.812Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "loguru",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "tabulate",
+      "importance": 5
+    },
+    {
+      "name": "yfinance",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"yfmcp\"\nversion = \"0.4.4\"\ndescription = \"\"\nreadme = \"README.md\"\nauthors = [{ name = \"narumi\", email = \"toucans-cutouts0f@icloud.com\" }]\nrequires-python = \">=3.12\"\ndependencies = [\n    \"loguru>=0.7.3\",\n \"mcp[cli]>=1.6.0\",\n \"tabulate>=0.9.0\",\n \"yfinance>=0.2.55\",\n]\n\n[project.scripts]\nyfmcp = \"yfmcp.server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[dependency-groups]\ndev = [\n    \"anyio[trio]>=4.9.0\",\n    \"mypy>=1.13.0\",\n    \"pip>=25.0.1\",\n    \"pytest>=8.3.3\",\n    \"pytest-asyncio>=0.26.0\",\n    \"pytest-cov>=6.0.0\",\n    \"ruff>=0.7.3\",\n    \"types-pyopenssl>=24.1.0.20240722\",\n    \"types-pyyaml>=6.0.12.20250326\",\n    \"types-setuptools>=78.1.0.20250329\",\n]\n\n[tool.ruff]\nexclude = [\"build\"]\nline-length = 120\n\n[tool.ruff.lint]\nselect = [\n    \"B\",   # flake8-bugbear\n    \"C\",   # flake8-comprehensions\n    \"E\",   # pycodestyle errors\n    \"F\",   # pyflakes\n    \"I\",   # isort\n    \"N\",   # pep8-naming\n    \"SIM\", # flake8-simplify\n    \"UP\",  # pyupgrade\n    \"W\",   # pycodestyle warnings\n]\n\n[tool.ruff.lint.per-file-ignores]\n\"__init__.py\" = [\"F401\", \"F403\"]\n\n[tool.ruff.lint.isort]\nforce-single-line = true\n\n[tool.pytest.ini_options]\nfilterwarnings = [\"ignore::DeprecationWarning\"]\n\n[tool.mypy]\nignore_missing_imports = true\n\n[tool.bumpversion]\ncurrent_version = \"0.4.4\"\ntag = true\ncommit = true\npre_commit_hooks = [\"uv lock\", \"git add uv.lock\"]\n"
+}

@@ -36,6 +36,7 @@ import config, {
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
   parseFileStorageS3Config,
+  parseHackathonGalleryRepo,
   parseHackathonRecorderEnabled,
   parseK8sResourceQuantity,
   parseLogFormat,
@@ -2108,6 +2109,39 @@ describe("parseHackathonRecorderEnabled", () => {
   test("the override does nothing unless it is exactly true", () => {
     expect(parse(true, "yes")).toBe(false);
     expect(parse(true, "")).toBe(false);
+  });
+});
+
+describe("parseHackathonGalleryRepo", () => {
+  test("unset means sharing is not offered", () => {
+    expect(parseHackathonGalleryRepo(undefined)).toBeUndefined();
+    expect(parseHackathonGalleryRepo("")).toBeUndefined();
+    expect(parseHackathonGalleryRepo("   ")).toBeUndefined();
+  });
+
+  test("splits owner/name, tolerating surrounding whitespace", () => {
+    expect(parseHackathonGalleryRepo("archestra-ai/app-gallery")).toEqual({
+      owner: "archestra-ai",
+      name: "app-gallery",
+    });
+    expect(parseHackathonGalleryRepo(" archestra-ai/app-gallery ")).toEqual({
+      owner: "archestra-ai",
+      name: "app-gallery",
+    });
+  });
+
+  test("refuses anything that is not exactly owner/name", () => {
+    // Fail at boot, not with a broken share button: a URL, a bare owner, or a
+    // nested path are all misconfigurations.
+    expect(() =>
+      parseHackathonGalleryRepo("https://github.com/archestra-ai/app-gallery"),
+    ).toThrow(/owner\/name/);
+    expect(() => parseHackathonGalleryRepo("archestra-ai")).toThrow(
+      /owner\/name/,
+    );
+    expect(() =>
+      parseHackathonGalleryRepo("archestra-ai/app-gallery/main"),
+    ).toThrow(/owner\/name/);
   });
 });
 

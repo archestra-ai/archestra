@@ -1,0 +1,132 @@
+{
+  "name": "r-huijts__xcode-mcp-server",
+  "display_name": "xcode-mcp-server",
+  "description": "MCP Server implementation for Xcode integration",
+  "author": {
+    "name": "r-huijts"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {
+      "PROJECTS_BASE_DIR": "${user_config.projects_base_dir}",
+      "ALLOWED_PATHS": "${user_config.allowed_paths}",
+      "PORT": "${user_config.port}",
+      "DEBUG": "${user_config.debug}",
+      "LOG_LEVEL": "${user_config.log_level}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "projects_base_dir": {
+      "type": "directory",
+      "title": "Projects Base Directory",
+      "description": "The base directory where your Xcode projects are located.",
+      "required": true
+    },
+    "allowed_paths": {
+      "type": "string",
+      "title": "Additional Allowed Paths",
+      "description": "Comma-separated list of additional directories the server can access.",
+      "required": false
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port on which the MCP server will listen.",
+      "default": 3000,
+      "required": false
+    },
+    "debug": {
+      "type": "boolean",
+      "title": "Enable Debug Logging",
+      "description": "Enable verbose debug logging for the server.",
+      "default": false,
+      "required": false
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Logging Level",
+      "description": "Set the logging verbosity level (e.g., info, warn, error, debug).",
+      "default": "info",
+      "required": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/r-huijts-xcode-mcp-server-badge.png)](https://mseep.ai/app/r-huijts-xcode-mcp-server)\n\n# Xcode MCP Server\n\nAn MCP (Model Context Protocol) server providing comprehensive Xcode integration for AI assistants. This server enables AI agents to interact with Xcode projects, manage iOS simulators, and perform various Xcode-related tasks with enhanced error handling and support for multiple project types.\n\n## Features\n\n### Project Management\n- Set active projects and get detailed project information\n- Create new Xcode projects from templates (iOS, macOS, watchOS, tvOS)\n- Add files to Xcode projects with target and group specification\n- Parse workspace documents to find associated projects\n- List available schemes in projects and workspaces\n\n### File Operations\n- Read/write files with support for different encodings\n- Handle binary files with base64 encoding/decoding\n- Search for text content within files using patterns and regex\n- Check file existence and get file metadata\n- Create directory structures automatically\n\n### Build & Testing\n- Build projects with customizable options\n- Run tests with detailed failure reporting\n- Analyze code for potential issues\n- Clean build directories\n- Archive projects for distribution\n\n### CocoaPods Integration\n- Initialize CocoaPods in projects\n- Install and update pods\n- Add and remove pod dependencies\n- Execute arbitrary pod commands\n\n### Swift Package Manager\n- Initialize new Swift packages\n- Add and remove package dependencies with various version requirements\n- Update packages and resolve dependencies\n- Generate documentation for Swift packages using DocC\n- Run tests and build Swift packages\n\n### iOS Simulator Tools\n- List available simulators with detailed information\n- Boot and shut down simulators\n- Install and launch apps on simulators\n- Take screenshots and record videos\n- Manage simulator settings and state\n\n### Xcode Utilities\n- Execute Xcode commands via xcrun\n- Compile asset catalogs\n- Generate app icon sets from source images\n- Trace app performance\n- Export and validate archives for App Store submission\n- Switch between different Xcode versions\n\n## Installation\n\n### Prerequisites\n\n- macOS with Xcode 14.0 or higher installed\n- Node.js 16 or higher\n- npm or yarn\n- Swift 5.5+ for Swift Package Manager features\n- CocoaPods (optional, for CocoaPods integration)\n\n### Setup\n\n#### Option 1: Automated Setup (Recommended)\n\nUse the included setup script which automates the installation and configuration process:\n\n```bash\n# Make the script executable\nchmod +x setup.sh\n\n# Run the setup script\n./setup.sh\n```\n\n**What the Setup Script Does:**\n\n1. **Environment Verification**:\n   - Checks that you're running on macOS\n   - Verifies Xcode is installed and accessible\n   - Confirms Node.js (v16+) and npm are available\n   - Checks for Ruby installation\n   - Verifies CocoaPods installation (offers to install if missing)\n\n2. **Dependency Installation**:\n   - Runs `npm install` to install all required Node.js packages\n   - Executes `npm run build` to compile the TypeScript code\n\n3. **Configuration Setup**:\n   - Creates a `.env` file if one doesn't exist\n   - Prompts for your projects base directory\n   - Asks if you want to enable debug logging\n   - Saves your configuration preferences\n\n4. **Claude Desktop Integration** (Optional):\n   - Offers to configure the server for Claude Desktop\n   - Creates or updates the Claude Desktop configuration file\n   - Sets up the proper command and arguments to launch the server\n\n**When to Use the Setup Script:**\n\n- First-time installation to ensure all prerequisites are met\n- When you want guided configuration with interactive prompts\n- If you want to quickly set up Claude Desktop integration\n- To verify your environment has all necessary components\n\nThe script will guide you through the configuration process with clear prompts and helpful feedback.\n\n#### Option 2: Manual Setup\n\n**When to Use Manual Setup:**\n\n- You prefer explicit control over each installation step\n- You have a custom environment or non-standard configuration\n- You're setting up in a CI/CD pipeline or automated environment\n- You want to customize specific aspects of the installation process\n- You're an experienced developer familiar with Node.js projects\n\nFollow these steps for manual installation:\n\n1. Clone the repository:\n   ```bash\n   git clone https://github.com/r-huijts/xcode-mcp-server.git\n   cd xcode-mcp-server\n   ```\n\n2. Verify prerequisites (these must be installed):\n   - Xcode and Xcode Command Line Tools\n   - Node.js v16 or higher\n   - npm\n   - Ruby (for CocoaPods support)\n   - CocoaPods (optional, for pod-related features)\n\n3. Install dependencies:\n   ```bash\n   npm install\n   ```\n\n4. Build the project:\n   ```bash\n   npm run build\n   ```\n\n5. Create a configuration file:\n   ```bash\n   # Option A: Start with the example configuration\n   cp .env.example .env\n\n   # Option B: Create a minimal configuration\n   echo \"PROJECTS_BASE_DIR=/path/to/your/projects\" > .env\n   echo \"DEBUG=false\" >> .env\n   ```\n\n   Edit the `.env` file to set your preferred configuration.\n\n6. For Claude Desktop integration (optional):\n   - Edit or create `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - Add the following configuration (adjust paths as needed):\n   ```json\n   {\n     \"mcpServers\": {\n       \"xcode\": {\n         \"command\": \"node\",\n         \"args\": [\"/path/to/xcode-mcp-server/dist/index.js\"]\n       }\n     }\n   }\n   ```\n\n### Setup Troubleshooting\n\n**Common Setup Issues:**\n\n1. **Build Errors**:\n   - Ensure you have the correct Node.js version (v16+)\n   - Try deleting `node_modules` and running `npm install` again\n   - Check for TypeScript errors with `npx tsc --noEmit`\n   - Make sure all imports in the code are properly resolved\n\n2. **Missing Dependencies**:\n   - If you see errors about missing modules, run `npm install` again\n   - For native dependencies, you may need Xcode Command Line Tools: `xcode-select --install`\n\n3. **Permission Issues**:\n   - Ensure you have write permissions to the installation directory\n   - For CocoaPods installation, you may need to use `sudo gem install cocoapods`\n\n4. **Configuration Problems**:\n   - Verify your `.env` file has the correct format and valid paths\n   - Make sure `PROJECTS_BASE_DIR` points to an existing directory\n   - Check that the path doesn't contain special characters that need escaping\n\n5. **Claude Desktop Integration**:\n   - Ensure the path in the Claude configuration points to the correct location of `index.js`\n   - Restart Claude Desktop after making configuration changes\n   - Check that the server is running before attempting to use it with Claude\n\n## Usage\n\n### Starting the Server\n\n```bash\nnpm start\n```\n\nFor development mode with automatic restarts:\n```bash\nnpm run dev\n```\n\n### Configuration Options\n\nYou can configure the server in two ways:\n\n1. Environment variables in `.env` file:\n   ```\n   PROJECTS_BASE_DIR=/path/to/your/projects\n   DEBUG=true\n   ALLOWED_PATHS=/path/to/additional/allowed/directory\n   PORT=8080\n   ```\n\n2. Command line arguments:\n   ```bash\n   npm start -- --projects-dir=/path/to/your/projects --port=8080\n   ```\n\n### Key Configuration Parameters\n\n- `PROJECTS_BASE_DIR` / `--projects-dir`: Base directory for projects (required)\n- `ALLOWED_PATHS` / `--allowed-paths`: Additional directories to allow access to (comma-separated)\n- `PORT` / `--port`: Port to run the server on (default: 3000)\n- `DEBUG` / `--debug`: Enable debug logging (default: false)\n- `LOG_LEVEL` / `--log-level`: Set logging level (default: info)\n\n### Connecting to AI Assistants\n\nThe server implements the Model Context Protocol (MCP), making it compatible with various AI assistants that support this protocol. To connect:\n\n1. Start the Xcode MCP server\n2. Configure your AI assistant to use the server URL (typically `http://localhost:3000`)\n3. The AI assistant will now have access to all the Xcode tools provided by the server\n\n### Tool Documentation\n\nFor a comprehensive overview of all available tools and their usage, see [Tools Overview](docs/tools-overview.md).\n\nFor detailed usage examples and best practices, see [User Guide](docs/user-guide.md).\n\n### Common Workflows\n\n#### Setting Up a New Project\n\n```javascript\n// Create a new iOS app project\nawait tools.create_xcode_project({\n  name: \"MyAwesomeApp\",\n  template: \"ios-app\",\n  outputDirectory: \"~/Projects\",\n  organizationName: \"My Organization\",\n  organizationIdentifier: \"com.myorganization\",\n  language: \"swift\",\n  includeTests: true,\n  setAsActive: true\n});\n\n// Add a Swift Package dependency\nawait tools.add_swift_package({\n  url: \"https://github.com/Alamofire/Alamofire.git\",\n  version: \"from: 5.0.0\"\n});\n```\n\n#### Working with Files\n\n```javascript\n// Read a file with specific encoding\nconst fileContent = await tools.read_file({\n  filePath: \"MyAwesomeApp/AppDelegate.swift\",\n  encoding: \"utf-8\"\n});\n\n// Write to a file\nawait tools.write_file({\n  path: \"MyAwesomeApp/NewFile.swift\",\n  content: \"import Foundation\\n\\nclass NewClass {}\\n\",\n  createIfMissing: true\n});\n\n// Search for text in files\nconst searchResults = await tools.search_in_files({\n  directory: \"MyAwesomeApp\",\n  pattern: \"*.swift\",\n  searchText: \"class\",\n  isRegex: false\n});\n```\n\n#### Building and Testing\n\n```javascript\n// Build the project\nawait tools.build_project({\n  scheme: \"MyAwesomeApp\",\n  configuration: \"Debug\"\n});\n\n// Run tests\nawait tools.test_project({\n  scheme: \"MyAwesomeApp\",\n  testPlan: \"MyAwesomeAppTests\"\n});\n```\n\n## Project Structure\n\n```\nxcode-mcp-server/\n├── src/\n│   ├── index.ts                 # Entry point\n│   ├── server.ts                # MCP server implementation\n│   ├── types/                   # Type definitions\n│   │   └── index.ts             # Core type definitions\n│   ├── utils/                   # Utility functions\n│   │   ├── errors.js            # Error handling classes\n│   │   ├── pathManager.ts       # Path validation and management\n│   │   ├── project.js           # Project utilities\n│   │   └── simulator.js         # Simulator utilities\n│   └── tools/                   # Tool implementations\n│       ├── project/             # Project management tools\n│       │   └── index.ts         # Project creation, detection, file adding\n│       ├── file/                # File operation tools\n│       │   └── index.ts         # File reading, writing, searching\n│       ├── build/               # Build and testing tools\n│       │   └── index.ts         # Building, testing, analyzing\n│       ├── cocoapods/           # CocoaPods integration\n│       │   └── index.ts         # Pod installation and management\n│       ├── spm/                 # Swift Package Manager tools\n│       │   └── index.ts         # Package management and documentation\n│       ├── simulator/           # iOS simulator tools\n│       │   └── index.ts         # Simulator control and interaction\n│       └── xcode/               # Xcode utilities\n│           └── index.ts         # Xcode version management, asset tools\n├── docs/                        # Documentation\n│   ├── tools-overview.md        # Comprehensive tool documentation\n│   └── user-guide.md            # Usage examples and best practices\n├── tests/                       # Tests\n└── dist/                        # Compiled code (generated)\n```\n\n## How It Works\n\nThe Xcode MCP server uses the Model Context Protocol to provide a standardized interface for AI models to interact with Xcode projects. The server architecture is designed with several key components:\n\n### Core Components\n\n1. **Server Implementation**: The main MCP server that handles tool registration and request processing.\n\n2. **Path Management**: Ensures secure file access by validating all paths against allowed directories.\n\n3. **Project Management**: Detects, loads, and manages different types of Xcode projects:\n   - Standard Xcode projects (.xcodeproj)\n   - Xcode workspaces (.xcworkspace)\n   - Swift Package Manager projects (Package.swift)\n\n4. **Directory State**: Maintains the active directory context for relative path resolution.\n\n5. **Tool Registry**: Organizes tools into logical categories for different Xcode operations.\n\n### Request Flow\n\n1. An AI assistant sends a tool execution request to the MCP server.\n\n2. The server validates the request parameters and permissions.\n\n3. The appropriate tool handler is invoked with the validated parameters.\n\n4. The tool executes the requested operation, often using native Xcode commands.\n\n5. Results are formatted and returned to the AI assistant.\n\n6. Comprehensive error handling provides meaningful feedback for troubleshooting.\n\n### Safety Features\n\n- **Path Validation**: All file operations are restricted to allowed directories.\n- **Error Handling**: Detailed error messages help diagnose issues.\n- **Parameter Validation**: Input parameters are validated using Zod schemas.\n- **Process Management**: External processes are executed safely with proper error handling.\n\n### Project Type Support\n\nThe server intelligently handles different project types:\n\n- **Standard Projects**: Direct .xcodeproj manipulation\n- **Workspaces**: Manages multiple projects within a workspace\n- **SPM Projects**: Handles Swift Package Manager specific operations\n\nThis architecture allows AI assistants to seamlessly work with any type of Xcode project while maintaining security and providing detailed feedback.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n### Development Guidelines\n\n- Follow the existing code style and organization\n- Add comprehensive error handling with specific error messages\n- Write tests for new functionality\n- Update documentation to reflect your changes\n- Ensure compatibility with different project types (standard, workspace, SPM)\n\n### Adding New Tools\n\nTo add a new tool to the server:\n\n1. Identify the appropriate category in the `src/tools/` directory\n2. Implement the tool using the existing patterns with Zod schema validation\n3. Register the tool in the category's `index.ts` file\n4. Add error handling with specific error messages\n5. Document the tool in the appropriate documentation files\n\n## Troubleshooting\n\n### Common Issues\n\n- **Path Access Errors**: Ensure the paths you're trying to access are within the allowed directories\n- **Build Failures**: Check that Xcode command line tools are installed and up to date\n- **Tool Not Found**: Verify that the tool name is correct and properly registered\n- **Parameter Validation Errors**: Check the parameter types and requirements in the tool documentation\n\n### Debugging\n\n1. Start the server with debug logging enabled: `npm start -- --debug`\n2. Check the console output for detailed error messages\n3. Examine the server logs for request and response details\n4. For tool-specific issues, try running the equivalent Xcode command directly in the terminal\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Acknowledgments\n\n- Thanks to the Model Context Protocol team for the MCP SDK\n- Built with TypeScript and Node.js\n- Uses Xcode command line tools and Swift Package Manager\n- Special thanks to all contributors who have helped improve the server's functionality and robustness\n",
+  "category": "Development",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "xcode-mcp-server": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "xcode-mcp-server-dev": {
+        "command": "npm",
+        "args": ["run", "dev"],
+        "env": {}
+      },
+      "xcode-mcp-server-configured": {
+        "command": "node",
+        "args": ["/path/to/xcode-mcp-server/dist/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "r-huijts",
+    "repo": "xcode-mcp-server",
+    "url": "https://github.com/r-huijts/xcode-mcp-server",
+    "name": "r-huijts__xcode-mcp-server",
+    "path": null,
+    "stars": 314,
+    "contributors": 3,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f3419f00117aa9949e326f78cc940166c88f18cb"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:41.763Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "glob",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"xcode-mcp-server\",\n  \"version\": \"1.0.3\",\n  \"description\": \"An MCP server for Xcode integration, enabling AI assistants to interact with Xcode projects\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"xcode-server\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"clean\": \"rm -rf dist\",\n    \"prebuild\": \"npm run clean\",\n    \"build\": \"tsc && chmod +x dist/index.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"tsc && node dist/index.js\",\n    \"debug\": \"DEBUG=true node --trace-warnings dist/index.js\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector dist/index.js\"\n  },\n  \"keywords\": [\n    \"xcode\",\n    \"mcp\",\n    \"ai\",\n    \"llm\",\n    \"ios\",\n    \"development\",\n    \"claude\",\n    \"modelcontextprotocol\"\n  ],\n  \"author\": \"R.Huijts\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/r-huijts/xcode-mcp-server.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/r-huijts/xcode-mcp-server/issues\"\n  },\n  \"homepage\": \"https://github.com/r-huijts/xcode-mcp-server#readme\",\n  \"engines\": {\n    \"node\": \">=16.0.0\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.9.0\",\n    \"@types/glob\": \"^8.1.0\",\n    \"glob\": \"^11.0.1\",\n    \"zod\": \"^3.24.2\",\n    \"dotenv\": \"^16.4.5\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.17.28\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

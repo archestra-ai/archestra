@@ -1,0 +1,185 @@
+{
+  "name": "isaacphi__mcp-language-server",
+  "display_name": "mcp-language-server",
+  "description": "mcp-language-server gives MCP enabled clients access semantic tools like get definition, references, rename, and diagnostics.",
+  "author": {
+    "name": "isaacphi"
+  },
+  "server": {
+    "command": "mcp-language-server",
+    "args": [
+      "--workspace",
+      "${user_config.workspace_directory}",
+      "--lsp",
+      "${user_config.lsp_command}",
+      "--",
+      "${user_config.lsp_args}"
+    ],
+    "env": {
+      "PATH": "${user_config.path}",
+      "GOPATH": "${user_config.gopath}",
+      "GOCACHE": "${user_config.gocache}",
+      "GOMODCACHE": "${user_config.gomodcache}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "workspace_directory": {
+      "type": "directory",
+      "title": "Workspace Directory",
+      "description": "The root directory of the project to analyze. This will be passed to the MCP language server via the --workspace flag.",
+      "required": true,
+      "default": "${HOME}/dev/yourproject"
+    },
+    "lsp_command": {
+      "type": "string",
+      "title": "Language Server Command",
+      "description": "The command to execute the underlying Language Server Protocol (LSP) server (e.g., 'gopls', 'rust-analyzer', 'pyright-langserver', 'typescript-language-server', or a full path to a binary like '/path/to/clangd'). This will be passed to the MCP language server via the --lsp flag.",
+      "required": true,
+      "default": "gopls"
+    },
+    "lsp_args": {
+      "type": "string",
+      "title": "LSP Specific Arguments",
+      "description": "Additional arguments to pass directly to the underlying Language Server Protocol (LSP) server, separated by spaces. These arguments will be passed after a '--' separator to the MCP language server.",
+      "multiple": true,
+      "required": false,
+      "default": []
+    },
+    "path": {
+      "type": "string",
+      "title": "PATH Environment Variable",
+      "description": "The PATH environment variable, which needs to contain the path to the 'go' executable and the chosen LSP server (e.g., 'gopls'). You can get this with `echo $(which go):$(which gopls)`.",
+      "required": false,
+      "default": "${HOME}/go/bin:/opt/homebrew/bin"
+    },
+    "gopath": {
+      "type": "string",
+      "title": "GOPATH Environment Variable",
+      "description": "The GOPATH environment variable, typically where Go workspaces and installed binaries are located.",
+      "required": false,
+      "default": "${HOME}/go"
+    },
+    "gocache": {
+      "type": "string",
+      "title": "GOCACHE Environment Variable",
+      "description": "The GOCACHE environment variable, specifying the directory for Go build cache.",
+      "required": false,
+      "default": "${HOME}/Library/Caches/go-build"
+    },
+    "gomodcache": {
+      "type": "string",
+      "title": "GOMODCACHE Environment Variable",
+      "description": "The GOMODCACHE environment variable, specifying the directory for Go module cache.",
+      "required": false,
+      "default": "${HOME}/go/pkg/mod"
+    }
+  },
+  "readme": "# MCP Language Server\n\n[![Go Tests](https://github.com/isaacphi/mcp-language-server/actions/workflows/go.yml/badge.svg)](https://github.com/isaacphi/mcp-language-server/actions/workflows/go.yml)\n[![Go Report Card](https://goreportcard.com/badge/github.com/isaacphi/mcp-language-server)](https://goreportcard.com/report/github.com/isaacphi/mcp-language-server)\n[![GoDoc](https://pkg.go.dev/badge/github.com/isaacphi/mcp-language-server)](https://pkg.go.dev/github.com/isaacphi/mcp-language-server)\n[![Go Version](https://img.shields.io/github/go-mod/go-version/isaacphi/mcp-language-server)](https://github.com/isaacphi/mcp-language-server/blob/main/go.mod)\n\nThis is an [MCP](https://modelcontextprotocol.io/introduction) server that runs and exposes a [language server](https://microsoft.github.io/language-server-protocol/) to LLMs. Not a language server for MCP, whatever that would be.\n\n## Demo\n\n`mcp-language-server` helps MCP enabled clients navigate codebases more easily by giving them access semantic tools like get definition, references, rename, and diagnostics.\n\n![Demo](demo.gif)\n\n## Setup\n\n1. **Install Go**: Follow instructions at <https://golang.org/doc/install>\n2. **Install or update this server**: `go install github.com/isaacphi/mcp-language-server@latest`\n3. **Install a language server**: _follow one of the guides below_\n4. **Configure your MCP client**: _follow one of the guides below_\n\n<details>\n  <summary>Go (gopls)</summary>\n  <div>\n    <p><strong>Install gopls</strong>: <code>go install golang.org/x/tools/gopls@latest</code></p>\n    <p><strong>Configure your MCP client</strong>: This will be different but similar for each client. For Claude Desktop, add the following to <code>~/Library/Application\\ Support/Claude/claude_desktop_config.json</code></p>\n\n<pre>\n{\n  \"mcpServers\": {\n    \"language-server\": {\n      \"command\": \"mcp-language-server\",\n      \"args\": [\"--workspace\", \"/Users/you/dev/yourproject/\", \"--lsp\", \"gopls\"],\n      \"env\": {\n        \"PATH\": \"/opt/homebrew/bin:/Users/you/go/bin\",\n        \"GOPATH\": \"/users/you/go\",\n        \"GOCACHE\": \"/users/you/Library/Caches/go-build\",\n        \"GOMODCACHE\": \"/Users/you/go/pkg/mod\"\n      }\n    }\n  }\n}\n</pre>\n\n<p><strong>Note</strong>: Not all clients will need these environment variables. For Claude Desktop you will need to update the environment variables above based on your machine and username:</p>\n<ul>\n  <li><code>PATH</code> needs to contain the path to <code>go</code> and to <code>gopls</code>. Get this with <code>echo $(which go):$(which gopls)</code></li>\n  <li><code>GOPATH</code>, <code>GOCACHE</code>, and <code>GOMODCACHE</code> may be different on your machine. These are the defaults.</li>\n</ul>\n\n  </div>\n</details>\n<details>\n  <summary>Rust (rust-analyzer)</summary>\n  <div>\n    <p><strong>Install rust-analyzer</strong>: <code>rustup component add rust-analyzer</code></p>\n    <p><strong>Configure your MCP client</strong>: This will be different but similar for each client. For Claude Desktop, add the following to <code>~/Library/Application\\ Support/Claude/claude_desktop_config.json</code></p>\n\n<pre>\n{\n  \"mcpServers\": {\n    \"language-server\": {\n      \"command\": \"mcp-language-server\",\n      \"args\": [\n        \"--workspace\",\n        \"/Users/you/dev/yourproject/\",\n        \"--lsp\",\n        \"rust-analyzer\"\n      ]\n    }\n  }\n}\n</pre>\n  </div>\n</details>\n<details>\n  <summary>Python (pyright)</summary>\n  <div>\n    <p><strong>Install pyright</strong>: <code>npm install -g pyright</code></p>\n    <p><strong>Configure your MCP client</strong>: This will be different but similar for each client. For Claude Desktop, add the following to <code>~/Library/Application\\ Support/Claude/claude_desktop_config.json</code></p>\n\n<pre>\n{\n  \"mcpServers\": {\n    \"language-server\": {\n      \"command\": \"mcp-language-server\",\n      \"args\": [\n        \"--workspace\",\n        \"/Users/you/dev/yourproject/\",\n        \"--lsp\",\n        \"pyright-langserver\",\n        \"--\",\n        \"--stdio\"\n      ]\n    }\n  }\n}\n</pre>\n  </div>\n</details>\n<details>\n  <summary>Typescript (typescript-language-server)</summary>\n  <div>\n    <p><strong>Install typescript-language-server</strong>: <code>npm install -g typescript typescript-language-server</code></p>\n    <p><strong>Configure your MCP client</strong>: This will be different but similar for each client. For Claude Desktop, add the following to <code>~/Library/Application\\ Support/Claude/claude_desktop_config.json</code></p>\n\n<pre>\n{\n  \"mcpServers\": {\n    \"language-server\": {\n      \"command\": \"mcp-language-server\",\n      \"args\": [\n        \"--workspace\",\n        \"/Users/you/dev/yourproject/\",\n        \"--lsp\",\n        \"typescript-language-server\",\n        \"--\",\n        \"--stdio\"\n      ]\n    }\n  }\n}\n</pre>\n  </div>\n</details>\n<details>\n  <summary>C/C++ (clangd)</summary>\n  <div>\n    <p><strong>Install clangd</strong>: Download prebuilt binaries from the <a href=\"https://github.com/clangd/clangd/releases\">official LLVM releases page</a> or install via your system's package manager (e.g., <code>apt install clangd</code>, <code>brew install clangd</code>).</p>\n    <p><strong>Configure your MCP client</strong>: This will be different but similar for each client. For Claude Desktop, add the following to <code>~/Library/Application\\\\ Support/Claude/claude_desktop_config.json</code></p>\n\n<pre>\n{\n  \"mcpServers\": {\n    \"language-server\": {\n      \"command\": \"mcp-language-server\",\n      \"args\": [\n        \"--workspace\",\n        \"/Users/you/dev/yourproject/\",\n        \"--lsp\",\n        \"/path/to/your/clangd_binary\",\n        \"--\",\n        \"--compile-commands-dir=/path/to/yourproject/build_or_compile_commands_dir\"\n      ]\n    }\n  }\n}\n</pre>\n    <p><strong>Note</strong>:</p>\n    <ul>\n      <li>Replace <code>/path/to/your/clangd_binary</code> with the actual path to your clangd executable.</li>\n      <li><code>--compile-commands-dir</code> should point to the directory containing your <code>compile_commands.json</code> file (e.g., <code>./build</code>, <code>./cmake-build-debug</code>).</li>\n      <li>Ensure <code>compile_commands.json</code> is generated for your project for clangd to work effectively.</li>\n    </ul>\n  </div>\n</details>\n<details>\n  <summary>Other</summary>\n  <div>\n    <p>I have only tested this repo with the servers above but it should be compatible with many more. Note:</p>\n    <ul>\n      <li>The language server must communicate over stdio.</li>\n      <li>Any aruments after <code>--</code> are sent as arguments to the language server.</li>\n      <li>Any env variables are passed on to the language server.</li>\n    </ul>\n  </div>\n</details>\n\n## Tools\n\n- `definition`: Retrieves the complete source code definition of any symbol (function, type, constant, etc.) from your codebase.\n- `references`: Locates all usages and references of a symbol throughout the codebase.\n- `diagnostics`: Provides diagnostic information for a specific file, including warnings and errors.\n- `hover`: Display documentation, type hints, or other hover information for a given location.\n- `rename_symbol`: Rename a symbol across a project.\n- `edit_file`: Allows making multiple text edits to a file based on line numbers. Provides a more reliable and context-economical way to edit files compared to search and replace based edit tools.\n\n## About\n\nThis codebase makes use of edited code from [gopls](https://go.googlesource.com/tools/+/refs/heads/master/gopls/internal/protocol) to handle LSP communication. See ATTRIBUTION for details. Everything here is covered by a permissive BSD style license.\n\n[mcp-go](https://github.com/mark3labs/mcp-go) is used for MCP communication. Thank you for your service.\n\nThis is beta software. Please let me know by creating an issue if you run into any problems or have suggestions of any kind.\n\n## Contributing\n\nPlease keep PRs small and open Issues first for anything substantial. AI slop O.K. as long as it is tested, passes checks, and doesn't smell too bad.\n\n### Setup\n\nClone the repo:\n\n```bash\ngit clone https://github.com/isaacphi/mcp-language-server.git\ncd mcp-language-server\n```\n\nA [justfile](https://just.systems/man/en/) is included for convenience:\n\n```bash\njust -l\nAvailable recipes:\n    build    # Build\n    check    # Run code audit checks\n    fmt      # Format code\n    generate # Generate LSP types and methods\n    help     # Help\n    install  # Install locally\n    snapshot # Update snapshot tests\n    test     # Run tests\n```\n\nConfigure your Claude Desktop (or similar) to use the local binary:\n\n```json\n{\n  \"mcpServers\": {\n    \"language-server\": {\n      \"command\": \"/full/path/to/your/clone/mcp-language-server/mcp-language-server\",\n      \"args\": [\n        \"--workspace\",\n        \"/path/to/workspace\",\n        \"--lsp\",\n        \"language-server-executable\"\n      ],\n      \"env\": {\n        \"LOG_LEVEL\": \"DEBUG\"\n      }\n    }\n  }\n}\n```\n\nRebuild after making changes.\n\n### Logging\n\nSetting the `LOG_LEVEL` environment variable to DEBUG enables verbose logging to stderr for all components including messages to and from the language server and the language server's logs.\n\n### LSP interaction\n\n- `internal/lsp/methods.go` contains generated code to make calls to the connected language server.\n- `internal/protocol/tsprotocol.go` contains generated code for LSP types. I borrowed this from `gopls`'s source code. Thank you for your service.\n- LSP allows language servers to return different types for the same methods. Go doesn't like this so there are some ugly workarounds in `internal/protocol/interfaces.go`.\n\n### Local Development and Snapshot Tests\n\nThere is a snapshot test suite that makes it a lot easier to try out changes to tools. These run actual language servers on mock workspaces and capture output and logs.\n\nYou will need the language servers installed locally to run them. There are tests for go, rust, python, and typescript.\n\n```\nintegrationtests/\n├── tests/        # Tests are in this folder\n├── snapshots/    # Snapshots of tool outputs\n├── test-output/  # Gitignored folder showing the final state of each workspace and logs after each test run\n└── workspaces/   # Mock workspaces that the tools run on\n```\n\nTo update snapshots, run `UPDATE_SNAPSHOTS=true go test ./integrationtests/...`\n",
+  "category": "Development",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-language-server-gopls": {
+        "command": "mcp-language-server",
+        "args": ["--workspace", "/Users/you/dev/yourproject/", "--lsp", "gopls"],
+        "env": {
+          "PATH": "/opt/homebrew/bin:/Users/you/go/bin",
+          "GOPATH": "/users/you/go",
+          "GOCACHE": "/users/you/Library/Caches/go-build",
+          "GOMODCACHE": "/Users/you/go/pkg/mod"
+        }
+      },
+      "mcp-language-server-rust-analyzer": {
+        "command": "mcp-language-server",
+        "args": ["--workspace", "/Users/you/dev/yourproject/", "--lsp", "rust-analyzer"],
+        "env": {}
+      },
+      "mcp-language-server-pyright-langserver": {
+        "command": "mcp-language-server",
+        "args": ["--workspace", "/Users/you/dev/yourproject/", "--lsp", "pyright-langserver", "--", "--stdio"],
+        "env": {}
+      },
+      "mcp-language-server-typescript-language-server": {
+        "command": "mcp-language-server",
+        "args": ["--workspace", "/Users/you/dev/yourproject/", "--lsp", "typescript-language-server", "--", "--stdio"],
+        "env": {}
+      },
+      "mcp-language-server-clangd": {
+        "command": "mcp-language-server",
+        "args": [
+          "--workspace",
+          "/Users/you/dev/yourproject/",
+          "--lsp",
+          "/path/to/your/clangd_binary",
+          "--",
+          "--compile-commands-dir=/path/to/yourproject/build_or_compile_commands_dir"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "isaacphi",
+    "repo": "mcp-language-server",
+    "url": "https://github.com/isaacphi/mcp-language-server",
+    "name": "isaacphi__mcp-language-server",
+    "path": null,
+    "stars": 1061,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e4395849a52e18555361abab60a060802c06bf50"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:37.902Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "davecgh/go-spew",
+      "importance": 4
+    },
+    {
+      "name": "fsnotify/fsnotify",
+      "importance": 8
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "sabhiram/go-gitignore",
+      "importance": 6
+    },
+    {
+      "name": "stretchr/testify",
+      "importance": 3
+    },
+    {
+      "name": "golang.org/x/text",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/isaacphi/mcp-language-server\n\ngo 1.24.0\n\nrequire (\n\tgithub.com/davecgh/go-spew v1.1.1\n\tgithub.com/fsnotify/fsnotify v1.9.0\n\tgithub.com/mark3labs/mcp-go v0.25.0\n\tgithub.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06\n\tgithub.com/stretchr/testify v1.10.0\n\tgolang.org/x/text v0.25.0\n)\n\nrequire (\n\tgithub.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect\n\tgithub.com/google/go-cmp v0.7.0 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/kisielk/errcheck v1.9.0 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/rogpeppe/go-internal v1.14.1 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgolang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac // indirect\n\tgolang.org/x/mod v0.24.0 // indirect\n\tgolang.org/x/sync v0.14.0 // indirect\n\tgolang.org/x/sys v0.31.0 // indirect\n\tgolang.org/x/telemetry v0.0.0-20240522233618-39ace7a40ae7 // indirect\n\tgolang.org/x/tools v0.31.0 // indirect\n\tgolang.org/x/vuln v1.1.4 // indirect\n\tgopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n\thonnef.co/go/tools v0.6.1 // indirect\n)\n\ntool (\n\tgithub.com/kisielk/errcheck\n\tgolang.org/x/vuln/cmd/govulncheck\n\thonnef.co/go/tools/cmd/staticcheck\n)\n"
+}

@@ -1,0 +1,197 @@
+{
+  "name": "redis__mcp-redis",
+  "display_name": "mcp-redis",
+  "description": "The official Redis MCP Server is a natural language interface designed for agentic applications to manage and search data in Redis efficiently",
+  "author": {
+    "name": "redis"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "src/main.py"],
+    "env": {
+      "REDIS_HOST": "${user_config.redis_host}",
+      "REDIS_PORT": "${user_config.redis_port}",
+      "REDIS_PWD": "${user_config.redis_pwd}",
+      "REDIS_SSL": "${user_config.redis_ssl}",
+      "REDIS_CA_PATH": "${user_config.redis_ca_path}",
+      "REDIS_CLUSTER_MODE": "${user_config.redis_cluster_mode}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "redis_host": {
+      "type": "string",
+      "title": "Redis Host",
+      "description": "Hostname of the Redis database",
+      "required": true,
+      "default": "localhost"
+    },
+    "redis_port": {
+      "type": "number",
+      "title": "Redis Port",
+      "description": "Port number of the Redis database",
+      "required": true,
+      "default": 6379
+    },
+    "redis_pwd": {
+      "type": "string",
+      "title": "Redis Password",
+      "description": "Password for the Redis database",
+      "sensitive": true,
+      "required": false
+    },
+    "redis_ssl": {
+      "type": "boolean",
+      "title": "Enable SSL/TLS",
+      "description": "Enable SSL/TLS connection to Redis",
+      "default": false,
+      "required": false
+    },
+    "redis_ca_path": {
+      "type": "file",
+      "title": "Redis CA Certificate Path",
+      "description": "Path to the CA certificate file for SSL/TLS verification",
+      "required": false
+    },
+    "redis_cluster_mode": {
+      "type": "boolean",
+      "title": "Redis Cluster Mode",
+      "description": "Enable Redis Cluster mode connection",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# Redis MCP Server\n[![Integration](https://github.com/redis/mcp-redis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redis/mcp-redis/actions/workflows/ci.yml)\n[![PyPI - Version](https://img.shields.io/pypi/v/redis-mcp-server)](https://pypi.org/project/redis-mcp-server/)\n[![Python Version](https://img.shields.io/badge/python-3.13%2B-blue&logo=redis)](https://www.python.org/downloads/)\n[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE.txt)\n[![smithery badge](https://smithery.ai/badge/@redis/mcp-redis)](https://smithery.ai/server/@redis/mcp-redis)\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/70102150-efe0-4705-9f7d-87980109a279)\n[![Docker Image Version](https://img.shields.io/docker/v/mcp/redis?sort=semver&logo=docker&label=Docker)](https://hub.docker.com/r/mcp/redis)\n[![codecov](https://codecov.io/gh/redis/mcp-redis/branch/master/graph/badge.svg?token=yenl5fzxxr)](https://codecov.io/gh/redis/mcp-redis)\n\n\n[![Discord](https://img.shields.io/discord/697882427875393627.svg?style=social&logo=discord)](https://discord.gg/redis)\n[![Twitch](https://img.shields.io/twitch/status/redisinc?style=social)](https://www.twitch.tv/redisinc)\n[![YouTube](https://img.shields.io/youtube/channel/views/UCD78lHSwYqMlyetR0_P4Vig?style=social)](https://www.youtube.com/redisinc)\n[![Twitter](https://img.shields.io/twitter/follow/redisinc?style=social)](https://twitter.com/redisinc)\n[![Stack Exchange questions](https://img.shields.io/stackexchange/stackoverflow/t/mcp-redis?style=social&logo=stackoverflow&label=Stackoverflow)](https://stackoverflow.com/questions/tagged/mcp-redis)\n\n## Overview\nThe Redis MCP Server is a **natural language interface** designed for agentic applications to efficiently manage and search data in Redis. It integrates seamlessly with **MCP (Model Content Protocol) clients**, enabling AI-driven workflows to interact with structured and unstructured data in Redis. Using this MCP Server, you can ask questions like:\n\n- \"Store the entire conversation in a stream\"\n- \"Cache this item\"\n- \"Store the session with an expiration time\"\n- \"Index and search this vector\"\n\n## Table of Contents\n- [Overview](#overview)\n- [Features](#features)\n- [Tools](#tools)\n- [Installation](#installation)\n  - [From PyPI (recommended)](#from-pypi-recommended)\n  - [Testing the PyPI package](#testing-the-pypi-package)\n  - [From GitHub](#from-github)\n  - [Development Installation](#development-installation)\n  - [With Docker](#with-docker)\n- [Configuration](#configuration)\n  - [Redis ACL](#redis-acl)\n  - [Configuration via command line arguments](#configuration-via-command-line-arguments)\n  - [Configuration via Environment Variables](#configuration-via-environment-variables)\n- [Integrations](#integrations)\n  - [OpenAI Agents SDK](#openai-agents-sdk)\n  - [Augment](#augment)\n  - [Claude Desktop](#claude-desktop)\n  - [VS Code with GitHub Copilot](#vs-code-with-github-copilot)\n- [Testing](#testing)\n- [Example Use Cases](#example-use-cases)\n- [Contributing](#contributing)\n- [License](#license)\n- [Badges](#badges)\n- [Contact](#contact)\n\n\n## Features\n- **Natural Language Queries**: Enables AI agents to query and update Redis using natural language.\n- **Seamless MCP Integration**: Works with any **MCP client** for smooth communication.\n- **Full Redis Support**: Handles **hashes, lists, sets, sorted sets, streams**, and more.\n- **Search & Filtering**: Supports efficient data retrieval and searching in Redis.\n- **Scalable & Lightweight**: Designed for **high-performance** data operations.\n- The Redis MCP Server supports the `stdio` [transport](https://modelcontextprotocol.io/docs/concepts/transports#standard-input%2Foutput-stdio). Support to the `stremable-http` transport will be added in the future.\n\n## Tools\n\nThis MCP Server provides tools to manage the data stored in Redis.\n\n- `string` tools to set, get strings with expiration. Useful for storing simple configuration values, session data, or caching responses.\n- `hash` tools to store field-value pairs within a single key. The hash can store vector embeddings. Useful for representing objects with multiple attributes, user profiles, or product information where fields can be accessed individually.\n- `list` tools with common operations to append and pop items. Useful for queues, message brokers, or maintaining a list of most recent actions.\n- `set` tools to add, remove and list set members. Useful for tracking unique values like user IDs or tags, and for performing set operations like intersection.\n- `sorted set` tools to manage data for e.g. leaderboards, priority queues, or time-based analytics with score-based ordering.\n- `pub/sub` functionality to publish messages to channels and subscribe to receive them. Useful for real-time notifications, chat applications, or distributing updates to multiple clients.\n- `streams` tools to add, read, and delete from data streams. Useful for event sourcing, activity feeds, or sensor data logging with consumer groups support.\n- `JSON` tools to store, retrieve, and manipulate JSON documents in Redis. Useful for complex nested data structures, document databases, or configuration management with path-based access.\n\nAdditional tools.\n\n- `query engine` tools to manage vector indexes and perform vector search\n- `server management` tool to retrieve information about the database\n\n## Installation\n\nThe Redis MCP Server is available as a PyPI package and as direct installation from the GitHub repository. \n\n### From PyPI (recommended)\nConfiguring the latest Redis MCP Server version from PyPI, as an example, can be done importing the following JSON configuration in the desired framework or tool.\nThe `uvx` command will download the server on the fly (if not cached already), create a temporary environment, and then run it.\n\n```commandline\n{\n  \"mcpServers\": {\n    \"RedisMCPServer\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--from\",\n        \"redis-mcp-server@latest\",\n        \"redis-mcp-server\",\n        \"--url\",\n        \"\\\"redis://localhost:6379/0\\\"\"\n      ]\n    }\n  }\n}\n```\n\nYou will find examples for different platforms along the README.\n\n### Testing the PyPI package\n\nYou can install the package as follows:\n\n```sh\npip install redis-mcp-server\n```\n\nAnd start it using `uv` the package in your environment.\n\n```sh\nuv python install 3.13\nuv sync\nuv run redis-mcp-server --url redis://localhost:6379/0\n```\n\nHowever, starting the MCP Server is most useful when delegate to the framework or tool where this MCP Server is configured.\n\n### From GitHub\n\nYou can configure the desired Redis MCP Server version with `uvx`, which allows you to run it directly from GitHub (from a branch, or use a tagged release).\n\n> It is recommended to use a tagged release, the `main` branch is under active development and may contain breaking changes. \n\nAs an example, you can execute the following command to run the `0.2.0` release:\n\n```commandline\nuvx --from git+https://github.com/redis/mcp-redis.git@0.2.0 redis-mcp-server --url redis://localhost:6379/0\n```\n\nCheck the release notes for the latest version in the [Releases](https://github.com/redis/mcp-redis/releases) section.\nAdditional examples are provided below.\n\n```sh\n# Run with Redis URI\nuvx --from git+https://github.com/redis/mcp-redis.git redis-mcp-server --url redis://localhost:6379/0\n\n# Run with Redis URI and SSL \nuvx --from git+https://github.com/redis/mcp-redis.git redis-mcp-server --url \"rediss://<USERNAME>:<PASSWORD>@<HOST>:<PORT>?ssl_cert_reqs=required&ssl_ca_certs=<PATH_TO_CERT>\"\n\n# Run with individual parameters\nuvx --from git+https://github.com/redis/mcp-redis.git redis-mcp-server --host localhost --port 6379 --password mypassword\n\n# See all options\nuvx --from git+https://github.com/redis/mcp-redis.git redis-mcp-server --help\n```\n\n### Development Installation\n\nFor development or if you prefer to clone the repository:\n\n```sh\n# Clone the repository\ngit clone https://github.com/redis/mcp-redis.git\ncd mcp-redis\n\n# Install dependencies using uv\nuv venv\nsource .venv/bin/activate\nuv sync\n\n# Run with CLI interface\nuv run redis-mcp-server --help\n\n# Or run the main file directly (uses environment variables)\nuv run src/main.py\n```\n\nOnce you cloned the repository, installed the dependencies and verified you can run the server, you can configure Claude Desktop or any other MCP Client to use this MCP Server running the main file directly (it uses environment variables). This is usually preferred for development.\nThe following example is for Claude Desktop, but the same applies to any other MCP Client.\n\n1. Specify your Redis credentials and TLS configuration\n2. Retrieve your `uv` command full path (e.g. `which uv`)\n3. Edit the `claude_desktop_config.json` configuration file\n   - on a MacOS, at `~/Library/Application\\ Support/Claude/`\n\n```json\n{\n    \"mcpServers\": {\n        \"redis\": {\n            \"command\": \"<full_path_uv_command>\",\n            \"args\": [\n                \"--directory\",\n                \"<your_mcp_server_directory>\",\n                \"run\",\n                \"src/main.py\"\n            ],\n            \"env\": {\n                \"REDIS_HOST\": \"<your_redis_database_hostname>\",\n                \"REDIS_PORT\": \"<your_redis_database_port>\",\n                \"REDIS_PWD\": \"<your_redis_database_password>\",\n                \"REDIS_SSL\": True|False,\n                \"REDIS_CA_PATH\": \"<your_redis_ca_path>\",\n                \"REDIS_CLUSTER_MODE\": True|False\n            }\n        }\n    }\n}\n```\n\nYou can troubleshoot problems by tailing the log file.\n\n```commandline\ntail -f ~/Library/Logs/Claude/mcp-server-redis.log\n```\n\n### With Docker\n\nYou can use a dockerized deployment of this server. You can either build your own image or use the official [Redis MCP Docker](https://hub.docker.com/r/mcp/redis) image.\n\nIf you'd like to build your own image, the Redis MCP Server provides a Dockerfile. Build this server's image with:\n\n```commandline\ndocker build -t mcp-redis .\n```\n\nFinally, configure the client to create the container at start-up. An example for Claude Desktop is provided below. Edit the `claude_desktop_config.json` and add:\n\n```json\n{\n  \"mcpServers\": {\n    \"redis\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\",\n                \"--rm\",\n                \"--name\",\n                \"redis-mcp-server\",\n                \"-i\",\n                \"-e\", \"REDIS_HOST=<redis_hostname>\",\n                \"-e\", \"REDIS_PORT=<redis_port>\",\n                \"-e\", \"REDIS_USERNAME=<redis_username>\",\n                \"-e\", \"REDIS_PWD=<redis_password>\",\n                \"mcp-redis\"]\n    }\n  }\n}\n```\n\nTo use the official [Redis MCP Docker](https://hub.docker.com/r/mcp/redis) image, just replace your image name (`mcp-redis` in the example above) with `mcp/redis`.\n\n## Configuration\n\nThe Redis MCP Server can be configured in two ways: via command line arguments or via environment variables.\nThe precedence is: command line arguments > environment variables > default values.\n\n### Redis ACL\n\nYou can configure Redis ACL to restrict the access to the Redis database. For example, to create a read-only user:\n\n```\n127.0.0.1:6379> ACL SETUSER readonlyuser on >mypassword ~* +@read -@write\n```\n\nConfigure the user via command line arguments or environment variables.\n\n### Configuration via command line arguments\n\nWhen using the CLI interface, you can configure the server with command line arguments:\n\n```sh\n# Basic Redis connection\nuvx --from redis-mcp-server@latest redis-mcp-server \\\n  --host localhost \\\n  --port 6379 \\\n  --password mypassword\n\n# Using Redis URI (simpler)\nuvx --from redis-mcp-server@latest redis-mcp-server \\\n  --url redis://user:pass@localhost:6379/0\n\n# SSL connection\nuvx --from redis-mcp-server@latest redis-mcp-server \\\n  --url rediss://user:pass@redis.example.com:6379/0\n\n# See all available options\nuvx --from redis-mcp-server@latest redis-mcp-server --help\n```\n\n**Available CLI Options:**\n- `--url` - Redis connection URI (redis://user:pass@host:port/db)\n- `--host` - Redis hostname (default: 127.0.0.1)\n- `--port` - Redis port (default: 6379)\n- `--db` - Redis database number (default: 0)\n- `--username` - Redis username\n- `--password` - Redis password\n- `--ssl` - Enable SSL connection\n- `--ssl-ca-path` - Path to CA certificate file\n- `--ssl-keyfile` - Path to SSL key file\n- `--ssl-certfile` - Path to SSL certificate file\n- `--ssl-cert-reqs` - SSL certificate requirements (default: required)\n- `--ssl-ca-certs` - Path to CA certificates file\n- `--cluster-mode` - Enable Redis cluster mode\n\n### Configuration via Environment Variables\n\nIf desired, you can use environment variables. Defaults are provided for all variables.\n\n| Name                 | Description                                               | Default Value |\n|----------------------|-----------------------------------------------------------|---------------|\n| `REDIS_HOST`         | Redis IP or hostname                                      | `\"127.0.0.1\"` |\n| `REDIS_PORT`         | Redis port                                                | `6379`        |\n| `REDIS_DB`           | Database                                                  | 0             |\n| `REDIS_USERNAME`     | Default database username                                 | `\"default\"`   |\n| `REDIS_PWD`          | Default database password                                 | \"\"            |\n| `REDIS_SSL`          | Enables or disables SSL/TLS                               | `False`       |\n| `REDIS_CA_PATH`      | CA certificate for verifying server                       | None          |\n| `REDIS_SSL_KEYFILE`  | Client's private key file for client authentication       | None          |\n| `REDIS_SSL_CERTFILE` | Client's certificate file for client authentication       | None          |\n| `REDIS_CERT_REQS`    | Whether the client should verify the server's certificate | `\"required\"`  |\n| `REDIS_CA_CERTS`     | Path to the trusted CA certificates file                  | None          |\n| `REDIS_CLUSTER_MODE` | Enable Redis Cluster mode                                 | `False`       |\n\n\nThere are several ways to set environment variables:\n\n1. **Using a `.env` File**:  \nPlace a `.env` file in your project directory with key-value pairs for each environment variable. Tools like `python-dotenv`, `pipenv`, and `uv` can automatically load these variables when running your application. This is a convenient and secure way to manage configuration, as it keeps sensitive data out of your shell history and version control (if `.env` is in `.gitignore`).\nFor example, create a `.env` file with the following content from the `.env.example` file provided in the repository:\n\n```bash\ncp .env.example .env\n```\n\nThen edit the `.env` file to set your Redis configuration:\n\nOR,\n\n2. **Setting Variables in the Shell**:  \nYou can export environment variables directly in your shell before running your application. For example:\n\n```sh\nexport REDIS_HOST=your_redis_host\nexport REDIS_PORT=6379\n# Other variables will be set similarly...\n```\n\nThis method is useful for temporary overrides or quick testing.\n\n\n## Integrations\n\nIntegrating this MCP Server to development frameworks like OpenAI Agents SDK, or with tools like Claude Desktop, VS Code, or Augment is described in the following sections.\n\n### OpenAI Agents SDK\n\nIntegrate this MCP Server with the OpenAI Agents SDK. Read the [documents](https://openai.github.io/openai-agents-python/mcp/) to learn more about the integration of the SDK with MCP.\n\nInstall the Python SDK.\n\n```commandline\npip install openai-agents\n```\n\nConfigure the OpenAI token:\n\n```commandline\nexport OPENAI_API_KEY=\"<openai_token>\"\n```\n\nAnd run the [application](./examples/redis_assistant.py).\n\n```commandline\npython3.13 redis_assistant.py\n```\n\nYou can troubleshoot your agent workflows using the [OpenAI dashboard](https://platform.openai.com/traces/).\n\n### Augment\n\nThe preferred way of configuring the Redis MCP Server in Augment is to use the [Easy MCP](https://docs.augmentcode.com/setup-augment/mcp#redis) feature.\n\nYou can also configure the Redis MCP Server in Augment manually by importing the server via JSON:\n\n```json\n{\n  \"mcpServers\": {\n    \"Redis MCP Server\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--from\",\n        \"redis-mcp-server@latest\",\n        \"redis-mcp-server\",\n        \"--url\",\n        \"redis://localhost:6379/0\"\n      ]\n    }\n  }\n}\n```\n\n### Claude Desktop\n\nThe simplest way to configure MCP clients is using `uvx`. Add the following JSON to your `claude_desktop_config.json`, remember to provide the full path to `uvx`.\n\n```json\n{\n  \"mcpServers\": {\n    \"redis-mcp-server\": {\n        \"type\": \"stdio\",\n        \"command\": \"/Users/mortensi/.local/bin/uvx\",\n        \"args\": [\n            \"--from\", \"redis-mcp-server@latest\",\n            \"redis-mcp-server\",\n            \"--url\", \"redis://localhost:6379/0\"\n        ]\n    }\n  }\n}\n```\n\nIf you'd like to test the [Redis MCP Server](https://smithery.ai/server/@redis/mcp-redis) via Smithery, you can configure Claude Desktop automatically:\n\n```bash\nnpx -y @smithery/cli install @redis/mcp-redis --client claude\n```\n\nFollow the prompt and provide the details to configure the server and connect to Redis (e.g. using a Redis Cloud database).\nThe procedure will create the proper configuration in the `claude_desktop_config.json` configuration file.\n\n### VS Code with GitHub Copilot\n\nTo use the Redis MCP Server with VS Code, you must nable the [agent mode](https://code.visualstudio.com/docs/copilot/chat/chat-agent-mode) tools. Add the following to your `settings.json`:\n\n```json\n{\n  \"chat.agent.enabled\": true\n}\n```\n\nYou can start the GitHub desired version of the Redis MCP server using `uvx` by adding the following JSON to your `settings.json`:\n\n```json\n\"mcp\": {\n    \"servers\": {\n        \"Redis MCP Server\": {\n        \"type\": \"stdio\",\n        \"command\": \"uvx\", \n        \"args\": [\n            \"--from\", \"redis-mcp-server@latest\",\n            \"redis-mcp-server\",\n            \"--url\", \"redis://localhost:6379/0\"\n        ]\n        },\n    }\n},\n```\n\nAlternatively, you can start the server using `uv` and configure your `mcp.json` or `settings.json`. This is usually desired for development.\n\n```json\n{\n  \"servers\": {\n    \"redis\": {\n      \"type\": \"stdio\",\n      \"command\": \"<full_path_uv_command>\",\n      \"args\": [\n        \"--directory\",\n        \"<your_mcp_server_directory>\",\n        \"run\",\n        \"src/main.py\"\n      ],\n      \"env\": {\n        \"REDIS_HOST\": \"<your_redis_database_hostname>\",\n        \"REDIS_PORT\": \"<your_redis_database_port>\",\n        \"REDIS_USERNAME\": \"<your_redis_database_username>\",\n        \"REDIS_PWD\": \"<your_redis_database_password>\",\n      }\n    }\n  }\n}\n```\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"redis\": {\n        \"type\": \"stdio\",\n        \"command\": \"<full_path_uv_command>\",\n        \"args\": [\n          \"--directory\",\n          \"<your_mcp_server_directory>\",\n          \"run\",\n          \"src/main.py\"\n        ],\n        \"env\": {\n          \"REDIS_HOST\": \"<your_redis_database_hostname>\",\n          \"REDIS_PORT\": \"<your_redis_database_port>\",\n          \"REDIS_USERNAME\": \"<your_redis_database_username>\",\n          \"REDIS_PWD\": \"<your_redis_database_password>\",\n        }\n      }\n    }\n  }\n}\n```\n\nFor more information, see the [VS Code documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).\n\n\n## Testing\n\nYou can use the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) for visual debugging of this MCP Server.\n\n```sh\nnpx @modelcontextprotocol/inspector uv run src/main.py\n```\n\n## Example Use Cases\n- **AI Assistants**: Enable LLMs to fetch, store, and process data in Redis.\n- **Chatbots & Virtual Agents**: Retrieve session data, manage queues, and personalize responses.\n- **Data Search & Analytics**: Query Redis for **real-time insights and fast lookups**.\n- **Event Processing**: Manage event streams with **Redis Streams**.\n\n## Contributing\n1. Fork the repo\n2. Create a new branch (`feature-branch`)\n3. Commit your changes\n4. Push to your branch and submit a PR!\n\n## License\nThis project is licensed under the **MIT License**.\n\n## Badges\n\n<a href=\"https://glama.ai/mcp/servers/@redis/mcp-redis\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@redis/mcp-redis/badge\" alt=\"Redis Server MCP server\" />\n</a>\n\n## Contact\nFor questions or support, reach out via [GitHub Issues](https://github.com/redis/mcp-redis/issues).\n",
+  "category": "AI Tools",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "redis-mcp-server-stdio-0-2-0": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "git+https://github.com/redis/mcp-redis.git@0.2.0",
+          "redis-mcp-server",
+          "--url",
+          "redis://localhost:6379/0"
+        ],
+        "env": {}
+      },
+      "redis-mcp-server-stdio-url": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "git+https://github.com/redis/mcp-redis.git",
+          "redis-mcp-server",
+          "--url",
+          "redis://localhost:6379/0"
+        ],
+        "env": {}
+      },
+      "redis-mcp-server-stdio-ssl": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "git+https://github.com/redis/mcp-redis.git",
+          "redis-mcp-server",
+          "--url",
+          "rediss://<USERNAME>:<PASSWORD>@<HOST>:<PORT>?ssl_cert_reqs=required&ssl_ca_certs=<PATH_TO_CERT>"
+        ],
+        "env": {}
+      },
+      "redis-mcp-server-stdio-params": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "git+https://github.com/redis/mcp-redis.git",
+          "redis-mcp-server",
+          "--host",
+          "localhost",
+          "--port",
+          "6379",
+          "--password",
+          "mypassword"
+        ],
+        "env": {}
+      },
+      "redis-mcp-server-configured": {
+        "command": "uv",
+        "args": ["--directory", "<your_mcp_server_directory>", "run", "src/main.py"],
+        "env": {
+          "REDIS_HOST": "<your_redis_database_hostname>",
+          "REDIS_PORT": "<your_redis_database_port>",
+          "REDIS_PWD": "<your_redis_database_password>",
+          "REDIS_SSL": "True|False",
+          "REDIS_CA_PATH": "<your_redis_ca_path>",
+          "REDIS_CLUSTER_MODE": "True|False"
+        }
+      },
+      "mcp-redis-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "--name", "redis-mcp-server", "-i", "-e", "REDIS_HOST=<redis_hostname>"],
+        "env": {
+          "REDIS_HOST": "<redis_hostname>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "redis",
+    "repo": "mcp-redis",
+    "url": "https://github.com/redis/mcp-redis",
+    "name": "redis__mcp-redis",
+    "path": null,
+    "stars": 231,
+    "contributors": 16,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d892956f1e5fc85195d267062692a76d79b5314e"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.976Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "redis",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "numpy",
+      "importance": 8
+    },
+    {
+      "name": "click",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"redis-mcp-server\"\nversion = \"0.3.0\"\ndescription = \"Redis MCP Server - Model Context Protocol server for Redis\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = \"MIT\"\nauthors = [\n    {name = \"Redis\", email = \"oss@redis.com\"}\n]\nkeywords = [\"redis\", \"mcp\", \"model-context-protocol\", \"ai\", \"llm\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Programming Language :: Python :: 3.13\",\n    \"Topic :: Database\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n]\ndependencies = [\n    \"mcp[cli]>=1.9.4\",\n    \"redis>=6.0.0\",\n    \"dotenv>=0.9.9\",\n    \"numpy>=2.2.4\",\n    \"click>=8.0.0\",\n]\n\n[project.scripts]\nredis-mcp-server = \"src.main:cli\"\n\n[project.urls]\nHomepage = \"https://github.com/redis/mcp-redis\"\nRepository = \"https://github.com/redis/mcp-redis\"\nIssues = \"https://github.com/redis/mcp-redis/issues\"\n\n[build-system]\nrequires = [\"uv_build>=0.8.3,<0.9.0\"]\nbuild-backend = \"uv_build\"\n\n[tool.uv.build-backend]\nmodule-name = \"src\"\nmodule-root = \".\"\n\n# Security configuration for bandit\n[tool.bandit]\nexclude_dirs = [\"tests\", \"build\", \"dist\"]\nskips = [\"B101\", \"B601\"]  # Skip assert_used and shell_injection_process_args if needed\n\n[tool.bandit.assert_used]\nskips = [\"*_test.py\", \"*/test_*.py\"]\n\n\n\n[dependency-groups]\ndev = [\n    \"bandit[toml]>=1.8.6\",\n    \"black>=25.1.0\",\n    \"coverage>=7.10.1\",\n    \"mypy>=1.17.0\",\n    \"pytest>=8.4.1\",\n    \"pytest-asyncio>=1.1.0\",\n    \"pytest-cov>=6.2.1\",\n    \"pytest-mock>=3.12.0\",\n    \"ruff>=0.12.5\",\n    \"safety>=3.6.0\",\n    \"twine>=4.0\",\n]\n\ntest = [\n    \"pytest>=8.4.1\",\n    \"pytest-asyncio>=1.1.0\",\n    \"pytest-cov>=6.2.1\",\n    \"pytest-mock>=3.12.0\",\n    \"coverage>=7.10.1\",\n]\n\n# Testing configuration\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = [\"test_*.py\"]\npython_classes = [\"Test*\"]\npython_functions = [\"test_*\"]\naddopts = [\n    \"--strict-markers\",\n    \"--strict-config\",\n    \"--verbose\",\n    \"--cov=src\",\n    \"--cov-report=html\",\n    \"--cov-report=term\",\n    \"--cov-report=xml\",\n    \"--cov-fail-under=80\",\n]\nmarkers = [\n    \"unit: marks tests as unit tests\",\n    \"integration: marks tests as integration tests\",\n    \"slow: marks tests as slow running\",\n]\nasyncio_mode = \"auto\"\nfilterwarnings = [\n    \"ignore::DeprecationWarning\",\n    \"ignore::PendingDeprecationWarning\",\n]\n\n[tool.coverage.run]\nsource = [\"src\"]\nomit = [\n    \"*/tests/*\",\n    \"*/test_*.py\",\n    \"*/__pycache__/*\",\n    \"*/venv/*\",\n    \"*/.venv/*\",\n]\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"if self.debug:\",\n    \"if settings.DEBUG\",\n    \"raise AssertionError\",\n    \"raise NotImplementedError\",\n    \"if 0:\",\n    \"if __name__ == .__main__.:\",\n    \"class .*\\\\bProtocol\\\\):\",\n    \"@(abc\\\\.)?abstractmethod\",\n]\n\n\n"
+}

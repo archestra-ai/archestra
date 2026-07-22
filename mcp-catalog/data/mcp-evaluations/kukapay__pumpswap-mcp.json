@@ -1,0 +1,131 @@
+{
+  "name": "kukapay__pumpswap-mcp",
+  "display_name": "pumpswap-mcp",
+  "description": "An MCP server that enables AI agents to interact with PumpSwap for real-time token swaps and automated on-chain trading.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "${__dirname}/main.py"],
+    "env": {
+      "HTTPS_RPC_ENDPOINT": "${user_config.https_rpc_endpoint}",
+      "BUY_SLIPPAGE": "${user_config.buy_slippage}",
+      "SELL_SLIPPAGE": "${user_config.sell_slippage}",
+      "SWAP_PRIORITY_FEE": "${user_config.swap_priority_fee}",
+      "PRIVATE_KEY": "${user_config.private_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "https_rpc_endpoint": {
+      "type": "string",
+      "title": "Solana RPC Endpoint URL",
+      "description": "Solana RPC endpoint URL",
+      "default": "https://api.mainnet-beta.solana.com",
+      "required": false,
+      "sensitive": false
+    },
+    "buy_slippage": {
+      "type": "number",
+      "title": "Buy Slippage Tolerance",
+      "description": "Slippage tolerance for buy transactions (e.g., 0.3 for 30%)",
+      "default": 0.3,
+      "required": false,
+      "sensitive": false,
+      "min": 0,
+      "max": 1
+    },
+    "sell_slippage": {
+      "type": "number",
+      "title": "Sell Slippage Tolerance",
+      "description": "Slippage tolerance for sell transactions (e.g., 0.1 for 10%)",
+      "default": 0.1,
+      "required": false,
+      "sensitive": false,
+      "min": 0,
+      "max": 1
+    },
+    "swap_priority_fee": {
+      "type": "number",
+      "title": "Swap Priority Fee (lamports)",
+      "description": "Priority fee for transactions (in lamports)",
+      "default": 1500000,
+      "required": false,
+      "sensitive": false,
+      "min": 0
+    },
+    "private_key": {
+      "type": "string",
+      "title": "Solana Private Key",
+      "description": "Your Solana private key for transaction signing",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# PumpSwap MCP Server\n\nAn MCP server that enables AI agents to interact with [PumpSwap](https://swap.pump.fun/) for real-time token swaps and automated on-chain trading.\n\n![License](https://img.shields.io/badge/license-MIT-green)\n![Python](https://img.shields.io/badge/python-3.10%2B-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n\n## Features\n\n- **Buy Tokens**: Purchase tokens using SOL with customizable slippage and priority fees.\n- **Sell Tokens**: Sell tokens for SOL with configurable parameters.\n- **Token Price Query**: Retrieve current token prices in SOL.\n- **Pool Data Retrieval**: Fetch and display detailed pool information for a given token mint.\n\n## Prerequisites\n\n- Python 3.13 or higher\n- [uv](https://github.com/astral-sh/uv) for dependency management and script execution\n- Solana RPC endpoint (e.g., `https://api.mainnet-beta.solana.com`)\n- A valid Solana private key for transaction signing\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/pumpswap-mcp.git\n   cd pumpswap-mcp\n   ```\n\n2. **Install uv**:\n   If `uv` is not installed, follow the official [uv installation guide](https://github.com/astral-sh/uv#installation). For example:\n   ```bash\n   curl -LsSf https://astral.sh/uv/install.sh | sh\n   ```\n\n3. **Set Up Dependencies**:\n   Use `uv` to install dependencies:\n   ```bash\n   uv sync\n   ```\n\n4. **Configure Environment Variables**:\n   Create a `.env.private` filein the project root with the following variables:\n   ```plaintext\n   HTTPS_RPC_ENDPOINT=https://api.mainnet-beta.solana.com\n   BUY_SLIPPAGE=0.3\n   SELL_SLIPPAGE=0.1\n   SWAP_PRIORITY_FEE=1500000\n   PRIVATE_KEY=your-solana-private-key\n   ```\n\n   Replace `your-solana-private-key` with your actual Solana private key. \n   \n## Usage\n\n### Run the MCP Server\n   Use `uv` to run the server:\n   ```bash\n   uv run main.py\n   ```\n\n   The server will listen for MCP commands and expose the following tools:\n   - `buy_token(mint: str, sol_amount: float, user_private_key: str)`: Buy tokens with SOL.\n   - `sell_token(mint: str, token_amount: float, user_private_key: str)`: Sell tokens for SOL.\n   - `get_token_price(mint: str)`: Fetch the current token price in SOL.\n   - `get_pool_data(mint: str)`: Retrieve formatted pool data for a token.\n\n### Buy Tokens\n\n**Prompt**:\n```\nBuy 0.1 SOL worth of tokens with mint address FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump.\n```\n\nThis triggers `buy_token(\"FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump\", 0.1)`.\n\n**Expected Output**:\n```\nBuy successful for 0.1 SOL of token FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump\nTransaction ID: <transaction-id>\nAmount: <token-amount>\nToken Price (SOL): <price>\n```\n\n### Sell Tokens\n**Prompt**:\n```\nSell 1000 tokens of FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump.\n```\n\nThis triggers `sell_token(\"FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump\", 1000)`.\n\n**Expected Output**:\n```\nSell successful for 1000 tokens of FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump\nTransaction ID: <transaction-id>\nAmount: <sol-amount>\nToken Price (SOL): <price>\n```\n\n### Get Token Price\n**Prompt**:\n```\nWhat is the current price of the token with mint FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump?\n```\nThis triggers `get_token_price(\"FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump\")`.\n\n**Expected Output**:\n```\nThe current price of token FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump is <price> SOL.\n```\n\n### Get Pool Data\n**Prompt**:\n```\nShow me the pool data for the token with mint FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump.\n```\nThis triggers `get_pool_data(\"FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump\")`.\n\n**Expected Output**:\n```\nPumpPool Data for mint FC988ZAKRPc26wefDAxcYWB8kgbJTH4Tg3qDvf7xpump:\nPool Bump: <bump>\nIndex: <index>\nCreator: <creator-pubkey>\nBase Mint: <base-mint>\nQuote Mint: <quote-mint>\nLP Mint: <lp-mint>\nPool Base Token Account: <base-account>\nPool Quote Token Account: <quote-account>\nLP Supply: <supply>\n```\n\n## Environment Variables\n\nThe server uses the following environment variables, loaded from `.env.private`:\n\n| Variable              | Description                                      | Default Value                       |\n|-----------------------|--------------------------------------------------|-------------------------------------|\n| `HTTPS_RPC_ENDPOINT`  | Solana RPC endpoint URL                          | https://api.mainnet-beta.solana.com |\n| `BUY_SLIPPAGE`        | Slippage tolerance for buy transactions          | 0.3 (30%)                           |\n| `SELL_SLIPPAGE`       | Slippage tolerance for sell transactions         | 0.1 (10%)                           |\n| `SWAP_PRIORITY_FEE`   | Priority fee for transactions (in lamports)      | 1500000                             |\n| `PRIVATE_KEY`         | Solana private key for signing transactions      | None (required)                     |\n\nEnsure `PRIVATE_KEY` is set, as the server will raise an error if it's missing.\n\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n## Disclaimer\n\nThis software interacts with decentralized finance (DeFi) protocols and handles sensitive data like private keys. Use it at your own risk. Ensure your `.env.private` file is secure and never share your private key. The authors are not responsible for any financial losses or security issues arising from the use of this software.\n\n",
+  "category": "Finance",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pumpswap-mcp-server": {
+        "command": "uv",
+        "args": ["run", "main.py"],
+        "env": {
+          "HTTPS_RPC_ENDPOINT": "https://api.mainnet-beta.solana.com",
+          "BUY_SLIPPAGE": "0.3",
+          "SELL_SLIPPAGE": "0.1",
+          "SWAP_PRIORITY_FEE": "1500000",
+          "PRIVATE_KEY": "your-solana-private-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "pumpswap-mcp",
+    "url": "https://github.com/kukapay/pumpswap-mcp",
+    "name": "pumpswap-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "70be1bd029ec161bfc188fb43087199b34cf408f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:14.398Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pumpswap-sdk",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"pumpswap-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that enables AI agents to interact with PumpSwap for real-time token swaps and automated on-chain trading.\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"mcp[cli]>=1.7.1\",\n    \"pumpswap-sdk>=0.1.3\",\n]\n"
+}

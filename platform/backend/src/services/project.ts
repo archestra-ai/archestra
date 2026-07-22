@@ -551,10 +551,19 @@ class ProjectService {
     organizationId: string;
     userId: string;
   }): Promise<ProjectConversationItem[]> {
-    // Chats are NOT part of admin oversight — this stays share/owner-only, so a
-    // `project:admin` viewing a foreign project cannot list (or open) its chats.
+    // Reading another member's chats requires `project:read-all` — uniformly,
+    // including in a project the caller owns. Without it, callers see only the
+    // chats they authored. `project:admin` does NOT grant this (chats are not
+    // part of admin oversight), so a `project:admin` viewing a foreign project
+    // still cannot list its chats (requireReadable already excludes them).
     const project = await this.requireReadable(params);
-    const rows = await ProjectModel.listConversations(project.id);
+    const canReadAllChats = await this.callerCanReadAllChats(params);
+    // Without `project:read-all`, scope the query to the caller's own chats in
+    // SQL rather than fetching every project chat and filtering in memory.
+    const rows = await ProjectModel.listConversations(
+      project.id,
+      canReadAllChats ? undefined : params.userId,
+    );
     return rows.map((row) => ({
       ...row,
       readOnly: row.authorUserId !== params.userId,
@@ -678,6 +687,18 @@ class ProjectService {
       params.organizationId,
       "project",
       "admin",
+    );
+  }
+
+  private async callerCanReadAllChats(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<boolean> {
+    return userHasPermission(
+      params.userId,
+      params.organizationId,
+      "project",
+      "read-all",
     );
   }
 }

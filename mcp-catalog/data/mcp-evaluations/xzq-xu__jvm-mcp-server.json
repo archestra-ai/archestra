@@ -1,0 +1,126 @@
+{
+  "name": "xzq-xu__jvm-mcp-server",
+  "display_name": "jvm-mcp-server",
+  "description": "This is an implementation project of a JVM-based MCP (Model Context Protocol) server. The project aims to provide a standardized MCP server implementation for the JVM platform, enabling AI models to better interact with the Java ecosystem.",
+  "author": {
+    "name": "xzq-xu"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "jvm-mcp-server"],
+    "env": {
+      "ARTHAS_SSH_HOST": "${user_config.arthas_ssh_host}",
+      "ARTHAS_SSH_PORT": "${user_config.arthas_ssh_port}",
+      "ARTHAS_SSH_PASSWORD": "${user_config.arthas_ssh_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "arthas_ssh_host": {
+      "type": "string",
+      "title": "Arthas SSH Host",
+      "description": "SSH host for remote Java process monitoring (e.g., user@remote-host)",
+      "required": false
+    },
+    "arthas_ssh_port": {
+      "type": "number",
+      "title": "Arthas SSH Port",
+      "description": "SSH port for remote connection (default: 22)",
+      "default": 22,
+      "required": false
+    },
+    "arthas_ssh_password": {
+      "type": "string",
+      "title": "Arthas SSH Password",
+      "description": "Password for SSH authentication (if using password authentication)",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# JVM MCP Server\n\n<p align=\"center\">\n  <img src=\"https://img.shields.io/badge/Python-3.6+-blue.svg\" alt=\"Python Version\">\n  <img src=\"https://img.shields.io/badge/JDK-8+-green.svg\" alt=\"JDK Version\">\n  <img src=\"https://img.shields.io/badge/License-MIT-yellow.svg\" alt=\"License\">\n</p>\n\n[English](README.md) | [中文](README_zh.md)\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/xzq-xu-jvm-mcp-server-badge.png)](https://mseep.ai/app/xzq-xu-jvm-mcp-server)\n\n\nA lightweight JVM monitoring and diagnostic MCP (Multi-Agent Communication Protocol) server implementation based on native JDK tools. Provides AI agents with powerful capabilities to monitor and analyze Java applications without requiring third-party tools like Arthas.\n\n## Features\n\n- **Zero Dependencies**: Uses only native JDK tools (jps, jstack, jmap, etc.)\n- **Lightweight**: Minimal resource consumption compared to agent-based solutions\n- **High Compatibility**: Works with all Java versions and platforms\n- **Non-Intrusive**: No modifications to target applications required\n- **Secure**: Uses only JDK certified tools and commands\n- **Remote Monitoring**: Support for both local and remote JVM monitoring via SSH\n\n## Core Capabilities\n\n### Basic Monitoring\n- Java process listing and identification\n- JVM basic information retrieval\n- Memory usage monitoring\n- Thread information and stack trace analysis\n- Class loading statistics\n- Detailed class structure information\n\n### Advanced Features\n- Method call path analysis\n- Class decompilation\n- Method search and inspection\n- Method invocation monitoring\n- Logger level management\n- System resource dashboard\n\n## System Requirements\n\n- Python 3.6+\n- JDK 8+\n- Linux/Unix/Windows OS\n- SSH access (for remote monitoring)\n\n## Installation\n\n### Using uv (Recommended)\n\n```bash\n# Install uv if not already installed\ncurl -LsSf https://astral.sh/uv/install.sh | sh  # Linux/macOS\n# or\npowershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"  # Windows\n\n# Install the package\nuv pip install jvm-mcp-server\n```\n\n### Using pip\n\n```bash\npip install jvm-mcp-server\n```\n\n### From Source\n\n```bash\n# Clone the repository\ngit clone https://github.com/your-repo/jvm-mcp-server.git\ncd jvm-mcp-server\n\n# Using uv (recommended)\nuv venv  # Create virtual environment\nuv sync  # Install dependencies\n\n# Or install in development mode\nuv pip install -e .\n```\n\n## Quick Start\n\n### Starting the Server\n\n#### Using uv (Recommended)\n\n```bash\n# Local mode\nuv run jvm-mcp-server\n\n# Using environment variables file for remote mode\nuv run --env-file .env jvm-mcp-server\n\n# In specific directory\nuv --directory /path/to/project run --env-file .env jvm-mcp-server\n```\n\n#### Using uvx\n\n```bash\n# Local mode\nuvx run jvm-mcp-server\n\n# With environment variables\nuvx run --env-file .env jvm-mcp-server\n```\n\n#### Using Python directly\n\n```python\nfrom jvm_mcp_server import JvmMcpServer\n\n# Local mode\nserver = JvmMcpServer()\nserver.run()\n\n# Remote mode (via environment variables)\n# Set SSH_HOST, SSH_PORT, SSH_USER, SSH_PASSWORD or SSH_KEY\nimport os\nos.environ['SSH_HOST'] = 'user@remote-host'\nos.environ['SSH_PORT'] = '22'\nserver = JvmMcpServer()\nserver.run()\n```\n\n### Using with MCP Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"jvm-mcp-server\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/path/to/jvm-mcp-server\",\n        \"run\",\n        \"--env-file\",\n        \"/path/to/jvm-mcp-server/.env\",\n        \"jvm-mcp-server\"\n      ]\n    }\n  }\n}\n```\n\n## Available Tools\n\nJVM-MCP-Server provides a comprehensive set of tools for JVM monitoring and diagnostics:\n\n- `list_java_processes`: List all Java processes\n- `get_thread_info`: Get thread information for a specific process\n- `get_jvm_info`: Get JVM basic information\n- `get_memory_info`: Get memory usage information\n- `get_stack_trace`: Get thread stack trace information\n- `get_class_info`: Get detailed class information including structure\n- `get_stack_trace_by_method`: Get method call path\n- `decompile_class`: Decompile class source code\n- `search_method`: Search for methods in classes\n- `watch_method`: Monitor method invocations\n- `get_logger_info`: Get logger information\n- `set_logger_level`: Set logger levels\n- `get_dashboard`: Get system resource dashboard\n- `get_jcmd_output`: Execute JDK jcmd commands\n- `get_jstat_output`: Execute JDK jstat commands\n\nFor detailed documentation on each tool, see [Available Tools](./doc/available_tools.md).\n\n## Architecture\n\nJVM-MCP-Server is built on a modular architecture:\n\n1. **Command Layer**: Wraps JDK native commands\n2. **Executor Layer**: Handles local and remote command execution\n3. **Formatter Layer**: Processes and formats command output\n4. **MCP Interface**: Exposes functionality through FastMCP protocol\n\n### Key Components\n\n- `BaseCommand`: Abstract base class for all commands\n- `CommandExecutor`: Interface for command execution (local and remote)\n- `OutputFormatter`: Interface for formatting command output\n- `JvmMcpServer`: Main server class that registers all tools\n\n## Development Status\n\nThe project is in active development. See [Native_TODO.md](Native_TODO.md) for current progress.\n\n### Completed\n- Core architecture and command framework\n- Basic commands implementation (jps, jstack, jmap, jinfo, jcmd, jstat)\n- Class information retrieval system\n- MCP tool parameter type compatibility fixes\n\n### In Progress\n- Caching mechanism\n- Method tracing\n- Performance monitoring\n- Error handling improvements\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## Acknowledgements\n\n- JDK tools documentation\n- FastMCP protocol specification\n- Contributors and testers ",
+  "category": "Monitoring",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "jvm-mcp-server": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "/path/to/jvm-mcp-server",
+          "run",
+          "--env-file",
+          "/path/to/jvm-mcp-server/.env",
+          "jvm-mcp-server"
+        ],
+        "env": {}
+      },
+      "jvm-mcp-server-no-env": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/jvm-mcp-server", "run", "jvm-mcp-server"],
+        "env": {}
+      },
+      "jvm-mcp-server-cli-basic": {
+        "command": "uv",
+        "args": ["run", "jvm-mcp-server"],
+        "env": {}
+      },
+      "jvm-mcp-server-cli-with-env-file": {
+        "command": "uv",
+        "args": ["run", "--env-file", ".env", "jvm-mcp-server"],
+        "env": {}
+      },
+      "jvm-mcp-server-cli-generic-directory-env-file": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/project", "run", "--env-file", ".env", "jvm-mcp-server"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "xzq-xu",
+    "repo": "jvm-mcp-server",
+    "url": "https://github.com/xzq-xu/jvm-mcp-server",
+    "name": "xzq-xu__jvm-mcp-server",
+    "path": null,
+    "stars": 67,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "6ea176f64f0e92893bb23778108ae96cd1b414c0"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:44.260Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "paramiko",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"jvm-mcp-server\"\nversion = \"0.1.0\"\nauthors = [\n    { name=\"xzq\", email=\"xzq@example.com\" },\n]\ndescription = \"A JVM monitoring and control server\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n]\ndependencies = [\n    \"fastapi>=0.68.0\",\n    \"uvicorn>=0.15.0\",\n    \"pydantic>=1.8.2\",\n    \"mcp[cli]\",\n    \"paramiko>=3.5.1\",\n]\n\n[project.optional-dependencies]\ntest = [\n    \"pytest>=7.0.0\",\n    \"pytest-cov>=4.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n]\ndev = [\n    \"autopep8>=2.0.0\",\n    \"flake8>=6.0.0\",\n]\n\n[tool.pytest.ini_options]\ntestpaths = [\"src/jvm_mcp_server/tests\"]\npython_files = [\"test_*.py\"]\naddopts = \"-v --cov=jvm_mcp_server --cov-report=term-missing\"\n\n[tool.coverage.run]\nsource = [\"src/jvm_mcp_server\"]\nomit = [\"src/jvm_mcp_server/tests/*\"]\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"if self.debug:\",\n    \"raise NotImplementedError\",\n    \"if __name__ == .__main__.:\",\n    \"pass\",\n    \"raise ImportError\",\n]\n\n[project.scripts]\njvm-mcp-server = \"jvm_mcp_server.__main__:main\"\n\n[project.urls]\nHomepage = \"https://github.com/xzq-xu/jvm-mcp-server\"\nRepository = \"https://github.com/xzq-xu/jvm-mcp-server.git\"\nIssues = \"https://github.com/xzq-xu/jvm-mcp-server/issues\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/jvm_mcp_server\"]\n\n[tool.hatch.version]\npath = \"src/jvm_mcp_server/__init__.py\"\n\n[tool.autopep8]\n# 基本配置\nmax_line_length = 120  # 最大行长度\nindent_size = 4  # 缩进大小\nignore = [\n    \"E226\",  # 操作符周围缺少空格\n    \"E302\",  # 期望在函数/类之间有两个空行\n    \"E41\",   # 代码缩进使用tab\n]\n\n# 格式化行为\nin-place = true           # 直接修改源文件\nrecursive = true          # 递归处理子目录\naggressive = 3            # 最激进的格式化级别\nverbose = 2              # 显示详细的格式化信息\njobs = 0                 # 使用所有可用CPU核心\nexclude = \".git,.hg,.svn,CVS,.tox,.venv,venv,__pycache__,*.pyc,*.egg-info,*.egg,build,dist\"  # 排除的文件/目录\n\n# 代码风格\nhang_closing = true      # 右括号独占一行\nexperimental = true      # 启用实验性功能\n\n[dependency-groups]\ndev = [\n    \"pytest>=8.4.0\",\n    \"pytest-cov>=6.2.1\",\n]\n"
+}

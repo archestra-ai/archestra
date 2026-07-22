@@ -17,6 +17,7 @@ import {
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
+  ChatOpsThreadContextModel,
   LlmProviderApiKeyModel,
   OrganizationModel,
   TeamModel,
@@ -44,6 +45,7 @@ import {
   extractApprovalRequestsFromSendMessageResult,
   extractMessageFromSendMessageResult,
 } from "../a2a/a2a-helper";
+import { A2AContextManager } from "../a2a/a2a-model-manager";
 import type {
   A2AArchestraApprovalRequest,
   A2AProtocolSendMessageResponse,
@@ -58,6 +60,7 @@ import { chatOpsRunRegistry } from "./chatops-run-registry";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
+  CHATOPS_CONTEXT_COMPACTED_NOTICE,
   CHATOPS_MESSAGE_RETENTION,
   CHATOPS_NO_REPLY_SENTINEL,
   SLACK_DEFAULT_CONNECTION_MODE,
@@ -85,10 +88,19 @@ export class ChatOpsManager {
   private telegramProvider: TelegramProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
+  private readonly statefulA2aManager: A2AManager;
 
   constructor() {
     this.a2aManager = new A2AManager({
       stateless: true,
+    });
+    // Server-side-session providers (Telegram — no platform history API) run
+    // stateful: each thread's messages persist in its A2A context, shared by
+    // every participant. Access control happens in this manager
+    // (validateUserAccess), so the per-actor context ownership check is
+    // skipped via trustedContextAccess.
+    this.statefulA2aManager = new A2AManager({
+      trustedContextAccess: true,
     });
   }
 
@@ -730,9 +742,14 @@ export class ChatOpsManager {
       return { success: false, error: authResult.error };
     }
 
-    // Build context from thread history (includes downloading historical image attachments)
-    const { contextMessages, historyAttachments } =
-      await this.fetchThreadHistory(message, provider);
+    // Build context from thread history (includes downloading historical
+    // image attachments). Server-side-session providers skip the platform
+    // fetch: their history lives in the thread's persistent A2A context and
+    // reaches the model as real prior turns instead of a text block.
+    const serverSideSessions = provider.usesServerSideSessions === true;
+    const { contextMessages, historyAttachments } = serverSideSessions
+      ? { contextMessages: [], historyAttachments: [] }
+      : await this.fetchThreadHistory(message, provider);
 
     // Build the full message with context — use cleanedMessageText so
     // the "AgentName >" prefix is stripped from what the LLM sees
@@ -806,9 +823,25 @@ export class ChatOpsManager {
       ].join("\n");
     }
 
-    let fullMessage = `${systemPrefix}\n\n${cleanedMessageText}`;
-    if (contextMessages.length > 0) {
-      fullMessage = `${systemPrefix}\n\nThe earlier messages in this thread are below — this is your shared history in this conversation, so you DO have access to it and remember it. Use it to answer follow-up questions and references to "earlier", "before", or "what I just asked".\n\nConversation so far:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
+    // Server-side sessions persist every turn in the thread's A2A context, so
+    // the stored turn stays clean — sender attribution only (needed in groups
+    // where several people share the history) — while the situational framing
+    // built above travels as an ephemeral prefix on the executed turn.
+    // Stateless providers keep baking everything into one message.
+    let fullMessage: string;
+    let ephemeralExecutionPrefix: string | undefined;
+    if (serverSideSessions) {
+      const isGroup =
+        conversationType === "groupChat" || conversationType === "channel";
+      fullMessage = isGroup
+        ? `${message.senderName}: ${cleanedMessageText}`
+        : cleanedMessageText;
+      ephemeralExecutionPrefix = systemPrefix;
+    } else {
+      fullMessage = `${systemPrefix}\n\n${cleanedMessageText}`;
+      if (contextMessages.length > 0) {
+        fullMessage = `${systemPrefix}\n\nThe earlier messages in this thread are below — this is your shared history in this conversation, so you DO have access to it and remember it. Use it to answer follow-up questions and references to "earlier", "before", or "what I just asked".\n\nConversation so far:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
+      }
     }
 
     // Tell the model about files that were attached but not delivered (e.g. too
@@ -835,6 +868,7 @@ export class ChatOpsManager {
       },
       provider,
       fullMessage,
+      ephemeralExecutionPrefix,
       sendReply,
       userId: authResult.userId,
     });
@@ -1528,6 +1562,7 @@ export class ChatOpsManager {
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
     fullMessage: string;
+    ephemeralExecutionPrefix?: string;
     sendReply: boolean;
     userId: string;
   }): Promise<ChatOpsProcessingResult> {
@@ -1537,6 +1572,7 @@ export class ChatOpsManager {
       message,
       provider,
       fullMessage,
+      ephemeralExecutionPrefix,
       sendReply,
       userId,
     } = params;
@@ -1561,6 +1597,23 @@ export class ChatOpsManager {
         .catch(() => {});
     }
 
+    // Platforms whose typing indicator expires on its own (Telegram: ~5s)
+    // need a heartbeat, or long agent runs look stalled. Cleared in `finally`;
+    // no explicit stop on reply is needed — the indicator drops when the
+    // bot's message arrives.
+    const typingHeartbeat =
+      sendReply && provider.setTypingStatus && provider.typingRefreshIntervalMs
+        ? setInterval(() => {
+            provider
+              .setTypingStatus?.(
+                message.channelId,
+                message.threadId ?? "",
+                message.metadata,
+              )
+              .catch(() => {});
+          }, provider.typingRefreshIntervalMs)
+        : null;
+
     // Register this run so muting the thread can abort it mid-flight, and record
     // the thread's mute marker now: if it changes before we reply, the thread
     // was muted while we were working and the reply must be dropped (see
@@ -1572,8 +1625,25 @@ export class ChatOpsManager {
       channelId: message.channelId,
       threadId: message.threadId ?? message.channelId,
     };
-    const { signal: abortSignal, unregister } =
-      chatOpsRunRegistry.register(threadKey);
+    // A sender's follow-up message supersedes their still-running turn: the
+    // stale reply is dropped and only the follow-up gets answered — with the
+    // earlier message in context. Only for server-side-session providers,
+    // whose pre-execution persistence guarantees the superseded turn stays in
+    // the thread history (stateless providers would lose it entirely).
+    const supersede =
+      provider.usesServerSideSessions === true
+        ? {
+            senderId: message.senderId,
+            sequence:
+              typeof message.metadata?.telegramMessageId === "number"
+                ? message.metadata.telegramMessageId
+                : message.timestamp.getTime(),
+          }
+        : undefined;
+    const { signal: abortSignal, unregister } = chatOpsRunRegistry.register(
+      threadKey,
+      { supersede },
+    );
     const muteMarkerAtStart = await getThreadMuteMarker(threadKey);
 
     try {
@@ -1583,8 +1653,10 @@ export class ChatOpsManager {
         message,
         provider,
         fullMessage,
+        ephemeralExecutionPrefix,
         userId,
         abortSignal,
+        notifyContextCompaction: sendReply,
       };
       let execution: Awaited<ReturnType<ChatOpsManager["executeMessage"]>>;
       try {
@@ -1666,6 +1738,7 @@ export class ChatOpsManager {
 
       return { success: false, error: errorMessage(error) };
     } finally {
+      if (typingHeartbeat) clearInterval(typingHeartbeat);
       unregister();
     }
   }
@@ -1690,10 +1763,11 @@ export class ChatOpsManager {
   }
 
   /**
-   * Silently drop the reply for a run whose thread was muted mid-flight: clear
-   * the lingering "typing…" indicator and report success with no response (same
-   * shape as the agent deliberately staying quiet), so nothing is posted to the
-   * now-muted thread.
+   * Silently drop the reply for a run aborted mid-flight — the thread was
+   * muted, or the run was superseded by the sender's follow-up message: clear
+   * the lingering "typing…" indicator and report success with no response
+   * (same shape as the agent deliberately staying quiet), so nothing is
+   * posted.
    */
   private async suppressMutedReply(params: {
     provider: ChatOpsProvider;
@@ -1712,7 +1786,7 @@ export class ChatOpsManager {
         channelId: threadKey.channelId,
         threadId: threadKey.threadId,
       },
-      "[ChatOps] Thread muted during execution — dropping reply",
+      "[ChatOps] Run aborted (thread muted or superseded by a follow-up) — dropping reply",
     );
     await provider
       .clearTypingStatus?.(message.channelId, message.threadId ?? "")
@@ -2050,9 +2124,13 @@ export class ChatOpsManager {
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
     fullMessage: string;
+    /** Per-turn framing executed with the message but not persisted (server-side sessions). */
+    ephemeralExecutionPrefix?: string;
     userId: string;
     /** Aborts the agent run when the thread is muted mid-flight. */
     abortSignal?: AbortSignal;
+    /** Post a chat notice when loading history triggers a compaction. */
+    notifyContextCompaction?: boolean;
   }): Promise<{
     result: A2AProtocolSendMessageResponse;
     responseAgent: { id: string; name: string };
@@ -2063,8 +2141,10 @@ export class ChatOpsManager {
       message,
       provider,
       fullMessage,
+      ephemeralExecutionPrefix,
       userId,
       abortSignal,
+      notifyContextCompaction,
     } = params;
 
     // Use thread ID (or channel ID for non-threaded messages) as session ID
@@ -2077,7 +2157,27 @@ export class ChatOpsManager {
     const effectiveThreadId =
       message.threadId ?? message.channelId ?? message.messageId;
 
+    const actor = {
+      kind: "user" as const,
+      id: userId,
+      organizationId: binding.organizationId,
+    };
+
+    // Server-side sessions: every thread runs against its persistent A2A
+    // context, which carries the conversation history Telegram's API can't
+    // provide.
+    const contextId =
+      provider.usesServerSideSessions === true
+        ? await this.resolveThreadContextId({
+            provider,
+            message,
+            threadId: effectiveThreadId,
+            actor,
+          })
+        : undefined;
+
     const request = buildSendMessageRequest({
+      contextId,
       parts: [
         { text: fullMessage },
         ...buildAttachmentsMessageParts(message.attachments || []),
@@ -2091,21 +2191,69 @@ export class ChatOpsManager {
       route: RouteCategory.CHATOPS,
       chatOpsBindingId: binding.id,
       chatOpsThreadId: effectiveThreadId,
+      ephemeralExecutionPrefix,
     };
 
-    const initialResult = await this.a2aManager.sendMessage({
-      actor: {
-        kind: "user",
-        id: userId,
-        organizationId: binding.organizationId,
-      },
+    const a2aManager = contextId ? this.statefulA2aManager : this.a2aManager;
+    const initialResult = await a2aManager.sendMessage({
+      actor,
       agentId: agent.id,
       request,
       systemParams,
       abortSignal,
+      // Tell the user their conversation was summarized — otherwise the model
+      // suddenly "forgetting" details reads as a bug.
+      onContextCompacted: notifyContextCompaction
+        ? async () => {
+            await provider
+              .sendReply({
+                originalMessage: message,
+                text: CHATOPS_CONTEXT_COMPACTED_NOTICE,
+              })
+              .catch((error) => {
+                logger.warn(
+                  { error: errorMessage(error), messageId: message.messageId },
+                  "[ChatOps] Failed to post context-compaction notice",
+                );
+              });
+          }
+        : undefined,
     });
 
     return { result: initialResult, responseAgent: agent };
+  }
+
+  /**
+   * Resolve (or create) the persistent A2A context backing a chat thread.
+   * The mapping is keyed like the LLM session id — thread id, falling back
+   * to channel id — so a Telegram DM or plain group is one long conversation.
+   */
+  private async resolveThreadContextId(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    threadId: string;
+    actor: { kind: "user"; id: string; organizationId: string };
+  }): Promise<string> {
+    const threadKey = {
+      provider: params.provider.providerId,
+      channelId: params.message.channelId,
+      workspaceId: params.message.workspaceId ?? null,
+      threadId: params.threadId,
+    };
+    const existing = await ChatOpsThreadContextModel.findByThread(threadKey);
+    if (existing) {
+      return existing.contextId;
+    }
+
+    // The context's recorded owner is whoever spoke first; later access goes
+    // through the trusted-access manager, which authorizes via this manager's
+    // own checks rather than context ownership.
+    const context = await A2AContextManager.createContext(params.actor);
+    const mapping = await ChatOpsThreadContextModel.createOrGet({
+      ...threadKey,
+      contextId: context.id,
+    });
+    return mapping.contextId;
   }
 
   async handleInteractiveApprovalDecision(
@@ -2192,7 +2340,15 @@ export class ChatOpsManager {
         });
       }
 
-      const result = await this.a2aManager.sendMessage({
+      // Server-side-session providers resume through the stateful manager:
+      // the approval task lives under the shared thread context, whose
+      // recorded owner may be another participant (trusted access), and the
+      // resumed run must see the thread's history.
+      const approvalA2aManager =
+        provider.usesServerSideSessions === true
+          ? this.statefulA2aManager
+          : this.a2aManager;
+      const result = await approvalA2aManager.sendMessage({
         actor: {
           kind: "user" as const,
           id: user.id,

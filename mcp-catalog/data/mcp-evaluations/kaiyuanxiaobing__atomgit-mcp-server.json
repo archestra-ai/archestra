@@ -1,0 +1,105 @@
+{
+  "name": "kaiyuanxiaobing__atomgit-mcp-server",
+  "display_name": "atomgit-mcp-server",
+  "description": "MCP server from kaiyuanxiaobing/atomgit-mcp-server",
+  "author": {
+    "name": "kaiyuanxiaobing"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "atomgit-mcp-server@latest"],
+    "env": {
+      "ATOMGIT_PERSONAL_ACCESS_TOKEN": "${user_config.atomgit_personal_access_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "atomgit_personal_access_token": {
+      "type": "string",
+      "title": "AtomGit Personal Access Token",
+      "description": "AtomGit Personal Access Token",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# AtomGit MCP Server\n[![smithery badge](https://smithery.ai/badge/@kaiyuanxiaobing/atomgit-mcp-server)](https://smithery.ai/server/@kaiyuanxiaobing/atomgit-mcp-server)\n\n[English](./README_EN.md) | [中文](./README.md)\n\nAtomGit MCP 服务器是专门为 AtomGit 开源协作平台的模型上下文(MCP) 服务的实现。提供了一系列方法，允许 AI 管理 AtomGit 开源协作平台的仓库、issues、pull requests、branch、label等。\n\n## 安装使用\n\n### 从源代码构建\n\n#### 前提条件（npx启动跳过该步骤）\n- nodejs v18.20.2 或者更高版本\n- pnpm 10.9.0\n- 拥有 AtomGit 账户的访问令牌，[获取方式](https://docs.atomgit.com/user/pats)\n\n#### 克隆仓库\n``` bash\ngit clone https://atomgit.com/atomgit-open-source-ecosystem/atomgit-mcp-server.git\n\ncd mcp-server-atomgit\n```\n\n#### 构建项目\n```bash\npnpm build\n```\n\n#### 查看构建位置\n```bash\npwd\n```\n#### claude 可执行文件启动\nstdio mode:\n```json\n{\n  \"mcpServers\": {\n    \"command\": \"node\",\n    \"args\": [\n      \"/home/user/work/mcp-server-atomgit/dist/index.js\"\n    ],\n    \"env\": {\n      \"ATOMGIT_PERSONAL_ACCESS_TOKEN\": \"<your-atomgit-api-key-here>\"\n    },\n  }\n}\n```\n\n### MCP Hosts配置\n\n#### claude \n##### npx 启动\n```json\n{\n  \"mcpServers\": {\n    \"atomgit-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"atomgit-mcp-server@latest\"\n      ],\n      \"env\": {\n        \"ATOMGIT_PERSONAL_ACCESS_TOKEN\": \"<your-atomgit-api-key-here>\"\n      }\n    }\n  }\n}\n```\n#### vscode\n\nNPX\n``` json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"your-atomgit-api-key\",\n        \"description\": \"AtomGit Personal Access Token\",\n        \"password\": true\n      }\n    ],\n    \"servers\": {\n      \"atomgit-mcp-server\": {\n        \"command\": \"npx\",\n        \"args\": [\n          \"-y\",\n          \"atomgit-mcp-server@latest\"\n        ],\n        \"env\": {\n          \"ATOMGIT_PERSONAL_ACCESS_TOKEN\": \"<your-atomgit-api-key-here>\"\n        }\n      }\n    }\n  }\n}\n```\n\n### 可用工具\n\nmcp-server-atomgit 服务器提供了多种与 AtomGit 交互的工具，后续会不断完善：\n\n| 工具                         | 类别           | 描述            |\n|-----------------------------|-------------|------------------|\n| **get_user_repository**     | repo         | 列出用户授权某个的仓库   |\n| **get_user_repositories**   | repo         | 列出用户授权的所有仓库   |\n| **get_org_repositories**    | repo         | 列出组织授权的所有仓库   |\n| **create_issue**            | issue       | 为某个仓库创建issue     |\n| **create_issue_comment**    | issue        | 为某条issue创建评论    |\n| **delete_issue_comment**    | issue        | 删除某条issue的评论    |\n| **get_issue_comment**       | issue        | 获取某条issue的评论    |\n| **list_issue_comments**     | issue        | 列出某条issue的所有评论 |\n| **list_issues**             | issue        | 列出某个仓库的所有issues |\n| **get_issue**               | issue        | 获取某个issue的详细信息 |\n| **set_assignees**           | issue        | 设置某个issue的负责人   |\n| **list_issue_assignees**    | issue        | 列出某个issue的负责人   |\n| **check_if_user_is_assignable** | issue    | 检查某用户是否可分配为issue负责人 |\n| **create_pull_request**         | pull     | 创建一个新的变更请求            |\n| **get_pull_request_details**    | pull     | 获取某个变更请求的详细信息      |\n| **create_pull_request_comment** | pull     | 为某个变更请求创建评论          |\n| **create_pull_request_reply**   | pull     | 回复某个变更请求的评论          |\n| **get_pull_request_comment**    | pull     | 获取某个变更请求评论的详细信息  |\n| **list_repository_branches**    | branch   | 获取分支列表                 |\n| **get_repository_branch_details** | branch  | 获取分支信息                 |\n| **get_repository_labels**         |  label  | 获取仓库所有标签              |\n| **create_issue_labels**           |  label  | 为issue添加标签              |\n| **get_issue_labels**              | label   | 获取issue的所有标签           |\n| **delete_issue_label**            |  label  | 从issue中移除标签             |\n| **get_label_by_name**             |  label  | 根据名称获取仓库中的单个标签     |\n\n### 贡献\n\n我们欢迎热爱开源的开发者们的贡献！如果您想为这个项目做出贡献，请按照以下指南操作：\n\n1. 访问仓库[https://atomgit.com/atomgit-open-source-ecosystem/atomgit-mcp-server](https://atomgit.com/atomgit-open-source-ecosystem/atomgit-mcp-server)\n2. Fork 此[仓库](https://atomgit.com/atomgit-open-source-ecosystem/atomgit-mcp-server)\n3. 为 feature 或 bug 修复创建一个新分支。\n4. 更改代码，并确保代码有良好的文档。\n5. 提交一个 pull request，并附上清晰的更改描述。\n\n有任何问题，请给我们提交[issue](https://atomgit.com/atomgit-open-source-ecosystem/atomgit-mcp-server/issues)，我们会及时查看反馈，并积极解决~\n\n### 木兰宽松许可证, 第2版\n[木兰宽松许可证, 第2版](./license)\n\n",
+  "category": "Development",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "atomgit-mcp-server-stdio": {
+        "command": "node",
+        "args": ["/home/user/work/mcp-server-atomgit/dist/index.js"],
+        "env": {
+          "ATOMGIT_PERSONAL_ACCESS_TOKEN": "<your-atomgit-api-key-here>"
+        }
+      },
+      "atomgit-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "atomgit-mcp-server@latest"],
+        "env": {
+          "ATOMGIT_PERSONAL_ACCESS_TOKEN": "<your-atomgit-api-key-here>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kaiyuanxiaobing",
+    "repo": "atomgit-mcp-server",
+    "url": "https://github.com/kaiyuanxiaobing/atomgit-mcp-server",
+    "name": "atomgit-mcp-server",
+    "path": null,
+    "stars": 6,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "8544fadf90dc79274df9f5025739dcc169980791"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:40.354Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 5
+    },
+    {
+      "name": "universal-user-agent",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"atomgit-mcp-server\",\n  \"version\": \"1.0.9\",\n  \"type\": \"module\",\n  \"description\": \"MCP server for using AtomGit API\",\n  \"main\": \"index.js\",\n  \"bin\": {\n    \"atomgit-mcp-server\": \"./dist/index.js\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://atomgit.com/atomgit-open-source-ecosystem/atomgit-mcp-server\"\n  },\n  \"homepage\": \"https://atomgit.com/atomgit-open-source-ecosystem/atomgit-mcp-server/blob/master/README.md\",\n  \"scripts\": {\n    \"generate-version\": \"tsx common/generate-version.ts\",\n    \"build\": \"pnpm run generate-version && tsc && shx chmod +x dist/*.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"keywords\": [\n    \"AtomGit\",\n    \"MCP\",\n    \"mcp-server-atomgit\",\n    \"mcp-server\",\n    \"atomgit-mcp-server\",\n    \"API\",\n    \"server\",\n    \"typescript\",\n    \"node\",\n    \"universal-user-agent\",\n    \"node-fetch\",\n    \"zod\",\n    \"zod-to-json-schema\"\n  ],\n  \"author\": {\n    \"name\": \"kaiyuanxiaobing\",\n    \"url\": \"https://atomgit.com/kaiyuanxiaobing\"\n  },\n  \"bugs\": \"https://atomgit.com/atomgit-open-source-ecosystem/atomgit-mcp-server/issues\",\n  \"license\": \"MulanPSL-2.0\",\n  \"packageManager\": \"pnpm@10.9.0\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.11.2\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"node-fetch\": \"^3.3.2\",\n    \"universal-user-agent\": \"^7.0.3\",\n    \"zod\": \"^3.24.4\",\n    \"zod-to-json-schema\": \"^3.24.5\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.15.17\",\n    \"shx\": \"^0.4.0\",\n    \"tsx\": \"^4.19.4\",\n    \"typescript\": \"^5.8.3\"\n  }\n}"
+}

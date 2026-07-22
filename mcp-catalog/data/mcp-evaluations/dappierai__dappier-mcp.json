@@ -1,0 +1,90 @@
+{
+  "name": "dappierai__dappier-mcp",
+  "display_name": "dappier-mcp",
+  "description": "Enable fast, free real-time web search and access premium data from trusted media brands—news, financial markets, sports, entertainment, weather, and more. Build powerful AI agents with Dappier.",
+  "author": {
+    "name": "DappierAI"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["dappier-mcp"],
+    "env": {
+      "DAPPIER_API_KEY": "${user_config.dappier_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "dappier_api_key": {
+      "type": "string",
+      "title": "Dappier API Key",
+      "description": "Your API key for authentication with Dappier.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "## 📽️ Watch the Demo Video (Live!)\n\n> 📌 Click the image below — use **Ctrl+Click** (or **Cmd+Click on Mac**) to open in a new tab.\n\n<a href=\"https://youtu.be/2Q_PwLFkYTQ\">\n  <img src=\"https://i9.ytimg.com/vi/2Q_PwLFkYTQ/sddefault.jpg?v=685e5a3d&sqp=CIy0-cIG&rs=AOn4CLAWY2I5qfS3BbWByURKQeIaSZAYDg\" alt=\"Watch the demo video\">\n</a>\n\n# Dappier MCP Server\n\nEnable fast, free real-time web search and access premium data from trusted media brands—news, financial markets, sports, entertainment, weather, and more. Build powerful AI agents with Dappier.\n\n> Explore a wide range of data models in our marketplace at [marketplace.dappier.com](https://marketplace.dappier.com/marketplace).\n\n<br>\n\n<a href=\"https://smithery.ai/server/@DappierAI/dappier-mcp\" target=\"_blank\"><img alt=\"Smithery Badge\" src=\"https://smithery.ai/badge/@DappierAI/dappier-mcp\"></a>\n\n<br>\n\n<a href=\"https://glama.ai/mcp/servers/@DappierAI/dappier-mcp\" target=\"_blank\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@DappierAI/dappier-mcp/badge\" />\n</a>\n\n<br>\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/dappierai-dappier-mcp-badge.png)](https://mseep.ai/app/dappierai-dappier-mcp)\n\n<br>\n\n## Getting Started\n\nGet Dappier API Key. Head to [Dappier](https://platform.dappier.com/profile/api-keys) to sign up and generate an API key.\n\n\n## Installing via Smithery\n\nTo install dappier-mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@DappierAI/dappier-mcp):\n\n```bash\nnpx -y @smithery/cli install @DappierAI/dappier-mcp --client claude\n```\n\n## Installation\n\nInstall `uv` first.\n\n**MacOS/Linux**:\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n**Windows**:\n```bash\npowershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n```\n\n## Usage\n\n### Claude Desktop\n\nUpdate your Claude configuration file (`claude_desktop_config.json`) with the following content:\n\n```json\n{\n  \"mcpServers\": {\n    \"dappier\": {\n      \"command\": \"uvx\",\n      \"args\": [\"dappier-mcp\"],\n      \"env\": {\n        \"DAPPIER_API_KEY\": \"YOUR_API_KEY_HERE\"\n      }\n    }\n  }\n}\n```\n\n> **Hint**: You may need to provide the full path to the `uvx` executable in the `command` field. You can obtain this by running `which uvx` on macOS/Linux or `where uvx` on Windows.\n\n**Configuration file location:**\n- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n**Accessing via application:**\n- **macOS**:\n  1. Open the Claude Desktop application.\n  2. In the menu bar, click on `Claude` > `Settings`.\n  3. Navigate to the `Developer` tab.\n  4. Click on `Edit Config` to open the configuration file in your default text editor.\n- **Windows**:\n  1. Open the Claude Desktop application.\n  2. Click on the gear icon to access `Settings`.\n  3. Navigate to the `Developer` tab.\n  4. Click on `Edit Config` to open the configuration file in your default text editor.\n\n> **Note**: If the `Developer` tab is not visible, ensure you're using the latest version of Claude Desktop. \n\n---\n\n### Cursor\n\nUpdate your Cursor configuration file (`mcp.json`) with the following content:\n\n```json\n{\n  \"mcpServers\": {\n    \"dappier\": {\n      \"command\": \"uvx\",\n      \"args\": [\"dappier-mcp\"],\n      \"env\": {\n        \"DAPPIER_API_KEY\": \"YOUR_API_KEY_HERE\"\n      }\n    }\n  }\n}\n```\n\n> **Hint**: You may need to provide the full path to the `uvx` executable in the `command` field. You can obtain this by running `which uvx` on macOS/Linux or `where uvx` on Windows.\n\n**Configuration file location:**\n- **Global Configuration**:\n  - **macOS**: `~/.cursor/mcp.json`\n  - **Windows**: `%USERPROFILE%\\.cursor\\mcp.json`\n- **Project-Specific Configuration**:\n  - Place the `mcp.json` file inside the `.cursor` directory within your project folder: `<project-root>/.cursor/mcp.json`\n\n**Accessing via application:**\n1. Open the Cursor application.\n2. Navigate to `Settings` > `MCP`.\n3. Click on `Add New Global MCP Server`.\n4. The application will open the `mcp.json` file in your default text editor for editing.\n\n> **Note**: On Windows, if the project-level configuration is not recognized, consider adding the MCP server through the Cursor settings interface. \n\n---\n\n### Windsurf\n\nUpdate your Windsurf configuration file (`mcp_config.json`) with the following content:\n\n```json\n{\n  \"mcpServers\": {\n    \"dappier\": {\n      \"command\": \"uvx\",\n      \"args\": [\"dappier-mcp\"],\n      \"env\": {\n        \"DAPPIER_API_KEY\": \"YOUR_API_KEY_HERE\"\n      }\n    }\n  }\n}\n```\n\n> **Hint**: You may need to provide the full path to the `uvx` executable in the `command` field. You can obtain this by running `which uvx` on macOS/Linux or `where uvx` on Windows.\n\n**Configuration file location:**\n- **macOS**: `~/.codeium/windsurf/mcp_config.json`\n- **Windows**: `%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json`\n\n**Accessing via application:**\n1. Open the Windsurf application.\n2. Navigate to `Settings` > `Cascade`.\n3. Scroll down to the `Model Context Protocol (MCP) Servers` section.\n4. Click on `View raw config` to open the `mcp_config.json` file in your default text editor.\n\n> **Note**: After editing the configuration file, click the `Refresh` button in the MCP Servers section to apply the changes. \n\n## Features\n\nThe Dappier MCP Remote Server provides powerful real-time capabilities out of the box — no training or fine-tuning needed. Use it to build live, interactive tools powered by the latest web data, financial markets, or AI-curated content.\n\n### Real-Time Web Search  \n**Model ID:** `am_01j06ytn18ejftedz6dyhz2b15`  \n\nSearch the live web using Dappier’s AI-powered index. Get real-time access to:\n\n- Breaking news from across the globe  \n- Weather forecasts and local updates  \n- Travel alerts and flight info  \n- Trending topics and viral content  \n- Online deals and shopping highlights  \n\nIdeal for use cases like news agents, travel planners, alert bots, and more.\n\n### Stock Market Insights  \n**Model ID:** `am_01j749h8pbf7ns8r1bq9s2evrh`  \n\nThis model delivers instant access to market data, financial headlines, and trade insights. Perfect for portfolio dashboards, trading copilots, and investment tools.\n\nIt provides:\n\n- Real-time stock prices  \n- Financial news and company updates  \n- Trade signals and trends  \n- Market movement summaries  \n- AI-curated analysis using live data from Polygon.io  \n\n### AI-Powered Content Recommendations  \n\nChoose from several domain-specific AI models tailored for content discovery, summarization, and feed generation.\n\n#### Sports News  \n**Model ID:** `dm_01j0pb465keqmatq9k83dthx34`  \nStay updated with real-time sports headlines, game recaps, and expert analysis.\n\n#### Lifestyle Updates  \n**Model ID:** `dm_01j0q82s4bfjmsqkhs3ywm3x6y`  \nExplore curated lifestyle content — covering wellness, entertainment, and everyday inspiration.\n\n#### iHeartDogs AI  \n**Model ID:** `dm_01j1sz8t3qe6v9g8ad102kvmqn`  \nYour intelligent dog care assistant — access training tips, health advice, and behavior insights.\n\n#### iHeartCats AI  \n**Model ID:** `dm_01j1sza0h7ekhaecys2p3y0vmj`  \nAn expert AI for all things feline — from nutrition to playtime to grooming routines.\n\n#### GreenMonster  \n**Model ID:** `dm_01j5xy9w5sf49bm6b1prm80m27`  \nDiscover sustainable lifestyle ideas, ethical choices, and green innovations.\n\n#### WISH-TV AI  \n**Model ID:** `dm_01jagy9nqaeer9hxx8z1sk1jx6`  \nTap into hyperlocal news, politics, culture, health, and multicultural updates.\n\nEach recommendation includes:\n\n- A clear title and concise summary  \n- The original publication date  \n- The trusted source and domain  \n- Image preview (if available)  \n- A relevance score for prioritization\n\nAdvanced options let you:\n\n- Tune the search algorithm (`semantic`, `most_recent`, `trending`, etc.)  \n- Focus results on a specific domain (`ref`)  \n- Adjust how many results you want (`similarity_top_k`, `num_articles_ref`)  \n\n## Debugging\n\nRun the MCP inspector to debug the server:\n```bash\nnpx @modelcontextprotocol/inspector uvx dappier-mcp\n```\n\n## Contributing\n\nWe welcome contributions to expand and improve the Dappier MCP Server. Whether you want to add new search capabilities, enhance existing functionality, or improve documentation, your input is valuable.\n\nFor examples of other MCP servers and implementation patterns, see:\n[https://github.com/modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers)\n\nPull requests are welcome! Feel free to contribute new ideas, bug fixes, or enhancements.\n",
+  "category": "AI Tools",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "dappier-mcp": {
+        "command": "uvx",
+        "args": ["dappier-mcp"],
+        "env": {
+          "DAPPIER_API_KEY": "YOUR_API_KEY_HERE"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "DappierAI",
+    "repo": "dappier-mcp",
+    "url": "https://github.com/DappierAI/dappier-mcp",
+    "name": "dappier-mcp",
+    "path": null,
+    "stars": 23,
+    "contributors": 4,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "38bbde12ef9ea3a7a5fd142d018150c8c53bc63d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:26.394Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "dappier",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"dappier-mcp\"\nversion = \"0.3.2\"\ndescription = \"An MCP server for interacting with Dappier's RAG models\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nauthors = [{ name = \"Amaan Mohammed\", email = \"amaan@ai20labs.com\" }]\nmaintainers = [{ name = \"Amaan Mohammed\", email = \"amaan@ai20labs.com\" }]\nkeywords = [\"http\", \"mcp\", \"llm\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n]\ndependencies = [\n    \"dappier>=0.3.3\",\n    \"mcp[cli]>=1.2.1\",\n    \"pydantic>=2.10.2\",\n]\n\n[project.urls]\nhomepage = \"https://github.com/DappierAI/dappier-mcp\"\nrepository = \"https://github.com/DappierAI/dappier-mcp\"\nissues = \"https://github.com/DappierAI/dappier-mcp/issues\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\ndappier-mcp = \"dappier_mcp:main\"\n\n[tool.uv]\npackage = true\n"
+}

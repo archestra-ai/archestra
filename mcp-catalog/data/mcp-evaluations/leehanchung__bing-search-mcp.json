@@ -1,0 +1,107 @@
+{
+  "name": "leehanchung__bing-search-mcp",
+  "display_name": "bing-search-mcp",
+  "description": "MCP Server for Bing Search API",
+  "author": {
+    "name": "leehanchung"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["bing-search-mcp"],
+    "env": {
+      "BING_API_KEY": "${user_config.bing_api_key}",
+      "BING_API_URL": "${user_config.bing_api_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bing_api_key": {
+      "type": "string",
+      "title": "Bing API Key",
+      "description": "Your Microsoft Bing Search API key",
+      "sensitive": true,
+      "required": true
+    },
+    "bing_api_url": {
+      "type": "string",
+      "title": "Bing API URL",
+      "description": "The base URL for Bing API requests",
+      "default": "https://api.bing.microsoft.com/",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# Bing Search MCP Server\n\nA Model Context Protocol (MCP) server for Microsoft Bing Search API integration, allowing AI assistants to perform web, news, and image searches.\n\n[![smithery badge](https://smithery.ai/badge/@leehanchung/bing-search-mcp)](https://smithery.ai/server/@leehanchung/bing-search-mcp)\n\n![Bing Search MCP Server](assets/mcp_server_bing.png)\n\n\n## Features\n\n- Web search for general information\n- News search for recent events and timely information\n- Image search for visual content\n- Rate limiting to prevent API abuse\n- Comprehensive error handling\n\n## Requirements\n\n- Python 3.10 or higher\n- Microsoft Bing Search API key\n- MCP-compatible client (e.g., Claude Desktop, Cursor)\n\n## Installation\n\n1. Clone this repository\n2. Install dependencies:\n   ```\n   uv venv\n   source .venv/bin/activate  # On Windows: .venv\\Scripts\\activate\n   uv pip install -e .\n   ```\n\n## Configuration\n\nSet the required environment variables:\n\n```bash\nexport BING_API_KEY=\"your-bing-api-key\"\nexport BING_API_URL=\"https://api.bing.microsoft.com/\"  # Optional\n```\n\nFor Windows:\n```cmd\nset BING_API_KEY=your-bing-api-key\nset BING_API_URL=https://api.bing.microsoft.com/\n```\n\n## Usage\n\n### Running the server\n\n```\nuvx bing-search-mcp\n```\n\n### Configuring with Claude for Desktop\n\nAdd the following to your Claude Desktop configuration file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\\Claude\\claude_desktop_config.json` on Windows):\n\n```json\n{\n  \"mcpServers\": {\n    \"bing-search\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"/path/to/your/bing-search-mcp\"\n      ],\n      \"env\": {\n        \"BING_API_KEY\": \"your-bing-api-key\"\n      }\n    }\n  }\n}\n```\n![Claude Code Bing Search MCP](assets/claude_bing_search.png)\n\n## Available Tools\n\n### 1. bing_web_search\nGeneral web search for information, websites, and content.\n\n```python\nbing_web_search(query: str, count: int = 10, offset: int = 0, market: str = \"en-US\")\n```\n\n### 2. bing_news_search\nSearch for news articles and current events.\n\n```python\nbing_news_search(query: str, count: int = 10, market: str = \"en-US\", freshness: str = \"Day\")\n```\n\n### 3. bing_image_search\nSearch for images.\n\n```python\nbing_image_search(query: str, count: int = 10, market: str = \"en-US\")\n```\n\n## Getting a Bing API Key\n\n1. Visit [Microsoft Azure Portal](https://portal.azure.com/)\n2. Create or sign in to your Azure account\n3. Create a new Bing Search resource\n4. Go to the resource and find your API key in the \"Keys and Endpoint\" section\n\n## License\n\n[MIT License](LICENSE)\n",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bing-search-mcp": {
+        "command": "uvx",
+        "args": ["bing-search-mcp"],
+        "env": {
+          "BING_API_KEY": "your-bing-api-key",
+          "BING_API_URL": "https://api.bing.microsoft.com/"
+        }
+      },
+      "bing-search-mcp-configured": {
+        "command": "uvx",
+        "args": ["/path/to/your/bing-search-mcp"],
+        "env": {
+          "BING_API_KEY": "your-bing-api-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "leehanchung",
+    "repo": "bing-search-mcp",
+    "url": "https://github.com/leehanchung/bing-search-mcp",
+    "name": "bing-search-mcp",
+    "path": null,
+    "stars": 53,
+    "contributors": 1,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "887097adcc0c2b9de67843bed072245afc05dd70"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:28.863Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp_server_bing\"\nversion = \"0.1.0\"\ndescription = \"MCP server implementation for Bing Search API integration\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = \"MIT\"\nauthors = [\n    { name = \"Hanchung Lee\", email = \"leehanchung@gmail.com\" }\n]\ndependencies = [\n    \"python-dotenv>=1.0.1\",\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.4.1\",\n]\n\n[tool.ruff]\nline-length = 88\ntarget-version = \"py310\"\n\n[tool.ruff.lint]\nselect = [\n    \"E\",     # pycodestyle\n    \"F\",     # pyflakes\n    \"B\",     # flake8-bugbear\n    \"I\",     # isort\n    \"N\",     # pep8-naming\n    \"UP\",    # pyupgrade\n    \"PL\",    # pylint\n    \"RUF\",   # ruff-specific\n    \"SIM\",   # flake8-simplify\n    \"TCH\",   # flake8-type-checking\n    \"TID\",   # flake8-tidy-imports\n    \"ERA\",   # eradicate\n]\nignore = []\n\n[tool.ruff.format]\nquote-style = \"double\"\nindent-style = \"space\"\nline-ending = \"auto\"\nskip-magic-trailing-comma = false\n\n[tool.ruff.isort]\ncombine-as-imports = true\nforce-wrap-aliases = true\n\n[tool.ruff.lint.pep8-naming]\nclassmethod-decorators = [\n    \"classmethod\",\n    \"pydantic.validator\",\n    \"pydantic.root_validator\"\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pyright>=1.1.398\",\n    \"ruff>=0.11.0\",\n    \"mypy>=1.9.0\",\n    \"pytest>=8.0.0\",\n    \"pytest-asyncio>=0.23.5\",\n    \"pytest-cov>=4.1.0\"\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-server-bing = \"mcp_server_bing:main\"\n"
+}

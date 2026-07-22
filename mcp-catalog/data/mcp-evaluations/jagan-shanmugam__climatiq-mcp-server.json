@@ -1,0 +1,108 @@
+{
+  "name": "jagan-shanmugam__climatiq-mcp-server",
+  "display_name": "climatiq-mcp-server",
+  "description": "A Model Context Protocol (MCP) server for accessing the Climatiq API to calculate carbon emissions. This allows AI assistants to perform real-time carbon calculations and provide climate impact insights.",
+  "author": {
+    "name": "jagan-shanmugam"
+  },
+  "server": {
+    "command": "climatiq-mcp-server",
+    "args": [],
+    "env": {
+      "CLIMATIQ_API_KEY": "${user_config.climatiq_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "climatiq_api_key": {
+      "type": "string",
+      "title": "Climatiq API Key",
+      "description": "Your Climatiq API key for authentication with the Climatiq API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Climatiq MCP Server\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;\n\nA Model Context Protocol (MCP) server for accessing the Climatiq API to calculate carbon emissions. This allows AI assistants to perform real-time carbon calculations and provide climate impact insights.\n\n## Demo\n\n\nhttps://github.com/user-attachments/assets/c253d6d1-ccf6-4c14-965e-6023ba2a0296\n\n\n\nhttps://github.com/user-attachments/assets/d61c1181-acf6-4d9f-9a48-537fc64ac4c3\n\n\n\n## Features\n\nThis MCP server integrates with the Climatiq API to provide carbon emission calculations for AI assistants:\n\n### Tools\n\n- **set-api-key**: Configure the Climatiq API key used for authentication\n- **electricity-emission**: Calculate carbon emissions from electricity consumption\n- **travel-emission**: Calculate carbon emissions from travel by car, plane, or train\n- **search-emission-factors**: Search for specific emission factors in the Climatiq database\n- **custom-emission-calculation**: Perform custom calculations using specific emission factors\n- **cloud-computing-emission**: Calculate emissions from cloud computing resources usage\n- **freight-emission**: Calculate emissions from freight transportation\n- **procurement-emission**: Calculate emissions from procurement spending\n- **hotel-emission**: Calculate emissions from hotel stays\n- **travel-spend**: Calculate emissions from travel expenses\n\n### Resources\n\n- Carbon calculation results are exposed as resources with a `climatiq://calculation/{id}` URI scheme\n- Each resource contains detailed information about an emission factor and calculation results\n\n### Prompts\n\n- **climate-impact-explanation**: Generate natural language explanations about the climate impact of specific emission calculations\n\n## Installation\n\n### From Source\n\nThis project uses `uv` for virtual environment and dependency management. Make sure to [install uv](https://github.com/astral-sh/uv) first.\n\n```bash\n# Clone the repository\ngit clone https://github.com/your-org/climatiq-mcp-server.git\ncd climatiq-mcp-server\n\n# Create a virtual environment\nuv venv\n\n# Activate the virtual environment\n# On macOS/Linux:\nsource .venv/bin/activate\n# On Windows:\n.venv\\Scripts\\activate\n\n# Install dependencies with development extras\nuv sync --dev --extra all\n```\n\n### Using uv\n\n```bash\nuv pip install climatiq-mcp-server\n```\n\n## API Key Configuration\n\nThe server requires a Climatiq API key to function. You have several options to provide it:\n\n1. **Environment Variable**: Set the `CLIMATIQ_API_KEY` environment variable before starting the server\n   ```bash\n   export CLIMATIQ_API_KEY=your_climatiq_api_key\n   ```\n\n2. **Configuration During Installation**:\n   ```bash\n   CLIMATIQ_API_KEY=your_climatiq_api_key uv pip install climatiq-mcp-server\n   ```\n\n3. **set-api-key Tool**: Use the `set-api-key` tool to configure it during runtime within the AI assistant\n\n4. **Configuration File**: Create a `.env` file in the project directory:\n   ```\n   CLIMATIQ_API_KEY=your_climatiq_api_key\n   ```\n\nTo get a Climatiq API key:\n1. Sign up at [app.climatiq.io](https://app.climatiq.io/api/signup)\n2. Follow the instructions at [Getting API Keys](https://www.climatiq.io/docs/guides/how-tos/getting-api-key)\n\n## Running the Server\n\nThe server can be started directly from the command line:\n\n```bash\nclimatiq-mcp-server\n```\n\n## Setup in AI Assistants\n\n### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n<details>\n  <summary>Configuration Example</summary>\n  \n  ```json\n  \"mcpServers\": {\n    \"climatiq-mcp-server\": {\n      \"command\": \"climatiq-mcp-server\",\n      \"env\": {\n        \"CLIMATIQ_API_KEY\": \"your_climatiq_api_key\"\n      }\n    }\n  }\n  ```\n</details>\n\n## Examples and Utilities\n\n### Examples Directory\n\nThe `examples/` directory contains:\n\n- **climatiq.ipynb**: A Jupyter notebook demonstrating direct API usage with Climatiq\n- **simple_test.py**: A simple utility for testing the API integration directly without MCP protocol\n\n```bash\n# Run the simple test\npython examples/simple_test.py\n```\n\n### Utility Scripts\n\nThe `utils/` directory contains several helpful scripts:\n\n#### Test Client\n\nThe `test_client.py` script tests all the tools, prompts, and resources:\n\n```bash\npython utils/test_client.py\n```\n\n#### LLM Example Client\n\nThe `llm_example_client.py` script demonstrates how a Large Language Model (like Claude) could interact with the Climatiq MCP server:\n\n```bash\npython utils/llm_example_client.py\n```\n\nKey features:\n- Complete API wrapper with error handling and timeout management\n- Resource and result caching to preserve calculation history\n- Example prompts showing how to generate natural language explanations\n- Demonstrates electricity emission, travel emission, and emission factor search capabilities\n\n#### CLI Tool\n\nA command-line interface tool for direct API access without the MCP server complexity:\n\n```bash\n# For electricity emissions\npython utils/climatiq_cli.py electricity --energy 1000 --unit kWh --region US\n\n# For travel emissions\npython utils/climatiq_cli.py travel --mode car --distance 100 --unit km --region US\n```\n\n#### Run MCP Server Script\n\nUse the `run_mcp_server.py` script to directly run the server without installing:\n\n```bash\npython utils/run_mcp_server.py\n```\n\n## Key Concepts\n\n### Activity IDs\n\nAn Activity ID is a key concept in Climatiq's API that groups similar emission factors together:\n\n- Each emission factor in the Climatiq database has an activity ID\n- Activity IDs group emission factors describing the same activity across regions, years, sources, etc.\n- Examples: `electricity-supply_grid-source_residual_mix` (electricity), `passenger_vehicle-vehicle_type_car` (car travel)\n\n### Calculation Methods\n\nThe Climatiq MCP server supports multiple calculation methods:\n\n1. **Distance-based method** for travel emissions\n2. **Advanced travel calculations** with origin-destination pairs\n3. **Spend-based method** for when you only have expenditure data\n4. **Direct calculations** using specific emission factors\n\n## Troubleshooting\n\n### API Key Issues\n\n1. Ensure `CLIMATIQ_API_KEY` is set correctly in your environment or .env file\n2. Verify the API key is active in your Climatiq dashboard\n3. Use `examples/simple_test.py` to check if your API key works correctly\n\n\n## Advanced Usage\n\nFor detailed documentation on using specific tools and advanced features, see the [docs/README.md](docs/README.md) file.\n\n## About Climatiq\n\nClimatiq provides a powerful API for carbon intelligence, allowing you to calculate emissions from electricity usage, transportation, procurement, and more. This MCP server makes those capabilities accessible to AI assistants through the Model Context Protocol.\n\nFor more information about Climatiq, visit [climatiq.io](https://www.climatiq.io/).\n\n\n## License\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.",
+  "category": "AI Tools",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "climatiq-mcp-server": {
+        "command": "climatiq-mcp-server",
+        "args": [],
+        "env": {}
+      },
+      "climatiq-mcp-server-configured": {
+        "command": "climatiq-mcp-server",
+        "args": [],
+        "env": {
+          "CLIMATIQ_API_KEY": "your_climatiq_api_key"
+        }
+      },
+      "climatiq-mcp-server-utils-script": {
+        "command": "python",
+        "args": ["utils/run_mcp_server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jagan-shanmugam",
+    "repo": "climatiq-mcp-server",
+    "url": "https://github.com/jagan-shanmugam/climatiq-mcp-server",
+    "name": "climatiq-mcp-server",
+    "path": null,
+    "stars": 5,
+    "contributors": 2,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d68c1ef2e295566fd46adabe6b7b2890dd3b23bd"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.940Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "rich",
+      "importance": 3
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"climatiq-mcp-server\"\nversion = \"0.2.0\"\ndescription = \"Climatiq MCP server for carbon emission calculations\"\nreadme = \"README.md\"\nrequires-python = \">=3.11.9\"\ndependencies = [\n \"mcp[cli]>=1.4.1\",\n \"httpx>=0.25.2\",\n \"python-dotenv>=1.0.0\",\n \"rich>=13.5.0\",\n \"pydantic>=2.10.6\",\n]\n[[project.authors]]\nname = \"Jagan Shanmugam\"\nemail = \"jaganshanmugam@outlook.com\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nclimatiq-mcp-server = \"climatiq_mcp_server.server:run_server\"\n\n[project.urls]\n\"Homepage\" = \"https://github.com/yourusername/climatiq-mcp-server\"\n\"Documentation\" = \"https://github.com/yourusername/climatiq-mcp-server#readme\"\n"
+}

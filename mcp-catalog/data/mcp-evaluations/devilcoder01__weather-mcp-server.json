@@ -1,0 +1,88 @@
+{
+  "name": "devilcoder01__weather-mcp-server",
+  "display_name": "weather-mcp-server",
+  "description": "MCP server from devilcoder01/weather-mcp-server",
+  "author": {
+    "name": "devilcoder01"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/main.py"],
+    "env": {
+      "WEATHER_API_KEY": "${user_config.weather_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "weather_api_key": {
+      "type": "string",
+      "title": "WeatherAPI Key",
+      "description": "Your API key for WeatherAPI.com",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Weather MCP Server\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/devilcoder01/weather-mcp-server)](https://archestra.ai/mcp-catalog/devilcoder01__weather-mcp-server)\n[![smithery badge](https://smithery.ai/badge/@devilcoder01/weather-mcp-server)](https://smithery.ai/server/@devilcoder01/weather-mcp-server)\n\nA Model Context Protocol (MCP) server for weather data, built with FastAPI and the MCP framework. This server provides various weather-related tools that can be used by AI assistants to retrieve current weather conditions, forecasts, air quality data, and more.\n\n## Features\n\n- Current weather conditions\n- Weather forecasts (1-14 days)\n- Historical weather data\n- Weather alerts\n- Air quality information\n- Astronomy data (sunrise, sunset, moon phases)\n- Location search\n- Timezone information\n- Sports events\n\n## Requirements\n\n- Python 3.13+\n- [uv](https://github.com/astral-sh/uv) package manager\n- [WeatherAPI](https://www.weatherapi.com/) API key\n\n## Installation\n\n### Installing via Smithery\n\nTo install Weather Data Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@devilcoder01/weather-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @devilcoder01/weather-mcp-server --client claude\n```\n\n### Manual Installation\n1. Clone this repository:\n   ```\n   git clone https://github.com/yourusername/Weather_mcp_server.git\n   cd Weather_mcp_server\n   ```\n\n2. Install dependencies using uv:\n   ```\n   uv venv\n   uv pip install -e .\n   ```\n\n3. Create a `.env` file in the project root with your WeatherAPI key:\n   ```\n   WEATHER_API_KEY=your_api_key_here\n   ```\n\n## Usage\n\nRun the server:\n\n```\npython main.py\n```\n\nThe server will start on http://localhost:8000 by default.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Data",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "devilcoder01-weather-mcp-server": {
+        "command": "python",
+        "args": ["main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "devilcoder01",
+    "repo": "weather-mcp-server",
+    "url": "https://github.com/devilcoder01/weather-mcp-server",
+    "name": "weather-mcp-server",
+    "path": null,
+    "stars": 12,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "25fe46f330941e12e6c6ede867f97499c32502ea"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:21.448Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastapi-mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"weather-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"fastapi-mcp>=0.3.3\",\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.6.0\",\n]\n"
+}

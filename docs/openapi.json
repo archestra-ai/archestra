@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.12"
+    "version": "1.3.13"
   },
   "components": {
     "schemas": {
@@ -54964,6 +54964,610 @@
         }
       }
     },
+    "/api/app-gallery/device/start": {
+      "post": {
+        "operationId": "appGalleryDeviceAuthStart",
+        "tags": [
+          "App Gallery"
+        ],
+        "description": "Start the GitHub device flow used to share a recorded app session to the public App Gallery\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deviceCode": {
+                      "type": "string"
+                    },
+                    "userCode": {
+                      "type": "string"
+                    },
+                    "verificationUri": {
+                      "type": "string"
+                    },
+                    "interval": {
+                      "type": "number"
+                    },
+                    "expiresIn": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "deviceCode",
+                    "userCode",
+                    "verificationUri",
+                    "interval",
+                    "expiresIn"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:update"
+          ]
+        }
+      }
+    },
+    "/api/app-gallery/device/poll": {
+      "post": {
+        "operationId": "appGalleryDeviceAuthPoll",
+        "tags": [
+          "App Gallery"
+        ],
+        "description": "Poll the GitHub device flow once; returns the GitHub OAuth token when the participant has authorized\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "deviceCode": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "deviceCode"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "slow_down"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "complete"
+                          ]
+                        },
+                        "accessToken": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "accessToken"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:update"
+          ]
+        }
+      }
+    },
     "/api/app-recordings/enhance": {
       "post": {
         "operationId": "enhanceAppRecording",
@@ -63994,6 +64598,7 @@
                 "agentTool.updated",
                 "agentTool.deleted",
                 "agentTool.bulk_assigned",
+                "agentTool.bulk_removed",
                 "apiKey.created",
                 "apiKey.deleted",
                 "app.created",
@@ -64259,6 +64864,7 @@
                               "agentTool.updated",
                               "agentTool.deleted",
                               "agentTool.bulk_assigned",
+                              "agentTool.bulk_removed",
                               "apiKey.created",
                               "apiKey.deleted",
                               "app.created",
@@ -64820,6 +65426,7 @@
                         "agentTool.updated",
                         "agentTool.deleted",
                         "agentTool.bulk_assigned",
+                        "agentTool.bulk_removed",
                         "apiKey.created",
                         "apiKey.deleted",
                         "app.created",
@@ -105944,6 +106551,10 @@
                     "enterpriseCoreActive": {
                       "type": "boolean"
                     },
+                    "mcpSandboxDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "analytics": {
                       "type": "object",
                       "properties": {
@@ -105988,6 +106599,7 @@
                     "maintenanceMode",
                     "siteNotificationMessage",
                     "enterpriseCoreActive",
+                    "mcpSandboxDomain",
                     "analytics"
                   ],
                   "additionalProperties": false
@@ -106174,6 +106786,23 @@
                         },
                         "hackathonRecorderOverrideActive": {
                           "type": "boolean"
+                        },
+                        "hackathonGalleryRepo": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "owner": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "owner",
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -106201,7 +106830,8 @@
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
                         "hackathonRecorderEnabled",
-                        "hackathonRecorderOverrideActive"
+                        "hackathonRecorderOverrideActive",
+                        "hackathonGalleryRepo"
                       ],
                       "additionalProperties": false
                     },
@@ -106250,6 +106880,294 @@
           "kind": "none",
           "note": "None (no additional RBAC permission required)",
           "permissions": []
+        }
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "operationId": "getConnectionHealth",
+        "tags": [
+          "Connection Setups"
+        ],
+        "description": "Health of the remotes a connected client is wired to, one request for all of them. Public: used by the Claude Code startup guard before every launch, from machines with no session. Reports only ok/down per requested remote.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "in": "query",
+            "name": "mcp",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "in": "query",
+            "name": "llm",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mcp": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "down"
+                      ]
+                    },
+                    "llm": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "down"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -123277,6 +124195,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -123832,6 +124751,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -124808,6 +125728,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -125484,6 +126405,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -126160,6 +127082,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -126836,6 +127759,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -127391,6 +128315,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -127946,6 +128871,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -130452,6 +131378,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -133669,6 +134596,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -134224,6 +135152,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -134779,6 +135708,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -135334,6 +136264,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -135889,6 +136820,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -136444,6 +137376,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -136999,6 +137932,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -137543,6 +138477,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -138087,6 +139022,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -138642,6 +139578,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -139197,6 +140134,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -139752,6 +140690,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -142478,6 +143417,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -145209,6 +146149,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -145764,6 +146705,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -146553,6 +147495,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -147795,6 +148738,7 @@
                 "model_router",
                 "chat",
                 "chat:compaction",
+                "a2a:compaction",
                 "chat:title_generation",
                 "chat:tool_call_repair",
                 "skill:description_generation",
@@ -147911,6 +148855,7 @@
                               "model_router",
                               "chat",
                               "chat:compaction",
+                              "a2a:compaction",
                               "chat:title_generation",
                               "chat:tool_call_repair",
                               "skill:description_generation",
@@ -147935,6 +148880,7 @@
                                 "model_router",
                                 "chat",
                                 "chat:compaction",
+                                "a2a:compaction",
                                 "chat:title_generation",
                                 "chat:tool_call_repair",
                                 "skill:description_generation",
@@ -149048,6 +149994,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -149603,6 +150550,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -150579,6 +151527,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -151255,6 +152204,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -151931,6 +152881,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -152607,6 +153558,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -153162,6 +154114,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -153717,6 +154670,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -156223,6 +157177,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -159440,6 +160395,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -159995,6 +160951,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -160550,6 +161507,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -161105,6 +162063,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -161660,6 +162619,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -162215,6 +163175,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -162770,6 +163731,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -163314,6 +164276,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -163858,6 +164821,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -164413,6 +165377,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -164968,6 +165933,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -165523,6 +166489,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -168249,6 +169216,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -170980,6 +171948,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -171535,6 +172504,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -172324,6 +173294,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -178643,6 +179614,10 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "group": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "assignedAgentCount": {
                         "type": "number"
                       },
@@ -178672,6 +179647,7 @@
                       "description",
                       "parameters",
                       "createdAt",
+                      "group",
                       "assignedAgentCount",
                       "assignedAgents"
                     ],
@@ -217911,6 +218887,10 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "group": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "assignedAgentCount": {
                         "type": "number"
                       },
@@ -217940,6 +218920,7 @@
                       "description",
                       "parameters",
                       "createdAt",
+                      "group",
                       "assignedAgentCount",
                       "assignedAgents"
                     ],
@@ -239406,7 +240387,8 @@
                                   "query",
                                   "execute",
                                   "deploy-to-restricted",
-                                  "manage"
+                                  "manage",
+                                  "read-all"
                                 ]
                               }
                             }
@@ -239764,7 +240746,8 @@
                           "query",
                           "execute",
                           "deploy-to-restricted",
-                          "manage"
+                          "manage",
+                          "read-all"
                         ]
                       }
                     }
@@ -239820,7 +240803,8 @@
                             "query",
                             "execute",
                             "deploy-to-restricted",
-                            "manage"
+                            "manage",
+                            "read-all"
                           ]
                         }
                       }
@@ -240165,7 +241149,8 @@
                             "query",
                             "execute",
                             "deploy-to-restricted",
-                            "manage"
+                            "manage",
+                            "read-all"
                           ]
                         }
                       }
@@ -240475,7 +241460,8 @@
                           "query",
                           "execute",
                           "deploy-to-restricted",
-                          "manage"
+                          "manage",
+                          "read-all"
                         ]
                       }
                     }
@@ -240552,7 +241538,8 @@
                             "query",
                             "execute",
                             "deploy-to-restricted",
-                            "manage"
+                            "manage",
+                            "read-all"
                           ]
                         }
                       }
@@ -255421,7 +256408,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -256174,7 +257161,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Project detail. Share team ids are included for the owner only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "Project detail. Share team ids are included for the owner only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -257421,7 +258408,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and the chats inside them",
+        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -257741,7 +258728,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and the chats inside them",
+        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and your own chats inside them",
         "requestBody": {
           "required": true,
           "content": {
@@ -258056,7 +259043,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "The project's instructions (markdown). Readable by anyone with project access; empty until the owner first saves it. The content is injected into the system prompt of every chat in the project.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "The project's instructions (markdown). Readable by anyone with project access; empty until the owner first saves it. The content is injected into the system prompt of every chat in the project.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -258628,7 +259615,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All chats in a project the caller can read. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "All chats in a project the caller can read. Chats authored by others require `project:read-all`; without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -258961,7 +259948,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Pin a project to the current user's sidebar. Personal — does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "Pin a project to the current user's sidebar. Personal — does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -259238,7 +260225,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Remove the current user's pin on a project. Idempotent; allowed even if the project was since unshared from the user.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "Remove the current user's pin on a project. Idempotent; allowed even if the project was since unshared from the user.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -287253,7 +288240,8 @@
                         "query",
                         "execute",
                         "deploy-to-restricted",
-                        "manage"
+                        "manage",
+                        "read-all"
                       ]
                     }
                   }

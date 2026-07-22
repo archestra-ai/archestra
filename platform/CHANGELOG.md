@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.3.13](https://github.com/archestra-ai/archestra/compare/platform-v1.3.12...platform-v1.3.13) (2026-07-22)
+
+
+### Features
+
+* add project admin permissions ([#6742](https://github.com/archestra-ai/archestra/issues/6742)) ([f52765b](https://github.com/archestra-ai/archestra/commit/f52765bca8af93141a8fce8a37b9eef645808cfc))
+* **audit:** org-audit rows for mutating Archestra MCP tools ([#6751](https://github.com/archestra-ai/archestra/issues/6751)) ([0899cc1](https://github.com/archestra-ai/archestra/commit/0899cc19190d66815b42d5d3c8a342e85c41b62c))
+* **connection:** add a Disconnect panel to the connect flow ([#6720](https://github.com/archestra-ai/archestra/issues/6720)) ([397eb3f](https://github.com/archestra-ai/archestra/commit/397eb3f029e885880894262e6f08caf97f6be37e))
+* **frontend:** group built-in Archestra MCP tools by domain in the tool picker ([#6738](https://github.com/archestra-ai/archestra/issues/6738)) ([785ada1](https://github.com/archestra-ai/archestra/commit/785ada110a30a9e900d33da925de24265d4bfd09))
+* **hackathon:** capture and replay app audio in session recordings ([#6761](https://github.com/archestra-ai/archestra/issues/6761)) ([4eeac8d](https://github.com/archestra-ai/archestra/commit/4eeac8d07b2d27f995e49d7cb506ad160e1695e4))
+* **kb:** native Bedrock embeddings, provider gating, and diagnosable KB failures ([#6671](https://github.com/archestra-ai/archestra/issues/6671)) ([b059b1e](https://github.com/archestra-ai/archestra/commit/b059b1e88c98a7fab4fad1af161db692745bc6f2))
+* per-skill usage analytics on the Skills page ([#6740](https://github.com/archestra-ai/archestra/issues/6740)) ([ddca27b](https://github.com/archestra-ai/archestra/commit/ddca27b3ad431fa57e4adc4febb7a61180f91d0e))
+* telegram conversation memory, group bindings, GA ([#6749](https://github.com/archestra-ai/archestra/issues/6749)) ([917bb7e](https://github.com/archestra-ai/archestra/commit/917bb7eccf7146960cd3e7af1016dde30ac645cb))
+* **ui:** cards/table view toggle for Projects, Apps, and MCP Registry ([#6753](https://github.com/archestra-ai/archestra/issues/6753)) ([82531f0](https://github.com/archestra-ai/archestra/commit/82531f09da6cb564e26b865555510e1afaf26b82))
+
+
+### Bug Fixes
+
+* bump fast-uri override to 3.1.4 (CVE-2026-16221, CVE-2026-13676) ([#6760](https://github.com/archestra-ai/archestra/issues/6760)) ([a9af6d2](https://github.com/archestra-ai/archestra/commit/a9af6d2348da210331b70523ee8c3ceb3bd56cb8))
+* GPT-5.6 support across OpenAI API and ChatGPT-subscription chat ([#6750](https://github.com/archestra-ai/archestra/issues/6750)) ([2fac946](https://github.com/archestra-ai/archestra/commit/2fac94656393802613b7a70ac27f2c28613ddc20))
+* **hackathon:** share app sessions bugs ([#6748](https://github.com/archestra-ai/archestra/issues/6748)) ([0c45968](https://github.com/archestra-ai/archestra/commit/0c45968827bb5a8b1d0648197387c7951c6b92b0))
+* **hackathon:** stop the app-session player blacking out transparent … ([#6759](https://github.com/archestra-ai/archestra/issues/6759)) ([ffa29f4](https://github.com/archestra-ai/archestra/commit/ffa29f43df287aa28181015737cfa57eb64f56a5))
+* highlight links in skill sync panel, rename Chat button ([#6734](https://github.com/archestra-ai/archestra/issues/6734)) ([7555826](https://github.com/archestra-ai/archestra/commit/75558260f948cb652d5ed4107b66750418f0134f))
+* **knowledge:** show connection result on the test button, align footer layout ([#6763](https://github.com/archestra-ai/archestra/issues/6763)) ([55ca578](https://github.com/archestra-ai/archestra/commit/55ca578c5d62f3af3c023c8955ee7f703d138091))
+* **llm-proxy:** make reject-mode 400 self-diagnosing for misconfigured base URLs ([#6755](https://github.com/archestra-ai/archestra/issues/6755)) ([553557d](https://github.com/archestra-ai/archestra/commit/553557d94bbe4572d0c52363e2fa703c4ae10788))
+* **projects:** hide Schedules section for roles without scheduledTask:read ([#6762](https://github.com/archestra-ai/archestra/issues/6762)) ([9f6cc9b](https://github.com/archestra-ai/archestra/commit/9f6cc9ba67803df33fb9d5cebf8ca4a9873590de))
+
+
+### Miscellaneous Chores
+
+* **chat:** show chat support links in the mobile header bar ([#6743](https://github.com/archestra-ai/archestra/issues/6743)) ([6b55505](https://github.com/archestra-ai/archestra/commit/6b55505e92b3fc1b3464819ee5b9fea17ea5dbc7))
+
 ## [1.3.12](https://github.com/archestra-ai/archestra/compare/platform-v1.3.11...platform-v1.3.12) (2026-07-21)
 
 

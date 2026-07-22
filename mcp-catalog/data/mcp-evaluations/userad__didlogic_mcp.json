@@ -1,0 +1,157 @@
+{
+  "name": "userad__didlogic_mcp",
+  "display_name": "didlogic_mcp",
+  "description": "MCP server from UserAd/didlogic_mcp",
+  "author": {
+    "name": "UserAd"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["didlogic_mcp"],
+    "env": {
+      "DIDLOGIC_API_KEY": "${user_config.didlogic_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "didlogic_api_key": {
+      "type": "string",
+      "title": "Didlogic API Key",
+      "description": "Your API key for accessing Didlogic services.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Didlogic MCP Server\n\nA Model Context Protocol (MCP) server implementation for the Didlogic API. This server allows Large Language Models (LLMs) to interact with Didlogic services through a standardized interface.\n\n## Features\n\n- Full access to Didlogic API through MCP tools\n- Specialized prompts for common operations\n- Balance management tools\n- SIP account (sipfriends) management\n- IP restriction management\n- Purchases management\n- Call hisory access\n- Transaction history access\n\n## Installation\n\n### Using uv (recommended)\n\nWhen using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will\nuse [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *didlogic_mcp*.\n\n### Using PIP\n\nAlternatively you can install `didlogic_mcp` via pip:\n\n```bash\npip install didlogic_mcp\n```\n\nAfter installation, you can run it as a script using:\n\n```bash\nDIDLOGIC_API_KEY=YOUR_DIDLOGIC_KEY python -m didlogic_mcp\n```\n\n## Configuration\n\n### Configure for Claude.app\n\nAdd to your Claude settings:\n\n#### Using uvx\n\n```json\n\"mcpServers\": {\n  \"didlogic\": {\n    \"command\": \"uvx\",\n    \"args\": [\"didlogic_mcp\"],\n    \"env\": {\n      \"DIDLOGIC_API_KEY\": \"YOUR_DIDLOGIC_KEY\"\n    }\n  }\n}\n```\n\n#### Using pip installation\n\n```json\n\"mcpServers\": {\n  \"didlogic\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"didlogic_mcp\"],\n    \"env\": {\n      \"DIDLOGIC_API_KEY\": \"YOUR_DIDLOGIC_KEY\"\n    }\n  }\n}\n```\n\n## License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "didlogic_mcp": {
+        "command": "uvx",
+        "args": ["didlogic_mcp"],
+        "env": {
+          "DIDLOGIC_API_KEY": "YOUR_DIDLOGIC_KEY"
+        }
+      },
+      "didlogic_mcp-python": {
+        "command": "python",
+        "args": ["-m", "didlogic_mcp"],
+        "env": {
+          "DIDLOGIC_API_KEY": "YOUR_DIDLOGIC_KEY"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "UserAd",
+    "repo": "didlogic_mcp",
+    "url": "https://github.com/UserAd/didlogic_mcp",
+    "name": "userad__didlogic_mcp",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "cef69e78ea1d96fc6aacb9cacaf088e35e4831e5"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:24.945Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "starlette",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "pydantic-core",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 7
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 7
+    },
+    {
+      "name": "anyio",
+      "importance": 6
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    },
+    {
+      "name": "annotated-types",
+      "importance": 5
+    },
+    {
+      "name": "httpcore",
+      "importance": 5
+    },
+    {
+      "name": "typing-extensions",
+      "importance": 5
+    },
+    {
+      "name": "click",
+      "importance": 4
+    },
+    {
+      "name": "h11",
+      "importance": 4
+    },
+    {
+      "name": "certifi",
+      "importance": 3
+    },
+    {
+      "name": "idna",
+      "importance": 3
+    },
+    {
+      "name": "sniffio",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"didlogic_mcp\"\nversion = \"1.0.3\"\ndescription = \"DIDLogic MCP server\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\nlicense = \"MIT\"\nauthors = [\n    { name = \"Konstantin Tumalevich\", email = \"userad@gmail.com\" }\n]\ndependencies = [\n    \"annotated-types==0.7.0\",\n    \"anyio==4.9.0\",\n    \"certifi==2025.1.31\",\n    \"click==8.1.8\",\n    \"h11==0.14.0\",\n    \"httpcore==1.0.7\",\n    \"httpx==0.28.1\",\n    \"idna==3.10\",\n    \"mcp==1.4.1\",\n    \"pydantic==2.10.6\",\n    \"pydantic-core==2.27.2\",\n    \"pydantic-settings==2.8.1\",\n    \"python-dotenv==1.0.1\",\n    \"sniffio==1.3.1\",\n    \"sse-starlette==2.2.1\",\n    \"starlette==0.46.1\",\n    \"typing-extensions==4.12.2\",\n    \"uvicorn==0.34.0\",\n]\n\n[project.scripts]\ndidlogic_mcp = \"didlogic_mcp:server\"\n"
+}

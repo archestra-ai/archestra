@@ -1,0 +1,119 @@
+{
+  "name": "picahq__mcp",
+  "display_name": "mcp",
+  "description": "A Model Context Protocol Server for Pica",
+  "author": {
+    "name": "picahq"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@picahq/mcp"],
+    "env": {
+      "PICA_SECRET": "${user_config.pica_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "pica_secret": {
+      "type": "string",
+      "title": "Pica Secret Key",
+      "description": "Your Pica secret key, obtainable from the Pica dashboard (app.picaos.com/settings/api-keys), for authenticating with the Pica platform.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Pica MCP Server\n\n[![npm version](https://img.shields.io/npm/v/%40picahq%2Fmcp)](https://npmjs.com/package/@picahq/mcp) [![smithery badge](https://smithery.ai/badge/@picahq/mcp)](https://smithery.ai/server/@picahq/mcp)\n\n<img src=\"https://assets.picaos.com/github/pica-mcp.svg\" alt=\"Pica MCP Banner\" style=\"border-radius: 5px;\">\n\nA [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that integrates with [Pica](https://picaos.com), enabling seamless interaction with various third-party services through a standardized interface. This server provides direct access to platform integrations, actions, execution capabilities, and robust code generation capabilities.\n\n<a href=\"https://glama.ai/mcp/servers/@picahq/mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@picahq/mcp/badge\" alt=\"pica MCP server\" />\n</a>\n\n## Features\n\n### 🔧 Tools\n- **list_pica_integrations** - List all available platforms and your active connections\n- **get_pica_platform_actions** - Get available actions for a specific platform\n- **get_pica_action_knowledge** - Get detailed documentation for a specific action including parameters and usage\n- **execute_pica_action** - Execute API actions with full parameter support\n\n## Key Capabilities\n\n### 🔌 **Platform Integration**\n- Connect to 100+ platforms through Pica\n- Manage multiple connections per platform\n- Access real-time connection status\n\n### 🎯 **Smart Intent Detection**\n- Execute actions immediately (e.g. \"read my last gmail email\", \"send a message to the slack channel #general\")\n- Generate integration code (e.g. \"build a form to send emails using gmail\", \"create a UI for messaging\")\n- Intelligent context handling\n\n### 🔒 **Enhanced Security**\n- Never exposes secrets in generated code\n- Uses environment variables: `PICA_SECRET`, `PICA_[PLATFORM]_CONNECTION_KEY`\n- Sanitized request configurations for production use\n\n### ⚡ **Direct Execution**\n- Execute actions directly through the MCP interface\n- Support for all HTTP methods (GET, POST, PUT, DELETE, etc.)\n- Handle form data, URL encoding, and JSON payloads\n- Pass path variables, query parameters, and custom headers\n\n### 🔒 **Secure Authentication**\n- All requests authenticated through Pica's secure proxy\n- No need to manage individual platform API keys\n- Environment variable configuration for security\n\n## Installation\n\n```bash\nnpm install @picahq/mcp\n```\n\n## Setup\n```bash\nPICA_SECRET=your-pica-secret-key\n```\n\nGet your Pica secret key from the [Pica dashboard](https://app.picaos.com/settings/api-keys).\n\n## Usage\n\n### As a Standalone Server\n\n```bash\nnpx @picahq/mcp\n```\n\n### In Claude Desktop\n\nTo use with [Claude Desktop](https://claude.ai/download), add the server config:\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"pica\": {\n      \"command\": \"npx\",\n      \"args\": [\"@picahq/mcp\"],\n      \"env\": {\n        \"PICA_SECRET\": \"your-pica-secret-key\"\n      }\n    }\n  }\n}\n```\n\n### In Cursor\n\nIn the Cursor menu, select \"MCP Settings\" and update the MCP JSON file to include the following:\n\n```json\n{\n  \"mcpServers\": {\n    \"pica\": {\n      \"command\": \"npx\",\n      \"args\": [\"@picahq/mcp\"],\n      \"env\": {\n        \"PICA_SECRET\": \"your-pica-secret-key\"\n      }\n    }\n  }\n}\n```\n\n### Using Docker\n\nBuild the Docker Image:\n\n```bash\ndocker build -t pica-mcp-server .\n```\n\nRun the Docker Container:\n\n```bash\ndocker run -e PICA_SECRET=your_pica_secret_key pica-mcp-server\n```\n\n### Installing via Smithery\n\nTo install pica for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@picahq/mcp):\n\n```bash\nnpx -y @smithery/cli install @picahq/mcp --client claude\n```\n\n## Deploy to Vercel\n\nYou can deploy this MCP server to Vercel for remote access:\n\n1. Install dependencies including Vercel adapter:\n   ```bash\n   npm install @vercel/mcp-adapter zod\n   ```\n\n2. Deploy to Vercel:\n   ```bash\n   vercel\n   ```\n\n3. Configure your MCP client to use the remote server:\n   - **For Cursor**: `https://your-project.vercel.app/api/mcp`\n   - **For Claude/Cline**: Use `npx mcp-remote https://your-project.vercel.app/api/mcp`\n\nSee [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed Vercel deployment instructions.\n\n## Examples for Inspiration\n\n### 📋 **Integration Code Generation**\n\n**Build Email Form:**\n> \"Create me a React form component that can send emails using Gmail using Pica\"\n\n**Linear Dashboard:**\n> \"Create a dashboard that displays Linear users and their assigned projects with filtering options using Pica\"\n\n**QuickBooks Table:**\n> \"Build a paginatable table component that fetches and displays QuickBooks invoices with search and sort using Pica\"\n\n**Slack Integration:**\n> \"Create a page with a form that can post messages to multiple Slack channels with message scheduling using Pica\"\n\n### 🚀 **Direct Action Execution**\n\n**Gmail Example:**\n> \"Get my last 5 emails from Gmail using Pica\"\n\n**Slack Example:**\n> \"Send a slack message to #general channel: 'Meeting in 10 minutes' using Pica\"\n\n**Shopify Example:**\n> \"Get all products from my Shopify store using Pica\"\n\n## API Reference\n\n### Tools\n\n#### `list_pica_integrations`\nList all available Pica integrations and platforms. Always call this tool first to discover available platforms and connections.\n\n**Parameters:** None\n\n**Returns:**\n- Connected integrations grouped by platform\n- Available platforms with descriptions\n- Summary statistics\n- Management links\n\n#### `get_pica_platform_actions`\nGet all available actions for a specific platform.\n\n**Parameters:**\n- `platform` (string, required): Platform name in kebab-case format (e.g., 'ship-station', 'shopify')\n\n**Returns:**\n- List of available actions with IDs and titles\n- Platform-specific action count\n- Next steps guidance\n\n#### `get_pica_action_knowledge`\nGet comprehensive documentation for a specific action. **Must be called before execute_pica_action** to understand requirements.\n\n**Parameters:**\n- `action_id` (string, required): Action ID from get_pica_platform_actions\n- `platform` (string, required): Platform name in kebab-case format\n\n**Returns:**\n- Detailed action documentation\n- Parameter requirements and structure\n- API-specific guidance and caveats\n- Usage examples and implementation notes\n\n#### `execute_pica_action`\nExecute a Pica action to perform operations on third-party platforms. **Critical:** Only call this when the user wants to execute an action, not when building applications.\n\n**Parameters:**\n- `platform` (string, required): Platform name\n- `action` (object, required): Action object with `_id`, `path`, and `method`\n- `connectionKey` (string, required): Connection key for the platform\n- `data` (object, optional): Request body data\n- `pathVariables` (object, optional): Variables to replace in the path\n- `queryParams` (object, optional): Query parameters\n- `headers` (object, optional): Additional headers\n- `isFormData` (boolean, optional): Send as multipart/form-data\n- `isFormUrlEncoded` (boolean, optional): Send as URL-encoded form data\n\n**Returns:**\n- `requestConfig`: Sanitized request configuration\n- `responseData`: Actual API response from the platform\n\n## Error Handling\n\nThe server implements comprehensive error handling:\n\n- ✅ Parameter validation for all tools\n- ✅ Connection verification before execution\n- ✅ Path variable validation and substitution\n- ✅ Graceful handling of API failures\n- ✅ Detailed error messages for debugging\n- ✅ MCP-compliant error responses\n\n## Security\n\n- 🔐 Single environment variable required: `PICA_SECRET`\n- 🛡️ All requests authenticated through Pica's secure proxy\n- 🔒 No direct platform API key management needed\n- 🚫 Secrets never exposed in responses\n- ✅ Request configurations sanitized\n- 🔍 Sensitive data filtered from logs\n- 🛡️ Input validation and sanitization\n\n## License\n\nGPL-3.0\n\n## Support\n\nFor support, please contact support@picaos.com or visit https://picaos.com",
+  "category": "Development",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "picahq-mcp": {
+        "command": "npx",
+        "args": ["-y", "@picahq/mcp"],
+        "env": {}
+      },
+      "picahq-mcp-configured": {
+        "command": "npx",
+        "args": ["-y", "@picahq/mcp"],
+        "env": {
+          "PICA_SECRET": "your-pica-secret-key"
+        }
+      },
+      "pica-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "-e", "PICA_SECRET=your_pica_secret_key", "pica-mcp-server"],
+        "env": {
+          "PICA_SECRET": "your_pica_secret_key"
+        },
+        "docker_image": "pica-mcp-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "picahq",
+    "repo": "mcp",
+    "url": "https://github.com/picahq/mcp",
+    "name": "picahq__mcp",
+    "path": null,
+    "stars": 8,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "095adf85622c10f4864d84408c599299298643f6"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:41.260Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@vercel/mcp-adapter",
+      "importance": 9
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "cors",
+      "importance": 8
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "form-data",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@picahq/mcp\",\n  \"version\": \"1.0.3\",\n  \"description\": \"A Model Context Protocol Server for Pica\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"http\": \"npm run build && node build/index.js\",\n    \"http:dev\": \"npm run build && nodemon build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"@vercel/mcp-adapter\": \"^0.9.1\",\n    \"axios\": \"^1.10.0\",\n    \"cors\": \"^2.8.5\",\n    \"express\": \"^5.1.0\",\n    \"form-data\": \"^4.0.3\",\n    \"zod\": \"^3.23.0\"\n  },\n  \"devDependencies\": {\n    \"@types/cors\": \"^2.8.19\",\n    \"@types/express\": \"^5.0.3\",\n    \"@types/node\": \"^22.0.0\",\n    \"nodemon\": \"^3.1.10\",\n    \"typescript\": \"^5.6.0\"\n  },\n  \"author\": {\n    \"name\": \"Pica\",\n    \"email\": \"support@picaos.com\",\n    \"url\": \"https://picaos.com\"\n  },\n  \"license\": \"GPL-3.0\"\n}"
+}

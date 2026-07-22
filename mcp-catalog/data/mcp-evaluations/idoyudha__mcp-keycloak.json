@@ -1,0 +1,152 @@
+{
+  "name": "idoyudha__mcp-keycloak",
+  "display_name": "mcp-keycloak",
+  "description": "The Keycloak MCP Server designed for agentic applications to manage and search data in Keycloak efficiently",
+  "author": {
+    "name": "idoyudha"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-keycloak"],
+    "env": {
+      "SERVER_URL": "${user_config.server_url}",
+      "USERNAME": "${user_config.username}",
+      "PASSWORD": "${user_config.password}",
+      "REALM_NAME": "${user_config.realm_name}",
+      "CLIENT_ID": "${user_config.client_id}",
+      "CLIENT_SECRET": "${user_config.client_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "server_url": {
+      "type": "string",
+      "title": "Keycloak Server URL",
+      "description": "The base URL of your Keycloak server (e.g., https://your-keycloak-server.com)",
+      "required": true,
+      "sensitive": false
+    },
+    "username": {
+      "type": "string",
+      "title": "Keycloak Admin Username",
+      "description": "Username for the Keycloak administrator account",
+      "required": true,
+      "sensitive": false
+    },
+    "password": {
+      "type": "string",
+      "title": "Keycloak Admin Password",
+      "description": "Password for the Keycloak administrator account",
+      "required": true,
+      "sensitive": true
+    },
+    "realm_name": {
+      "type": "string",
+      "title": "Keycloak Realm Name",
+      "description": "The name of the Keycloak realm to manage",
+      "required": true,
+      "sensitive": false
+    },
+    "client_id": {
+      "type": "string",
+      "title": "OAuth2 Client ID (Optional)",
+      "description": "Optional client ID for OAuth2 authentication",
+      "required": false,
+      "sensitive": false
+    },
+    "client_secret": {
+      "type": "string",
+      "title": "OAuth2 Client Secret (Optional)",
+      "description": "Optional client secret for OAuth2 authentication",
+      "required": false,
+      "sensitive": true
+    }
+  },
+  "readme": "# Keycloak MCP Server \n[![Python Version](https://img.shields.io/badge/python-3.13%2B-blue)](https://www.python.org/downloads/)\n[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE.txt)\n[![smithery badge](https://smithery.ai/badge/@idoyudha/mcp-keycloak)](https://smithery.ai/server/@idoyudha/mcp-keycloak)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/idoyudha/mcp-keycloak)](https://archestra.ai/mcp-catalog/idoyudha__mcp-keycloak)\n\nA Model Context Protocol (MCP) server that provides a natural language interface for managing Keycloak identity and access management through its REST API. This server enables AI agents to perform user management, client configuration, realm administration, and role-based access control operations seamlessly.\n\n## Overview\n\nThe Keycloak MCP Server bridges the gap between AI applications and Keycloak's powerful identity management capabilities. Whether you're building an AI assistant that needs to manage users, configure clients, or handle complex authorization scenarios, this server provides the tools you need through simple, natural language commands.\n\n## Features\n\n### 🔐 Comprehensive User Management\nManage users lifecycle from creation to deletion, including password resets, session management, and user attribute updates.\n\n### 🏢 Client Configuration\nCreate and configure OAuth2/OIDC clients, manage client secrets, and handle service accounts programmatically.\n\n### 👥 Role-Based Access Control\nDefine and assign realm and client-specific roles, manage user permissions, and implement fine-grained access control.\n\n### 🏛️ Realm Administration\nConfigure realm settings, manage default groups, handle event configurations, and control realm-wide policies.\n\n### 🔐 Authentication Management\nComprehensive authentication flow management including creating, updating, and deleting flows, managing executions, and configuring authenticators.\n\n### 🔄 Group Management\nOrganize users into groups, manage group hierarchies, and handle group-based permissions efficiently.\n\n## Installation\n\n### Installing via Smithery\n\nTo install mcp-keycloak for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-keycloak):\n\n```bash\nnpx -y @smithery/cli install mcp-keycloak --client claude\n```\n\n### Quick Start\n\nInstall using pip:\n```bash\npip install mcp-keycloak\n```\n\n### Development Installation\n\nClone the repository and install dependencies:\n```bash\ngit clone https://github.com/idoyudha/mcp-keycloak.git\ncd mcp-keycloak\npip install -e .\n```\n\n## Configuration\n\nThe server can be configured using environment variables or a `.env` file:\n\n```bash\n# Required configuration\nSERVER_URL=https://your-keycloak-server.com\nUSERNAME=admin-username\nPASSWORD=admin-password\nREALM_NAME=your-realm\n\n# Optional OAuth2 client configuration\nCLIENT_ID=optional-client-id\nCLIENT_SECRET=optional-client-secret\n```\n\n## Tools\n\nThe Keycloak MCP Server provides a comprehensive set of tools organized by functionality:\n\n### User Management\nComplete user lifecycle management including:\n- `list_users` - List users with pagination and filtering\n- `create_user` / `update_user` / `delete_user` - Full CRUD operations\n- `reset_user_password` - Password management\n- `get_user_sessions` / `logout_user` - Session control\n- `count_users` - User statistics\n\n### Client Management\nOAuth2/OIDC client configuration:\n- `list_clients` / `get_client` / `create_client` - Client operations\n- `get_client_secret` / `regenerate_client_secret` - Secret management\n- `get_client_service_account` - Service account access\n- `update_client` / `delete_client` - Client modifications\n\n### Role Management\nFine-grained permission control:\n- `list_realm_roles` / `create_realm_role` - Realm role operations\n- `list_client_roles` / `create_client_role` - Client-specific roles\n- `assign_realm_role_to_user` / `remove_realm_role_from_user` - Role assignments\n- `get_user_realm_roles` / `assign_client_role_to_user` - User role queries\n\n### Group Management\nHierarchical user organization:\n- `list_groups` / `create_group` / `update_group` - Group operations\n- `get_group_members` / `add_user_to_group` - Membership management\n- `get_user_groups` / `remove_user_from_group` - User group associations\n\n### Realm Administration\nSystem-wide configuration:\n- `get_accessible_realms` - List of accessible realms\n- `get_realm_info` / `update_realm_settings` - Realm configuration\n- `get_realm_events_config` / `update_realm_events_config` - Event management\n- `add_realm_default_group` / `remove_realm_default_group` - Default settings\n\n### Authentication Management\nComplete authentication flow control:\n- `list_authentication_flows` / `get_authentication_flow` - Flow management\n- `create_authentication_flow` / `update_authentication_flow` - Flow CRUD operations\n- `delete_authentication_flow` / `copy_authentication_flow` - Flow modifications\n- `get_flow_executions` / `update_flow_executions` - Execution management\n- `create_execution` / `delete_execution` - Execution lifecycle\n- `get_authenticator_config` / `create_authenticator_config` - Configuration management\n- `get_required_actions` / `update_required_action` - Required actions control\n\n## Usage\n\n### Running the Server\n\nThe server supports both stdio (default) and HTTP transports. The smithery.yaml configuration file enables deployment on the Smithery platform and automatic installation via Smithery CLI:\n\n```bash\n# Run in stdio mode (default, for local CLI tools)\npython -m src.main\n\n# Run in HTTP mode with streamable HTTP transport\nTRANSPORT=http python -m src.main\n\n# Run HTTP mode on a custom port\nTRANSPORT=http PORT=8080 python -m src.main\n\n# Or use the convenience script:\n./scripts/run_server.sh         # stdio mode (default)\n./scripts/run_server.sh http    # HTTP mode\nPORT=8080 ./scripts/run_server.sh http  # HTTP mode on custom port\n```\n\nWhen using HTTP transport, the server will be accessible at `http://127.0.0.1:8000/mcp/` (or your custom PORT).\n\n### HTTP Transport\n\nThe Keycloak MCP Server supports HTTP transport mode, which offers several advantages:\n\n- **Network Accessibility**: Access the server from any machine on your network\n- **Multiple Clients**: Support concurrent connections from multiple AI clients\n- **Integration Flexibility**: Easy integration with web applications and APIs\n- **Load Balancing**: Deploy behind a reverse proxy for scalability\n\n#### HTTP Protocol Details\n\nThe HTTP transport follows the MCP specification for Streamable HTTP. FastMCP automatically handles all protocol requirements:\n\n- **Endpoint**: All communication happens through `/mcp/` endpoint\n- **Request Method**: POST requests with JSON-RPC 2.0 messages\n- **Content Types**: \n  - Server returns `Content-Type: application/json` for single responses\n  - Server returns `Content-Type: text/event-stream` for streaming responses\n- **Accept Headers**: Clients must include `Accept: application/json, text/event-stream`\n- **Message Format**: All messages use JSON-RPC 2.0 format, UTF-8 encoded\n\nFastMCP automatically determines whether to return a single JSON response or an SSE stream based on the request type and whether the response needs streaming capabilities.\n\n#### Connecting to HTTP Server\n\nWhen running in HTTP mode, clients can connect to:\n```\nhttp://127.0.0.1:8000/mcp/\n```\n\nExample client request:\n```bash\ncurl -X POST http://localhost:8000/mcp/ \\\n  -H \"Content-Type: application/json\" \\\n  -H \"Accept: application/json, text/event-stream\" \\\n  -d '{\"jsonrpc\": \"2.0\", \"method\": \"list_tools\", \"id\": 1}'\n```\n\n#### Security Implementation\n\nThe HTTP transport implements all MCP specification security requirements:\n\n**✅ Origin Header Validation (REQUIRED)**\n- Automatically validates Origin headers to prevent DNS rebinding attacks\n- Only allows connections from `localhost` and `127.0.0.1` origins\n- Blocks unauthorized cross-origin requests\n\n**✅ Localhost Binding (RECOMMENDED)**\n- Binds to `127.0.0.1` only to prevent network-based attacks\n- Follows MCP specification security recommendations\n\n**✅ No Authentication Required**\n- The server runs without authentication requirements for simplified local development\n- Suitable for localhost usage and trusted environments\n\nFor production deployments, additional considerations:\n- Use HTTPS with proper certificates\n- Deploy behind a reverse proxy (nginx, Apache)\n- Set appropriate firewall rules\n- Implement authentication at the reverse proxy level if needed\n\n### Integration Examples\n\n#### Prerequisites\n\nBefore integrating the Keycloak MCP Server, ensure you have one of the following installed:\n\n- **uvx** (recommended): Install via `pip install uvx` or `pipx install uvx`\n- **uv**: Follow [installation instructions](https://docs.astral.sh/uv/getting-started/installation/)\n- **npm/npx**: For Smithery installation (comes with [Node.js](https://nodejs.org/))\n\n#### Option 1: Using Smithery CLI (Recommended)\n\nThe easiest way - automatically configures everything for Claude Desktop:\n\n```bash\nnpx @smithery/cli install @idoyudha/mcp-keycloak --client claude\n```\n\nThis command will prompt you for the required configuration values and set up the server automatically.\n\n#### Option 2: Using uvx (Manual Setup)\n\nNo cloning required! Add to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"keycloak\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-keycloak\"],\n      \"env\": {\n        \"SERVER_URL\": \"https://your-keycloak.com\",\n        \"USERNAME\": \"admin\",\n        \"PASSWORD\": \"admin-password\",\n        \"REALM_NAME\": \"your-realm\"\n      }\n    }\n  }\n}\n```\n\n#### Option 3: Local Development Setup\n\nFor development or customization:\n\n1. Clone the repository:\n```bash\ngit clone https://github.com/idoyudha/mcp-keycloak.git\ncd mcp-keycloak\n```\n\n2. Add to your `claude_desktop_config.json`:\n```json\n{\n  \"mcpServers\": {\n    \"keycloak\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/path/to/mcp-keycloak\",\n        \"run\",\n        \"python\",\n        \"-m\",\n        \"src\"\n      ],\n      \"env\": {\n        \"SERVER_URL\": \"https://your-keycloak.com\",\n        \"USERNAME\": \"admin\",\n        \"PASSWORD\": \"admin-password\",\n        \"REALM_NAME\": \"your-realm\"\n      }\n    }\n  }\n}\n```\n\n💡 **Quick Tips:**\n- Replace `/path/to/mcp-keycloak` with the actual path where you cloned the repository\n- Ensure your Keycloak server URL includes the protocol (`https://` or `http://`)\n- The `REALM_NAME` should match an existing realm in your Keycloak instance\n\n## Example Use Cases\n\n### 🤖 AI-Powered Identity Management\nBuild AI assistants that can handle user onboarding, permission management, and access control through natural language commands.\n\n### 🔄 Automated User Provisioning\nCreate workflows that automatically provision users, assign roles, and configure client applications based on business rules.\n\n### 📊 Identity Analytics\nQuery and analyze user data, session information, and access patterns to gain insights into your identity infrastructure.\n\n### 🚀 DevOps Integration\nIntegrate Keycloak management into your CI/CD pipelines, allowing automated configuration of identity services.\n\n## Requirements\n\n- Python 3.8 or higher\n- Keycloak server (tested with Keycloak 18+)\n- Admin access to Keycloak realm\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## Support\n\nFor issues, questions, or contributions, please visit the [GitHub repository](https://github.com/idoyudha/mcp-keycloak).\n",
+  "category": "Security",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-keycloak": {
+        "command": "uvx",
+        "args": ["mcp-keycloak"],
+        "env": {
+          "SERVER_URL": "https://your-keycloak.com",
+          "USERNAME": "admin",
+          "PASSWORD": "admin-password",
+          "REALM_NAME": "your-realm"
+        }
+      },
+      "mcp-keycloak-local": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/mcp-keycloak", "run", "python", "-m", "src"],
+        "env": {
+          "SERVER_URL": "https://your-keycloak.com",
+          "USERNAME": "admin",
+          "PASSWORD": "admin-password",
+          "REALM_NAME": "your-realm"
+        }
+      },
+      "mcp-keycloak-direct": {
+        "command": "python",
+        "args": ["-m", "src.main"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "idoyudha",
+    "repo": "mcp-keycloak",
+    "url": "https://github.com/idoyudha/mcp-keycloak",
+    "name": "mcp-keycloak",
+    "path": null,
+    "stars": 1,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "0f9d29c8826873ea58a9442541d4e9e3c5e755bc"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:54.360Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-keycloak\"\nversion = \"1.0.1\"\ndescription = \"MCP server for Keycloak administration\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"python-dotenv>=1.0.0\",\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.12.3\",\n    \"requests>=2.32.0\",\n]\n\n[project.scripts]\nmcp-keycloak = \"mcp_keycloak.__main__:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src\"]\n\n[tool.hatch.build.targets.wheel.force-include]\n\"src\" = \"mcp_keycloak\"\n\n[dependency-groups]\ndev = [\n    \"ruff>=0.12.7\",\n]\n"
+}

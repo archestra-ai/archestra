@@ -3,6 +3,7 @@
 import { APP_RECORDING_RENDER_ROUTE } from "@archestra/shared";
 import type { Permissions } from "@archestra/shared/permission.types";
 import { usePathname } from "next/navigation";
+import { MOBILE_HEADER_ACTIONS_CONTAINER_ID } from "@/components/chat/chat-help-link";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { FeedbackPopupDialog } from "@/components/feedback-popup-dialog";
@@ -152,7 +153,7 @@ export function AppShell({ children }: AppShellProps) {
               <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
                 <NavAwareSidebarTrigger />
                 <div
-                  id="mobile-header-actions"
+                  id={MOBILE_HEADER_ACTIONS_CONTAINER_ID}
                   className="flex items-center gap-2"
                 />
               </header>

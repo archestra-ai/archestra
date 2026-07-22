@@ -20,6 +20,7 @@ export * from "./autonomy-policies";
 export * from "./catalog-team-level";
 export * from "./chat";
 export * from "./chat-active-run";
+export * as ChatToolExecutionClaim from "./chat-tool-execution-claim";
 export * from "./chatops";
 // chatops-channel-binding uses @/database (drizzle-zod) — import directly to avoid circular deps
 export * from "./common-llm-format";

@@ -79163,6 +79163,91 @@ export type UpdateVirtualApiKeyResponses = {
 
 export type UpdateVirtualApiKeyResponse = UpdateVirtualApiKeyResponses[keyof UpdateVirtualApiKeyResponses];
 
+export type GetVirtualApiKeyValueData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-virtual-keys/{id}/value';
+};
+
+export type GetVirtualApiKeyValueErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetVirtualApiKeyValueError = GetVirtualApiKeyValueErrors[keyof GetVirtualApiKeyValueErrors];
+
+export type GetVirtualApiKeyValueResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        value: string;
+    };
+};
+
+export type GetVirtualApiKeyValueResponse = GetVirtualApiKeyValueResponses[keyof GetVirtualApiKeyValueResponses];
+
 export type VllmEmbeddingsWithDefaultAgentData = {
     body: {
         model: string;

@@ -1144,6 +1144,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetVirtualApiKey]: {
     llmVirtualKey: ["read"],
   },
+  // Reveals the raw key value; restricted to the key's author in the handler.
+  [RouteId.GetVirtualApiKeyValue]: {
+    llmVirtualKey: ["read"],
+  },
   [RouteId.CreateVirtualApiKey]: {
     llmVirtualKey: ["create"],
   },

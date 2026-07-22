@@ -407,6 +407,7 @@ export const RouteId = {
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   GetVirtualApiKey: "getVirtualApiKey",
+  GetVirtualApiKeyValue: "getVirtualApiKeyValue",
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",

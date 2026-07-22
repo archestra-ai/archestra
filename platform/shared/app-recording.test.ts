@@ -234,13 +234,20 @@ describe("validateRecordingBundle", () => {
       edits: {
         cuts: [],
         chat: {
-          enhancementDisabled: true,
+          enhancementEnabled: true,
           removedMessageIds: ["m1"],
           editedMessages: [{ id: "m1", text: "sharper ask" }],
         },
       },
     });
     expect(validateRecordingBundle(edited).ok).toBe(true);
+
+    // Recordings stored with the superseded `enhancementDisabled` flag still
+    // validate under the strict schema.
+    const legacy = bundle({
+      edits: { cuts: [], chat: { enhancementDisabled: true } },
+    });
+    expect(validateRecordingBundle(legacy).ok).toBe(true);
   });
 
   it("accepts captured audio events (config + chunk)", () => {

@@ -383,14 +383,28 @@ const AppRecordingMessageEditSchema = z
   .strict();
 
 /**
- * The viewer's chat edits: hide the AI-enhanced consolidation (replaying the
- * original conversation instead), drop captured messages from the replay, or
- * override a user message's text. All keyed by the captured messages'
- * immutable ids — the capture itself never changes, so clearing an entry
- * restores the original message.
+ * The viewer's chat edits: opt in to the AI-enhanced consolidation (the player
+ * replays the original conversation as-is by default), drop captured messages
+ * from the replay, or override a user message's text. All keyed by the captured
+ * messages' immutable ids — the capture itself never changes, so clearing an
+ * entry restores the original message.
  */
 const AppRecordingChatEditsSchema = z
   .object({
+    /**
+     * Opt in to replaying the AI-enhanced consolidation (the single
+     * consolidated prompt and closing response) in place of the original
+     * conversation. Absent/false → the captured chat replays verbatim, which
+     * is the default. The AI enhancement is still drafted and packed into the
+     * bundle for the gallery regardless of this flag — it only governs what the
+     * PLAYER replays.
+     */
+    enhancementEnabled: z.boolean().optional(),
+    /**
+     * @deprecated Superseded by `enhancementEnabled` once the default flipped
+     * to the original chat. Kept in this strict schema only so recordings
+     * stored with it still validate; it is no longer read anywhere.
+     */
     enhancementDisabled: z.boolean().optional(),
     // Same anti-abuse ceiling as cuts: far above any real editing session.
     removedMessageIds: z.array(z.string()).max(500).optional(),

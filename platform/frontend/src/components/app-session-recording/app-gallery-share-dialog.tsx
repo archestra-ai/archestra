@@ -305,7 +305,9 @@ export function AppGalleryShareButton(props: {
       <StandardDialog
         open={open}
         onOpenChange={setDialogOpen}
-        size="small"
+        // The manual screen shows the full PR description without an inner
+        // scroll area, so it gets the roomier dialog.
+        size={state.step === "manual" ? "medium" : "small"}
         // A mid-flight submission must not be lost to a stray outside click
         // or Esc — the X button is the one deliberate way out.
         preventCloseOnInteractOutside
@@ -834,8 +836,10 @@ function CopyChip(props: { text: string; multiline?: boolean }) {
       type="button"
       className={cn(
         "flex w-fit max-w-full items-start gap-1 rounded bg-muted px-2 py-1 text-left font-mono text-sm hover:bg-muted/70",
+        // No inner scroll on multiline content — the chip shows all of it,
+        // and the dialog body scrolls only if a screen truly overflows.
         props.multiline
-          ? "max-h-28 overflow-y-auto whitespace-pre-wrap break-words"
+          ? "whitespace-pre-wrap break-words"
           : "items-center break-all",
       )}
       aria-label="Copy"

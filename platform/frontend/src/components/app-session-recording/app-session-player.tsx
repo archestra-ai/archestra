@@ -2412,7 +2412,9 @@ function PlayerSurface({
                   disabled={!audioReady}
                   onClick={() => setMuted((value) => !value)}
                 >
-                  {audioMuted ? (
+                  {audioStatus.status === "loading" ? (
+                    <Loader size={16} />
+                  ) : audioMuted ? (
                     <VolumeX className="h-4 w-4" />
                   ) : (
                     <Volume2 className="h-4 w-4" />

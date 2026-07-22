@@ -216,6 +216,45 @@ describe("app recording playback audio", () => {
     expect(onUnavailable).toHaveBeenCalledOnce();
   });
 
+  test("closes a partially initialized audio graph exactly once", async () => {
+    const close = vi.fn();
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        readonly destination = {};
+
+        createGain() {
+          return { gain: { value: 1 }, connect() {} };
+        }
+
+        createBuffer() {
+          throw new Error("audio buffer unavailable");
+        }
+
+        close() {
+          close();
+          return Promise.resolve();
+        }
+      },
+    );
+    const { AudioPlaybackController } = await import("./app-recording-audio");
+    const onUnavailable = vi.fn();
+    const controller = new AudioPlaybackController(
+      {
+        sampleRate: 48_000,
+        numberOfChannels: 1,
+        length: 48,
+        channelData: [new Float32Array(48)],
+      },
+      onUnavailable,
+    );
+
+    controller.play(0);
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(onUnavailable).toHaveBeenCalledOnce();
+  });
+
   test("decodes a real Opus packet through the bundled WASM fallback", async () => {
     vi.doUnmock("opus-decoder");
     vi.stubGlobal("AudioDecoder", undefined);

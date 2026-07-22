@@ -231,6 +231,12 @@ export async function preparePlaybackAudio(params: {
  */
 const AUDIO_SYNC_DRIFT_MS = 250;
 
+interface PlaybackAudioGraph {
+  ctx: AudioContext;
+  buffer: AudioBuffer;
+  gain: GainNode;
+}
+
 /**
  * Live audio for the player: one prebuilt {@link PlaybackAudio} buffer scheduled
  * against the host clock. Follows play/pause/seek by (re)starting a
@@ -240,9 +246,7 @@ const AUDIO_SYNC_DRIFT_MS = 250;
  */
 export class AudioPlaybackController {
   private readonly audio: PlaybackAudio;
-  private ctx: AudioContext | null = null;
-  private buffer: AudioBuffer | null = null;
-  private gain: GainNode | null = null;
+  private graph: PlaybackAudioGraph | null = null;
   private source: AudioBufferSourceNode | null = null;
   private muted = false;
   private playing = false;
@@ -280,7 +284,8 @@ export class AudioPlaybackController {
 
   /** (Re)start playback at the given playback-clock offset. */
   play(offsetMs: number) {
-    if (!this.ensure() || !this.ctx || !this.buffer || !this.gain) {
+    const graph = this.ensure();
+    if (!graph) {
       this.markUnavailable();
       return;
     }
@@ -288,12 +293,12 @@ export class AudioPlaybackController {
     this.playing = true;
     // A user gesture (opening the player, pressing play, toggling mute) is what
     // reaches here, so resuming a suspended context is allowed.
-    void this.ctx.resume().catch(() => this.markUnavailable());
+    void graph.ctx.resume().catch(() => this.markUnavailable());
     const offsetSec = Math.max(0, offsetMs / 1000);
-    if (offsetSec >= this.buffer.duration) return;
-    const source = this.ctx.createBufferSource();
-    source.buffer = this.buffer;
-    source.connect(this.gain);
+    if (offsetSec >= graph.buffer.duration) return;
+    const source = graph.ctx.createBufferSource();
+    source.buffer = graph.buffer;
+    source.connect(graph.gain);
     try {
       source.start(0, offsetSec);
     } catch {
@@ -301,7 +306,7 @@ export class AudioPlaybackController {
       return;
     }
     this.source = source;
-    this.startedAtCtxTime = this.ctx.currentTime;
+    this.startedAtCtxTime = graph.ctx.currentTime;
     this.startedOffsetMs = offsetMs;
   }
 
@@ -313,34 +318,32 @@ export class AudioPlaybackController {
 
   setMuted(muted: boolean) {
     this.muted = muted;
-    if (this.gain) this.gain.gain.value = muted ? 0 : 1;
+    if (this.graph) this.graph.gain.gain.value = muted ? 0 : 1;
   }
 
   dispose() {
     this.disposed = true;
     this.stopSource();
     try {
-      void this.ctx?.close();
+      void this.graph?.ctx.close();
     } catch {}
-    this.ctx = null;
-    this.buffer = null;
-    this.gain = null;
+    this.graph = null;
   }
 
   /** The offset the live source has reached, or null when not playing. */
   private expectedOffsetMs(): number | null {
-    if (!this.playing || !this.ctx || this.startedAtCtxTime === null) {
+    if (!this.playing || !this.graph || this.startedAtCtxTime === null) {
       return null;
     }
     return (
       this.startedOffsetMs +
-      (this.ctx.currentTime - this.startedAtCtxTime) * 1000
+      (this.graph.ctx.currentTime - this.startedAtCtxTime) * 1000
     );
   }
 
-  private ensure(): boolean {
-    if (this.unavailable || this.disposed) return false;
-    if (this.ctx) return true;
+  private ensure(): PlaybackAudioGraph | null {
+    if (this.unavailable || this.disposed) return null;
+    if (this.graph) return this.graph;
     let ctx: AudioContext | null = null;
     try {
       ctx = new AudioContext();
@@ -361,16 +364,13 @@ export class AudioPlaybackController {
           c,
         );
       }
-      this.ctx = ctx;
-      this.gain = gain;
-      this.buffer = buffer;
-      return true;
+      this.graph = { ctx, gain, buffer };
+      return this.graph;
     } catch {
       try {
         void ctx?.close().catch(() => {});
       } catch {}
-      this.ctx = null;
-      return false;
+      return null;
     }
   }
 
@@ -379,11 +379,9 @@ export class AudioPlaybackController {
     this.unavailable = true;
     this.pause();
     try {
-      void this.ctx?.close().catch(() => {});
+      void this.graph?.ctx.close().catch(() => {});
     } catch {}
-    this.ctx = null;
-    this.buffer = null;
-    this.gain = null;
+    this.graph = null;
     this.onUnavailable?.();
   }
 
@@ -515,6 +513,11 @@ interface OpusDecoderOptions {
   channelMappingTable?: number[];
 }
 
+/** "OpusHead" — RFC 7845 section 5.1 identification-header signature. */
+const OPUS_HEAD_MAGIC = new Uint8Array([
+  0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64,
+]);
+
 /** Build libopus options from the RFC 7845 `OpusHead` decoder description. */
 function opusDecoderOptions(
   config: RuntimeAudioConfig,
@@ -523,9 +526,7 @@ function opusDecoderOptions(
   const hasOpusHead =
     description !== undefined &&
     description.length >= 19 &&
-    [79, 112, 117, 115, 72, 101, 97, 100].every(
-      (byte, index) => description[index] === byte,
-    );
+    OPUS_HEAD_MAGIC.every((byte, index) => description[index] === byte);
   const channels = hasOpusHead ? description[9] : config.numberOfChannels;
   if (channels < 1 || channels > 255) return null;
   const preSkip = hasOpusHead ? description[10] | (description[11] << 8) : 0;

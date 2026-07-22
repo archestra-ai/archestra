@@ -427,9 +427,8 @@ jobs:
 
           echo "✅ All validation checks passed"
 
-  # mac-mini routing: the heavy merge-queue jobs below (both Rust checks, the
-  # backend unit test shards, and the frontend integration tests) run on the
-  # self-hosted mac-mini-1 runners instead of Blacksmith when BOTH hold:
+  # mac-mini routing: both Rust checks and the frontend integration tests run
+  # on the self-hosted mac-mini-1 runners instead of Blacksmith when BOTH hold:
   #   - the event is merge_group (only maintainer-queued code ever reaches the
   #     self-hosted machine; label-triggered PR runs stay on Blacksmith), and
   #   - the MAC_MINI_CI repository variable is "on" — the kill switch. Flip it
@@ -439,6 +438,12 @@ jobs:
   # The mac-mini-watchdog job below auto-flips the switch off and cancels the
   # run if the machine stops taking jobs, so a dead mini ejects the PR from
   # the merge queue in minutes instead of blocking it for hours.
+  #
+  # The backend unit test shards deliberately stay on Blacksmith: the merge
+  # queue runs several stacked groups concurrently, and 4 shards per group
+  # oversubscribe the machine's 3 runner slots — queued-behind-saturation is
+  # indistinguishable from dead for the jobs involved and adds minutes of
+  # merge latency per group.
   #
   # Rust toolchain checks, split out of the lint job so cargo work runs in
   # parallel with the pnpm work instead of serializing ~1.5-2 min ahead of it.
@@ -535,8 +540,7 @@ jobs:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
     # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
-    # mac-mini routing (see comment above platform-rust-checks)
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-16vcpu-ubuntu-2404' }}
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     # A full local suite run is ~4 min on comparable hardware; a shard is a
     # quarter of that plus setup. 15 minutes means something is hung.
     timeout-minutes: 15
@@ -589,13 +593,7 @@ jobs:
         working-directory: ./platform/backend
         env:
           SHARD: ${{ matrix.shard }}
-        # On the mac mini several shards share one 10-core machine; uncapped
-        # vitest worker pools oversubscribe it and PGlite setup hooks start
-        # blowing their timeouts. Cap workers there (shell check: zizmor
-        # forbids ${{ }} templating inside run blocks).
-        run: |
-          if [ "$RUNNER_OS" = "macOS" ]; then WORKERS="--maxWorkers=3"; else WORKERS=""; fi
-          pnpm exec vitest run --shard="${SHARD}/4" $WORKERS
+        run: pnpm exec vitest run --shard="${SHARD}/4"
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.
@@ -738,9 +736,13 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           REPO: ${{ github.repository }}
         run: |
-          # Grace window: cold caches make the first mac-mini job slow to
-          # *finish*, but a healthy machine picks jobs up within seconds, and
-          # "picked up" (in_progress) already counts as progress.
+          # Grace window: a healthy, idle machine picks queued jobs up within
+          # seconds, and "picked up" (in_progress) already counts as progress.
+          # The merge queue runs several stacked groups concurrently and every
+          # group carries this watchdog, so before declaring the machine dead
+          # we must rule out "alive but busy with another group's jobs":
+          # a mini job executing in ANY in-progress run of this workflow means
+          # the machine is fine and this run's jobs are just queued behind it.
           deadline=$((SECONDS + 360))
           while [ "$SECONDS" -lt "$deadline" ]; do
             jobs=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" \
@@ -751,10 +753,20 @@ jobs:
               echo "mac-mini-1 is alive ($progressed/$total routed jobs progressed)."
               exit 0
             fi
-            echo "Waiting: $total mac-mini jobs queued, none progressed yet..."
+            busy_elsewhere=$(gh api "repos/$REPO/actions/workflows/on-pull-requests.yml/runs?status=in_progress&per_page=10" \
+              --jq '.workflow_runs[].id' 2>/dev/null | while read -r rid; do
+                [ "$rid" = "$RUN_ID" ] && continue
+                gh api "repos/$REPO/actions/runs/$rid/jobs?per_page=100" \
+                  --jq '.jobs[] | select(.status == "in_progress") | select((.runner_name // "") | startswith("mac-mini")) | .id' 2>/dev/null
+              done | wc -l | tr -d ' ')
+            if [ "${busy_elsewhere:-0}" -gt 0 ]; then
+              echo "mac-mini-1 is alive: executing $busy_elsewhere job(s) for other runs; ours are queued behind them."
+              exit 0
+            fi
+            echo "Waiting: $total mac-mini jobs queued, none progressed, machine idle elsewhere..."
             sleep 20
           done
-          echo "::error::mac-mini-1 accepted no jobs within the grace window. Disabling MAC_MINI_CI and cancelling this run — re-queue to run on Blacksmith. Re-enable with: gh variable set MAC_MINI_CI --body on"
+          echo "::error::mac-mini-1 accepted no jobs within the grace window and is executing nothing anywhere. Disabling MAC_MINI_CI and cancelling this run — re-queue to run on Blacksmith. Re-enable with: gh variable set MAC_MINI_CI --body on"
           GH_TOKEN="$VAR_TOKEN" gh variable set MAC_MINI_CI --body off --repo "$REPO" \
             || echo "::warning::Could not flip MAC_MINI_CI — flip it manually before re-queueing."
           gh run cancel "$RUN_ID" --repo "$REPO"

@@ -413,6 +413,10 @@ function IdentityProviderStatus({
 
   const idpId = detail?.identityProviderId;
   const idpName = identityProviders?.find((idp) => idp.id === idpId)?.issuer;
+  // The edit dialog only shows its IdP field when the org has identity
+  // providers configured — without any, "Edit …" would be a dead end, so
+  // point at IdP setup instead.
+  const orgHasIdps = (identityProviders?.length ?? 0) > 0;
 
   return (
     <div className="space-y-3">
@@ -434,7 +438,7 @@ function IdentityProviderStatus({
           )
         }
         action={
-          canUpdate ? (
+          !canUpdate ? null : orgHasIdps ? (
             <Button
               variant="outline"
               size="sm"
@@ -445,7 +449,13 @@ function IdentityProviderStatus({
             >
               Edit {target.agentType === "mcp_gateway" ? "gateway" : "proxy"}
             </Button>
-          ) : null
+          ) : (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/settings/identity-providers">
+                Set up identity providers
+              </Link>
+            </Button>
+          )
         }
       />
     </div>

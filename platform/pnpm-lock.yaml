@@ -90,6 +90,9 @@ overrides:
 
 packageExtensionsChecksum: sha256-OtX37i1Ryo9P6g4B33ec8l4gf38qd6EPAZjHSLupRlQ=
 
+patchedDependencies:
+  opus-decoder@0.7.11: 56051d0697914c234dba3419dbbdf41d5f0c8461c8ed89501a06a8c83af4e59d
+
 importers:
 
   .:
@@ -775,7 +778,7 @@ importers:
         version: 0.4.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       opus-decoder:
         specifier: 0.7.11
-        version: 0.7.11
+        version: 0.7.11(patch_hash=56051d0697914c234dba3419dbbdf41d5f0c8461c8ed89501a06a8c83af4e59d)
       posthog-js:
         specifier: ^1.399.2
         version: 1.399.2
@@ -20255,7 +20258,7 @@ snapshots:
 
   option@0.2.4: {}
 
-  opus-decoder@0.7.11:
+  opus-decoder@0.7.11(patch_hash=56051d0697914c234dba3419dbbdf41d5f0c8461c8ed89501a06a8c83af4e59d):
     dependencies:
       '@wasm-audio-decoders/common': 9.0.7
 

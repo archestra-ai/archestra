@@ -1,0 +1,14 @@
+diff --git a/index.js b/index.js
+index 073ead2..f35d89d 100644
+--- a/index.js
++++ b/index.js
+@@ -1,8 +1,6 @@
+ import OpusDecoder from "./src/OpusDecoder.js";
+-import OpusDecoderWebWorker from "./src/OpusDecoderWebWorker.js";
+ import { assignNames } from "@wasm-audio-decoders/common";
+ 
+ assignNames(OpusDecoder, "OpusDecoder");
+-assignNames(OpusDecoderWebWorker, "OpusDecoderWebWorker");
+ 
+-export { OpusDecoder, OpusDecoderWebWorker };
++export { OpusDecoder };

@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "default_member_role" text;

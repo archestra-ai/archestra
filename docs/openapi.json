@@ -254014,6 +254014,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -254313,6 +254317,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -254983,6 +254988,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -255282,6 +255291,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -256241,6 +256251,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -256540,6 +256554,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -257068,6 +257083,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -257367,6 +257386,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -257888,6 +257908,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -258187,6 +258211,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -258708,6 +258733,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -259007,6 +259036,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -259543,6 +259573,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -259842,6 +259876,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -260456,6 +260491,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -260755,6 +260794,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -261347,6 +261387,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -261646,6 +261690,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -261941,6 +261986,11 @@
                   },
                   "showTwoFactor": {
                     "type": "boolean"
+                  },
+                  "defaultMemberRole": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
                   }
                 }
               }
@@ -262171,6 +262221,10 @@
                         "calendar_week_monday",
                         "calendar_month"
                       ]
+                    },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "defaultAgentId": {
                       "nullable": true,
@@ -262471,6 +262525,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -263010,6 +263065,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -263309,6 +263368,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -263815,6 +263875,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -264114,6 +264178,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -265225,6 +265290,10 @@
                         "calendar_month"
                       ]
                     },
+                    "defaultMemberRole": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "defaultAgentId": {
                       "nullable": true,
                       "type": "string",
@@ -265524,6 +265593,7 @@
                     "defaultUserLimitValue",
                     "defaultUserLimitModel",
                     "defaultUserLimitCleanupInterval",
+                    "defaultMemberRole",
                     "defaultAgentId",
                     "favicon",
                     "appName",
@@ -293457,6 +293527,9 @@
                   },
                   "description": {
                     "type": "string"
+                  },
+                  "convertToolResultsToToon": {
+                    "type": "boolean"
                   },
                   "labels": {
                     "type": "array",

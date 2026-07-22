@@ -13,8 +13,15 @@ import { cn } from "@/lib/utils";
 
 /** Smallest the panel itself may shrink to. */
 const MIN_PANEL_WIDTH = 300;
-/** Width the main content column must always keep so it never squashes. */
-const MIN_CONTENT_WIDTH = 400;
+/**
+ * Width the main content column must always keep so it never squashes. Sized so
+ * the chat composer's footer toolbar stays uncramped at its narrowest: the Apps
+ * Hackathon recorder pill is fixed-width and sits between the (collapsible) tool
+ * row and the fixed send/mic controls, so the column needs a little extra width
+ * to keep a clear gap there — even as the recorder's live timer widens during a
+ * capture — rather than the pill and mic crowding together.
+ */
+const MIN_CONTENT_WIDTH = 420;
 /** Shared across surfaces so the panel keeps its width from page to page. */
 export const RIGHT_PANEL_WIDTH_STORAGE_KEY = "archestra-right-panel-width";
 /** Panel width before the user has ever resized it. */

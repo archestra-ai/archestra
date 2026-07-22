@@ -3,6 +3,7 @@
 import {
   APP_RECORDING_LIMITS,
   archestraApiSdk,
+  connectedMcpServerNames,
   parseFullToolName,
   sanitizeRecordingBundle,
   validateRecordingBundle,
@@ -18,7 +19,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { toast } from "sonner";
-import { useApp } from "@/lib/app.query";
+import { useApp, useAppTools } from "@/lib/app.query";
 import {
   fallbackRecordingDescription,
   useInvalidateAppRecording,
@@ -520,6 +521,10 @@ export function useOwnAppSessionRecorder(params: {
 
   const { data: app } = useApp(appId, { toastOnError: false });
   const { data: session } = useSession();
+  // The app's assigned tools are the source for the bundle's connected-MCP-server
+  // list: every server the app is wired to belongs on the gallery card, whether
+  // or not the recorded session happened to call it.
+  const { data: appTools } = useAppTools(appId);
   const invalidateRecording = useInvalidateAppRecording();
 
   // The core finalizes at stop time, so read the app/author context from a ref
@@ -532,11 +537,13 @@ export function useOwnAppSessionRecorder(params: {
     appId,
     appName: app?.name ?? "App",
     authorName: session?.user?.name ?? null,
+    connectedMcpServers: connectedMcpServerNames(appTools),
   });
   finalizeCtxRef.current = {
     appId,
     appName: app?.name ?? "App",
     authorName: session?.user?.name ?? null,
+    connectedMcpServers: connectedMcpServerNames(appTools),
   };
 
   useEffect(() => {
@@ -575,6 +582,7 @@ export function useOwnAppSessionRecorder(params: {
         appId: ctx.appId,
         appName: ctx.appName,
         authorName: ctx.authorName,
+        connectedMcpServers: ctx.connectedMcpServers,
         raw: {
           ...raw,
           events: (await serializeRecordingEvents(
@@ -705,6 +713,9 @@ function buildBundle(params: {
   appId: string | null;
   appName: string;
   authorName: string | null;
+  /** The MCP servers the app is connected to (from its assigned tools),
+   * whether or not the recorded session called them. */
+  connectedMcpServers: string[];
   raw: RawRecording;
   transcript: AppRecordingBundle["recording"]["transcript"];
   enhancement?: AppRecordingBundle["enhancement"];
@@ -719,6 +730,7 @@ function buildBundle(params: {
     appId,
     appName,
     authorName,
+    connectedMcpServers,
     raw,
     transcript,
     enhancement,
@@ -746,7 +758,7 @@ function buildBundle(params: {
       platform: "archestra",
       // Gallery facts about the build. (Built date and total duration are
       // already carried by createdAt and recording.durationMs.)
-      mcpServers: mcpServerNames(raw, transcript),
+      mcpServers: mcpServerNames(raw, transcript, connectedMcpServers),
       appVersionCount: raw.segments.reduce(
         (max, segment) => Math.max(max, segment.version),
         0,
@@ -758,15 +770,18 @@ function buildBundle(params: {
 }
 
 /**
- * The MCP servers the session actually used, from both sides of the capture:
- * the app's own proxied calls and the agent's tool activity in the chat.
- * Tool names are `<server>__<tool>`; the server half is the name.
+ * The MCP servers to record for the app. Every server the app is connected to
+ * (from its assigned tools) is listed whether or not the session called it,
+ * unioned with the servers observed during capture — the app's own proxied
+ * calls and the agent's tool activity in the chat. Tool names are
+ * `<server>__<tool>`; the server half is the name.
  */
 function mcpServerNames(
   raw: RawRecording,
   transcript: AppRecordingBundle["recording"]["transcript"],
+  connectedMcpServers: string[],
 ): string[] {
-  const names = new Set<string>();
+  const names = new Set<string>(connectedMcpServers);
   const add = (toolName: unknown) => {
     if (typeof toolName !== "string") return;
     const server = parseFullToolName(toolName).serverName;

@@ -45,6 +45,9 @@ class TeamModel {
           description: input.description || null,
           organizationId: input.organizationId,
           createdBy: input.createdBy,
+          // Default of `false` is enforced by the column; passing `undefined`
+          // omits the field from the INSERT so the column default applies.
+          convertToolResultsToToon: input.convertToolResultsToToon ?? undefined,
           createdAt: now,
           updatedAt: now,
         })

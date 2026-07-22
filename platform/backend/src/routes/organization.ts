@@ -26,6 +26,7 @@ import {
   McpToolCallModel,
   MemberModel,
   OrganizationModel,
+  OrganizationRoleModel,
   TeamModel,
   ToolModel,
   UserModel,
@@ -526,6 +527,19 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
+      // A non-null default role must resolve to a real role in this org
+      // (predefined or custom) — otherwise new members would be provisioned
+      // with a role that grants no permissions.
+      if (body.defaultMemberRole) {
+        const role = await OrganizationRoleModel.getByIdentifier(
+          body.defaultMemberRole,
+          organizationId,
+        );
+        if (!role) {
+          throw new ApiError(400, "Default role not found");
+        }
+      }
+
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {

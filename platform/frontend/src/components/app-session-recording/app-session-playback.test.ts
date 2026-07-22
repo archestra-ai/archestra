@@ -177,7 +177,7 @@ describe("buildPlayback", () => {
     expect(playback.toRawMs(playback.duration)).toBe(6_000);
   });
 
-  it("drops chat messages inside a cut — nothing said during a removed stretch replays", () => {
+  it("keeps chat messages inside a cut — a cut trims app replay, never the chat", () => {
     const playback = buildPlayback(
       recording({
         durationMs: 10_000,
@@ -192,7 +192,7 @@ describe("buildPlayback", () => {
             id: "inside-cut",
             role: "assistant",
             atMs: 4_500,
-            parts: [{ type: "text", text: "edited out" }],
+            parts: [{ type: "text", text: "said during the cut" }],
           },
           {
             id: "keep-after",
@@ -209,14 +209,22 @@ describe("buildPlayback", () => {
       }),
     );
 
-    // The removed stretch's message is gone entirely — not replayed in a
-    // burst at the cut's collapse point — while its neighbors stay in order.
+    // Every message still replays, in order — the cut removed the app frames in
+    // its range, not the conversation.
     expect(playback.transcript.map((message) => message.id)).toEqual([
       "keep-before",
+      "inside-cut",
       "keep-after",
     ]);
-    expect(playback.transcript[0].atMs).toBeLessThan(
-      playback.transcript[1].atMs,
+    // The message said during the cut collapses onto the cut's instant, where
+    // the reveal cascade streams it in (sped up) rather than dropping it.
+    const insideCut = playback.transcript.find((m) => m.id === "inside-cut");
+    expect(insideCut?.atMs).toBe(playback.toPlaybackMs(3_000));
+    expect(playback.transcript[0].atMs).toBeLessThanOrEqual(
+      insideCut?.atMs ?? 0,
+    );
+    expect(insideCut?.atMs ?? 0).toBeLessThanOrEqual(
+      playback.transcript[2].atMs,
     );
   });
 
@@ -291,14 +299,20 @@ describe("buildPlayback", () => {
       }),
     );
 
-    // Playback genuinely ends at the trim: nothing inside the trimmed tail
-    // plays — its events and messages are left out, not applied at the end.
+    // Playback's app timeline genuinely ends at the trim: no app event inside
+    // the trimmed tail plays — those are left out, not applied at the end.
     expect(trimmed.duration).toBeLessThan(uncut.duration);
     expect(trimmed.duration).toBe(trimmed.toPlaybackMs(5_000));
     const pointers = trimmed.events.filter((event) => event.kind === "pointer");
     expect(pointers).toHaveLength(1);
     expect(pointers[0]).toMatchObject({ x: 1, y: 1 });
-    expect(trimmed.transcript.map((message) => message.id)).toEqual(["u1"]);
+    // The chat is NOT trimmed: the late message is kept and streams in at the
+    // trim point (the end of the app timeline), so nothing said is lost.
+    expect(trimmed.transcript.map((message) => message.id)).toEqual([
+      "u1",
+      "u2",
+    ]);
+    expect(trimmed.transcript[1].atMs).toBe(trimmed.duration);
   });
 
   it("maps playback time back to raw recording time for storing edits", () => {
@@ -339,7 +353,13 @@ describe("buildPlayback", () => {
   const enhancement = { description: "An app.", prompt: "Build me an app" };
 
   it("replays only the last app version and its events once enhanced", () => {
-    const playback = buildPlayback(recording({ ...twoVersions, enhancement }));
+    const playback = buildPlayback(
+      recording({
+        ...twoVersions,
+        enhancement,
+        edits: { cuts: [], chat: { enhancementEnabled: true } },
+      }),
+    );
 
     // The enhanced chat claims one prompt built the app, so the stage must not
     // swap versions behind it.
@@ -354,22 +374,21 @@ describe("buildPlayback", () => {
     );
   });
 
-  it("keeps every version when the enhancement is off or switched off", () => {
+  it("keeps every version by default — the enhancement is off until opted in", () => {
     const plain = buildPlayback(recording(twoVersions));
     expect(plain.segments.map((segment) => segment.version)).toEqual([1, 2]);
     expect(
       plain.events.filter((event) => event.kind === "pointer"),
     ).toHaveLength(2);
 
-    // The author can toggle the enhancement off; the real build comes back.
-    const disabled = buildPlayback(
-      recording({
-        ...twoVersions,
-        enhancement,
-        edits: { cuts: [], chat: { enhancementDisabled: true } },
-      }),
+    // An enhancement is present but not enabled: the real build still replays,
+    // version by version, because the AI consolidation is opt-in.
+    const notEnabled = buildPlayback(
+      recording({ ...twoVersions, enhancement, edits: { cuts: [], chat: {} } }),
     );
-    expect(disabled.segments.map((segment) => segment.version)).toEqual([1, 2]);
+    expect(notEnabled.segments.map((segment) => segment.version)).toEqual([
+      1, 2,
+    ]);
   });
 
   it("never compresses time across the app's own activity", () => {
@@ -497,28 +516,29 @@ describe("buildPlayback", () => {
 
   it("measures the uncut ruler against the same session that plays", () => {
     // The strip is built from the recording with its cuts dropped. Dropping the
-    // whole edits object also drops the chat's enhancement toggle, which left
-    // the ruler stuck at the enhanced length while playback ran the full chat.
-    const off = recording({
+    // whole edits object would also drop the chat's enhancement toggle, which
+    // left the ruler measuring a different session than playback ran.
+    const on = recording({
       ...twoVersions,
       enhancement,
       edits: {
         cuts: [{ fromMs: 1_000, toMs: 2_000 }],
-        chat: { enhancementDisabled: true },
+        chat: { enhancementEnabled: true },
       },
     });
-    const uncut = uncutRecording(off);
+    const uncut = uncutRecording(on);
     expect(uncut.edits?.cuts).toEqual([]);
-    expect(uncut.edits?.chat?.enhancementDisabled).toBe(true);
-    // The ruler therefore shows every version, exactly as playback does.
-    expect(buildPlayback(uncut).segments.map((s) => s.version)).toEqual([1, 2]);
+    expect(uncut.edits?.chat?.enhancementEnabled).toBe(true);
+    // The enhancement stays on through the uncut ruler, so it shows the single
+    // final version, exactly as playback does.
+    expect(buildPlayback(uncut).segments.map((s) => s.version)).toEqual([2]);
 
     // And the toggle genuinely changes what the ruler measures, or the above
-    // proves nothing.
-    const on = uncutRecording(
+    // proves nothing: off (the default) brings every version back.
+    const off = uncutRecording(
       recording({ ...twoVersions, enhancement, edits: { cuts: [] } }),
     );
-    expect(buildPlayback(on).segments.map((s) => s.version)).toEqual([2]);
+    expect(buildPlayback(off).segments.map((s) => s.version)).toEqual([1, 2]);
   });
 
   it("always leaves an app on the stage, even when a trim removes every version", () => {
@@ -767,16 +787,33 @@ describe("consolidatedTranscript", () => {
   describe("presentedTranscript (chat edits layered on top)", () => {
     const enhancement = { description: "A blue app.", prompt: "One-shot ask" };
 
-    it("disabling the enhancement replays the original conversation", () => {
-      const result = presentedTranscript(transcript, enhancement, {
-        enhancementDisabled: true,
-      });
-      expect(result.map((message) => message.id)).toEqual([
+    it("replays the original conversation by default — enhancement is opt-in", () => {
+      const original = presentedTranscript(transcript, enhancement, undefined);
+      expect(original.map((message) => message.id)).toEqual([
         "u1",
         "a1",
         "u2",
         "a2",
       ]);
+      // An empty chat-edits object (not enabled) is the same as absent.
+      const notEnabled = presentedTranscript(transcript, enhancement, {});
+      expect(notEnabled.map((message) => message.id)).toEqual([
+        "u1",
+        "a1",
+        "u2",
+        "a2",
+      ]);
+    });
+
+    it("enabling the enhancement replays the consolidated prompt", () => {
+      const result = presentedTranscript(transcript, enhancement, {
+        enhancementEnabled: true,
+      });
+      // The consolidated prompt (its own :enhanced id) replaces the user prose.
+      expect(result.some((message) => message.id.endsWith(":enhanced"))).toBe(
+        true,
+      );
+      expect(result.some((message) => message.id === "u2")).toBe(false);
     });
 
     it("drops removed messages from the replay — user and assistant alike", () => {
@@ -799,6 +836,7 @@ describe("consolidatedTranscript", () => {
 
     it("removals still apply while the enhancement consolidates the chat", () => {
       const result = presentedTranscript(transcript, enhancement, {
+        enhancementEnabled: true,
         removedMessageIds: ["a2"],
       });
       // The consolidated prompt survives (it has its own id); a2 is gone.

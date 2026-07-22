@@ -11,6 +11,7 @@ import {
   rememberGallerySubmission,
   submitRecordingToAppGallery,
   takeCachedGithubToken,
+  viewportBox,
 } from "./app-gallery-share";
 
 /**
@@ -21,11 +22,37 @@ import {
  * stub fetch and pin that wire sequence, including the duplicate guards.
  */
 
+let toBlobSpy: ReturnType<typeof vi.spyOn> | null = null;
+
 afterEach(() => {
   // vitest is not configured to auto-unstub globals, so put the real fetch
   // back explicitly instead of leaning on every later test re-stubbing it.
   vi.unstubAllGlobals();
+  // Restore the specific canvas spy rather than vi.restoreAllMocks(), which
+  // would also drop the global getContext mock the test setup installs.
+  toBlobSpy?.mockRestore();
+  toBlobSpy = null;
 });
+
+/**
+ * jsdom has no image decoder or canvas encoder, so the thumbnail-framing path
+ * (createImageBitmap → draw into a 4:5 canvas → toBlob) can't run for real.
+ * Stub the two boundaries so the framing code executes deterministically: the
+ * 4:5 geometry itself is pinned by the viewportBox unit tests. The stubbed
+ * WebP bytes stand in for the encoded thumbnail.
+ */
+function stubCanvasEncoding(webpBytes: string) {
+  vi.stubGlobal("createImageBitmap", async () => ({
+    width: 800,
+    height: 800,
+    close: () => {},
+  }));
+  toBlobSpy = vi
+    .spyOn(HTMLCanvasElement.prototype, "toBlob")
+    .mockImplementation(function toBlob(callback: BlobCallback) {
+      callback(new Blob([webpBytes], { type: "image/webp" }));
+    });
+}
 
 function makeBundle(
   events: AppRecordingBundle["recording"]["events"] = [],
@@ -232,7 +259,8 @@ describe("submitRecordingToAppGallery", () => {
     expect(atob(upload.body.content)).not.toContain("@example.com");
   });
 
-  test("commits the last canvas frame as the thumbnail when one exists", async () => {
+  test("commits the last canvas frame, framed to the 4:5 viewport, as the thumbnail", async () => {
+    stubCanvasEncoding("framed-webp");
     const bundle = makeBundle([
       {
         kind: "canvas",
@@ -255,12 +283,15 @@ describe("submitRecordingToAppGallery", () => {
     expect(uploads[1].url).toContain(
       "/contents/apps/sam_pr_review_queue/thumbnail.webp",
     );
+    // The committed bytes are the re-encoded (4:5-framed) frame, not the raw
+    // canvas capture — the framing runs before upload.
     expect(atob((uploads[1].body as { content: string }).content)).toBe(
-      "final-frame",
+      "framed-webp",
     );
   });
 
   test("uploads are byte-identical to the manual-submission package", async () => {
+    stubCanvasEncoding("framed-webp");
     const bundle = makeBundle([
       {
         kind: "canvas",
@@ -755,5 +786,33 @@ describe("fetchSubmittedPrState", () => {
     await expect(fetchSubmittedPrState("not a pull request url")).resolves.toBe(
       "unknown",
     );
+  });
+});
+
+describe("viewportBox", () => {
+  const ASPECT = 4 / 5;
+
+  test("pads a wider-than-4:5 frame top and bottom, never scaling it", () => {
+    // 800×400 (2:1) is wider than 4:5, so its width binds and the box grows
+    // taller to reach 4:5.
+    expect(viewportBox(800, 400)).toEqual({ width: 800, height: 1000 });
+    expect(800 / 1000).toBe(ASPECT);
+  });
+
+  test("pads a taller-than-4:5 frame left and right, never scaling it", () => {
+    // 400×800 (1:2) is taller than 4:5, so its height binds and the box grows
+    // wider to reach 4:5.
+    expect(viewportBox(400, 800)).toEqual({ width: 640, height: 800 });
+    expect(640 / 800).toBe(ASPECT);
+  });
+
+  test("leaves a frame already at the 4:5 aspect unchanged", () => {
+    expect(viewportBox(800, 1000)).toEqual({ width: 800, height: 1000 });
+  });
+
+  test("treats a square frame as wider than 4:5", () => {
+    // A square is wider than 4:5, so it letterboxes top and bottom.
+    expect(viewportBox(600, 600)).toEqual({ width: 600, height: 750 });
+    expect(600 / 750).toBe(ASPECT);
   });
 });

@@ -1,5 +1,6 @@
 import {
   DEFAULT_THEME_ID,
+  MEMBER_ROLE_NAME,
   type OrganizationCustomFont,
 } from "@archestra/shared";
 import { and, eq, isNull } from "drizzle-orm";
@@ -35,6 +36,23 @@ class OrganizationModel {
    */
   static async getAppName(): Promise<string> {
     return (await OrganizationModel.getFirst())?.appName || "Archestra";
+  }
+
+  /**
+   * The role slug assigned to newly provisioned members that don't carry an
+   * explicit role (email/password self-signup, ChatOps auto-provisioning).
+   * Falls back to the built-in "member" role when unset. Org-wide mirror of the
+   * per-IdP SSO `roleMapping.defaultRole` fallback.
+   */
+  static async getDefaultMemberRole(organizationId: string): Promise<string> {
+    const [organization] = await db
+      .select({
+        defaultMemberRole: schema.organizationsTable.defaultMemberRole,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, organizationId))
+      .limit(1);
+    return organization?.defaultMemberRole || MEMBER_ROLE_NAME;
   }
 
   /**
@@ -389,6 +407,7 @@ class OrganizationModel {
       footerText: org.footerText ?? null,
       defaultUserLimitCleanupInterval:
         org.defaultUserLimitCleanupInterval ?? null,
+      defaultMemberRole: org.defaultMemberRole ?? null,
       onboardingComplete: org.onboardingComplete,
       compressionScope: org.compressionScope,
       convertToolResultsToToon: org.convertToolResultsToToon,

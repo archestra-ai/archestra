@@ -55,6 +55,7 @@ import {
   gallerySubmissionBranch,
   gallerySubmissionFolder,
   gallerySubmissionSlug,
+  healSubmissionMcpServers,
   oversizedGallerySubmissionFile,
   recallGallerySubmission,
   rememberGallerySubmission,
@@ -237,15 +238,21 @@ export function AppGalleryShareButton(props: {
           return;
         }
 
+        // Self-heal the connected-MCP list against the app as it stands now,
+        // so a recording made before that list was captured (or one whose app
+        // has since gained servers) still submits the app's full MCP surface.
+        // Best-effort — a failed lookup submits the recorded list unchanged.
+        const healed = await healSubmissionMcpServers(trimmed);
+
         // The bundle that's actually submitted: the chosen category, and the
         // duration as the editor's final cut showed it (cuts applied, idle
         // time-lapsed) rather than the raw capture length.
         const withCategory: AppRecordingBundle = {
-          ...trimmed,
+          ...healed,
           enhancement: { ...enhancement, category: chosenCategory },
           meta: {
-            ...trimmed.meta,
-            finalCutDurationMs: finalCutDurationMs(trimmed),
+            ...healed.meta,
+            finalCutDurationMs: finalCutDurationMs(healed),
           },
         };
 
@@ -324,21 +331,26 @@ export function AppGalleryShareButton(props: {
       ? await fetchGithubIdentity(token, cancellation.signal)
       : null;
     if (cancellation.signal.aborted) return;
+    // Self-healed identically to the automatic path (same union against the
+    // app's current MCP servers), so a hand-uploaded bundle carries the same
+    // connected-server list the automatic PR would have.
+    const healed = await healSubmissionMcpServers(trimmed);
+    if (cancellation.signal.aborted) return;
     // Best-effort parity with the automatic path: stamp whatever this run
     // already knows (GitHub identity, the confirmed category, the final-cut
     // duration) onto the downloaded bundle too. A category chosen on an
     // earlier, later-failed run carries over; one never reached keeps
     // whatever enhancement.category the recording already had.
     const withStamps: AppRecordingBundle = {
-      ...trimmed,
+      ...healed,
       enhancement:
-        trimmed.enhancement && category
-          ? { ...trimmed.enhancement, category }
-          : trimmed.enhancement,
+        healed.enhancement && category
+          ? { ...healed.enhancement, category }
+          : healed.enhancement,
       meta: {
-        ...trimmed.meta,
+        ...healed.meta,
         ...(identity ? { github: identity } : {}),
-        finalCutDurationMs: finalCutDurationMs(trimmed),
+        finalCutDurationMs: finalCutDurationMs(healed),
       },
     };
     setState({
@@ -445,15 +457,25 @@ export function AppGalleryShareButton(props: {
       </Button>
     ) : null;
 
+  const shareDisabled = props.disabled || existingPr !== null;
   const shareButton = (
     <span className="inline-flex" data-tour="share">
+      {/* Styled to echo the hackathon recorder pill — primary-tinted border,
+          mostly-transparent primary background, and the same periodic glitter
+          sweep + travelling edge shimmer — so the submit action reads as part
+          of the same flow while still standing out from the neutral player
+          toolbar. The animation is dropped while disabled (already submitted /
+          unavailable). */}
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="size-7 text-muted-foreground hover:text-foreground"
+        className={cn(
+          "size-7 border border-primary/30 bg-primary/5 text-primary shadow-sm hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10",
+          !shareDisabled && "hackathon-glitter hackathon-edge-shimmer",
+        )}
         aria-label="Submit this session to Archestra for review"
-        disabled={props.disabled || existingPr !== null}
+        disabled={shareDisabled}
         onClick={() => setDialogOpen(true)}
       >
         {/* The create-a-pull-request glyph, not a generic share icon —

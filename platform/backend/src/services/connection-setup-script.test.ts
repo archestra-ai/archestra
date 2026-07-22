@@ -408,7 +408,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain(`select "${MCP.serverName}"`);
   });
 
-  test("claude-code bedrock: keeps the bearer token out of settings.json", () => {
+  test("claude-code bedrock: merges the bearer token into settings.json env", async () => {
     const script = renderSetupScript({
       ...fullContext("claude-code"),
       proxy: {
@@ -418,11 +418,15 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
         url: "https://archestra.example.com/v1/bedrock/profile-123",
       },
     });
+    await expectValidBash(script);
     expect(script).toContain("CLAUDE_CODE_USE_BEDROCK");
     expect(script).toContain("ANTHROPIC_BEDROCK_BASE_URL");
-    expect(script).toContain("AWS_BEARER_TOKEN_BEDROCK");
-    // The secret goes to the profile-paste block, not the settings merge env.
-    expect(script).not.toContain(`ARCHESTRA_SET_ENV_AWS_BEARER_TOKEN_BEDROCK`);
+    // The virtual key is applied automatically, exactly like
+    // ANTHROPIC_AUTH_TOKEN on the Anthropic path — no manual paste step.
+    expect(script).toContain(
+      `export ARCHESTRA_SET_ENV_AWS_BEARER_TOKEN_BEDROCK='arch_deadbeefcafe'`,
+    );
+    expect(script).not.toContain("shell profile");
     // The client-attribution header rides along for Bedrock too (no passthrough
     // key in virtual-key mode, so only the agent-id line).
     expect(script).toContain(
@@ -430,6 +434,23 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     );
     expect(script).toContain(AGENT_ID_HEADER_LINE);
     expect(script).not.toContain("X-Archestra-Virtual-Key");
+  });
+
+  test("claude-code bedrock (windows): merges the bearer token into settings.json env", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code", "windows"),
+      proxy: {
+        ...PROXY,
+        provider: "bedrock",
+        providerLabel: "Bedrock",
+        url: "https://archestra.example.com/v1/bedrock/profile-123",
+      },
+    });
+    expect(script).toContain("CLAUDE_CODE_USE_BEDROCK");
+    expect(script).toContain("ANTHROPIC_BEDROCK_BASE_URL");
+    // Written by the settings.json merge, not printed as a manual step.
+    expect(script).toContain("'AWS_BEARER_TOKEN_BEDROCK'");
+    expect(script).not.toContain("$env:AWS_BEARER_TOKEN_BEDROCK");
   });
 
   test("claude-code anthropic passthrough: injects the attribution header, not an auth token", async () => {

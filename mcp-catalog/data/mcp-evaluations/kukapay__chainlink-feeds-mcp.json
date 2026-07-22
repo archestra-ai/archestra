@@ -1,0 +1,98 @@
+{
+  "name": "kukapay__chainlink-feeds-mcp",
+  "display_name": "chainlink-feeds-mcp",
+  "description": "An MCP server that provides real-time access to Chainlink's decentralized on-chain price feeds.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {
+      "INFURA_API_KEY": "${user_config.infura_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "infura_api_key": {
+      "type": "string",
+      "title": "Infura API Key",
+      "description": "Obtain a key from the MetaMask Developer Dashboard with access to supported networks (e.g., Ethereum, Base).",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Chainlink Feeds MCP Server\n\nAn MCP server that provides real-time access to Chainlink's decentralized on-chain price feeds, optimized for seamless integration into AI agents and autonomous systems\n\n<a href=\"https://glama.ai/mcp/servers/@kukapay/chainlink-feeds-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@kukapay/chainlink-feeds-mcp/badge\" alt=\"chainlink-feeds-mcp MCP server\" />\n</a>\n\n[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)\n[![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)](https://nodejs.org/)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Query Latest Price**: Fetch the latest price for a specified price feed pair (e.g., `FIL/ETH`) on a given chain (e.g., `ethereum`), including price, decimals, round ID, and timestamp.\n- **Query Price by Round ID**: Retrieve price data for a specific round ID (currently a placeholder due to on-chain historical data limitations).\n- **List Supported Chains**: Get a comma-separated list of supported blockchain networks (e.g., `ethereum,base`).\n- **List All Feeds**: Retrieve a Markdown-formatted list of all chains and their price feed names (e.g., `- ethereum: FIL/ETH,FDUSD/USD`).\n- **List Feeds by Chain**: Obtain a comma-separated list of price feed names for a specific chain (e.g., `FIL/ETH,FDUSD/USD` for `ethereum`).\n- **Configurable Feeds**: Define price feeds and RPC endpoints in a `feeds.json` file, supporting multiple chains and feed categories.\n\n## Supported Chains and Feeds\n\nThe server supports **9 blockchain networks** with a total of **329 price feeds**, as defined in `feeds.json`:\n\n- **Ethereum**: 107 feeds (e.g., `FIL/ETH`, `BTC/USD`, `USDC/USD`)\n- **BNB Chain (bsc)**: 80 feeds (e.g., `DOT/USD`, `CAKE/USD`, `BUSD/BNB`)\n- **Base**: 52 feeds (e.g., `AXL/USD`, `USDC/USD`, `WIF/USD`)\n- **Starknet**: 9 feeds (e.g., `ETH/USD`, `BTC/USD`, `WSTETH/ETH`)\n- **Linea**: 15 feeds (e.g., `ETH/USD`, `FOXY/USD`, `MATIC/USD`)\n- **Mantle**: 6 feeds (e.g., `MNT/USD`, `USDT/USD`, `BTC/USD`)\n- **Scroll**: 22 feeds (e.g., `SCR/USD`, `STETH/USD`, `WBTC/BTC`)\n- **zkSync**: 16 feeds (e.g., `ZK/USD`, `PEPE/USD`, `TRUMP/USD`)\n- **Celo**: 22 feeds (e.g., `CELO/USD`, `CUSD/USD`, `NGN/USD`)\n\nAdditional chains and feeds can be added by updating `feeds.json` with new network configurations and proxy addresses from Chainlink's Price Feeds documentation.\n\n## Prerequisites\n\n- **Node.js**: Version 18.x or higher.\n- **npm**: For dependency installation.\n- **Infura API Key**: Obtain a key from the [MetaMask Developer Dashboard](https://infura.io/) with access to supported networks (e.g., Ethereum, Base).\n- **MCP Inspector** (optional): For testing the server locally.\n- **Claude Desktop** (optional): For integration with Anthropic's Claude interface.\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/chainlink-feeds-mcp.git\n   cd chainlink-feeds-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   npm install\n   ```\n   The project requires:\n   - `@modelcontextprotocol/sdk`: For MCP server functionality.\n   - `ethers`: Version 6.x for blockchain interactions.\n   - `zod`: For input validation.\n   - `dotenv`: For environment variable management.\n\n3. **Configure MCP Client**:\n   To use this server with an MCP client like Claude Desktop, add the following to your config file (or equivalent):\n    ```json\n    {\n      \"mcpServers\": {\n        \"chainlink-feeds-mcp\": {\n          \"command\": \"node\",\n          \"args\": [\"path/to/chainlink-feeds-mcp/index.js\"],\n          \"env\": { \"INFURA_API_KEY\": \"your_api_key_here\" }\n        }\n      }\n    }   \n    ```\n## Usage\n\nThe server exposes five tools via the MCP protocol, accessible through **Claude Desktop** (for natural language queries) or **MCP Inspector** (for JSON inputs). Below are the tools, with examples in both natural language (via Claude Desktop) and JSON formats.\n\n### Tool: `getLatestPrice`\n\n- **Description**: Fetches the latest price for a given pair on a specified chain, returns a JSON object like this:\n    ```json\n    {\n      \"chain\": \"ethereum\",\n      \"pair\": \"FIL/ETH\",\n      \"price\": 0.01234,\n      \"decimals\": 18,\n      \"roundId\": \"123456\",\n      \"timestamp\": \"2025-04-17T12:00:00.000Z\",\n      \"proxyAddress\": \"0x0606Be69451B1C9861Ac6b3626b99093b713E801\",\n      \"feedCategory\": \"medium\"\n    }\n    ```\n\n- **Parameters**:\n  - `pair` (string): The price feed pair, e.g., `FIL/ETH`.\n  - `chain` (string): The blockchain network, e.g., `ethereum`.\n\n- **Natural Language Example (Claude Desktop)**:\n  \n  > **Input**: \"What¡¯s the latest FIL/ETH price on Ethereum?\"\n  \n  > **Output**: \"The latest FIL/ETH price on Ethereum is 0.01234, with 18 decimals, round ID 123456, updated at 2025-04-17 12:00:00 UTC.\"\n\n\n### Tool: `queryPriceByRound`\n\n- **Description**: Queries the price for a given pair and round ID on a specified chain, returns a JSON object like this:\n    ```json\n    {\n      \"chain\": \"ethereum\",\n      \"pair\": \"FDUSD/USD\",\n      \"price\": 1.0001,\n      \"decimals\": 8,\n      \"roundId\": \"123\",\n      \"timestamp\": \"2025-04-17T12:00:00.000Z\",\n      \"proxyAddress\": \"0xfAA9147190c2C2cc5B8387B4f49016bDB3380572\",\n      \"feedCategory\": \"medium\"\n    }\n    ```\n\n\n- **Parameters**:\n  - `roundId` (string): The round ID for the price data.\n  - `pair` (string): The price feed pair, e.g., `FDUSD/USD`.\n  - `chain` (string): The blockchain network, e.g., `ethereum`.\n\n- **Natural Language Example (Claude Desktop)**:\n  \n  > **Input**: \"Can you get the FDUSD/USD price for round ID 123 on Ethereum?\"\n  \n  > **Output**: \"For round ID 123, the FDUSD/USD price on Ethereum is 1.0001, with 8 decimals, updated at 2025-04-17 12:00:00 UTC. Note: This is a placeholder response due to historical data limitations.\"\n\n### Tool: `listSupportedChains`\n\n- **Description**: Returns a comma-separated list of all supported blockchain networks.\n\n- **Parameters**: None.\n\n- **Natural Language Example (Claude Desktop)**:\n  \n  > **Input**: \"Which blockchain networks does this server support?\"\n  \n  > **Output**: \"The server supports the following networks: ethereum, bsc, base, starknet, linea, mantle, scroll, zksync, celo.\"\n\n\n### Tool: `listSupportedFeeds`\n\n- **Description**: Returns a Markdown list of all supported chains and their price feed names.\n\n- **Parameters**: None.\n\n- **Natural Language Example (Claude Desktop)**:\n \n  > **Input**: \"Can you list all the price feeds supported by the server?\"\n  \n  > **Output**: \"Here are the supported price feeds by chain:\n    - Ethereum: FIL/ETH, FDUSD/USD, UNI/ETH, ...\n    - BNB Chain: DOT/USD, CAKE/USD, BUSD/BNB, ...\n    - Base: AXL/USD, USDC/USD, WIF/USD, ...\n    - Starknet: ETH/USD, BTC/USD, WSTETH/ETH, ...\n    - Linea: ETH/USD, FOXY/USD, MATIC/USD, ...\n    - Mantle: MNT/USD, USDT/USD, BTC/USD, ...\n    - Scroll: SCR/USD, STETH/USD, WBTC/BTC, ...\n    - zkSync: ZK/USD, PEPE/USD, TRUMP/USD, ...\n    - Celo: CELO/USD, CUSD/USD, NGN/USD, ...\"\n\n\n### Tool: `listSupportedFeedsByChain`\n\n- **Description**: Returns a comma-separated list of price feed names for a specified blockchain network.\n\n- **Parameters**:\n  - `chain` (string): The blockchain network, e.g., `base`.\n\n- **Natural Language Example (Claude Desktop)**:\n  > **Input**:  \"What price feeds are available on the Base chain?\"\n  \n  > **Output**: \"The Base chain supports the following price feeds: AXL/USD, USDC/USD, WIF/USD, CBETH/ETH, ...\"\n\n\n## License\n\nThis project is licensed under the [MIT License](LICENSE).",
+  "category": "Finance",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "chainlink-feeds-mcp": {
+        "command": "node",
+        "args": ["path/to/chainlink-feeds-mcp/index.js"],
+        "env": {
+          "INFURA_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "chainlink-feeds-mcp",
+    "url": "https://github.com/kukapay/chainlink-feeds-mcp",
+    "name": "chainlink-feeds-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "625d2a16c33a71e0c32a766c7e12c1dc0e3f5f28"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.173Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "ethers",
+      "importance": 9
+    },
+    {
+      "name": "https-proxy-agent",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"chainlink-feeds-mcp\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"homepage\": \"https://github.com/kukapay/chainlink-feeds-mcp\",\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"An MCP server that provides real-time access to Chainlink's decentralized on-chain price feeds.\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.9.0\",\n    \"dotenv\": \"^16.5.0\",\n    \"ethers\": \"^6.13.5\",\n    \"https-proxy-agent\": \"^7.0.6\",\n    \"zod\": \"^3.24.3\"\n  }\n}\n"
+}

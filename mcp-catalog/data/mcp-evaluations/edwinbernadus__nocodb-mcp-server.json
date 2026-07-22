@@ -1,0 +1,114 @@
+{
+  "name": "edwinbernadus__nocodb-mcp-server",
+  "display_name": "nocodb-mcp-server",
+  "description": "nocodb mcp server",
+  "author": {
+    "name": "edwinbernadus"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/start.js"],
+    "env": {
+      "NOCODB_URL": "${user_config.nocodb_url}",
+      "NOCODB_BASE_ID": "${user_config.nocodb_base_id}",
+      "NOCODB_API_TOKEN": "${user_config.nocodb_api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "nocodb_url": {
+      "type": "string",
+      "title": "NocoDB URL",
+      "description": "The URL of your NocoDB instance (e.g., https://your-nocodb-instance.com or https://app.nocodb.com for cloud)",
+      "required": true,
+      "sensitive": false,
+      "default": "https://app.nocodb.com"
+    },
+    "nocodb_base_id": {
+      "type": "string",
+      "title": "NocoDB Base ID",
+      "description": "The Base ID for your NocoDB project, found in the URL (e.g., pqmob3ammcknma5 from https://app.nocodb.com/#/{USERNAME}/{NOCODB_BASE_ID}/{TABLE_ID})",
+      "required": true,
+      "sensitive": false
+    },
+    "nocodb_api_token": {
+      "type": "string",
+      "title": "NocoDB API Token",
+      "description": "Your NocoDB API token for authentication",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/edwinbernadus-nocodb-mcp-server-badge.jpg)](https://mseep.ai/app/edwinbernadus-nocodb-mcp-server)\n\n# Nocodb MCP Server\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/edwinbernadus/nocodb-mcp-server)](https://archestra.ai/mcp-catalog/edwinbernadus__nocodb-mcp-server)\n[![smithery badge](https://smithery.ai/badge/@edwinbernadus/nocodb-mcp-server)](https://smithery.ai/server/@edwinbernadus/nocodb-mcp-server)\n\n## Introduction\n\nThe NocoDB MCP Server enables seamless interaction with your NocoDB database using the Model Context Protocol (MCP). This server makes it easy to perform CRUD (Create, Read, Update, Delete) operations on NocoDB tables through natural language commands.\n\n## Example Prompt\n\n```text\n[Get Records]\nget data from nocodb, table: Shinobi\n\n[Create Record]\nadd new row, with name: sasuke-2\nadd other row, with name: naruto-2\n\n[Update Record]\nupdate all rows, remove suffix -\n\n[Delete Record]\ndelete all rows with name naruto\n\n[Add Column]\nadd column with name: Age\n\nupdate all rows, set Age to 18\n\n[Delete Column]\ndelete column with name: Age\n```\n\n## Example Prompt - Upload File\n\n```text\n[Create table]\nfrom the json files\nput on nocodb database\ntable name is TableShinobi\n```\nJSON location file in: [example_upload.json](example_upload.json)\n\n## Example Prompt - Bulk Create Records and Bulk Delete Records\n\n\n![bulk_sample1](https://raw.githubusercontent.com/edwinbernadus/nocodb-mcp-server/refs/heads/main/docs/sample-bulk/bulk-screen1.png)\n![bulk_sample2](https://raw.githubusercontent.com/edwinbernadus/nocodb-mcp-server/refs/heads/main/docs/sample-bulk/bulk-screen2.png)\n![bulk_sample3](https://raw.githubusercontent.com/edwinbernadus/nocodb-mcp-server/refs/heads/main/docs/sample-bulk/bulk-screen3.png)\n\n## About This Fork\n\nThis repository is a TypeScript-based fork of [NocoDB-MCP-Server](https://github.com/granthooks/Nocodb-MCP-Server). It retains the core functionality while improving maintainability and compatibility with modern TypeScript development practices.\n\n## Setup\n\nEnsure that Node.js and TypeScript are installed, then execute:\n\n```bash\nnpm install\nnpm run build\n```\n\n## Configuration\n\nDefine the required environment variables in a `.env` file:\n\n```env\nNOCODB_URL=https://your-nocodb-instance.com\nNOCODB_API_TOKEN=your_api_token_here\nNOCODB_BASE_ID=your_base_id_here\n```\n\n**Tip:** You can copy the template from [env.example](env.example) and fill in your values.\n\n### How to Obtain NOCODB_BASE_ID\n\nTo find your `NOCODB_BASE_ID`, check the URL of your Nocodb instance.  \nFor example:\nhttps://app.nocodb.com/#/wi6evls6/pqmob3ammcknma5/maty9c5xkmf4012  \nIn this URL format:\n\n```text\nhttps://app.nocodb.com/#/{USERNAME}/{NOCODB_BASE_ID}/{TABLE_ID}\n```\n\n## Integration with Claude Desktop\n\nModify `claude_desktop_config.json` to include:\n\n```json\n{\n  \"mcpServers\": {\n    \"nocodb\": {\n      \"command\": \"node\",\n      \"args\": [\"{working_folder}/dist/start.js\"],\n      \"env\": {\n        \"NOCODB_URL\": \"https://your-nocodb-instance.com\",\n        \"NOCODB_BASE_ID\": \"your_base_id_here\",\n        \"NOCODB_API_TOKEN\": \"your_api_token_here\"\n      }\n    }\n  }\n}\n```\n\n## Direct call from CLI\n\nYou can directly call the MCP server from the command line:  \nNOCODB_URL, NOCODB_API_TOKEN, and NOCODB_BASE_ID are required parameters.  \n`NOCODB_URL=https://app.nocodb.com` if you are using NocoDB cloud.\n\n```bash\nnpx -y nocodb-mcp-server {NOCODB_URL} {NOCODB_BASE_ID} {NOCODB_API_TOKEN} \n```\n\n## Testing CLI\n\nTo run the tests, execute:\n\n```bash\nnpx -y @wong2/mcp-cli npx nocodb-mcp-server {NOCODB_URL} {NOCODB_BASE_ID} {NOCODB_API_TOKEN} \n```\n\n## API Functions\n\nFor detailed information about available API functions, please refer to [API_FUNCTION.md](API_FUNCTION.md).\n\n## Project Structure\n\n```text\n/project-root\n  ├── src/            # TypeScript source files\n  ├── dist/           # Compiled JavaScript output\n  ├── .env            # Environment variable configurations\n  ├── package.json    # Project dependencies and scripts\n  ├── tsconfig.json   # TypeScript settings\n```\n\n## Contribution Guidelines\n\nContributions are encouraged! Feel free to open issues or submit pull requests.\n\n## License\n\nThis project is distributed under MIT.\n",
+  "category": "Development",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "nocodb-configured": {
+        "command": "node",
+        "args": ["{working_folder}/dist/start.js"],
+        "env": {
+          "NOCODB_URL": "https://your-nocodb-instance.com",
+          "NOCODB_BASE_ID": "your_base_id_here",
+          "NOCODB_API_TOKEN": "your_api_token_here"
+        }
+      },
+      "nocodb-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "nocodb-mcp-server", "{NOCODB_URL}", "{NOCODB_BASE_ID}", "{NOCODB_API_TOKEN}"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "edwinbernadus",
+    "repo": "nocodb-mcp-server",
+    "url": "https://github.com/edwinbernadus/nocodb-mcp-server",
+    "name": "edwinbernadus__nocodb-mcp-server",
+    "path": null,
+    "stars": 45,
+    "contributors": 6,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b785f22e36a16643c5749df6f6b7316350b169c1"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:28.260Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"nocodb-mcp-server\",\n  \"version\": \"1.0.24\",\n  \"description\": \"Model Context Protocol server for nocodb\",\n  \"scripts\": {\n    \"build\": \"tsc\"\n  },\n  \"type\": \"module\",\n  \"files\": [\n    \"dist\"\n  ],\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"bin\": {\n    \"nocodb-mcp-server\": \"dist/start.js\"\n  },\n  \"homepage\": \"https://github.com/edwinbernadus/nocodb-mcp-server.git\",\n  \"keywords\": [\n    \"nocodb\",\n    \"mcp\",\n    \"model context protocol\",\n    \"nocodb mcp\"\n  ],\n  \"author\": \"edwinbernadus\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/edwinbernadus/nocodb-mcp-server.git\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.0\",\n    \"typescript\": \"5.8.3\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.8.0\",\n    \"axios\": \"1.8.4\",\n    \"zod\": \"3.24.2\"\n  }\n}\n"
+}

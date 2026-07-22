@@ -1,0 +1,132 @@
+{
+  "name": "xuanwo__mcp-server-opendal",
+  "display_name": "mcp-server-opendal",
+  "description": "Model Context Protocol Server for Apache OpenDAL™",
+  "author": {
+    "name": "Xuanwo"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-opendal"],
+    "env": {
+      "OPENDAL_MYS3_TYPE": "${user_config.opendal_mys3_type}",
+      "OPENDAL_MYS3_BUCKET": "${user_config.opendal_mys3_bucket}",
+      "OPENDAL_MYS3_REGION": "${user_config.opendal_mys3_region}",
+      "OPENDAL_MYS3_ENDPOINT": "${user_config.opendal_mys3_endpoint}",
+      "OPENDAL_MYS3_ACCESS_KEY_ID": "${user_config.opendal_mys3_access_key_id}",
+      "OPENDAL_MYS3_SECRET_ACCESS_KEY": "${user_config.opendal_mys3_secret_access_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "opendal_mys3_type": {
+      "type": "string",
+      "title": "OpenDAL Service Type (mys3)",
+      "description": "Type of the OpenDAL storage service for the 'mys3' alias (e.g., s3, azblob, gcs).",
+      "required": true,
+      "default": "s3"
+    },
+    "opendal_mys3_bucket": {
+      "type": "string",
+      "title": "OpenDAL S3 Bucket (mys3)",
+      "description": "Name of the S3 bucket for the 'mys3' alias.",
+      "required": true
+    },
+    "opendal_mys3_region": {
+      "type": "string",
+      "title": "OpenDAL S3 Region (mys3)",
+      "description": "AWS region for the S3 bucket for the 'mys3' alias.",
+      "required": true
+    },
+    "opendal_mys3_endpoint": {
+      "type": "string",
+      "title": "OpenDAL S3 Endpoint (mys3)",
+      "description": "Custom endpoint for S3 for the 'mys3' alias (e.g., for MinIO).",
+      "required": false
+    },
+    "opendal_mys3_access_key_id": {
+      "type": "string",
+      "title": "OpenDAL S3 Access Key ID (mys3)",
+      "description": "Access Key ID for S3 authentication for the 'mys3' alias.",
+      "sensitive": true,
+      "required": true
+    },
+    "opendal_mys3_secret_access_key": {
+      "type": "string",
+      "title": "OpenDAL S3 Secret Access Key (mys3)",
+      "description": "Secret Access Key for S3 authentication for the 'mys3' alias.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Model Context Protocol Server for Apache OpenDAL™\nA Model Context Protocol (MCP) server implementation that provides access to various storage services via [Apache OpenDAL™](https://opendal.apache.org/).\n\n[![PyPI - Version](https://img.shields.io/pypi/v/mcp-server-opendal)](https://pypi.org/project/mcp-server-opendal/)\n[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mcp-server-opendal)](https://pypi.org/project/mcp-server-opendal/)\n[![Lint and Test](https://github.com/Xuanwo/mcp-server-opendal/actions/workflows/test.yml/badge.svg)](https://github.com/Xuanwo/mcp-server-opendal/actions/workflows/test.yml)\n\n## Features\n\n- Seamless access to multiple storage services including S3, Azure Blob Storage, Google Cloud Storage, and more\n- List files and directories from storage services\n- Read file contents with automatic text/binary detection\n- Environment variable based configuration\n\n## Installation\n\n```shell\npip install mcp-server-opendal\n```\n\n## Usage with Claude Desktop\n\nAdd the following to `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"opendal\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"mcp-server-opendal\"\n      ],\n      \"env\": {\n        \"YOUR_ENV_VAR\": \"YOUR_ENV_VALUE\"\n      }\n    }\n  }\n}\n```\n\nIt requires `uv` to be installed on your machine. Check the [official documentation](https://docs.astral.sh/uv/getting-started/installation/) for installation guides.\n\n## Environment variables\n\nConfigure storage services by setting environment variables. Each service requires a prefix and specific configuration options.\n\nFor example, to configure an S3 service with alias \"mys3\":\n\n```\nOPENDAL_MYS3_TYPE=s3\nOPENDAL_MYS3_BUCKET=mybucket\nOPENDAL_MYS3_REGION=us-east-1\nOPENDAL_MYS3_ENDPOINT=http://localhost:9000\nOPENDAL_MYS3_ACCESS_KEY_ID=myaccesskey\nOPENDAL_MYS3_SECRET_ACCESS_KEY=mysecretkey\n```\n\nThen you can use tool like `read` and `list` with `mys3://path/to/file`.\n\n`mcp-server-opendal` will also load from `.env`.\n\n## Development\n\n```shell\nnpx @modelcontextprotocol/inspector \\\n  uv run mcp-server-opendal\n```\n",
+  "category": "Cloud",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-opendal-with-config": {
+        "command": "uvx",
+        "args": ["mcp-server-opendal"],
+        "env": {
+          "YOUR_ENV_VAR": "YOUR_ENV_VALUE"
+        }
+      },
+      "mcp-server-opendal-uv-run": {
+        "command": "uv",
+        "args": ["run", "mcp-server-opendal"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Xuanwo",
+    "repo": "mcp-server-opendal",
+    "url": "https://github.com/Xuanwo/mcp-server-opendal",
+    "name": "xuanwo__mcp-server-opendal",
+    "path": null,
+    "stars": 33,
+    "contributors": 3,
+    "issues": 4,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "f49ee92cae7755f78697f899297539a53cfbf9b1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:08.519Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "opendal",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-opendal\"\ndescription = \"A Model Context Protocol server providing tools to access storage services for usage by LLMs\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\nlicense = { text = \"Apache-2.0\" }\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: Apache Software License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.12\",\n]\ndependencies = [\n    \"mcp>=1.0.0\",\n    \"opendal>=0.45.16,<0.46.0\",\n    \"python-dotenv>=1.0.1\",\n]\ndynamic = [\"version\"]\n\n[build-system]\nrequires = [\"hatchling\", \"hatch-vcs>=0.3.0\"]\nbuild-backend = \"hatchling.build\"\n\n[dependency-groups]\ndev = [\"pytest>=8.3.5\", \"pytest-asyncio>=0.25.3\", \"ruff>=0.7.3\"]\nexamples = [\n    \"llama-index>=0.12.22\",\n    \"llama-index-llms-openai-like>=0.3.4\",\n    \"llama-index-tools-mcp>=0.1.0\",\n]\n\n[project.scripts]\nmcp-server-opendal = \"mcp_server_opendal:main\"\n\n[tool.hatch.version]\nsource = \"vcs\"\nfallback-version = \"0.0.0\"\n\n[tool.hatch.build.targets.sdist]\nonly-include = [\"src/\", \"examples/\", \"tests/\"]\n\n[tool.ruff]\nline-length = 88\nsrc = [\"src\"]\nexclude = [\"tests/fixtures\"]\ntarget-version = \"py312\"\n\n[tool.ruff.lint]\nextend-select = [\n    \"I\",    # isort\n    \"B\",    # flake8-bugbear\n    \"C4\",   # flake8-comprehensions\n    \"PGH\",  # pygrep-hooks\n    \"RUF\",  # ruff\n    \"W\",    # pycodestyle\n    \"YTT\",  # flake8-2020\n]\nextend-ignore = [\"B018\", \"B019\", \"B905\"]\n\n[tool.ruff.lint.mccabe]\nmax-complexity = 10\n"
+}

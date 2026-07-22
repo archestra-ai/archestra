@@ -1,0 +1,120 @@
+{
+  "name": "flipt-io__mcp-server-flipt",
+  "display_name": "Flipt",
+  "description": "MCP server from flipt-io/mcp-server-flipt",
+  "author": {
+    "name": "flipt-io"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@flipt-io/mcp-server-flipt"],
+    "env": {
+      "FLIPT_API_URL": "${user_config.flipt_api_url}",
+      "FLIPT_API_KEY": "${user_config.flipt_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "flipt_api_url": {
+      "type": "string",
+      "title": "Flipt API URL",
+      "description": "The URL of the Flipt API",
+      "required": false,
+      "default": "http://localhost:8080"
+    },
+    "flipt_api_key": {
+      "type": "string",
+      "title": "Flipt API Key",
+      "description": "The API key to use for the Flipt API",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Flipt MCP Server\n\n[![mcp-server-flipt](https://img.shields.io/npm/v/@flipt-io/mcp-server-flipt?label=%40flipt-io%2Fmcp-server-flipt)](https://www.npmjs.com/package/@flipt-io/mcp-server-flipt)\n[![smithery badge](https://smithery.ai/badge/@flipt-io/mcp-server-flipt)](https://smithery.ai/install/@flipt-io/mcp-server-flipt)\n[![MseeP.ai Security Assessment Badge](https://mseep.net/mseep-audited.png)](https://mseep.ai/app/flipt-io-mcp-server-flipt)\n\nA [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for [Flipt](https://flipt.io), allowing AI assistants to interact with feature flags.\n\n<img width=\"2060\" alt=\"mcp\" src=\"https://github.com/user-attachments/assets/cc32a6dd-5368-43c1-897a-a0ccfeeacaf0\" />\n\n## Features\n\n- List, create, update, and delete namespaces, flags, segments, rules, and more\n- Evaluate flags for specific entities\n- Toggle flags on/off\n- Manage constraints, variants, distributions, and rollouts\n\n## Usage\n\nOnce the server is running, it will:\n\n1. Set up a STDIO transport for MCP communication\n2. Register tools and prompts for interacting with Flipt\n\nThe server is designed to be used with AI assistants that support the Model Context Protocol.\n\n### Installing via Smithery\n\nTo install Flipt MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/install/@flipt-io/mcp-server-flipt):\n\n```bash\nnpx -y @smithery/cli install @flipt-io/mcp-server-flipt --client claude\n```\n\n### Node\n\nYou can install the package globally and run it:\n\n```bash\nnpm install -g @flipt-io/mcp-server-flipt && mcp-server-flipt\n```\n\nOr run it directly with npx:\n\n```bash\nnpx -y @flipt-io/mcp-server-flipt\n```\n\n### Docker\n\nYou can also run the server in a Docker container:\n\n```bash\ndocker run -d --name mcp-server-flipt ghcr.io/flipt-io/mcp-server-flipt:latest\n```\n\n## Configuration\n\nThe server can be configured using environment variables:\n\n- `FLIPT_API_URL`: The URL of the Flipt API (default: <http://localhost:8080>)\n- `FLIPT_API_KEY`: The API key to use for the Flipt API (optional)\n\nYou can set these in a `.env` file in the directory where you run the server.\n\n## Development\n\n```bash\n# Install dependencies\nnpm install\n\n# Run in development mode\nnpm run dev\n\n# Build the project\nnpm run build\n\n# Start the server\nnpm start\n\n# Format code\nnpm run fmt\n\n# Lint code\nnpm run lint\n```\n\n## License\n\nApache 2.0\n",
+  "category": "Development",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "flipt-io-mcp-server-flipt-global": {
+        "command": "mcp-server-flipt",
+        "args": [],
+        "env": {}
+      },
+      "flipt-io-mcp-server-flipt-npx": {
+        "command": "npx",
+        "args": ["-y", "@flipt-io/mcp-server-flipt"],
+        "env": {}
+      },
+      "flipt-io-mcp-server-flipt-docker": {
+        "command": "docker",
+        "args": ["run", "-d", "--name", "mcp-server-flipt", "ghcr.io/flipt-io/mcp-server-flipt:latest"],
+        "env": {},
+        "docker_image": "ghcr.io/flipt-io/mcp-server-flipt:latest"
+      },
+      "flipt-io-mcp-server-flipt-npm-start": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "flipt-io",
+    "repo": "mcp-server-flipt",
+    "url": "https://github.com/flipt-io/mcp-server-flipt",
+    "name": "flipt-io__mcp-server-flipt",
+    "path": null,
+    "stars": 2,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "a69f3cc18312eb70cb15950e515bc76d4c1d2024"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.392Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "whatwg-fetch",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@flipt-io/mcp-server-flipt\",\n  \"version\": \"0.0.2\",\n  \"description\": \"Model Context Protocol server for Flipt\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"commonjs\",\n  \"author\": \"Flipt Devs <dev@flipt.io>\",\n  \"homepage\": \"https://flipt.io\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/flipt-io/mcp-server-flipt.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/flipt-io/mcp-server-flipt/issues\"\n  },\n  \"license\": \"Apache-2.0\",\n  \"bin\": {\n    \"mcp-server-flipt\": \"./bin/cli.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"bin\"\n  ],\n  \"eslintConfig\": {\n    \"type\": \"module\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"check\": \"tsc --noEmit\",\n    \"start\": \"node bin/cli.js\",\n    \"dev\": \"tsx src/index.ts\",\n    \"test\": \"jest\",\n    \"lint\": \"eslint 'src/**/*.ts' --ignore-pattern 'src/generated/**'\",\n    \"lint:fix\": \"eslint 'src/**/*.ts' --ignore-pattern 'src/generated/**' --fix\",\n    \"fmt\": \"prettier --write 'src/**/*.ts' --ignore-path .prettierignore\",\n    \"fmt:check\": \"prettier --check 'src/**/*.ts' --ignore-path .prettierignore\",\n    \"prepublishOnly\": \"npm run build\",\n    \"postbuild\": \"shx chmod +x dist/*.js bin/cli.js\",\n    \"prepare\": \"npm run build && shx chmod +x bin/cli.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"axios\": \"^1.6.7\",\n    \"dotenv\": \"^16.4.1\",\n    \"whatwg-fetch\": \"^3.6.20\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.22.0\",\n    \"@openapitools/openapi-generator-cli\": \"^2.7.0\",\n    \"@types/jest\": \"^29.5.11\",\n    \"@types/node\": \"^20.11.5\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.26.1\",\n    \"@typescript-eslint/parser\": \"^8.26.1\",\n    \"eslint\": \"^9.22.0\",\n    \"eslint-config-prettier\": \"^10.1.1\",\n    \"eslint-plugin-prettier\": \"^5.2.3\",\n    \"jest\": \"^29.7.0\",\n    \"prettier\": \"^3.5.3\",\n    \"shx\": \"^0.3.4\",\n    \"ts-jest\": \"^29.1.1\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"^5.3.3\",\n    \"typescript-eslint\": \"^8.26.1\"\n  }\n}\n"
+}

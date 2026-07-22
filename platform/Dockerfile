@@ -40,8 +40,9 @@ RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/dock
     cd /docker-cli && \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
     go mod edit -go=1.25.11 && \
-    # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3
-    go get google.golang.org/grpc@v1.79.3 && \
+    # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3.
+    # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
+    go get google.golang.org/grpc@v1.82.1 && \
     # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
     go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
     # CVE-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
@@ -80,9 +81,11 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     go get github.com/moby/go-archive@v0.2.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.0 && \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
     # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
-    # Must be the LAST `go get` before `go mod tidy` — earlier `go get`s (go-git/go-billy/moby)
-    # transitively pull containerd 2.2.4 and would otherwise downgrade our explicit requirement.
     go get github.com/containerd/containerd/v2@v2.2.5 && \
+    # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
+    # Must be the LAST `go get` before `go mod tidy` — earlier `go get`s (go-git/go-billy/moby/containerd)
+    # transitively pull grpc 1.80.0 and would otherwise downgrade our explicit requirement.
+    go get google.golang.org/grpc@v1.82.1 && \
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \

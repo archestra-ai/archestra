@@ -1,0 +1,59 @@
+{
+  "name": "j3k0__speech-sh__mcp_readme-md",
+  "display_name": "MCP_README.md",
+  "description": "Simple curl script to play aloud what you type, useful if your voice is suddenly broken.",
+  "author": {
+    "name": "j3k0"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Communication",
+  "quality_score": 21,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "j3k0",
+    "repo": "speech.sh",
+    "url": "https://github.com/j3k0/speech.sh/blob/main/MCP_README.md",
+    "name": "speech.sh",
+    "path": "MCP_README.md",
+    "stars": 3,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "961de346b950f4183051df6a376d0b89afaaecd3"
+  },
+  "programming_language": "Shell",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T21:00:04.561Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [],
+  "raw_dependencies": null
+}

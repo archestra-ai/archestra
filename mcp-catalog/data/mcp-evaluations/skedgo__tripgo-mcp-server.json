@@ -1,0 +1,115 @@
+{
+  "name": "skedgo__tripgo-mcp-server",
+  "display_name": "tripgo-mcp-server",
+  "description": "MCP server for TripGo's multi-modal routing",
+  "author": {
+    "name": "skedgo"
+  },
+  "server": {
+    "command": "npm",
+    "args": ["run", "dev:local"],
+    "env": {
+      "API_KEY": "${user_config.api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "Your API key for the TripGo API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# TripGo MCP Server\n\nThe is a remote MCP server that wraps the TripGo API and provides the following tools:\n\n- `tripgo-locations`: Retrieve transport-related locations\n- `tripgo-departures`: Departures from a specific public transport stop\n- `tripgo-routing`: Mixed and multi-modal trip planning\n- `tripgo-get-trip-url`: Get the URL of a trip previously calculated using the `tripgo-routing` tool\n\nThe MCP server is deployed on Cloudflare Workers.\n\n## Connect directly to remove MCP\n\nThe MCP server is deployed on Cloudflare Workers. You can connect to it directly using the URL `https://tripgo-mcp-server.skedgo-account.workers.dev/sse`.\n\n## Connect Claude Desktop to public MCP server\n\nYou can also connect to your remote MCP server from *local* MCP clients, by using the [mcp-remote proxy](https://www.npmjs.com/package/mcp-remote).\n\nTo connect to your MCP server from Claude Desktop, follow [Anthropic's Quickstart](https://modelcontextprotocol.io/quickstart/user) and within Claude Desktop go to Settings > Developer > Edit Config.\n\nUse with this configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"TripGo\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"mcp-remote\",\n        \"https://tripgo-mcp-server.skedgo-account.workers.dev/sse\"\n      ]\n    }\n  }\n}\n```\n\nRestart Claude and you should see the tools become available.\n\n## Development\n\n- Create a copy of `.env.example` and rename it to `.env` and set an API key\n- Install dependencies with `npm install`\n- Start the server with `npm run dev:local`\n\nThe configure Claude:\n\n```json\n{\n  \"mcpServers\": {\n    \"calculator\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"mcp-remote\",\n        \"http://localhost:8787/sse\"\n      ]\n    }\n  }\n}\n```\n\nRestart Claude and you should see the tools become available.\n\n## Deployment\n\nThis is deployed locally currently, run:\n\n```bash\nnpm install\nnpm run deploy\n```\n",
+  "category": "Travel",
+  "quality_score": 36,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-remote": {
+        "command": "npx",
+        "args": ["mcp-remote", "https://tripgo-mcp-server.skedgo-account.workers.dev/sse"],
+        "env": {}
+      },
+      "mcp-remote-local-target": {
+        "command": "npx",
+        "args": ["mcp-remote", "http://localhost:8787/sse"],
+        "env": {}
+      },
+      "tripgo-mcp-server-dev": {
+        "command": "npm",
+        "args": ["run", "dev:local"],
+        "env": {}
+      },
+      "tripgo-mcp-server-deploy": {
+        "command": "npm",
+        "args": ["run", "deploy"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "skedgo",
+    "repo": "tripgo-mcp-server",
+    "url": "https://github.com/skedgo/tripgo-mcp-server",
+    "name": "tripgo-mcp-server",
+    "path": null,
+    "stars": 1,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "06ebc522b564c39826b36e79f1b6e4da60811deb"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:39.753Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@mapbox/polyline",
+      "importance": 7
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@turf/boolean-point-in-polygon",
+      "importance": 8
+    },
+    {
+      "name": "@turf/helpers",
+      "importance": 8
+    },
+    {
+      "name": "agents",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"remote-mcp-server-authless\",\n  \"version\": \"0.0.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"deploy\": \"wrangler deploy\",\n    \"dev\": \"wrangler dev\",\n    \"dev:local\": \"export $(cat .env | xargs) && wrangler dev --var TRIPGO_API_KEY:$TRIPGO_API_KEY\",\n    \"format\": \"biome format --write\",\n    \"lint:fix\": \"biome lint --fix\",\n    \"start\": \"wrangler dev --var TRIPGO_API_KEY:$TRIPGO_API_KEY\",\n    \"cf-typegen\": \"wrangler types\",\n    \"type-check\": \"tsc --noEmit\"\n  },\n  \"dependencies\": {\n    \"@mapbox/polyline\": \"^1.2.1\",\n    \"@modelcontextprotocol/sdk\": \"^1.12.0\",\n    \"@turf/boolean-point-in-polygon\": \"^7.2.0\",\n    \"@turf/helpers\": \"^7.2.0\",\n    \"agents\": \"^0.0.93\",\n    \"zod\": \"^3.25.28\"\n  },\n  \"devDependencies\": {\n    \"@biomejs/biome\": \"^1.9.4\",\n    \"@types/mapbox__polyline\": \"^1.0.5\",\n    \"@types/node\": \"^22.15.29\",\n    \"typescript\": \"^5.8.3\",\n    \"wrangler\": \"^4.18.0\"\n  }\n}\n"
+}

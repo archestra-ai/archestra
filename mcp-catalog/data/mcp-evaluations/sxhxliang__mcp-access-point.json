@@ -1,0 +1,130 @@
+{
+  "name": "sxhxliang__mcp-access-point",
+  "display_name": "mcp-access-point",
+  "description": "Turn a web server into an MCP server in one click without making any code changes.",
+  "author": {
+    "name": "sxhxliang"
+  },
+  "server": {
+    "command": "${__dirname}/mcp-access-point",
+    "args": ["-c", "${user_config.config_file}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "config_file": {
+      "type": "file",
+      "title": "Configuration File",
+      "description": "Path to the YAML configuration file (e.g., config.yaml) that defines the upstream services and routing rules.",
+      "required": true,
+      "default": "${__dirname}/config.yaml"
+    }
+  },
+  "readme": "# MCP Access Point  \r\n\r\n`MCP Access Point` is a lightweight protocol conversion gateway tool designed to establish a communication bridge between traditional `HTTP` services and `MCP` (Model Context Protocol) clients. It enables MCP clients to interact directly with existing HTTP services without requiring any server-side interface modifications.  \r\n<p align=\"center\">\r\n  <a href=\"./README.md\"><img alt=\"README in English\" src=\"https://img.shields.io/badge/English-4578DA\"></a>\r\n  <a href=\"./README_CN.md\"><img alt=\"简体中文版\" src=\"https://img.shields.io/badge/简体中文-F40002\"></a>\r\n  <a href=\"https://deepwiki.com/sxhxliang/mcp-access-point\"><img src=\"https://deepwiki.com/badge.svg\" alt=\"Ask DeepWiki\"></a>\r\n  <a href=\"https://zread.ai/sxhxliang/mcp-access-point\"><img alt=\"中文文档\" src=\"https://img.shields.io/badge/中文文档-4578DA\"></a>\r\n</p>\r\n\r\n## Introduction  \r\nThis project is built on `Pingora` - an ultra-high performance gateway proxy library capable of supporting massive-scale request proxy services. Pingora has been used to build services that handle core traffic for the Cloudflare platform, consistently serving over 40 million requests per second across the internet for years. It has become the technical cornerstone supporting a significant proportion of traffic on the Cloudflare platform.\r\n\r\n## HTTP to MCP  \r\nThis mode allows clients like `Cursor Desktop` to communicate with remote HTTP servers through `SSE`, even when the servers themselves don't support the SSE protocol.\r\n\r\n- Example setup includes two services:  \r\n  - Service 1 runs locally at `127.0.0.1:8090`  \r\n  - Service 2 runs remotely at `api.example.com`  \r\n- Through the `MCP Access Point`, both services can be converted to MCP services without any code modifications.  \r\n- Clients communicate with `Service 1` and `Service 2` via the MCP protocol. The MCP Access Point automatically distinguishes MCP requests and forwards them to the appropriate backend services.\r\n\r\n```mermaid\r\ngraph LR\r\n   A[\"Cursor Desktop\"] <--> |SSE| B[\"MCP Access Point\"]\r\n   A2[\"Other Desktop\"] <--> |Streamable Http| B[\"MCP Access Point\"]\r\n   B <--> |http 127.0.0.1:8090| C1[\"Existing API Server\"]\r\n   B <--> |https//api.example.com| C2[\"Existing API Server\"]\r\n  \r\n   style A2 fill:#ffe6f9,stroke:#333,color:black,stroke-width:2px\r\n   style A fill:#ffe6f9,stroke:#333,color:black,stroke-width:2px\r\n   style B fill:#e6e6af,stroke:#333,color:black,stroke-width:2px\r\n   style C1 fill:#e6ffe6,stroke:#333,color:black,stroke-width:2px\r\n   style C2 fill:#e6ffd6,stroke:#333,color:black,stroke-width:2px\r\n```\r\n\r\n### Transport Type (Specification)\r\nCurrently supports `SSE` and `Streamable HTTP` protocols:\r\n- ✅ Streamable HTTP (stateless) 2025-03-26\r\n  - All services: `ip:port/mcp`\r\n  - Single service: `ip:port/api/{service_id}/mcp`\r\n  \r\n- ✅ SSE 2024-11-05\r\n  - All services: `ip:port/sse`\r\n  - Single service: `ip:port/api/{service_id}/sse`\r\n\r\nuse `IP:PORT/sse` for `SSE` \r\nuse `IP:PORT/mcp` for `Streamable HTTP` \r\n\r\n### Supported MCP clients\r\n- ✅ [MCP Inspector](https://github.com/modelcontextprotocol/inspector)\r\n- ✅ [Cursor Desktop](https://docs.cursor.com/context/model-context-protocol)\r\n- ✅ [Windsurf](https://docs.windsurf.com/plugins/cascade/mcp#model-context-protocol-mcp)\r\n- ✅ [VS Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers)\r\n- ✅ [Trae](https://docs.trae.ai/ide/model-context-protocol)\r\n\r\n## Core Features  \r\n- **Protocol Conversion**: Seamless conversion between HTTP and MCP protocols  \r\n- **Zero-Intrusive Integration**: Full compatibility with existing HTTP services  \r\n- **Client Empowerment**: Enables MCP clients to directly call standard HTTP services  \r\n- **Lightweight Proxy**: Minimalist architecture with efficient protocol conversion  \r\n- **Multi-tenancy**: Independent configuration and endpoints for each tenant\r\n\r\n## Quick Start  \r\n\r\n### Installation  \r\n```bash\r\n# Install from source\r\ngit clone https://github.com/sxhxliang/mcp-access-point.git\r\ncd mcp-access-point\r\ncargo run -- -c config.yaml\r\n\r\n# Use inspector for debugging (start service first)\r\nnpx @modelcontextprotocol/inspector node build/index.js\r\n# Access http://127.0.0.1:6274/\r\n# Select \"SSE\" and enter 0.0.0.0:8080/sse, then click connect\r\n# or select \"Streamable HTTP\" and enter 0.0.0.0:8080/mcp\r\n```\r\n\r\n### Multi-tenancy Support\r\nThe MCP Access Gateway supports multi-tenancy, where each tenant can configure multiple MCP services accessible via:\r\n- `/api/{mcp-service-id}/sse` (for SSE)\r\n- `/api/{mcp-service-id}/mcp` (for Streamable HTTP)\r\n\r\nExample configuration:\r\n```yaml\r\n# config.yaml example (supports multiple services)\r\n\r\nmcps:\r\n  - id: service-1 # Access via /api/service-1/sse or /api/service-1/mcp\r\n    ... # Service configuration\r\n  - id: service-2 # Access via /api/service-2/sse or /api/service-2/mcp\r\n    ... # Service configuration\r\n  - id: service-3 # Access via /api/service-3/sse or /api/service-3/mcp\r\n    ... # Service configuration\r\n```\r\n\r\nTo access all services simultaneously, use:\r\n- `0.0.0.0:8080/mcp` (Streamable HTTP)\r\n- `0.0.0.0:8080/sse` (SSE)\r\n\r\n### Configuration Details\r\n1. **`-c config.yaml`**\r\n   - `-c` (or `--config`) specifies the configuration file path (`config.yaml`).\r\n   - This file defines the APIs that the MCP Access Point will proxy and convert.\r\n\r\n### config.yaml Example\r\nThe configuration file supports multi-tenancy, allowing independent configuration of upstream services and routing rules for each MCP service. Key configuration items include:\r\n\r\n1. **mcps** - MCP service list\r\n   - `id`: Unique service identifier used to generate access paths\r\n   - `upstream_id`: Associated upstream service ID\r\n   - `path`: OpenAPI specification file path (local or remote)\r\n   - `routes`: Custom routing configuration (optional)\r\n   - `upstream`: Upstream service specific configuration (optional)\r\n\r\n2. **upstreams** - Upstream service configuration\r\n   - `id`: Upstream service ID\r\n   - `nodes`: Backend node addresses and weights\r\n   - `type`: Load balancing algorithm (roundrobin/random/ip_hash)\r\n   - `scheme`: Upstream protocol (http/https)\r\n   - `pass_host`: HTTP Host header handling\r\n   - `upstream_host`: Override Host header value\r\n\r\nComplete configuration example:\r\n```yaml\r\n# config.yaml example (supports multiple services)\r\nmcps:\r\n  - id: service-1 # Unique identifier, accessible via /api/service-1/sse or /api/service-1/mcp\r\n    upstream_id: 1\r\n    path: config/openapi_for_demo_patch1.json # Local OpenAPI spec path\r\n\r\n  - id: service-2 # Unique identifier\r\n    upstream_id: 2\r\n    path: https://petstore.swagger.io/v2/swagger.json # Remote OpenAPI spec\r\n\r\n  - id: service-3 \r\n    upstream_id: 3\r\n    routes: # Custom routing\r\n      - id: 1\r\n        operation_id: get_weather\r\n        uri: /points/{latitude},{longitude}\r\n        method: GET\r\n        meta:\r\n          name: Get Weather\r\n          description: Retrieve weather information by coordinates\r\n          inputSchema: # Optional input validation\r\n            type: object\r\n            required:\r\n              - latitude\r\n              - longitude\r\n            properties:\r\n              latitude:\r\n                type: number\r\n                minimum: -90\r\n                maximum: 90\r\n              longitude:\r\n                type: number\r\n                minimum: -180\r\n                maximum: 180\r\n\r\nupstreams: # Required upstream configuration\r\n  - id: 1\r\n    headers: # Headers to send to upstream service\r\n      X-API-Key: \"12345-abcdef\"        # API key\r\n      Authorization: \"Bearer token123\" # Bearer token\r\n      User-Agent: \"MyApp/1.0\"          # User agent\r\n      Accept: \"application/json\"       # Accept header\r\n    nodes: # Backend nodes (IP or domain)\r\n      \"127.0.0.1:8090\": 1 # Format: address:weight\r\n\r\n  - id: 2 \r\n    nodes:\r\n      \"127.0.0.1:8091\": 1\r\n\r\n  - id: 3 \r\n    nodes:\r\n      \"api.weather.gov\": 1\r\n    type: roundrobin # Load balancing algorithm\r\n    scheme: https # Protocol\r\n    pass_host: rewrite # Host header handling\r\n    upstream_host: api.weather.gov # Override Host\r\n```\r\n\r\nTo run the MCP Access Gateway with config file:\r\n```bash\r\ncargo run -- -c config.yaml\r\n```\r\n\r\n## Running via Docker  \r\n\r\n### Run Locally for quick start\r\n\r\n```bash\r\n# Note: Replace /path/to/your/config.yaml with actual path\r\ndocker run -d --name mcp-access-point --rm \\\r\n  -p 8080:8080 \\\r\n  -e port=8080 \\\r\n  -v /path/to/your/config.yaml:/app/config/config.yaml \\\r\n  ghcr.io/sxhxliang/mcp-access-point:main\r\n```\r\n\r\n\r\n### Build Docker Image (Optional)  \r\n- install docker\r\n- clone repository and build image\r\n```bash\r\n# Clone repository\r\ngit clone https://github.com/sxhxliang/mcp-access-point.git\r\ncd mcp-access-point\r\n\r\n# Build image\r\ndocker build -t liangshihua/mcp-access-point:latest .\r\n```\r\n\r\n- Run Docker Container\r\n```bash\r\n# Using environment variables (service running on host)\r\n# Note: Replace /path/to/your/config.yaml with actual path\r\n\r\ndocker run -d --name mcp-access-point --rm \\\r\n  -p 8080:8080 \\\r\n  -e port=8080 \\\r\n  -v /path/to/your/config.yaml:/app/config/config.yaml \\\r\n  liangshihua/mcp-access-point:latest\r\n```\r\n\r\n### Environment Variables  \r\n- `port`: MCP Access Point listening port (default: 8080)\r\n\r\n## Typical Use Cases  \r\n\r\n- **Progressive Architecture Migration**: Facilitate gradual transition from HTTP to MCP  \r\n- **Hybrid Architecture Support**: Reuse existing HTTP infrastructure within MCP ecosystem  \r\n- **Protocol Compatibility**: Build hybrid systems supporting both protocols  \r\n\r\n**Example Scenario**:  \r\nWhen MCP-based AI clients need to interface with legacy HTTP microservices, the MCP Access Gateway acts as a middleware layer enabling seamless protocol conversion.\r\n\r\nMany thanks to [@limcheekin](https://github.com/limcheekin) for writing an article with a practical example: https://limcheekin.medium.com/building-your-first-no-code-mcp-server-the-fabric-integration-story-90da58cdbe1f\r\n\r\n## Contribution Guidelines\r\n1. Fork this repository.\r\n2. Create a branch and commit your changes.\r\n3. Create a pull request and wait for it to be merged.\r\n4. Make sure your code follows the Rust coding standards.",
+  "category": "Development",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-access-point-with-config": {
+        "command": "cargo",
+        "args": ["run", "--", "-c", "config.yaml"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sxhxliang",
+    "repo": "mcp-access-point",
+    "url": "https://github.com/sxhxliang/mcp-access-point",
+    "name": "sxhxliang__mcp-access-point",
+    "path": null,
+    "stars": 121,
+    "contributors": 4,
+    "issues": 11,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "b7fed6077e4f8fe45078b2032d73fe521960198e"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:09.992Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "pingora",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 10
+    },
+    {
+      "name": "serde",
+      "importance": 9
+    },
+    {
+      "name": "matchit",
+      "importance": 8
+    },
+    {
+      "name": "validator",
+      "importance": 7
+    },
+    {
+      "name": "async-stream",
+      "importance": 7
+    },
+    {
+      "name": "clap",
+      "importance": 6
+    },
+    {
+      "name": "reqwest",
+      "importance": 6
+    },
+    {
+      "name": "log",
+      "importance": 6
+    },
+    {
+      "name": "notify",
+      "importance": 6
+    },
+    {
+      "name": "sentry",
+      "importance": 5
+    },
+    {
+      "name": "prometheus",
+      "importance": 5
+    },
+    {
+      "name": "jsonwebtoken",
+      "importance": 5
+    },
+    {
+      "name": "etcd-client",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"access-point\"\nversion = \"0.1.4\"\nedition = \"2021\"\n\n[dependencies]\nclap = {version = \"4.5.35\", features = [\"derive\"] }\nbytes = \"1.8.0\"\nbase64 = \"0.22.1\"\nserde = \"1.0.219\"\nserde_json = \"1.0.133\"\nserde_yaml = \"0.9.34\"\nserde-transcode = \"1.1.1\"\nasync-trait=\"0.1.88\"\n\npingora = { version = \"0.6.0\", features = [\"openssl\", \"sentry\"] }\npingora-core = \"0.6.0\"\npingora-error = \"0.6.0\"\npingora-http = \"0.6.0\"\npingora-limits = \"0.6.0\"\npingora-load-balancing = \"0.6.0\"\npingora-proxy = \"0.6.0\"\npingora-runtime = \"0.6.0\"\n\nhickory-resolver = \"0.24.1\"\nhttp = \"1.3.1\"\nipnetwork = { version = \"0.20.0\", features = [\"serde\"] }\njsonwebtoken = \"9.3.1\"\nasync-stream = \"0.3.6\"\nfutures = \"0.3.31\"\nchrono = \"0.4.40\"\n\nvalidator = { version = \"0.20.0\", features = [\"derive\"] }\nmatchit = \"0.8.4\"\nrand = \"0.9\"\nurl = \"2\"\nregex = \"1.11.1\"\nonce_cell = \"1.21.3\"\narc-swap = \"1.7.1\"\ndashmap = \"6.1.0\"\nuuid = { version = \"1.16.0\", features = [\"v4\"] }\ntokio = { version = \"1.44.2\", features = [\"fs\"] }\n\nenv_logger = { version = \"0.11.8\", features = [\"unstable-kv\"] }\nlog = { version = \"0.4.22\", features = [\"kv\"] }\nnotify = \"8.0\"\nsentry = \"0.36\"\nprometheus = \"0.13.4\"\netcd-client = \"0.16.1\"\nreqwest = { version = \"0.12\", features = [\"json\", \"blocking\"] }\nurlencoding = \"2.1.3\"\n\n[profile.release]\ncodegen-units = 1\nlto = true\nstrip = \"debuginfo\""
+}

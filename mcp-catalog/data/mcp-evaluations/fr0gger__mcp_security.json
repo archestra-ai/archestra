@@ -1,0 +1,78 @@
+{
+  "name": "fr0gger__mcp_security",
+  "display_name": "MCP_Security",
+  "description": "This is a repository to experiment with MCP for security",
+  "author": {
+    "name": "fr0gger"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "orkl"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# ORKL MCP Server\n\n![MIT License](https://img.shields.io/badge/license-MIT-green)\n\nA full write-up can be found here: https://blog.securitybreak.io/building-a-threat-intelligence-genai-reporter-with-orkl-and-claude-a0ae2e969693\n\nA Model Context Protocol (MCP) server for querying the ORKL API. This server provides tools for fetching and analyzing threat reports, threat actors, and sources. It integrates smoothly with MCP-compatible applications.\n\n---\n# Quick Install\nEdit or create the file /Users/user/Library/Application Support/Claude/claude_desktop_config.json\n```\n{\n  \"mcpServers\": {\n    \"orkl\": {\n      \"command\": \"uv\",\n      \"args\": [\n      \"--directory\",\n      \"/MyMCP/mcptest/orkl\",\n      \"run\",\n      \"orkl\"\n      ]\n    }\n  }\n}\n```\n---\n\n# Tools\n\n## Report Tools\n\n### Fetch Latest Threat Reports\n- **Name**: `fetch_latest_threat_reports`\n- **Description**: Fetch recent threat reports with their titles and IDs.\n- **Parameters**: None\n\n### Fetch Threat Report Details\n- **Name**: `fetch_threat_report_details`\n- **Description**: Retrieve detailed information for a specific threat report by ID.\n- **Parameters**:\n  - `report_id` (required): The ID of the threat report.\n\n## Threat Actor Tools\n\n### Fetch Threat Actors\n- **Name**: `fetch_threat_actors`\n- **Description**: Fetch a list of known threat actors with their IDs and names.\n- **Parameters**: None\n\n### Fetch Threat Actor Details\n- **Name**: `fetch_threat_actor_details`\n- **Description**: Retrieve detailed information for a specific threat actor by ID.\n- **Parameters**:\n  - `actor_id` (required): The ID of the threat actor.\n\n## Source Tools\n\n### Fetch Sources\n- **Name**: `fetch_sources`\n- **Description**: Fetch a list of sources used in threat intelligence.\n- **Parameters**: None\n\n### Fetch Source Details\n- **Name**: `fetch_source_details`\n- **Description**: Retrieve detailed metadata for a specific source by ID.\n- **Parameters**:\n  - `source_id` (required): The ID of the source.\n\n\n",
+  "category": "Security",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "orkl": {
+        "command": "uv",
+        "args": ["--directory", "/MyMCP/mcptest/orkl", "run", "orkl"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "fr0gger",
+    "repo": "MCP_Security",
+    "url": "https://github.com/fr0gger/MCP_Security",
+    "name": "MCP_Security",
+    "path": null,
+    "stars": 41,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "497d7708308a03ec80cd55af6b72858a5de20e8d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:33.687Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "fastapi",
+      "importance": 9
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": null
+}

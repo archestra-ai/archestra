@@ -1,0 +1,86 @@
+{
+  "name": "davidlin2k__pox-mcp-server",
+  "display_name": "pox-mcp-server",
+  "description": "A Model Context Protocol (MCP) server for the POX SDN controller",
+  "author": {
+    "name": "davidlin2k"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "server.py"],
+    "env": {
+      "POX_SERVER_URL": "${user_config.pox_server_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "pox_server_url": {
+      "type": "string",
+      "title": "POX Server URL",
+      "description": "The URL where the POX SDN controller server is running.",
+      "default": "http://localhost:8000",
+      "required": false
+    }
+  },
+  "readme": "# POX MCP Server\n\n## Overview\nA Model Context Protocol (MCP) server implementation that provides network control and management capabilities through the POX SDN controller. This server enables Python-based network programming, OpenFlow device management, and automated network analysis through POX's modular architecture. Perfect for educational environments, network prototyping, and SDN research.\n\n## Components\n\n### Resources\nThe server exposes two dynamic resources:\n- `pox://network-config`: A comprehensive POX controller configuration memo\n  - Tracks active POX components and their configurations\n  - Records network topology and flow rules\n  - Maintains discovered network insights\n- `pox://topology`: Real-time network topology view\n  - Shows active OpenFlow datapaths (switches)\n  - Maps host locations and connections\n  - Displays link status and port mappings\n\n### Prompts\nThe server provides three specialized prompts:\n- `pox-network-manager`: Interactive prompt for POX controller management\n  - Required argument: `topic` - The network control aspect to focus on\n  - Helps configure POX components and modules\n  - Guides through network policy implementation\n  - Integrates with network configuration memo\n\n- `simple-hub`: Basic L2 hub implementation using POX\n  - Required argument: `dpid` - The datapath identifier\n  - Demonstrates POX's event-driven programming\n  - Shows basic packet handling and flooding\n  - Explains POX's core mechanisms\n\n- `learning-switch`: L2 learning switch implementation\n  - Required argument: `dpid` - The datapath identifier\n  - Showcases POX's table management\n  - Implements MAC learning and forwarding\n  - Demonstrates POX's packet handling capabilities\n\n### Tools\nThe server offers five core tools:\n\n#### Datapath Management Tools\n- `get_switches`\n   - List all connected OpenFlow datapaths\n   - No input required\n   - Returns: Array of active POX-controlled switches\n   - Includes connection status and capabilities\n\n- `get_switch_desc`\n   - Get detailed datapath information\n   - Input:\n     - `dpid` (string): Datapath identifier\n   - Returns: POX-managed switch details and features\n\n#### Flow Management Tools\n- `get_flow_stats`\n   - Retrieve POX flow statistics\n   - Input:\n     - `dpid` (string): Datapath identifier\n     - `match` (object, optional): POX match structure\n     - `table_id` (string, optional): OpenFlow table ID\n     - `out_port` (string, optional): Output port filter\n   - Returns: POX flow statistics including packet counts\n\n- `set_table`\n   - Configure POX flow tables\n   - Input:\n     - `dpid` (string): Datapath identifier\n     - `flows` (array): POX flow specifications\n   - Returns: Flow table update confirmation\n\n#### Analysis Tools\n- `append_insight`\n   - Add network insights to POX configuration memo\n   - Input:\n     - `insight` (string): Network observation or analysis\n   - Returns: Insight addition confirmation\n   - Updates pox://network-config resource\n\n## Usage with Claude Desktop\n\n### uv\n\n```json\n{\n  \"mcpServers\": {\n    \"pox\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"parent_of_servers_repo/servers/src/mcp_server_pox\",\n        \"run\",\n        \"server.py\"\n      ],\n      \"env\": {\n        \"POX_SERVER_URL\": \"http://localhost:8000\"\n      }\n    }\n  }\n}\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit pull requests, report bugs, or suggest new features.\n",
+  "category": "Development",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pox": {
+        "command": "uv",
+        "args": ["--directory", "parent_of_servers_repo/servers/src/mcp_server_pox", "run", "server.py"],
+        "env": {
+          "POX_SERVER_URL": "http://localhost:8000"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "davidlin2k",
+    "repo": "pox-mcp-server",
+    "url": "https://github.com/davidlin2k/pox-mcp-server",
+    "name": "davidlin2k__pox-mcp-server",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "aff446d91ba3709dda42aea9e53eb6d868c5dadf"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.316Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-pox\"\nversion = \"0.1.0\"\ndescription = \"A sample POX MCP server\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"mcp[cli]>=1.5.0\",\n    \"requests>=2.32.3\",\n]\n\n[dependency-groups]\nlint = [\n    \"ruff>=0.11.2\",\n]\n"
+}

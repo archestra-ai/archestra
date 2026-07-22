@@ -846,3 +846,133 @@ describe("getUserEmail", () => {
     expect(await provider.getUserEmail("12345")).toBeNull();
   });
 });
+
+describe("my_chat_member group binding sync", () => {
+  function myChatMemberUpdate(params: {
+    chatType: string;
+    status: string;
+    chatId?: number;
+    title?: string;
+  }) {
+    return {
+      update_id: 42,
+      my_chat_member: {
+        chat: {
+          id: params.chatId ?? -100200,
+          type: params.chatType,
+          title: params.title,
+        },
+        new_chat_member: { status: params.status },
+      },
+    };
+  }
+
+  test("creates a channel binding when the bot is added to a group", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    const provider = makeProvider(makeEventHandler());
+
+    await dispatchUpdate(
+      provider,
+      myChatMemberUpdate({
+        chatType: "supergroup",
+        status: "member",
+        title: "Engineering",
+      }),
+    );
+
+    const binding = await ChatOpsChannelBindingModel.findByChannel({
+      provider: "telegram",
+      channelId: "-100200",
+      workspaceId: null,
+    });
+    expect(binding).not.toBeNull();
+    expect(binding?.channelName).toBe("Engineering");
+    expect(binding?.isDm).toBe(false);
+    expect(binding?.agentId).toBeNull();
+  });
+
+  test("keeps the assigned agent when the bot is re-added to a known group", async ({
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "telegram",
+      channelId: "-100200",
+      channelName: "Engineering",
+      agentId: agent.id,
+    });
+    const provider = makeProvider(makeEventHandler());
+
+    await dispatchUpdate(
+      provider,
+      myChatMemberUpdate({
+        chatType: "supergroup",
+        status: "member",
+        title: "Engineering v2",
+      }),
+    );
+
+    const binding = await ChatOpsChannelBindingModel.findByChannel({
+      provider: "telegram",
+      channelId: "-100200",
+      workspaceId: null,
+    });
+    expect(binding?.agentId).toBe(agent.id);
+    expect(binding?.channelName).toBe("Engineering v2");
+  });
+
+  test("deletes the binding when the bot is removed from the group", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "telegram",
+      channelId: "-100200",
+      channelName: "Engineering",
+    });
+    const provider = makeProvider(makeEventHandler());
+
+    await dispatchUpdate(
+      provider,
+      myChatMemberUpdate({ chatType: "supergroup", status: "kicked" }),
+    );
+
+    expect(
+      await ChatOpsChannelBindingModel.findByChannel({
+        provider: "telegram",
+        channelId: "-100200",
+        workspaceId: null,
+      }),
+    ).toBeNull();
+  });
+
+  test("ignores membership updates outside groups", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    const provider = makeProvider(makeEventHandler());
+
+    await dispatchUpdate(
+      provider,
+      myChatMemberUpdate({
+        chatType: "private",
+        status: "member",
+        chatId: 555,
+      }),
+    );
+
+    expect(
+      await ChatOpsChannelBindingModel.findByChannel({
+        provider: "telegram",
+        channelId: "555",
+        workspaceId: null,
+      }),
+    ).toBeNull();
+  });
+});

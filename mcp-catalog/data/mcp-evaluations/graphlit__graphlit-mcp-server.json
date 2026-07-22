@@ -1,0 +1,104 @@
+{
+  "name": "graphlit__graphlit-mcp-server",
+  "display_name": "graphlit-mcp-server",
+  "description": "Model Context Protocol (MCP) Server for Graphlit Platform",
+  "author": {
+    "name": "graphlit"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "graphlit-mcp-server"],
+    "env": {
+      "GRAPHLIT_ORGANIZATION_ID": "${user_config.graphlit_organization_id}",
+      "GRAPHLIT_ENVIRONMENT_ID": "${user_config.graphlit_environment_id}",
+      "GRAPHLIT_JWT_SECRET": "${user_config.graphlit_jwt_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "graphlit_organization_id": {
+      "type": "string",
+      "title": "Graphlit Organization ID",
+      "description": "Your organization ID.",
+      "sensitive": true,
+      "required": true
+    },
+    "graphlit_environment_id": {
+      "type": "string",
+      "title": "Graphlit Environment ID",
+      "description": "Your environment ID.",
+      "sensitive": true,
+      "required": true
+    },
+    "graphlit_jwt_secret": {
+      "type": "string",
+      "title": "Graphlit JWT Secret",
+      "description": "Your JWT secret for signing the JWT token.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "[![npm version](https://badge.fury.io/js/graphlit-mcp-server.svg)](https://badge.fury.io/js/graphlit-mcp-server)\n[![smithery badge](https://smithery.ai/badge/@graphlit/graphlit-mcp-server)](https://smithery.ai/server/@graphlit/graphlit-mcp-server)\n\n# Model Context Protocol (MCP) Server for Graphlit Platform\n\n## Overview\n\nThe Model Context Protocol (MCP) Server enables integration between MCP clients and the Graphlit service. This document outlines the setup process and provides a basic example of using the client.\n\nIngest anything from Slack, Discord, websites, Google Drive, email, Jira, Linear or GitHub into a Graphlit project - and then search and retrieve relevant knowledge within an MCP client like Cursor, Windsurf, Goose or Cline.\n\nYour Graphlit project acts as a searchable, and RAG-ready knowledge base across all your developer and product management tools.\n\nDocuments (PDF, DOCX, PPTX, etc.) and HTML web pages will be extracted to Markdown upon ingestion. Audio and video files will be transcribed upon ingestion.\n\nWeb crawling and web search are built-in as MCP tools, with no need to integrate other tools like Firecrawl, Exa, etc. separately.\n\nYou can read more about the MCP Server use cases and features on our [blog](https://www.graphlit.com/blog/graphlit-mcp-server).\n\nWatch our latest [YouTube video](https://www.youtube.com/watch?v=Or-QqonvcAs&t=4s) on using the Graphlit MCP Server with the Goose MCP client.\n\nFor any questions on using the MCP Server, please join our [Discord](https://discord.gg/ygFmfjy3Qx) community and post on the #mcp channel.\n\n<a href=\"https://glama.ai/mcp/servers/fscrivteod\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/fscrivteod/badge\" alt=\"graphlit-mcp-server MCP server\" />\n</a>\n\n## Tools\n\n### Retrieval\n\n- Query Contents\n- Query Collections\n- Query Feeds\n- Query Conversations\n- Retrieve Relevant Sources\n- Retrieve Similar Images\n- Visually Describe Image\n\n### RAG\n\n- Prompt LLM Conversation\n\n### Extraction\n\n- Extract Structured JSON from Text\n\n### Publishing\n\n- Publish as Audio (ElevenLabs Audio)\n- Publish as Image (OpenAI Image Generation)\n\n### Ingestion\n\n- Files\n- Web Pages\n- Messages\n- Posts\n- Emails\n- Issues\n- Text\n- Memory (Short-Term)\n\n### Data Connectors\n\n- Microsoft Outlook email\n- Google Mail\n- Notion\n- Reddit\n- Linear\n- Jira\n- GitHub Issues\n- Google Drive\n- OneDrive\n- SharePoint\n- Dropbox\n- Box\n- GitHub\n- Slack\n- Microsoft Teams\n- Discord\n- Twitter/X\n- Podcasts (RSS)\n\n### Web\n\n- Web Crawling\n- Web Search (including Podcast Search)\n- Web Mapping\n- Screenshot Page\n\n### Notifications\n\n- Slack\n- Email\n- Webhook\n- Twitter/X\n\n### Operations\n\n- Configure Project\n- Create Collection\n- Add Contents to Collection\n- Remove Contents from Collection\n- Delete Collection(s)\n- Delete Feed(s)\n- Delete Content(s)\n- Delete Conversation(s)\n- Is Feed Done?\n- Is Content Done?\n\n### Enumerations\n\n- List Slack Channels\n- List Microsoft Teams Teams\n- List Microsoft Teams Channels\n- List SharePoint Libraries\n- List SharePoint Folders\n- List Linear Projects\n- List Notion Databases\n- List Notion Pages\n- List Dropbox Folders\n- List Box Folders\n- List Discord Guilds\n- List Discord Channels\n- List Google Calendars\n- List Microsoft Calendars\n\n## Resources\n\n- Project\n- Contents\n- Feeds\n- Collections (of Content)\n- Workflows\n- Conversations\n- Specifications\n\n## Prerequisites\n\nBefore you begin, ensure you have the following:\n\n- Node.js installed on your system (recommended version 18.x or higher).\n- An active account on the [Graphlit Platform](https://portal.graphlit.dev) with access to the API settings dashboard.\n\n## Configuration\n\nThe Graphlit MCP Server supports environment variables to be set for authentication and configuration:\n\n- `GRAPHLIT_ENVIRONMENT_ID`: Your environment ID.\n- `GRAPHLIT_ORGANIZATION_ID`: Your organization ID.\n- `GRAPHLIT_JWT_SECRET`: Your JWT secret for signing the JWT token.\n\nYou can find these values in the API settings dashboard on the [Graphlit Platform](https://portal.graphlit.dev).\n\n## Installation\n\n### Installing via VS Code\n\nFor quick installation, use one of the one-click install buttons below:\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=graphlit&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22organization_id%22%2C%22description%22%3A%22Graphlit%20Organization%20ID%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22environment_id%22%2C%22description%22%3A%22Graphlit%20Environment%20ID%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22jwt_secret%22%2C%22description%22%3A%22Graphlit%20JWT%20Secret%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22graphlit-mcp-server%22%5D%2C%22env%22%3A%7B%22GRAPHLIT_ORGANIZATION_ID%22%3A%22%24%7Binput%3Aorganization_id%7D%22%2C%22GRAPHLIT_ENVIRONMENT_ID%22%3A%22%24%7Binput%3Aenvironment_id%7D%22%2C%22GRAPHLIT_JWT_SECRET%22%3A%22%24%7Binput%3Ajwt_secret%7D%22%7D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=graphlit&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22organization_id%22%2C%22description%22%3A%22Graphlit%20Organization%20ID%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22environment_id%22%2C%22description%22%3A%22Graphlit%20Environment%20ID%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22jwt_secret%22%2C%22description%22%3A%22Graphlit%20JWT%20Secret%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22graphlit-mcp-server%22%5D%2C%22env%22%3A%7B%22GRAPHLIT_ORGANIZATION_ID%22%3A%22%24%7Binput%3Aorganization_id%7D%22%2C%22GRAPHLIT_ENVIRONMENT_ID%22%3A%22%24%7Binput%3Aenvironment_id%7D%22%2C%22GRAPHLIT_JWT_SECRET%22%3A%22%24%7Binput%3Ajwt_secret%7D%22%7D%7D&quality=insiders)\n\nFor manual installation, add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n> Note that the `mcp` key is not needed in the `.vscode/mcp.json` file.\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"organization_id\",\n        \"description\": \"Graphlit Organization ID\",\n        \"password\": true\n      },\n      {\n        \"type\": \"promptString\",\n        \"id\": \"environment_id\",\n        \"description\": \"Graphlit Environment ID\",\n        \"password\": true\n      },\n      {\n        \"type\": \"promptString\",\n        \"id\": \"jwt_secret\",\n        \"description\": \"Graphlit JWT Secret\",\n        \"password\": true\n      }\n    ],\n    \"servers\": {\n      \"graphlit\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"graphlit-mcp-server\"],\n        \"env\": {\n          \"GRAPHLIT_ORGANIZATION_ID\": \"${input:organization_id}\",\n          \"GRAPHLIT_ENVIRONMENT_ID\": \"${input:environment_id}\",\n          \"GRAPHLIT_JWT_SECRET\": \"${input:jwt_secret}\"\n        }\n      }\n    }\n  }\n}\n```\n\n### Installing via Windsurf\n\nTo install graphlit-mcp-server in Windsurf IDE application, Cline should use NPX:\n\n```bash\nnpx -y graphlit-mcp-server\n```\n\nYour mcp_config.json file should be configured similar to:\n\n```\n{\n    \"mcpServers\": {\n        \"graphlit-mcp-server\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"-y\",\n                \"graphlit-mcp-server\"\n            ],\n            \"env\": {\n                \"GRAPHLIT_ORGANIZATION_ID\": \"your-organization-id\",\n                \"GRAPHLIT_ENVIRONMENT_ID\": \"your-environment-id\",\n                \"GRAPHLIT_JWT_SECRET\": \"your-jwt-secret\",\n            }\n        }\n    }\n}\n```\n\n### Installing via Cline\n\nTo install graphlit-mcp-server in Cline IDE application, Cline should use NPX:\n\n```bash\nnpx -y graphlit-mcp-server\n```\n\nYour cline_mcp_settings.json file should be configured similar to:\n\n```\n{\n    \"mcpServers\": {\n        \"graphlit-mcp-server\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"-y\",\n                \"graphlit-mcp-server\"\n            ],\n            \"env\": {\n                \"GRAPHLIT_ORGANIZATION_ID\": \"your-organization-id\",\n                \"GRAPHLIT_ENVIRONMENT_ID\": \"your-environment-id\",\n                \"GRAPHLIT_JWT_SECRET\": \"your-jwt-secret\",\n            }\n        }\n    }\n}\n```\n\n### Installing via Cursor\n\nTo install graphlit-mcp-server in Cursor IDE application, Cursor should use NPX:\n\n```bash\nnpx -y graphlit-mcp-server\n```\n\nYour mcp.json file should be configured similar to:\n\n```\n{\n    \"mcpServers\": {\n        \"graphlit-mcp-server\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"-y\",\n                \"graphlit-mcp-server\"\n            ],\n            \"env\": {\n                \"GRAPHLIT_ORGANIZATION_ID\": \"your-organization-id\",\n                \"GRAPHLIT_ENVIRONMENT_ID\": \"your-environment-id\",\n                \"GRAPHLIT_JWT_SECRET\": \"your-jwt-secret\",\n            }\n        }\n    }\n}\n```\n\n### Installing via Smithery\n\nTo install graphlit-mcp-server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@graphlit/graphlit-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @graphlit/graphlit-mcp-server --client claude\n```\n\n### Installing manually\n\nTo use the Graphlit MCP Server in any MCP client application, use:\n\n```\n{\n    \"mcpServers\": {\n        \"graphlit-mcp-server\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"-y\",\n                \"graphlit-mcp-server\"\n            ],\n            \"env\": {\n                \"GRAPHLIT_ORGANIZATION_ID\": \"your-organization-id\",\n                \"GRAPHLIT_ENVIRONMENT_ID\": \"your-environment-id\",\n                \"GRAPHLIT_JWT_SECRET\": \"your-jwt-secret\",\n            }\n        }\n    }\n}\n```\n\nOptionally, you can configure the credentials for data connectors, such as Slack, Google Email and Notion.\nOnly GRAPHLIT_ORGANIZATION_ID, GRAPHLIT_ENVIRONMENT_ID and GRAPHLIT_JWT_SECRET are required.\n\n```\n{\n    \"mcpServers\": {\n        \"graphlit-mcp-server\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"-y\",\n                \"graphlit-mcp-server\"\n            ],\n            \"env\": {\n                \"GRAPHLIT_ORGANIZATION_ID\": \"your-organization-id\",\n                \"GRAPHLIT_ENVIRONMENT_ID\": \"your-environment-id\",\n                \"GRAPHLIT_JWT_SECRET\": \"your-jwt-secret\",\n                \"SLACK_BOT_TOKEN\": \"your-slack-bot-token\",\n                \"DISCORD_BOT_TOKEN\": \"your-discord-bot-token\",\n                \"TWITTER_TOKEN\": \"your-twitter-token\",\n                \"GOOGLE_EMAIL_REFRESH_TOKEN\": \"your-google-refresh-token\",\n                \"GOOGLE_EMAIL_CLIENT_ID\": \"your-google-client-id\",\n                \"GOOGLE_EMAIL_CLIENT_SECRET\": \"your-google-client-secret\",\n                \"LINEAR_API_KEY\": \"your-linear-api-key\",\n                \"GITHUB_PERSONAL_ACCESS_TOKEN\": \"your-github-pat\",\n                \"JIRA_EMAIL\": \"your-jira-email\",\n                \"JIRA_TOKEN\": \"your-jira-token\",\n                \"NOTION_API_KEY\": \"your-notion-api-key\"\n            }\n        }\n    }\n}\n```\n\nNOTE: when running 'npx' on Windows, you may need to explicitly call npx via the command prompt.\n\n```\n\"command\": \"C:\\\\Windows\\\\System32\\\\cmd.exe /c npx\"\n```\n\n## Support\n\nPlease refer to the [Graphlit API Documentation](https://docs.graphlit.dev/).\n\nFor support with the Graphlit MCP Server, please submit a [GitHub Issue](https://github.com/graphlit/graphlit-mcp-server/issues).\n\nFor further support with the Graphlit Platform, please join our [Discord](https://discord.gg/ygFmfjy3Qx) community.\n",
+  "category": "AI Tools",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "graphlit-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "graphlit-mcp-server"],
+        "env": {
+          "GRAPHLIT_ORGANIZATION_ID": "your-organization-id",
+          "GRAPHLIT_ENVIRONMENT_ID": "your-environment-id",
+          "GRAPHLIT_JWT_SECRET": "your-jwt-secret"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "graphlit",
+    "repo": "graphlit-mcp-server",
+    "url": "https://github.com/graphlit/graphlit-mcp-server",
+    "name": "graphlit-mcp-server",
+    "path": null,
+    "stars": 344,
+    "contributors": 4,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "dc6a32603c20445b53cde06d6c67d9fda86bacde"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:19.975Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "graphlit-client",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"graphlit-mcp-server\",\n  \"version\": \"1.0.1\",\n  \"description\": \"Graphlit MCP Server\",\n  \"type\": \"module\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/graphlit/graphlit-mcp-server.git\"\n  },\n  \"contributors\": [\n    \"Kirk Marple (https://github.com/kirk-marple)\"\n  ],\n  \"bin\": {\n    \"graphlit-mcp-server\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"scripts\": {\n    \"start\": \"node ./dist/index.js\",\n    \"dev\": \"ts-node ./src/index.ts\",\n    \"build\": \"tsc -p tsconfig.json\",\n    \"watch\": \"tsc --watch\",\n    \"check\": \"tsc --noEmit --incremental\",\n    \"format\": \"prettier --write .\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector node dist/index.js\"\n  },\n  \"keywords\": [\n    \"Graphlit\",\n    \"API\",\n    \"LLM\",\n    \"AI\",\n    \"RAG\",\n    \"OpenAI\",\n    \"PDF\",\n    \"parsing\",\n    \"preprocessing\",\n    \"memory\",\n    \"agents\",\n    \"agent tools\",\n    \"retrieval\",\n    \"web scraping\",\n    \"knowledge graph\",\n    \"MCP\"\n  ],\n  \"author\": \"Unstruk Data Inc.\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.13.2\",\n    \"graphlit-client\": \"^1.0.20250723001\"\n  },\n  \"devDependencies\": {\n    \"@types/mime-types\": \"^3.0.1\",\n    \"prettier\": \"^3.5.3\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

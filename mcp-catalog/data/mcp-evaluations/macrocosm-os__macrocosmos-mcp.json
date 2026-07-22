@@ -1,0 +1,90 @@
+{
+  "name": "macrocosm-os__macrocosmos-mcp",
+  "display_name": "macrocosmos-mcp",
+  "description": "The MCP for macrocosmos subnets. ",
+  "author": {
+    "name": "macrocosm-os"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "macrocosmos_mcp.py"],
+    "env": {
+      "MC_API": "${user_config.mc_api}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mc_api": {
+      "type": "string",
+      "title": "Macrocosmos API Key",
+      "description": "Your API key for Macrocosmos",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# 🌌 Macrocosmos MCP\n\n**Macrocosmos MCP** lets you integrate **SN13** and **SN1** APIs directly into **Claude for Desktop** or **Cursor**. Instantly tap into social data, perform live web searches, and explore Hugging Face models — all from within your AI environment.\n\n---\n\n## ⚡ Features\n\n- 🔍 Query **X** (Twitter) and **Reddit** data on demand\n- 📚 Explore **SN13 Hugging Face** repositories and datasets\n\n---\n\n## 🚀 Quick Setup\n\n### 1. Clone the Repo\n\n```bash\ngit clone https://github.com/macrocosm-os/macrocosmos-mcp.git\ncd macrocosmos-mcp/src\n```\n\n### 2. Install Requirements (requires [uv](https://astral.sh/blog/uv/))\n\n```bash\nuv venv\nsource .venv/bin/activate\nuv add \"mcp[cli]\" httpx macrocosmos\n```\n\n### 3. Configure Claude or Cursor\n\nOpen the MCP config file:\n\n- **Claude:** `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Cursor:** `~/Library/Application Support/Cursor/cursor_mcp_config.json`\n\nAdd this entry:\n\n```json\n\"macrocosmos\": {\n    \"command\": \"uv\",\n    \"args\": [\n        \"--directory\",\n        \"/full_path_to_repo/macrocosmos_mcp/src/\",\n        \"run\",\n        \"macrocosmos_mcp.py\"\n    ],\n    \"env\": {\n        \"MC_API\": \"\",\n    }\n}\n```\n\nReplace `/full_path_to_repo/` with your full local path and insert your API keys.\n\n---\n\n## 🔮 Upcoming\n\n- 🧠 All the power of **Subnets** in your AI environment — coming soon.\n\n---\n\nMIT License\nMade with ❤️ by the Macrocosm OS team\n",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "macrocosmos-configured": {
+        "command": "uv",
+        "args": ["--directory", "/full_path_to_repo/macrocosmos_mcp/src/", "run", "macrocosmos_mcp.py"],
+        "env": {
+          "MC_API": ""
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "macrocosm-os",
+    "repo": "macrocosmos-mcp",
+    "url": "https://github.com/macrocosm-os/macrocosmos-mcp",
+    "name": "macrocosmos-mcp",
+    "path": null,
+    "stars": 10,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "fdaba8dd396c0d51499732269071015aa2c7e332"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:36.066Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "macrocosmos",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"macrocosmos-mcp\"\nversion = \"0.1.0\"\ndescription = \"MCP server for integrating SN13 and SN1 APIs into Claude Desktop and Cursor\"\nauthors = [\n    { name = \"Macrocosmos AI\" }\n]\nreadme = \"README.md\"\nlicense = { text = \"MIT\" }\nrequires-python = \">=3.10,<3.13\"\nkeywords = [\"mcp\", \"claude\", \"cursor\", \"api\", \"social-data\", \"huggingface\"]\nclassifiers = [\n    \"Development Status :: 3 - Alpha\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n]\ndependencies = [\n    \"mcp[cli]\",\n    \"httpx\",\n    \"macrocosmos\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/macrocosm-os/macrocosmos-mcp\"\nRepository = \"https://github.com/macrocosm-os/macrocosmos-mcp\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src\"]\n"
+}

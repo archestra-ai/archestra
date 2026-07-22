@@ -1,0 +1,126 @@
+{
+  "name": "tradercjz__dolphindb-mcp-server",
+  "display_name": "dolphindb-mcp-server",
+  "description": "dolphindb-mcp-server",
+  "author": {
+    "name": "tradercjz"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["dolphindb-mcp-server"],
+    "env": {
+      "DDB_HOST": "${user_config.ddb_host}",
+      "DDB_PORT": "${user_config.ddb_port}",
+      "DDB_USER": "${user_config.ddb_user}",
+      "DDB_PASSWD": "${user_config.ddb_passwd}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ddb_host": {
+      "type": "string",
+      "title": "DolphinDB Host",
+      "description": "Host address for DolphinDB connection",
+      "default": "127.0.0.1",
+      "required": false
+    },
+    "ddb_port": {
+      "type": "number",
+      "title": "DolphinDB Port",
+      "description": "Port number for DolphinDB connection",
+      "default": 8848,
+      "required": false
+    },
+    "ddb_user": {
+      "type": "string",
+      "title": "DolphinDB User",
+      "description": "Username for DolphinDB connection",
+      "default": "admin",
+      "required": false
+    },
+    "ddb_passwd": {
+      "type": "string",
+      "title": "DolphinDB Password",
+      "description": "Password for DolphinDB connection",
+      "default": "123456",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "\n\n## 🧱 安装方式\n\n### ✅ 方法一：使用 `uvx`（推荐）\n\n通过 `uvx` 安装并运行：\n\n```bash\nuvx install dolphindb-mcp-server\n```\n\n安装完成后，直接运行：\n```bash\nuvx dolphindb-mcp-server\n```\n> 📌 **注意**：`uvx` 安装方式需要通过 `uv.pack` 构建并上传到 Universe。如果你尚未上传，请参考 `uv` 文档进行打包与发布。\n\n### ✅ 方法二：从 PyPI 安装\n\n```bash\npip install dolphindb-mcp-server\n```\n安装后运行：\n```bash\ndolphindb-mcp-server\n```\n\n### ✅ 方法三：本地构建 & 安装\n\n```bash\ngit clone https://github.com/your-org/dolphindb-mcp-server.git\ncd dolphindb-mcp-server\n\n# 创建并激活虚拟环境\npython -m venv .venv\nsource .venv/bin/activate\n\n# 构建并安装\npip install build\npython -m build\npip install dist/*.whl\n```\n安装后运行：\n```bash\ndolphindb-mcp-server\n```\n\n## 🧪 测试运行\n\n运行后你可以直接使用工具，例如：\n\n```bash\ndolphindb-mcp-server\n```\n\n或（如果是 `uvx` 安装）：\n\n```bash\nuvx dolphindb-mcp-server\n```\n好的，这是转换后的 Markdown 版本：\n\n好的，这是转换后的 Markdown 版本：\n\n---\n\n## 🚀 使用方法\n\n1.  **配置环境变量（可选）**\n\n    你可以通过 `.env` 文件或系统环境变量配置 DolphinDB 的连接信息：\n\n    ```env\n    DDB_HOST=127.0.0.1\n    DDB_PORT=8848\n    DDB_USER=admin\n    DDB_PASSWD=123456\n    ```\n\n    也可以不设置，系统将使用默认值。\n\n2.  **启动服务**\n\n    ```bash\n    dolphindb-mcp-server\n    ```\n\n    该命令会启动 MCP 插件服务，供外部调用。\n\n3.  **FastMCP Agent 使用示例**\n\n    启动后，你的工具将通过 FastMCP 对外暴露以下函数接口：\n\n    *   `list_dbs()`\n    *   `list_tbs(dbName: str)`\n    *   `query_table_diskusage(database: str, tableName: str)`\n    *   `query_dolphindb(script: str)`\n\n    可通过 MCP 前端界面或对接 LLM 工具链来进行访问。\n",
+  "category": "Development",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "dolphindb-mcp-server": {
+        "command": "dolphindb-mcp-server",
+        "args": [],
+        "env": {}
+      },
+      "dolphindb-mcp-server-uvx": {
+        "command": "uvx",
+        "args": ["dolphindb-mcp-server"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tradercjz",
+    "repo": "dolphindb-mcp-server",
+    "url": "https://github.com/tradercjz/dolphindb-mcp-server",
+    "name": "tradercjz__dolphindb-mcp-server",
+    "path": null,
+    "stars": 4,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "eff1fd1bf451f72c24b1aa13c808b4b601f023a6"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.976Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "dolphindb",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "fastmcp",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"dolphindb-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"dolphindb mcp server\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"dolphindb\",\n    \"httpx>=0.28.1\",\n    \"mcp>=1.1.2\",\n    \"fastapi[standard]\",\n    \"fastmcp\"\n]\n\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"dolphindb_mcp_server\"]\n\n[project.scripts]\ndolphindb-mcp-server = \"dolphindb_mcp_server.server:main\"\n"
+}

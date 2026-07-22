@@ -1,0 +1,88 @@
+{
+  "name": "hannesrudolph__sqlite-explorer-fastmcp-mcp-server",
+  "display_name": "sqlite-explorer-fastmcp-mcp-server",
+  "description": "An MCP server that provides safe, read-only access to SQLite databases through Model Context Protocol (MCP). This server is built with the FastMCP framework, which enables LLMs to explore and query SQLite databases with built-in safety features and query validation.",
+  "author": {
+    "name": "hannesrudolph"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "--with", "fastmcp", "--with", "uvicorn", "fastmcp", "run", "${__dirname}/sqlite_explorer.py"],
+    "env": {
+      "SQLITE_DB_PATH": "${user_config.sqlite_db_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "sqlite_db_path": {
+      "type": "file",
+      "title": "SQLite Database Path",
+      "description": "Full path to the SQLite database file you want to explore",
+      "required": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/hannesrudolph-sqlite-explorer-fastmcp-mcp-server-badge.png)](https://mseep.ai/app/hannesrudolph-sqlite-explorer-fastmcp-mcp-server)\n\n# SQLite Explorer MCP Server\n\nAn MCP server that provides safe, read-only access to SQLite databases through Model Context Protocol (MCP). This server is built with the FastMCP framework, which enables LLMs to explore and query SQLite databases with built-in safety features and query validation.\n\n## 📋 System Requirements\n\n- Python 3.6+\n- SQLite database file (path specified via environment variable)\n\n## 📦 Dependencies\n\nInstall all required dependencies:\n\n```bash\n# Using pip\npip install -r requirements.txt\n```\n\n### Required Packages\n- **fastmcp**: Framework for building Model Context Protocol servers\n\nAll dependencies are specified in `requirements.txt` for easy installation.\n\n## 📑 Table of Contents\n- [System Requirements](#-system-requirements)\n- [Dependencies](#-dependencies)\n- [MCP Tools](#%EF%B8%8F-mcp-tools)\n- [Getting Started](#-getting-started)\n- [Installation Options](#-installation-options)\n  - [Claude Desktop](#option-1-install-for-claude-desktop)\n  - [Cline VSCode Plugin](#option-2-install-for-cline-vscode-plugin)\n- [Safety Features](#-safety-features)\n- [Development Documentation](#-development-documentation)\n- [Environment Variables](#%EF%B8%8F-environment-variables)\n\n## 🛠️ MCP Tools\n\nThe server exposes the following tools to LLMs:\n\n### read_query\nExecute a SELECT query on the database with built-in safety validations. Features:\n- Query validation and sanitization\n- Parameter binding support\n- Row limit enforcement\n- Results formatted as dictionaries\n\n### list_tables \nList all available tables in the database with their names.\n\n### describe_table\nGet detailed schema information for a specific table, including:\n- Column names and types\n- NULL constraints\n- Default values\n- Primary key information\n\n## 🚀 Getting Started\n\nClone the repository:\n\n```bash\ngit clone https://github.com/hannesrudolph/sqlite-explorer-fastmcp-mcp-server.git\ncd sqlite-explorer-fastmcp-mcp-server\n```\n\n## 📦 Installation Options\n\nYou can install this MCP server in either Claude Desktop or the Cline VSCode plugin. Choose the option that best suits your needs.\n\n### Option 1: Install for Claude Desktop\n\nInstall using FastMCP:\n\n```bash\nfastmcp install sqlite_explorer.py --name \"SQLite Explorer\" -e SQLITE_DB_PATH=/path/to/db\n```\n\nReplace `/path/to/db` with the path to your SQLite database file.\n\n### Option 2: Install for Cline VSCode Plugin\n\nTo use this server with the [Cline VSCode plugin](http://cline.bot):\n\n1. In VSCode, click the server icon (☰) in the Cline plugin sidebar\n2. Click the \"Edit MCP Settings\" button (✎)\n3. Add the following configuration to the settings file:\n\n```json\n{\n  \"sqlite-explorer\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"run\",\n      \"--with\",\n      \"fastmcp\",\n      \"--with\",\n      \"uvicorn\",\n      \"fastmcp\",\n      \"run\",\n      \"/path/to/repo/sqlite_explorer.py\"\n    ],\n    \"env\": {\n      \"SQLITE_DB_PATH\": \"/path/to/your/database.db\"\n    }\n  }\n}\n```\n\nReplace:\n- `/path/to/repo` with the full path to where you cloned this repository (e.g., `/Users/username/Projects/sqlite-explorer-fastmcp-mcp-server`)\n- `/path/to/your/database.db` with the full path to your SQLite database file\n\n## 🔒 Safety Features\n\n- Read-only access to SQLite databases\n- Query validation and sanitization\n- Parameter binding for safe query execution\n- Row limit enforcement\n- Progress output suppression for clean JSON responses\n\n## 📚 Development Documentation\n\nThe repository includes documentation files for development:\n\n- `mcp-documentation.txt`: Contains comprehensive documentation about the MCP server implementation and FastMCP framework usage.\n\nThis documentation serves as context when developing features and can be used with LLMs to assist in development.\n\n## ⚙️ Environment Variables\n\nThe following environment variables must be set:\n\n- `SQLITE_DB_PATH`: Full path to the SQLite database file you want to explore\n",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "sqlite-explorer-claude-desktop": {
+        "command": "fastmcp",
+        "args": ["install", "sqlite_explorer.py", "--name", "SQLite Explorer", "-e", "SQLITE_DB_PATH=/path/to/db"],
+        "env": {
+          "SQLITE_DB_PATH": "/path/to/db"
+        }
+      },
+      "sqlite-explorer": {
+        "command": "uv",
+        "args": ["run", "--with", "fastmcp", "--with", "uvicorn", "fastmcp", "run", "/path/to/repo/sqlite_explorer.py"],
+        "env": {
+          "SQLITE_DB_PATH": "/path/to/your/database.db"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hannesrudolph",
+    "repo": "sqlite-explorer-fastmcp-mcp-server",
+    "url": "https://github.com/hannesrudolph/sqlite-explorer-fastmcp-mcp-server",
+    "name": "hannesrudolph__sqlite-explorer-fastmcp-mcp-server",
+    "path": null,
+    "stars": 84,
+    "contributors": 2,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "69f3f6c7d878cd5210a27e33fae814a9ec9e4b55"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:28.923Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nfastmcp==0.4.1"
+}

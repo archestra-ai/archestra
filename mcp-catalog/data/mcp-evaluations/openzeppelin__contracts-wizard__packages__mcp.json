@@ -1,0 +1,95 @@
+{
+  "name": "openzeppelin__contracts-wizard__packages__mcp",
+  "display_name": "mcp",
+  "description": "Interactive smart contract generator based on OpenZeppelin Contracts.",
+  "author": {
+    "name": "OpenZeppelin"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@openzeppelin/contracts-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# OpenZeppelin Contracts MCP Server\n\n[![NPM Package](https://img.shields.io/npm/v/@openzeppelin/contracts-mcp)](https://www.npmjs.com/package/@openzeppelin/contracts-mcp)\n\nA Model Context Protocol (MCP) server that allows AI agents to generate smart contracts using OpenZeppelin Contracts libraries.\n\nThis server runs locally and requires Node.js to be installed. For a hosted version, see [OpenZeppelin MCP Servers](https://mcp.openzeppelin.com/).\n\n> [!WARNING]\n> AI agents determine when and how to use the MCP server and therefore may produce inaccurate results. You should always review any information produced by the AI agent to ensure that any results are accurate and suit your purposes.\n\n## Features\n\nProvides tools to generate smart contract source code for the following languages and contract kinds. Resulting contracts use OpenZeppelin Contracts libraries for each language. Tools are named in the format `<language>-<contract>`.\n\n| Language | Contracts |\n| --- | --- |\n| solidity | erc20, erc721, erc1155, stablecoin, rwa, account, governor, custom |\n| cairo | erc20, erc721, erc1155, account, multisig, governor, vesting, custom |\n| stellar | fungible, stablecoin, non-fungible |\n| stylus | erc20, erc721, erc1155 |\n\n\n## Installation\n\n### Cursor\n\nFor quick installation, use the button below.\n\n[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=OpenZeppelinContracts&config=ewogICJjb21tYW5kIjogIm5weCIsCiAgImFyZ3MiOiBbCiAgICAiLXkiLAogICAgIkBvcGVuemVwcGVsaW4vY29udHJhY3RzLW1jcCIKICBdCn0=)\n\nFor manual installation:\n1. Go to Settings > Cursor Settings > Tools & Integrations > MCP Tools > New MCP Server.\n2. Add the contents from the [Client Configuration](#client-configuration-cursorwindsurfclaude-desktop) section to your MCP configuration file and save.\n3. See the MCP server in the list.\n\n### Windsurf\n\n1. Go to Settings > Windsurf Settings > Cascade > Manage MCPs > View raw config.\n2. Add the contents from the [Client Configuration](#client-configuration-cursorwindsurfclaude-desktop) section to your MCP configuration file and save.\n3. Click Refresh on the Manage MCP Servers page.\n4. See the MCP server in the list.\n\n### Claude Desktop\n\n1. Go to Settings > Developer > Edit Config.\n2. Add the contents from the [Client Configuration](#client-configuration-cursorwindsurfclaude-desktop) section to your MCP configuration file and save.\n3. Restart Claude Desktop.\n4. Click the \"Search and tools\" button and see the MCP server in the list.\n\n### Client Configuration (Cursor/Windsurf/Claude Desktop)\n\n```json\n{\n  \"mcpServers\": {\n    \"OpenZeppelinContracts\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@openzeppelin/contracts-mcp\"\n      ]\n    }\n  }\n}\n```\n\n### Claude Code\n\n```sh\nclaude mcp add OpenZeppelinContracts -- npx -y @openzeppelin/contracts-mcp\n```\n\n### VS Code\n\nFor quick installation, use one of the buttons below.\n\n[![Add to VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square)](https://insiders.vscode.dev/redirect/mcp/install?name=OpenZeppelinContracts&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%20%22%40openzeppelin%2Fcontracts-mcp%22%5D%7D)\n[![Add to VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square)](https://insiders.vscode.dev/redirect/mcp/install?name=OpenZeppelinContracts&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%20%22%40openzeppelin%2Fcontracts-mcp%22%5D%7D&quality=insiders)\n\nFor manual installation:\n1. Follow VS Code documentation to [Add an MCP server to your workspace](https://code.visualstudio.com/docs/copilot/chat/mcp-servers#_add-an-mcp-server-to-your-workspace) using the following configuration:\n```json\n{\n  \"servers\": {\n    \"OpenZeppelinContracts\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@openzeppelin/contracts-mcp\"\n      ]\n    }\n  }\n}\n```\n2. Start the MCP server according to [Manage MCP servers](https://code.visualstudio.com/docs/copilot/chat/mcp-servers#_manage-mcp-servers).\n\n## Usage\n\nWhen interacting with an AI agent, for example in your IDE's Write or Agent mode, ask it to write or modify smart contracts for your use case. When the AI agent determines it is appropriate to do so, it will use the MCP server to generate the contracts or determine best practices for your use case.\n",
+  "category": "AI Tools",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "openzeppelin-contracts-mcp": {
+        "command": "npx",
+        "args": ["-y", "@openzeppelin/contracts-mcp"],
+        "env": {}
+      },
+      "openzeppelin-contracts-mcp-stdio": {
+        "command": "npx",
+        "args": ["-y", "@openzeppelin/contracts-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "OpenZeppelin",
+    "repo": "contracts-wizard",
+    "url": "https://github.com/OpenZeppelin/contracts-wizard/tree/master/packages/mcp",
+    "name": "openzeppelin__contracts-wizard__packages__mcp",
+    "path": "packages/mcp",
+    "stars": 272,
+    "contributors": 45,
+    "issues": 112,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "41d5c74d3aa3734a02b7b88c959634bb42fa6d20"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:41.279Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@openzeppelin/wizard",
+      "importance": 9
+    },
+    {
+      "name": "@openzeppelin/wizard-common",
+      "importance": 8
+    },
+    {
+      "name": "@openzeppelin/wizard-stylus",
+      "importance": 8
+    },
+    {
+      "name": "@openzeppelin/wizard-stellar",
+      "importance": 8
+    },
+    {
+      "name": "@openzeppelin/wizard-cairo",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@openzeppelin/contracts-mcp\",\n  \"version\": \"0.1.0\",\n  \"description\": \"OpenZeppelin Contracts MCP Server\",\n  \"license\": \"AGPL-3.0-only\",\n  \"repository\": \"https://github.com/OpenZeppelin/contracts-wizard\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"bin\": {\n    \"contracts-mcp\": \"dist/cli.js\"\n  },\n  \"ts:main\": \"src/index.ts\",\n  \"files\": [\n    \"LICENSE\",\n    \"NOTICE\",\n    \"/dist\",\n    \"/src\",\n    \"!**/*.test.*\"\n  ],\n  \"scripts\": {\n    \"prepare\": \"tsc\",\n    \"watch\": \"tsc --watch\",\n    \"test\": \"ava\",\n    \"test:update-snapshots\": \"ava --update-snapshots\",\n    \"test:watch\": \"ava --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.11.1\",\n    \"@openzeppelin/wizard-common\": \"^0.1.0\",\n    \"@openzeppelin/wizard\": \"^0.7.1\",\n    \"@openzeppelin/wizard-stylus\": \"^0.2.0\",\n    \"@openzeppelin/wizard-stellar\": \"^0.4.2\",\n    \"@openzeppelin/wizard-cairo\": \"^2.0.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.0.0\",\n    \"typescript\": \"^5.0.0\",\n    \"ava\": \"^6.0.0\",\n    \"ts-node\": \"^10.4.0\"\n  }\n}"
+}

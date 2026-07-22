@@ -13,10 +13,20 @@ describe("requiresOpenAiResponsesApi", () => {
     expect(requiresOpenAiResponsesApi("o3-pro")).toBe(true);
   });
 
+  test("matches the gpt-5.6 family, whose function tools require the Responses API", () => {
+    expect(requiresOpenAiResponsesApi("gpt-5.6-sol")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-5.6-terra")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-5.6-luna")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-5.6")).toBe(true);
+    expect(requiresOpenAiResponsesApi("gpt-5.6-sol-2026-07-09")).toBe(true);
+    expect(requiresOpenAiResponsesApi("openai/gpt-5.6-sol")).toBe(true);
+  });
+
   test("does not match chat-completions models", () => {
     expect(requiresOpenAiResponsesApi("gpt-5.5")).toBe(false);
     expect(requiresOpenAiResponsesApi("gpt-4o")).toBe(false);
     expect(requiresOpenAiResponsesApi("babbage-002")).toBe(false);
+    expect(requiresOpenAiResponsesApi("gpt-5.61")).toBe(false);
   });
 });
 

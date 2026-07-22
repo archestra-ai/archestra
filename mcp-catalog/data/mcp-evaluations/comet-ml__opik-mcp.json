@@ -1,0 +1,138 @@
+{
+  "name": "comet-ml__opik-mcp",
+  "display_name": "opik-mcp",
+  "description": "Model Context Protocol (MCP) implementation for Opik enabling seamless IDE integration and unified access to prompts, projects, traces, and metrics. ",
+  "author": {
+    "name": "comet-ml"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js", "--debug", "${user_config.opik_debug}"],
+    "env": {
+      "OPIK_API_BASE_URL": "${user_config.opik_api_base_url}",
+      "OPIK_API_KEY": "${user_config.opik_api_key}",
+      "OPIK_WORKSPACE_NAME": "${user_config.opik_workspace_name}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "opik_api_base_url": {
+      "type": "string",
+      "title": "Opik API Base URL",
+      "description": "The base URL for Opik API requests.",
+      "default": "https://www.comet.com/opik/api",
+      "required": false,
+      "sensitive": false
+    },
+    "opik_api_key": {
+      "type": "string",
+      "title": "Opik API Key",
+      "description": "Your Opik API key for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "opik_workspace_name": {
+      "type": "string",
+      "title": "Opik Workspace Name",
+      "description": "The name of the Opik workspace to use.",
+      "default": "default",
+      "required": false,
+      "sensitive": false
+    },
+    "opik_debug": {
+      "type": "boolean",
+      "title": "Enable Debug Mode",
+      "description": "Enable verbose logging for debugging purposes.",
+      "default": false,
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "readme": "<h1 align=\"center\" style=\"border-bottom: none\">\n    <div>\n        <a href=\"https://www.comet.com/site/products/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=header_img&utm_campaign=opik-mcp\">\n            <picture>\n                <source media=\"(prefers-color-scheme: dark)\" srcset=\"https://raw.githubusercontent.com/comet-ml/opik-mcp/refs/heads/main/docs/assets/logo-dark-mode.svg\">\n                <source media=\"(prefers-color-scheme: light)\" srcset=\"https://raw.githubusercontent.com/comet-ml/opik-mcp/refs/heads/main/docs/assets/logo-light-mode.svg\">\n                <img alt=\"Comet Opik logo\" src=\"docs/assets/logo-light-mode.svg\" width=\"200\" />\n            </picture>\n        </a>\n        <br>\n        Opik MCP Server\n    </div>\n    (Model Context Protocol)<br>\n</h1>\n\n<p align=\"center\">\nA Model Context Protocol (MCP) implementation for the <a href=\"https://github.com/comet-ml/opik/\">Opik platform</a> with support for multiple transport mechanisms, enabling seamless integration with IDEs and providing a unified interface for Opik's capabilities.\n</p>\n\n<div align=\"center\">\n\n[![License](https://img.shields.io/github/license/comet-ml/opik-mcp)](https://github.com/comet-ml/opik-mcp/blob/main/LICENSE)\n[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.11.0-brightgreen)](https://nodejs.org/)\n[![TypeScript](https://img.shields.io/badge/typescript-%5E5.8.2-blue)](https://www.typescriptlang.org/)\n<img src=\"https://badge.mcpx.dev?status=on\" title=\"MCP Enabled\"/>\n[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15411156.svg)](https://doi.org/10.5281/zenodo.15411156)\n\n</div>\n\n<p align=\"center\">\n    <a href=\"https://www.comet.com/site/products/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=website_button&utm_campaign=opik\"><b>Website</b></a> •\n    <a href=\"https://chat.comet.com\"><b>Slack community</b></a> •\n    <a href=\"https://x.com/Cometml\"><b>Twitter</b></a> •\n    <a href=\"https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik\"><b>Documentation</b></a>\n</p>\n\n<p align=\"center\">\n    <a href=\"https://glama.ai/mcp/servers/@comet-ml/opik-mcp\" rel=\"nofollow\" target=\"_blank\">\n      <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@comet-ml/opik-mcp/badge\" alt=\"Opik Server MCP server\" />\n    </a>\n</p>\n\n> **⚠️ Notice:** SSE (Server-Sent Events) transport support is currently experimental and untested. For production use, we recommend using the direct process execution approach shown in the IDE integration examples.\n\n## 🚀 What is Opik MCP Server?\n\nOpik MCP Server is an open-source implementation of the Model Context Protocol for the Opik platform. It provides a unified interface for interacting with Opik's capabilities, supporting multiple transport mechanisms for flexible integration into various environments.\n\n<br>\n\nYou can use Opik MCP Server for:\n* **IDE Integration:**\n  * Seamlessly integrate with Cursor and other compatible IDEs\n  * Provide direct access to Opik's capabilities from your development environment\n\n* **Unified API Access:**\n  * Access all Opik features through a standardized protocol\n  * Leverage multiple transport options (stdio, SSE) for different integration scenarios\n\n* **Platform Management:**\n  * Manage prompts, projects, traces, and metrics through a consistent interface\n  * Organize and monitor your LLM applications efficiently\n\n## Features\n\n- **Prompts Management**: Create, list, update, and delete prompts\n- **Projects/Workspaces Management**: Organize and manage projects\n- **Traces**: Track and analyze trace data\n- **Metrics**: Gather and query metrics data\n\n## Quick Start\n\n### Installation\n\n#### Manual Installation\n```bash\n# Clone the repository\ngit clone https://github.com/comet-ml/opik-mcp.git\ncd opik-mcp\n\n# Install dependencies and build\nnpm install\nnpm run build\n```\n\n### Configuration\n\nCreate a `.env` file based on the example:\n\n```bash\ncp .env.example .env\n# Edit .env with your specific configuration\n```\n\n### Starting the Server\n\n```bash\n# Start with stdio transport (default)\nnpm run start:stdio\n\n# Start with SSE transport for network access (experimental)\nnpm run start:sse\n```\n\n## IDE Integration\n\n### Cursor Integration\n\nTo integrate with Cursor IDE, create a `.cursor/mcp.json` file in your project directory with the following configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"opik\": {\n      \"command\": \"/path/to/node\",\n      \"args\": [\n        \"/path/to/opik-mcp/build/index.js\",\n        \"--apiUrl\",\n        \"https://www.comet.com/opik/api\",\n        \"--apiKey\",\n        \"YOUR_API_KEY\",\n        \"--workspace\",\n        \"default\",\n        \"--debug\",\n        \"true\"\n      ],\n      \"env\": {\n        \"OPIK_API_BASE_URL\": \"https://www.comet.com/opik/api\",\n        \"OPIK_API_KEY\": \"YOUR_API_KEY\",\n        \"OPIK_WORKSPACE_NAME\": \"default\",\n      }\n    }\n  }\n}\n```\n\nReplace `/path/to/node` with the path to your Node.js executable and `/path/to/opik-mcp` with the path to your opik-mcp installation. Also replace `YOUR_API_KEY` with your actual Opik API key.\n\n## Available Commands\n\nThe project includes a Makefile for common operations:\n\n```bash\n# Display all available commands\nmake help\n\n# Run tests\nmake test\n\n# Run transport-specific tests\nmake test-transport\n\n# Start the server with SSE transport (experimental)\nmake start-sse\n\n# Start the server with stdio transport\nmake start-stdio\n```\n\n## Transport Options\n\n### Standard Input/Output\n\nIdeal for local integration where the client and server run on the same machine.\n\n```bash\nmake start-stdio\n```\n\n### Server-Sent Events (SSE)\n\nEnables remote access and multiple simultaneous clients over HTTP. Note that this transport option is experimental.\n\n```bash\nmake start-sse\n```\n\nFor detailed information about the SSE transport, see [docs/sse-transport.md](docs/sse-transport.md).\n\n## Development\n\n### Testing\n\n```bash\n# Run all tests\nnpm test\n\n# Run specific test suite\nnpm test -- tests/transports/sse-transport.test.ts\n```\n\n### Pre-commit Hooks\n\nThis project uses pre-commit hooks to ensure code quality:\n\n```bash\n# Run pre-commit checks manually\nmake precommit\n```\n\n## Documentation\n\n- [SSE Transport](docs/sse-transport.md) - Details on using the SSE transport\n- [API Reference](docs/api-reference.md) - Complete API documentation\n- [Configuration](docs/configuration.md) - Advanced configuration options\n- [IDE Integration](docs/ide-integration.md) - Integration with Cursor IDE\n\n## Citation\n\nIf you use this project in your research, please cite it as follows:\n\n```\nComet ML, Inc, Koc, V., & Boiko, Y. (2025). Opik MCP Server. Github. https://doi.org/10.5281/zenodo.15411156\n```\n\nOr use the following BibTeX entry:\n\n```bibtex\n@software{CometML_Opik_MCP_Server_2025,\n  author = {{Comet ML, Inc} and Koc, V. and Boiko, Y.},\n  title = {{Opik MCP Server}},\n  year = {2025},\n  publisher = {GitHub},\n  url = {https://doi.org/10.5281/zenodo.15411156},\n  doi = {10.5281/zenodo.15411156}\n}\n```\n\nYou can also find citation information in the `CITATION.cff` file in this repository.\n\n## License\n\nApache 2.0\n",
+  "category": "AI Tools",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "comet-ml-opik-mcp-stdio": {
+        "command": "npm",
+        "args": ["run", "start:stdio"],
+        "env": {}
+      },
+      "comet-ml-opik-mcp-sse": {
+        "command": "npm",
+        "args": ["run", "start:sse"],
+        "env": {}
+      },
+      "comet-ml-opik-mcp-cursor-integration": {
+        "command": "node",
+        "args": [
+          "build/index.js",
+          "--apiUrl",
+          "https://www.comet.com/opik/api",
+          "--apiKey",
+          "YOUR_API_KEY",
+          "--workspace",
+          "default",
+          "--debug",
+          "true"
+        ],
+        "env": {
+          "OPIK_API_BASE_URL": "https://www.comet.com/opik/api",
+          "OPIK_API_KEY": "YOUR_API_KEY",
+          "OPIK_WORKSPACE_NAME": "default"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "comet-ml",
+    "repo": "opik-mcp",
+    "url": "https://github.com/comet-ml/opik-mcp",
+    "name": "comet-ml__opik-mcp",
+    "path": null,
+    "stars": 165,
+    "contributors": 6,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b3093b7fbf261ae6ebcd6366277d5736df39d741"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.335Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "yargs",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"test-opik-mcp\",\n  \"version\": \"0.0.1\",\n  \"description\": \"test opik mcp\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"opik-mcp\": \"build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x build/*.js && shx cp -r client build/\",\n    \"test\": \"node --experimental-vm-modules node_modules/jest/bin/jest.js\",\n    \"test:transport\": \"node --experimental-vm-modules node_modules/jest/bin/jest.js --forceExit --detectOpenHandles tests/transports\",\n    \"api:build\": \"tsc\",\n    \"api:test\": \"node build/test-client.js\",\n    \"simple\": \"node build/simple-mcp.js\",\n    \"lint\": \"eslint . --ext .ts\",\n    \"lint:fix\": \"eslint . --ext .ts --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\" \\\"tests/**/*.ts\\\"\",\n    \"check\": \"npm run lint && npm run test\",\n    \"start\": \"node build/index.js\",\n    \"start:sse\": \"node build/cli.js serve --transport sse\",\n    \"start:stdio\": \"node build/cli.js serve --transport stdio\",\n    \"dev:sse\": \"tsc && node build/cli.js serve --transport sse\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"dotenv\": \"^16.4.5\",\n    \"yargs\": \"^17.7.2\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@jest/globals\": \"^29.7.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.6.1\",\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/express\": \"^5.0.0\",\n    \"@types/jest\": \"^29.5.12\",\n    \"@types/node\": \"^22.13.9\",\n    \"@typescript-eslint/eslint-plugin\": \"^7.4.0\",\n    \"@typescript-eslint/parser\": \"^7.4.0\",\n    \"cors\": \"^2.8.5\",\n    \"eslint\": \"^8.57.0\",\n    \"eslint-config-prettier\": \"^9.1.0\",\n    \"eslint-plugin-prettier\": \"^5.1.3\",\n    \"express\": \"^5.0.1\",\n    \"jest\": \"^29.7.0\",\n    \"jest-environment-jsdom\": \"^29.7.0\",\n    \"node-fetch\": \"^3.3.2\",\n    \"pre-commit\": \"^1.2.2\",\n    \"prettier\": \"^3.2.5\",\n    \"shx\": \"^0.3.4\",\n    \"ts-jest\": \"^29.1.2\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"jest\": {\n    \"preset\": \"ts-jest/presets/default-esm\",\n    \"extensionsToTreatAsEsm\": [\n      \".ts\"\n    ],\n    \"transform\": {\n      \"^.+\\\\.tsx?$\": [\n        \"ts-jest\",\n        {\n          \"useESM\": true\n        }\n      ]\n    },\n    \"moduleNameMapper\": {\n      \"^(\\\\.{1,2}/.*)\\\\.js$\": \"$1\"\n    }\n  },\n  \"pre-commit\": [\n    \"lint\",\n    \"test\"\n  ]\n}\n"
+}

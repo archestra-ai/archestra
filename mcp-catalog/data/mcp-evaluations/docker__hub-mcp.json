@@ -1,0 +1,171 @@
+{
+  "name": "docker__hub-mcp",
+  "display_name": "hub-mcp",
+  "description": "Docker Hub MCP Server",
+  "author": {
+    "name": "docker"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js", "--transport=stdio", "--username=${user_config.docker_hub_username}"],
+    "env": {
+      "HUB_PAT_TOKEN": "${user_config.hub_pat_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "hub_pat_token": {
+      "type": "string",
+      "title": "Docker Hub Personal Access Token",
+      "description": "Your Docker Hub Personal Access Token for authenticated access to Docker Hub. Required for managing repositories.",
+      "sensitive": true,
+      "required": false
+    },
+    "docker_hub_username": {
+      "type": "string",
+      "title": "Docker Hub Username",
+      "description": "Your Docker Hub username associated with the Personal Access Token, required for authenticated access.",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# Docker Hub MCP Server\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/docker/hub-mcp)](https://archestra.ai/mcp-catalog/docker__hub-mcp)\n\nThe Docker Hub MCP Server is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server that interfaces with Docker Hub APIs to make them accessible to LLMs, enabling intelligent content discovery and repository management.\n\nDevelopers building with containers, especially in AI and LLM-powered workflows, often face inadequate context across the vast landscape of Docker Hub images. As a result, LLMs struggle to recommend the right images, and developers lose time manually searching instead of building.\n\n<p align=\"center\">\n  <img src=\"hubmcp.gif\" \n       alt=\"Demo\"\n       width=\"50%\" \n       style=\"border: 1px solid #ccc; border-radius: 8px;\" />\n</p>\n\n### Use Cases\n\n- AI-powered image recommendations - LLMs access real-time Docker Hub data for accurate container image suggestions.\n- Enhanced content discovery - AI tools help developers find the right images faster.\n- Simplified Hub workflows - Manage Docker repositories and images using natural language.\n\n## Prerequisites\n\n- [Docker](https://docs.docker.com/get-docker/) installed\n- [Node.js](https://nodejs.org/) (version 22+)\n- [Optional] A [Docker Personal Access Token (PAT)](https://docs.docker.com/security/for-developers/access-tokens/) with appropriate permissions\n\n## Setup\n\n1. **Build**\n\n    ```bash\n    npm install\n    npm run build\n    ```\n\n2. **Run**\n\n    ```bash\n     npm start -- [--transport=http|stdio] [--port=3000]\n    ```\n\n- Default args:\n  - `transport`: Choose between `http` or `stdio` (default: `stdio`)\n  - `port=3000`\n    This starts the server with default settings and can only access public Docker Hub content.\n\n### Run in inspector [Optional]\n\nThe MCP Inspector provides a web interface to test your server:\n\n```\nnpx @modelcontextprotocol/inspector node dist/index.js [--transport=http|stdio] [--port=3000]\n```\n\n## Authenticate with docker\n\nBy default this MCP server can only query public content on Docker Hub. In order to manage your repositories you need to provide authentication.\n\n### Run with authentication\n\n```\nHUB_PAT_TOKEN=<a_pat_token> npm start -- [--username=<the_hub_username_for_the_pat>]\n```\n\n### Run in inspector [Optional]\n\n```\nHUB_PAT_TOKEN=<a_pat_token> npx @modelcontextprotocol/inspector node dist/index.js[--username=<the_hub_username_for_the_pat>]\n```\n## Usage in Docker Ask Gordon\nYou can configure Gordon to be a host that can interact with the Docker Hub MCP server.\n\n### Gordon Setup\n\n[Ask Gordon](https://docs.docker.com/ai/gordon/) is your personal AI assistant embedded in Docker Desktop and the Docker CLI. It's designed to streamline your workflow and help you make the most of the Docker ecosystem.\n\nYou can configure Gordon to be a client that can interact with the Docker Hub MCP server.\n\n1. Create the [`gordon-mcp.yml` file](https://docs.docker.com/ai/gordon/mcp/yaml/) file in your working directory.\n2. Replace environment variables in the `gordon-mcp.yml`  with your Docker Hub username and a PAT token.\n\n```\nservices:\n  hub:\n    image: hub\n    environment:\n      - HUB_PAT_TOKEN=<your_pat_token>\n    command:\n      - --username=<your_hub_username>\n```\n\n2. Run `docker build -t hub .`\n3. Run `docker ai`\n\n## Usage in other MCP Clients\n\n### Usage with Claude Desktop\n\n> NOTE: Make sure you have already built the application as mentioned in Step 1.\n\n1. Add the Docker Hub MCP Server configuration to your `claude_desktop_config.json`:\n\n> NOTE: if you are using [nvm](https://github.com/nvm-sh/nvm) to manage node versions, you should put the node binary path in the `command` property. This ensure MCP server runs with the right node version. You can find your binary path by running `which node` in your shell\n\n#### For public repositories only:\n\n- `/FULL/PATH/TO/YOUR/docker-hub-mcp-server` - The complete path to where you cloned this repository\n\n```json\n{\n    \"mcpServers\": {\n        \"docker-hub\": {\n            \"command\": \"node\", // or absoulute binary path\n            \"args\": [\"/FULL/PATH/TO/YOUR/docker-hub-mcp-server/dist/index.js\", \"--transport=stdio\"]\n        }\n    }\n}\n```\n\n#### For authenticated access (recommended):\n\nReplace the following values:\n\n- `YOUR_DOCKER_HUB_USERNAME` - Your Docker Hub username\n- `YOUR_DOCKER_HUB_PERSONAL_ACCESS_TOKEN` - Your Docker Hub Personal Access Token\n- `/FULL/PATH/TO/YOUR/docker-hub-mcp-server` - The complete path to where you cloned this\n\n```json\n{\n    \"mcpServers\": {\n        \"docker-hub\": {\n            \"command\": \"node\",\n            \"args\": [\n                \"/FULL/PATH/TO/YOUR/docker-hub-mcp-server/dist/index.js\",\n                \"--transport=stdio\",\n                \"--username=YOUR_DOCKER_HUB_USERNAME\"\n            ],\n            \"env\": {\n                \"HUB_PAT_TOKEN\": \"YOUR_DOCKER_HUB_PERSONAL_ACCESS_TOKEN\"\n            }\n        }\n    }\n}\n```\n\n2. Save the configuration file and completely restart Claude Desktop for the changes to take effect.\n\n## Usage with VS Code\n\n1. Add the Docker Hub MCP Server configuration to your User Settings (JSON) file in VS Code. You can do this by opening the `Command Palette` and typing `Preferences: Open User Settings (JSON)`.\n\n#### For public repositories only:\n\n- `/FULL/PATH/TO/YOUR/docker-hub-mcp-server` - The complete path to where you cloned this repository\n\n```json\n{\n    \"mcpServers\": {\n        \"docker-hub\": {\n            \"command\": \"node\",\n            \"args\": [\"/FULL/PATH/TO/YOUR/docker-hub-mcp-server/dist/index.js\", \"--transport=stdio\"]\n        }\n    }\n}\n```\n\n#### For authenticated access (recommended):\n\nReplace the following values:\n\n- `YOUR_DOCKER_HUB_USERNAME` - Your Docker Hub username\n- `YOUR_DOCKER_HUB_PERSONAL_ACCESS_TOKEN` - Your Docker Hub Personal Access Token\n- `/FULL/PATH/TO/YOUR/docker-hub-mcp-server` - The complete path to where you cloned this\n\n```json\n{\n    \"mcpServers\": {\n        \"docker-hub\": {\n            \"command\": \"node\",\n            \"args\": [\n                \"/FULL/PATH/TO/YOUR/docker-hub-mcp-server/dist/index.js\",\n                \"--transport=stdio\",\n                \"--username=YOUR_DOCKER_HUB_USERNAME\"\n            ],\n            \"env\": {\n                \"HUB_PAT_TOKEN\": \"YOUR_DOCKER_HUB_PERSONAL_ACCESS_TOKEN\"\n            }\n        }\n    }\n}\n```\n\n2. Open the `Command Palette` and type `MCP: List Servers`.\n3. Select `docker-hub` and select `Start Server`.\n\n## Task Examples\n\n### Finding images\n\n```console\n# Search for official images\n$ docker ai \"Search for official nginx images on Docker Hub\"\n\n# Search for lightweight images to reduce deployment size and improve performance\n$ docker ai \"Search for minimal Node.js images with small footprint\"\n\n# Get the most recent tag of a base image\n$ docker ai \"Show me the latest tag details for go\"\n\n# Find a production-ready database with enterprise features and reliability\n$ docker ai \"Search for production ready database images\"\n\n# Compare Ubuntu versions to choose the right one for my project\n$ docker ai \"Help me find the right Ubuntu version for my project\"\n```\n\n### Repository Management\n\n```console\n# Create a repository\n$ docker ai \"Create a repository in my namespace\"\n\n# List all repositories in my namespace\n$ docker ai \"List all repositories in my namespace\"\n\n# Find the largest repository in my namespace\n$ docker ai \"Which of my repositories takes up the most space?\"\n\n# Find repositories that haven't been updated recently\n$ docker ai \"Which of my repositories haven't had any pushes in the last 60 days?\"\n\n# Find which repositories are currently active and being used\n$ docker ai \"Show me my most recently updated repositories\"\n\n# Get details about a repository\n$ docker ai \"Show me information about my '<repository-name>' repository\"\n```\n\n### Pull/Push Images\n\n```console\n# Pull latest PostgreSQL version\n$ docker ai \"Pull the latest postgres image\"\n\n# Push image to your Docker Hub repository\n$ docker ai \"Push my <image-name> to my <repository-name> repository\"\n```\n\n### Tag Management\n\n```console\n# List all tags for a repository\n$ $ docker ai \"Show me all tags for my '<repository-name>' repository\"\n\n# Find the most recently pushed tag\n$ docker ai \"What's the most recent tag pushed to my '<repository-name>' repository?\"\n\n# List tags with architecture filtering\n$ docker ai \"List tags for in the '<repository-name>' repository that support amd64 architecture\"\n\n# Get detailed information about a specific tag\n$ docker ai \"Show me details about the '<tag-name>' tag in the '<repository-name>' repository\"\n\n# Check if a specific tag exists\n$ docker ai \"Check if version 'v1.2.0' exists for my 'my-web-app' repository\"\n```\n\n### Docker Hardened Images\n\n```console\n# List available hardened images\n$ docker ai \"What is the most secure image I can use to run a node.js application?\"\n\n# Convert Dockerfile to use a hardened image\n$ docker ai \"Can you help me update my Dockerfile to use a docker hardened image instead of the current one\"\n```\n\n## Tools\n\n### Search\n\n- **search** - Search repositories and content using Search V4 API\n    - `query`: Search query parameter (string, required)\n    - `architectures`: Filter on architectures (string, optional)\n    - `badges`: Filter by image content type badges (string, optional)\n    - `categories`: Filter on categories (string, optional)\n    - `extension_reviewed`: Filter on reviewed extensions (boolean, optional)\n    - `from`: Number of documents to skip for pagination (number, optional)\n    - `images`: Filter on image names (string, optional)\n    - `operating_systems`: Filter on operating systems (string, optional)\n    - `order`: Change the ordering of results (string, optional)\n    - `size`: Maximum number of results to return (number, optional)\n    - `sort`: Sort results by search field (string, optional)\n    - `type`: Filter on repository content type (string, optional)\n\n### Namespace Management\n\n- **get_namespaces** - Get list of namespaces the user is a member of\n    - `page`: Page number for pagination (string, optional)\n    - `page_size`: Number of items per page (string, optional)\n\n### Repository Management\n\n- **list_repositories_by_namespace** - List all repositories under the provided namespace\n    - `namespace`: Repository namespace (string, required)\n    - `content_types`: Comma-delimited list of content types (string, optional)\n    - `media_types`: Comma-delimited list of media types (string, optional)\n    - `name`: Search by repository name (string, optional)\n    - `ordering`: Sort order (string, optional)\n    - `page`: Page number (number, optional)\n    - `page_size`: Number of items per page (number, optional)\n\n- **get_repository_info** - Get information about a repository\n    - `namespace`: Repository namespace (string, required)\n    - `repository`: Repository name (string, required)\n\n- **check_repository** - Check if a repository exists\n    - `namespace`: Repository namespace (string, required)\n    - `repository`: Repository name (string, required)\n\n- **check_repository_tag** - Check if a specific tag exists in a repository\n    - `namespace`: Repository namespace (string, required)\n    - `repository`: Repository name (string, required)\n    - `tag`: Tag name (string, required)\n\n- **create_repository** - Create a new repository in the provided namespace\n    - `namespace`: Repository namespace (string, required)\n    - `body`: Request body data (object, optional)\n\n- **update_repository_info** - Update repository information\n    - `namespace`: Repository namespace (string, required)\n    - `repository`: Repository name (string, required)\n    - `body`: Request body data (object, optional)\n\n### Tag Management\n\n- **list_repository_tags** - List all tags for a repository\n    - `namespace`: Repository namespace (string, required)\n    - `repository`: Repository name (string, required)\n    - `architecture`: Filter by architecture (string, optional)\n    - `os`: Filter by operating system (string, optional)\n    - `page`: Page number (number, optional)\n    - `page_size`: Number of items per page (number, optional)\n- **read_repository_tag** - Get details of a specific repository tag\n    - `namespace`: Repository namespace (string, required)\n    - `repository`: Repository name (string, required)\n    - `tag`: Tag name (string, required)\n\n### Hardened Images\n\n- **docker_hardened_images** - Query for mirrored Docker Hardened Images (DHI) in the namespace\n    - `namespace`: The namespace to query for mirrored hardened repositories (string, optional)\n\n## Licensing\n\n[docker/hub-mcp](https://github.com/docker/hub-mcp) is licensed under the Apache License, Version 2.0. See\n[LICENSE](https://github.com/docker/docker/blob/master/LICENSE) for the full\nlicense text.\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "docker-hub-mcp-server-npm-stdio": {
+        "command": "npm",
+        "args": ["start", "--", "--transport=stdio"],
+        "env": {}
+      },
+      "docker-hub-mcp-server-npm-authenticated-stdio": {
+        "command": "npm",
+        "args": ["start", "--", "--transport=stdio", "--username=YOUR_DOCKER_HUB_USERNAME"],
+        "env": {
+          "HUB_PAT_TOKEN": "YOUR_DOCKER_HUB_PERSONAL_ACCESS_TOKEN"
+        }
+      },
+      "modelcontextprotocol-inspector-stdio": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/inspector", "node", "dist/index.js", "--transport=stdio"],
+        "env": {}
+      },
+      "modelcontextprotocol-inspector-authenticated-stdio": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/inspector",
+          "node",
+          "dist/index.js",
+          "--transport=stdio",
+          "--username=YOUR_DOCKER_HUB_USERNAME"
+        ],
+        "env": {
+          "HUB_PAT_TOKEN": "YOUR_DOCKER_HUB_PERSONAL_ACCESS_TOKEN"
+        }
+      },
+      "hub-docker-authenticated": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-e",
+          "HUB_PAT_TOKEN=YOUR_DOCKER_HUB_PERSONAL_ACCESS_TOKEN",
+          "hub",
+          "--username=YOUR_DOCKER_HUB_USERNAME"
+        ],
+        "env": {
+          "HUB_PAT_TOKEN": "YOUR_DOCKER_HUB_PERSONAL_ACCESS_TOKEN"
+        },
+        "docker_image": "hub"
+      },
+      "docker-hub-stdio": {
+        "command": "node",
+        "args": ["/FULL/PATH/TO/YOUR/docker-hub-mcp-server/dist/index.js", "--transport=stdio"],
+        "env": {}
+      },
+      "docker-hub-authenticated-stdio": {
+        "command": "node",
+        "args": [
+          "/FULL/PATH/TO/YOUR/docker-hub-mcp-server/dist/index.js",
+          "--transport=stdio",
+          "--username=YOUR_DOCKER_HUB_USERNAME"
+        ],
+        "env": {
+          "HUB_PAT_TOKEN": "YOUR_DOCKER_HUB_PERSONAL_ACCESS_TOKEN"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "docker",
+    "repo": "hub-mcp",
+    "url": "https://github.com/docker/hub-mcp",
+    "name": "docker__hub-mcp",
+    "path": null,
+    "stars": 53,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "7da4fddd243bc4150c3d1d21cd7e69167407e935"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.350Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@apidevtools/swagger-parser",
+      "importance": 8
+    },
+    {
+      "name": "@genql/cli",
+      "importance": 7
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@modelcontextprotocol/specification",
+      "importance": 9
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "jwt-decode",
+      "importance": 6
+    },
+    {
+      "name": "winston",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"dockerhub-mcp-server\",\n    \"version\": \"1.0.0\",\n    \"description\": \"MCP Server that dynamically generates tools from OpenAPI specifications\",\n    \"main\": \"dist/index.js\",\n    \"scripts\": {\n        \"build\": \"tsc\",\n        \"start\": \"node dist/index.js\",\n        \"clean\": \"rm -rf dist\",\n        \"lint\": \"eslint --ext .ts .\",\n        \"inspect\": \"tsc -w & nodemon --watch dist --exec 'npx @modelcontextprotocol/inspector node dist/index.js'\",\n        \"genql.scout\": \"genql --endpoint https://api.scout.docker.com/v1/graphql --output ./src/scout/genql\",\n        \"format:fix\": \"prettier --write \\\"**/*.+(ts|json)\\\"\",\n        \"format:check\": \"prettier --check \\\"**/*.+(ts|json)\\\"\",\n        \"format\": \"npm run format:fix\",\n        \"list-tools:check\": \"npm run build && node dist/scripts/toolsList.js check-tools-list\",\n        \"list-tools:update\": \"npm run build && node dist/scripts/toolsList.js update-tools-list\",\n        \"list-tools\": \"npm run list-tools:check && npm run list-tools:update\"\n    },\n    \"keywords\": [\n        \"mcp\",\n        \"openapi\",\n        \"swagger\",\n        \"api\",\n        \"claude\"\n    ],\n    \"dependencies\": {\n        \"@apidevtools/swagger-parser\": \"^10.1.0\",\n        \"@genql/cli\": \"^6.3.3\",\n        \"@modelcontextprotocol/sdk\": \"^1.13.0\",\n        \"@modelcontextprotocol/specification\": \"github:modelcontextprotocol/specification\",\n        \"express\": \"^5.1.0\",\n        \"jwt-decode\": \"^4.0.0\",\n        \"winston\": \"^3.17.0\",\n        \"zod\": \"^3.25.67\"\n    },\n    \"devDependencies\": {\n        \"@types/express\": \"^5.0.3\",\n        \"@types/lodash\": \"^4.17.19\",\n        \"@types/node\": \"^20.10.0\",\n        \"commander\": \"^14.0.0\",\n        \"esbuild\": \"^0.25.5\",\n        \"eslint\": \"^9.29.0\",\n        \"glob\": \"^11.0.2\",\n        \"i\": \"^0.3.7\",\n        \"lodash\": \"^4.17.21\",\n        \"nodemon\": \"^3.1.10\",\n        \"npm\": \"^11.4.2\",\n        \"prettier\": \"^3.6.1\",\n        \"tsx\": \"^4.20.1\",\n        \"typescript\": \"^5.3.0\",\n        \"typescript-eslint\": \"^8.35.0\"\n    },\n    \"engines\": {\n        \"node\": \">=22\"\n    }\n}\n"
+}

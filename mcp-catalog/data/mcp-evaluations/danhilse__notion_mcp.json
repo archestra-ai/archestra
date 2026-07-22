@@ -1,0 +1,100 @@
+{
+  "name": "danhilse__notion_mcp",
+  "display_name": "notion_mcp",
+  "description": "A simple MCP integration that allows Claude to read and manage a personal Notion todo list",
+  "author": {
+    "name": "danhilse"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "notion_mcp"],
+    "env": {
+      "NOTION_API_KEY": "${user_config.notion_api_key}",
+      "NOTION_DATABASE_ID": "${user_config.notion_database_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "notion_api_key": {
+      "type": "string",
+      "title": "Notion API Key",
+      "description": "Your API key for Notion integration",
+      "sensitive": true,
+      "required": true
+    },
+    "notion_database_id": {
+      "type": "string",
+      "title": "Notion Database ID",
+      "description": "The ID of your Notion todo database",
+      "required": true
+    }
+  },
+  "readme": "# Notion MCP Integration\n\nA simple Model Context Protocol (MCP) server that integrates with Notion's API to manage my personal todo list through Claude. This is a basic implementation tailored specifically for my minimalist todo list setup in Notion.\n\n<p align=\"center\">\n  <img src=\"assets/demo.gif\" width=\"600\"/>\n</p>\n\n## Important Note\n\nThis is a personal project designed for a very specific use case: my simple Notion todo list that has just three properties:\n- Task (title)\n- When (select with only two options: \"today\" or \"later\")\n- Checkbox (marks if completed)\n\n[Example Notion Database](https://danhilse.notion.site/14e5549555a08078afb5ed5d374bb656?v=14e5549555a081f9b5a4000cdf952cb9&pvs=4)\n\nWhile you can use this as a starting point for your own Notion integration, you'll likely need to modify the code to match your specific database structure and requirements.\n\n## Features\n\n- Add new todo items\n- View all todos\n- View today's tasks\n- Check off a task as complete\n\n## Prerequisites\n\n- Python 3.10 or higher\n- A Notion account\n- A Notion integration (API key)\n- A Notion database that matches the exact structure described above (or willingness to modify the code for your structure)\n\n## Setup\n\n1. Clone the repository:\n```bash\ngit clone https://github.com/yourusername/notion-mcp.git\ncd notion-mcp\n```\n\n2. Set up Python environment:\n```bash\npython -m venv .venv\nsource .venv/bin/activate  # On Windows use: .venv\\Scripts\\activate\nuv pip install -e .\n```\n\n3. Create a Notion integration:\n   - Go to https://www.notion.so/my-integrations\n   - Create new integration\n   - Copy the API key\n\n4. Share your database with the integration:\n   - Open your todo database in Notion\n   - Click \"...\" menu → \"Add connections\"\n   - Select your integration\n\n5. Create a `.env` file:\n```env\nNOTION_API_KEY=your-api-key-here\nNOTION_DATABASE_ID=your-database-id-here\n```\n\n6. Configure Claude Desktop:\n```json\n{\n  \"mcpServers\": {\n    \"notion-todo\": {\n      \"command\": \"/path/to/your/.venv/bin/python\",\n      \"args\": [\"-m\", \"notion_mcp\"],\n      \"cwd\": \"/path/to/notion-mcp\"\n    }\n  }\n}\n```\n\n## Running the Server\n\nThe server can be run in two ways:\n\n1. Directly from the command line:\n```bash\n# From the project directory with virtual environment activated\npython -m notion_mcp\n```\n\n2. Automatically through Claude Desktop (recommended):\n- The server will start when Claude launches if configured correctly in `claude_desktop_config.json`\n- No manual server management needed\n- Server stops when Claude is closed\n\nNote: When running directly, the server won't show any output unless there's an error - this is normal as it's waiting for MCP commands.\n\n## Usage\n\nBasic commands through Claude:\n- \"Show all my todos\"\n- \"What's on my list for today?\"\n- \"Add a todo for today: check emails\"\n- \"Add a task for later: review project\"\n\n## Limitations\n\n- Only works with a specific Notion database structure\n- No support for complex database schemas\n- Limited to \"today\" or \"later\" task scheduling\n- No support for additional properties or custom fields\n- Basic error handling\n- No advanced features like recurring tasks, priorities, or tags\n\n## Customization\n\nIf you want to use this with a different database structure, you'll need to modify the `server.py` file, particularly:\n- The `create_todo()` function to match your database properties\n- The todo formatting in `call_tool()` to handle your data structure\n- The input schema in `list_tools()` if you want different options\n\n## Project Structure\n```\nnotion_mcp/\n├── pyproject.toml\n├── README.md\n├── .env                   # Not included in repo\n└── src/\n    └── notion_mcp/\n        ├── __init__.py\n        ├── __main__.py\n        └── server.py      # Main implementation\n```\n\n## License\n\nMIT License - Use at your own risk\n\n## Acknowledgments\n\n- Built to work with Claude Desktop\n- Uses Notion's API\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "notion_mcp": {
+        "command": "python",
+        "args": ["-m", "notion_mcp"],
+        "env": {}
+      },
+      "notion-todo": {
+        "command": "/path/to/your/.venv/bin/python",
+        "args": ["-m", "notion_mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "danhilse",
+    "repo": "notion_mcp",
+    "url": "https://github.com/danhilse/notion_mcp",
+    "name": "notion_mcp",
+    "path": null,
+    "stars": 198,
+    "contributors": 1,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "fec49b95f9a1eb7d27db9433af0b61bc2354f398"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:46.562Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"notion_mcp\"\nversion = \"0.1.0\"\ndescription = \"Notion MCP integration for todo lists\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp\",\n    \"httpx\",\n    \"python-dotenv\"\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\""
+}

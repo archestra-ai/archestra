@@ -1,0 +1,127 @@
+{
+  "name": "optuna__optuna-mcp",
+  "display_name": "optuna-mcp",
+  "description": "The Optuna MCP Server is a Model Context Protocol (MCP) server to interact with Optuna APIs.",
+  "author": {
+    "name": "optuna"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["optuna-mcp", "--storage", "${user_config.storage}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "storage": {
+      "type": "string",
+      "title": "Optuna Storage",
+      "description": "Specify the Optuna storage to persist the results. For example: 'sqlite:///optuna.db' or 'postgresql://user:password@host/dbname'. If left empty, Optuna will use an in-memory storage.",
+      "required": false,
+      "default": "sqlite:///optuna.db"
+    }
+  },
+  "readme": "# Optuna MCP Server\n\n[![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue)](https://www.python.org)\n[![pypi](https://img.shields.io/pypi/v/optuna-mcp.svg)](https://pypi.python.org/pypi/optuna-mcp)\n[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/optuna/optuna-mcp)\n[![Tests](https://github.com/optuna/optuna-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/optuna/optuna-mcp/actions/workflows/tests.yml)\n\nA [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server that automates optimization and analysis using [Optuna](http://optuna.org).\n\n<img width=\"840\" alt=\"image\" src=\"https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/sphere2d/images/sphere2d-6.png\" />\n\n## Use Cases\n\nThe Optuna MCP Server can be used in the following use cases, for example.\n\n- Automated hyperparameter optimization by LLMs\n- Interactive analysis of Optuna's optimization results via chat interface\n- Optimize input and output of other MCP tools\n\nFor details, see the [Examples section](#examples).\n\n## Installation\n\nThe Optuna MCP server can be installed using `uv` or Docker.\nThis section explains how to install the Optuna MCP server, using Claude Desktop as an example MCP client.\n\n### Usage with uv\n\nBefore starting the installation process, install `uv` from [Astral](https://docs.astral.sh/uv/getting-started/installation/).\n\nThen, add the Optuna MCP server configuration to the MCP client.\nTo include it in Claude Desktop, go to Claude > Settings > Developer > Edit Config > `claude_desktop_config.json`\nand add the following:\n\n```json\n{\n  \"mcpServers\": {\n    \"Optuna\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"optuna-mcp\"\n      ]\n    }\n  }\n}\n```\n\nAdditionally, you can specify the Optuna storage with the `--storage` argument to persist the results.\n\n```json\n{\n  \"mcpServers\": {\n    \"Optuna\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"optuna-mcp\"\n        \"--storage\",\n        \"sqlite:///optuna.db\"\n      ]\n    }\n  }\n}\n```\n\nAfter adding this, please restart Claude Desktop application.\nFor more information about Claude Desktop, check out [the quickstart page](https://modelcontextprotocol.io/quickstart/user).\n\n### Usage with Docker\n\nYou can also run the Optuna MCP server using Docker. Make sure you have Docker installed and running on your machine.\n\n```json\n{\n  \"mcpServers\": {\n    \"Optuna\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"--net=host\",\n        \"-v\",\n        \"/PATH/TO/LOCAL/DIRECTORY/WHICH/INCLUDES/DB/FILE:/app/workspace\",\n        \"optuna/optuna-mcp:latest\",\n        \"--storage\",\n        \"sqlite:////app/workspace/optuna.db\"\n      ]\n    }\n  }\n}\n```\n\n## Tools provided by Optuna MCP\n\nThe Optuna MCP provides the following tools.\nSpecifically, it offers primitive functions of Optuna such as Study, Trial, Visualization, and Dashboard.\nSince MCP clients know the list of tools and the details of each tool, users do not need to remember those details.\n\n### Study\n\n- **create_study** - Create a new Optuna study with the given study_name and directions.\n  If the study already exists, it will be simply loaded.\n  - `study_name` : name of the study (string, required).\n  - `directions`: The directions of optimization (list of literal strings minimize/maximize, optional).\n- **set_sampler** - Set the sampler for the study.\n  - `name` : the name of the sampler (string, required).\n- **get_all_study_names** - Get all study names from the storage.\n- **set_metric_names** - Set metric_names. Metric_names are labels used to distinguish what each objective value is.\n  - `metric_names` : The list of metric names for each objective (list of strings, required).\n- **get_metric_names** - Get metric_names.\n  - No parameters required.\n- **get_directions** - Get the directions of the study.\n  - No parameters required.\n- **get_trials** - Get all trials in a CSV format.\n  - No parameters required.\n- **best_trial** - Get the best trial.\n  - No parameters required.\n- **best_trials** - Return trials located at the Pareto front in the study.\n  - No parameters required.\n\n### Trial\n\n- **ask** - Suggest new parameters using Optuna.\n  - `search_space` : the search space for Optuna (dictionary, required).\n- **tell** - Report the result of a trial.\n  - `trial_number` : the trial number (integer, required).\n  - `values` : the result of the trial (float or list of floats, required).\n- **set_trial_user_attr** - Set user attributes for a trial.\n  - `trial_number`: the trial number (integer, required).\n  - `key`: the key of the user attribute (string, required).\n  - `value`: the value of the user attribute (any type, required).\n- **get_trial_user_attrs** - Get user attributes in a trial.\n  - `trial_number`: the trial number (integer, required).\n\n### Visualization\n\n- **plot_optimization_history** - Return the optimization history plot as an image.\n  - `target`: index to specify which value to display (integer, optional).\n  - `target_name`: target’s name to display on the axis label (string, optional).\n- **plot_hypervolume_history** - Return the hypervolume history plot as an image.\n  - `reference_point` : a list of reference points to calculate the hypervolume (list of floats, required).\n- **plot_pareto_front** - Return the Pareto front plot as an image for multi-objective optimization.\n  - `target_names`: objective name list used as the axis titles (list of strings, optional).\n  - `include_dominated_trials`: a flag to include all dominated trial's objective values (boolean, optional).\n  - `targets`: a list of indices to specify the objective values to display. (list of integers, optional).\n- **plot_contour** - Return the contour plot as an image.\n  - `params` : parameter list to visualize (list of strings, optional).\n  - `target` : an index to specify the value to display (integer, required).\n  - `target_name` : target’s name to display on the color bar (string, required).\n- **plot_parallel_coordinate** - Return the parallel coordinate plot as an image.\n  - `params` : parameter list to visualize (list of strings, optional).\n  - `target` : an index to specify the value to display (integer, required).\n  - `target_name` : target’s name to display on the axis label and the legend (string, required).\n- **plot_slice** - Return the slice plot as an image.\n  - `params` : parameter list to visualize (list of strings, optional).\n  - `target` : an index to specify the value to display (integer, required).\n  - `target_name` : target’s name to display on the axis label (string, required).\n- **plot_param_importances** - Return the parameter importances plot as an image.\n  - `params` : parameter list to visualize (list of strings, optional).\n  - `target` : an index to specify the value to display (integer/null, optional).\n  - `target_name` : target’s name to display on the legend (string, required).\n- **plot_edf** - Return the EDF plot as an image.\n  - `target` : an index to specify the value to display (integer, required).\n  - `target_name` : target’s name to display on the axis label (string, required).\n- **plot_timeline** - Return the timeline plot as an image.\n  - No parameters required.\n- **plot_rank** - Return the rank plot as an image.\n  - `params` : parameter list to visualize (list of strings, optional).\n  - `target` : an index to specify the value to display (integer, required).\n  - `target_name` : target’s name to display on the color bar (string, required).\n\n### Web Dashboard\n\n- **launch_optuna_dashboard** - Launch the Optuna dashboard.\n  - `port`: server port (integer, optional, default: 58080).\n\n## Examples\n\n- [Optimizing the 2D-Sphere function](#optimizing-the-2d-sphere-function)\n- [Starting the Optuna dashboard and analyzing optimization results](#starting-the-optuna-dashboard-and-analyzing-optimization-results)\n- [Optimizing the FFmpeg encoding parameters](#optimizing-the-ffmpeg-encoding-parameters)\n- [Optimizing the Cookie Recipe](#optimizing-the-cookie-recipe)\n- [Optimizing the Matplotlib Configuration](#optimizing-the-matplotlib-configuration)\n\n### Optimizing the 2D-Sphere Function\n\nHere we present a simple example of optimizing the 2D-Sphere function, along with example prompts and the summary of the LLM responses.\n\n| User prompt | Output in Claude |\n| - | - |\n| (Launch Claude Desktop) | <img alt=\"1\" src=\"https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/sphere2d/images/sphere2d-1.png\" /> |\n| Please create an Optuna study named \"Optimize-2D-Sphere\" for minimization. | <img alt=\"2\" src=\"https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/sphere2d/images/sphere2d-2.png\" /> |\n| Please suggest two float parameters x, y in [-1, 1]. | <img alt=\"3\" src=\"https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/sphere2d/images/sphere2d-3.png\" /> |\n| Please report the objective value x\\*\\*2 + y\\*\\*2. To calculate the value, please use the JavaScript interpreter and do not round the values. | <img alt=\"4\" src=\"https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/sphere2d/images/sphere2d-4.png\" /> |\n| Please suggest another parameter set and evaluate it. | <img alt=\"5\" src=\"https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/sphere2d/images/sphere2d-5.png\" /> |\n| Please plot the optimization history so far. | <img alt=\"6\" src=\"https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/sphere2d/images/sphere2d-6.png\" /> |\n\n### Starting the Optuna Dashboard and Analyzing Optimization Results\n\nYou can also start the [Optuna dashboard](https://github.com/optuna/optuna-dashboard) via the MCP server to analyze the optimization results interactively.\n\n| User prompt | Output in Claude |\n| - | - |\n| Please launch the Optuna dashboard. | <img alt=\"7\" src=\"https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/optuna-dashboard/images/optuna-dashboard-1.png\" /> |\n\nBy default, the Optuna dashboard will be launched on port 58080.\nYou can access it by navigating to `http://localhost:58080` in your web browser as shown below:\n<img alt=\"8\" src=\"https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/optuna-dashboard/images/optuna-dashboard-2.png\" />\n\nOptuna dashboard provides various visualizations to analyze the optimization results, such as optimization history, parameter importances, and more.\n\n### Optimizing the FFmpeg Encoding Parameters\n\n![ffmpeg-2](https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/ffmpeg/images/demo-ffmpeg-2.png)\n\nThis demo showcases how to use the Optuna MCP server to automatically find optimal FFmpeg encoding parameters. It optimizes x264 encoding options to maximize video quality (measured by the SSIM score) while keeping encoding time reasonable.\n\nCheck out [examples/ffmpeg](https://github.com/optuna/optuna-mcp/tree/main/examples/ffmpeg/README.md) for details.\n\n### Optimizing the Cookie Recipe\n\n![cookie-recipe](https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/cookie-recipe/images/result-table.png)\n\nIn this example, we will optimize a cookie recipe, referencing the paper titled \"[Bayesian Optimization for a Better Dessert](https://research.google/pubs/bayesian-optimization-for-a-better-dessert/)\".\n\nCheck out [examples/cookie-recipe](https://github.com/optuna/optuna-mcp/tree/main/examples/cookie-recipe/README.md) for details.\n\n### Optimizing the Matplotlib Configuration\n\n<table>\n    <caption>Default and optimized figures by Optuna MCP.</caption>\n    <tr>\n        <td><img src=\"https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/auto-matplotlib/images/first-plot.png\" alt=\"\"></td>\n        <td><img src=\"https://raw.githubusercontent.com/optuna/optuna-mcp/main/examples/auto-matplotlib/images/best-plot.png\" alt=\"\"></td>\n    </tr>\n</table>\n\nThis example optimizes a Matplotlib configuration.\n\nCheck out [examples/auto-matplotlib](https://github.com/optuna/optuna-mcp/tree/main/examples/auto-matplotlib/README.md) for details.\n\n## License\n\nMIT License (see [LICENSE](./LICENSE)).\n\n",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "optuna-mcp": {
+        "command": "uvx",
+        "args": ["optuna-mcp"],
+        "env": {}
+      },
+      "optuna-mcp-configured": {
+        "command": "uvx",
+        "args": ["optuna-mcp", "--storage", "sqlite:///optuna.db"],
+        "env": {}
+      },
+      "optuna-optuna-mcp-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "--net=host",
+          "-v",
+          "/PATH/TO/LOCAL/DIRECTORY/WHICH/INCLUDES/DB/FILE:/app/workspace",
+          "optuna/optuna-mcp:latest",
+          "--storage",
+          "sqlite:////app/workspace/optuna.db"
+        ],
+        "env": {},
+        "docker_image": "optuna/optuna-mcp:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "optuna",
+    "repo": "optuna-mcp",
+    "url": "https://github.com/optuna/optuna-mcp",
+    "name": "optuna__optuna-mcp",
+    "path": null,
+    "stars": 51,
+    "contributors": 7,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "14546738350700e4ea47bcad96d11d7257bf5b90"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:04.976Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "optuna",
+      "importance": 10
+    },
+    {
+      "name": "bottle",
+      "importance": 9
+    },
+    {
+      "name": "optuna-dashboard",
+      "importance": 8
+    },
+    {
+      "name": "torch",
+      "importance": 8
+    },
+    {
+      "name": "pandas",
+      "importance": 7
+    },
+    {
+      "name": "plotly",
+      "importance": 7
+    },
+    {
+      "name": "kaleido",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"optuna-mcp\"\ndynamic = [\"version\"]\ndescription = \"Optuna MCP Server operates, manages, and visualizes Optuna studies.\"\nreadme = \"README.md\"\nclassifiers = [\n  \"Development Status :: 3 - Alpha\",\n  \"Intended Audience :: Science/Research\",\n  \"Intended Audience :: Developers\",\n  \"License :: OSI Approved :: MIT License\",\n  \"Programming Language :: Python :: 3\",\n  \"Programming Language :: Python :: 3.12\",\n  \"Programming Language :: Python :: 3.13\",\n  \"Programming Language :: Python :: 3 :: Only\",\n  \"Topic :: Scientific/Engineering\",\n  \"Topic :: Scientific/Engineering :: Mathematics\",\n  \"Topic :: Scientific/Engineering :: Artificial Intelligence\",\n  \"Topic :: Software Development\",\n  \"Topic :: Software Development :: Libraries\",\n  \"Topic :: Software Development :: Libraries :: Python Modules\",\n]\nrequires-python = \">=3.12\"\ndependencies = [\n    \"kaleido==0.2.1\",\n    \"mcp[cli]>=1.5.0\",\n    \"optuna>=4.2.1\",\n    \"optuna-dashboard>=0.18.0\",\n    \"pandas>=2.2.3\",\n    \"plotly>=6.0.1\",\n    \"torch>=2.7.0\",\n    \"bottle>=0.13.4\",\n]\n\n[project.scripts]\noptuna-mcp = \"optuna_mcp.server:main\"\n\n[dependency-groups]\ndev = [\n    \"mypy>=1.15.0\",\n    \"pytest>=8.3.5\",\n    \"pre-commit>=4.2.0\",\n    \"ruff>=0.11.11\",\n    \"trio>=0.30.0\",\n]\n\n[build-system]\nrequires = [\"setuptools >= 61.1.0\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.setuptools.dynamic]\nversion = {attr = \"optuna_mcp.version.__version__\"}\n\n[tool.setuptools.packages.find]\ninclude = [\"optuna_mcp*\"]\n\n[tool.setuptools.package-data]\n\"optuna_mcp\" = [\n  \"py.typed\",\n]\n\n[[tool.uv.index]]\nname = \"pytorch-cpu\"\nurl = \"https://download.pytorch.org/whl/cpu\"\nexplicit = true\n\n[tool.uv.sources]\ntorch = [\n  { index = \"pytorch-cpu\" },\n]\n\n[tool.ruff]\nline-length = 99\ntarget-version = \"py312\"\n\nexclude = [\n    \".bzr\",\n    \".direnv\",\n    \".eggs\",\n    \".git\",\n    \".hg\",\n    \".mypy_cache\",\n    \".nox\",\n    \".pants.d\",\n    \".ruff_cache\",\n    \".svn\",\n    \".tox\",\n    \".venv\",\n    \"__pypackages__\",\n    \"_build\",\n    \"buck-out\",\n    \"build\",\n    \"dist\",\n    \"venv\",\n]\n\n[tool.ruff.lint]\nselect = [\n    \"E\",    # pycodestyle errors\n    \"W\",    # pycodestyle warnings\n    \"F\",    # pyflakes\n    \"I\",    # isort\n    \"N\",    # pep8-naming\n    \"UP\",   # pyupgrade\n    \"B\",    # flake8-bugbear\n    \"C4\",   # flake8-comprehensions\n    \"SIM\",  # flake8-simplify\n]\n\nignore = [\n    \"E501\",  # line too long (handled by formatter)\n]\n\n[tool.ruff.lint.isort]\nlines-after-imports = 2\nforce-single-line = true\nforce-sort-within-sections = true\norder-by-type = false\n\n[tool.ruff.format]\nquote-style = \"double\"\nindent-style = \"space\"\nskip-magic-trailing-comma = false\nline-ending = \"auto\"\n\n[tool.mypy]\n# Options configure mypy's strict mode.\nwarn_unused_configs = true\ndisallow_untyped_calls = true\ndisallow_untyped_defs = true\ndisallow_incomplete_defs = true\ncheck_untyped_defs = true\nno_implicit_optional = true\nwarn_redundant_casts = true\nstrict_equality = true\nextra_checks = true\nno_implicit_reexport = true\nignore_missing_imports = true\nexclude = [\".venv\", \"venv\", \"build\", \"docs\", \"dist\"]\n"
+}

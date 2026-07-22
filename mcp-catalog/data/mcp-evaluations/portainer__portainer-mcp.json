@@ -1,0 +1,167 @@
+{
+  "name": "portainer__portainer-mcp",
+  "display_name": "portainer-mcp",
+  "description": "Portainer MCP server",
+  "author": {
+    "name": "portainer"
+  },
+  "server": {
+    "command": "${__dirname}/portainer-mcp",
+    "args": [
+      "-server",
+      "${user_config.server_address}",
+      "-token",
+      "${user_config.api_token}",
+      "-tools",
+      "${user_config.tools_file_path}"
+    ],
+    "env": {
+      "PORTAINER_MCP_DISABLE_VERSION_CHECK": "${user_config.disable_version_check}",
+      "PORTAINER_MCP_READ_ONLY": "${user_config.read_only_mode}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "server_address": {
+      "type": "string",
+      "title": "Portainer Server Address",
+      "description": "The IP address and port of your Portainer instance (e.g., 192.168.1.100:9000)",
+      "required": true,
+      "sensitive": false
+    },
+    "api_token": {
+      "type": "string",
+      "title": "Portainer API Token",
+      "description": "The Portainer administrator API access token.",
+      "sensitive": true,
+      "required": true
+    },
+    "tools_file_path": {
+      "type": "file",
+      "title": "Tools Definition File Path",
+      "description": "Path to a custom YAML file defining MCP tools. This path is used by the AI assistant to store/read tool definitions.",
+      "required": true,
+      "default": "/tmp/tools.yaml"
+    },
+    "disable_version_check": {
+      "type": "boolean",
+      "title": "Disable Portainer Version Check",
+      "description": "Disable validation that your Portainer server version matches the supported version. Use with caution.",
+      "required": false,
+      "default": false
+    },
+    "read_only_mode": {
+      "type": "boolean",
+      "title": "Enable Read-Only Mode",
+      "description": "Enable read-only mode to prevent any modifications to Portainer resources.",
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "# Portainer MCP\n[![Go Report Card](https://goreportcard.com/badge/github.com/portainer/portainer-mcp)](https://goreportcard.com/report/github.com/portainer/portainer-mcp)\n![coverage](https://raw.githubusercontent.com/portainer/portainer-mcp/badges/.badges/main/coverage.svg)\n\nEver wished you could just ask Portainer what's going on?\n\nNow you can! Portainer MCP connects your AI assistant directly to your Portainer environments. Manage Portainer resources such as users and environments, or dive deeper by executing any Docker or Kubernetes command directly through the AI.\n\n![portainer-mcp-demo](https://downloads.portainer.io/mcp-demo5.gif)\n\n## Overview\n\nPortainer MCP is a work in progress implementation of the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) for Portainer environments. This project aims to provide a standardized way to connect Portainer's container management capabilities with AI models and other services.\n\nMCP (Model Context Protocol) is an open protocol that standardizes how applications provide context to LLMs (Large Language Models). Similar to how USB-C provides a standardized way to connect devices to peripherals, MCP provides a standardized way to connect AI models to different data sources and tools.\n\nThis implementation focuses on exposing Portainer environment data through the MCP protocol, allowing AI assistants and other tools to interact with your containerized infrastructure in a secure and standardized way.\n\n> [!NOTE]\n> This tool is designed to work with specific Portainer versions. If your Portainer version doesn't match the supported version, you can use the `--disable-version-check` flag to attempt connection anyway. See [Portainer Version Support](#portainer-version-support) for compatible versions and [Disable Version Check](#disable-version-check) for bypass instructions.\n\nSee the [Supported Capabilities](#supported-capabilities) sections for more details on compatibility and available features.\n\n*Note: This project is currently under development.*\n\nIt is currently designed to work with a Portainer administrator API token.\n\n## Installation\n\nYou can download pre-built binaries for Linux (amd64, arm64) and macOS (arm64) from the [**Latest Release Page**](https://github.com/portainer/portainer-mcp/releases/latest). Find the appropriate archive for your operating system and architecture under the \"Assets\" section.\n\n**Download the archive:**\nYou can usually download this directly from the release page. Alternatively, you can use `curl`. Here's an example for macOS (ARM64) version `v0.2.0`:\n\n```bash\n# Example for macOS (ARM64) - adjust version and architecture as needed\ncurl -Lo portainer-mcp-v0.2.0-darwin-arm64.tar.gz https://github.com/portainer/portainer-mcp/releases/download/v0.2.0/portainer-mcp-v0.2.0-darwin-arm64.tar.gz\n```\n\n(Linux AMD64 binaries are also available on the release page.)\n\n**(Optional but recommended) Verify the checksum:**\nFirst, download the corresponding `.md5` checksum file from the release page.\nExample for macOS (ARM64) `v0.2.0`:\n\n```bash\n# Download the checksum file (adjust version/arch)\ncurl -Lo portainer-mcp-v0.2.0-darwin-arm64.tar.gz.md5 https://github.com/portainer/portainer-mcp/releases/download/v0.2.0/portainer-mcp-v0.2.0-darwin-arm64.tar.gz.md5\n# Now verify (output should match the content of the .md5 file)\nif [ \"$(md5 -q portainer-mcp-v0.2.0-darwin-arm64.tar.gz)\" = \"$(cat portainer-mcp-v0.2.0-darwin-arm64.tar.gz.md5)\" ]; then echo \"OK\"; else echo \"FAILED\"; fi\n```\n\n(For Linux, you can use `md5sum -c <checksum_file_name>.md5`)\nIf the verification command outputs \"OK\", the file is intact.\n\n**Extract the archive:**\n\n```bash\n# Adjust the filename based on the downloaded version/OS/architecture\ntar -xzf portainer-mcp-v0.2.0-darwin-arm64.tar.gz\n```\n\nThis will extract the `portainer-mcp` executable.\n\n**Move the executable:**\nMove the executable to a location in your `$PATH` (e.g., `/usr/local/bin`) or note its location for the configuration step below.\n\n# Usage\n\nWith Claude Desktop, configure it like so:\n\n```\n{\n    \"mcpServers\": {\n        \"portainer\": {\n            \"command\": \"/path/to/portainer-mcp\",\n            \"args\": [\n                \"-server\",\n                \"[IP]:[PORT]\",\n                \"-token\",\n                \"[TOKEN]\",\n                \"-tools\",\n                \"/tmp/tools.yaml\"\n            ]\n        }\n    }\n}\n```\n\nReplace `[IP]`, `[PORT]` and `[TOKEN]` with the IP, port and API access token associated with your Portainer instance.\n\n> [!NOTE]\n> By default, the tool looks for \"tools.yaml\" in the same directory as the binary. If the file does not exist, it will be created there with the default tool definitions. You may need to modify this path as described above, particularly when using AI assistants like Claude that have restricted write permissions to the working directory.\n\n## Disable Version Check\n\nBy default, the application validates that your Portainer server version matches the supported version and will fail to start if there's a mismatch. If you have a Portainer server version that doesn't have a corresponding Portainer MCP version available, you can disable this version check to attempt connection anyway.\n\nTo disable the version check, add the `-disable-version-check` flag to your command arguments:\n\n```\n{\n    \"mcpServers\": {\n        \"portainer\": {\n            \"command\": \"/path/to/portainer-mcp\",\n            \"args\": [\n                \"-server\",\n                \"[IP]:[PORT]\",\n                \"-token\",\n                \"[TOKEN]\",\n                \"-disable-version-check\"\n            ]\n        }\n    }\n}\n```\n\n> [!WARNING]\n> Disabling the version check may result in unexpected behavior or API incompatibilities if your Portainer server version differs significantly from the supported version. The tool may work partially or not at all with unsupported versions.\n\nWhen using this flag:\n- The application will skip Portainer server version validation at startup\n- Some features may not work correctly due to API differences between versions\n- Newer Portainer versions may have API changes that cause errors\n- Older Portainer versions may be missing APIs that the tool expects\n\nThis flag is useful when:\n- You're running a newer Portainer version that doesn't have MCP support yet\n- You're running an older Portainer version and want to try the tool anyway\n\n## Tool Customization\n\nBy default, the tool definitions are embedded in the binary. The application will create a tools file at the default location if one doesn't already exist.\n\nYou can customize the tool definitions by specifying a custom tools file path using the `-tools` flag:\n\n```\n{\n    \"mcpServers\": {\n        \"portainer\": {\n            \"command\": \"/path/to/portainer-mcp\",\n            \"args\": [\n                \"-server\",\n                \"[IP]:[PORT]\",\n                \"-token\",\n                \"[TOKEN]\",\n                \"-tools\",\n                \"/path/to/custom/tools.yaml\"\n            ]\n        }\n    }\n}\n```\n\nThe default tools file is available for reference at `internal/tooldef/tools.yaml` in the source code. You can modify the descriptions of the tools and their parameters to alter how AI models interpret and decide to use them. You can even decide to remove some tools if you don't wish to use them.\n\n> [!WARNING]\n> Do not change the tool names or parameter definitions (other than descriptions), as this will prevent the tools from being properly registered and functioning correctly.\n\n## Read-Only Mode\n\nFor security-conscious users, the application can be run in read-only mode. This mode ensures that only read operations are available, completely preventing any modifications to your Portainer resources.\n\nTo enable read-only mode, add the `-read-only` flag to your command arguments:\n\n```\n{\n    \"mcpServers\": {\n        \"portainer\": {\n            \"command\": \"/path/to/portainer-mcp\",\n            \"args\": [\n                \"-server\",\n                \"[IP]:[PORT]\",\n                \"-token\",\n                \"[TOKEN]\",\n                \"-read-only\"\n            ]\n        }\n    }\n}\n```\n\nWhen using read-only mode:\n- Only read tools (list, get) will be available to the AI model\n- All write tools (create, update, delete) are not loaded\n- The Docker proxy requests tool is not loaded\n- The Kubernetes proxy requests tool is not loaded\n\n# Portainer Version Support\n\nThis tool is pinned to support a specific version of Portainer. The application will validate the Portainer server version at startup and fail if it doesn't match the required version.\n\n| Portainer MCP Version  | Supported Portainer Version |\n|--------------|----------------------------|\n| 0.1.0 | 2.28.1 |\n| 0.2.0 | 2.28.1 |\n| 0.3.0 | 2.28.1 |\n| 0.4.0 | 2.29.2 |\n| 0.4.1 | 2.29.2 |\n| 0.5.0 | 2.30.0 |\n| 0.6.0 | 2.31.2 |\n\n> [!NOTE]\n> If you need to connect to an unsupported Portainer version, you can use the `-disable-version-check` flag to bypass version validation. See the [Disable Version Check](#disable-version-check) section for more details and important warnings about using this feature.\n\n# Supported Capabilities\n\nThe following table lists the currently (latest version) supported operations through MCP tools:\n\n| Resource | Operation | Description | Supported In Version |\n|----------|-----------|-------------|----------------------|\n| **Environments** | | | |\n| | ListEnvironments | List all available environments | 0.1.0 |\n| | UpdateEnvironmentTags | Update tags associated with an environment | 0.1.0 |\n| | UpdateEnvironmentUserAccesses | Update user access policies for an environment | 0.1.0 |\n| | UpdateEnvironmentTeamAccesses | Update team access policies for an environment | 0.1.0 |\n| **Environment Groups (Edge Groups)** | | | |\n| | ListEnvironmentGroups | List all available environment groups | 0.1.0 |\n| | CreateEnvironmentGroup | Create a new environment group | 0.1.0 |\n| | UpdateEnvironmentGroupName | Update the name of an environment group | 0.1.0 |\n| | UpdateEnvironmentGroupEnvironments | Update environments associated with a group | 0.1.0 |\n| | UpdateEnvironmentGroupTags | Update tags associated with a group | 0.1.0 |\n| **Access Groups (Endpoint Groups)** | | | |\n| | ListAccessGroups | List all available access groups | 0.1.0 |\n| | CreateAccessGroup | Create a new access group | 0.1.0 |\n| | UpdateAccessGroupName | Update the name of an access group | 0.1.0 |\n| | UpdateAccessGroupUserAccesses | Update user accesses for an access group | 0.1.0 |\n| | UpdateAccessGroupTeamAccesses | Update team accesses for an access group | 0.1.0 |\n| | AddEnvironmentToAccessGroup | Add an environment to an access group | 0.1.0 |\n| | RemoveEnvironmentFromAccessGroup | Remove an environment from an access group | 0.1.0 |\n| **Stacks (Edge Stacks)** | | | |\n| | ListStacks | List all available stacks | 0.1.0 |\n| | GetStackFile | Get the compose file for a specific stack | 0.1.0 |\n| | CreateStack | Create a new Docker stack | 0.1.0 |\n| | UpdateStack | Update an existing Docker stack | 0.1.0 |\n| **Tags** | | | |\n| | ListEnvironmentTags | List all available environment tags | 0.1.0 |\n| | CreateEnvironmentTag | Create a new environment tag | 0.1.0 |\n| **Teams** | | | |\n| | ListTeams | List all available teams | 0.1.0 |\n| | CreateTeam | Create a new team | 0.1.0 |\n| | UpdateTeamName | Update the name of a team | 0.1.0 |\n| | UpdateTeamMembers | Update the members of a team | 0.1.0 |\n| **Users** | | | |\n| | ListUsers | List all available users | 0.1.0 |\n| | UpdateUser | Update an existing user | 0.1.0 |\n| | GetSettings | Get the settings of the Portainer instance | 0.1.0 |\n| **Docker** | | | |\n| | DockerProxy | Proxy ANY Docker API requests | 0.2.0 |\n| **Kubernetes** | | | |\n| | KubernetesProxy | Proxy ANY Kubernetes API requests | 0.3.0 |\n| | getKubernetesResourceStripped | Proxy GET Kubernetes API requests and automatically strip verbose metadata fields | 0.6.0 |\n\n# Development\n\n## Code Statistics\n\nThe repository includes a helper script `cloc.sh` to calculate lines of code and other metrics for the Go source files using the `cloc` tool. You might need to install `cloc` first (e.g., `sudo apt install cloc` or `brew install cloc`).\n\nRun the script from the repository root to see the default summary output:\n\n```bash\n./cloc.sh\n```\n\nRefer to the comment header within the `cloc.sh` script for details on available flags to retrieve specific metrics.\n\n## Token Counting\n\nTo get an estimate of how many tokens your current tool definitions consume in prompts, you can use the provided Go program and shell script to query the Anthropic API's token counting endpoint.\n\n**1. Generate the Tools JSON:**\n\nFirst, use the `token-count` Go program to convert your YAML tool definitions into the JSON format required by the Anthropic API. Run this from the repository root:\n\n```bash\n# Replace internal/tooldef/tools.yaml with your YAML file if different\n# Replace .tmp/tools.json with your desired output path\ngo run ./cmd/token-count -input internal/tooldef/tools.yaml -output .tmp/tools.json\n```\n\nThis command reads the tool definitions from the specified input YAML file and writes a JSON array of tools (containing `name`, `description`, and `input_schema`) to the specified output file.\n\n**2. Query the Anthropic API:**\n\nNext, use the `token.sh` script to send these tool definitions along with a sample message to the Anthropic API. You will need an Anthropic API key for this step.\n\n```bash\n# Ensure you have jq installed\n# Replace sk-ant-xxxxxxxx with your actual Anthropic API key\n# Replace .tmp/tools.json with the path to the file generated in step 1\n./token.sh -k sk-ant-xxxxxxxx -i .tmp/tools.json\n```\n\nThe script will output the JSON response from the Anthropic API, which includes the estimated token count for the provided tools and sample message under the `usage.input_tokens` field.\n\nThis process helps in understanding the token cost associated with the toolset provided to the language model.\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "portainer-mcp": {
+        "command": "/path/to/portainer-mcp",
+        "args": ["-server", "[IP]:[PORT]", "-token", "[TOKEN]", "-tools", "/tmp/tools.yaml"],
+        "env": {}
+      },
+      "portainer-mcp-disable-version-check": {
+        "command": "/path/to/portainer-mcp",
+        "args": ["-server", "[IP]:[PORT]", "-token", "[TOKEN]", "-disable-version-check"],
+        "env": {}
+      },
+      "portainer-mcp-custom-tools": {
+        "command": "/path/to/portainer-mcp",
+        "args": ["-server", "[IP]:[PORT]", "-token", "[TOKEN]", "-tools", "/path/to/custom/tools.yaml"],
+        "env": {}
+      },
+      "portainer-mcp-read-only": {
+        "command": "/path/to/portainer-mcp",
+        "args": ["-server", "[IP]:[PORT]", "-token", "[TOKEN]", "-read-only"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "portainer",
+    "repo": "portainer-mcp",
+    "url": "https://github.com/portainer/portainer-mcp",
+    "name": "portainer__portainer-mcp",
+    "path": null,
+    "stars": 61,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "783cf7fa44095d9d90459dfe73988c677f8ce3ae"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:16.479Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "portainer/client-api-go/v2",
+      "importance": 9
+    },
+    {
+      "name": "docker/docker",
+      "importance": 8
+    },
+    {
+      "name": "k8s.io/apimachinery",
+      "importance": 8
+    },
+    {
+      "name": "go-openapi/runtime",
+      "importance": 6
+    },
+    {
+      "name": "docker/go-connections",
+      "importance": 5
+    },
+    {
+      "name": "go-openapi/strfmt",
+      "importance": 5
+    },
+    {
+      "name": "gopkg.in/yaml.v3",
+      "importance": 5
+    },
+    {
+      "name": "rs/zerolog",
+      "importance": 4
+    },
+    {
+      "name": "golang.org/x/mod",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/portainer/portainer-mcp\n\ngo 1.24.2\n\nrequire (\n\tgithub.com/docker/docker v28.0.1+incompatible\n\tgithub.com/docker/go-connections v0.5.0\n\tgithub.com/go-openapi/runtime v0.28.0\n\tgithub.com/go-openapi/strfmt v0.23.0\n\tgithub.com/mark3labs/mcp-go v0.32.0\n\tgithub.com/portainer/client-api-go/v2 v2.31.2\n\tgithub.com/rs/zerolog v1.34.0\n\tgithub.com/stretchr/testify v1.10.0\n\tgithub.com/testcontainers/testcontainers-go v0.36.0\n\tgolang.org/x/mod v0.24.0\n\tgopkg.in/yaml.v3 v3.0.1\n\tk8s.io/apimachinery v0.33.1\n)\n\nrequire (\n\tdario.cat/mergo v1.0.1 // indirect\n\tgithub.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect\n\tgithub.com/Microsoft/go-winio v0.6.2 // indirect\n\tgithub.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect\n\tgithub.com/cenkalti/backoff/v4 v4.2.1 // indirect\n\tgithub.com/containerd/log v0.1.0 // indirect\n\tgithub.com/containerd/platforms v0.2.1 // indirect\n\tgithub.com/cpuguy83/dockercfg v0.3.2 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/distribution/reference v0.6.0 // indirect\n\tgithub.com/docker/go-units v0.5.0 // indirect\n\tgithub.com/ebitengine/purego v0.8.2 // indirect\n\tgithub.com/felixge/httpsnoop v1.0.4 // indirect\n\tgithub.com/fxamacker/cbor/v2 v2.7.0 // indirect\n\tgithub.com/go-logr/logr v1.4.2 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/go-ole/go-ole v1.2.6 // indirect\n\tgithub.com/go-openapi/analysis v0.23.0 // indirect\n\tgithub.com/go-openapi/errors v0.22.0 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.21.0 // indirect\n\tgithub.com/go-openapi/jsonreference v0.21.0 // indirect\n\tgithub.com/go-openapi/loads v0.22.0 // indirect\n\tgithub.com/go-openapi/spec v0.21.0 // indirect\n\tgithub.com/go-openapi/swag v0.23.0 // indirect\n\tgithub.com/go-openapi/validate v0.24.0 // indirect\n\tgithub.com/gogo/protobuf v1.3.2 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/klauspost/compress v1.17.4 // indirect\n\tgithub.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect\n\tgithub.com/magiconair/properties v1.8.9 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mattn/go-colorable v0.1.14 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/mitchellh/mapstructure v1.5.0 // indirect\n\tgithub.com/moby/docker-image-spec v1.3.1 // indirect\n\tgithub.com/moby/patternmatcher v0.6.0 // indirect\n\tgithub.com/moby/sys/sequential v0.5.0 // indirect\n\tgithub.com/moby/sys/user v0.1.0 // indirect\n\tgithub.com/moby/sys/userns v0.1.0 // indirect\n\tgithub.com/moby/term v0.5.0 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/morikuni/aec v1.0.0 // indirect\n\tgithub.com/oklog/ulid v1.3.1 // indirect\n\tgithub.com/opencontainers/go-digest v1.0.0 // indirect\n\tgithub.com/opencontainers/image-spec v1.1.1 // indirect\n\tgithub.com/opentracing/opentracing-go v1.2.0 // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect\n\tgithub.com/shirou/gopsutil/v4 v4.25.1 // indirect\n\tgithub.com/sirupsen/logrus v1.9.3 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/stretchr/objx v0.5.2 // indirect\n\tgithub.com/tklauser/go-sysconf v0.3.12 // indirect\n\tgithub.com/tklauser/numcpus v0.6.1 // indirect\n\tgithub.com/x448/float16 v0.8.4 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgithub.com/yusufpapurcu/wmi v1.2.4 // indirect\n\tgo.mongodb.org/mongo-driver v1.14.0 // indirect\n\tgo.opentelemetry.io/auto/sdk v1.1.0 // indirect\n\tgo.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect\n\tgo.opentelemetry.io/otel v1.35.0 // indirect\n\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace v1.35.0 // indirect\n\tgo.opentelemetry.io/otel/metric v1.35.0 // indirect\n\tgo.opentelemetry.io/otel/sdk v1.35.0 // indirect\n\tgo.opentelemetry.io/otel/trace v1.35.0 // indirect\n\tgo.opentelemetry.io/proto/otlp v1.5.0 // indirect\n\tgolang.org/x/crypto v0.36.0 // indirect\n\tgolang.org/x/net v0.38.0 // indirect\n\tgolang.org/x/sync v0.12.0 // indirect\n\tgolang.org/x/sys v0.31.0 // indirect\n\tgolang.org/x/text v0.23.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463 // indirect\n\tgoogle.golang.org/protobuf v1.36.6 // indirect\n\tgopkg.in/inf.v0 v0.9.1 // indirect\n\tk8s.io/klog/v2 v2.130.1 // indirect\n\tk8s.io/utils v0.0.0-20241104100929-3ea5e8cea738 // indirect\n\tsigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect\n\tsigs.k8s.io/randfill v1.0.0 // indirect\n\tsigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect\n\tsigs.k8s.io/yaml v1.4.0 // indirect\n\n)\n"
+}

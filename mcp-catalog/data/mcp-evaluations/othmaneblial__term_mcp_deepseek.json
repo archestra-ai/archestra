@@ -1,0 +1,92 @@
+{
+  "name": "othmaneblial__term_mcp_deepseek",
+  "display_name": "term_mcp_deepseek",
+  "description": "A MCP‑like server using the DeepSeek API for Terminal",
+  "author": {
+    "name": "OthmaneBlial"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server.py"],
+    "env": {
+      "DEEPSEEK_API_KEY": "${user_config.deepseek_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "deepseek_api_key": {
+      "type": "string",
+      "title": "DeepSeek API Key",
+      "description": "Your DeepSeek API key for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# DeepSeek MCP-like Server for Terminal\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/OthmaneBlial/term_mcp_deepseek)](https://archestra.ai/mcp-catalog/othmaneblial__term_mcp_deepseek)\nThis project is a prototype implementation of an MCP‑like server using the DeepSeek API. It aims to demonstrate the core concepts behind the Model Context Protocol (MCP) by exposing endpoints that allow AI assistants to:\n \n- List available tools.\n- Invoke commands on an active shell session.\n- Integrate with an AI chat (DeepSeek) that can include special instructions (e.g., `CMD:` lines) to trigger command execution.\n\n> **Note:** While this implementation captures many of the MCP ideas, it is not yet a fully compliant MCP server as defined by Anthropic. It is designed as a proof-of-concept, and further enhancements (e.g., JSON‑RPC protocol support, real‑time updates via SSE, session management, and improved security) would be needed for production use.\n\n## Features\n\n- **Chat Interface:**  \n  A simple web-based chat client (using Flask and Tailwind CSS) where users can interact with the server.\n\n- **AI Integration:**  \n  Uses the DeepSeek API to generate responses. The AI can instruct the server to execute terminal commands by including lines beginning with `CMD:`.\n\n- **Terminal Command Execution:**  \n  Executes shell commands via a persistent Bash session using the `pexpect` library and returns output to the client.\n\n- **MCP Endpoints:**  \n  Provides `/mcp/list_tools` and `/mcp/call_tool` endpoints that mimic MCP tool discovery and invocation.\n\n## Getting Started\n\n### Prerequisites\n\n- Python 3.8+\n- [pip](https://pip.pypa.io/)\n- A valid DeepSeek API key\n\n### Installation\n\n1. **Clone the repository:**\n\n   ```bash\n   git clone https://github.com/OthmaneBlial/term_mcp_deepseek.git\n   cd term_mcp_deepseek\n   ```\n\n2. **Create and activate a virtual environment:**\n\n   ```bash\n   python3 -m venv venv\n   source venv/bin/activate  # On Windows, use `venv\\Scripts\\activate`\n   ```\n\n3. **Install the required dependencies:**\n\n   ```bash\n   pip install -r requirements.txt\n   ```\n\n4. **Configure your API key:**\n\n   Update the `DEEPSEEK_API_KEY` in `.env` with your DeepSeek API key.\n\n### Running the Server\n\nRun the Flask server with:\n\n```bash\npython server.py\n```\n\nVisit [http://127.0.0.1:5000](http://127.0.0.1:5000) to access the chat interface.\n\n## Endpoints\n\n### Chat Endpoint\n- **URL:** `/chat`\n- **Method:** `POST`\n- **Payload:** `{ \"message\": \"your message here\" }`\n- **Description:**  \n  Adds the user message to the conversation, sends it to the DeepSeek API, looks for any command instructions (`CMD:`), executes them, and returns the final response.\n\n### MCP Endpoints\n\n#### List Tools\n- **URL:** `/mcp/list_tools`\n- **Method:** `POST`\n- **Response:**  \n  JSON listing available tools (e.g., `write_to_terminal`, `read_terminal_output`, `send_control_character`).\n\n#### Call Tool\n- **URL:** `/mcp/call_tool`\n- **Method:** `POST`\n- **Payload:**  \n  ```json\n  {\n    \"name\": \"tool_name\",\n    \"arguments\": { ... }\n  }\n  ```\n- **Description:**  \n  Directly invoke a tool command on the server.\n\n## Future Improvements\n\n- **Protocol Standardization:**  \n  Implement JSON‑RPC for a more robust and standardized communication protocol.\n\n- **Real-time Communication:**  \n  Add Server‑Sent Events (SSE) or WebSockets for live command output streaming.\n\n- **Session & Security Enhancements:**  \n  Introduce per‑user sessions, proper authentication, input sanitization, and comprehensive error handling.\n\n- **Modular Code Architecture:**  \n  Further separate API logic from business logic for better maintainability and scalability.\n\n## License\n\nThis project is open-source and available under the [MIT License](LICENSE).\n\n",
+  "category": "AI Tools",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "term-mcp-deepseek": {
+        "command": "python",
+        "args": ["server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "OthmaneBlial",
+    "repo": "term_mcp_deepseek",
+    "url": "https://github.com/OthmaneBlial/term_mcp_deepseek",
+    "name": "othmaneblial__term_mcp_deepseek",
+    "path": null,
+    "stars": 12,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "bc1836705bb5c6deb5bf8cb8e6a9a159895045a3"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:22.000Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "Flask",
+      "importance": 10
+    },
+    {
+      "name": "pexpect",
+      "importance": 9
+    },
+    {
+      "name": "psutil",
+      "importance": 6
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nFlask==2.3.3\npexpect==4.8.0\npsutil==5.9.5\npython-dotenv==1.0.0 \n"
+}

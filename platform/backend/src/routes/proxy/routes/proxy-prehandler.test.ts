@@ -346,8 +346,38 @@ describe("createProxyPreHandler", () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
       expect(body.error.message).toContain("/chat/completions and /models");
+      // The message must name the offending request and the expected base
+      // URL, so a misconfigured client sees the cause in its own error body.
+      expect(body.error.message).toContain("POST /v1/github-copilot/responses");
+      expect(body.error.message).toContain(
+        '"/v1/github-copilot" or "/v1/github-copilot/<llm-proxy-id>"',
+      );
       // The preHandler must short-circuit before http-proxy's handler runs:
       // a forwarded request would relay the caller's raw token upstream.
+      expect(upstreamHits).toBe(0);
+    });
+
+    test("rejectUnhandledPaths: names the stray base-URL segment for a supported endpoint", async () => {
+      await setupProxy({
+        apiPrefix: "/v1/github-copilot",
+        endpointSuffix: "/chat/completions",
+        providerName: "GitHubCopilot",
+        rejectUnhandledPaths: true,
+      });
+
+      // A base URL misconfigured with a trailing "/v1" makes OpenAI-compatible
+      // clients request /v1/github-copilot/v1/models — /models itself is
+      // supported, so the error must point at the base URL, not the endpoint.
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/github-copilot/v1/models",
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error.type).toBe("invalid_request_error");
+      expect(body.error.message).toContain("GET /v1/github-copilot/v1/models");
+      expect(body.error.message).toContain('no trailing "/v1"');
       expect(upstreamHits).toBe(0);
     });
 

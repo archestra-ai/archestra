@@ -1,0 +1,74 @@
+{
+  "name": "kukapay__blockbeats-mcp",
+  "display_name": "blockbeats-mcp",
+  "description": "An MCP server that delivers blockchain news and in-depth articles from BlockBeats for AI agents.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# BlockBeats MCP Server\n\nAn MCP server that delivers blockchain news and in-depth articles from BlockBeats for AI agents.\n\n[![Discord](https://img.shields.io/discord/1353556181251133481?cacheSeconds=3600)](https://discord.gg/aRnuu2eJ)\n![GitHub License](https://img.shields.io/github/license/kukapay/blockbeats-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n\n## Features\n\n- **Fast News Retrieval**: Fetch the latest blockchain fast news articles using the `get_latest_news` tool.\n- **In-Depth Articles**: Access detailed blockchain articles with the `get_latest_articles` tool.\n- **Multi-Language Support**: Supports English (`en`), Simplified Chinese (`cn`), and Traditional Chinese (`cht`).\n\n## Installation\n\n### Installing via Smithery\n\nTo install BlockBeats News for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kukapay/blockbeats-mcp):\n\n```bash\nnpx -y @smithery/cli install @kukapay/blockbeats-mcp --client claude\n```\n\n### Manual Installation\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/blockbeats-mcp.git\n   cd blockbeats-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   pip install mcp[cli] httpx\n   ```\n\n3. **Run the Server**:\n   - For development mode (hot reload enabled):\n     ```bash\n     mcp dev main.py\n     ```\n   - For production use with Claude Desktop:\n     ```bash\n     mcp install main.py --name \"BlockBeats News\"\n     ```\n     \n## Usage\n\nThe server provides two main tools:\n\n### `get_latest_news`\nFetches the latest blockchain fast news articles from BlockBeats' `open-api/open-flash` endpoint.\n\n**Parameters**:\n- `size` (int): Number of articles per page (default: 5).\n- `max_pages` (int): Maximum number of pages to fetch (default: 1).\n- `type` (str): News type filter, e.g., `'push'` for important news (default: `'push'`).\n- `lang` (str): Language of the news (`'en'` for English, `'cn'` for Simplified Chinese, `'cht'` for Traditional Chinese; default: `'en'`).\n\n**Example**:\n- **Input**: \"Get me the 2 latest blockchain news articles in English from one page.\"\n- **Output**:\n  ```\n  ID: 288909\n  Title: Bitcoin Falls Below $75,000, 24-Hour Drop Widens to 5.75%\n  Content: <p>BlockBeats News, April 9 – According to HTX market data, Bitcoin has fallen below $75,000, currently priced at $74,854, with a 24-hour drop widening to 5.75%.</p>\n  Link: https://m.theblockbeats.info/flash/288909\n  Created: 2025-04-09 15:26:29\n\n  ID: 288908\n  Title: Ethereum Drops Below $1,400, Down 9.36% in 24 Hours\n  Content: <p>BlockBeats News, April 9 – Per HTX market data, Ethereum has fallen below $1,400, now at $1,398, with a 24-hour decline of 9.36%.</p>\n  Link: https://m.theblockbeats.info/flash/288908\n  Created: 2025-04-09 15:22:24\n  ```\n\n### `get_latest_articles`\nFetches in-depth blockchain articles from BlockBeats' `open-api/open-information` endpoint.\n\n**Parameters**:\n- `size` (int): Number of articles per page (default: 5).\n- `max_pages` (int): Maximum number of pages to fetch (default: 1).\n- `type` (str): Article type filter, e.g., `'push'` for important articles (default: `'push'`).\n- `lang` (str): Language of the articles (`'en'` for English, `'cn'` for Simplified Chinese, `'cht'` for Traditional Chinese; default: `'en'`).\n\n**Example**:\n- **Input**: \"Show me one in-depth blockchain article in English from the first page with push type.\"\n- **Output**:\n  ```\n  Title: Solo Bitcoin Miners Are Winning More Blocks Lately—What Gives?\n  Description: Using a $180 Bitaxe miner with a 1.2 TH/s hash rate, the daily chance of mining a block is just 0.00068390%.\n  Content: <blockquote>Original Title: Solo Bitcoin Miners Are Winning More Blocks Lately—What Gives?</blockquote><blockquote>Author: Mat Di Salvo, Decrypt</blockquote><blockquote>Translated by: Lila, BlockBeats</blockquote><p><br></p><p>Last week, another solo Bitcoin miner successfully mined a block, earning a reward of 3.125 BTC, worth nearly $260,000 including transaction fees. This is just one of several recent wins for solo miners in recent months.</p><p><br></p><p>Was this miner just lucky? Is solo mining becoming more common? Can an average person with a basic miner and modest hash power take on the big mining firms?</p><p><br></p><p>The answers vary. While solo miners—here referring to individual enthusiasts or small, low-profile groups—have indeed been mining blocks more often recently, the increase is modest and unlikely to surge dramatically.</p><p><br></p><p><img src=\"https://image.theblockbeats.info/file_v6/20250408/e870c395-deef-48de-b133-0a5ea85053d5.png?x-oss-process=image/quality,q_50/format,webp\" alt=\"\" data-href=\"\" style=\"\"/></p><p><br></p><p>Scott Norris, CEO of solo mining firm Optiminer, put it bluntly: solo mining is still like “buying a lottery ticket.”</p><p><br></p>...\n  Link: https://m.theblockbeats.info/news/57650\n  Created: 2025-04-08 23:30:00\n  ```\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Finance",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kukapay-blockbeats-mcp-dev": {
+        "command": "mcp",
+        "args": ["dev", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "blockbeats-mcp",
+    "url": "https://github.com/kukapay/blockbeats-mcp",
+    "name": "blockbeats-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f89d765f8eeb4ccd7d4d24ec102001b68593ab90"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:10.246Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"blockbeats-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that delivers blockchain news and in-depth articles from BlockBeats for AI agents.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.6.0\",\n]\n"
+}

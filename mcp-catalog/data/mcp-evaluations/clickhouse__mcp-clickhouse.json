@@ -1,0 +1,281 @@
+{
+  "name": "clickhouse__mcp-clickhouse",
+  "display_name": "mcp-clickhouse",
+  "description": "Connect ClickHouse to your AI assistants.",
+  "author": {
+    "name": "ClickHouse"
+  },
+  "server": {
+    "command": "python3",
+    "args": ["-m", "mcp_clickhouse.main"],
+    "env": {
+      "CLICKHOUSE_HOST": "${user_config.clickhouse_host}",
+      "CLICKHOUSE_PORT": "${user_config.clickhouse_port}",
+      "CLICKHOUSE_USER": "${user_config.clickhouse_user}",
+      "CLICKHOUSE_PASSWORD": "${user_config.clickhouse_password}",
+      "CLICKHOUSE_SECURE": "${user_config.clickhouse_secure}",
+      "CLICKHOUSE_VERIFY": "${user_config.clickhouse_verify}",
+      "CLICKHOUSE_CONNECT_TIMEOUT": "${user_config.clickhouse_connect_timeout}",
+      "CLICKHOUSE_SEND_RECEIVE_TIMEOUT": "${user_config.clickhouse_send_receive_timeout}",
+      "CHDB_ENABLED": "${user_config.chdb_enabled}",
+      "CLICKHOUSE_ENABLED": "${user_config.clickhouse_enabled}",
+      "CHDB_DATA_PATH": "${user_config.chdb_data_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "clickhouse_host": {
+      "type": "string",
+      "title": "ClickHouse Host",
+      "description": "The hostname of your ClickHouse server",
+      "required": true,
+      "sensitive": false
+    },
+    "clickhouse_port": {
+      "type": "number",
+      "title": "ClickHouse Port",
+      "description": "The port of your ClickHouse server",
+      "required": false,
+      "sensitive": false,
+      "default": 8443
+    },
+    "clickhouse_user": {
+      "type": "string",
+      "title": "ClickHouse User",
+      "description": "The username for authentication",
+      "required": true,
+      "sensitive": false
+    },
+    "clickhouse_password": {
+      "type": "string",
+      "title": "ClickHouse Password",
+      "description": "The password for authentication",
+      "required": true,
+      "sensitive": true
+    },
+    "clickhouse_secure": {
+      "type": "boolean",
+      "title": "ClickHouse Secure Connection",
+      "description": "Enable secure (TLS/SSL) connection to ClickHouse",
+      "required": false,
+      "sensitive": false,
+      "default": true
+    },
+    "clickhouse_verify": {
+      "type": "boolean",
+      "title": "ClickHouse Verify TLS Certificate",
+      "description": "Verify ClickHouse server's TLS certificate",
+      "required": false,
+      "sensitive": false,
+      "default": true
+    },
+    "clickhouse_connect_timeout": {
+      "type": "number",
+      "title": "ClickHouse Connection Timeout (seconds)",
+      "description": "Timeout for establishing a connection to ClickHouse",
+      "required": false,
+      "sensitive": false,
+      "default": 30,
+      "min": 1
+    },
+    "clickhouse_send_receive_timeout": {
+      "type": "number",
+      "title": "ClickHouse Send/Receive Timeout (seconds)",
+      "description": "Timeout for sending and receiving data from ClickHouse",
+      "required": false,
+      "sensitive": false,
+      "default": 30,
+      "min": 1
+    },
+    "chdb_enabled": {
+      "type": "boolean",
+      "title": "Enable chDB",
+      "description": "Enable the embedded chDB (ClickHouse engine) functionality",
+      "required": false,
+      "sensitive": false,
+      "default": false
+    },
+    "clickhouse_enabled": {
+      "type": "boolean",
+      "title": "Enable ClickHouse",
+      "description": "Enable the ClickHouse cluster connection functionality",
+      "required": false,
+      "sensitive": false,
+      "default": true
+    },
+    "chdb_data_path": {
+      "type": "directory",
+      "title": "chDB Data Path",
+      "description": "Path to store chDB data",
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "readme": "# ClickHouse MCP Server\n\n[![PyPI - Version](https://img.shields.io/pypi/v/mcp-clickhouse)](https://pypi.org/project/mcp-clickhouse)\n\nAn MCP server for ClickHouse.\n\n<a href=\"https://glama.ai/mcp/servers/yvjy4csvo1\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/yvjy4csvo1/badge\" alt=\"mcp-clickhouse MCP server\" /></a>\n\n## Features\n\n### ClickHouse Tools\n\n* `run_select_query`\n  * Execute SQL queries on your ClickHouse cluster.\n  * Input: `sql` (string): The SQL query to execute.\n  * All ClickHouse queries are run with `readonly = 1` to ensure they are safe.\n\n* `list_databases`\n  * List all databases on your ClickHouse cluster.\n\n* `list_tables`\n  * List all tables in a database.\n  * Input: `database` (string): The name of the database.\n\n### chDB Tools\n\n* `run_chdb_select_query`\n  * Execute SQL queries using [chDB](https://github.com/chdb-io/chdb)'s embedded ClickHouse engine.\n  * Input: `sql` (string): The SQL query to execute.\n  * Query data directly from various sources (files, URLs, databases) without ETL processes.\n\n### Health Check Endpoint\n\nWhen running with HTTP or SSE transport, a health check endpoint is available at `/health`. This endpoint:\n- Returns `200 OK` with the ClickHouse version if the server is healthy and can connect to ClickHouse\n- Returns `503 Service Unavailable` if the server cannot connect to ClickHouse\n\nExample:\n```bash\ncurl http://localhost:8000/health\n# Response: OK - Connected to ClickHouse 24.3.1\n```\n\n## Configuration\n\nThis MCP server supports both ClickHouse and chDB. You can enable either or both depending on your needs.\n\n1. Open the Claude Desktop configuration file located at:\n   * On macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   * On Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n2. Add the following:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-clickhouse\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--with\",\n        \"mcp-clickhouse\",\n        \"--python\",\n        \"3.10\",\n        \"mcp-clickhouse\"\n      ],\n      \"env\": {\n        \"CLICKHOUSE_HOST\": \"<clickhouse-host>\",\n        \"CLICKHOUSE_PORT\": \"<clickhouse-port>\",\n        \"CLICKHOUSE_USER\": \"<clickhouse-user>\",\n        \"CLICKHOUSE_PASSWORD\": \"<clickhouse-password>\",\n        \"CLICKHOUSE_SECURE\": \"true\",\n        \"CLICKHOUSE_VERIFY\": \"true\",\n        \"CLICKHOUSE_CONNECT_TIMEOUT\": \"30\",\n        \"CLICKHOUSE_SEND_RECEIVE_TIMEOUT\": \"30\"\n      }\n    }\n  }\n}\n```\n\nUpdate the environment variables to point to your own ClickHouse service.\n\nOr, if you'd like to try it out with the [ClickHouse SQL Playground](https://sql.clickhouse.com/), you can use the following config:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-clickhouse\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--with\",\n        \"mcp-clickhouse\",\n        \"--python\",\n        \"3.10\",\n        \"mcp-clickhouse\"\n      ],\n      \"env\": {\n        \"CLICKHOUSE_HOST\": \"sql-clickhouse.clickhouse.com\",\n        \"CLICKHOUSE_PORT\": \"8443\",\n        \"CLICKHOUSE_USER\": \"demo\",\n        \"CLICKHOUSE_PASSWORD\": \"\",\n        \"CLICKHOUSE_SECURE\": \"true\",\n        \"CLICKHOUSE_VERIFY\": \"true\",\n        \"CLICKHOUSE_CONNECT_TIMEOUT\": \"30\",\n        \"CLICKHOUSE_SEND_RECEIVE_TIMEOUT\": \"30\"\n      }\n    }\n  }\n}\n```\n\nFor chDB (embedded ClickHouse engine), add the following configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-clickhouse\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--with\",\n        \"mcp-clickhouse\",\n        \"--python\",\n        \"3.10\",\n        \"mcp-clickhouse\"\n      ],\n      \"env\": {\n        \"CHDB_ENABLED\": \"true\",\n        \"CLICKHOUSE_ENABLED\": \"false\",\n        \"CHDB_DATA_PATH\": \"/path/to/chdb/data\"\n      }\n    }\n  }\n}\n```\n\nYou can also enable both ClickHouse and chDB simultaneously:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-clickhouse\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--with\",\n        \"mcp-clickhouse\",\n        \"--python\",\n        \"3.10\",\n        \"mcp-clickhouse\"\n      ],\n      \"env\": {\n        \"CLICKHOUSE_HOST\": \"<clickhouse-host>\",\n        \"CLICKHOUSE_PORT\": \"<clickhouse-port>\",\n        \"CLICKHOUSE_USER\": \"<clickhouse-user>\",\n        \"CLICKHOUSE_PASSWORD\": \"<clickhouse-password>\",\n        \"CLICKHOUSE_SECURE\": \"true\",\n        \"CLICKHOUSE_VERIFY\": \"true\",\n        \"CLICKHOUSE_CONNECT_TIMEOUT\": \"30\",\n        \"CLICKHOUSE_SEND_RECEIVE_TIMEOUT\": \"30\",\n        \"CHDB_ENABLED\": \"true\",\n        \"CHDB_DATA_PATH\": \"/path/to/chdb/data\"\n      }\n    }\n  }\n}\n```\n\n3. Locate the command entry for `uv` and replace it with the absolute path to the `uv` executable. This ensures that the correct version of `uv` is used when starting the server. On a mac, you can find this path using `which uv`.\n\n4. Restart Claude Desktop to apply the changes.\n\n### Running Without uv (Using System Python)\n\nIf you prefer to use the system Python installation instead of uv, you can install the package from PyPI and run it directly:\n\n1. Install the package using pip:\n   ```bash\n   python3 -m pip install mcp-clickhouse\n   ```\n\n   To upgrade to the latest version:\n   ```bash\n   python3 -m pip install --upgrade mcp-clickhouse\n   ```\n\n2. Update your Claude Desktop configuration to use Python directly:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-clickhouse\": {\n      \"command\": \"python3\",\n      \"args\": [\n        \"-m\",\n        \"mcp_clickhouse.main\"\n      ],\n      \"env\": {\n        \"CLICKHOUSE_HOST\": \"<clickhouse-host>\",\n        \"CLICKHOUSE_PORT\": \"<clickhouse-port>\",\n        \"CLICKHOUSE_USER\": \"<clickhouse-user>\",\n        \"CLICKHOUSE_PASSWORD\": \"<clickhouse-password>\",\n        \"CLICKHOUSE_SECURE\": \"true\",\n        \"CLICKHOUSE_VERIFY\": \"true\",\n        \"CLICKHOUSE_CONNECT_TIMEOUT\": \"30\",\n        \"CLICKHOUSE_SEND_RECEIVE_TIMEOUT\": \"30\"\n      }\n    }\n  }\n}\n```\n\nAlternatively, you can use the installed script directly:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-clickhouse\": {\n      \"command\": \"mcp-clickhouse\",\n      \"env\": {\n        \"CLICKHOUSE_HOST\": \"<clickhouse-host>\",\n        \"CLICKHOUSE_PORT\": \"<clickhouse-port>\",\n        \"CLICKHOUSE_USER\": \"<clickhouse-user>\",\n        \"CLICKHOUSE_PASSWORD\": \"<clickhouse-password>\",\n        \"CLICKHOUSE_SECURE\": \"true\",\n        \"CLICKHOUSE_VERIFY\": \"true\",\n        \"CLICKHOUSE_CONNECT_TIMEOUT\": \"30\",\n        \"CLICKHOUSE_SEND_RECEIVE_TIMEOUT\": \"30\"\n      }\n    }\n  }\n}\n```\n\nNote: Make sure to use the full path to the Python executable or the `mcp-clickhouse` script if they are not in your system PATH. You can find the paths using:\n- `which python3` for the Python executable\n- `which mcp-clickhouse` for the installed script\n\n## Development\n\n1. In `test-services` directory run `docker compose up -d` to start the ClickHouse cluster.\n\n2. Add the following variables to a `.env` file in the root of the repository.\n\n*Note: The use of the `default` user in this context is intended solely for local development purposes.*\n\n```bash\nCLICKHOUSE_HOST=localhost\nCLICKHOUSE_PORT=8123\nCLICKHOUSE_USER=default\nCLICKHOUSE_PASSWORD=clickhouse\n```\n\n3. Run `uv sync` to install the dependencies. To install `uv` follow the instructions [here](https://docs.astral.sh/uv/). Then do `source .venv/bin/activate`.\n\n4. For easy testing with the MCP Inspector, run `fastmcp dev mcp_clickhouse/mcp_server.py` to start the MCP server.\n\n5. To test with HTTP transport and the health check endpoint:\n   ```bash\n   # Using default port 8000\n   CLICKHOUSE_MCP_SERVER_TRANSPORT=http python -m mcp_clickhouse.main\n\n   # Or with a custom port\n   CLICKHOUSE_MCP_SERVER_TRANSPORT=http CLICKHOUSE_MCP_BIND_PORT=4200 python -m mcp_clickhouse.main\n\n   # Then in another terminal:\n   curl http://localhost:8000/health  # or http://localhost:4200/health for custom port\n   ```\n\n### Environment Variables\n\nThe following environment variables are used to configure the ClickHouse and chDB connections:\n\n#### ClickHouse Variables\n\n##### Required Variables\n\n* `CLICKHOUSE_HOST`: The hostname of your ClickHouse server\n* `CLICKHOUSE_USER`: The username for authentication\n* `CLICKHOUSE_PASSWORD`: The password for authentication\n\n> [!CAUTION]\n> It is important to treat your MCP database user as you would any external client connecting to your database, granting only the minimum necessary privileges required for its operation. The use of default or administrative users should be strictly avoided at all times.\n\n##### Optional Variables\n\n* `CLICKHOUSE_PORT`: The port number of your ClickHouse server\n  * Default: `8443` if HTTPS is enabled, `8123` if disabled\n  * Usually doesn't need to be set unless using a non-standard port\n* `CLICKHOUSE_SECURE`: Enable/disable HTTPS connection\n  * Default: `\"true\"`\n  * Set to `\"false\"` for non-secure connections\n* `CLICKHOUSE_VERIFY`: Enable/disable SSL certificate verification\n  * Default: `\"true\"`\n  * Set to `\"false\"` to disable certificate verification (not recommended for production)\n* `CLICKHOUSE_CONNECT_TIMEOUT`: Connection timeout in seconds\n  * Default: `\"30\"`\n  * Increase this value if you experience connection timeouts\n* `CLICKHOUSE_SEND_RECEIVE_TIMEOUT`: Send/receive timeout in seconds\n  * Default: `\"300\"`\n  * Increase this value for long-running queries\n* `CLICKHOUSE_DATABASE`: Default database to use\n  * Default: None (uses server default)\n  * Set this to automatically connect to a specific database\n* `CLICKHOUSE_MCP_SERVER_TRANSPORT`: Sets the transport method for the MCP server.\n  * Default: `\"stdio\"`\n  * Valid options: `\"stdio\"`, `\"http\"`, `\"sse\"`. This is useful for local development with tools like MCP Inspector.\n* `CLICKHOUSE_MCP_BIND_HOST`: Host to bind the MCP server to when using HTTP or SSE transport\n  * Default: `\"127.0.0.1\"`\n  * Set to `\"0.0.0.0\"` to bind to all network interfaces (useful for Docker or remote access)\n  * Only used when transport is `\"http\"` or `\"sse\"`\n* `CLICKHOUSE_MCP_BIND_PORT`: Port to bind the MCP server to when using HTTP or SSE transport\n  * Default: `\"8000\"`\n  * Only used when transport is `\"http\"` or `\"sse\"`\n* `CLICKHOUSE_ENABLED`: Enable/disable ClickHouse functionality\n  * Default: `\"true\"`\n  * Set to `\"false\"` to disable ClickHouse tools when using chDB only\n\n#### chDB Variables\n\n* `CHDB_ENABLED`: Enable/disable chDB functionality\n  * Default: `\"false\"`\n  * Set to `\"true\"` to enable chDB tools\n* `CHDB_DATA_PATH`: The path to the chDB data directory\n  * Default: `\":memory:\"` (in-memory database)\n  * Use `:memory:` for in-memory database\n  * Use a file path for persistent storage (e.g., `/path/to/chdb/data`)\n\n#### Example Configurations\n\nFor local development with Docker:\n\n```env\n# Required variables\nCLICKHOUSE_HOST=localhost\nCLICKHOUSE_USER=default\nCLICKHOUSE_PASSWORD=clickhouse\n\n# Optional: Override defaults for local development\nCLICKHOUSE_SECURE=false  # Uses port 8123 automatically\nCLICKHOUSE_VERIFY=false\n```\n\nFor ClickHouse Cloud:\n\n```env\n# Required variables\nCLICKHOUSE_HOST=your-instance.clickhouse.cloud\nCLICKHOUSE_USER=default\nCLICKHOUSE_PASSWORD=your-password\n\n# Optional: These use secure defaults\n# CLICKHOUSE_SECURE=true  # Uses port 8443 automatically\n# CLICKHOUSE_DATABASE=your_database\n```\n\nFor ClickHouse SQL Playground:\n\n```env\nCLICKHOUSE_HOST=sql-clickhouse.clickhouse.com\nCLICKHOUSE_USER=demo\nCLICKHOUSE_PASSWORD=\n# Uses secure defaults (HTTPS on port 8443)\n```\n\nFor chDB only (in-memory):\n\n```env\n# chDB configuration\nCHDB_ENABLED=true\nCLICKHOUSE_ENABLED=false\n# CHDB_DATA_PATH defaults to :memory:\n```\n\nFor chDB with persistent storage:\n\n```env\n# chDB configuration\nCHDB_ENABLED=true\nCLICKHOUSE_ENABLED=false\nCHDB_DATA_PATH=/path/to/chdb/data\n```\n\nFor MCP Inspector or remote access with HTTP transport:\n\n```env\nCLICKHOUSE_HOST=localhost\nCLICKHOUSE_USER=default\nCLICKHOUSE_PASSWORD=clickhouse\nCLICKHOUSE_MCP_SERVER_TRANSPORT=http\nCLICKHOUSE_MCP_BIND_HOST=0.0.0.0  # Bind to all interfaces\nCLICKHOUSE_MCP_BIND_PORT=4200  # Custom port (default: 8000)\n```\n\nWhen using HTTP transport, the server will run on the configured port (default 8000). For example, with the above configuration:\n- MCP endpoint: `http://localhost:4200/mcp`\n- Health check: `http://localhost:4200/health`\n\nYou can set these variables in your environment, in a `.env` file, or in the Claude Desktop configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-clickhouse\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--with\",\n        \"mcp-clickhouse\",\n        \"--python\",\n        \"3.10\",\n        \"mcp-clickhouse\"\n      ],\n      \"env\": {\n        \"CLICKHOUSE_HOST\": \"<clickhouse-host>\",\n        \"CLICKHOUSE_USER\": \"<clickhouse-user>\",\n        \"CLICKHOUSE_PASSWORD\": \"<clickhouse-password>\",\n        \"CLICKHOUSE_DATABASE\": \"<optional-database>\",\n        \"CLICKHOUSE_MCP_SERVER_TRANSPORT\": \"stdio\",\n        \"CLICKHOUSE_MCP_BIND_HOST\": \"127.0.0.1\",\n        \"CLICKHOUSE_MCP_BIND_PORT\": \"8000\"\n      }\n    }\n  }\n}\n```\n\nNote: The bind host and port settings are only used when transport is set to \"http\" or \"sse\".\n\n### Running tests\n\n```bash\nuv sync --all-extras --dev # install dev dependencies\nuv run ruff check . # run linting\n\ndocker compose up -d test_services # start ClickHouse\nuv run pytest -v tests\nuv run pytest -v tests/test_tool.py # ClickHouse only\nuv run pytest -v tests/test_chdb_tool.py # chDB only\n```\n\n## YouTube Overview\n\n[![YouTube](http://i.ytimg.com/vi/y9biAm_Fkqw/hqdefault.jpg)](https://www.youtube.com/watch?v=y9biAm_Fkqw)\n",
+  "category": "Data",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-clickhouse-uv-clickhouse-placeholder": {
+        "command": "uv",
+        "args": ["run", "--with", "mcp-clickhouse", "--python", "3.10", "mcp-clickhouse"],
+        "env": {
+          "CLICKHOUSE_HOST": "<clickhouse-host>",
+          "CLICKHOUSE_PORT": "<clickhouse-port>",
+          "CLICKHOUSE_USER": "<clickhouse-user>",
+          "CLICKHOUSE_PASSWORD": "<clickhouse-password>",
+          "CLICKHOUSE_SECURE": "true",
+          "CLICKHOUSE_VERIFY": "true",
+          "CLICKHOUSE_CONNECT_TIMEOUT": "30",
+          "CLICKHOUSE_SEND_RECEIVE_TIMEOUT": "30"
+        }
+      },
+      "mcp-clickhouse-uv-clickhouse-playground": {
+        "command": "uv",
+        "args": ["run", "--with", "mcp-clickhouse", "--python", "3.10", "mcp-clickhouse"],
+        "env": {
+          "CLICKHOUSE_HOST": "sql-clickhouse.clickhouse.com",
+          "CLICKHOUSE_PORT": "8443",
+          "CLICKHOUSE_USER": "demo",
+          "CLICKHOUSE_PASSWORD": "",
+          "CLICKHOUSE_SECURE": "true",
+          "CLICKHOUSE_VERIFY": "true",
+          "CLICKHOUSE_CONNECT_TIMEOUT": "30",
+          "CLICKHOUSE_SEND_RECEIVE_TIMEOUT": "30"
+        }
+      },
+      "mcp-clickhouse-uv-chdb": {
+        "command": "uv",
+        "args": ["run", "--with", "mcp-clickhouse", "--python", "3.10", "mcp-clickhouse"],
+        "env": {
+          "CHDB_ENABLED": "true",
+          "CLICKHOUSE_ENABLED": "false",
+          "CHDB_DATA_PATH": "/path/to/chdb/data"
+        }
+      },
+      "mcp-clickhouse-uv-both": {
+        "command": "uv",
+        "args": ["run", "--with", "mcp-clickhouse", "--python", "3.10", "mcp-clickhouse"],
+        "env": {
+          "CLICKHOUSE_HOST": "<clickhouse-host>",
+          "CLICKHOUSE_PORT": "<clickhouse-port>",
+          "CLICKHOUSE_USER": "<clickhouse-user>",
+          "CLICKHOUSE_PASSWORD": "<clickhouse-password>",
+          "CLICKHOUSE_SECURE": "true",
+          "CLICKHOUSE_VERIFY": "true",
+          "CLICKHOUSE_CONNECT_TIMEOUT": "30",
+          "CLICKHOUSE_SEND_RECEIVE_TIMEOUT": "30",
+          "CHDB_ENABLED": "true",
+          "CHDB_DATA_PATH": "/path/to/chdb/data"
+        }
+      },
+      "mcp-clickhouse-python-module": {
+        "command": "python3",
+        "args": ["-m", "mcp_clickhouse.main"],
+        "env": {
+          "CLICKHOUSE_HOST": "<clickhouse-host>",
+          "CLICKHOUSE_PORT": "<clickhouse-port>",
+          "CLICKHOUSE_USER": "<clickhouse-user>",
+          "CLICKHOUSE_PASSWORD": "<clickhouse-password>",
+          "CLICKHOUSE_SECURE": "true",
+          "CLICKHOUSE_VERIFY": "true",
+          "CLICKHOUSE_CONNECT_TIMEOUT": "30",
+          "CLICKHOUSE_SEND_RECEIVE_TIMEOUT": "30"
+        }
+      },
+      "mcp-clickhouse-python-script": {
+        "command": "mcp-clickhouse",
+        "args": [],
+        "env": {
+          "CLICKHOUSE_HOST": "<clickhouse-host>",
+          "CLICKHOUSE_PORT": "<clickhouse-port>",
+          "CLICKHOUSE_USER": "<clickhouse-user>",
+          "CLICKHOUSE_PASSWORD": "<clickhouse-password>",
+          "CLICKHOUSE_SECURE": "true",
+          "CLICKHOUSE_VERIFY": "true",
+          "CLICKHOUSE_CONNECT_TIMEOUT": "30",
+          "CLICKHOUSE_SEND_RECEIVE_TIMEOUT": "30"
+        }
+      },
+      "mcp-clickhouse-dev-fastmcp": {
+        "command": "fastmcp",
+        "args": ["dev", "mcp_clickhouse/mcp_server.py"],
+        "env": {}
+      },
+      "mcp-clickhouse-http-default-port": {
+        "command": "python",
+        "args": ["-m", "mcp_clickhouse.main"],
+        "env": {
+          "CLICKHOUSE_MCP_SERVER_TRANSPORT": "http"
+        }
+      },
+      "mcp-clickhouse-http-custom-port": {
+        "command": "python",
+        "args": ["-m", "mcp_clickhouse.main"],
+        "env": {
+          "CLICKHOUSE_MCP_SERVER_TRANSPORT": "http",
+          "CLICKHOUSE_MCP_BIND_PORT": "4200"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ClickHouse",
+    "repo": "mcp-clickhouse",
+    "url": "https://github.com/ClickHouse/mcp-clickhouse",
+    "name": "clickhouse__mcp-clickhouse",
+    "path": null,
+    "stars": 514,
+    "contributors": 16,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "46c46637776d3f9a5b67fe44d6b73fe8edca39b7"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:27.246Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "clickhouse-connect",
+      "importance": 9
+    },
+    {
+      "name": "chdb",
+      "importance": 9
+    },
+    {
+      "name": "pip-system-certs",
+      "importance": 5
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-clickhouse\"\nversion = \"0.1.11\"\ndescription = \"An MCP server for ClickHouse.\"\nreadme = \"README.md\"\nlicense = \"Apache-2.0\"\nlicense-files = [\"LICENSE\"]\nrequires-python = \">=3.10\"\ndependencies = [\n     \"fastmcp>=2.0.0\",\n     \"python-dotenv>=1.0.1\",\n     \"clickhouse-connect>=0.8.16\",\n     \"pip-system-certs>=4.0\",\n     \"chdb>=3.3.0\",\n]\n\n[project.scripts]\nmcp-clickhouse = \"mcp_clickhouse.main:main\"\n\n[project.urls]\nHome = \"https://github.com/ClickHouse/mcp-clickhouse\"\n\n[project.optional-dependencies]\ndev = [\n    \"ruff\",\n    \"pytest\",\n    \"pytest-asyncio\"\n]\n\n[tool.hatch.build.targets.wheel]\npackages = [\"mcp_clickhouse\"]\n\n[tool.ruff]\nline-length = 100\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n"
+}

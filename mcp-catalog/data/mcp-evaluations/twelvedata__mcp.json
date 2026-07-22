@@ -1,0 +1,183 @@
+{
+  "name": "twelvedata__mcp",
+  "display_name": "mcp",
+  "description": "Twelve Data MCP (Model Context Protocol) Server provides seamless, real-time access to financial market data via WebSocket, enabling reliable streaming of price quotes, market metrics, and events directly into your applications.",
+  "author": {
+    "name": "twelvedata"
+  },
+  "server": {
+    "command": "uvx",
+    "args": [
+      "mcp-server-twelve-data",
+      "-k",
+      "${user_config.twelve_data_api_key}",
+      "-u",
+      "${user_config.openai_api_key}"
+    ],
+    "env": {
+      "AUTH_HEADER": "${user_config.auth_header}",
+      "OPENAI_API_KEY": "${user_config.openai_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "twelve_data_api_key": {
+      "type": "string",
+      "title": "Twelve Data API Key",
+      "description": "Your API key from Twelve Data, required for accessing financial market data.",
+      "sensitive": true,
+      "required": true
+    },
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your API key for OpenAI GPT-4o, used by the u-tool for natural language processing and smart routing (also used as an environment variable for remote server configuration).",
+      "sensitive": true,
+      "required": true
+    },
+    "num_endpoints": {
+      "type": "number",
+      "title": "Number of Endpoints",
+      "description": "Optionally limit the server to the N most popular endpoints instead of using the u-tool. If provided, the OpenAI API Key will not be used.",
+      "required": false,
+      "min": 1
+    },
+    "auth_header": {
+      "type": "string",
+      "title": "Authorization Header (Remote Server)",
+      "description": "The full Authorization header string for the remote server configuration (e.g., 'apikey YOUR_TWELVE_DATA_API_KEY'). This is an environment variable used by the remote server setup.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "\n# Twelve Data MCP Server\n\n## Overview\n\nThe Twelve Data MCP Server provides a seamless integration with the Twelve Data API to access financial market data. It enables retrieval of historical time series, real-time quotes, and instrument metadata for stocks, forex pairs, and cryptocurrencies.\n\n> Note: This server is currently in early-stage development; features and tools may evolve alongside updates to the Twelve Data API.\n\n## Obtaining Your API Key\n\nTo use Twelve Data MCP Server, you must first obtain an API key from Twelve Data:\n\n1. Visit [Twelve Data Sign Up](https://twelvedata.com/register?utm_source=github&utm_medium=repository&utm_campaign=mcp_repo).\n2. Create an account or log in if you already have one.\n3. Navigate to your Dashboard and copy your API key.\n\nImportant: Access to specific endpoints or markets may vary depending on your Twelve Data subscription plan.\n\n## U-tool\nu-tool is an AI-powered universal router for the Twelve Data API that transforms how you access financial data. Instead of navigating 100+ individual endpoints and complex documentation, simply describe what you need in plain English.\n\nHow it works:\n🧠 Natural Language Processing: Understands your request in conversational English\n🔍 Smart Routing: Uses vector search to find the most relevant endpoints from Twelve Data's entire API catalog\n🎯 Intelligent Selection: Leverages OpenAI GPT-4o to choose the optimal method and generate correct parameters\n⚡ Automatic Execution: Calls the appropriate endpoint and returns formatted results\n\nWhat you can ask:\n📈 \"Show me Apple stock performance this week\"\n📊 \"Calculate RSI for Bitcoin with 14-day period\" \n💰 \"Get Tesla's financial ratios and balance sheet\"\n🌍 \"Compare EUR/USD exchange rates over 6 months\"\n🏦 \"Find top-performing tech ETFs\"\n\nSupported data categories:\n- Market data & quotes • Technical indicators (100+)\n- Fundamental data & financials • Currencies & crypto\n- Mutual funds & ETFs • Economic calendars & events\n\nOne tool, entire Twelve Data ecosystem. No API documentation required.\n\n## Installation\n\n### Using **UV** (recommended)\n\nDirectly run without local installation using [`uvx`](https://docs.astral.sh/uv/guides/tools/):\n\n```bash\nuvx mcp-server-twelve-data --help\n```\n\n### Using **pip**\n\nInstall the server via pip:\n\n```bash\npip install mcp-server-twelve-data\npython -m mcp_server_twelve_data --help\n```\n\n## Configuration\n\n### Claude Desktop integration\n\nAdd one of the following snippets to your `claude_desktop_config.json`:\n(1) local stdio server configured with utool\n```json\n{\n  \"mcpServers\": {\n    \"twelvedata\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-twelve-data@latest\", \"-k\", \"YOUR_TWELVE_DATA_API_KEY\", \"-u\", \"YOUR_OPEN_AI_APIKEY\"]\n    }\n  }\n}\n```\n\n(2) local stdio server only with 10 the most popular endpoints\n```json\n{\n  \"mcpServers\": {\n    \"twelvedata\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-twelve-data@latest\", \"-k\", \"YOUR_TWELVE_DATA_API_KEY\", \"-n\", \"10\"]\n    }\n  }\n}\n```\n\n(3) twelve data remote mcp server\n\n```json\n{\n  \"mcpServers\": {\n    \"twelvedata-remote\": {\n      \"command\": \"npx\",\n      \"args\":    [\n        \"mcp-remote\", \"https://mcp.twelvedata.com/mcp\",\n        \"--header\",\n        \"Authorization:${AUTH_HEADER}\",\n        \"--header\",\n        \"X-OpenAPI-Key:${OPENAI_API_KEY}\"\n      ],\n      \"env\": {\n        \"AUTH_HEADER\": \"apikey YOUR_TWELVE_DATA_API_KEY\",\n        \"OPENAI_API_KEY\": \"YOUR_OPENAI_API_KEY\"\n      }\n    }\n  }\n}\n```\n\nSee how easy it is to connect Claude Desktop to Twelve Data MCP Server:\n\n![Example usage with Claude Desktop](./example.gif)\n\n### VS Code integration\n\n#### Automatic setup (with UV)\n\n[![Install with UV in VS Code](https://img.shields.io/badge/VS_Code-UV-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=twelvedata&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22mcp-server-twelve-data%22%2C%22-k%22%2C%22YOUR_TWELVE_DATA_API_KEY%22%2C%22-u%22%2C%22YOUR_OPENAI_API_KEY%22%5D%7D)\n\n#### Manual setup\n\nFor manual configuration, add to your **User Settings (JSON)**:\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"twelvedata\": {\n          \"command\": \"uvx\",\n          \"args\": [\n            \"mcp-server-twelve-data\",\n            \"-k\", \"YOUR_TWELVE_DATA_API_KEY\",\n            \"-u\", \"YOUR_OPENAI_API_KEY\"\n          ]\n        }\n    }\n  }\n}\n```\n\n## Debugging\n\nUse the MCP Inspector for troubleshooting:\n\n```bash\nnpx @modelcontextprotocol/inspector uvx mcp-server-twelve-data@latest -k YOUR_TWELVE_DATA_API_KEY\n```\n\n## Development guide\n\n1. **Local testing:** Utilize the MCP Inspector as described in **Debugging**.\n2. **Claude Desktop:**: Update `claude_desktop_config.json` to reference local source paths.\n\n## Docker usage\n\nBuild and run the server using Docker:\n\n```bash\ndocker build -t mcp-server-twelve-data .\n\ndocker run --rm mcp-server-twelve-data \\\n  -k YOUR_TWELVE_DATA_API_KEY \\\n  -u YOUR_OPENAI_API_KEY \\\n  -t streamable-http\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. See the [LICENSE](../../LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-twelve-data-claude-utool": {
+        "command": "uvx",
+        "args": ["mcp-server-twelve-data@latest", "-k", "YOUR_TWELVE_DATA_API_KEY", "-u", "YOUR_OPEN_AI_APIKEY"],
+        "env": {}
+      },
+      "mcp-server-twelve-data-claude-10endpoints": {
+        "command": "uvx",
+        "args": ["mcp-server-twelve-data@latest", "-k", "YOUR_TWELVE_DATA_API_KEY", "-n", "10"],
+        "env": {}
+      },
+      "mcp-remote-twelvedata": {
+        "command": "npx",
+        "args": [
+          "mcp-remote",
+          "https://mcp.twelvedata.com/mcp",
+          "--header",
+          "Authorization:${AUTH_HEADER}",
+          "--header",
+          "X-OpenAPI-Key:${OPENAI_API_KEY}"
+        ],
+        "env": {
+          "AUTH_HEADER": "apikey YOUR_TWELVE_DATA_API_KEY",
+          "OPENAI_API_KEY": "YOUR_OPENAI_API_KEY"
+        }
+      },
+      "mcp-server-twelve-data-vscode-auto": {
+        "command": "uvx",
+        "args": ["mcp-server-twelve-data", "-k", "YOUR_TWELVE_DATA_API_KEY", "-u", "YOUR_OPENAI_API_KEY"],
+        "env": {}
+      },
+      "mcp-server-twelve-data-vscode-manual": {
+        "command": "uvx",
+        "args": ["mcp-server-twelve-data", "-k", "YOUR_TWELVE_DATA_API_KEY", "-u", "YOUR_OPENAI_API_KEY"],
+        "env": {}
+      },
+      "mcp-server-twelve-data-inspector": {
+        "command": "uvx",
+        "args": ["mcp-server-twelve-data@latest", "-k", "YOUR_TWELVE_DATA_API_KEY"],
+        "env": {}
+      },
+      "mcp-server-twelve-data-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "mcp-server-twelve-data",
+          "-k",
+          "YOUR_TWELVE_DATA_API_KEY",
+          "-u",
+          "YOUR_OPEN_AI_API_KEY",
+          "-t",
+          "streamable-http"
+        ],
+        "env": {},
+        "docker_image": "mcp-server-twelve-data"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "twelvedata",
+    "repo": "mcp",
+    "url": "https://github.com/twelvedata/mcp",
+    "name": "mcp",
+    "path": null,
+    "stars": 19,
+    "contributors": 4,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a74555c37c6954185d19df2a83bb66e826cd13a8"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:16.665Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "click",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    },
+    {
+      "name": "pyyml",
+      "importance": 5
+    },
+    {
+      "name": "lancedb",
+      "importance": 7
+    },
+    {
+      "name": "pandas",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-twelve-data\"\nversion = \"0.2.4\"\ndescription = \"A Model Context Protocol server providing tools access Twelve Data.\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\nauthors = [{ name = \"Twelve Data, PBC.\" }]\nmaintainers = [{ name = \"Kopyev Eugene\", email = \"kopyev.eugene@gmail.com\" }]\nkeywords = [\"twelve\", \"data\", \"mcp\", \"llm\", \"automation\"]\nlicense = { text = \"MIT\" }\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.13\",\n]\ndependencies = [\n    \"click==8.2.1\",\n    \"mcp[cli]>=1.9.4\",\n    \"openai>=1.86.0\",\n    \"pydantic==2.11.5\",\n    \"pylint>=3.3.7\",\n    \"pyyml>=0.0.2\",\n]\n\n[project.scripts]\nmcp-server-twelve-data = \"mcp_server_twelve_data:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\n    \"pyright>=1.1.389\",\n    \"ruff>=0.7.3\",\n    \"pytest>=8.0.0\",\n    \"datamodel-code-generator>=0.31.2\",\n    \"pytest-asyncio>=1.0.0\",\n    \"bs4>=0.0.2\",\n]\n\n[project.optional-dependencies]\ndb = [\n    \"lancedb>=0.23.0\",\n    \"pandas>=2.3.1\"\n]\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_classes = \"Test*\"\npython_functions = \"test_*\"\nasyncio_default_fixture_loop_scope = \"function\"\naddopts = \"-s\"\nlog_cli = true\nlog_cli_level = \"INFO\"\n\n\n[tool.hatch.build]\nexclude = [\n    \"src/resources/*\",\n    \"example.gif\"\n]\n"
+}

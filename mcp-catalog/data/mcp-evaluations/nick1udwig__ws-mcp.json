@@ -1,0 +1,159 @@
+{
+  "name": "nick1udwig__ws-mcp",
+  "display_name": "ws-mcp",
+  "description": "MCP server from nick1udwig/ws-mcp",
+  "author": {
+    "name": "nick1udwig"
+  },
+  "server": {
+    "command": "uvx",
+    "args": [
+      "--refresh",
+      "ws-mcp@latest",
+      "--port",
+      "${user_config.port}",
+      "--config",
+      "${user_config.config_file}",
+      "--command",
+      "${user_config.commands}"
+    ],
+    "env": {
+      "BRAVE_API_KEY": "${user_config.brave_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "port": {
+      "type": "number",
+      "title": "Port Number",
+      "description": "The port on which ws-mcp will listen for connections.",
+      "default": 10125,
+      "required": false
+    },
+    "config_file": {
+      "type": "file",
+      "title": "Configuration File",
+      "description": "Path to the JSON configuration file specifying MCP servers to run. If not provided, default servers (wcgw, fetch) are used.",
+      "required": false
+    },
+    "brave_api_key": {
+      "type": "string",
+      "title": "Brave API Key",
+      "description": "Your API key for Brave search. This will be made available to child MCP servers, such as the Brave search server.",
+      "sensitive": true,
+      "required": false
+    },
+    "commands": {
+      "type": "string",
+      "title": "MCP Server Commands",
+      "description": "Commands to launch additional MCP servers. Can be supplied multiple times to run several servers.",
+      "multiple": true,
+      "required": false
+    }
+  },
+  "readme": "# ws-mcp\n\nWrap MCP stdio servers with a WebSocket.\nFor use with [kibitz](https://github.com/nick1udwig/kibitz).\n\n## Quickstart\n\n### Prerequisites\n\nInstall [uv](https://github.com/astral-sh/uv):\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n### Configuration\n\nThe config file specifies which MCP servers to run.\nThe default config (no `--config` or `--command` args provided) includes:\n- [`wcgw`](https://github.com/rusiaaman/wcgw): For general system operations and file management\n- [`fetch`](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch): For making HTTP requests\n\nTo make a configuration file:\n\n1. Create your configuration file:\n   ```bash\n   cp sample.config.json config.json\n   ```\n2. Modify `config.json` to add or remove servers based on your needs.\n3. Run with `--config path/to/config.json` to use the new config file.\n\n### Running ws-mcp\n\nBasic usage with default config file (no `--config` or `--command` provided) and port:\n```bash\nuvx --refresh ws-mcp@latest\n```\n\nThis will start all configured servers on the default port (`10125`).\n\nTo use a config file and port:\n```bash\nuvx --refresh ws-mcp@latest --config path/to/config --port 10125\n```\n\n## Detailed Usage\n\n```bash\n# Example using fetch\nuvx --refresh ws-mcp --command \"uvx mcp-server-fetch\" --port 3002\n\n# Example using wcgw\nuvx --refresh ws-mcp --command \"uvx --from wcgw@latest --python 3.12 wcgw_mcp\" --port 3001\n\n# Example using Brave search\nexport BRAVE_API_KEY=YOUR_API_KEY_HERE\nuvx --refresh ws-mcp --env BRAVE_API_KEY=$BRAVE_API_KEY --command \"npx -y @modelcontextprotocol/server-brave-search\" --port 3003\n\n# Or, with a .env file:\nuvx --refresh ws-mcp --env-file path/to/.env --command \"npx -y @modelcontextprotocol/server-brave-search\" --port 3003\n\n# `--command` can be supplied multiple times!\n#  Example serving multiple servers at once:\nuvx --refresh ws-mcp --env-file path/to/.env --command \"npx -y @modelcontextprotocol/server-brave-search\" --command \"uvx mcp-server-fetch\" --port 3004\n\n# Servers can also be specified in a `.json` file following [the standard MCP format](https://modelcontextprotocol.io/quickstart/user#2-add-the-filesystem-mcp-server)\nuvx --refresh ws-mcp --env-file path/to/.env --config path/to/config.json --port 3005\n```\n",
+  "category": "AI Tools",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-fetch": {
+        "command": "uvx",
+        "args": ["mcp-server-fetch"],
+        "env": {}
+      },
+      "wcgw_mcp-macos": {
+        "command": "uvx",
+        "args": ["--from", "wcgw@latest", "--python", "3.12", "wcgw_mcp"],
+        "env": {}
+      },
+      "wcgw_mcp-linux": {
+        "command": "uvx",
+        "args": ["--from", "/tmp/wcgw", "--with", "/tmp/wcgw/src/mcp_wcgw", "--python", "3.12", "wcgw_mcp"],
+        "env": {}
+      },
+      "modelcontextprotocol-server-brave-search-env-var": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+        "env": {
+          "BRAVE_API_KEY": "YOUR_API_KEY_HERE"
+        }
+      },
+      "modelcontextprotocol-server-brave-search-env-file": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+        "env": {}
+      },
+      "modelcontextprotocol-server-brave-search-multiple": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+        "env": {}
+      },
+      "mcp-server-fetch-multiple": {
+        "command": "uvx",
+        "args": ["mcp-server-fetch"],
+        "env": {}
+      },
+      "wcgw-default-configured": {
+        "command": "uvx",
+        "args": ["--from", "wcgw@latest", "--python", "3.12", "wcgw_mcp"],
+        "env": {}
+      },
+      "fetch-default-configured": {
+        "command": "uvx",
+        "args": ["mcp-server-fetch"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "nick1udwig",
+    "repo": "ws-mcp",
+    "url": "https://github.com/nick1udwig/ws-mcp",
+    "name": "ws-mcp",
+    "path": null,
+    "stars": 19,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "15b5414db935b673d9f86a9b68a4c829c7d7d6c4"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:53.330Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "jsonschema",
+      "importance": 8
+    },
+    {
+      "name": "websockets",
+      "importance": 10
+    },
+    {
+      "name": "colorama",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"ws-mcp\"\nversion = \"0.1.11\"\ndescription = \"Wrap MCP servers with a WebSocket.\"\nreadme = \"README.md\"\nauthors = [{ name = \"nick1udwig\", email = \"hosted-fornet@protonmail.com\" }]\nrequires-python = \">=3.12\"\ndependencies = [\n    \"jsonschema>=4.23.0\",\n    \"websockets>=14.1\",\n    \"colorama>=0.4.6\",\n]\n\n[project.urls]\nGitHub = \"https://github.com/nick1udwig/ws-mcp\"\n\n[project.scripts]\nws-mcp = \"ws_mcp:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n"
+}

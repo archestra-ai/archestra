@@ -1,0 +1,84 @@
+{
+  "name": "danielpeter-99__calcom-mcp",
+  "display_name": "calcom-mcp",
+  "description": "A FastMCP server for interacting with the Cal.com API. This enables LLMs to manage event types, create bookings, and access Cal.com scheduling data programmatically.",
+  "author": {
+    "name": "Danielpeter-99"
+  },
+  "server": {
+    "command": "fastmcp",
+    "args": ["run", "app.py", "--transport", "sse", "--port", "8010"],
+    "env": {
+      "CALCOM_API_KEY": "${user_config.calcom_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "calcom_api_key": {
+      "type": "string",
+      "title": "Cal.com API Key",
+      "description": "Your Cal.com API Key (v2) for authentication. This is required for all tools to function.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Cal.com FastMCP Server\r\n\r\n> ⚠️ **Disclaimer**: This project is not affiliated with or endorsed by Cal.com. I am an independent developer and have no association with Cal.com in any official capacity.\r\n\r\nThis project provides a FastMCP server for interacting with the Cal.com API. It allows Language Learning Models (LLMs) to use tools to connect with important Cal.com functionalities like managing event types and bookings.\r\n\r\n## Prerequisites\r\n\r\n- Python 3.8+\r\n- A Cal.com account and API Key (v2)\r\n\r\n## Setup\r\n\r\n1.  **Clone the repository (if applicable) or download the files.**\r\n    ```bash\r\n    git clone https://github.com/Danielpeter-99/calcom-mcp.git\r\n    cd calcom-mcp\r\n    ```\r\n    \r\n2.  **Create a virtual environment (recommended):**\r\n    ```bash\r\n    python -m venv venv\r\n    source venv/bin/activate  # On Windows: venv\\Scripts\\activate\r\n    ```\r\n\r\n3.  **Install dependencies:**\r\n    ```bash\r\n    pip install -r requirements.txt\r\n    ```\r\n\r\n4.  **Set up the Cal.com API Key:**\r\n    You need to set the `CALCOM_API_KEY` environment variable. You can get your API key from your Cal.com settings page (usually under Developer or Security settings).\r\n\r\n    -   **Linux/macOS:**\r\n        ```bash\r\n        export CALCOM_API_KEY=\"your_actual_api_key_here\"\r\n        ```\r\n        To make it permanent, add this line to your shell configuration file (e.g., `.bashrc`, `.zshrc`).\r\n\r\n    -   **Windows (PowerShell):**\r\n        ```powershell\r\n        $env:CALCOM_API_KEY=\"your_actual_api_key_here\"\r\n        ```\r\n        To make it permanent, you can set it through the System Properties > Environment Variables.\r\n\r\n## Running the Server\r\n\r\nOnce the setup is complete, you can run the FastMCP server:\r\n\r\n```bash\r\nfastmcp run app.py --transport sse --port 8010\r\n```\r\n\r\nThe server will start at localhost:8010, and you should see output indicating it's running. If the `CALCOM_API_KEY` is not set, a warning will be displayed.\r\n\r\n## Available Tools\r\n\r\nThe server currently provides the following tools for LLM interaction:\r\n\r\n-   `get_api_status()`: Check if the Cal.com API key is configured in the environment. Returns a string indicating the status.\r\n-   `list_event_types()`: Fetch a list of all event types from Cal.com for the authenticated account. Returns a dictionary with the list of event types or an error message.\r\n-   `get_bookings(...)`: Fetch a list of bookings from Cal.com, with optional filters (event_type_id, user_id, status, date_from, date_to, limit). Returns a dictionary with the list of bookings or an error message.\r\n-   `create_booking(...)`: Create a new booking in Cal.com for a specific event type and attendee. Requires parameters like start_time, attendee details, and event type identifiers. Returns a dictionary with booking details or an error message.\r\n-   `list_schedules(...)`: List all schedules available to the authenticated user or for a specific user/team. Optional filters: user_id, team_id, limit. Returns a dictionary with the list of schedules or an error message.\r\n-   `list_teams(...)`: List all teams available to the authenticated user. Optional filter: limit. Returns a dictionary with the list of teams or an error message.\r\n-   `list_users(...)`: List all users available to the authenticated account. Optional filter: limit. Returns a dictionary with the list of users or an error message.\r\n-   `list_webhooks(...)`: List all webhooks configured for the authenticated account. Optional filter: limit. Returns a dictionary with the list of webhooks or an error message.\r\n\r\n**Note:** All tools require the `CALCOM_API_KEY` environment variable to be set. If it is not set, tools will return a structured error message.\r\n\r\n## Tool Usage and Error Handling\r\n\r\n- All tools return either the API response (as a dictionary or string) or a structured error message with details about the failure.\r\n- Error messages include the type of error, HTTP status code (if applicable), and the response text from the Cal.com API.\r\n- For best results, always check for the presence of an `error` key in the response before using the returned data.\r\n- Tools are designed to be robust and provide informative feedback for both successful and failed API calls.\r\n\r\n## Development Notes\r\n\r\n-   The Cal.com API base URL is set to `https://api.cal.com/v2`.\r\n-   Authentication is primarily handled using a Bearer token with the `CALCOM_API_KEY`.\r\n-   The `create_booking` tool uses the `cal-api-version: 2024-08-13` header as specified in the Cal.com API v2 documentation for that endpoint.\r\n-   Error handling is included in the API calls to provide informative responses.\r\n\r\n## 🚀 Built With\r\n\r\n[![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python&logoColor=white)](https://www.python.org/)  \r\n[![FastMCP](https://img.shields.io/badge/FastMCP-Framework-8A2BE2?logo=fastapi&logoColor=white)](https://github.com/jlowin/fastmcp)  \r\n[![Cal.com API](https://img.shields.io/badge/Cal.com%20API-v2-00B8A9?logo=google-calendar&logoColor=white)](https://cal.com/docs/api-reference/v2/introduction)  \r\n\r\n\r\n## Important Security Note\r\n\r\n**Never hardcode your `CALCOM_API_KEY` directly into the source code.** Always use environment variables as described in the setup instructions to keep your API key secure.\r\n",
+  "category": "AI Tools",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "fastmcp": {
+        "command": "fastmcp",
+        "args": ["run", "app.py", "--transport", "sse", "--port", "8010"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Danielpeter-99",
+    "repo": "calcom-mcp",
+    "url": "https://github.com/Danielpeter-99/calcom-mcp",
+    "name": "danielpeter-99__calcom-mcp",
+    "path": null,
+    "stars": 10,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "c457fb0f7ae014fb07888e02d86fa83811989c3d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:22.609Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nfastmcp\r\nrequests"
+}

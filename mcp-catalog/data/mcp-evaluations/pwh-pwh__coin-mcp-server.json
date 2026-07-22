@@ -1,0 +1,94 @@
+{
+  "name": "pwh-pwh__coin-mcp-server",
+  "display_name": "coin-mcp-server",
+  "description": "use Bitget’s API to get cryptocurrency info",
+  "author": {
+    "name": "pwh-pwh"
+  },
+  "server": {
+    "command": "deno",
+    "args": ["run", "--allow-net", "--allow-read", "--allow-env", "https://deno.land/x/coin_mcp_server/main.ts"],
+    "env": {
+      "BGURL": "${user_config.bgurl}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bgurl": {
+      "type": "string",
+      "title": "Bitget API Base URL",
+      "description": "Custom Bitget API base URL (defaults to https://api.bitget.com if not set).",
+      "default": "https://api.bitget.com",
+      "required": false
+    }
+  },
+  "readme": "# Coin MCP Server 🚀💰\n\nWelcome to the **Coin MCP Server** – your one-stop shop for snagging the latest cryptocurrency prices faster than you can say \"To the moon!\" 🌙 Built with `FastMCP` and spiced up with `zod` for validation, this little server is here to fetch token prices from Bitget’s API like a trusty crypto butler. 🧑‍💼\n\n[中文文档](README-cn.md) | English\n\n---\n\n## What Does It Do? 🤔\n\nThis project spins up a server that lets you query the current price of any cryptocurrency (paired with USDT) using Bitget’s slick API. Want to know how much your favorite token is worth right now? Just ask, and boom – the price is yours! 💸\n\n- **Tool**: `getTokenPrice`\n- **Mission**: Fetch the latest price of a token (e.g., `BGB`, `BTC`, `ETH`).\n- **Superpower**: It’s fast, it’s simple, and it’s powered by `FastMCP`! ⚡\n\n- **Tool**: `getAnnoucements`\n- **Mission**: get annoucements\n\n- **Tool**: `getCoinInfo`\n- **Mission**: Get detailed information about a specified token.\n- **Superpower**: Provides detailed information such as token transferability, supported chain list, chain network status, etc.\n\n---\n\n## Features 🌟\n\n- 🎯 **Dead-Simple API**: Pass a token symbol, get a price. No fuss, no muss.\n- 🛡️ **Zod Validation**: Parameters are checked tighter than a vault door.\n- 📡 **Bitget Integration**: Pulls live data straight from Bitget’s market ticker API.\n- 🧠 **Error Handling**: Catches hiccups like a pro and logs them for you to giggle at later.\n\n---\n\n## Getting Started 🏁\n\nReady to dive into the crypto price pool? Here’s how to get this baby running:\n\n### Prerequisites\n- **Deno**: You’ll need Deno installed because we’re fancy and modern. Grab it [here](https://deno.land/).\n- **Bitget API Access**: No API key needed – we’re hitting the public endpoint like champs! But if you’ve got a custom `BGURL`, set it as an environment variable.\n\n### Installation\n1. Clone this repo like it’s hot:\n   ```bash\n   git clone https://github.com/pwh-pwh/coin-mcp-server.git\n   cd coin-mcp-server\n   ```\n2. Install dependencies (Deno handles this automagically via imports!).\n\n### Running the Server\nFire it up with:\n```bash\ndeno run --allow-net --allow-env --allow-read main.ts\n```\n\nor\n```bash\ndeno run --allow-net --allow-env --allow-read https://deno.land/x/coin_mcp_server/main.ts\n```\n\n- `--allow-net`: Lets us talk to Bitget’s API.\n- `--allow-env`: Grabs your `BGURL` env variable if you’ve set one.\n\nThe server will start in `stdio` mode, ready to serve up prices like a crypto vending machine! 🍔\n\n3. Support installation-free, directly deploy to deno, fork this project, log in dash.deno.com, set the environment variable StartType=sse to use the domain name provided by deno to connect in sse mode\n\n---\n\n### Configuration\n\nconfig.json\n```json\n{\n  \"mcpServers\": {\n    \"coin-mcp\": {\n      \"command\": \"deno\",\n      \"args\": [\n        \"run\",\n        \"--allow-net\",\n        \"--allow-read\",\n        \"--allow-env\",\n        \"https://deno.land/x/coin_mcp_server/main.ts\"\n      ]\n    }\n  }\n}\n```\n\n## Usage Example 🎮\n\nHere’s how you’d call `getTokenPrice`:\n```json\n{\n  \"tool\": \"getTokenPrice\",\n  \"parameters\": {\n    \"token\": \"BGB\"\n  }\n}\n```\n\n**Response**:\n```\n\"42.069\"  // The latest BGB/USDT price (not a real price, just vibes!)\n```\n\nIf the token doesn’t exist or the API hiccups, it’ll throw an error with a cheeky log to remind you it tried its best. 😅\n\n---\n\n## Code Sneak Peek 👀\n\nHere’s the magic behind the curtain:\n- **FastMCP**: Spins up the server with a cool name and version.\n- **Zod**: Keeps your `token` parameter in check.\n- **Bitget API**: Fetches ticker data from `https://api.bitget.com/api/v2/spot/market/tickers`.\n\nThe `getBitgetPrice` function is the MVP, grabbing that sweet `lastPr` (last price) from the response. Check the logs for price updates or error comedy gold! 😂\n\n---\n\n## Environment Variables 🌍\n\n- `BGURL`: Custom Bitget API base URL (defaults to `https://api.bitget.com` if not set). Set it like:\n  ```bash\n  export BGURL=\"https://your-custom-bitget-url.com\"\n  ```\n\n---\n\n## Troubleshooting 🛠️\n\n- **“HTTP error! status: 404”**: Double-check your token symbol. `BGBUSDT` isn’t the same as `BGB`!\n- **“Network error”**: Make sure you’ve got internet and Deno’s `--allow-net` flag.\n- **Still stuck?**: Yell into the void (or open an issue). We’ll figure it out together! 🙌\n\n---\n\n## Why This Exists 🎉\n\nBecause who doesn’t want to know the price of their crypto stash in real-time? Whether you’re a trader, a HODLer, or just crypto-curious, this server’s got your back. Plus, it’s a fun way to flex some Deno skills and play with APIs. 😎\n\n---\n\n## Contributing 🤝\n\nGot ideas? Found a bug? Want to add a feature like moon phase price predictions? Fork it, tweak it, PR it! Let’s make this the coolest MCP server in the galaxy. 🌌\n\n---\n\n## License 📜\n\nMIT – Do whatever you want with it, just don’t blame me if your token moons or dumps! 🌑📉\n\n---\n\nHappy crypto hunting, and may your bags always be green! 💚\n",
+  "category": "Finance",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "coin-mcp-server-local": {
+        "command": "deno",
+        "args": ["run", "--allow-net", "--allow-env", "--allow-read", "main.ts"],
+        "env": {}
+      },
+      "coin-mcp-server": {
+        "command": "deno",
+        "args": ["run", "--allow-net", "--allow-env", "--allow-read", "https://deno.land/x/coin_mcp_server/main.ts"],
+        "env": {}
+      },
+      "coin-mcp-configured": {
+        "command": "deno",
+        "args": ["run", "--allow-net", "--allow-read", "--allow-env", "https://deno.land/x/coin_mcp_server/main.ts"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pwh-pwh",
+    "repo": "coin-mcp-server",
+    "url": "https://github.com/pwh-pwh/coin-mcp-server",
+    "name": "coin-mcp-server",
+    "path": null,
+    "stars": 24,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b0a70fbb02043a18de1d24813d2e8a6d8243d0c8"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:16.608Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "FastMCP",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": null
+}

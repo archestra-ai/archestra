@@ -286,6 +286,188 @@ export type ArchestraToolFullName<
   ShortName extends ArchestraToolShortName = ArchestraToolShortName,
 > = `${typeof ARCHESTRA_TOOL_PREFIX}${ShortName}`;
 
+/**
+ * Logical domain grouping of the built-in Archestra tools, in display order.
+ * Single source of truth for both the generated MCP-server docs page and the
+ * agent tool-picker UI, which render tools grouped by these domains rather than
+ * as one flat list. Array order is the display order; `label` is the section
+ * heading (a platform concept, never white-labeled — the product name never
+ * appears here).
+ */
+export const ARCHESTRA_TOOL_GROUPS = [
+  { id: "identity", label: "Identity" },
+  { id: "agents", label: "Agents" },
+  { id: "llm_proxies", label: "LLM Proxies" },
+  { id: "mcp_gateways", label: "MCP Gateways" },
+  { id: "mcp_servers", label: "MCP Servers" },
+  { id: "teams", label: "Teams" },
+  { id: "limits", label: "Limits" },
+  { id: "policies", label: "Policies" },
+  { id: "tool_assignment", label: "Tool Assignment" },
+  { id: "knowledge_management", label: "Knowledge Management" },
+  { id: "chat", label: "Chat" },
+  { id: "meta", label: "Meta" },
+  { id: "skills", label: "Skills" },
+  { id: "skill_sandbox", label: "Skill Sandbox" },
+  { id: "apps", label: "Apps" },
+] as const;
+
+export type ArchestraToolGroupId = (typeof ARCHESTRA_TOOL_GROUPS)[number]["id"];
+
+/**
+ * Maps every built-in Archestra tool to its domain group. Typed as a full
+ * `Record<ArchestraToolShortName, ArchestraToolGroupId>` so adding a tool to
+ * `ARCHESTRA_TOOL_SHORT_NAMES` without assigning it a group is a compile error.
+ */
+export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
+  ArchestraToolShortName,
+  ArchestraToolGroupId
+> = {
+  whoami: "identity",
+
+  create_agent: "agents",
+  get_agent: "agents",
+  list_agents: "agents",
+  edit_agent: "agents",
+  list_hooks: "agents",
+  create_hook: "agents",
+  update_hook: "agents",
+  delete_hook: "agents",
+
+  create_llm_proxy: "llm_proxies",
+  get_llm_proxy: "llm_proxies",
+  edit_llm_proxy: "llm_proxies",
+
+  create_mcp_gateway: "mcp_gateways",
+  get_mcp_gateway: "mcp_gateways",
+  edit_mcp_gateway: "mcp_gateways",
+
+  search_private_mcp_registry: "mcp_servers",
+  get_mcp_servers: "mcp_servers",
+  get_mcp_server_tools: "mcp_servers",
+  edit_mcp_description: "mcp_servers",
+  edit_mcp_config: "mcp_servers",
+  create_mcp_server: "mcp_servers",
+  deploy_mcp_server: "mcp_servers",
+  list_mcp_server_deployments: "mcp_servers",
+  get_mcp_server_logs: "mcp_servers",
+  reload_mcp_server_tools: "mcp_servers",
+  create_mcp_server_installation_request: "mcp_servers",
+
+  create_team: "teams",
+  get_team: "teams",
+  list_teams: "teams",
+  edit_team: "teams",
+  delete_team: "teams",
+  list_team_members: "teams",
+  add_team_member: "teams",
+  update_team_member_role: "teams",
+  remove_team_member: "teams",
+  list_team_external_groups: "teams",
+  add_team_external_group: "teams",
+  remove_team_external_group: "teams",
+
+  create_limit: "limits",
+  get_limits: "limits",
+  update_limit: "limits",
+  delete_limit: "limits",
+  get_agent_token_usage: "limits",
+  get_llm_proxy_token_usage: "limits",
+
+  get_autonomy_policy_operators: "policies",
+  get_tool_invocation_policies: "policies",
+  create_tool_invocation_policy: "policies",
+  get_tool_invocation_policy: "policies",
+  update_tool_invocation_policy: "policies",
+  delete_tool_invocation_policy: "policies",
+  get_trusted_data_policies: "policies",
+  create_trusted_data_policy: "policies",
+  get_trusted_data_policy: "policies",
+  update_trusted_data_policy: "policies",
+  delete_trusted_data_policy: "policies",
+
+  bulk_assign_tools_to_agents: "tool_assignment",
+  bulk_remove_tools_from_agents: "tool_assignment",
+  bulk_assign_tools_to_mcp_gateways: "tool_assignment",
+
+  query_knowledge_sources: "knowledge_management",
+  create_knowledge_base: "knowledge_management",
+  get_knowledge_bases: "knowledge_management",
+  get_knowledge_base: "knowledge_management",
+  update_knowledge_base: "knowledge_management",
+  delete_knowledge_base: "knowledge_management",
+  create_knowledge_connector: "knowledge_management",
+  get_knowledge_connectors: "knowledge_management",
+  get_knowledge_connector: "knowledge_management",
+  update_knowledge_connector: "knowledge_management",
+  delete_knowledge_connector: "knowledge_management",
+  assign_knowledge_connector_to_knowledge_base: "knowledge_management",
+  unassign_knowledge_connector_from_knowledge_base: "knowledge_management",
+  assign_knowledge_base_to_agent: "knowledge_management",
+  unassign_knowledge_base_from_agent: "knowledge_management",
+  assign_knowledge_connector_to_agent: "knowledge_management",
+  unassign_knowledge_connector_from_agent: "knowledge_management",
+
+  todo_write: "chat",
+  create_project_from_conversation: "chat",
+
+  search_tools: "meta",
+  run_tool: "meta",
+
+  list_skills: "skills",
+  load_skill: "skills",
+  create_skill: "skills",
+  update_skill: "skills",
+  edit_skill: "skills",
+
+  run_command: "skill_sandbox",
+  download_file: "skill_sandbox",
+  upload_file: "skill_sandbox",
+  search_files: "skill_sandbox",
+  read_file: "skill_sandbox",
+  save_file: "skill_sandbox",
+  edit_file: "skill_sandbox",
+  delete_file: "skill_sandbox",
+
+  scaffold_app: "apps",
+  refine_app: "apps",
+  list_apps: "apps",
+  render_app: "apps",
+  read_app: "apps",
+  edit_app: "apps",
+  set_app_tools: "apps",
+  validate_app: "apps",
+  publish_app: "apps",
+  delete_app: "apps",
+  preview_app_tool: "apps",
+  get_app_diagnostics: "apps",
+  app_data_get: "apps",
+  app_data_set: "apps",
+  app_data_list: "apps",
+  app_data_delete: "apps",
+  llm_complete: "apps",
+};
+
+/**
+ * The domain group of an Archestra tool short name, or null when the name is
+ * not a built-in Archestra tool (e.g. an external MCP server's tool). Callers
+ * that hold a full/branded tool name should resolve the short name first
+ * (branding-aware) and pass it here.
+ */
+const groupIdByShortName = new Map<string, ArchestraToolGroupId>(
+  Object.entries(ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME) as [
+    string,
+    ArchestraToolGroupId,
+  ][],
+);
+
+export function getArchestraToolGroupId(
+  shortName: string | null | undefined,
+): ArchestraToolGroupId | null {
+  if (!shortName) return null;
+  return groupIdByShortName.get(shortName) ?? null;
+}
+
 export type ArchestraMcpIdentityOptions = {
   appName?: string | null;
   fullWhiteLabeling?: boolean;

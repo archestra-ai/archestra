@@ -1,0 +1,143 @@
+{
+  "name": "modelcontextprotocol__servers__src__filesystem",
+  "display_name": "Filesystem",
+  "description": "Model Context Protocol Servers",
+  "author": {
+    "name": "modelcontextprotocol"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem", "${user_config.allowed_directories}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "allowed_directories": {
+      "type": "directory",
+      "title": "Allowed Directories",
+      "description": "Select directories the filesystem server can access. The server requires at least one allowed directory to operate.",
+      "multiple": true,
+      "required": true
+    },
+    "read_only": {
+      "type": "boolean",
+      "title": "Read-only Access",
+      "description": "If true, the mounted directories will be mounted read-only inside the container.",
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "# Filesystem MCP Server\n\nNode.js server implementing Model Context Protocol (MCP) for filesystem operations.\n\n## Features\n\n- Read/write files\n- Create/list/delete directories\n- Move files/directories\n- Search files\n- Get file metadata\n- Dynamic directory access control via [Roots](https://modelcontextprotocol.io/docs/learn/client-concepts#roots)\n\n## Directory Access Control\n\nThe server uses a flexible directory access control system. Directories can be specified via command-line arguments or dynamically via [Roots](https://modelcontextprotocol.io/docs/learn/client-concepts#roots).\n\n### Method 1: Command-line Arguments\nSpecify Allowed directories when starting the server:\n```bash\nmcp-server-filesystem /path/to/dir1 /path/to/dir2\n```\n\n### Method 2: MCP Roots (Recommended)\nMCP clients that support [Roots](https://modelcontextprotocol.io/docs/learn/client-concepts#roots) can dynamically update the Allowed directories. \n\nRoots notified by Client to Server, completely replace any server-side Allowed directories when provided.\n\n**Important**: If server starts without command-line arguments AND client doesn't support roots protocol (or provides empty roots), the server will throw an error during initialization.\n\nThis is the recommended method, as this enables runtime directory updates via `roots/list_changed` notifications without server restart, providing a more flexible and modern integration experience.\n\n### How It Works\n\nThe server's directory access control follows this flow:\n\n1. **Server Startup**\n   - Server starts with directories from command-line arguments (if provided)\n   - If no arguments provided, server starts with empty allowed directories\n\n2. **Client Connection & Initialization**\n   - Client connects and sends `initialize` request with capabilities\n   - Server checks if client supports roots protocol (`capabilities.roots`)\n   \n3. **Roots Protocol Handling** (if client supports roots)\n   - **On initialization**: Server requests roots from client via `roots/list`\n   - Client responds with its configured roots\n   - Server replaces ALL allowed directories with client's roots\n   - **On runtime updates**: Client can send `notifications/roots/list_changed`\n   - Server requests updated roots and replaces allowed directories again\n\n4. **Fallback Behavior** (if client doesn't support roots)\n   - Server continues using command-line directories only\n   - No dynamic updates possible\n\n5. **Access Control**\n   - All filesystem operations are restricted to allowed directories\n   - Use `list_allowed_directories` tool to see current directories\n   - Server requires at least ONE allowed directory to operate\n\n**Note**: The server will only allow operations within directories specified either via `args` or via Roots.\n\n\n\n## API\n\n### Tools\n\n- **read_text_file**\n  - Read complete contents of a file as text\n  - Inputs:\n    - `path` (string)\n    - `head` (number, optional): First N lines\n    - `tail` (number, optional): Last N lines\n  - Always treats the file as UTF-8 text regardless of extension\n  - Cannot specify both `head` and `tail` simultaneously\n\n- **read_media_file**\n  - Read an image or audio file\n  - Inputs:\n    - `path` (string)\n  - Streams the file and returns base64 data with the corresponding MIME type\n\n- **read_multiple_files**\n  - Read multiple files simultaneously\n  - Input: `paths` (string[])\n  - Failed reads won't stop the entire operation\n\n- **write_file**\n  - Create new file or overwrite existing (exercise caution with this)\n  - Inputs:\n    - `path` (string): File location\n    - `content` (string): File content\n\n- **edit_file**\n  - Make selective edits using advanced pattern matching and formatting\n  - Features:\n    - Line-based and multi-line content matching\n    - Whitespace normalization with indentation preservation\n    - Multiple simultaneous edits with correct positioning\n    - Indentation style detection and preservation\n    - Git-style diff output with context\n    - Preview changes with dry run mode\n  - Inputs:\n    - `path` (string): File to edit\n    - `edits` (array): List of edit operations\n      - `oldText` (string): Text to search for (can be substring)\n      - `newText` (string): Text to replace with\n    - `dryRun` (boolean): Preview changes without applying (default: false)\n  - Returns detailed diff and match information for dry runs, otherwise applies changes\n  - Best Practice: Always use dryRun first to preview changes before applying them\n\n- **create_directory**\n  - Create new directory or ensure it exists\n  - Input: `path` (string)\n  - Creates parent directories if needed\n  - Succeeds silently if directory exists\n\n- **list_directory**\n  - List directory contents with [FILE] or [DIR] prefixes\n  - Input: `path` (string)\n\n- **list_directory_with_sizes**\n  - List directory contents with [FILE] or [DIR] prefixes, including file sizes\n  - Inputs:\n    - `path` (string): Directory path to list\n    - `sortBy` (string, optional): Sort entries by \"name\" or \"size\" (default: \"name\")\n  - Returns detailed listing with file sizes and summary statistics\n  - Shows total files, directories, and combined size\n\n- **directory_tree**\n  - Get a recursive tree view of files and directories as a JSON structure\n  - Input: `path` (string): Starting directory path\n  - Returns JSON structure with:\n    - `name`: File/directory name\n    - `type`: \"file\" or \"directory\"\n    - `children`: Array of child entries (for directories only)\n  - Output is formatted with 2-space indentation for readability\n\n- **move_file**\n  - Move or rename files and directories\n  - Inputs:\n    - `source` (string)\n    - `destination` (string)\n  - Fails if destination exists\n\n- **search_files**\n  - Recursively search for files/directories that match or do not match patterns\n  - Inputs:\n    - `path` (string): Starting directory\n    - `pattern` (string): Search pattern\n    - `excludePatterns` (string[]): Exclude any patterns.\n  - Glob-style pattern matching\n  - Returns full paths to matches\n\n- **directory_tree**\n  - Get recursive JSON tree structure of directory contents\n  - Inputs:\n    - `path` (string): Starting directory\n    - `excludePatterns` (string[]): Exclude any patterns. Glob formats are supported.\n  - Returns:\n    - JSON array where each entry contains:\n      - `name` (string): File/directory name\n      - `type` ('file'|'directory'): Entry type\n      - `children` (array): Present only for directories\n        - Empty array for empty directories\n        - Omitted for files\n    \n- **get_file_info**\n  - Get detailed file/directory metadata\n  - Input: `path` (string)\n  - Returns:\n    - Size\n    - Creation time\n    - Modified time\n    - Access time\n    - Type (file/directory)\n    - Permissions\n\n- **list_allowed_directories**\n  - List all directories the server is allowed to access\n  - No input required\n  - Returns:\n    - Directories that this server can read/write from\n\n## Usage with Claude Desktop\nAdd this to your `claude_desktop_config.json`:\n\nNote: you can provide sandboxed directories to the server by mounting them to `/projects`. Adding the `ro` flag will make the directory readonly by the server.\n\n### Docker\nNote: all directories must be mounted to `/projects` by default.\n\n```json\n{\n  \"mcpServers\": {\n    \"filesystem\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"--mount\", \"type=bind,src=/Users/username/Desktop,dst=/projects/Desktop\",\n        \"--mount\", \"type=bind,src=/path/to/other/allowed/dir,dst=/projects/other/allowed/dir,ro\",\n        \"--mount\", \"type=bind,src=/path/to/file.txt,dst=/projects/path/to/file.txt\",\n        \"mcp/filesystem\",\n        \"/projects\"\n      ]\n    }\n  }\n}\n```\n\n### NPX\n\n```json\n{\n  \"mcpServers\": {\n    \"filesystem\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-filesystem\",\n        \"/Users/username/Desktop\",\n        \"/path/to/other/allowed/dir\"\n      ]\n    }\n  }\n}\n```\n\n## Usage with VS Code\n\nFor quick installation, click the installation buttons below...\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=filesystem&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-filesystem%22%2C%22%24%7BworkspaceFolder%7D%22%5D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=filesystem&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-filesystem%22%2C%22%24%7BworkspaceFolder%7D%22%5D%7D&quality=insiders)\n\n[![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Docker-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=filesystem&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7BworkspaceFolder%7D%2Cdst%3D%2Fprojects%2Fworkspace%22%2C%22mcp%2Ffilesystem%22%2C%22%2Fprojects%22%5D%7D) [![Install with Docker in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Docker-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=filesystem&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7BworkspaceFolder%7D%2Cdst%3D%2Fprojects%2Fworkspace%22%2C%22mcp%2Ffilesystem%22%2C%22%2Fprojects%22%5D%7D&quality=insiders)\n\nFor manual installation, you can configure the MCP server using one of these methods:\n\n**Method 1: User Configuration (Recommended)**\nAdd the configuration to your user-level MCP configuration file. Open the Command Palette (`Ctrl + Shift + P`) and run `MCP: Open User Configuration`. This will open your user `mcp.json` file where you can add the server configuration.\n\n**Method 2: Workspace Configuration**\nAlternatively, you can add the configuration to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n> For more details about MCP configuration in VS Code, see the [official VS Code MCP documentation](https://code.visualstudio.com/docs/copilot/mcp).\n\nYou can provide sandboxed directories to the server by mounting them to `/projects`. Adding the `ro` flag will make the directory readonly by the server.\n\n### Docker\nNote: all directories must be mounted to `/projects` by default. \n\n```json\n{\n  \"servers\": {\n    \"filesystem\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"--mount\", \"type=bind,src=${workspaceFolder},dst=/projects/workspace\",\n        \"mcp/filesystem\",\n        \"/projects\"\n      ]\n    }\n  }\n}\n```\n\n### NPX\n\n```json\n{\n  \"servers\": {\n    \"filesystem\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-filesystem\",\n        \"${workspaceFolder}\"\n      ]\n    }\n  }\n}\n```\n\n## Build\n\nDocker build:\n\n```bash\ndocker build -t mcp/filesystem -f src/filesystem/Dockerfile .\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "File Management",
+  "quality_score": 77,
+  "archestra_config": {
+    "client_config_permutations": {
+      "modelcontextprotocol-server-filesystem-configured": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "/Users/username/Desktop",
+          "/path/to/other/allowed/dir"
+        ],
+        "env": {}
+      },
+      "mcp-filesystem-docker-configured": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "--mount",
+          "type=bind,src=/Users/username/Desktop,dst=/projects/Desktop",
+          "--mount",
+          "type=bind,src=/path/to/other/allowed/dir,dst=/projects/other/allowed/dir,ro",
+          "--mount",
+          "type=bind,src=/path/to/file.txt,dst=/projects/path/to/file.txt",
+          "mcp/filesystem",
+          "/projects"
+        ],
+        "env": {},
+        "docker_image": "mcp/filesystem"
+      },
+      "modelcontextprotocol-server-filesystem-vscode": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "${workspaceFolder}"],
+        "env": {}
+      },
+      "mcp-filesystem-docker-vscode": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "--mount",
+          "type=bind,src=${workspaceFolder},dst=/projects/workspace",
+          "mcp/filesystem",
+          "/projects"
+        ],
+        "env": {},
+        "docker_image": "mcp/filesystem"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "modelcontextprotocol",
+    "repo": "servers",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+    "name": "modelcontextprotocol__servers__src__filesystem",
+    "path": "src/filesystem",
+    "stars": 67080,
+    "contributors": 821,
+    "issues": 650,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "8ba0ff5e4c74b1b0034f30f4ad75632183df67f4"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:08.755Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "diff",
+      "importance": 7
+    },
+    {
+      "name": "glob",
+      "importance": 8
+    },
+    {
+      "name": "minimatch",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@modelcontextprotocol/server-filesystem\",\n  \"version\": \"0.6.3\",\n  \"description\": \"MCP server for filesystem access\",\n  \"license\": \"MIT\",\n  \"author\": \"Anthropic, PBC (https://anthropic.com)\",\n  \"homepage\": \"https://modelcontextprotocol.io\",\n  \"bugs\": \"https://github.com/modelcontextprotocol/servers/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-filesystem\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"test\": \"jest --config=jest.config.cjs --coverage\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.17.0\",\n    \"diff\": \"^5.1.0\",\n    \"glob\": \"^10.3.10\",\n    \"minimatch\": \"^10.0.1\",\n    \"zod-to-json-schema\": \"^3.23.5\"\n  },\n  \"devDependencies\": {\n    \"@jest/globals\": \"^29.7.0\",\n    \"@types/diff\": \"^5.0.9\",\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/minimatch\": \"^5.1.2\",\n    \"@types/node\": \"^22\",\n    \"jest\": \"^29.7.0\",\n    \"shx\": \"^0.3.4\",\n    \"ts-jest\": \"^29.1.1\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

@@ -1,0 +1,89 @@
+{
+  "name": "nickclyde__duckduckgo-mcp-server",
+  "display_name": "DuckDuckGo",
+  "description": "A Model Context Protocol (MCP) server that provides web search capabilities through DuckDuckGo, with additional features for content fetching and parsing.",
+  "author": {
+    "name": "nickclyde"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["duckduckgo-mcp-server"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [
+    {
+      "name": "search",
+      "description": "Search the web with DuckDuckGo and return formatted results (title, URL, snippet); supports max_results and region"
+    },
+    {
+      "name": "fetch_content",
+      "description": "Fetch a webpage and return cleaned, LLM-friendly text content"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["duckduckgo", "search", "web search", "fetch", "content extraction"],
+  "user_config": {},
+  "readme": "# DuckDuckGo Search MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@nickclyde/duckduckgo-mcp-server)](https://smithery.ai/server/@nickclyde/duckduckgo-mcp-server)\n\nA Model Context Protocol (MCP) server that provides web search capabilities through DuckDuckGo, with additional features for content fetching and parsing.\n\n<a href=\"https://glama.ai/mcp/servers/phcus2gcpn\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/phcus2gcpn/badge\" alt=\"DuckDuckGo Server MCP server\" />\n</a>\n\n## Features\n\n- **Web Search**: Search DuckDuckGo with advanced rate limiting and result formatting\n- **Content Fetching**: Retrieve and parse webpage content with intelligent text extraction\n- **Rate Limiting**: Built-in protection against rate limits for both search and content fetching\n- **Error Handling**: Comprehensive error handling and logging\n- **LLM-Friendly Output**: Results formatted specifically for large language model consumption\n\n## Installation\n\n### Installing via Smithery\n\nTo install DuckDuckGo Search Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@nickclyde/duckduckgo-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @nickclyde/duckduckgo-mcp-server --client claude\n```\n\n### Installing via `uv`\n\nInstall directly from PyPI using `uv`:\n\n```bash\nuv pip install duckduckgo-mcp-server\n```\n\n## Usage\n\n### Running with Claude Desktop\n\n1. Download [Claude Desktop](https://claude.ai/download)\n2. Create or edit your Claude Desktop configuration:\n   - On macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - On Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\nAdd the following configuration:\n\n```json\n{\n    \"mcpServers\": {\n        \"ddg-search\": {\n            \"command\": \"uvx\",\n            \"args\": [\"duckduckgo-mcp-server\"]\n        }\n    }\n}\n```\n\n3. Restart Claude Desktop\n\n### Development\n\nFor local development, you can use the MCP CLI:\n\n```bash\n# Run with the MCP Inspector\nmcp dev server.py\n\n# Install locally for testing with Claude Desktop\nmcp install server.py\n```\n## Available Tools\n\n### 1. Search Tool\n\n```python\nasync def search(query: str, max_results: int = 10) -> str\n```\n\nPerforms a web search on DuckDuckGo and returns formatted results.\n\n**Parameters:**\n- `query`: Search query string\n- `max_results`: Maximum number of results to return (default: 10)\n\n**Returns:**\nFormatted string containing search results with titles, URLs, and snippets.\n\n### 2. Content Fetching Tool\n\n```python\nasync def fetch_content(url: str) -> str\n```\n\nFetches and parses content from a webpage.\n\n**Parameters:**\n- `url`: The webpage URL to fetch content from\n\n**Returns:**\nCleaned and formatted text content from the webpage.\n\n## Features in Detail\n\n### Rate Limiting\n\n- Search: Limited to 30 requests per minute\n- Content Fetching: Limited to 20 requests per minute\n- Automatic queue management and wait times\n\n### Result Processing\n\n- Removes ads and irrelevant content\n- Cleans up DuckDuckGo redirect URLs\n- Formats results for optimal LLM consumption\n- Truncates long content appropriately\n\n### Error Handling\n\n- Comprehensive error catching and reporting\n- Detailed logging through MCP context\n- Graceful degradation on rate limits or timeouts\n\n## Contributing\n\nIssues and pull requests are welcome! Some areas for potential improvement:\n\n- Additional search parameters (region, language, etc.)\n- Enhanced content parsing options\n- Caching layer for frequently accessed content\n- Additional rate limiting strategies\n\n## License\n\nThis project is licensed under the MIT License.",
+  "category": "AI Tools",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "duckduckgo-mcp-server": {
+        "command": "uvx",
+        "args": ["duckduckgo-mcp-server"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "github_info": {
+    "owner": "nickclyde",
+    "repo": "duckduckgo-mcp-server",
+    "url": "https://github.com/nickclyde/duckduckgo-mcp-server",
+    "name": "duckduckgo-mcp-server",
+    "path": null,
+    "stars": 347,
+    "contributors": 0,
+    "issues": 14,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "d198a2f0e8bd7c862d87d8517e1518aa295f8348"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:29.741Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "beautifulsoup4",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"duckduckgo-mcp-server\"\nversion = \"0.1.1\"\ndescription = \"MCP Server for searching via DuckDuckGo\"\nreadme = \"README.md\"\nauthors = [{ name = \"Nick Clyde\", email = \"nick@clyde.tech\" }]\nrequires-python = \">=3.10\"\ndependencies = [\"beautifulsoup4>=4.13.3\", \"httpx>=0.28.1\", \"mcp[cli]>=1.3.0\"]\nclassifiers = [\n    \"Development Status :: 3 - Alpha\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Programming Language :: Python :: 3.13\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/nickclyde/duckduckgo-mcp-server\"\nIssues = \"https://github.com/nickclyde/duckduckgo-mcp-server/issues\"\n\n[project.scripts]\nduckduckgo-mcp-server = \"duckduckgo_mcp_server.server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxLjAxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI1NSI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJTVkdHMEY3UWI2UiIgeDE9IjcxLjAwNSUiIHgyPSIwJSIgeTE9IjEwMCUiIHkyPSIxMDAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMzk0YTlmIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjNjE3NmI5Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHBhdGggZmlsbD0iI2RlNTgzMyIgZD0iTTEyOC4xNDUgMTguODQxYzYwLjAwMiAwIDEwOC42NDMgNDguNjQxIDEwOC42NDMgMTA4LjY0M2MwIDYwLjAwMS00OC42NDEgMTA4LjY0Mi0xMDguNjQzIDEwOC42NDJjLTYwLjAwMSAwLTEwOC42NDItNDguNjQxLTEwOC42NDItMTA4LjY0MmMwLTYwLjAwMiA0OC42NDEtMTA4LjY0MyAxMDguNjQyLTEwOC42NDMiLz48cGF0aCBmaWxsPSIjZGU1ODMzIiBkPSJNMTI4LjE0MyAyNTQuOTIyYzcwLjM4MyAwIDEyNy40NC01Ny4wNTcgMTI3LjQ0LTEyNy40NFMxOTguNTI2LjA0MiAxMjguMTQzLjA0MlMuNzAzIDU3LjA5OS43MDMgMTI3LjQ4MnM1Ny4wNTcgMTI3LjQ0IDEyNy40NCAxMjcuNDRtMC0xMC42MmMtNjQuNTE4IDAtMTE2LjgyLTUyLjMwMi0xMTYuODItMTE2LjgyczUyLjMwMi0xMTYuODIgMTE2LjgyLTExNi44MnMxMTYuODIgNTIuMzAyIDExNi44MiAxMTYuODJzLTUyLjMwMiAxMTYuODItMTE2LjgyIDExNi44MiIvPjxwYXRoIGZpbGw9IiNkNWQ3ZDgiIGQ9Ik03NS4yMTkgNTQuMTNjLS4wMjEtMS44MjcgMS4zMDYtMi44NSAzLjA2OS0zLjU2N2MtLjgwNy4xMzItMS41OC4zMzQtMi4yNzYuNjQ2Yy0xLjgzOC44MzMtMy4yMTIgMy45ODctMy4xOTkgNS40OGM4LjkyMy0uOTAyIDIyLjExOC0uMjc4IDMxLjc2NyAyLjYwMmMuNzEyLS4xIDEuNDI0LS4yIDIuMTQ3LS4yODNjLTkuNjI0LTQuMjczLTIxLjA2Ni01LjkyMy0zMS41MDgtNC44NzhtMS44MjktMTAuOThjLjIwMS0uMDM2LjQwNS0uMDYxLjYwNy0uMDk1Yy0xLjkyNS4yMzktMi45NC45MjctNC4zODUgMS4xNjRjMS41NjkuMTM5IDcuNTE0IDIuOTE0IDExLjI1IDQuNDRjLjUyNC0uMTk5Ljk5Ni0uNDIgMS4zODEtLjY4MWMtMS45MzctLjI4Ni02Ljc1LTQuNjM2LTguODUzLTQuODI4bTkuMjc4IDIxLjYwNmMtLjUzNS4yMDYtMS4wNDMuNDIxLTEuNDgzLjY1MmMtMTQuNTQ1IDcuNjYzLTIwLjk3IDI1LjU2Mi0xNy4xNDEgNDcuMDFjMy40OTUgMTkuNTE4IDE3LjgyIDg2LjIwNSAyNC4zNzkgMTE3LjU3MWMxLjkxNS42NzMgMy44NTMgMS4yOTggNS44MTUgMS44NjVjLTUuODQxLTI4LjI0LTIxLjc4NC0xMDIuMjQtMjUuNTA0LTEyMy4wMjNjLTMuNzcxLTIxLjE0My0uMTAyLTM2LjMxNCAxMy45MzQtNDQuMDc1Ii8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTE0NS4xODQgMjE4LjYxOGMtLjI0LjE2LS41MjYuMzEtLjgzMS40NTZjLS4yMjYuODc2LS41NzEgMS41NC0xLjA3NCAxLjg3NGMtMy4wMDQgMS45OTMtMTEuNDg5IDIuOTk3LTE1Ljk2OSAxLjk5M2MtLjc3MS0uMTcxLTEuMzU1LS40NTQtMS44MTEtLjg0M2MtNy42NDkgNC4yNDctMTguNjQ5IDkuOTAxLTIwLjg4MyA4LjYyN2MtMy40OS0yLjAwMS0zLjk5Ni0yOC40NTEtMy40OS0zNC45NDJjLjM2OS00LjkgMTcuNTgxIDMuMDM3IDI1Ljk1NCA3LjJjMS44NTEtMS43MjkgNi4zODYtMi44ODYgMTAuNC0zLjI3OWMtNi4wNjUtMTQuNzYxLTEwLjUzOC0zMS42NDUtNy43OTYtNDMuNjE4Yy0zLjc5LTIuNjQxLTguODEzLTguNzY2LTcuNzY3LTE1LjE1OWMuODA2LTQuODY2IDEzLjM4LTE0LjA3MiAyMi4yODMtMTQuNjI4YzguOTIzLS41NjMgMTEuNzA0LS40MzYgMTkuMTM4LTIuMjE2bDEuMjA5LS4yOWM0LjU3Ni0xNi4wODctNi4zOTktNDQuMDc0LTE4LjY0MS01Ni4zMjFjLTMuOTkxLTMuOTkxLTEwLjEyNy02LjUwMy0xNy4wNDEtNy44MjljLTIuNjU5LTMuNjQ5LTYuOTQ4LTcuMTM4LTEzLjAyLTEwLjM2OWMtMTEuMjc1LTUuOTg2LTI1LjIwOS04LjQyMy0zOC4xOS02LjIxOWMtLjIwMi4wMzQtLjQwNi4wNTktLjYwNy4wOTVjMi4xMDMuMTkyIDYuOTE2IDQuNTQyIDguODUzIDQuODI4Yy0uMzg1LjI2MS0uODU3LjQ4Mi0xLjM4MS42ODFjLTEuODE4LjY5Mi00LjI4OSAxLjExMi02LjIzMiAxLjkwNGMtMS43NjMuNzE3LTMuMDkgMS43NC0zLjA2OSAzLjU2N2MxMC40NDItMS4wNDUgMjEuODg0LjYwNSAzMS41MDggNC44NzhjLS43MjMuMDgzLTEuNDM1LjE4My0yLjE0Ny4yODNjLTYuODI1Ljk2LTEzLjA5OCAyLjcyOC0xNy42MyA1LjExOWMtLjIxMy4xMTEtLjQxNS4yMzEtLjYyNC4zNDZjLTE0LjAzNiA3Ljc2MS0xNy43MDUgMjIuOTMyLTEzLjkzNCA0NC4wNzVDNzYuMTEyIDEyOS42MTQgOTIuMTU5IDIwNC43NiA5OCAyMzNjOS42MDMgMi43NzkgMTguNTgyIDUgMjkuMDggNWM4LjkxMiAwIDE5LjYzMS0xLjk3NSAyNy45Mi00Yy0yLjkxMS01LjYxMy02LjY1Ni0xMS44Mi04Ljk2NC0xNi4yNzFjLS4zMDguMzY3LS41NTEuNjg4LS44NTIuODg5bTUuODczLTEwNi41NjFjLTMuODA0IDAtNi45MDctMy4wOTQtNi45MDctNi45MmMwLTMuODA4IDMuMTAzLTYuOTAzIDYuOTA3LTYuOTAzYzMuODI1IDAgNi45MTYgMy4wOTUgNi45MTYgNi45MDNhNi45MSA2LjkxIDAgMCAxLTYuOTE2IDYuOTJtNC4xNjEtMjYuMDA4cy00LjM1Ny0yLjQ4OS03LjczOC0yLjQ0N2MtNi45NDguMDkxLTguODQgMy4xNjEtOC44NCAzLjE2MXMxLjE2Ni03LjMxOCAxMC4wNTEtNS44NWM0LjgxNy44MDEgNi41MjcgNS4xMzYgNi41MjcgNS4xMzZtLTczLjI1NSA4Ljk5N3MtMy4xMjktNi45NzMgNS4yMS0xMC4zOWM4LjM0OC0zLjQxOCAxMi40MTMgMS45NDUgMTIuNDEzIDEuOTQ1cy02LjA2Mi0yLjc0Mi0xMS45NTYuOTYyYy01Ljg4NCAzLjctNS42NjcgNy40ODMtNS42NjcgNy40ODNtNy4yOSAxNC44NjJhOC4wNCA4LjA0IDAgMCAxIDguMDQ3LTguMDQ0YTguMDQgOC4wNCAwIDAgMSA4LjA0IDguMDQ0YzAgNC40NDctMy42IDguMDQxLTguMDQgOC4wNDFhOC4wMzQgOC4wMzQgMCAwIDEtOC4wNDctOC4wNDEiLz48cGF0aCBmaWxsPSIjMmQ0ZjhlIiBkPSJNMTA1LjM0IDEwOS45MDhhOC4wNCA4LjA0IDAgMCAwLTguMDQtOC4wNDRhOC4wNCA4LjA0IDAgMCAwLTguMDQ3IDguMDQ0YTguMDM0IDguMDM0IDAgMCAwIDguMDQ3IDguMDQxYzQuNDQgMCA4LjA0LTMuNTk0IDguMDQtOC4wNDFtLTQuNDc4LS41OTFhMi4wOSAyLjA5IDAgMCAxLTIuMDgxLTIuMDlhMi4wODUgMi4wODUgMCAxIDEgNC4xNzEgMGEyLjA5IDIuMDkgMCAwIDEtMi4wOSAyLjA5Ii8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEwMC44NjIgMTA1LjEzOWEyLjA4NSAyLjA4NSAwIDAgMC0yLjA4MSAyLjA4OGMwIDEuMTU0LjkzOSAyLjA5MyAyLjA4MSAyLjA5YTIuMDkgMi4wOSAwIDAgMCAyLjA5LTIuMDlhMi4wODcgMi4wODcgMCAwIDAtMi4wOS0yLjA4OCIvPjxwYXRoIGZpbGw9IiMyZDRmOGUiIGQ9Ik0xNTEuMDU3IDk4LjIzNGMtMy44MDQgMC02LjkwNyAzLjA5NS02LjkwNyA2LjkwM2MwIDMuODI2IDMuMTAzIDYuOTIgNi45MDcgNi45MmE2LjkxIDYuOTEgMCAwIDAgNi45MTYtNi45MmMwLTMuODA4LTMuMDkxLTYuOTAzLTYuOTE2LTYuOTAzbTMuMDY3IDYuMzk0Yy0uOTc1IDAtMS43OC0uNzkzLTEuNzgtMS43ODljMC0uOTgzLjgwNS0xLjc5IDEuNzgtMS43OWMxLjAxNyAwIDEuNzk3LjgwNyAxLjc5NyAxLjc5YzAgLjk5Ni0uNzggMS43ODktMS43OTcgMS43ODkiLz48cGF0aCBmaWxsPSIjZmZmIiBkPSJNMTU0LjEyNCAxMDEuMDQ5Yy0uOTc1IDAtMS43OC44MDctMS43OCAxLjc5YzAgLjk5Ni44MDUgMS43ODkgMS43OCAxLjc4OWExLjc3MyAxLjc3MyAwIDAgMCAxLjc5Ny0xLjc4OWMwLS45ODMtLjc4LTEuNzktMS43OTctMS43OSIvPjxwYXRoIGZpbGw9InVybCgjU1ZHRzBGN1FiNlIpIiBkPSJNMzMuNTg2IDQ0LjYwMXMtNC4wNjUtNS4zNjMtMTIuNDEzLTEuOTQ1Yy04LjMzOSAzLjQxNy01LjIxIDEwLjM5LTUuMjEgMTAuMzlzLS4yMTctMy43ODMgNS42NjctNy40ODNjNS44OTQtMy43MDQgMTEuOTU2LS45NjIgMTEuOTU2LS45NjIiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDY2IDQyKSIvPjxwYXRoIGZpbGw9InVybCgjU1ZHRzBGN1FiNlIpIiBkPSJNODIuNjkxIDM4LjkxM2MtOC44ODUtMS40NjgtMTAuMDUxIDUuODUtMTAuMDUxIDUuODVzMS44OTItMy4wNyA4Ljg0LTMuMTYxYzMuMzgxLS4wNDIgNy43MzggMi40NDcgNy43MzggMi40NDdzLTEuNzEtNC4zMzUtNi41MjctNS4xMzYiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDY2IDQyKSIvPjxwYXRoIGZpbGw9IiNmZGQyMDkiIGQ9Ik0xNDQuMiAxMjYuMjk5Yy04LjkwMy41NTYtMjEuNDc3IDkuNzYyLTIyLjI4MyAxNC42MjhjLTEuMDQ2IDYuMzkzIDMuOTc3IDEyLjUxOCA3Ljc2NyAxNS4xNTlsLjAzMS4wMjNjMy43ODkgMi42MzYgMjkuMDE4IDExLjE0NyA0MS41MzUgMTAuOTExYzEyLjUzMS0uMjQ0IDMzLjExMS03LjkxOCAzMC44NTEtMTQuMDY3Yy0yLjI1LTYuMTUxLTIyLjY4OSA1LjQyNy00NC4wMDcgMy40NTFjLTE1Ljc4OC0xLjQ2Ny0xOC41NzUtOC41NC0xNS4wNzktMTMuNzA2YzQuMzk3LTYuNDkzIDEyLjQwNiAxLjIzMiAyNS42MTYtMi43MjFjMTMuMjMtMy45NDIgMzEuNzMyLTEwLjk5OCAzOC41OTctMTQuODRjMTUuODczLTguODQ5LTYuNjQyLTEyLjUxOS0xMS45Ni0xMC4wNjRjLTUuMDQxIDIuMzI5LTIyLjU4NyA2Ljc1Ny0zMC43MjEgOC43MmwtMS4yMDkuMjljLTcuNDM0IDEuNzgtMTAuMjE1IDEuNjUzLTE5LjEzOCAyLjIxNiIvPjxwYXRoIGZpbGw9IiM2NWJjNDYiIGQ9Ik0xMjQuMzE2IDIwNi45N2MwLS45MjEuNzQxLTEuNzM2IDEuOTE3LTIuNDMxYy4wMzMtLjU1OS4zMzctMS4wNzkuODQ3LTEuNTU2Yy04LjM3My00LjE2My0yNS41ODUtMTIuMS0yNS45NTQtNy4yYy0uNTA2IDYuNDkxIDAgMzIuOTQxIDMuNDkgMzQuOTQyYzIuMjM0IDEuMjc0IDEzLjIzNC00LjM4IDIwLjg4My04LjYyN2MtMi4yMDctMS44ODEtMS4xODMtNi40NDctMS4xODMtMTUuMTI4bTIxLjYwOSAxMC43MTZsLjExMS4wNDNjNi44NTQgMi42NDUgMjAuNDk4IDcuNjI0IDIzLjQ2MSA2LjUzN2MzLjk5NS0xLjUyNyAyLjk5NS0zMy40NTMtMS40ODktMzQuNDdjLTMuNTkyLS43OTctMTcuMzQzIDguODkyLTIyLjc1MyAxMi44MzljLjk1NyA0LjA0MSAyLjExNSAxMi4wNDUuNjcgMTUuMDUxIi8+PHBhdGggZmlsbD0iIzQzYTI0NCIgZD0iTTEyOS4yMTQgMjIwLjYxMWMtNC40OTUtLjk5Ni0yLjk5My01LjQ5My0yLjk5My0xNS45NzFjMC0uMDM0LjAxLS4wNjcuMDEyLS4xMDFjLTEuMTc2LjY5NS0xLjkxNyAxLjUxLTEuOTE3IDIuNDMxYzAgOC42ODEtMS4wMjQgMTMuMjQ3IDEuMTgzIDE1LjEyOGMuNDU2LjM4OSAxLjA0LjY3MiAxLjgxMS44NDNjNC40OCAxLjAwNCAxMi45NjUgMCAxNS45NjktMS45OTNjLjUwMy0uMzM0Ljg0OC0uOTk4IDEuMDc0LTEuODc0Yy0zLjUxNiAxLjY4NC0xMS4wMjQgMi40NzMtMTUuMTM5IDEuNTM3Ii8+PHBhdGggZmlsbD0iIzY1YmM0NiIgZD0iTTEyNy4wOCAyMDIuOTgzYy0uNTEuNDc3LS44MTQuOTk3LS44NDcgMS41NTZjLS4wMDIuMDM0LS4wMTIuMDY3LS4wMTIuMTAxYzAgMTAuNDc4LTEuNTAyIDE0Ljk3NSAyLjk5MyAxNS45NzFjNC4xMTUuOTM2IDExLjYyMy4xNDcgMTUuMTM5LTEuNTM3Yy4zMDUtLjE0Ni41OTEtLjI5Ni44MzEtLjQ1NmMuMzAxLS4yMDEuNTQ0LS41MjIuNzQxLS45MzJjMS40NDUtMy4wMDYuMjg3LTExLjAxLS42Ny0xNS4wNTFjLS4yMTEtLjg4OS0uNDExLTEuNTg5LS41NzItMS45OTljLS40MTMtMS4wMjItMy41OTQtMS4yODUtNy4yMDMtLjkzMmMtNC4wMTQuMzkzLTguNTQ5IDEuNTUtMTAuNCAzLjI3OSIvPjwvc3ZnPg==",
+  "instructions": "No credentials required — DuckDuckGo search is keyless. The server rate-limits itself (30 searches/min, 20 content fetches/min), and DuckDuckGo may throttle heavy usage."
+}

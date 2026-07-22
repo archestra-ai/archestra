@@ -1,0 +1,105 @@
+{
+  "name": "emicklei__mcp-log-proxy",
+  "display_name": "mcp-log-proxy",
+  "description": "a web logging proxy for MCP client-server communication",
+  "author": {
+    "name": "emicklei"
+  },
+  "server": {
+    "command": "melrose-mcp",
+    "args": ["-log", "${user_config.log_file_path}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "log_file_path": {
+      "type": "file",
+      "title": "Melrose MCP Log File",
+      "description": "Path to the log file for the Melrose MCP server.",
+      "required": false,
+      "default": "${HOME}/Library/Logs/melrose-mcp.log"
+    }
+  },
+  "readme": "## mcp-log-proxy\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/emicklei/mcp-log-proxy)](https://archestra.ai/mcp-catalog/emicklei__mcp-log-proxy)\n\n`mcp-log-proxy` can be used to see the messages to and from a MCP client and a MCP server using a Web interface.\n\nCurrently, it only supports the STDIO interface.\n\n![web log view](doc/screenshot2.png)\n\n### Multiple proxies\n\n![multi flow](doc/multiple_proxies.png)\n\nAll running mcp-log-proxy processes will register themselves in `.mcp-log-proxy-instances.json` located in your home directory. On the web page, you can use the selector to switch to another proxy instance.\n\n## install\n```shell\nbrew tap \"emicklei/tap\"\n```\n\nand then\n\n```shell\nbrew install emicklei/tap/mcp-log-proxy\n```\n\nor via Go\n\n```shell\ngo install github.com/emicklei/mcp-log-proxy@latest\n```\n\n### usage\n\n`mcp-log-proxy` requires one argument `-command` that contains the full command line for starting the MCP server.\n\nFor example, to proxy traffic to the `melrose-mcp` server, the full command is:\n\n    mcp-log-proxy -command melrose-mcp\n\nThis example assumes that both tools are available on your execution PATH.\n\nOnce the proxy is started, messages can be viewed on `http:/localhost:5656`.\n\n#### optional flags\n\nYou can override the Web page title using the `title` flag:\n\n    mcp-log-proxy -command melrose-mcp -title \"Melrōse (proxy)\"   \n\nYou can override the HTTP port(default 5656) using the `port` flag:\n\n    mcp-log-proxy -command melrose-mcp -port 9999\n\nWhen running multiple proxies, the `mcp-log-proxy` will detect whether a HTTP port is taken and choose a different port instead. Using the Web UI you can select any of the other running proxies.\n\nYou can override the log file location of the proxy that captures errors in the proxy itself using the `log` flag:\n\n    mcp-log-proxy -command melrose-mcp -log /your/logs/mcp-log-proxy.log\n\n### Claude examples\n\nThis example proxies the use of the `melrose-mcp` server.\nLocate the binaries to get the correct paths.\n\n    \"melrōse\": {\n      \"command\": \"/Users/SOME-USER/go/bin/mcp-log-proxy\",\n      \"args\": [\n        \"-command\",\n        \"/Users/SOME-USER/go/bin/melrose-mcp -log /Users/SOME-USER/Library/Logs/claude-melrose.log\",\n        \"-log\",\n        \"/Users/SOME-USER/Library/Logs/claude-melrose-proxy.log\",\n        \"-port\",\n        \"7788\",\n        \"-title\",\n        \"Claude Melrose MCP\"\n      ]\n    },\n\nProxying the `browsermcp` server.\n\n    \"browsermcp\": {\n      \"command\": \"/Users/SOME-USER/go/bin/mcp-log-proxy\",\n      \"args\": [\n        \"-command\",\n        \"npx @browsermcp/mcp@latest\",\n        \"-log\",\n        \"/Users/SOME-USER/Library/Logs/claude-browsermcp-proxy.log\",\n        \"-port\",\n        \"7799\",\n        \"-title\",\n        \"Claude Browser MCP\"\n      ]\n    }\n\n### Goose Example\n\nThis example proxies the use of the `melrose-mcp` server.\nLocate the binaries to get the correct paths.\n```\n/Users/SOME-USER/go/bin/mcp-log-proxy -command /Users/SOME-USER/go/bin/melrose-mcp -log /Users/SOME-USER/Library/Logs/goose-melrose.log -port 8888 -title Melrose-MCP\n```\n\n### Error information\n\n![web log view](doc/screenshot1.png)\n\n&copy; 2025, https://ernestmicklei.com. MIT License.\n",
+  "category": "Development",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "melrose-mcp": {
+        "command": "melrose-mcp",
+        "args": [],
+        "env": {}
+      },
+      "melrose-mcp-configured": {
+        "command": "/Users/SOME-USER/go/bin/melrose-mcp",
+        "args": ["-log", "/Users/SOME-USER/Library/Logs/claude-melrose.log"],
+        "env": {}
+      },
+      "browsermcp-mcp": {
+        "command": "npx",
+        "args": ["-y", "@browsermcp/mcp@latest"],
+        "env": {}
+      },
+      "melrose-mcp-stdio": {
+        "command": "/Users/SOME-USER/go/bin/melrose-mcp",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "emicklei",
+    "repo": "mcp-log-proxy",
+    "url": "https://github.com/emicklei/mcp-log-proxy",
+    "name": "mcp-log-proxy",
+    "path": null,
+    "stars": 17,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "3546417fcf336a2f2a6e697cb7527f49c7d89b87"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:46.645Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "emicklei/nanny",
+      "importance": 9
+    },
+    {
+      "name": "gofrs/flock",
+      "importance": 8
+    },
+    {
+      "name": "DmitriyVTitov/size",
+      "importance": 3
+    },
+    {
+      "name": "golang.org/x/sys",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/emicklei/mcp-log-proxy\n\ngo 1.24.0\n\nrequire (\n\tgithub.com/emicklei/nanny v1.54.1\n\tgithub.com/gofrs/flock v0.12.1\n)\n\nrequire (\n\tgithub.com/DmitriyVTitov/size v1.5.0 // indirect\n\tgolang.org/x/sys v0.34.0 // indirect\n)\n"
+}

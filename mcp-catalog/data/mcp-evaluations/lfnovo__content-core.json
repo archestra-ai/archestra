@@ -1,0 +1,169 @@
+{
+  "name": "lfnovo__content-core",
+  "display_name": "content-core",
+  "description": "Extract what matters from any media source",
+  "author": {
+    "name": "lfnovo"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/content_core/mcp_server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Content Core\n\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![PyPI version](https://badge.fury.io/py/content-core.svg)](https://badge.fury.io/py/content-core)\n[![Downloads](https://pepy.tech/badge/content-core)](https://pepy.tech/project/content-core)\n[![Downloads](https://pepy.tech/badge/content-core/month)](https://pepy.tech/project/content-core)\n[![GitHub stars](https://img.shields.io/github/stars/lfnovo/content-core?style=social)](https://github.com/lfnovo/content-core)\n[![GitHub forks](https://img.shields.io/github/forks/lfnovo/content-core?style=social)](https://github.com/lfnovo/content-core)\n[![GitHub issues](https://img.shields.io/github/issues/lfnovo/content-core)](https://github.com/lfnovo/content-core/issues)\n[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)\n[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)\n\n**Content Core** is a powerful, AI-powered content extraction and processing platform that transforms any source into clean, structured content. Extract text from websites, transcribe videos, process documents, and generate AI summaries—all through a unified interface with multiple integration options.\n\n## 🚀 What You Can Do\n\n**Extract content from anywhere:**\n- 📄 **Documents** - PDF, Word, PowerPoint, Excel, Markdown, HTML, EPUB\n- 🎥 **Media** - Videos (MP4, AVI, MOV) with automatic transcription  \n- 🎵 **Audio** - MP3, WAV, M4A with speech-to-text conversion\n- 🌐 **Web** - Any URL with intelligent content extraction\n- 🖼️ **Images** - JPG, PNG, TIFF with OCR text recognition\n- 📦 **Archives** - ZIP, TAR, GZ with content analysis\n\n**Process with AI:**\n- ✨ **Clean & format** extracted content automatically\n- 📝 **Generate summaries** with customizable styles (bullet points, executive summary, etc.)\n- 🎯 **Context-aware processing** - explain to a child, technical summary, action items\n- 🔄 **Smart engine selection** - automatically chooses the best extraction method\n\n## 🛠️ Multiple Ways to Use\n\n### 🖥️ Command Line (Zero Install)\n```bash\n# Extract content from any source\nuvx --from \"content-core\" ccore https://example.com\nuvx --from \"content-core\" ccore document.pdf\n\n# Generate AI summaries  \nuvx --from \"content-core\" csum video.mp4 --context \"bullet points\"\n```\n\n### 🤖 Claude Desktop Integration\nOne-click setup with Model Context Protocol (MCP) - extract content directly in Claude conversations.\n\n### 🔍 Raycast Extension  \nSmart auto-detection commands:\n- **Extract Content** - Full interface with format options\n- **Summarize Content** - 9 summary styles available\n- **Quick Extract** - Instant clipboard extraction\n\n### 🖱️ macOS Right-Click Integration\nRight-click any file in Finder → Services → Extract or Summarize content instantly.\n\n### 🐍 Python Library\n```python\nimport content_core as cc\n\n# Extract from any source\nresult = await cc.extract(\"https://example.com/article\")\nsummary = await cc.summarize_content(result, context=\"explain to a child\")\n```\n\n## ⚡ Key Features\n\n*   **🎯 Intelligent Auto-Detection:** Automatically selects the best extraction method based on content type and available services\n*   **🔧 Smart Engine Selection:** \n    * **URLs:** Firecrawl → Jina → BeautifulSoup fallback chain\n    * **Documents:** Docling → Enhanced PyMuPDF → Simple extraction fallback  \n    * **Media:** OpenAI Whisper transcription\n    * **Images:** OCR with multiple engine support\n*   **📊 Enhanced PDF Processing:** Advanced PyMuPDF engine with quality flags, table detection, and optional OCR for mathematical formulas\n*   **🌍 Multiple Integrations:** CLI, Python library, MCP server, Raycast extension, macOS Services\n*   **⚡ Zero-Install Options:** Use `uvx` for instant access without installation\n*   **🧠 AI-Powered Processing:** LLM integration for content cleaning and summarization\n*   **🔄 Asynchronous:** Built with `asyncio` for efficient processing\n*   **🐍 Pure Python Implementation:** No system dependencies required - simplified installation across all platforms\n\n## Getting Started\n\n### Installation\n\nInstall Content Core using `pip` - **no system dependencies required!**\n\n```bash\n# Basic installation (PyMuPDF + BeautifulSoup/Jina extraction)\npip install content-core\n\n# With enhanced document processing (adds Docling)\npip install content-core[docling]\n\n# With MCP server support (now included by default)\npip install content-core\n\n# Full installation (with enhanced document processing)\npip install content-core[docling]\n```\n\n> **Note:** Unlike many content extraction tools, Content Core uses pure Python implementations and doesn't require system libraries like libmagic. This ensures consistent, hassle-free installation across Windows, macOS, and Linux.\n\nAlternatively, if you’re developing locally:\n\n```bash\n# Clone the repository\ngit clone https://github.com/lfnovo/content-core\ncd content-core\n\n# Install with uv\nuv sync\n```\n\n### Command-Line Interface\n\nContent Core provides three CLI commands for extracting, cleaning, and summarizing content: \nccore, cclean, and csum. These commands support input from text, URLs, files, or piped data (e.g., via cat file | command).\n\n**Zero-install usage with uvx:**\n```bash\n# Extract content\nuvx --from \"content-core\" ccore https://example.com\n\n# Clean content  \nuvx --from \"content-core\" cclean \"messy content\"\n\n# Summarize content\nuvx --from \"content-core\" csum \"long text\" --context \"bullet points\"\n```\n\n#### ccore - Extract Content\n\nExtracts content from text, URLs, or files, with optional formatting.\nUsage:\n```bash\nccore [-f|--format xml|json|text] [-d|--debug] [content]\n```\nOptions:\n- `-f`, `--format`: Output format (xml, json, or text). Default: text.\n- `-d`, `--debug`: Enable debug logging.\n- `content`: Input content (text, URL, or file path). If omitted, reads from stdin.\n\nExamples:\n\n```bash\n# Extract from a URL as text\nccore https://example.com\n\n# Extract from a file as JSON\nccore -f json document.pdf\n\n# Extract from piped text as XML\necho \"Sample text\" | ccore --format xml\n```\n\n#### cclean - Clean Content\nCleans content by removing unnecessary formatting, spaces, or artifacts. Accepts text, JSON, XML input, URLs, or file paths.\nUsage:\n\n```bash\ncclean [-d|--debug] [content]\n```\n\nOptions:\n- `-d`, `--debug`: Enable debug logging.\n- `content`: Input content to clean (text, URL, file path, JSON, or XML). If omitted, reads from stdin.\n\nExamples:\n\n```bash\n# Clean a text string\ncclean \"  messy   text   \"\n\n# Clean piped JSON\necho '{\"content\": \"  messy   text   \"}' | cclean\n\n# Clean content from a URL\ncclean https://example.com\n\n# Clean a file’s content\ncclean document.txt\n```\n\n### csum - Summarize Content\n\nSummarizes content with an optional context to guide the summary style. Accepts text, JSON, XML input, URLs, or file paths.\n\nUsage:\n\n```bash\ncsum [--context \"context text\"] [-d|--debug] [content]\n```\n\nOptions:\n- `--context`: Context for summarization (e.g., \"explain to a child\"). Default: none.\n- `-d`, `--debug`: Enable debug logging.\n- `content`: Input content to summarize (text, URL, file path, JSON, or XML). If omitted, reads from stdin.\n\nExamples:\n\n```bash\n# Summarize text\ncsum \"AI is transforming industries.\"\n\n# Summarize with context\ncsum --context \"in bullet points\" \"AI is transforming industries.\"\n\n# Summarize piped content\ncat article.txt | csum --context \"one sentence\"\n\n# Summarize content from URL\ncsum https://example.com\n\n# Summarize a file's content\ncsum document.txt\n```\n\n## Quick Start\n\nYou can quickly integrate `content-core` into your Python projects to extract, clean, and summarize content from various sources.\n\n```python\nimport content_core as cc\n\n# Extract content from a URL, file, or text\nresult = await cc.extract(\"https://example.com/article\")\n\n# Clean messy content\ncleaned_text = await cc.clean(\"...messy text with [brackets] and extra spaces...\")\n\n# Summarize content with optional context\nsummary = await cc.summarize_content(\"long article text\", context=\"explain to a child\")\n```\n\n## Documentation\n\nFor more information on how to use the Content Core library, including details on AI model configuration and customization, refer to our [Usage Documentation](docs/usage.md).\n\n## MCP Server Integration\n\nContent Core includes a Model Context Protocol (MCP) server that enables seamless integration with Claude Desktop and other MCP-compatible applications. The MCP server exposes Content Core's powerful extraction capabilities through a standardized protocol.\n\n<a href=\"https://glama.ai/mcp/servers/@lfnovo/content-core\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@lfnovo/content-core/badge\" />\n</a>\n\n### Quick Setup with Claude Desktop\n\n```bash\n# Install Content Core (MCP server included)\npip install content-core\n\n# Or use directly with uvx (no installation required)\nuvx --from \"content-core\" content-core-mcp\n```\n\nAdd to your `claude_desktop_config.json`:\n```json\n{\n  \"mcpServers\": {\n    \"content-core\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--from\",\n        \"content-core\",\n        \"content-core-mcp\"\n      ]\n    }\n  }\n}\n```\n\nFor detailed setup instructions, configuration options, and usage examples, see our [MCP Documentation](docs/mcp.md).\n\n## Enhanced PDF Processing\n\nContent Core features an optimized PyMuPDF extraction engine with significant improvements for scientific documents and complex PDFs.\n\n### Key Improvements\n\n- **🔬 Mathematical Formula Extraction**: Enhanced quality flags eliminate `<!-- formula-not-decoded -->` placeholders\n- **📊 Automatic Table Detection**: Tables converted to markdown format for LLM consumption\n- **🔧 Quality Text Rendering**: Better ligature, whitespace, and image-text integration\n- **⚡ Optional OCR Enhancement**: Selective OCR for formula-heavy pages (requires Tesseract)\n\n### Configuration for Scientific Documents\n\nFor documents with heavy mathematical content, enable OCR enhancement:\n\n```yaml\n# In cc_config.yaml\nextraction:\n  pymupdf:\n    enable_formula_ocr: true      # Enable OCR for formula-heavy pages\n    formula_threshold: 3          # Min formulas per page to trigger OCR\n    ocr_fallback: true           # Graceful fallback if OCR fails\n```\n\n```python\n# Runtime configuration\nfrom content_core.config import set_pymupdf_ocr_enabled\nset_pymupdf_ocr_enabled(True)\n```\n\n### Requirements for OCR Enhancement\n\n```bash\n# Install Tesseract OCR (optional, for formula enhancement)\n# macOS\nbrew install tesseract\n\n# Ubuntu/Debian\nsudo apt-get install tesseract-ocr\n```\n\n**Note**: OCR is optional - you get improved PDF extraction automatically without any additional setup.\n\n## macOS Services Integration\n\nContent Core provides powerful right-click integration with macOS Finder, allowing you to extract and summarize content from any file without installation. Choose between clipboard or TextEdit output for maximum flexibility.\n\n### Available Services\n\nCreate **4 convenient services** for different workflows:\n\n- **Extract Content → Clipboard** - Quick copy for immediate pasting\n- **Extract Content → TextEdit** - Review before using  \n- **Summarize Content → Clipboard** - Quick summary copying\n- **Summarize Content → TextEdit** - Formatted summary with headers\n\n### Quick Setup\n\n1. **Install uv** (if not already installed):\n   ```bash\n   curl -LsSf https://astral.sh/uv/install.sh | sh\n   ```\n\n2. **Create services manually** using Automator (5 minutes setup)\n\n### Usage\n\n**Right-click any supported file** in Finder → **Services** → Choose your option:\n\n- **PDFs, Word docs** - Instant text extraction\n- **Videos, audio files** - Automatic transcription  \n- **Images** - OCR text recognition\n- **Web content** - Clean text extraction\n- **Multiple files** - Batch processing support\n\n### Features\n\n- **Zero-install processing**: Uses `uvx` for isolated execution\n- **Multiple output options**: Clipboard or TextEdit display\n- **System notifications**: Visual feedback on completion\n- **Wide format support**: 20+ file types supported\n- **Batch processing**: Handle multiple files at once\n- **Keyboard shortcuts**: Assignable hotkeys for power users\n\nFor complete setup instructions with copy-paste scripts, see [macOS Services Documentation](docs/macos.md).\n\n## Raycast Extension\n\nContent Core provides a powerful Raycast extension with smart auto-detection that handles both URLs and file paths seamlessly. Extract and summarize content directly from your Raycast interface without switching applications.\n\n### Quick Setup\n\n**From Raycast Store** (coming soon):\n1. Open Raycast and search for \"Content Core\"\n2. Install the extension by `luis_novo`\n3. Configure API keys in preferences\n\n**Manual Installation**:\n1. Download the extension from the repository\n2. Open Raycast → \"Import Extension\"\n3. Select the `raycast-content-core` folder\n\n### Commands\n\n**🔍 Extract Content** - Smart URL/file detection with full interface\n- Auto-detects URLs vs file paths in real-time\n- Multiple output formats (Text, JSON, XML)\n- Drag & drop support for files\n- Rich results view with metadata\n\n**📝 Summarize Content** - AI-powered summaries with customizable styles  \n- 9 different summary styles (bullet points, executive summary, etc.)\n- Auto-detects source type with visual feedback\n- One-click snippet creation and quicklinks\n\n**⚡ Quick Extract** - Instant extraction to clipboard\n- Type → Tab → Paste source → Enter\n- No UI, works directly from command bar\n- Perfect for quick workflows\n\n### Features\n\n- **Smart Auto-Detection**: Instantly recognizes URLs vs file paths\n- **Zero Installation**: Uses `uvx` for Content Core execution\n- **Rich Integration**: Keyboard shortcuts, clipboard actions, Raycast snippets\n- **All File Types**: Documents, videos, audio, images, archives\n- **Visual Feedback**: Real-time type detection with icons\n\nFor detailed setup, configuration, and usage examples, see [Raycast Extension Documentation](docs/raycast.md).\n\n## Using with Langchain\n\nFor users integrating with the [Langchain](https://python.langchain.com/) framework, `content-core` exposes a set of compatible tools. These tools, located in the `src/content_core/tools` directory, allow you to leverage `content-core` extraction, cleaning, and summarization capabilities directly within your Langchain agents and chains.\n\nYou can import and use these tools like any other Langchain tool. For example:\n\n```python\nfrom content_core.tools import extract_content_tool, cleanup_content_tool, summarize_content_tool\nfrom langchain.agents import initialize_agent, AgentType\n\ntools = [extract_content_tool, cleanup_content_tool, summarize_content_tool]\nagent = initialize_agent(tools, llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True)\nagent.run(\"Extract the content from https://example.com and then summarize it.\") \n```\n\nRefer to the source code in `src/content_core/tools` for specific tool implementations and usage details.\n\n## Basic Usage\n\nThe core functionality revolves around the extract_content function.\n\n```python\nimport asyncio\nfrom content_core.extraction import extract_content\n\nasync def main():\n    # Extract from raw text\n    text_data = await extract_content({\"content\": \"This is my sample text content.\"})\n    print(text_data)\n\n    # Extract from a URL (uses 'auto' engine by default)\n    url_data = await extract_content({\"url\": \"https://www.example.com\"})\n    print(url_data)\n\n    # Extract from a local video file (gets transcript, engine='auto' by default)\n    video_data = await extract_content({\"file_path\": \"path/to/your/video.mp4\"})\n    print(video_data)\n\n    # Extract from a local markdown file (engine='auto' by default)\n    md_data = await extract_content({\"file_path\": \"path/to/your/document.md\"})\n    print(md_data)\n\n    # Per-execution override with Docling for documents\n    doc_data = await extract_content({\n        \"file_path\": \"path/to/your/document.pdf\",\n        \"document_engine\": \"docling\",\n        \"output_format\": \"html\"\n    })\n    \n    # Per-execution override with Firecrawl for URLs\n    url_data = await extract_content({\n        \"url\": \"https://www.example.com\",\n        \"url_engine\": \"firecrawl\"\n    })\n    print(doc_data)\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n```\n\n(See `src/content_core/notebooks/run.ipynb` for more detailed examples.)\n\n## Docling Integration\n\nContent Core supports an optional Docling-based extraction engine for rich document formats (PDF, DOCX, PPTX, XLSX, Markdown, AsciiDoc, HTML, CSV, Images).\n\n\n### Enabling Docling\n\nDocling is not the default engine when parsing documents. If you don't want to use it, you need to set engine to \"simple\". \n\n#### Via configuration file\n\nIn your `cc_config.yaml` or custom config, set:\n```yaml\nextraction:\n  document_engine: docling  # 'auto' (default), 'simple', or 'docling'\n  url_engine: auto          # 'auto' (default), 'simple', 'firecrawl', or 'jina'\n  docling:\n    output_format: markdown  # markdown | html | json\n```\n\n#### Programmatically in Python\n\n```python\nfrom content_core.config import set_document_engine, set_url_engine, set_docling_output_format\n\n# switch document engine to Docling\nset_document_engine(\"docling\")\n\n# switch URL engine to Firecrawl\nset_url_engine(\"firecrawl\")\n\n# choose output format: 'markdown', 'html', or 'json'\nset_docling_output_format(\"html\")\n\n# now use ccore.extract or ccore.ccore\nresult = await cc.extract(\"document.pdf\")\n```\n\n## Configuration\n\nConfiguration settings (like API keys for external services, logging levels) can be managed through environment variables or `.env` files, loaded automatically via `python-dotenv`.\n\nExample `.env`:\n\n```plaintext\nOPENAI_API_KEY=your-key-here\nGOOGLE_API_KEY=your-key-here\n\n# Engine Selection (optional)\nCCORE_DOCUMENT_ENGINE=auto  # auto, simple, docling\nCCORE_URL_ENGINE=auto       # auto, simple, firecrawl, jina\n```\n\n### Engine Selection via Environment Variables\n\nFor deployment scenarios like MCP servers or Raycast extensions, you can override the extraction engines using environment variables:\n\n- **`CCORE_DOCUMENT_ENGINE`**: Force document engine (`auto`, `simple`, `docling`)\n- **`CCORE_URL_ENGINE`**: Force URL engine (`auto`, `simple`, `firecrawl`, `jina`)\n\nThese variables take precedence over config file settings and provide explicit control for different deployment scenarios.\n\n### Custom Prompt Templates\n\nContent Core allows you to define custom prompt templates for content processing. By default, the library uses built-in prompts located in the `prompts` directory. However, you can create your own prompt templates and store them in a dedicated directory. To specify the location of your custom prompts, set the `PROMPT_PATH` environment variable in your `.env` file or system environment.\n\nExample `.env` with custom prompt path:\n\n```plaintext\nOPENAI_API_KEY=your-key-here\nGOOGLE_API_KEY=your-key-here\nPROMPT_PATH=/path/to/your/custom/prompts\n```\n\nWhen a prompt template is requested, Content Core will first look in the custom directory specified by `PROMPT_PATH` (if set and exists). If the template is not found there, it will fall back to the default built-in prompts. This allows you to override specific prompts while still using the default ones for others.\n\n## Development\n\nTo set up a development environment:\n\n```bash\n# Clone the repository\ngit clone <repository-url>\ncd content-core\n\n# Create virtual environment and install dependencies\nuv venv\nsource .venv/bin/activate\nuv sync --group dev\n\n# Run tests\nmake test\n\n# Lint code\nmake lint\n\n# See all commands\nmake help\n```\n\n## License\n\nThis project is licensed under the [MIT License](LICENSE). See the [LICENSE](LICENSE) file for details.\n\n## Contributing\n\nContributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) for more details on how to get started.\n",
+  "category": "AI Tools",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "content-core-ccore": {
+        "command": "uvx",
+        "args": ["--from", "content-core", "ccore"]
+      },
+      "content-core-cclean": {
+        "command": "uvx",
+        "args": ["--from", "content-core", "cclean"]
+      },
+      "content-core-csum": {
+        "command": "uvx",
+        "args": ["--from", "content-core", "csum"]
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "lfnovo",
+    "repo": "content-core",
+    "url": "https://github.com/lfnovo/content-core",
+    "name": "content-core",
+    "path": null,
+    "stars": 33,
+    "contributors": 2,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "7992d485da02e672f681cde57564b5e0b3c3cc50"
+  },
+  "programming_language": "Jupyter Notebook",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:29.066Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "pymupdf",
+      "importance": 8
+    },
+    {
+      "name": "langgraph",
+      "importance": 8
+    },
+    {
+      "name": "firecrawl-py",
+      "importance": 8
+    },
+    {
+      "name": "bs4",
+      "importance": 7
+    },
+    {
+      "name": "pandas",
+      "importance": 7
+    },
+    {
+      "name": "youtube-transcript-api",
+      "importance": 7
+    },
+    {
+      "name": "moviepy",
+      "importance": 7
+    },
+    {
+      "name": "readability-lxml",
+      "importance": 7
+    },
+    {
+      "name": "pillow",
+      "importance": 7
+    },
+    {
+      "name": "pytubefix",
+      "importance": 7
+    },
+    {
+      "name": "jinja2",
+      "importance": 6
+    },
+    {
+      "name": "langdetect",
+      "importance": 6
+    },
+    {
+      "name": "openpyxl",
+      "importance": 6
+    },
+    {
+      "name": "python-docx",
+      "importance": 6
+    },
+    {
+      "name": "python-pptx",
+      "importance": 6
+    },
+    {
+      "name": "ai-prompter",
+      "importance": 6
+    },
+    {
+      "name": "asciidoc",
+      "importance": 6
+    },
+    {
+      "name": "esperanto",
+      "importance": 4
+    },
+    {
+      "name": "loguru",
+      "importance": 4
+    },
+    {
+      "name": "dicttoxml",
+      "importance": 4
+    },
+    {
+      "name": "validators",
+      "importance": 4
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"content-core\"\nversion = \"1.4.0\"\ndescription = \"Extract what matters from any media source. Available as Python Library, macOS Service, CLI and MCP Server\"\nreadme = \"README.md\"\nhomepage = \"https://github.com/lfnovo/content-core\"\nauthors = [\n    { name = \"LUIS NOVO\", email = \"lfnovo@gmail.com\" }\n]\nrequires-python = \">=3.10\"\ndependencies = [\n    \"aiohttp>=3.11\",\n    \"bs4>=0.0.2\",\n    \"esperanto>=1.2.0\",\n    \"jinja2>=3.1.6\",\n    \"langdetect>=1.0.9\",\n    \"loguru>=0.7.3\",\n    \"openpyxl>=3.1.5\",\n    \"pandas>=2.2.3\",\n    \"pymupdf>=1.25.5\",\n    \"python-docx>=1.1.2\",\n    \"python-dotenv>=1.1.0\",\n    \"python-pptx>=1.0.2\",\n    \"youtube-transcript-api>=1.0.3\",\n    \"langgraph>=0.3.29\",\n    \"dicttoxml>=1.7.16\",\n    \"validators>=0.34.0\",\n    \"ai-prompter>=0.2.3\",\n    \"moviepy>=2.1.2\",\n    \"readability-lxml>=0.8.4.1\",\n    \"firecrawl-py>=2.7.0\",\n    \"pillow>=10.4.0\",\n    \"asciidoc>=10.2.1\",\n    \"pytubefix>=9.1.1\",\n    \"fastmcp>=2.10.0\",\n]\n\n[project.optional-dependencies]\ndocling = [\"docling>=2.34.0\"]\n\n[project.scripts]\nccore = \"content_core:ccore\"\ncclean = \"content_core:cclean\"\ncsum = \"content_core:csum\"\ncontent-core-mcp = \"content_core.mcp.server:main\"\n\n[tool.hatch.metadata]\nallow-direct-references = true\n\n[build-system]\nrequires = [\"hatchling\", \"pip\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.setuptools]\npackage-dir = {\"content_core\" = \"src/content_core\"}\n\n[tool.uv.sources]\n\n[dependency-groups]\ndev = [\n    \"ipykernel>=4.0.1\",\n    \"ipywidgets>=4.0.0\",\n    \"openai>=1.78.1\",\n    \"pyperclip>=1.9.0\",\n    \"pytest>=7.2.0\",\n    \"pytest-asyncio>=0.21.0\",\n]\n\n[tool.pytest.ini_options]\npythonpath = [\"src\"]\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\n\n\n=== raycast-content-core/package.json ===\n{\n  \"$schema\": \"https://www.raycast.com/schemas/extension.json\",\n  \"name\": \"raycast-content-core\",\n  \"title\": \"Content Core\",\n  \"description\": \"Extract content from URLs, documents, videos, and audio files using Content Core's intelligent auto-engine\",\n  \"icon\": \"command-icon.png\",\n  \"author\": \"luis_novo\",\n  \"license\": \"MIT\",\n  \"keywords\": [\n    \"content\",\n    \"extract\",\n    \"pdf\",\n    \"video\",\n    \"audio\",\n    \"transcription\",\n    \"summary\",\n    \"ocr\",\n    \"documents\"\n  ],\n  \"categories\": [\n    \"Productivity\",\n    \"Developer Tools\"\n  ],\n  \"version\": \"1.0.0\",\n  \"preferences\": [\n    {\n      \"name\": \"openaiApiKey\",\n      \"type\": \"password\",\n      \"required\": false,\n      \"title\": \"OpenAI API Key\",\n      \"description\": \"Required for audio/video transcription and AI-powered content cleaning\",\n      \"placeholder\": \"sk-...\"\n    },\n    {\n      \"name\": \"firecrawlApiKey\",\n      \"type\": \"password\",\n      \"required\": false,\n      \"title\": \"Firecrawl API Key\",\n      \"description\": \"Optional: For enhanced web crawling and content extraction\",\n      \"placeholder\": \"fc-...\"\n    },\n    {\n      \"name\": \"jinaApiKey\",\n      \"type\": \"password\",\n      \"required\": false,\n      \"title\": \"Jina API Key\",\n      \"description\": \"Optional: Alternative web crawling service (fallback)\",\n      \"placeholder\": \"jina_...\"\n    }\n  ],\n  \"commands\": [\n    {\n      \"name\": \"extract-content\",\n      \"title\": \"Extract Content\",\n      \"description\": \"Extract content from URLs, files, documents, videos, and audio\",\n      \"mode\": \"view\",\n      \"keywords\": [\n        \"extract\",\n        \"content\",\n        \"url\",\n        \"file\",\n        \"pdf\",\n        \"document\",\n        \"video\",\n        \"audio\"\n      ]\n    },\n    {\n      \"name\": \"summarize-content\",\n      \"title\": \"Summarize Content\",\n      \"description\": \"Generate AI-powered summaries from URLs, files, and documents\",\n      \"mode\": \"view\",\n      \"keywords\": [\n        \"summarize\",\n        \"summary\",\n        \"ai\",\n        \"url\",\n        \"file\",\n        \"document\"\n      ]\n    },\n    {\n      \"name\": \"quick-extract\",\n      \"title\": \"Quick Extract\",\n      \"description\": \"Extract content from URL or file path directly to clipboard\",\n      \"mode\": \"no-view\",\n      \"arguments\": [\n        {\n          \"name\": \"source\",\n          \"placeholder\": \"URL or file path to extract\",\n          \"type\": \"text\",\n          \"required\": true\n        }\n      ],\n      \"keywords\": [\n        \"quick\",\n        \"extract\",\n        \"clipboard\",\n        \"url\",\n        \"file\"\n      ]\n    }\n  ],\n  \"dependencies\": {\n    \"@raycast/api\": \"1.70.0\",\n    \"@raycast/utils\": \"^1.12.0\"\n  },\n  \"devDependencies\": {\n    \"@raycast/eslint-config\": \"^1.0.6\",\n    \"@types/node\": \"20.8.10\",\n    \"@types/react\": \"18.2.27\",\n    \"eslint\": \"^8.51.0\",\n    \"prettier\": \"^3.0.3\",\n    \"typescript\": \"^5.2.2\"\n  },\n  \"scripts\": {\n    \"build\": \"ray build -e dist\",\n    \"build-no-types\": \"ray build -e dist --skip-types\",\n    \"dev\": \"ray develop\",\n    \"fix-lint\": \"ray lint --fix\",\n    \"lint\": \"ray lint\",\n    \"publish\": \"npx @raycast/api@latest publish\"\n  }\n}\n"
+}

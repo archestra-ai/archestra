@@ -47,15 +47,17 @@ describe("resolveAgentMaxOutputTokens", () => {
 
   describe("Ollama providers (unknown output ceiling)", () => {
     for (const provider of ["ollama", "ollama-native"] as const) {
-      test(`${provider}: falls back to the context window, not 8192`, () => {
+      test(`${provider}: derives the budget from the context window, not 8192`, () => {
+        // `num_predict` is drawn from the same `num_ctx` window as the prompt,
+        // so the fallback lands on half the window rather than all of it.
         expect(
           resolveAgentMaxOutputTokens({
             outputLength: null,
             ceiling,
             provider,
-            contextLength: 16384,
+            contextLength: 40960,
           }),
-        ).toBe(16384);
+        ).toBe(20480);
       });
 
       test(`${provider}: the operator ceiling still caps the context fallback`, () => {
@@ -118,5 +120,47 @@ describe("resolveAgentMaxOutputTokens", () => {
         ).toBe(UNKNOWN_MODEL_OUTPUT_TOKENS);
       }
     });
+  });
+
+  test("caps shared-window models at half the context so the prompt has room", () => {
+    // gpt-4: output 8192 == context 8192 — requesting the full output ceiling
+    // would consume the entire window and 400 on every request.
+    expect(
+      resolveAgentMaxOutputTokens({
+        outputLength: 8192,
+        contextLength: 8192,
+        ceiling,
+      }),
+    ).toBe(4096);
+  });
+
+  test("the shared-window cap never binds for modern large-context models", () => {
+    expect(
+      resolveAgentMaxOutputTokens({
+        outputLength: 128000,
+        contextLength: 400000,
+        ceiling: 200000,
+      }),
+    ).toBe(128000);
+  });
+
+  test("an unknown context window leaves the budget unchanged", () => {
+    expect(
+      resolveAgentMaxOutputTokens({
+        outputLength: 8192,
+        contextLength: null,
+        ceiling,
+      }),
+    ).toBe(8192);
+  });
+
+  test("an invalid context window is treated as unknown", () => {
+    expect(
+      resolveAgentMaxOutputTokens({
+        outputLength: 8192,
+        contextLength: 0,
+        ceiling,
+      }),
+    ).toBe(8192);
   });
 });

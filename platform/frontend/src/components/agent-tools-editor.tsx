@@ -3,6 +3,7 @@
 import {
   type AgentScope,
   ARCHESTRA_MCP_CATALOG_ID,
+  ARCHESTRA_TOOL_GROUPS,
   type archestraApiTypes,
   E2eTestId,
   getAgentToolCatalogPillTestId,
@@ -10,7 +11,7 @@ import {
   parseFullToolName,
 } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Search } from "lucide-react";
 import {
   forwardRef,
   useCallback,
@@ -1348,6 +1349,104 @@ function ExpandableDescription({ description }: { description: string }) {
   );
 }
 
+function ToolRow({
+  tool,
+  isSelected,
+  disableVariant,
+  onToggle,
+}: {
+  tool: CatalogTool;
+  isSelected: boolean;
+  disableVariant: boolean;
+  onToggle: (toolId: string) => void;
+}) {
+  const toolName = formatToolName(tool.name);
+  return (
+    <label
+      htmlFor={`tool-${tool.id}`}
+      className={cn(
+        "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
+        !isSelected && "hover:bg-muted/50",
+        isSelected && (disableVariant ? "bg-destructive/10" : "bg-primary/10"),
+      )}
+    >
+      <Checkbox
+        id={`tool-${tool.id}`}
+        checked={isSelected}
+        onCheckedChange={() => onToggle(tool.id)}
+        className="mt-0.5"
+      />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-medium">{toolName}</div>
+          {disableVariant && isSelected && (
+            <Badge
+              variant="outline"
+              className="border-destructive/40 text-destructive px-1.5 py-0"
+            >
+              Disabled
+            </Badge>
+          )}
+        </div>
+        {tool.description && (
+          <ExpandableDescription description={tool.description} />
+        )}
+      </div>
+    </label>
+  );
+}
+
+const OTHER_GROUP_ID = "__other__";
+const KNOWN_GROUP_IDS = new Set<string>(
+  ARCHESTRA_TOOL_GROUPS.map((group) => group.id),
+);
+
+/**
+ * Section id a tool renders under. A tool with no group or an unrecognized one
+ * (an external MCP tool, or a newer server group id this build doesn't know
+ * yet) maps to "Other" — never dropped, since only rendered sections are
+ * reachable. Single source for both bucketing and header counts so a body and
+ * its count can't diverge.
+ */
+function toolGroupKey(tool: CatalogTool): string {
+  return tool.group && KNOWN_GROUP_IDS.has(tool.group)
+    ? tool.group
+    : OTHER_GROUP_ID;
+}
+
+/**
+ * Buckets tools into domain sections in canonical `ARCHESTRA_TOOL_GROUPS`
+ * order. Empty groups are omitted; the "Other" section is appended last when
+ * non-empty.
+ */
+function bucketToolsByGroup(
+  tools: CatalogTool[],
+): { id: string; label: string; tools: CatalogTool[] }[] {
+  const byGroup = new Map<string, CatalogTool[]>();
+  for (const tool of tools) {
+    const key = toolGroupKey(tool);
+    const bucket = byGroup.get(key);
+    if (bucket) {
+      bucket.push(tool);
+    } else {
+      byGroup.set(key, [tool]);
+    }
+  }
+
+  const sections: { id: string; label: string; tools: CatalogTool[] }[] = [];
+  for (const group of ARCHESTRA_TOOL_GROUPS) {
+    const groupTools = byGroup.get(group.id);
+    if (groupTools && groupTools.length > 0) {
+      sections.push({ id: group.id, label: group.label, tools: groupTools });
+    }
+  }
+  const otherTools = byGroup.get(OTHER_GROUP_ID);
+  if (otherTools && otherTools.length > 0) {
+    sections.push({ id: OTHER_GROUP_ID, label: "Other", tools: otherTools });
+  }
+  return sections;
+}
+
 export function ToolChecklist({
   tools,
   selectedToolIds,
@@ -1405,6 +1504,61 @@ export function ToolChecklist({
     onSelectionChange(newSet);
   };
 
+  const setToolsSelected = (groupTools: CatalogTool[], selected: boolean) => {
+    const newSet = new Set(selectedToolIds);
+    for (const tool of groupTools) {
+      if (selected) {
+        newSet.add(tool.id);
+      } else {
+        newSet.delete(tool.id);
+      }
+    }
+    onSelectionChange(newSet);
+  };
+
+  // Built-in Archestra tools carry a domain group; render collapsible sections
+  // when at least one does. External MCP tools have none, so the flat list
+  // stays the fallback. Counts use the full group (stable while searching);
+  // section select-all/clear act on the group's currently visible tools.
+  const grouped = tools.some((tool) => tool.group);
+  const sections = useMemo(
+    () => (grouped ? bucketToolsByGroup(filteredTools) : []),
+    [grouped, filteredTools],
+  );
+  const fullGroupTotals = useMemo(() => {
+    const totals = new Map<string, { total: number; selected: number }>();
+    if (!grouped) return totals;
+    for (const tool of tools) {
+      const key = toolGroupKey(tool);
+      const entry = totals.get(key) ?? { total: 0, selected: 0 };
+      entry.total += 1;
+      if (selectedToolIds.has(tool.id)) entry.selected += 1;
+      totals.set(key, entry);
+    }
+    return totals;
+  }, [grouped, tools, selectedToolIds]);
+
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    // Collapsed by default: the per-section count is the scannable summary.
+    () =>
+      new Set([
+        ...ARCHESTRA_TOOL_GROUPS.map((group) => group.id),
+        OTHER_GROUP_ID,
+      ]),
+  );
+  const isSearching = searchQuery.trim().length > 0;
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="flex flex-col min-h-0 flex-1">
       <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30 shrink-0">
@@ -1448,54 +1602,112 @@ export function ToolChecklist({
         </div>
       )}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="p-2 space-y-0.5">
-          {filteredTools.length === 0 ? (
-            <div className="text-center py-4 text-sm text-muted-foreground">
-              No tools match your search
-            </div>
-          ) : (
-            filteredTools.map((tool) => {
-              const toolName = formatToolName(tool.name);
-              const isSelected = selectedToolIds.has(tool.id);
-
-              return (
-                <label
-                  key={tool.id}
-                  htmlFor={`tool-${tool.id}`}
-                  className={cn(
-                    "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
-                    !isSelected && "hover:bg-muted/50",
-                    isSelected &&
-                      (disableVariant ? "bg-destructive/10" : "bg-primary/10"),
-                  )}
-                >
-                  <Checkbox
-                    id={`tool-${tool.id}`}
-                    checked={isSelected}
-                    onCheckedChange={() => handleToggle(tool.id)}
-                    className="mt-0.5"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm font-medium">{toolName}</div>
-                      {disableVariant && isSelected && (
-                        <Badge
-                          variant="outline"
-                          className="border-destructive/40 text-destructive px-1.5 py-0"
+        {grouped ? (
+          <div className="p-2 space-y-1">
+            {sections.length === 0 ? (
+              <div className="text-center py-4 text-sm text-muted-foreground">
+                No tools match your search
+              </div>
+            ) : (
+              sections.map((section) => {
+                const totals = fullGroupTotals.get(section.id) ?? {
+                  total: section.tools.length,
+                  selected: 0,
+                };
+                // While searching, keep matching sections open so results show.
+                const expanded =
+                  isSearching || !collapsedGroups.has(section.id);
+                const allGroupSelected = section.tools.every((tool) =>
+                  selectedToolIds.has(tool.id),
+                );
+                const noneGroupSelected = section.tools.every(
+                  (tool) => !selectedToolIds.has(tool.id),
+                );
+                return (
+                  <div
+                    key={section.id}
+                    className="rounded-md border overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-muted/40">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(section.id)}
+                        disabled={isSearching}
+                        aria-expanded={expanded}
+                        className="flex items-center gap-1.5 min-w-0 disabled:cursor-default"
+                      >
+                        {expanded ? (
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        )}
+                        <span className="text-xs font-semibold truncate">
+                          {section.label}
+                        </span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {totals.selected}/{totals.total}
+                        </span>
+                      </button>
+                      <div className="flex gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs h-5 px-1.5"
+                          onClick={() => setToolsSelected(section.tools, true)}
+                          disabled={allGroupSelected}
+                          aria-label={`${disableVariant ? "Disable all" : "Select all"} ${section.label} tools`}
                         >
-                          Disabled
-                        </Badge>
-                      )}
+                          {disableVariant ? "Disable all" : "Select all"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs h-5 px-1.5"
+                          onClick={() => setToolsSelected(section.tools, false)}
+                          disabled={noneGroupSelected}
+                          aria-label={`${disableVariant ? "Enable all" : "Clear"} ${section.label} tools`}
+                        >
+                          {disableVariant ? "Enable all" : "Clear"}
+                        </Button>
+                      </div>
                     </div>
-                    {tool.description && (
-                      <ExpandableDescription description={tool.description} />
+                    {expanded && (
+                      <div className="p-1 space-y-0.5">
+                        {section.tools.map((tool) => (
+                          <ToolRow
+                            key={tool.id}
+                            tool={tool}
+                            isSelected={selectedToolIds.has(tool.id)}
+                            disableVariant={disableVariant}
+                            onToggle={handleToggle}
+                          />
+                        ))}
+                      </div>
                     )}
                   </div>
-                </label>
-              );
-            })
-          )}
-        </div>
+                );
+              })
+            )}
+          </div>
+        ) : (
+          <div className="p-2 space-y-0.5">
+            {filteredTools.length === 0 ? (
+              <div className="text-center py-4 text-sm text-muted-foreground">
+                No tools match your search
+              </div>
+            ) : (
+              filteredTools.map((tool) => (
+                <ToolRow
+                  key={tool.id}
+                  tool={tool}
+                  isSelected={selectedToolIds.has(tool.id)}
+                  disableVariant={disableVariant}
+                  onToggle={handleToggle}
+                />
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

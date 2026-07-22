@@ -1,0 +1,107 @@
+{
+  "name": "ferdousbhai__investor-agent",
+  "display_name": "investor-agent",
+  "description": "A Model Context Protocol server for building an investor agent",
+  "author": {
+    "name": "ferdousbhai"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["investor-agent"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/ferdousbhai-investor-agent-badge.png)](https://mseep.ai/app/ferdousbhai-investor-agent)\n\n# investor-agent: A Financial Analysis MCP Server\n\n## Overview\n\nThe **investor-agent** is a Model Context Protocol (MCP) server that provides comprehensive financial insights and analysis to Large Language Models. It leverages real-time market data, fundamental and technical analysis to deliver:\n\n- **Market Movers:** Top gainers, losers, and most active stocks with support for different market sessions\n- **Ticker Analysis:** Company overview, news, metrics, analyst recommendations, and upgrades/downgrades\n- **Options Data:** Filtered options chains with customizable parameters\n- **Historical Data:** Price trends and earnings history\n- **Financial Statements:** Income, balance sheet, and cash flow statements\n- **Ownership Analysis:** Institutional holders and insider trading activity\n- **Earnings Calendar:** Upcoming earnings announcements with date filtering (optional)\n- **Market Sentiment:** CNN Fear & Greed Index, Crypto Fear & Greed Index, and Google Trends sentiment analysis\n- **Technical Analysis:** SMA, EMA, RSI, MACD, BBANDS indicators (optional)\n\nThe server integrates with [yfinance](https://pypi.org/project/yfinance/) for market data and automatically optimizes data volume for better performance.\n\n## Prerequisites\n\n- **Python:** 3.12 or higher\n- **Package Manager:** [uv](https://docs.astral.sh/uv/). Install if needed:\n  ```bash\n  curl -LsSf https://astral.sh/uv/install.sh | sh\n  ```\n\n### Optional Dependencies\n\n- **TA-Lib C Library:** Required for technical indicators. Follow [official installation instructions](https://ta-lib.org/install/).\n- **Playwright:** Required for earnings calendar functionality. Installed automatically with the `playwright` optional dependency.\n\n## Installation\n\n### Quick Start\n\n```bash\n# Core features only\nuvx investor-agent\n\n# With technical indicators (requires TA-Lib)\nuvx \"investor-agent[ta]\"\n\n# With earnings calendar (requires Playwright)\nuvx \"investor-agent[playwright]\"\n# Note: After first installation, run:\n#   playwright install-deps chromium\n#   playwright install chromium\n\n# With both technical indicators and earnings calendar\nuvx \"investor-agent[ta,playwright]\"\n# Note: After first installation, run:\n#   playwright install-deps chromium\n#   playwright install chromium\n```\n\n## Tools\n\n### Market Data\n- **`get_market_movers(category=\"most-active\", count=25, market_session=\"regular\")`** - Market movers data including top gainers, losers, or most active stocks. Supports different market sessions (regular/pre-market/after-hours) for most-active category. Returns up to 100 stocks with cleaned percentage changes, volume, and market cap data\n- **`get_ticker_data(ticker, max_news=5, max_recommendations=5, max_upgrades=5)`** - Comprehensive ticker report with essential field filtering and configurable limits for news, analyst recommendations, and upgrades/downgrades\n- **`get_options(ticker_symbol, num_options=10, start_date, end_date, strike_lower, strike_upper, option_type)`** - Options data with advanced filtering by date range (YYYY-MM-DD), strike price bounds, and option type (C=calls, P=puts)\n- **`get_price_history(ticker, period=\"1mo\")`** - Historical OHLCV data with intelligent interval selection: daily intervals for periods ≤1y, monthly intervals for periods ≥2y to optimize data volume\n- **`get_financial_statements(ticker, statement_type=\"income\", frequency=\"quarterly\", max_periods=8)`** - Financial statements (income/balance/cash) with period limiting for context optimization\n- **`get_institutional_holders(ticker, top_n=20)`** - Major institutional and mutual fund holders data\n- **`get_earnings_history(ticker, max_entries=8)`** - Historical earnings data with configurable entry limits\n- **`get_insider_trades(ticker, max_trades=20)`** - Recent insider trading activity with configurable trade limits\n- **`get_earnings_calendar(start=None, end=None, limit=100)`** - Upcoming earnings announcements with optional date filtering (YYYY-MM-DD format). Requires Playwright dependency.\n\n### Market Sentiment\n- **`get_cnn_fear_greed_index(days=0, indicators=None)`** - CNN Fear & Greed Index with support for up to 30 days of historical data and selective indicator filtering. Available indicators: fear_and_greed, fear_and_greed_historical, put_call_options, market_volatility_vix, market_volatility_vix_50, junk_bond_demand, safe_haven_demand\n- **`get_crypto_fear_greed_index(days=7)`** - Crypto Fear & Greed Index with configurable historical data period\n- **`get_google_trends(keywords, period_days=7)`** - Google Trends relative search interest for market-related keywords. Requires a list of keywords to track (e.g., [\"stock market crash\", \"bull market\", \"recession\", \"inflation\"]). Returns relative search interest scores that can be used as sentiment indicators.\n\n### Technical Analysis\n- **`calculate_technical_indicator(ticker, indicator, period=\"1y\", timeperiod=14, ...)`** - Calculate technical indicators (SMA, EMA, RSI, MACD, BBANDS) with configurable parameters and result limiting. Returns time-aligned data with price history and indicator values. Requires TA-Lib library.\n\n## Usage with MCP Clients\n\nAdd to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"investor\": {\n      \"command\": \"uvx\",\n      \"args\": [\"investor-agent\"]\n    }\n  }\n}\n```\n\n## Debugging\n\n```bash\nnpx @modelcontextprotocol/inspector uvx investor-agent\n```\n\n**Log locations:**\n- macOS: `~/Library/Logs/Claude/mcp*.log`\n- Windows: `%APPDATA%\\Claude\\logs\\mcp*.log`\n\n## License\n\nMIT License. See [LICENSE](LICENSE) file for details.\n",
+  "category": "Finance",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "investor-agent": {
+        "command": "uvx",
+        "args": ["investor-agent"],
+        "env": {}
+      },
+      "investor-agent-ta": {
+        "command": "uvx",
+        "args": ["investor-agent[ta]"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ferdousbhai",
+    "repo": "investor-agent",
+    "url": "https://github.com/ferdousbhai/investor-agent",
+    "name": "investor-agent",
+    "path": null,
+    "stars": 228,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "5f9ab04a7bd57a47714fd6a3fbfef480ea92850a"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:09.304Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pandas",
+      "importance": 8
+    },
+    {
+      "name": "pyrate-limiter",
+      "importance": 7
+    },
+    {
+      "name": "pytrends",
+      "importance": 8
+    },
+    {
+      "name": "requests-cache",
+      "importance": 7
+    },
+    {
+      "name": "requests-ratelimiter",
+      "importance": 7
+    },
+    {
+      "name": "tabulate",
+      "importance": 4
+    },
+    {
+      "name": "yfinance",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"investor-agent\"\ndynamic = [\"version\"]\ndescription = \"A Model Context Protocol server for an investor agent\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.9.4\",\n    \"pandas>=2.0.0\",\n    \"pyrate-limiter>=2.10.0\",\n    \"pytrends>=4.9.2\",\n    \"requests-cache>=1.2.1\",\n    \"requests-ratelimiter>=0.7.0\",\n    \"tabulate>=0.9.0\",\n    \"yfinance[nospam]>=0.2.54\",\n]\nauthors = [\n    { name = \"Ferdous\", email = \"ferdous@hey.com\" }\n]\nkeywords = [\"investment\", \"finance\", \"trading\", \"agent\", \"mcp\", \"model context protocol\", \"broker\", \"robinhood\", \"wallstreetbets\"]\nclassifiers = [\n    \"Intended Audience :: Financial and Insurance Industry\",\n    \"Intended Audience :: End Users/Desktop\",\n    \"Topic :: Office/Business :: Financial\",\n    \"Programming Language :: Python :: 3.12\",\n    \"License :: OSI Approved :: MIT License\",\n]\n\n[project.optional-dependencies]\nta = [\"ta-lib>=0.6.3\"]\n\n[project.scripts]\ninvestor-agent = \"investor_agent.server:mcp.run\"\n\n[build-system]\nrequires = [\"hatchling\", \"hatch-vcs\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"investor_agent\"]\n\n[tool.hatch.version]\nsource = \"vcs\"\n\n[tool.hatch.build.hooks.vcs]\nversion-file = \"investor_agent/_version.py\"\n"
+}

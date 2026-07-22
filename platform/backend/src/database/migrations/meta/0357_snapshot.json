@@ -1,9 +1,127 @@
 {
-  "id": "a9b05c93-9814-4e22-a77c-84f5fd0c708f",
+  "id": "24c2fb3a-ddcd-4b8f-9361-5fe0f98f02a8",
   "prevId": "73828029-99b5-4d0b-a915-ad54ddd456ab",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.a2a_context_compactions": {
+      "name": "a2a_context_compactions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "context_id": {
+          "name": "context_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "boundary_message_id": {
+          "name": "boundary_message_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "original_token_estimate": {
+          "name": "original_token_estimate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compacted_token_estimate": {
+          "name": "compacted_token_estimate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "a2a_context_compactions_context_id_created_at_idx": {
+          "name": "a2a_context_compactions_context_id_created_at_idx",
+          "columns": [
+            {
+              "expression": "context_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "a2a_context_compactions_context_id_a2a_context_id_fk": {
+          "name": "a2a_context_compactions_context_id_a2a_context_id_fk",
+          "tableFrom": "a2a_context_compactions",
+          "tableTo": "a2a_context",
+          "columnsFrom": [
+            "context_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "a2a_context_compactions_boundary_message_id_a2a_message_id_fk": {
+          "name": "a2a_context_compactions_boundary_message_id_a2a_message_id_fk",
+          "tableFrom": "a2a_context_compactions",
+          "tableTo": "a2a_message",
+          "columnsFrom": [
+            "boundary_message_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.a2a_context": {
       "name": "a2a_context",
       "schema": "",
@@ -3713,6 +3831,104 @@
           "nullsNotDistinct": false,
           "columns": [
             "message_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.chatops_thread_contexts": {
+      "name": "chatops_thread_contexts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "provider": {
+          "name": "provider",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "thread_id": {
+          "name": "thread_id",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "context_id": {
+          "name": "context_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "chatops_thread_contexts_context_id_idx": {
+          "name": "chatops_thread_contexts_context_id_idx",
+          "columns": [
+            {
+              "expression": "context_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "chatops_thread_contexts_context_id_a2a_context_id_fk": {
+          "name": "chatops_thread_contexts_context_id_a2a_context_id_fk",
+          "tableFrom": "chatops_thread_contexts",
+          "tableTo": "a2a_context",
+          "columnsFrom": [
+            "context_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "chatops_thread_contexts_thread_key_uq": {
+          "name": "chatops_thread_contexts_thread_key_uq",
+          "nullsNotDistinct": true,
+          "columns": [
+            "provider",
+            "channel_id",
+            "workspace_id",
+            "thread_id"
           ]
         }
       },
@@ -10500,12 +10716,6 @@
         },
         "default_parameters": {
           "name": "default_parameters",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "configured_parameters": {
-          "name": "configured_parameters",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

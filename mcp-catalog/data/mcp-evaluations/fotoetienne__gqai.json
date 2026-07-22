@@ -1,0 +1,124 @@
+{
+  "name": "fotoetienne__gqai",
+  "display_name": "gqai",
+  "description": "Turn any GraphQL endpoint into a set of MCP tools",
+  "author": {
+    "name": "fotoetienne"
+  },
+  "server": {
+    "command": "gqai",
+    "args": ["run", "--config", ".graphqlrc.yml"],
+    "env": {
+      "MY_AUTH_TOKEN": "${user_config.my_auth_token}",
+      "MY_SCHEMA_URL": "${user_config.my_schema_url}",
+      "MY_DOCS_PATH": "${user_config.my_docs_path}",
+      "MY_INCLUDE": "${user_config.my_include}",
+      "MY_EXCLUDE": "${user_config.my_exclude}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "my_auth_token": {
+      "type": "string",
+      "title": "GraphQL Authorization Token",
+      "description": "Bearer token for GraphQL endpoint authentication. Used in the 'Authorization' header.",
+      "sensitive": true,
+      "required": false
+    },
+    "my_schema_url": {
+      "type": "string",
+      "title": "GraphQL Schema URL",
+      "description": "The URL of the GraphQL endpoint. Defaults to 'https://default/graphql' if not set.",
+      "default": "https://default/graphql",
+      "required": false
+    },
+    "my_docs_path": {
+      "type": "string",
+      "title": "GraphQL Documents Path",
+      "description": "Path or glob pattern for GraphQL operation documents. Defaults to 'operations/**/*.graphql' if not set.",
+      "default": "operations/**/*.graphql",
+      "required": false
+    },
+    "my_include": {
+      "type": "string",
+      "title": "GraphQL Include Glob",
+      "description": "Glob pattern for GraphQL documents to include. Defaults to 'operations/include.graphql' if not set.",
+      "default": "operations/include.graphql",
+      "required": false
+    },
+    "my_exclude": {
+      "type": "string",
+      "title": "GraphQL Exclude Glob",
+      "description": "Glob pattern for GraphQL documents to exclude. Defaults to 'operations/exclude.graphql' if not set.",
+      "default": "operations/exclude.graphql",
+      "required": false
+    }
+  },
+  "readme": "# gqai\n*graphql → ai*\n\n**gqai** is a lightweight proxy that exposes GraphQL operations as\n[Model Context Protocol (MCP)](https://platform.openai.com/docs/guides/function-calling) tools for AI like\nClaude, Cursor, and ChatGPT.  \nDefine tools using regular GraphQL queries/mutations against your GraphQL backend, and gqai automatically\ngenerates an MCP server for you.\n\n🔌 Powered by your GraphQL backend  \n⚙️ Driven by `.graphqlrc.yml` + plain `.graphql` files  \n\n---\n\n## ✨ Features\n\n- 🧰 Define tools using GraphQL operations\n- 🗂 Automatically discover operations from `.graphqlrc.yml`\n- 🧾 Tool metadata compatible with OpenAI function calling / MCP\n\n---\n\n## 🛠️ Installation\n\n```bash\ngo install github.com/fotoetienne/gqai@latest\n```\n\n\n## 🚀 Quick Start\n1. Create a .graphqlrc.yml:\n\n```yaml\nschema: https://graphql.org/graphql/\ndocuments: .\n```\n\nThis file tells gqai where to find your GraphQL schema and operations.\n\n*Note: The `schema` parameter tells gqai where to execute the operations. This must be a live server rather than a static schema file*\n\n2. Add a GraphQL operation\n\n`get_all_films.graphql`:\n```graphql\n# Get all Star Wars films\nquery get_all_films {\n  allFilms {\n    films {\n      title\n      episodeID\n    }\n  }\n}\n```\n\n3. Add gqai to your `mcp.json` file:\n\n```\n  \"gqai\": {\n    \"command\": \"gqai\",\n    \"args\": [\n      \"run\",\n      \"--config\"\n      \".graphqlrc.yml\"\n    ]\n  }\n```\n\nThat's it! Your AI model can now call the `get_all_films` tool.\n\n## Usage\n### Configuration\n#### GraphQL Config\nThe [graphql config](https://the-guild.dev/graphql/config/docs/user/schema)\nfile is a YAML file that defines the GraphQL endpoint and the operations\nyou want to expose as tools. It should be named `.graphqlrc.yml` and placed in the root of your project.\n\n```yaml\nschema: https://graphql.org/graphql/\ndocuments: operations\n```\n\nThe `schema` field specifies the GraphQL endpoint, and the `documents` field specifies the directory where your GraphQL operations are located.\n\nIn this example, the `operations` directory contains all the GraphQL operations you want to expose as tools.\nOperations are defined in `.graphql` files, and gqai will automatically discover them.\n\n##### Headers\nYou can also specify headers to be sent with each request to the GraphQL endpoint. This is useful for authentication or other custom headers.\n\n```yaml\nschema:\n  - https://graphql.org/graphql/:\n      headers:\n        Authorization: Bearer YOUR_TOKEN\n        X-Custom-Header: CustomValue\ndocuments: .\n```\n\n##### Using Environment Variables in Headers\nYou can reference environment variables in header values using the `${VARNAME}` syntax. For example:\n\n```yaml\nschema:\n  - https://graphql.org/graphql/:\n      headers:\n        Authorization: Bearer ${MY_AUTH_TOKEN}\ndocuments: .\n```\n\nYou can also provide a default value using the `${VARNAME:-default}` syntax:\n\n```yaml\nschema:\n  - https://graphql.org/graphql/:\n      headers:\n        Authorization: Bearer ${MY_AUTH_TOKEN:-default-token}\ndocuments: .\n```\n\nWhen gqai loads the config, it will substitute `${MY_AUTH_TOKEN}` with the value of the `MY_AUTH_TOKEN` environment variable, or use `default-token` if the variable is not set. This allows you to keep secrets out of your config files.\n\nIf the environment variable is not set and no default is provided, the value will be left as-is.\n\n##### Using Environment Variables in Config\nYou can use environment variables in any part of your `.graphqlrc.yml` config: schema URLs, document paths, include/exclude globs, and header values. Use `${VARNAME}` or `${VARNAME:-default}` syntax:\n\n```yaml\nschema:\n  - ${MY_SCHEMA_URL:-https://default/graphql}:\n      headers:\n        Authorization: Bearer ${MY_AUTH_TOKEN}\ndocuments:\n  - ${MY_DOCS_PATH:-operations/**/*.graphql}\ninclude: ${MY_INCLUDE:-operations/include.graphql}\nexclude: ${MY_EXCLUDE:-operations/exclude.graphql}\n```\n\ngqai will substitute these with the value of the environment variable, or use the default if not set. This keeps secrets and environment-specific paths out of your config files.\n\n#### MCP Configuration\n##### Claude Desktop\nTo use gqai with Claude Desktop, you need to add the following configuration to your `mcp.json` file:\n\n```json\n{\n  \"gqai\": {\n    \"command\": \"gqai\",\n    \"args\": [\n      \"run\",\n      \"--config\",\n      \".graphqlrc.yml\"\n    ]\n  }\n}\n```\n\n\n### 🧪 CLI Testing\n#### Call a tool via CLI to test:\n\n```bash\ngqai tools/call get_all_films\n```\n\nThis will execute the `get_all_films` tool and print the result.\n\n```shell\n{\n  \"data\": {\n    \"allFilms\": {\n      \"films\": [\n        {\n          \"id\": 4,\n          \"title\": \"A New Hope\"\n        },\n        {\n          \"id\": 5,\n          \"title\": \"The Empire Strikes Back\"\n        },\n        {\n          \"id\": 6,\n          \"title\": \"Return of the Jedi\"\n        },\n        ...\n      ]\n    }\n  }\n}\n```\n#### Call a tool with arguments:\n\nCreate a GraphQL operation that takes arguments, and these will be the tool inputs:\n\n`get_film_by_id.graphql`:\n```graphql\nquery get_film_by_id($id: ID!) {\n  film(filmID: $id) {\n    episodeID\n    title\n    director\n    releaseDate\n  }\n}\n```\n\nCall the tool with arguments:\n\n```bash\ngqai tools/call get_film_by_id '{\"id\": \"1\"}'\n```\n\nThis will execute the `get_film_by_id` tool with the provided arguments.\n\n```shell\n{\n  \"data\": {\n    \"film\": {\n      \"episodeID\": 1,\n      \"title\": \"A New Hope\",\n      \"director\": \"George Lucas\",\n      \"releaseDate\": \"1977-05-25\"\n    }\n  }\n}\n```\n\n## Development\n\n### Prerequisites\n- Go 1.20+\n\n### Build\n```bash\ngo build -o gqai main.go\n```\n\n### Test\n```bash\ngo test ./...\n```\n\n### Format\n```bash\ngo fmt ./...\n```\n\n### Run MCP server\n```bash\n./gqai run --config .graphqlrc.yml\n```\n\n### Run CLI\n```bash\n./gqai tools/call get_all_films\n```\n\n\n## About GQAI\n\n### 🤖 Why gqai?\ngqai makes it easy to turn your GraphQL backend into a model-ready tool layer — no code, no extra infra. Just define your operations and let AI call them.\n\n### 📜 License\nMIT — fork it, build on it, all the things.\n\n### 👋 Author\nMade with ❤️ and 🤖vibes by Stephen Spalding && `<your-name-here>`\n",
+  "category": "AI Tools",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gqai": {
+        "command": "gqai",
+        "args": ["run", "--config", ".graphqlrc.yml"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "fotoetienne",
+    "repo": "gqai",
+    "url": "https://github.com/fotoetienne/gqai",
+    "name": "gqai",
+    "path": null,
+    "stars": 19,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b096b6951cb6da9641e8ed2facd9b38b90703ca1"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.200Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "hasura/go-graphql-client",
+      "importance": 9
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 8
+    },
+    {
+      "name": "spf13/viper",
+      "importance": 8
+    },
+    {
+      "name": "vektah/gqlparser/v2",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/fotoetienne/gqai\n\ngo 1.20\n\nrequire (\n\tgithub.com/hasura/go-graphql-client v0.3.0\n\tgithub.com/spf13/cobra v1.7.0\n\tgithub.com/spf13/viper v1.15.0\n\tgithub.com/vektah/gqlparser/v2 v2.4.1\n)\n\nrequire (\n\tgithub.com/fsnotify/fsnotify v1.6.0 // indirect\n\tgithub.com/gorilla/mux v1.8.1 // indirect\n\tgithub.com/hashicorp/hcl v1.0.0 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/magiconair/properties v1.8.7 // indirect\n\tgithub.com/mitchellh/mapstructure v1.5.0 // indirect\n\tgithub.com/pelletier/go-toml/v2 v2.0.6 // indirect\n\tgithub.com/spf13/afero v1.9.3 // indirect\n\tgithub.com/spf13/cast v1.5.0 // indirect\n\tgithub.com/spf13/jwalterweatherman v1.1.0 // indirect\n\tgithub.com/spf13/pflag v1.0.5 // indirect\n\tgithub.com/subosito/gotenv v1.4.2 // indirect\n\tgolang.org/x/sys v0.3.0 // indirect\n\tgolang.org/x/text v0.5.0 // indirect\n\tgopkg.in/ini.v1 v1.67.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

@@ -30,6 +30,8 @@ export function startRenderJob(params: {
   bundle: AppRecordingBundle;
   userId: string;
   title: string;
+  /** Serialized size of the posted bundle, when the caller knows it. */
+  bundleBytes?: number;
 }): string {
   sweepExpired();
   const id = randomUUID();
@@ -43,6 +45,17 @@ export function startRenderJob(params: {
     abortController,
   };
   jobs.set(id, job);
+  // The bookend a failure is read against: what this job was chewing on —
+  // above all how BIG it was — must be on record before anything can go wrong,
+  // not reconstructed from a stack trace afterwards.
+  logger.info(
+    {
+      jobId: id,
+      durationMs: params.bundle.recording?.durationMs,
+      bundleBytes: params.bundleBytes,
+    },
+    "An app recording render started",
+  );
 
   // Deliberately not awaited: the caller answers with the id straight away.
   // `renderRecordingVideo` owns the concurrency slot and releases it however
@@ -71,7 +84,19 @@ export function startRenderJob(params: {
         error instanceof ApiError
           ? error.message
           : "Your video could not be prepared. The renderer stopped unexpectedly.";
-      logger.error({ err: error, jobId: id }, "An app recording render failed");
+      logger.error(
+        {
+          err: error,
+          jobId: id,
+          elapsedMs: Date.now() - job.startedAt,
+          durationMs: params.bundle.recording?.durationMs,
+          bundleBytes: params.bundleBytes,
+          // What the author was actually told — the generic line above never
+          // names the internal fault, so the log must tie the two together.
+          reportedAs: job.error,
+        },
+        "An app recording render failed",
+      );
     });
 
   return id;

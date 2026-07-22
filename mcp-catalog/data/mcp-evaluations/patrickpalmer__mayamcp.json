@@ -1,0 +1,70 @@
+{
+  "name": "patrickpalmer__mayamcp",
+  "display_name": "MayaMCP",
+  "description": "Model Context Protocol (MCP) server implementation for Autodesk Maya",
+  "author": {
+    "name": "PatrickPalmer"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/src/maya_mcp_server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Maya MCP\r\nModel Context Protocol (MCP) server implementation for Autodesk Maya\r\n\r\nTested with Maya 2023, 2025.\r\n\r\nv0.2.0\r\n\r\nThis project enables AI assistant clients like Claude Desktop to control Autodesk Maya through natural language using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). \r\n\r\nThis is early days for Maya MCP server and has a minimal set of functionality. It's really the architecture design and simplicity that has been the initial focus.\r\n\r\nHere is a list of some of the tools registered with Maya MCP.\r\n\r\n## Basic Tools\r\n\r\n| Tool | Description |\r\n|------|-------------|\r\n| list_objects_by_type | Get a list of objects in the scene. Use filter_by to filter for certain objects such as \"cameras\", \"lights\", \"materials\", or \"shapes\". |\r\n| create_object | Create an object in the Maya scene. Object types available are cube, cone, sphere, cylinder, camera, spotLight, pointLight, directionalLight. |\r\n| get_object_attributes | Get a list of attributes on a Maya object. | \r\n| set_object_attributes | Set an object's attribute with a specific value. |\r\n| scene_new | Create a new scene in Maya. Use the force argument to force a new scene when an existing scene is loaded and has been modified. |\r\n| scene_open | Load in a scene into Maya. | \r\n| scene_save | Save the current scene. If the filename is not specified, it will save it as its current name. |\r\n| select_object | Select an object in the scene. |\r\n\r\n## Advanced Modeling Tools\r\n\r\n| Tool | Description |\r\n|------|-------------|\r\n| create_advanced_model | Create complex 3D models like cars, trees, buildings, cups, and chairs with detailed parameters. |\r\n| mesh_operations | Perform modeling operations such as extrude, bevel, subdivide, boolean, combine, bridge, and split. |\r\n| create_material | Create and assign materials with various types (lambert, phong, wood, marble, chrome, glass, etc.) |\r\n| create_curve | Generate NURBS curves for various shapes (line, circle, spiral, helix, star, gear, etc.) |\r\n| curve_modeling | Create geometry using curve-based modeling techniques (extrude, loft, revolve, sweep, etc.) |\r\n| organize_objects | Organize objects through grouping, parenting, layout, alignment, and distribution. |\r\n| generate_scene | Generate complete 3D scenes with multiple objects (city, forest, living room, office, park) |\r\n\r\n## Installation\r\n\r\nMaya MCP server is designed so there is only an MCP server and doesn't require anything to be installed within Maya. This is helpful since you can easily use different versions of Maya and not have to worry about coordinating version changes. This is done by taking advantage of the default Command Port Maya opens up for MEL scripting. \r\n\r\nMCP requires Python 3.10 or greater. Currently using pip as the package requirements are minimal. To install the virtual environment:\r\n\r\n1. download this project\r\n2. Create a virtual env using Python 3.10+ in the project directory. ```python -m venv .venv```\r\n3. activate the virtual environment\r\n   * Windows: ```.venv\\Scripts\\activate.bat```\r\n   * Mac/Linux: ```source .venv\\bin\\activate.sh```\r\n4. ```pip install -r requirements.txt```\r\n\r\nAs stated, there is nothing to install for Maya.\r\n\r\n### MCP Client Configuration\r\n\r\nDepending on which MCP Client you're using, the configuration file location differs. For [Anthopic Claude Desktop](https://claude.ai/download), go to File -> Settings -> Developer Tab and press the Edit Config button. This will bring up the file finder in the directory location of the JSON config file.\r\n\r\nNext you need to edit the config JSON file by hand using a text editor.  Make sure to use full file paths.\r\n\r\n```\r\n{\r\n  \"mcpServers\": {\r\n    \"MayaMCP\": {\r\n      \"command\": \"[FULL PATH TO MayaMCP PROJECT]/.venv/Scripts/python.exe\",\r\n      \"args\": [\r\n        \"[FULL PATH TO MayaMCP PROJECT]/src/maya_mcp_server.py\"\r\n      ]\r\n    }\r\n  }\r\n}\r\n```\r\n\r\nOnce the changes have been made, restart Claude Desktop (use Exit menu item instead of just closing the window). In the Developers Tab, you will now see the Maya MCP server listed.\r\n\r\nIn Claude Desktop, you can verify the Maya MCP tools are available. Press the ![](docs/CluadeDesktop-MCP-Tools-Available-Button.jpg) button and a detailed popup will appear.\r\n\r\n![](docs/CluadeDesktop-MCP-Tools-Available-Detailed.jpg)\r\n\r\n\r\n### Maya Communications\r\n\r\nWhen the Maya MCP server first attempts to communicate with Maya, you will get this popup within Maya. Please click \"Allow All\" to allow for ongoing communication between the MCP server and Maya. This will need to be done each Maya session.\r\n\r\n![](docs/MayaSecurityWarning-RunScript.jpg)\r\n\r\n\r\n## Developer Notes\r\n\r\nThe Maya MCP Server module was designed to be easily modified in a non-intrusive way. This is done by having the Maya Python code reside in the MCP server and sent to Maya's command port for execution. The results are sent back to the server and processed.\r\n\r\nThe default Maya command port runs MEL so the Python code is modified to run within MEL function call to the Python interpreter. There is also some limits such as multi-line Python code can't have any returned results. So, each command creates two connections to Maya. First to run the operation and save the results. The second connection then to read back the results. \r\n\r\nTo help minimize populating the namespace in the Maya global Python interpreter, functions and variables sent to Maya will be scoped to start with _mcp_maya_*. Each of the Maya tools are scoped into a function named _mcp_maya_scope(). The results are assigned to the variable _mcp_maya_results. This way should significantly reduce the possibility of name collisions. \r\n\r\nThere is a bit of elegance to this design. You basically can just add the Python file, restart the MCP Client and Maya MCP server and go. You don't need to integrate the operations on both the Maya MCP server and Maya itself. The code you add is only Maya specific Python and doesn't need to add any MCP decorators. This is a much better design to grow and adapt to different installations instead of having a fixed set of tools.\r\n\r\nThe Maya MCP server was built using the low-level Python MCP module. This was necessary to allow for dynamically defining all of the tools at run time. The tool function signatures are captured dynamically at the start of the server. \r\n\r\n### Adding New Tools\r\n\r\nIt is easy to add new tools to Maya MCP. You don't need to change any of the existing code. All you need to do is add a single tool command Python file to the mayatools/thirdparty directory. The tool itself will run in Maya so it will have access to all of the Maya Python modules. There are a few programmer notes in the design of the tool.\r\n\r\n* The name of the Python file and the function name must be the same. Make sure it is unique.\r\n* The Python function will be loaded by both the server and Maya. Any code outside of the function must be able to be loaded into standalone Python. Meaning any imports such as maya.cmds should be done in the scope of the function. The MCP server loads the function so it can inspect the function signature to send the information to MCP Client via JSON-RPC.\r\n* The function signature will be parsed and must include any types in the function argument annotation.\r\n* When your function is sent to Maya, it will be scoped within am _mcp_maya_scope function. This provides a number of benefits. The functions sent to Maya will not polute the Python global space too much running in Maya. Plus, any exceptions thrown will be caught and returned back to the MCP Client as errors.\r\n* Generally, you want to return either a list or dictionary or throw an exception when there is an error.\r\n* Name your function and arguments appropriately so the LLM can understand the operation. Include a function doc string.\r\n* Default arguments are good. \r\n* Error checking is good so error messages can provide better failed explanations.\r\n\r\nI recommend looking at the existing Maya tools in this project as examples.\r\n\r\n## Testing\r\n\r\nCurrently Maya MCP has only been tested on Windows. Should work on both Linux and Mac as everything is using standard Python.\r\n\r\n## Future Ideas\r\n\r\nIt's early days for MCP and there is a lot to improve. Here are some ideas.\r\n\r\n* Expose more functionality.\r\n* Improve using prompt engineering, particularly describing Maya's usage and data relationships.\r\n* Everything is registered as tools, allow for resources and prompts.\r\n* It could be possible to find any plugins within Maya that has MCP tools. Maybe something like looking at the PYTHONPATH within Maya with any directory named MCP. All of those could be inspected and then provided back to the MCP Client.\r\n\r\n## License\r\n\r\nMIT\r\n\r\n## Links\r\n\r\n* [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)\r\n* [Anthopic Claude Desktop](https://claude.ai/download)\r\n* [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)\r\n* [Unreal MCP](https://github.com/chongdashu/unreal-mcp)\r\n\r\n\r\n## Important Note\r\n\r\nThis project was done on my personal time and equipment to learn about MCP. The project is not affiliated with my current employer and does not represent their work or interests.",
+  "category": "AI Tools",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "MayaMCP": {
+        "command": "[FULL PATH TO MayaMCP PROJECT]/.venv/Scripts/python.exe",
+        "args": ["[FULL PATH TO MayaMCP PROJECT]/src/maya_mcp_server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "PatrickPalmer",
+    "repo": "MayaMCP",
+    "url": "https://github.com/PatrickPalmer/MayaMCP",
+    "name": "patrickpalmer__mayamcp",
+    "path": null,
+    "stars": 25,
+    "contributors": 2,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "5aa3d7b575facf699f88d5334aafa785516bb7e5"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:12.383Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp\r\n"
+}

@@ -1,0 +1,221 @@
+{
+  "name": "zaizaizhao__mcp-swagger-server",
+  "display_name": "mcp-swagger-server",
+  "description": "MCP Swagger Server 将任何符合 OpenAPI/Swagger 规范的 REST API 转换为 Model Context Protocol (MCP) 格式，让 AI 助手能够理解和调用您的 API。",
+  "author": {
+    "name": "zaizaizhao"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-swagger-server"],
+    "env": {
+      "MCP_PORT": "${user_config.mcp_port}",
+      "MCP_TRANSPORT": "${user_config.mcp_transport}",
+      "MCP_OPENAPI_URL": "${user_config.mcp_openapi_url}",
+      "MCP_AUTH_TYPE": "${user_config.mcp_auth_type}",
+      "API_TOKEN": "${user_config.api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mcp_port": {
+      "type": "number",
+      "title": "MCP Server Port",
+      "description": "Port for the MCP server to listen on (via MCP_PORT environment variable).",
+      "default": 3322,
+      "required": false
+    },
+    "mcp_transport": {
+      "type": "string",
+      "title": "MCP Transport Protocol",
+      "description": "Transport protocol for the MCP server (stdio, sse, or streamable, via MCP_TRANSPORT environment variable).",
+      "default": "stdio",
+      "required": false
+    },
+    "mcp_openapi_url": {
+      "type": "string",
+      "title": "OpenAPI Specification URL",
+      "description": "URL or file path to the OpenAPI specification for the MCP server (via MCP_OPENAPI_URL environment variable).",
+      "required": true
+    },
+    "mcp_auth_type": {
+      "type": "string",
+      "title": "MCP Authentication Type",
+      "description": "Authentication type for the MCP server (e.g., bearer, via MCP_AUTH_TYPE environment variable).",
+      "default": "none",
+      "required": false
+    },
+    "api_token": {
+      "type": "string",
+      "title": "API Bearer Token",
+      "description": "Bearer token for authenticating with the target API (via API_TOKEN environment variable).",
+      "sensitive": true,
+      "required": false
+    },
+    "watch_files": {
+      "type": "boolean",
+      "title": "Watch OpenAPI File for Changes",
+      "description": "Monitor the OpenAPI file for changes and automatically reload the server (passed as --watch argument).",
+      "default": false,
+      "required": false
+    },
+    "verbose_logging": {
+      "type": "boolean",
+      "title": "Enable Verbose Logging",
+      "description": "Enable detailed log output for debugging (passed as --verbose argument).",
+      "default": false,
+      "required": false
+    },
+    "bearer_token_direct": {
+      "type": "string",
+      "title": "Direct Bearer Token (Argument)",
+      "description": "Directly specify the Bearer Token for authentication via command-line argument (--bearer-token). Use this if not using an environment variable.",
+      "sensitive": true,
+      "required": false
+    },
+    "config_file_path": {
+      "type": "file",
+      "title": "Configuration File Path",
+      "description": "Path to a JSON configuration file for the MCP server (passed as --config argument).",
+      "required": false
+    }
+  },
+  "readme": "# MCP Swagger Server(mss)\n\n<div align=\"center\">\n\n[![TypeScript](https://img.shields.io/badge/TypeScript-5+-blue.svg)](https://www.typescriptlang.org/)\n[![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)\n[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/zaizaizhao/mcp-swagger-server)](https://archestra.ai/mcp-catalog/zaizaizhao__mcp-swagger-server)\n\n**一个将 OpenAPI/Swagger 规范转换为 Model Context Protocol (MCP) 格式的工具**\n\n零配置将您的 REST API 转换为 AI 可调用的工具\n\n[🚀 快速开始](#快速开始) • [📖 使用指南](#使用指南) • [🛠️ 开发](#开发)\n\n**Languages**: [English](README_EN.md) | 中文\n\n</div>\n\n---\n## 🎯 项目截图\n\n![项目截图](./docs/img/mss.png)\n![项目截图](./docs/img/ui.png)\n## 🎯 项目简介\n\nMCP Swagger Server 是一个将 OpenAPI/Swagger 规范转换为 Model Context Protocol (MCP) 格式的工具。\n\n### 📦 项目结构\n\n```\nmcp-swagger-server/\n├── packages/\n│   ├── mcp-swagger-server/     # 🔧 核心 MCP 服务器 (可用)\n│   ├── mcp-swagger-parser/     # 📝 OpenAPI 解析器 (可用)\n│   ├── mcp-swagger-ui/         # 🎨 Web 界面 (开发中)\n│   └── mcp-swagger-api/        # 🔗 REST API 后端 (可用)\n└── scripts/                    # 🔨 构建脚本\n```\n\n### ✨ 核心特性\n\n- **🔄 零配置转换**: 输入 OpenAPI 规范，立即获得 MCP 工具\n- **🎯 渐进式命令行**: 提供逐步引导的命令行界面，方便用户配置\n- **🔌 多传输协议**: 支持 SSE、Streamable 和 Stdio 传输\n- **🔐 安全认证**: 支持 Bearer Token 认证保护 API 访问\n\n## 🚀 快速开始\n\n### 环境要求\n\n- Node.js ≥ 20.0.0\n- pnpm ≥ 8.0.0 (推荐)\n\n### 安装\n\n```bash\nnpm i mcp-swagger-server -g\n```\n\n### 快速启动\n#### 自定义启动\n```bash \nmss\n```\n#### 一键启动\n```bash \nmss --openapi https://api.example.com/openapi.json --operation-filter-methods GET,POST --transport streamable -auth-type bearer --bearer-token \"your-token-here\"\n\n# 使用配置文件\nmcp-swagger-server --config config.json\n```\n\n#### 命令行选项\n\n```bash\n# 基本用法\nmss [选项]\n\n# 选项：\n--openapi, -o       OpenAPI 规范的 URL 或文件路径\n--transport, -t     传输协议 (stdio|sse|streamable)\n--port, -p          端口号\n--watch, -w         监控文件变化\n--verbose           详细日志输出\n\n# Bearer Token 认证选项：\n--auth-type         认证类型 (bearer)\n--bearer-token      直接指定 Bearer Token\n--bearer-env        从环境变量读取 Token\n--config, -c        配置文件路径\n\n# 操作过滤选项：\n--operation-filter-methods <methods>        HTTP方法过滤 (可重复) [示例: GET,POST]\n--operation-filter-paths <paths>            路径过滤 (支持通配符, 可重复) [示例: /api/*]\n--operation-filter-operation-ids <ids>      操作ID过滤 (可重复) [示例: getUserById]\n--operation-filter-status-codes <codes>     状态码过滤 (可重复) [示例: 200,201]\n--operation-filter-parameters <params>      参数过滤 (可重复) [示例: userId,name]\n```\n\n### 🔐 Bearer Token 认证\n\n`mcp-swagger-server` 支持 Bearer Token 认证，可以保护需要身份验证的 API 访问。\n\n#### 认证方式\n\n**1. 直接指定 Token**\n```bash\nmss --auth-type bearer --bearer-token \"your-token-here\" --openapi https://api.example.com/openapi.json --transport streamable\n```\n\n\n\n#### 环境变量配置\n\n创建 `.env` 文件：\n```env\n# 基础配置\nMCP_PORT=3322\nMCP_TRANSPORT=stdio\nMCP_OPENAPI_URL=https://api.example.com/openapi.json\n\n# 认证配置\nMCP_AUTH_TYPE=bearer\nAPI_TOKEN=your-bearer-token-here\n```\n\n### 🤖 与 AI 助手集成\n\n#### Claude Desktop 配置\n\n```json\n{\n  \"mcpServers\": {\n    \"swagger-converter\": {\n      \"command\": \"mss\",\n      \"args\": [\n        \"--openapi\", \"https://petstore.swagger.io/v2/swagger.json\",\n        \"--transport\", \"stdio\"\n      ]\n    },\n    \"secured-api\": {\n      \"command\": \"mss\",\n      \"args\": [\n        \"--openapi\", \"https://api.example.com/openapi.json\",\n        \"--transport\", \"stdio\",\n        \"--auth-type\", \"bearer\",\n        \"--bearer-env\", \"API_TOKEN\"\n      ],\n      \"env\": {\n        \"API_TOKEN\": \"your-bearer-token-here\"\n      }\n    }\n  }\n}\n```\n\n## 🛠️ 开发\n\n### 构建系统\n\n```bash\n# 构建所有包\npnpm build\n\n# 仅构建后端包\npnpm build:packages\n\n# 开发模式\npnpm dev\n\n# 清理构建产物\npnpm clean\n```\n## 🤝 贡献\n\n欢迎贡献！请先阅读 [贡献指南](CONTRIBUTING.md)。\n\n## 📄 许可证\n\nMIT License - 详见 [LICENSE](LICENSE) 文件。\n\n---\n\n<div align=\"center\">\n\n**Built with ❤️ by ZhaoYaNan(ZTE)**\n\n[⭐ Star](../../stargazers) • [🐛 Issues](../../issues) • [💬 Discussions](../../discussions)\n\n</div>\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-swagger-server-cli-petstore": {
+        "command": "pnpm",
+        "args": ["cli:petstore"],
+        "env": {}
+      },
+      "mcp-swagger-server-cli-github": {
+        "command": "pnpm",
+        "args": ["cli:github"],
+        "env": {}
+      },
+      "mcp-swagger-server-petstore-streamable": {
+        "command": "mcp-swagger-server",
+        "args": [
+          "--openapi",
+          "https://petstore.swagger.io/v2/swagger.json",
+          "--transport",
+          "streamable",
+          "--port",
+          "3322"
+        ],
+        "env": {}
+      },
+      "mcp-swagger-server-local-file-sse": {
+        "command": "mcp-swagger-server",
+        "args": ["--openapi", "./swagger.json", "--transport", "sse", "--port", "3322"],
+        "env": {}
+      },
+      "mcp-swagger-server-remote-api-streamable": {
+        "command": "mcp-swagger-server",
+        "args": ["--openapi", "https://api.example.com/openapi.json", "--transport", "streamable", "--port", "3323"],
+        "env": {}
+      },
+      "mcp-swagger-server-watch-stdio": {
+        "command": "mcp-swagger-server",
+        "args": ["--openapi", "./api.yaml", "--transport", "stdio", "--watch"],
+        "env": {}
+      },
+      "mcp-swagger-server-bearer-token": {
+        "command": "mcp-swagger-server",
+        "args": [
+          "--openapi",
+          "https://api.example.com/openapi.json",
+          "--auth-type",
+          "bearer",
+          "--bearer-token",
+          "your-token-here",
+          "--transport",
+          "sse",
+          "--port",
+          "3322"
+        ],
+        "env": {}
+      },
+      "mcp-swagger-server-bearer-env": {
+        "command": "mcp-swagger-server",
+        "args": [
+          "--auth-type",
+          "bearer",
+          "--bearer-env",
+          "API_TOKEN",
+          "--openapi",
+          "https://api.example.com/openapi.json"
+        ],
+        "env": {
+          "API_TOKEN": "your-token-here"
+        }
+      },
+      "mcp-swagger-server-with-config": {
+        "command": "mcp-swagger-server",
+        "args": ["--config", "config.json"],
+        "env": {}
+      },
+      "mcp-swagger-server-claude-petstore-stdio": {
+        "command": "mcp-swagger-server",
+        "args": ["--openapi", "https://petstore.swagger.io/v2/swagger.json", "--transport", "stdio"],
+        "env": {}
+      },
+      "mcp-swagger-server-claude-secured-stdio": {
+        "command": "mcp-swagger-server",
+        "args": [
+          "--openapi",
+          "https://api.example.com/openapi.json",
+          "--transport",
+          "stdio",
+          "--auth-type",
+          "bearer",
+          "--bearer-env",
+          "API_TOKEN"
+        ],
+        "env": {
+          "API_TOKEN": "your-bearer-token-here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zaizaizhao",
+    "repo": "mcp-swagger-server",
+    "url": "https://github.com/zaizaizhao/mcp-swagger-server",
+    "name": "zaizaizhao__mcp-swagger-server",
+    "path": null,
+    "stars": 25,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "b8d4e22e85756eceea4bdd96bdb559d9e4de6762"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:45.075Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-swagger-monorepo\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP Swagger Server - A comprehensive monorepo for OpenAPI/Swagger to MCP conversion\",\n  \"private\": true,\n  \"scripts\": {\n    \"build\": \"node scripts/build.js\",\n    \"build:packages\": \"node scripts/build.js --non-ui\",\n    \"prepack\": \"node scripts/build.js\",\n    \"pack\": \"pnpm pack --filter mcp-swagger-server && pnpm pack --filter mcp-swagger-parser\",\n    \"publish\":\"pnpm publish --filter mcp-swagger-server && pnpm publish --filter mcp-swagger-parser\",\n    \"dev\": \"node scripts/dev.js\",\n    \"dev:ui\": \"pnpm --filter=mcp-swagger-ui run dev\",\n    \"clean\": \"node scripts/clean.js\",\n    \"clean:build\": \"node scripts/clean.js --build-only\",\n    \"diagnostic\": \"node scripts/diagnostic.js\",\n    \"test\": \"pnpm -r run test\",\n    \"lint\": \"pnpm -r run lint\",\n    \"type-check\": \"pnpm -r run type-check\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"swagger\",\n    \"openapi\",\n    \"monorepo\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"devDependencies\": {\n    \"@changesets/changelog-github\": \"^0.5.1\",\n    \"@changesets/cli\": \"^2.29.5\",\n    \"@types/node\": \"^22.15.21\",\n    \"cross-env\": \"^7.0.3\",\n    \"nodemon\": \"^3.1.10\",\n    \"rimraf\": \"^5.0.5\",\n    \"ts-node\": \"^10.9.2\",\n    \"tsconfig-paths\": \"^4.2.0\",\n    \"tslib\": \"^2.8.1\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

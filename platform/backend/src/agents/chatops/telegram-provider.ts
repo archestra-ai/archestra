@@ -46,6 +46,10 @@ import { errorMessage, formatApprovalToolArgs } from "./utils";
 class TelegramProvider implements ChatOpsProvider {
   readonly providerId: ChatOpsProviderType = "telegram";
   readonly displayName = "Telegram";
+  /** The Bot API has no history endpoint; conversations live server-side. */
+  readonly usesServerSideSessions = true;
+  /** sendChatAction's "typing…" lasts ~5s; refresh it during long runs. */
+  readonly typingRefreshIntervalMs = TYPING_REFRESH_INTERVAL_MS;
 
   private config: TelegramDbConfig;
   private eventHandler: ChatOpsEventHandler | null = null;
@@ -483,20 +487,23 @@ class TelegramProvider implements ChatOpsProvider {
           {
             offset,
             timeout: POLL_TIMEOUT_SECONDS,
-            allowed_updates: ["message", "callback_query"],
+            allowed_updates: ["message", "callback_query", "my_chat_member"],
           },
           signal,
         );
         for (const update of updates) {
           offset = Math.max(offset, update.update_id + 1);
-          try {
-            await this.handleUpdate(update);
-          } catch (error) {
+          // Fire-and-forget, like the webhook providers: a long agent run
+          // must not block the poll loop, or a follow-up message could never
+          // supersede the run in flight and every chat would wait on every
+          // other chat's turn. Trade-off: the next getUpdates acknowledges
+          // these updates while their handlers may still be running.
+          void this.handleUpdate(update).catch((error) => {
             logger.error(
               { error: errorMessage(error), updateId: update.update_id },
               "[TelegramProvider] Failed to handle update",
             );
-          }
+          });
         }
       } catch (error) {
         if (signal.aborted) break;
@@ -521,10 +528,70 @@ class TelegramProvider implements ChatOpsProvider {
       await this.handleCallbackQuery(update.callback_query);
       return;
     }
+    if (update.my_chat_member) {
+      await this.handleMyChatMember(update.my_chat_member);
+      return;
+    }
     const message = update.message;
     if (!message?.from || message.from.is_bot) return;
     if (await this.handleCommand(message)) return;
     await this.eventHandler?.handleIncomingMessage(this, update);
+  }
+
+  /**
+   * The bot's own membership changed. Mirror it into the channel bindings so
+   * group chats appear in the messaging-channels table the moment the bot is
+   * added — same as a DM row appearing at account-link time — instead of only
+   * after the first processed message. Removal deletes the binding so the
+   * table doesn't list chats the bot can no longer reach.
+   */
+  private async handleMyChatMember(
+    update: TelegramChatMemberUpdated,
+  ): Promise<void> {
+    const { chat } = update;
+    if (chat.type !== "group" && chat.type !== "supergroup") return;
+
+    const chatId = String(chat.id);
+    const status = update.new_chat_member.status;
+    const isMember = status === "member" || status === "administrator";
+
+    if (isMember) {
+      const org = await OrganizationModel.getFirst();
+      if (!org) {
+        logger.warn(
+          "[TelegramProvider] Bot added to a group but no organization exists yet",
+        );
+        return;
+      }
+      await ChatOpsChannelBindingModel.upsertByChannel({
+        organizationId: org.id,
+        provider: this.providerId,
+        channelId: chatId,
+        workspaceId: null,
+        channelName: chat.title ?? undefined,
+        isDm: false,
+      });
+      logger.info(
+        { chatTitle: chat.title },
+        "[TelegramProvider] Bot added to group; channel binding created",
+      );
+      return;
+    }
+
+    if (status === "left" || status === "kicked") {
+      const binding = await ChatOpsChannelBindingModel.findByChannel({
+        provider: this.providerId,
+        channelId: chatId,
+        workspaceId: null,
+      });
+      if (binding) {
+        await ChatOpsChannelBindingModel.delete(binding.id);
+        logger.info(
+          { chatTitle: chat.title },
+          "[TelegramProvider] Bot removed from group; channel binding deleted",
+        );
+      }
+    }
   }
 
   /**
@@ -1076,6 +1143,8 @@ const TELEGRAM_API_BASE = "https://api.telegram.org";
 /** Raw-markdown budget per message, leaving room for HTML tags under the 4096 cap. */
 const TELEGRAM_MESSAGE_CHUNK_SIZE = 3500;
 const POLL_TIMEOUT_SECONDS = 25;
+/** Just under Telegram's ~5s typing-indicator TTL so it never flickers off. */
+const TYPING_REFRESH_INTERVAL_MS = 4_000;
 const POLL_ERROR_BACKOFF_MS = 5_000;
 const POLL_CONFLICT_BACKOFF_MS = 30_000;
 /** How long approval buttons stay clickable. */
@@ -1152,10 +1221,25 @@ interface TelegramCallbackQuery {
   data?: string;
 }
 
+/** The bot's own membership change in a chat (add/remove/promote). */
+interface TelegramChatMemberUpdated {
+  chat: TelegramChat;
+  new_chat_member: {
+    status:
+      | "creator"
+      | "administrator"
+      | "member"
+      | "restricted"
+      | "left"
+      | "kicked";
+  };
+}
+
 interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
   callback_query?: TelegramCallbackQuery;
+  my_chat_member?: TelegramChatMemberUpdated;
 }
 
 /** Payload behind an approval button's 64-byte callback_data, stored in the distributed cache. */

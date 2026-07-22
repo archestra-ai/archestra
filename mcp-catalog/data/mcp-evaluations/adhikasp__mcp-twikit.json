@@ -1,0 +1,108 @@
+{
+  "name": "adhikasp__mcp-twikit",
+  "display_name": "mcp-twikit",
+  "description": "A Model Context Protocol (MCP) server for interacting with Twitter.",
+  "author": {
+    "name": "adhikasp"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/adhikasp/mcp-twikit", "mcp-twikit"],
+    "env": {
+      "TWITTER_USERNAME": "${user_config.twitter_username}",
+      "TWITTER_EMAIL": "${user_config.twitter_email}",
+      "TWITTER_PASSWORD": "${user_config.twitter_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "twitter_username": {
+      "type": "string",
+      "title": "Twitter Username",
+      "description": "Your Twitter username (e.g., @example)",
+      "sensitive": false,
+      "required": true
+    },
+    "twitter_email": {
+      "type": "string",
+      "title": "Twitter Email",
+      "description": "Your Twitter account email",
+      "sensitive": true,
+      "required": true
+    },
+    "twitter_password": {
+      "type": "string",
+      "title": "Twitter Password",
+      "description": "Your Twitter account password",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# MCP-Twikit\n\n[![smithery badge](https://smithery.ai/badge/mcp-twikit)](https://smithery.ai/server/mcp-twikit)\nA Model Context Protocol (MCP) server for interacting with Twitter.\n\n<a href=\"https://glama.ai/mcp/servers/49i9dd08w8\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/49i9dd08w8/badge\" alt=\"mcp-twikit MCP server\" /></a>\n\n## Installation\n\n### Installing via Smithery\n\nTo install Twikit Twitter Search for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-twikit):\n\n```bash\nnpx -y @smithery/cli install mcp-twikit --client claude\n```\n\n### Manual Installation\n```json\n{\n    \"mcpServer\": {\n        \"command\": \"uvx\",\n        \"args\": [\"--from\", \"git+https://github.com/adhikasp/mcp-twikit\", \"mcp-twikit\"],\n        \"env\": {\n            \"TWITTER_USERNAME\": \"@example\",\n            \"TWITTER_EMAIL\": \"me@example.com\",\n            \"TWITTER_PASSWORD\": \"secret\",\n        }\n    }\n}\n```\n\n## Example usage\n\nUsing [mcp-client-cli](https://github.com/adhikasp/mcp-client-cli)\n\n\n### Comparing sentiments across different twitter accounts\n\n```\n$ llm compare 20 latest tweet directed @IndiHomeCare, @di_cbn, @BiznetHome, @ID_MyRepublic. What are people sentiment to the product? Do 1 search for each account\n\nI'll help you analyze the latest tweets for these internet service providers in Indonesia to understand the public sentiment. I'll use the search_twitter function for each account.\n\nTool Calls:\n  search_twitter\n  Args:\n    query: to:IndiHomeCare\n    count: 20\n    sort_by: Latest\n\nTool Calls:\n  search_twitter\n  Args:\n    query: to:di_cbn\n    count: 20\n    sort_by: Latest\n\nTool Calls:\n  search_twitter\n  Args:\n    query: to:BiznetHome\n    count: 20\n    sort_by: Latest\n\nTool Calls:\n  search_twitter\n  Args:\n    query: to:ID_MyRepublic\n    count: 20\n    sort_by: Latest\n\nSentiment Analysis Summary:\n\n1. IndiHomeCare:\n- Predominantly Negative Sentiment\n- Key Issues:\n  - Unstable internet connection\n  - Slow response times\n  - Intermittent service disruptions\n  - Long waiting times for customer support\n- Specific Complaints:\n  - Network instability\n  - Lagging internet\n  - Unresolved technical issues\n  - Lack of timely communication\n\n2. CBN (di_cbn):\n- Mostly Negative Sentiment\n- Key Issues:\n  - Prolonged internet outages (some reporting 1-2 days of no service)\n  - Slow customer support response\n  - Lack of clear communication about service disruptions\n- Specific Complaints:\n  - LOS (Line of Sight) issues\n  - No timely resolution of technical problems\n  - Delayed email and support responses\n\n3. BiznetHome:\n- Strongly Negative Sentiment\n- Key Issues:\n  - Frequent network interruptions\n  - Slow internet speeds\n  - Poor customer support responsiveness\n- Specific Complaints:\n  - Packet loss\n  - Inconsistent connection\n  - Long download times\n  - Unresolved technical issues\n\n4. MyRepublic (ID_MyRepublic):\n- Extremely Negative Sentiment\n- Key Issues:\n  - Severe and prolonged service disruptions\n  - Complete internet outages\n  - Inability to access online services and games\n  - Extremely poor customer support\n- Specific Complaints:\n  - Multi-day service interruptions\n  - Inability to access websites and online games\n  - Missed technician appointments\n  - Lack of compensation or clear communication\n\nOverall Sentiment Ranking (from Bad to Worst):\n1. IndiHomeCare (Bad)\n2. CBN (Worse)\n3. BiznetHome (Very Bad)\n4. MyRepublic (Extremely Bad)\n\nCommon Themes Across Providers:\n- Poor network stability\n- Slow customer support response\n- Lack of transparent communication\n- Prolonged service interruptions\n- Unresolved technical issues\n\nRecommendation: These Indonesian internet service providers are experiencing significant customer satisfaction issues. Customers are frustrated with unreliable services, poor technical support, and lack of timely problem resolution.\n```\n\n### Getting tweets from your home timeline\n\n```\n$ llm what is happening on my twitter timeline?\n\nI'll help you check your Twitter timeline. I'll retrieve the latest tweets from your timeline:\n\nTool Calls:\n  get_timeline\n  Args:\n\nI'll summarize the key highlights from your Twitter timeline:\n\n1. Professional/Tech Highlights:\n- @ibamarief is preparing to onboard their first intern, noting it's a significant responsibility\n- @papanberjalan shared a critique about web developers not understanding computer performance\n- @pathofexile is running a Twitch Drops promotion for their game\n\n2. Notable Tweets:\n- @elonmusk posted a cryptic \"Hmm\"\n- @realDonaldTrump discussed eliminating Daylight Saving Time\n- @blinkist shared an article about billionaires reading up to 50 books per year\n\n3. Miscellaneous Interesting Tweets:\n- @nealtaparia shared a thread about 11 companies built around a single product\n- @Rixhabh__ posted about creative and iconic ads\n- Several tweets in Indonesian covering various topics from personal stories to social issues\n\nWould you like me to elaborate on any of these tweets or provide more context about any specific post?\n```\n",
+  "category": "Social Media",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-twikit": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/adhikasp/mcp-twikit", "mcp-twikit"],
+        "env": {
+          "TWITTER_USERNAME": "@example",
+          "TWITTER_EMAIL": "me@example.com",
+          "TWITTER_PASSWORD": "secret"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "adhikasp",
+    "repo": "mcp-twikit",
+    "url": "https://github.com/adhikasp/mcp-twikit",
+    "name": "adhikasp__mcp-twikit",
+    "path": null,
+    "stars": 203,
+    "contributors": 5,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d5c0e2418319e24866d762c6d00b9f5fc50a5c26"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:21.967Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "twikit",
+      "importance": 9
+    },
+    {
+      "name": "requests",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"mcp-twikit\"\nversion = \"0.1.0\"\ndescription = \"Twitter search tool for FastMCP using Twikit\"\nreadme = \"README.md\"\nrequires-python = \">=3.7\"\nlicense = \"MIT\"\nauthors = [\n    { name = \"Adhika Setya Pramudita\", email = \"adhika.setya.p@gmail.com\" }\n]\ndependencies = [\n    \"fastmcp\",\n    \"twikit\",\n    \"requests\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/adhikasp/mcp-twikit\"\n\n[project.scripts]\nmcp-twikit = \"mcp_twikit.twitter:mcp.run\""
+}

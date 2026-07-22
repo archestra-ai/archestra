@@ -73,6 +73,21 @@ export function useFeature<K extends keyof FeaturesResponse>(
   return data.features[flag];
 }
 
+/**
+ * The dedicated MCP App sandbox origin (`<hash>.{domain}`), resolved from the
+ * authenticated config when a session exists and otherwise from the public
+ * config. The offline app-recording video renderer drives the replay page with
+ * no session, so `useConfig` (gated on `isAuthenticated`) never runs there; the
+ * public-config fallback is what keeps that render pointing the app iframe at
+ * its real cross-origin instead of the frontend origin, which the backend
+ * refuses with a 403 sandbox-host check.
+ */
+export function useMcpSandboxDomain(): string | null | undefined {
+  const authed = useFeature("mcpSandboxDomain");
+  const { data: publicConfig } = usePublicConfig();
+  return authed ?? publicConfig?.mcpSandboxDomain;
+}
+
 type EnterpriseFeatures = ConfigResponse["enterpriseFeatures"];
 type EnterpriseFeatureKey = keyof EnterpriseFeatures;
 

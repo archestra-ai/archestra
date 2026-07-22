@@ -1,0 +1,78 @@
+{
+  "name": "dotemacs__domain-lookup-mcp",
+  "display_name": "domain-lookup-mcp",
+  "description": "Domain Lookup MCP",
+  "author": {
+    "name": "dotemacs"
+  },
+  "server": {
+    "command": "${__dirname}/domain-lookup-mcp",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# `domain-lookup-mcp`\n\nMCP server to look up domain names via rdap(1) and then whois(1).\n\n## How to use it?\n\n- Checkout the repo\n- build it: `go build ./...`\n- Point your MCP client at the binary:\n\n```javascript\n{\n  \"mcpServers\": {\n    \"domain-lookup-mcp\": {\n      \"command\": \"/path/to/domain-lookup-mcp/domain-lookup-mcp\",\n      \"args\": [],\n      \"env\": {}\n    }\n  }\n}\n```\n",
+  "category": "CLI Tools",
+  "quality_score": 34,
+  "archestra_config": {
+    "client_config_permutations": {
+      "domain-lookup-mcp": {
+        "command": "/path/to/domain-lookup-mcp/domain-lookup-mcp",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "dotemacs",
+    "repo": "domain-lookup-mcp",
+    "url": "https://github.com/dotemacs/domain-lookup-mcp",
+    "name": "domain-lookup-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d4ad6e77e5ab7858b96720025496582cb6f50536"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:46.658Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "metoro-io/mcp-golang",
+      "importance": 10
+    },
+    {
+      "name": "openrdap/rdap",
+      "importance": 9
+    },
+    {
+      "name": "shlin168/go-whois",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule domain-lookup-mcp\n\ngo 1.24.0\n\nrequire (\n\tgithub.com/metoro-io/mcp-golang v0.11.0\n\tgithub.com/openrdap/rdap v0.9.1\n\tgithub.com/shlin168/go-whois v0.0.0-20250318084517-048f50b8e6b7\n)\n\nrequire (\n\tgithub.com/alecthomas/kingpin/v2 v2.3.2 // indirect\n\tgithub.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect\n\tgithub.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect\n\tgithub.com/bahlo/generic-list-go v0.2.0 // indirect\n\tgithub.com/buger/jsonparser v1.1.1 // indirect\n\tgithub.com/invopop/jsonschema v0.12.0 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mitchellh/go-homedir v1.1.0 // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/sirupsen/logrus v1.8.1 // indirect\n\tgithub.com/tidwall/gjson v1.18.0 // indirect\n\tgithub.com/tidwall/match v1.1.1 // indirect\n\tgithub.com/tidwall/pretty v1.2.1 // indirect\n\tgithub.com/tidwall/sjson v1.2.5 // indirect\n\tgithub.com/wk8/go-ordered-map/v2 v2.1.8 // indirect\n\tgithub.com/xhit/go-str2duration/v2 v2.1.0 // indirect\n\tgolang.org/x/crypto v0.37.0 // indirect\n\tgolang.org/x/net v0.36.0 // indirect\n\tgolang.org/x/sys v0.32.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

@@ -1,0 +1,131 @@
+{
+  "name": "johnneerdael__netskope-mcp",
+  "display_name": "netskope-mcp",
+  "description": "MCP server from johnneerdael/netskope-mcp",
+  "author": {
+    "name": "johnneerdael"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@johnneerdael/netskope-mcp"],
+    "env": {
+      "NETSKOPE_BASE_URL": "${user_config.netskope_base_url}",
+      "NETSKOPE_API_KEY": "${user_config.netskope_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "netskope_base_url": {
+      "type": "string",
+      "title": "Netskope Base URL",
+      "description": "The base URL of your Netskope tenant. Example: https://your-tenant.goskope.com",
+      "required": true,
+      "sensitive": false,
+      "default": "https://your-tenant.goskope.com"
+    },
+    "netskope_api_key": {
+      "type": "string",
+      "title": "Netskope API Key",
+      "description": "API token for authentication with Netskope services. Keep this token secure and never commit it to version control.",
+      "required": true,
+      "sensitive": true,
+      "default": "your-token"
+    }
+  },
+  "readme": "# Netskope NPA MCP Server\n\nA comprehensive Model Context Protocol (MCP) server for managing Netskope Private Access (NPA) infrastructure through AI-powered automation.\n\n## 📚 Complete Documentation\n\nThis project includes extensive documentation organized for easy navigation:\n\n**👉 [Start with the Complete Documentation](./docs/README.md)** - Overview and navigation guide\n\n### Quick Access Links\n\n| Category | Description | Link |\n|----------|-------------|------|\n| **🏗️ Architecture** | Server design and patterns | [Server Architecture](./docs/architecture/server-architecture.md) |\n| **🛠️ Tools Reference** | Complete tool documentation | [Publisher Tools](./docs/tools/publisher-tools.md), [Private App Tools](./docs/tools/private-app-tools.md), [Policy Tools](./docs/tools/policy-tools.md) |\n| **🔄 Workflows** | Common automation patterns | [Common Workflows](./docs/workflows/common-workflows.md) |\n| **💼 Real Examples** | Complete use cases | [Real-World Examples](./docs/examples/real-world-examples.md) |\n\n## Tool Overview\n\nThe MCP server provides **84 specialized tools** across 10 categories:\n\n| Category | Tools | Primary Use Cases |\n|----------|-------|------------------|\n| **Publishers** | 9 tools | Infrastructure deployment and management |\n| **Private Apps** | 15 tools | Application lifecycle and configuration |\n| **Local Brokers** | 7 tools | Network connectivity and routing |\n| **Policy Management** | 6 tools | Access control and security rules |\n| **SCIM Integration** | 5 tools | Identity and user management |\n| **Upgrade Profiles** | 7 tools | Automated maintenance scheduling |\n| **Steering** | 3 tools | Traffic routing and associations |\n| **Alerts** | 2 tools | Event monitoring and notifications |\n| **Search** | 2 tools | Resource discovery and querying |\n| **Validation** | 2 tools | Configuration compliance |\n\n## Real-World Usage Examples\n\n### 🏢 \"Set up complete NPA infrastructure for our new London office\"\n**AI Response**: Executes comprehensive deployment workflow\n- ✅ Creates publisher with auto-upgrade profile\n- ✅ Configures local broker for internal routing  \n- ✅ Sets up core business applications (CRM, ERP, File Server)\n- ✅ Creates access policies with SCIM group validation\n- ✅ Enables monitoring and discovery for office network\n- ✅ Generates registration token for field deployment\n\n### 🚨 \"URGENT: Security incident - lock down HR/Finance apps immediately\"\n**AI Response**: Emergency security response workflow\n- ✅ Identifies all HR/Finance applications automatically\n- ✅ Creates emergency policy group with highest priority\n- ✅ Blocks access for all users except incident response team\n- ✅ Enhances monitoring for security events\n- ✅ Tags applications for incident tracking\n\n### 📊 \"Perform comprehensive compliance audit of our NPA environment\"\n**AI Response**: Automated compliance assessment\n- ✅ Audits all publishers for version compliance\n- ✅ Identifies applications without access policies\n- ✅ Validates SCIM group references in policies\n- ✅ Generates compliance score and remediation plan\n- ✅ Creates detailed findings report with priorities\n\n## Quick Start\n\n1. **Environment Setup**\n   ```bash\n   export NETSKOPE_BASE_URL=\"https://your-tenant.goskope.com\"\n   export NETSKOPE_TOKEN=\"your-api-token\"\n   ```\n\n2. **Install and Run**\n   ```bash\n   npm install\n   npm run build\n   npm start\n   ```\n\n3. **Connect via MCP Client**\n   ```json\n   {\n     \"mcpServers\": {\n       \"netskope-npa\": {\n         \"command\": \"node\",\n         \"args\": [\"/path/to/ns-private-access-mcp/build/index.js\"],\n         \"env\": {\n           \"NETSKOPE_BASE_URL\": \"https://your-tenant.goskope.com\",\n           \"NETSKOPE_TOKEN\": \"your-api-token\"\n         }\n       }\n     }\n   }\n   ```\n\n## Key Features\n\n### 🤖 AI-Native Design\n- Tools designed for LLM interaction with clear descriptions\n- Automatic parameter validation and transformation\n- Rich error context for troubleshooting\n\n### 🔄 Workflow Orchestration\n- Tools automatically coordinate with each other\n- Built-in retry logic and error recovery\n- Transactional operations where possible\n\n### 🛡️ Production Ready\n- Comprehensive input validation using Zod schemas\n- Rate limiting and API quota management\n- Detailed logging and monitoring\n\n### 🔗 Integration Patterns\n- SCIM integration for identity resolution\n- Search tools for resource discovery\n- Validation tools for compliance checking\n\n## Installation Options\n\n### NPM Package\n```bash\nnpm install @johnneerdael/ns-private-access-mcp\n```\n\n### Local Development\n```bash\ngit clone https://github.com/johnneerdael/ns-private-access-mcp.git\ncd ns-private-access-mcp\nnpm install\nnpm run build\n```\n\n## Architecture Highlights\n\n### Tool Composition\nTools are designed to work together through well-defined interfaces:\n\n```typescript\n// Example: Creating a private app with validation and tagging\n1. validateName() -> Check app name compliance\n2. searchPublishers() -> Find target publisher\n3. createPrivateApp() -> Create the application  \n4. createPrivateAppTags() -> Add organizational tags\n5. updatePublisherAssociation() -> Associate with publishers\n```\n\n### Schema-Driven Validation\nEvery tool uses Zod schemas for type safety and validation:\n\n```typescript\nconst createAppSchema = z.object({\n  app_name: z.string().min(1).max(64),\n  host: z.string().url(),\n  protocols: z.array(protocolSchema),\n  clientless_access: z.boolean()\n});\n```\n\n### Error Resilience\nBuilt-in patterns for handling common issues:\n- Automatic parameter extraction from MCP objects\n- Retry logic with exponential backoff\n- Graceful degradation for partial failures\n\n## Credits\n\n- **John Neerdael** (Netskope Private Access Product Manager)  \n- **Mitchell Pompe** (Chief Netskope Solutions Engineer for NL)\n\n## Getting Help\n\n- **Documentation Issues**: Open an issue on GitHub\n- **Feature Requests**: Create a feature request issue\n- **Bug Reports**: Use the bug report template\n- **Security Issues**: See [SECURITY.md](./docs/SECURITY.md)\n\n---\n\n*This MCP server transforms complex Netskope NPA management into simple, AI-driven conversations.*\n",
+  "category": "Security",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "johnneerdael-netskope-mcp-wsl": {
+        "command": "wsl.exe",
+        "args": [
+          "bash",
+          "-c",
+          "source ~/.nvm/nvm.sh && NETSKOPE_BASE_URL=https://your-tenant.goskope.com NETSKOPE_API_KEY=your-token npx -y @johnneerdael/netskope-mcp"
+        ],
+        "env": {}
+      },
+      "johnneerdael-netskope-mcp-wsl-local": {
+        "command": "wsl.exe",
+        "args": [
+          "bash",
+          "-c",
+          "cd /path/to/netskope-mcp && NETSKOPE_BASE_URL=https://your-tenant.goskope.com NETSKOPE_API_KEY=your-token node dist/cli.js"
+        ],
+        "env": {}
+      },
+      "johnneerdael-netskope-mcp": {
+        "command": "npx",
+        "args": ["-y", "@johnneerdael/netskope-mcp"],
+        "env": {
+          "NETSKOPE_BASE_URL": "https://your-tenant.goskope.com",
+          "NETSKOPE_API_KEY": "your-token"
+        }
+      },
+      "johnneerdael-netskope-mcp-local": {
+        "command": "node",
+        "args": ["dist/cli.js"],
+        "env": {
+          "NETSKOPE_BASE_URL": "https://your-tenant.goskope.com",
+          "NETSKOPE_API_KEY": "your-token"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "johnneerdael",
+    "repo": "netskope-mcp",
+    "url": "https://github.com/johnneerdael/netskope-mcp",
+    "name": "johnneerdael__netskope-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "c351c89def586033f07c5910ac20c6ecc5565f98"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:16.874Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "rimraf",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@johnneerdael/ns-private-access-mcp\",\n  \"version\": \"6.3.0\",\n  \"description\": \"MCP server for Netskope's Zero Trust Network Access Platform management through LLM's\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"netskope-mcp\": \"dist/cli.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node --env-file .env dist/cli.js\",\n    \"dev\": \"tsc -w & node --env-file .env --watch dist/cli.js\",\n    \"test\": \"vitest\",\n    \"test:watch\": \"vitest watch\",\n    \"test:coverage\": \"vitest run --coverage\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\",\n    \"registry\": \"https://registry.npmjs.org/\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/johnneerdael/ns-private-access-mcp/issues\",\n    \"email\": \"jneerdael@netskope.com\"\n  },\n  \"keywords\": [\n    \"netskope\",\n    \"mcp\",\n    \"api\",\n    \"ztna\",\n    \"modelcontextprotocol\"\n  ],\n  \"files\": [\n    \"dist\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/johnneerdael/ns-private-access-mcp.git\"\n  },\n  \"homepage\": \"https://community.netskope.com\",\n  \"author\": \"John Neerdael\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"latest\",\n    \"dotenv\": \"^17.2.1\",\n    \"rimraf\": \"^6.0.1\",\n    \"zod\": \"latest\",\n    \"dotenv\": \"latest\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"latest\",\n    \"node\": \"^22.0.0\",\n    \"typescript\": \"latest\",\n    \"vitest\": \"latest\"\n  }\n}\n"
+}

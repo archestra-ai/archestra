@@ -1,0 +1,44 @@
+{
+  "name": "square__remote-mcp",
+  "display_name": "Square MCP",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI1NiI+PGcgZmlsbD0iIzJlM2I0ZSI+PHBhdGggZD0iTTIxMi42NTEgMEg0Mi42N0MxOS4xMDcgMCAwIDE5LjEgMCA0Mi42N3YxNjkuOThjMCAyMy41NjkgMTkuMTA3IDQyLjY3IDQyLjY3IDQyLjY3aDE2OS45OGMyMy41NjkgMCA0Mi42Ny0xOS4xMDEgNDIuNjctNDIuNjdWNDIuNjdDMjU1LjMyNiAxOS4xMDEgMjM2LjIyNiAwIDIxMi42NSAwbS0zLjc0OCAxOTUuNDQ4YzAgNy40MzgtNi4wMjkgMTMuNDYtMTMuNDYxIDEzLjQ2SDU5LjkwOGMtNy40MzkgMC0xMy40NjctNi4wMjItMTMuNDY3LTEzLjQ2VjU5LjkwOGMwLTcuNDM5IDYuMDI4LTEzLjQ2NyAxMy40NjctMTMuNDY3aDEzNS41MzRjNy40MzIgMCAxMy40NiA2LjAyOCAxMy40NiAxMy40Njd6Ii8+PHBhdGggZD0iTTEwMC41NyAxNjIuNDhjLTQuMjcgMC03LjcyOS0zLjQ4Mi03LjcyOS03Ljc3di01NC4xYzAtNC4yODcgMy40NTgtNy43NjkgNy43MjktNy43NjloNTQuMThjNC4yODMgMCA3LjczIDMuNDgyIDcuNzMgNy43N3Y1NC4xYzAgNC4yODctMy40NDcgNy43NjgtNy43MyA3Ljc2OHoiLz48L2c+PC9zdmc+",
+  "description": "Remote MCP server for Square - payment processing and business solutions",
+  "oauth_config": {
+    "name": "Square MCP",
+    "server_url": "https://mcp.squareup.com/sse",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "Square MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Finance",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "square"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.squareup.com/sse",
+    "docs_url": "https://developer.squareup.com/docs/mcp"
+  },
+  "github_info": null,
+  "programming_language": null
+}

@@ -1,0 +1,86 @@
+{
+  "name": "tgeselle__bugsnag-mcp",
+  "display_name": "bugsnag-mcp",
+  "description": "A Model Context Protocol (MCP) server for interacting with Bugsnag. This server allows LLM tools like Cursor and Claude to investigate and resolve issues in Bugsnag.",
+  "author": {
+    "name": "tgeselle"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "bugsnag-mcp-server"],
+    "env": {
+      "BUGSNAG_API_KEY": "${user_config.bugsnag_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bugsnag_api_key": {
+      "type": "string",
+      "title": "Bugsnag API Key",
+      "description": "Your Bugsnag API key for authentication with the Bugsnag API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Bugsnag MCP Server\n\nA Model Context Protocol (MCP) server for interacting with Bugsnag. This server allows LLM tools like Cursor and Claude to investigate and resolve issues in Bugsnag.\n\n## ✨ Features\n\n### Error Monitoring & Analysis\n- **Organization & Project Navigation**: Easily browse your Bugsnag hierarchy\n- **Error & Event Filtering**: Find specific issues with powerful filtering options\n- **Detailed Stacktrace Viewing**: See formatted stacktraces with source code context and highlighted error lines\n- **Exception Chain Visualization**: Understand the root cause by viewing the full exception chain\n\n### Code Intelligence\n- **Project vs. Library Code Distinction**: Clearly identify your code vs third-party libraries\n- **Source Code Context**: View relevant code snippets around error locations\n- **Error Patterns**: Identify recurring patterns across multiple errors\n\n### Issue Management\n- **Search Capabilities**: Find issues by error class, message, or app version\n- **Error Details**: Get comprehensive information about each error\n- **Event History**: View all occurrences of a specific error\n\n## 🚀 Quick Setup\n\nSetting up the Bugsnag MCP server is simple and doesn't require any installation or downloading source code.\n\n### For Cursor\n\n1. Add the Bugsnag MCP server configuration:\n   ```json\n   {\n     \"mcpServers\": {\n       \"bugsnag\": {\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"bugsnag-mcp-server\"],\n         \"env\": {\n           \"BUGSNAG_API_KEY\": \"your-bugsnag-api-key\"\n         },\n         \"disabled\": false,\n         \"alwaysAllow\": []\n       }\n     }\n   }\n   ```\n\n2. Replace `your-bugsnag-api-key` with your Bugsnag API key\n\n### For Claude Desktop\n\n1. Add the Bugsnag MCP server configuration:\n   ```json\n   {\n     \"mcpServers\": {\n       \"bugsnag\": {\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"bugsnag-mcp-server\"],\n         \"env\": {\n           \"BUGSNAG_API_KEY\": \"your-bugsnag-api-key\"\n         },\n         \"disabled\": false,\n         \"alwaysAllow\": []\n       }\n     }\n   }\n   ```\n\n2. Replace `your-bugsnag-api-key` with your Bugsnag API key\n\n## 🔑 Obtaining a Bugsnag API Key\n\nTo use this MCP server, you'll need a Bugsnag API key:\n\n1. Log in to your Bugsnag account at [https://app.bugsnag.com/](https://app.bugsnag.com/)\n2. Go to **Settings** > **Organization settings** > **Access tokens**\n3. Create a new personal access token with the following permissions:\n   - Read projects\n   - Read and write errors\n   - Read and write comments\n4. Copy the generated token for use with the MCP server\n\n## 📋 Usage Examples\n\nOnce configured, you can use the Bugsnag MCP server with your LLM tool. Here are some example prompts:\n\n### Exploring Your Bugsnag Account\n\n```\nList all my Bugsnag organizations\n```\n\n```\nShow me all projects in organization \"org_12345\"\n```\n\n### Finding and Analyzing Errors\n\n```\nList the open errors in my Bugsnag project \"project_12345\"\n```\n\n```\nShow me the details for Bugsnag error ID \"error_12345\"\n```\n\n```\nShow me the detailed stacktrace for event \"event_12345\" in project \"project_12345\"\n```\n\n```\nView the exception chain for event \"event_12345\" in project \"project_12345\"\n```\n\n### Searching for Specific Issues\n\n```\nSearch for Bugsnag issues in project \"project_12345\" related to \"NullPointerException\"\n```\n\n```\nList all events for error \"error_12345\" in project \"project_12345\"\n```\n\n## 📚 Available Tools\n\nThe Bugsnag MCP server provides the following tools:\n\n### Organization & Project Management\n\n#### list_organizations\n\nLists available Bugsnag organizations.\n\nParameters:\n- None required\n\n#### list_projects\n\nLists projects in an organization.\n\nParameters:\n- `organization_id` (required): Bugsnag organization ID\n\n### Error & Event Management\n\n#### list_errors\n\nLists errors in a project with filtering options.\n\nParameters:\n- `project_id` (required): Bugsnag project ID\n- `status`: Filter by error status (\"open\", \"fixed\", \"ignored\")\n- `sort`: Sort order for errors (\"newest\", \"oldest\", \"priority\")\n- `limit`: Maximum number of errors to return\n\n#### view_error\n\nGets detailed information about a specific error.\n\nParameters:\n- `error_id` (required): Bugsnag error ID\n\n#### list_error_events\n\nLists events (occurrences) for a specific error.\n\nParameters:\n- `project_id` (required): Bugsnag project ID\n- `error_id` (required): Bugsnag error ID\n- `limit`: Maximum number of events to return\n\n#### view_latest_event\n\nViews the latest event for an error.\n\nParameters:\n- `error_id` (required): Bugsnag error ID\n\n#### view_event\n\nViews detailed information about a specific event.\n\nParameters:\n- `project_id` (required): Bugsnag project ID\n- `event_id` (required): Bugsnag event ID\n\n### Stacktrace Analysis\n\n#### view_stacktrace\n\nExtracts and formats stacktrace information from an event.\n\nParameters:\n- `project_id` (required): Bugsnag project ID\n- `event_id` (required): Bugsnag event ID\n- `include_code`: Include source code context if available (default: true)\n\n#### view_exception_chain\n\nViews the full chain of exceptions for an event.\n\nParameters:\n- `project_id` (required): Bugsnag project ID\n- `event_id` (required): Bugsnag event ID\n\n### Issue Management\n\n#### search_issues\n\nSearches for issues using various criteria.\n\nParameters:\n- `project_id` (required): Bugsnag project ID\n- `query`: Search query\n- `error_class`: Filter by error class\n- `app_version`: Filter by app version\n\n## 🛠️ Advanced Usage\n\n### Testing Your API Key\n\nYou can test if your Bugsnag API key is valid using:\n\n```bash\nnpx bugsnag-mcp-server test-api-key your-bugsnag-api-key\n```\n\nIf your API key is valid, this will display a list of your Bugsnag projects with their IDs.\n\n### Installation Options\n\nWhile using `npx` is recommended for most users, you can also install the package globally if you prefer:\n\n```bash\nnpm install -g bugsnag-mcp-server\n```\n\n### For Developers\n\nIf you're interested in contributing or modifying the code:\n\n1. Clone the repository:\n   ```bash\n   git clone https://github.com/yourusername/bugsnag-mcp.git\n   cd bugsnag-mcp\n   ```\n\n2. Install dependencies:\n   ```bash\n   npm install\n   ```\n\n3. Build the project:\n   ```bash\n   npm run build\n   ```\n\n4. Run tests:\n   ```bash\n   npm test\n   ```\n\n5. Run tests with coverage:\n   ```bash\n   npm run test:coverage\n   ```\n\n6. Format code:\n  ```bash\n  npm run format\n  ```\n\n7. Check code formatting:\n  ```bash\n  npm run format:check\n  ```\n\n### Continuous Integration\n\nThis project uses GitHub Actions for continuous integration. The workflows automatically:\n\n- Runs on push to the main branch and on pull requests\n- Tests against multiple Node.js versions (18.x and 20.x)\n- Runs the test suite\n- Generates and uploads test coverage reports\n- Checks code formatting with Prettier\n\nYou can view the workflow configurations in:\n- `.github/workflows/test.yml` - For running tests\n- `.github/workflows/prettier.yml` - For checking code formatting\n\n## License\n\nMIT\n",
+  "category": "Development",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bugsnag-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "bugsnag-mcp-server"],
+        "env": {
+          "BUGSNAG_API_KEY": "your-bugsnag-api-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tgeselle",
+    "repo": "bugsnag-mcp",
+    "url": "https://github.com/tgeselle/bugsnag-mcp",
+    "name": "tgeselle__bugsnag-mcp",
+    "path": null,
+    "stars": 16,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "784d46b39d191d77eee13cad4c207a9a536c96d0"
+  },
+  "programming_language": "API Blueprint",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:43.357Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"bugsnag-mcp-server\",\n  \"version\": \"1.1.0\",\n  \"description\": \"A Bugsnag MCP server for interacting with Bugsnag API\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"bugsnag-mcp-server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"keywords\": [\n    \"bugsnag\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"llm\",\n    \"cursor\",\n    \"claude\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/yourusername/bugsnag-mcp\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"test\": \"node --experimental-vm-modules node_modules/jest/bin/jest.js --config=jest.config.mjs\",\n    \"test:watch\": \"node --experimental-vm-modules node_modules/jest/bin/jest.js --config=jest.config.mjs --watch\",\n    \"test:coverage\": \"node --experimental-vm-modules node_modules/jest/bin/jest.js --config=jest.config.mjs --coverage\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\" \\\"tests/**/*.ts\\\"\",\n    \"format:check\": \"prettier --check \\\"src/**/*.ts\\\" \\\"tests/**/*.ts\\\"\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"axios\": \"^1.8.4\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.12\",\n    \"@types/node\": \"^20.11.24\",\n    \"jest\": \"^29.7.0\",\n    \"prettier\": \"^3.5.3\",\n    \"ts-jest\": \"^29.1.2\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

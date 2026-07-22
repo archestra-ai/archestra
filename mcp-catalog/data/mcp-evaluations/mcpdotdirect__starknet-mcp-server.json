@@ -1,0 +1,135 @@
+{
+  "name": "mcpdotdirect__starknet-mcp-server",
+  "display_name": "starknet-mcp-server",
+  "description": "MCP server that provides LLM with tools for interacting with Starknet ",
+  "author": {
+    "name": "mcpdotdirect"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@mcpdotdirect/starknet-mcp-server"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Starknet MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@mcpdotdirect/starknet-mcp-server)](https://smithery.ai/server/@mcpdotdirect/starknet-mcp-server)\n![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)\n![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6)\n![MCP](https://img.shields.io/badge/MCP-1.7+-green)\n![Starknet.js](https://img.shields.io/badge/Starknet.js-Latest-purple)\n\nA comprehensive Model Context Protocol (MCP) server for the Starknet blockchain. This server provides AI agents with the ability to interact with Starknet networks, query blockchain data, manage wallets, and interact with smart contracts.\n\n<a href=\"https://glama.ai/mcp/servers/@mcpdotdirect/starknet-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@mcpdotdirect/starknet-mcp-server/badge\" alt=\"Starknet Server MCP server\" />\n</a>\n\n## 📋 Contents\n\n- [Overview](#-overview)\n- [Features](#-features)\n- [Supported Networks](#-networks-supported)\n- [Prerequisites](#-prerequisites)\n- [Installation](#-installation)\n- [Server Configuration](#-server-configuration)\n- [Usage](#-usage)\n- [API Reference](#-api-reference)\n  - [Tools](#available-mcp-tools)\n  - [Resources](#available-mcp-resources)\n  - [Prompts](#available-mcp-prompts)\n- [Usage with AI Assistants](#-usage-with-ai-assistants)\n- [Security Considerations](#-security-considerations)\n- [Project Structure](#-project-structure)\n- [Development Conventions](#️-development-conventions)\n- [Documentation](#-documentation)\n- [License](#-license)\n\n## 🔭 Overview\n\nThe Starknet MCP Server leverages the Model Context Protocol to provide blockchain services to AI agents. It offers a comprehensive interface to the Starknet ecosystem, powering AI assistants with the ability to interact with Starknet blockchain data and operations through natural language.\n\nKey capabilities include:\n- Reading blockchain state (balances, transactions, blocks)\n- Interacting with Cairo smart contracts\n- Transferring tokens (ETH, STRK, and other ERC20 tokens)\n- Working with NFTs and token metadata\n- Resolving StarknetID domains (similar to ENS for Ethereum)\n- Making both read and write operations with proper transaction handling\n\nAll services are exposed through a consistent interface of MCP tools and resources, making it easy for AI agents to discover and use Starknet blockchain functionality. **Every tool that accepts Starknet addresses also supports StarknetID**, automatically resolving human-readable identities to addresses behind the scenes.\n\n## ✨ Features\n\n- **Starknet Integration**: Full Starknet blockchain integration using Starknet.js\n- **Network Support**: Supports both Mainnet and Sepolia testnet\n- **StarknetID Integration**: Resolution of Starknet IDs to addresses and vice versa\n- **Native Token Support**: Support for both ETH and STRK native tokens\n- **Smart Contract Interaction**: Call and query Starknet smart contracts\n- **Dual Transport**: Run as stdio server or HTTP server for different integration needs\n- **AI-Ready**: Designed to be used with Claude, GPT, and other AI assistants\n\n### Blockchain Information\n- Query chain information (chain ID, latest block)\n- Explore block details and transactions\n- View transaction receipts and status\n- Get address information and contract data\n\n### Native Token Operations\n- Get ETH and STRK balances for any address\n- Transfer ETH and STRK between accounts\n- View combined native token balances\n\n### Token Operations\n- Get ERC20 token balances and information\n- Transfer ERC20 tokens\n- View token supply and metadata\n- Check token ownership\n\n### NFT Operations\n- Check NFT ownership by token ID\n- Get NFT collection information\n- View NFT balances for addresses\n\n### Smart Contract Interaction\n- Call read-only contract functions\n- Execute contract writes with transaction confirmation\n- Get contract storage information\n- View ABIs and contract class information\n\n### StarknetID\n- Resolve Starknet addresses to Starknet IDs\n- Resolve Starknet IDs to addresses\n- Get complete Starknet ID profiles with verification data\n- Validate Starknet domains\n\n## 🔧 Networks Supported\n\nThe server supports the following Starknet networks:\n\n- **Mainnet**: The primary Starknet production network\n- **Sepolia**: Starknet's testnet on Ethereum's Sepolia\n\n## 🛠️ Prerequisites\n\n- [Bun](https://bun.sh/) 1.0.0 or higher (recommended)\n- Node.js 18.0.0 or higher\n\n## 📦 Installation\n\n### Installing via Smithery\n\nTo install starknet-mcp-server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@mcpdotdirect/starknet-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @mcpdotdirect/starknet-mcp-server --client claude\n```\n\n### Option 1: Use without installation (npx)\n\nThe easiest way to get started is to use `npx` to run the package directly:\n\n```bash\n# Run the stdio server without installation\nnpx @mcpdotdirect/starknet-mcp-server\n\n# Run the HTTP server without installation\nnpx @mcpdotdirect/starknet-mcp-server http\n```\n\nThis will automatically download and run the latest version without needing to install it first.\n\n### Option 2: Global installation\n\nIf you plan to use it frequently, you can install it globally:\n\n```bash\n# Install globally\nnpm install -g @mcpdotdirect/starknet-mcp-server\n\n# Then run from anywhere\nstarknet-mcp-server\nstarknet-mcp-server http\n```\n\n### Option 3: Local project installation\n\n```bash\n# Add to your project\nnpm install @mcpdotdirect/starknet-mcp-server\n\n# Using yarn\nyarn add @mcpdotdirect/starknet-mcp-server\n\n# Using pnpm\npnpm add @mcpdotdirect/starknet-mcp-server\n```\n\nThen add to your package.json scripts:\n```json\n\"scripts\": {\n  \"starknet-mcp\": \"starknet-mcp-server\",\n  \"starknet-mcp-http\": \"starknet-mcp-server http\"\n}\n```\n\n### Option 4: Running from source\n\nIf you want to run from source or develop locally:\n\n```bash\n# Clone the repository\ngit clone https://github.com/mcpdotdirect/starknet-mcp-server.git\ncd starknet-mcp-server\n\n# Install dependencies\nnpm install\n\n# Start the stdio server\nnpm start\n\n# Or start the HTTP server\nnpm run start:http\n```\n\nFor development with auto-reload:\n```bash\n# Development mode with stdio\nnpm run dev\n\n# Development mode with HTTP\nnpm run dev:http\n```\n\n## ⚙️ Server Configuration\n\nThe server uses the following default configuration:\n\n- **Default Network**: Mainnet\n- **Server Port**: 3000 (HTTP mode)\n- **Server Host**: 0.0.0.0 (accessible from any network interface)\n\nThese values are hardcoded in the application. If you need to modify them, you can edit the following files:\n\n- For network configuration: `src/core/chains.ts`\n- For server configuration: `src/server/http-server.ts`\n\n## 🔍 Usage\n\n### Running the Server\n\nYou can run the Starknet MCP Server in two modes:\n\n```bash\n# Run the server in stdio mode (for CLI tools and AI assistants)\nnpx @mcpdotdirect/starknet-mcp-server\n\n# Run the server in HTTP mode (for web applications)\nnpx @mcpdotdirect/starknet-mcp-server http\n```\n\nThe HTTP server runs on port 3000 by default and provides both a REST API and Server-Sent Events (SSE) for real-time communication.\n\n### Connecting from Cursor\n\nTo connect to the Starknet MCP server from Cursor:\n\n1. Open Cursor and go to Settings (gear icon in the bottom left)\n2. Click on \"Features\" in the left sidebar\n3. Scroll down to \"MCP Servers\" section\n4. Click \"Add new MCP server\"\n5. Enter the following details:\n   - Server name: `starknet-mcp-server`\n   - Type: `command`\n   - Command: `npx @mcpdotdirect/starknet-mcp-server`\n\n6. Click \"Save\"\n\nOnce connected, you can use the MCP server's capabilities directly within Cursor. The server will appear in the MCP Servers list and can be enabled/disabled as needed.\n\n### Using mcp.json with Cursor\n\nFor a more portable configuration that you can share with your team or use across projects, you can create an `.cursor/mcp.json` file in your project's root directory:\n\n```json\n{\n  \"mcpServers\": {\n    \"starknet-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@mcpdotdirect/starknet-mcp-server\"\n      ]\n    },\n    \"starknet-mcp-http\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@mcpdotdirect/starknet-mcp-server\",\n        \"http\"\n      ]\n    }\n  }\n}\n```\n\nPlace this file in your project's `.cursor` directory (create it if it doesn't exist), and Cursor will automatically detect and use these MCP server configurations when working in that project.\n\n### HTTP Mode with SSE\n\nIf you're developing a web application and want to connect to the HTTP server with Server-Sent Events (SSE), you can use this configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"starknet-mcp-sse\": {\n      \"url\": \"http://localhost:3000/sse\"\n    }\n  }\n}\n```\n\n### Connecting using Claude CLI\n\nIf you're using Claude CLI, you can connect to the MCP server with just two commands:\n\n```bash\n# Add the MCP server using npx\nclaude mcp add starknet-mcp-server npx @mcpdotdirect/starknet-mcp-server\n\n# Start Claude with the MCP server enabled\nclaude\n```\n\n### Example: Using the MCP Server in Cursor\n\nAfter configuring the MCP server, you can easily use it in Cursor. For example:\n\n1. Create a new JavaScript/TypeScript file in your project:\n\n```javascript\n// starknet-example.js\nasync function main() {\n  try {\n    // When using with Cursor, you can simply ask Cursor to:\n    // \"Check the ETH balance of address 0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7 on Starknet mainnet\"\n    // Or \"Lookup the Starknet ID for address 0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7\"\n    \n    // Cursor will use the MCP server to execute these operations \n    // without requiring any additional code from you\n  } catch (error) {\n    console.error(\"Error:\", error.message);\n  }\n}\n\nmain();\n```\n\n2. With the file open in Cursor, you can ask Cursor to:\n   - \"Check the ETH balance of vitalik.stark\"\n   - \"Get information about the latest block on Starknet\"\n   - \"Look up the owner of NFT #123 in collection 0x...\"\n\n### Example: Getting an ETH Balance with Starknet ID\n\n```javascript\n// Example of using the MCP client to check an ETH balance using Starknet ID\nconst mcp = new McpClient(\"http://localhost:3000\");\n\nconst result = await mcp.invokeTool(\"get_starknet_eth_balance\", {\n  address: \"vitalik.stark\", // Starknet ID instead of address\n  network: \"mainnet\"\n});\n\nconsole.log(result);\n// {\n//   wei: \"1000000000000000000\",\n//   ether: \"1.0\"\n// }\n```\n\n### Example: Resolving a Starknet ID\n\n```javascript\n// Example of using the MCP client to resolve a Starknet ID to an address\nconst mcp = new McpClient(\"http://localhost:3000\");\n\nconst result = await mcp.invokeTool(\"resolve_starknet_address\", {\n  name: \"vitalik.stark\",\n  network: \"mainnet\"\n});\n\nconsole.log(result);\n// {\n//   starknetId: \"vitalik.stark\",\n//   address: \"0x04d07e40e93398ed3c76981e449d3446f7c4e52aac5b3e8a37d7b0ca30845a5d\",\n//   resolved: true\n// }\n```\n\n### Example: Calling a Smart Contract\n\n```javascript\n// Example of using the MCP client to call a smart contract function\nconst mcp = new McpClient(\"http://localhost:3000\");\n\nconst result = await mcp.invokeTool(\"call_starknet_contract\", {\n  contractAddress: \"0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7\", // ETH contract\n  entrypoint: \"totalSupply\",\n  calldata: [],\n  network: \"mainnet\"\n});\n\nconsole.log(result);\n// {\n//   result: [\"0x84b6c7d5970d5a73abe\"]\n// }\n```\n\n### Using in a Node.js Project\n\nIf you want to programmatically use the MCP server in your Node.js project:\n\n```javascript\n// Start the MCP server as a child process\nconst { spawn } = require('child_process');\nconst mcpServer = spawn('npx', ['@mcpdotdirect/starknet-mcp-server']);\n\n// Connect to it with the MCP client\nconst mcp = new McpClient({ process: mcpServer });\n\n// Now you can use the client\nconst networks = await mcp.invokeTool(\"get_supported_starknet_networks\", {\n  random_string: \"any\"\n});\nconsole.log(\"Supported networks:\", networks);\n```\n\nFor more advanced usage, you can create a wrapper class around the HTTP API or use libraries like Axios for cleaner API calls.\n\n## 📚 API Reference\n\n### Available MCP Tools\n\nThis server implements the following MCP tools:\n\n#### Network Tools\n- `get_starknet_chain_info`: Get information about a Starknet network\n- `get_supported_starknet_networks`: Get a list of supported Starknet networks\n\n#### Balance Tools\n- `get_starknet_eth_balance`: Get the ETH balance for a Starknet address or Starknet ID\n- `get_starknet_token_balance`: Get the balance of any token for an address\n- `get_starknet_strk_balance`: Get the STRK token balance for an address\n- `get_starknet_native_balances`: Get all native token balances (ETH and STRK) for an address\n\n#### StarknetID Tools\n- `resolve_starknet_name`: Get the Starknet ID for an address\n- `resolve_starknet_address`: Get the address for a Starknet ID\n- `get_starknet_profile`: Get the full Starknet ID profile for an address\n- `validate_starknet_domain`: Check if a string is a valid Starknet ID\n\n#### Block Tools\n- `get_starknet_block`: Get information about a specific block\n- `get_starknet_block_transactions`: Get transactions in a specific block\n\n#### Transaction Tools\n- `get_starknet_transaction`: Get details about a transaction\n- `get_starknet_transaction_receipt`: Get transaction receipt\n- `check_starknet_transaction_status`: Check if a transaction is confirmed\n\n#### Contract Tools\n- `call_starknet_contract`: Call a read-only function on a contract\n- `get_starknet_contract_class`: Get the class (ABI and other information) of a contract\n- `execute_starknet_contract`: Execute a contract call (write operation)\n\n#### Token Tools\n- `get_starknet_token_info`: Get information about a token\n- `get_starknet_token_supply`: Get the total supply of a token\n- `check_starknet_nft_ownership`: Check if an address owns a specific NFT\n- `get_starknet_nft_balance`: Get the number of NFTs owned by an address\n\n#### Transfer Tools\n- `transfer_starknet_eth`: Transfer ETH from one account to another (amounts in human-readable format)\n- `transfer_starknet_strk`: Transfer STRK from one account to another (amounts in human-readable format)\n- `transfer_starknet_token`: Transfer ERC20 tokens from one account to another (amounts in human-readable format)\n\n### Available MCP Resources\n\nThe server provides the following MCP resources:\n\n#### Network Resources\n- `starknet://{network}/chain`: Get chain information for a specific network\n- `starknet://networks`: Get a list of all supported networks\n\n#### Block Resources\n- `starknet://{network}/block/{blockIdentifier}`: Get information about a specific block\n- `starknet://{network}/block/latest`: Get the latest block\n\n#### Address Resources\n- `starknet://{network}/address/{address}`: Get information about an address\n\n#### Transaction Resources\n- `starknet://{network}/tx/{txHash}`: Get transaction information\n\n#### StarknetID Resources\n- `starknet://{network}/id/address/{address}`: Resolve an address to a Starknet ID\n- `starknet://{network}/id/name/{name}`: Resolve a Starknet ID to an address\n- `starknet://{network}/id/profile/{address}`: Get the Starknet ID profile for an address\n\n### Available MCP Prompts\n\nFor LLM interactions, the server provides these prompts:\n\n- `explore_starknet_block`: Explore information about a specific Starknet block\n- `explore_starknet_address`: Get information about a Starknet address\n- `explore_starknet_transaction`: Get information about a Starknet transaction\n- `lookup_starknet_id`: Look up a Starknet ID or resolve an address to a Starknet ID\n- `explore_starknet_id_profile`: Explore a full Starknet ID profile\n\n## 🔍 Usage with AI Assistants\n\nWhen using this server with AI assistants like Claude or GPT:\n\n1. Configure your AI assistant to use this MCP server\n2. The assistant can then use tools to interact with Starknet\n3. Example queries:\n   - \"What's the ETH balance of address 0x04d07e40e93398ed3c76981e449d3446f7c4e52aac5b3e8a37d7b0ca30845a5d?\"\n   - \"Look up the Starknet ID for address 0x04d07e40e93398ed3c76981e449d3446f7c4e52aac5b3e8a37d7b0ca30845a5d\"\n   - \"What's in the latest block on Starknet mainnet?\"\n   - \"Get information about transaction 0x7e3a33ab42f2e24184763563b7b8482b53e3b89831ebc3eacf29d4d11f5198\"\n   - \"Resolve the Starknet ID vitalik.stark to an address\"\n\n## 🔒 Security Considerations\n\n- **Private keys** are used only for transaction signing and are never stored by the server\n- **All token amounts** are specified in human-readable format (e.g., ETH, STRK, token units) rather than in wei or smallest units\n- Always validate and sanitize input parameters before executing operations\n- Consider implementing additional authentication mechanisms for production use\n- Use HTTPS for the HTTP server in production environments\n- Implement rate limiting to prevent abuse\n- For high-value services, consider adding confirmation steps\n\n## 📁 Project Structure\n\n```\nstarknet-mcp-server/\n├── src/\n│   ├── index.ts                # Main stdio server entry point\n│   ├── server/                 # Server-related files\n│   │   ├── http-server.ts      # HTTP server with SSE\n│   │   └── server.ts           # General server setup\n│   ├── core/\n│   │   ├── chains.ts           # Chain definitions and utilities\n│   │   ├── resources.ts        # MCP resources implementation\n│   │   ├── tools.ts            # MCP tools implementation\n│   │   ├── prompts.ts          # MCP prompts implementation\n│   │   └── services/           # Core blockchain services\n│   │       ├── index.ts        # Service exports\n│   │       ├── balance.ts      # Balance services\n│   │       ├── blocks.ts       # Block services\n│   │       ├── clients.ts      # Client utilities\n│   │       ├── contracts.ts    # Contract interactions\n│   │       ├── starknetid.ts   # Starknet ID services\n│   │       ├── tokens.ts       # Token services\n│   │       ├── transactions.ts # Transaction services\n│   │       ├── transfer.ts     # Transfer services\n│   │       └── utils.ts        # Utility functions\n├── package.json\n├── tsconfig.json\n└── README.md\n```\n\n## 🛠️ Development Conventions\n\nWhen adding custom tools, resources, or prompts:\n\n1. Use underscores (`_`) instead of hyphens (`-`) in all resource, tool, and prompt names\n   ```typescript\n   // Good: Uses underscores\n   server.tool(\n     \"starknet_contract_call\",\n     \"Description of the tool\",\n     {\n       contract_address: z.string().describe(\"The contract address\")\n     },\n     async (params) => {\n       // Tool implementation\n     }\n   );\n   ```\n\n2. This naming convention ensures compatibility with Cursor and other AI tools\n\n## 📚 Documentation\n\nFor more information about:\n- [Model Context Protocol](https://modelcontextprotocol.io/introduction)\n- [Starknet.js Documentation](https://www.starknetjs.com/)\n- [Starknet Documentation](https://docs.starknet.io/)\n- [StarknetID Documentation](https://docs.starknet.id/)\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.",
+  "category": "Finance",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpdotdirect-starknet-mcp-server-npx-stdio": {
+        "command": "npx",
+        "args": ["@mcpdotdirect/starknet-mcp-server"],
+        "env": {}
+      },
+      "mcpdotdirect-starknet-mcp-server-npx-http": {
+        "command": "npx",
+        "args": ["@mcpdotdirect/starknet-mcp-server", "http"],
+        "env": {}
+      },
+      "mcpdotdirect-starknet-mcp-server-global-stdio": {
+        "command": "starknet-mcp-server",
+        "args": [],
+        "env": {}
+      },
+      "mcpdotdirect-starknet-mcp-server-global-http": {
+        "command": "starknet-mcp-server",
+        "args": ["http"],
+        "env": {}
+      },
+      "mcpdotdirect-starknet-mcp-server-local-script-stdio": {
+        "command": "npm",
+        "args": ["run", "starknet-mcp"],
+        "env": {}
+      },
+      "mcpdotdirect-starknet-mcp-server-local-script-http": {
+        "command": "npm",
+        "args": ["run", "starknet-mcp-http"],
+        "env": {}
+      },
+      "mcpdotdirect-starknet-mcp-server-source-start-stdio": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "mcpdotdirect-starknet-mcp-server-source-start-http": {
+        "command": "npm",
+        "args": ["run", "start:http"],
+        "env": {}
+      },
+      "mcpdotdirect-starknet-mcp-server-source-dev-stdio": {
+        "command": "npm",
+        "args": ["run", "dev"],
+        "env": {}
+      },
+      "mcpdotdirect-starknet-mcp-server-source-dev-http": {
+        "command": "npm",
+        "args": ["run", "dev:http"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mcpdotdirect",
+    "repo": "starknet-mcp-server",
+    "url": "https://github.com/mcpdotdirect/starknet-mcp-server",
+    "name": "starknet-mcp-server",
+    "path": null,
+    "stars": 4,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "cea723d1b58bbc6a18b9410889af064a898fbc81"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.761Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 8
+    },
+    {
+      "name": "starknet",
+      "importance": 9
+    },
+    {
+      "name": "starknetid.js",
+      "importance": 7
+    },
+    {
+      "name": "cors",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@mcpdotdirect/starknet-mcp-server\",\n  \"module\": \"src/index.ts\",\n  \"type\": \"module\",\n  \"version\": \"1.0.2\",\n  \"description\": \"Model Context Protocol (MCP) server for interacting with Starknet\",\n  \"private\": false,\n  \"main\": \"build/index.js\",\n  \"bin\": {\n    \"starknet-mcp-server\": \"./bin/cli.js\"\n  },\n  \"files\": [\n    \"build/\",\n    \"bin/\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"start\": \"bun run src/index.ts\",\n    \"build\": \"bun build src/index.ts --outdir build --target node\",\n    \"build:http\": \"bun build src/server/http-server.ts --outdir build --target node --outfile http-server.js\",\n    \"dev\": \"bun --watch src/index.ts\",\n    \"start:http\": \"bun run src/server/http-server.ts\",\n    \"dev:http\": \"bun --watch src/server/http-server.ts\",\n    \"prepublishOnly\": \"bun run build && bun run build:http\",\n    \"version:patch\": \"npm version patch\",\n    \"version:minor\": \"npm version minor\",\n    \"version:major\": \"npm version major\",\n    \"release\": \"npm publish\",\n    \"changelog\": \"conventional-changelog -p angular -i CHANGELOG.md -s -r 0\",\n    \"changelog:latest\": \"conventional-changelog -p angular -r 1 > RELEASE_NOTES.md\"\n  },\n  \"devDependencies\": {\n    \"@types/bun\": \"latest\",\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/express\": \"^5.0.1\",\n    \"@types/node\": \"^20.17.25\",\n    \"conventional-changelog-cli\": \"^5.0.0\"\n  },\n  \"peerDependencies\": {\n    \"typescript\": \"^5.8.2\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"cors\": \"^2.8.5\",\n    \"express\": \"^4.21.2\",\n    \"starknet\": \"^6.23.1\",\n    \"starknetid.js\": \"4.0.3\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"starknet\",\n    \"blockchain\",\n    \"ai\",\n    \"agent\"\n  ],\n  \"author\": \"Etheral <etheral.eth.dev@gmail.com>\",\n  \"license\": \"MIT\",\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/mcpdotdirect/starknet-mcp-server\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/mcpdotdirect/starknet-mcp-server/issues\"\n  },\n  \"homepage\": \"https://github.com/mcpdotdirect/starknet-mcp-server#readme\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  }\n}\n"
+}

@@ -1,0 +1,86 @@
+{
+  "name": "jjsantos01__jupyter-notebook-mcp",
+  "display_name": "jupyter-notebook-mcp",
+  "description": "A Model Context Protocol (MCP) for Jupyter Notebook",
+  "author": {
+    "name": "jjsantos01"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${user_config.src_path}", "run", "jupyter_mcp_server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "src_path": {
+      "type": "directory",
+      "title": "JupyterMCP Source Directory",
+      "description": "The absolute path to the 'src' folder of the jupyter-notebook-mcp repository, where 'jupyter_mcp_server.py' is located.",
+      "required": true,
+      "default": "${HOME}/jupyter-notebook-mcp/src"
+    }
+  },
+  "readme": "# JupyterMCP - Jupyter Notebook Model Context Protocol Integration\n\nJupyterMCP connects [Jupyter Notebook](https://jupyter.org/) to [Claude AI](https://claude.ai/chat) through the Model Context Protocol (MCP), allowing Claude to directly interact with and control Jupyter Notebooks. This integration enables AI-assisted code execution, data analysis, visualization, and more.\n\n## ⚠️ Compatibility Warning\n\n**This tool is compatible ONLY with Jupyter Notebook version 6.x.**\n\nIt does NOT work with:\n\n- Jupyter Lab\n- Jupyter Notebook v7.x\n- VS Code Notebooks\n- Google Colab\n- Any other notebook interfaces\n\n## Features\n\n- **Two-way communication**: Connect Claude AI to Jupyter Notebook through a WebSocket-based server\n- **Cell manipulation**: Insert, execute, and manage notebook cells\n- **Notebook management**: Save notebooks and retrieve notebook information\n- **Cell execution**: Run specific cells or execute all cells in a notebook\n- **Output retrieval**: Get output content from executed cells with text limitation options\n\n## Components\n\nThe system consists of three main components:\n\n1. **WebSocket Server (`jupyter_ws_server.py`)**: Sets up a WebSocket server inside Jupyter that bridges communication between notebook and external clients\n2. **Client JavaScript (`client.js`)**: Runs in the notebook to handle operations (inserting cells, executing code, etc.)\n3. **MCP Server (`jupyter_mcp_server.py`)**: Implements the Model Context Protocol and connects to the WebSocket server\n\n## Installation\n\n### Prerequisites\n\n- [Python 3.12 or newer](https://www.python.org/downloads/) (probably also work with older versions, but not tested)\n- [`uv` package manager](/README.md#installing-uv)\n- [Claude AI desktop application](https://claude.ai/download)\n\n#### Installing uv\n\nIf you're on Mac:\n\n```bash\nbrew install uv\n```\n\nOn Windows (PowerShell):\n\n```bash\npowershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n```\n\nFor other platforms, see the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).\n\n### Setup\n\n1. Clone or download this repository to your computer:\n\n   ```bash\n   git clone https://github.com/jjsantos01/jupyter-notebook-mcp.git\n   ```\n\n2. Create virtual environment with required packages an install `jupyter-mcp` kernel, so it can be recognized by your jupyter installation, if you had one before.\n\n   ```bash\n   uv run python -m ipykernel install --name jupyter-mcp\n   ```\n\n3. (optional) Install additional Python packages for your analysis:\n\n   ```bash\n   uv pip install seaborn\n   ```\n\n4. Configure Claude desktop integration:\n   Go to `Claude` > `Settings` > `Developer` > `Edit Config` > `claude_desktop_config.json` to include the following:\n\n   ```json\n      {\n       \"mcpServers\": {\n           \"jupyter\": {\n               \"command\": \"uv\",\n               \"args\": [\n                   \"--directory\",\n                   \"/ABSOLUTE/PATH/TO/PARENT/REPO/FOLDER/src\",\n                   \"run\",\n                   \"jupyter_mcp_server.py\"\n               ]\n           }\n       }\n   }\n   ```\n\n   Replace `/ABSOLUTE/PATH/TO/` with the actual path to the `src` folder on your system. For example:\n   - Windows: `\"C:\\\\Users\\\\MyUser\\\\GitHub\\\\jupyter-notebook-mcp\\\\src\\\\\"`\n   - Mac: `/Users/MyUser/GitHub/jupyter-notebook-mcp/src/`\n\n   If you had previously opened Claude, then `File` > `Exit` and open it again.\n\n## Usage\n\n### Starting the Connection\n\n1. Start your Jupyter Notebook (version 6.x) server:\n\n   ```bash\n   uv run jupyter nbclassic\n   ```\n\n2. Create a new Jupyter Notebook and make sure that you choose the `jupyter-mcp` kernel: `kernel` -> `change kernel` -> `jupyter-mcp`\n\n3. In a notebook cell, run the following code to initialize the WebSocket server:\n\n   ```python\n   import sys\n   sys.path.append('/path/to/jupyter-notebook-mcp/src')  # Add the path to where the scripts are located\n   \n   from jupyter_ws_server import setup_jupyter_mcp_integration\n   \n   # Start the WebSocket server inside Jupyter\n   server, port = setup_jupyter_mcp_integration()\n   ```\n\n   Don't forget to replace here `'/path/to/jupyter-notebook-mcp/src'` with `src` folder on your system. For example:\n   - Windows: `\"C:\\\\Users\\\\MyUser\\\\GitHub\\\\jupyter-notebook-mcp\\\\src\\\\\"`\n   - Mac: `/Users/MyUser/GitHub/jupyter-notebook-mcp/src/`\n\n   ![Notebook setup](/assets/img/notebook-setup.png)\n\n4. Launch Claude desktop with MCP enabled.\n\n### Using with Claude\n\nOnce connected, Claude will have access to the following tools:\n\n- `ping` - Check server connectivity\n- `insert_and_execute_cell` - Insert a cell at the specified position and execute it\n- `save_notebook` - Save the current Jupyter notebook\n- `get_cells_info` - Get information about all cells in the notebook\n- `get_notebook_info` - Get information about the current notebook\n- `run_cell` - Run a specific cell by its index\n- `run_all_cells` - Run all cells in the notebook\n- `get_cell_text_output` - Get the output content of a specific cell\n- `get_image_output` - Get the images output of a specific cell\n- `edit_cell_content` - Edit the content of an existing cell\n- `set_slideshow_type`- Set the slide show type for cell\n\n## ⚠️ DISCLAIMER\n\nThis is an experimental project and should be used with caution. This tool runs arbitrary Python code in your computer, which could potentially modify or delete data if not used carefully. Always back up your important projects and data.\n\n## Example Prompts\n\nAsk Claude to perform notebook operations:\n\n### Python example\n\nYou can check the [example notebook](/notebooks/example_notebook.ipynb) and the [video demo](https://x.com/jjsantoso/status/1906780778807390562)\n\n```plain\nYou have access to a Jupyter Notebook server.\n\nI need to create a presentation about Python's Seaborn library.  \nThe content is as follows:\n\n- What is Seaborn?\n- Long vs. Wide data format\n- Advantages of Seaborn over Matplotlib\n- Commonly used Seaborn functions\n- Live demonstration (comparison of Seaborn vs. Matplotlib)\n  - Bar plot\n  - Line plot\n  - Scatter plot\n\nFor each concept, I want the main explanations provided in markdown cells, followed by one or more Python code cells demonstrating its usage. Keep the text concise—the cells shouldn't exceed 10 lines each.\n\nUse appropriate slideshow types for each cell to make the presentation visually appealing.\n```\n\n[Check Here the full conversation](https://claude.ai/share/420b6aa6-b84b-437f-a6a6-89d310c36d52)\n\n### Stata example\n\nFor this example, you need the [Stata Software](https://www.stata.com/) (v17 or later), which is not open source. If you already have Stata, you need to install the [`stata-setup`](https://pypi.org/project/stata-setup/) package:\n\n```bash\nuv pip install stata-setup\n```\n\nThen, at the begining of your notebook, you need to additionally include:\n\n```python\nimport stata_setup\nstata_setup.config('your_stata_installation_directory', 'your_stata_edition')\n```\n\nYou can check the [example notebook](/notebooks/stata_example.ipynb) and the [video demo](https://x.com/jjsantoso/status/1906780784800731251)\n\nThis exercise comes from [Professor John Robert Warren webpage](https://www.rob-warren.com/soc3811_stata_exercises.html)\n\n```plain\nYou have access to a Jupyter Notebook server. By default it runs Python, but you can run Stata (v18) code in this server using the %%stata magic, for example:\n\n%%stata\ndisplay \"hello world\"\n\nRun the available tools to solve the exercise, execute the code, and interpret the results.\n\n**EXERCISE:**\n\nIn this exercise, you will use data from the American Community Survey (ACS). The ACS is a product of the U.S. Census Bureau and involves interviewing millions of Americans each year. For an introduction to the ACS, visit the ACS website (here).\n\nFor this exercise, I have created a data file containing two variables collected from respondents of the 2010 ACS who lived in one of two metropolitan areas: Minneapolis/St Paul and Duluth/Superior. The two variables are: (1) People's poverty status and (2) the time it takes people to commute to work.\n\nUse STATA syntax files you already have (from the first assignment or class examples) and modify them to accomplish the following goals.\n\n1. Read the data file (`\"./stata_assignment_2.dat\"`) for this assignment into STATA.\n2. Be sure to declare \"zero\" as a missing value for `TRANTIME`, the commuting time variable.\n3. Create a new dichotomous poverty variable that equals \"1\" if a person's income-to-poverty-line ratio (`POVRATIO`) is less than 100, and \"0\" otherwise; see the bottom of the assignment for an example of how to do this in STATA.\n4. Separately for Minneapolis/St Paul and Duluth/Superior, produce:\n   - a histogram of the commuting time (`TRANTIME`) variable.\n   - measures of central tendency and spread for commuting time.\n   - a frequency distribution for the poverty status (0 vs 1) variable.\n5. Separately for Minneapolis/St Paul and Duluth/Superior, use STATA code to produce:\n   - a 95% confidence interval for the mean commuting time.\n   - a 95% confidence interval for the proportion of people who are poor. See below for an example of how to do this in STATA.\n\nUse the results from step #4 above to:\n\n6. Separately for Minneapolis/St Paul and Duluth/Superior, manually calculate:\n   - a 95% confidence interval for the mean commuting time.\n   - a 95% confidence interval for the proportion of people who are poor.\n7. Confirm that your answers from steps #5 and #6 match.\n\nBased on the results above, answer this question:\n\n8. How do you interpret the confidence intervals calculated in steps #5 and #6 above?\n\n9. Finally, create a do file (.do) with the all the Stata code and the answers as comments.\n\n---\n\n**DESCRIPTION OF VARIABLES IN \"STATA ASSIGNMENT 2.DAT\"**\n\n**METAREAD** (Column 4-7)  \nMetropolitan Area  \n- `2240`: Duluth-Superior, MN/WI  \n- `5120`: Minneapolis-St. Paul, MN  \n\n**POVRATIO** (Column 18-20)  \nRatio of person's income to the poverty threshold:  \n- `<100`: Below Poverty Line  \n- `100`: At Poverty Line  \n- `>100`: Above Poverty Line  \n\n**TRANTIME** (Column 21-23)  \nTravel time to work  \n- `0`: Zero minutes  \n- `1`: 1 Minute  \n- etc.\n\n```\n\n[Check Here the full conversation](https://claude.ai/share/97b5a546-9375-434d-8224-561706782880)\n\n## Testing with External Client\n\nYou can test the functionality without using Claude Desktop with the included external client:\n\n```bash\nuv run python src/jupyter_ws_external_client.py\n```\n\nThis will provide an interactive menu to test some available functions.\n\nFor automated testing of all commands:\n\n```bash\nuv run python src/jupyter_ws_external_client.py --batch\n```\n\n## Troubleshooting\n\n- **Connection Issues**: If you experience connection timeouts, the client includes a reconnection mechanism. You can also try restarting the WebSocket server.\n- **Cell Execution Problems**: If cell execution doesn't work, check that the cell content is valid Python/Markdown and that the notebook kernel is running.\n- **WebSocket Port Conflicts**: If the default port (8765) is already in use, the server will automatically try to find an available port.\n\n## Limitations\n\n- Only supports Jupyter Notebook 6.x\n- Text output from cells is limited to 1500 characters by default\n- Does not support advanced Jupyter widget interactions\n- Connection may timeout after periods of inactivity\n\n## License\n\n[MIT](/LICENSE)\n\n## Other Jupyter MCPs\n\nThis project is inspired by similar MCP integrations for Jupyter as:\n\n- [ihrpr](https://github.com/ihrpr/mcp-server-jupyter)\n- [Datalayer](https://github.com/datalayer/jupyter-mcp-server/tree/main)\n",
+  "category": "Data Science",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "jupyter": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/src", "run", "jupyter_mcp_server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jjsantos01",
+    "repo": "jupyter-notebook-mcp",
+    "url": "https://github.com/jjsantos01/jupyter-notebook-mcp",
+    "name": "jjsantos01__jupyter-notebook-mcp",
+    "path": null,
+    "stars": 107,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1511d78bb03f35c7142010e0eff3226c7d10b9da"
+  },
+  "programming_language": "Jupyter Notebook",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:04.977Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "notebook",
+      "importance": 10
+    },
+    {
+      "name": "websockets",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"jupyter-notebook-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"mcp[cli]>=1.5.0\",\n    \"notebook>=7.3.3\",\n    \"websockets>=15.0.1\",\n]\n"
+}

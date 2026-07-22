@@ -1,0 +1,84 @@
+{
+  "name": "8ensmith__mcp-open-library",
+  "display_name": "mcp-open-library",
+  "description": "A Model Context Protocol (MCP) server for the Internet Archive's Open Library API that enables AI assistants to search for book and author information.",
+  "author": {
+    "name": "8enSmith"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@8enSmith/mcp-open-library"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Open Library\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/8enSmith/mcp-open-library)](https://archestra.ai/mcp-catalog/8ensmith__mcp-open-library)\n[![smithery badge](https://smithery.ai/badge/@8enSmith/mcp-open-library)](https://smithery.ai/server/@8enSmith/mcp-open-library)\n\nA Model Context Protocol (MCP) server for the Open Library API that enables AI assistants to search for book and author information.\n\n<a href=\"https://glama.ai/mcp/servers/@8enSmith/mcp-open-library\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@8enSmith/mcp-open-library/badge\" alt=\"mcp-open-library MCP server\" />\n</a>\n\n## Overview\n\nThis project implements an MCP server that provides tools for AI assistants to interact with the [Open Library](https://openlibrary.org/). It allows searching for book information by title, searching for authors by name, retrieving detailed author information using their Open Library key, and getting URLs for author photos using their Open Library ID (OLID). The server returns structured data for book and author information.\n\n## Features\n\n- **Book Search by Title**: Search for books using their title (`get_book_by_title`).\n- **Author Search by Name**: Search for authors using their name (`get_authors_by_name`).\n- **Get Author Details**: Retrieve detailed information for a specific author using their Open Library key (`get_author_info`).\n- **Get Author Photo**: Get the URL for an author's photo using their Open Library ID (OLID) (`get_author_photo`).\n- **Get Book Cover**: Get the URL for a book's cover image using various identifiers (ISBN, OCLC, LCCN, OLID, ID) (`get_book_cover`).\n- **Get Book by ID**: Retrieve detailed book information using various identifiers (ISBN, LCCN, OCLC, OLID) (`get_book_by_id`).\n\n## Installation\n\n### Installing via Smithery\n\nTo install MCP Open Library for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@8enSmith/mcp-open-library):\n\n```bash\nnpx -y @smithery/cli install @8enSmith/mcp-open-library --client claude\n```\n\n### Manual Installation\n```bash\n# Clone the repository\ngit clone https://github.com/8enSmith/mcp-open-library.git\ncd mcp-open-library\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n\n## Usage\n\n### Running the Server\n\nYou can use the MCP Inspector to test the server:\n\n```bash\nnpm run inspector\n```\n\nAccess the MCP Inspector and then test the tool e.g.\n\n![alt text](image.png)\n\n### Using with an MCP Client\n\nThis server implements the Model Context Protocol, which means it can be used by any MCP-compatible AI assistant or client e.g. [Claude Desktop](https://modelcontextprotocol.io/quickstart/user). The server exposes the following tools:\n\n- `get_book_by_title`: Search for book information by title\n- `get_authors_by_name`: Search for author information by name\n- `get_author_info`: Get detailed information for a specific author using their Open Library Author Key\n- `get_author_photo`: Get the URL for an author's photo using their Open Library Author ID (OLID)\n- `get_book_cover`: Get the URL for a book's cover image using a specific identifier (ISBN, OCLC, LCCN, OLID, or ID)\n- `get_book_by_id`: Get detailed book information using a specific identifier (ISBN, LCCN, OCLC, or OLID)\n\n**Example `get_book_by_title` input:**\n```json\n{\n  \"title\": \"The Hobbit\"\n}\n```\n\n**Example `get_book_by_title` output:**\n```json\n[\n  {\n    \"title\": \"The Hobbit\",\n    \"authors\": [\n      \"J. R. R. Tolkien\"\n    ],\n    \"first_publish_year\": 1937,\n    \"open_library_work_key\": \"/works/OL45883W\",\n    \"edition_count\": 120,\n    \"cover_url\": \"https://covers.openlibrary.org/b/id/10581294-M.jpg\"\n  }\n]\n```\n\n**Example `get_authors_by_name` input:**\n```json\n{\n  \"name\": \"J.R.R. Tolkien\"\n}\n```\n\n**Example `get_authors_by_name` output:**\n```json\n[\n  {\n    \"key\": \"OL26320A\",\n    \"name\": \"J. R. R. Tolkien\",\n    \"alternate_names\": [\n      \"John Ronald Reuel Tolkien\"\n    ],\n    \"birth_date\": \"3 January 1892\",\n    \"top_work\": \"The Hobbit\",\n    \"work_count\": 648\n  }\n]\n```\n\n**Example `get_author_info` input:**\n```json\n{\n  \"author_key\": \"OL26320A\"\n}\n```\n\n**Example `get_author_info` output:**\n```json\n{\n  \"name\": \"J. R. R. Tolkien\",\n  \"personal_name\": \"John Ronald Reuel Tolkien\",\n  \"birth_date\": \"3 January 1892\",\n  \"death_date\": \"2 September 1973\",\n  \"bio\": \"John Ronald Reuel Tolkien (1892-1973) was a major scholar of the English language, specializing in Old and Middle English. He served as the Rawlinson and Bosworth Professor of Anglo-Saxon and later the Merton Professor of English Language and Literature at Oxford University.\",\n  \"alternate_names\": [\"John Ronald Reuel Tolkien\"],\n  \"photos\": [6791763],\n  \"key\": \"/authors/OL26320A\",\n  \"remote_ids\": {\n    \"viaf\": \"95218067\",\n    \"wikidata\": \"Q892\"\n  },\n  \"revision\": 43,\n  \"last_modified\": {\n    \"type\": \"/type/datetime\",\n    \"value\": \"2023-02-12T05:50:22.881\"\n  }\n}\n```\n\n**Example `get_author_photo` input:**\n```json\n{\n  \"olid\": \"OL26320A\"\n}\n```\n\n**Example `get_author_photo` output:**\n```text\nhttps://covers.openlibrary.org/a/olid/OL26320A-L.jpg\n```\n\n**Example `get_book_cover` input:**\n```json\n{\n  \"key\": \"ISBN\",\n  \"value\": \"9780547928227\",\n  \"size\": \"L\"\n}\n```\n\n**Example `get_book_cover` output:**\n```text\nhttps://covers.openlibrary.org/b/isbn/9780547928227-L.jpg\n```\n\nThe `get_book_cover` tool accepts the following parameters:\n- `key`: The type of identifier (one of: `ISBN`, `OCLC`, `LCCN`, `OLID`, or `ID`)\n- `value`: The value of the identifier\n- `size`: Optional cover size (`S` for small, `M` for medium, `L` for large, defaults to `L`)\n\n**Example `get_book_by_id` input:**\n```json\n{\n  \"idType\": \"isbn\",\n  \"idValue\": \"9780547928227\"\n}\n```\n\n**Example `get_book_by_id` output:**\n```json\n{\n  \"title\": \"The Hobbit\",\n  \"authors\": [\n    \"J. R. R. Tolkien\"\n  ],\n  \"publishers\": [\n    \"Houghton Mifflin Harcourt\"\n  ],\n  \"publish_date\": \"October 21, 2012\",\n  \"number_of_pages\": 300,\n  \"isbn_13\": [\n    \"9780547928227\"\n  ],\n  \"isbn_10\": [\n    \"054792822X\"\n  ],\n  \"oclc\": [\n    \"794607877\"\n  ],\n  \"olid\": [\n    \"OL25380781M\"\n  ],\n  \"open_library_edition_key\": \"/books/OL25380781M\",\n  \"open_library_work_key\": \"/works/OL45883W\",\n  \"cover_url\": \"https://covers.openlibrary.org/b/id/8231496-M.jpg\",\n  \"info_url\": \"https://openlibrary.org/books/OL25380781M/The_Hobbit\",\n  \"preview_url\": \"https://archive.org/details/hobbit00tolkien\"\n}\n```\n\nThe `get_book_by_id` tool accepts the following parameters:\n- `idType`: The type of identifier (one of: `isbn`, `lccn`, `oclc`, `olid`)\n- `idValue`: The value of the identifier\n\nAn example of this tool being used in Claude Desktop can be see here:\n\n<img width=\"1132\" alt=\"image\" src=\"https://github.com/user-attachments/assets/0865904a-f984-4f7b-a27d-6397ac59d6d2\" />\n\n### Docker\n\nYou can test this MCP server using Docker. To do this first run:\n\n```bash\ndocker build -t mcp-open-library .\ndocker run -p 8080:8080 mcp-open-library\n```\n\nYou can then test the server running within Docker via the inspector e.g.\n\n```bash\nnpm run inspector http://localhost:8080\n```\n\n## Development\n\n### Project Structure\n\n- `src/index.ts` - Main server implementation\n- `src/types.ts` - TypeScript type definitions\n- `src/index.test.ts` - Test suite\n\n### Available Scripts\n\n- `npm run build` - Build the TypeScript code\n- `npm run watch` - Watch for changes and rebuild\n- `npm test` - Run the test suite\n- `npm run format` - Format code with Prettier\n- `npm run inspector` - Run the MCP Inspector against the server\n\n### Running Tests\n\n```bash\nnpm test\n```\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a pull request.\n\n## Acknowledgments\n\n- [Open Library API](https://openlibrary.org/developers/api)\n- [Model Context Protocol](https://github.com/modelcontextprotocol/mcp)\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "8enSmith-mcp-open-library": {
+        "command": "npx",
+        "args": ["-y", "@8enSmith/mcp-open-library"],
+        "env": {}
+      },
+      "mcp-open-library-docker": {
+        "command": "docker",
+        "args": ["run", "-p", "8080:8080", "mcp-open-library"],
+        "env": {},
+        "docker_image": "mcp-open-library"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "8enSmith",
+    "repo": "mcp-open-library",
+    "url": "https://github.com/8enSmith/mcp-open-library",
+    "name": "8ensmith__mcp-open-library",
+    "path": null,
+    "stars": 35,
+    "contributors": 4,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "c3fad63400ccc5050c1e9b0366c806bb27c148f4"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:11.232Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-open-library\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP server for the Open Library\",\n  \"private\": false,\n  \"keywords\": [\n    \"mcp\",\n    \"open-library\",\n    \"books\",\n    \"library\",\n    \"api\",\n    \"server\"\n  ],\n  \"author\": \"Ben Smith\",\n  \"license\": \"MIT\",\n  \"homepage\": \"https://github.com/8enSmith/mcp-open-library#readme\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/8enSmith/mcp-open-library.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/8enSmith/mcp-open-library/issues\"\n  },\n  \"type\": \"module\",\n  \"bin\": {\n    \"open-library-server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"test\": \"vitest\",\n    \"format\": \"prettier --write src/**/*.ts\",\n    \"lint\": \"eslint src --ext .ts\",\n    \"lint:fix\": \"eslint src --ext .ts --fix\",\n    \"test:precommit\": \"vitest run\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.16.0\",\n    \"axios\": \"^1.10.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@eslint/compat\": \"^1.2.8\",\n    \"@eslint/eslintrc\": \"^3.3.1\",\n    \"@eslint/js\": \"^9.25.0\",\n    \"@types/node\": \"^20.11.24\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.30.1\",\n    \"@typescript-eslint/parser\": \"^8.30.1\",\n    \"eslint\": \"^9.24.0\",\n    \"eslint-config-prettier\": \"^10.1.2\",\n    \"eslint-plugin-import\": \"^2.31.0\",\n    \"husky\": \"^9.1.7\",\n    \"lint-staged\": \"^15.5.1\",\n    \"prettier\": \"^3.5.3\",\n    \"typescript\": \"^5.3.3\",\n    \"vitest\": \"^3.1.1\"\n  },\n  \"lint-staged\": {\n    \"*.ts\": [\n      \"eslint --fix\",\n      \"prettier --write\"\n    ]\n  }\n}\n"
+}

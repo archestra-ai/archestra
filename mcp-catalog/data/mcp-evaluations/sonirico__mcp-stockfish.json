@@ -1,0 +1,185 @@
+{
+  "name": "sonirico__mcp-stockfish",
+  "display_name": "mcp-stockfish",
+  "description": "🐟 MCP server connecting AI systems to Stockfish chess engine ",
+  "author": {
+    "name": "sonirico"
+  },
+  "server": {
+    "command": "mcp-stockfish",
+    "args": [],
+    "env": {
+      "MCP_STOCKFISH_SERVER_MODE": "${user_config.mcp_stockfish_server_mode}",
+      "MCP_STOCKFISH_HTTP_HOST": "${user_config.mcp_stockfish_http_host}",
+      "MCP_STOCKFISH_HTTP_PORT": "${user_config.mcp_stockfish_http_port}",
+      "MCP_STOCKFISH_PATH": "${user_config.mcp_stockfish_path}",
+      "MCP_STOCKFISH_MAX_SESSIONS": "${user_config.mcp_stockfish_max_sessions}",
+      "MCP_STOCKFISH_SESSION_TIMEOUT": "${user_config.mcp_stockfish_session_timeout}",
+      "MCP_STOCKFISH_COMMAND_TIMEOUT": "${user_config.mcp_stockfish_command_timeout}",
+      "MCP_STOCKFISH_LOG_LEVEL": "${user_config.mcp_stockfish_log_level}",
+      "MCP_STOCKFISH_LOG_FORMAT": "${user_config.mcp_stockfish_log_format}",
+      "MCP_STOCKFISH_LOG_OUTPUT": "${user_config.mcp_stockfish_log_output}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mcp_stockfish_server_mode": {
+      "type": "string",
+      "title": "Server Mode",
+      "description": "Mode for the MCP server (stdio or http)",
+      "default": "stdio",
+      "required": false
+    },
+    "mcp_stockfish_http_host": {
+      "type": "string",
+      "title": "HTTP Host",
+      "description": "HTTP host for the server (if in http mode)",
+      "default": "localhost",
+      "required": false
+    },
+    "mcp_stockfish_http_port": {
+      "type": "number",
+      "title": "HTTP Port",
+      "description": "HTTP port for the server (if in http mode)",
+      "default": 8080,
+      "required": false
+    },
+    "mcp_stockfish_path": {
+      "type": "file",
+      "title": "Stockfish Binary Path",
+      "description": "Path to the Stockfish chess engine binary",
+      "default": "stockfish",
+      "required": false
+    },
+    "mcp_stockfish_max_sessions": {
+      "type": "number",
+      "title": "Max Concurrent Sessions",
+      "description": "Maximum number of concurrent Stockfish sessions",
+      "default": 10,
+      "required": false
+    },
+    "mcp_stockfish_session_timeout": {
+      "type": "string",
+      "title": "Session Timeout",
+      "description": "Timeout duration for inactive sessions (e.g., '30m', '1h')",
+      "default": "30m",
+      "required": false
+    },
+    "mcp_stockfish_command_timeout": {
+      "type": "string",
+      "title": "Command Timeout",
+      "description": "Timeout duration for individual Stockfish commands (e.g., '30s', '5m')",
+      "default": "30s",
+      "required": false
+    },
+    "mcp_stockfish_log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "Logging verbosity (debug, info, warn, error, fatal)",
+      "default": "info",
+      "required": false
+    },
+    "mcp_stockfish_log_format": {
+      "type": "string",
+      "title": "Log Format",
+      "description": "Format for log output (json or console)",
+      "default": "console",
+      "required": false
+    },
+    "mcp_stockfish_log_output": {
+      "type": "string",
+      "title": "Log Output",
+      "description": "Destination for log output (stdout or stderr)",
+      "default": "stdout",
+      "required": false
+    }
+  },
+  "readme": "# mcp-stockfish 🐟\n\nA Model Context Protocol server that lets your AI talk to Stockfish. Because apparently we needed to make chess engines even more accessible to our silicon overlords.\n\n![Claude Desktop with mcp-stockfish](claude.png)\n\n> 🧠⚡🖥️ *Your LLM thinks, Stockfish calculates, you pretend you understand the resulting 15-move tactical sequence.*\n\n## What is this?\n\nThis creates a bridge between AI systems and the Stockfish chess engine via the MCP protocol. It handles multiple concurrent sessions because your AI probably wants to analyze seventeen positions simultaneously while you're still figuring out why your knight is hanging.\n\nBuilt on [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go). Because reinventing wheels is for people with too much time.\n\n## Features\n\n- **🔄 Concurrent Sessions**: Run multiple Stockfish instances without your CPU crying\n- **⚡ Full UCI Support**: All the commands you need, none of the ones you don't\n- **🎯 Actually Works**: Unlike your last side project, this one has proper error handling\n- **📊 JSON Everything**: Because apparently we can't just use plain text anymore\n- **🐳 Docker Ready**: Containerized for when you inevitably break your local setup\n\n## Supported UCI Commands ♟️\n\n| **Command**          | **Description**                                                                |\n| -------------------- | ------------------------------------------------------------------------------ |\n| `uci`                | Initializes the engine in UCI mode                                            |\n| `isready`            | Checks if the engine is ready. Returns `readyok`                              |\n| `position startpos`  | Sets up the board to the starting position                                    |\n| `position fen [FEN]` | Sets up a position using FEN notation                                         |\n| `go`                 | Starts the engine to compute the best move                                    |\n| `go depth [n]`       | Searches `n` plies deep. Example: `go depth 10`                                |\n| `go movetime [ms]`   | Thinks for a fixed amount of time in milliseconds. Example: `go movetime 1000` |\n| `stop`               | Stops current search                                                          |\n| `quit`               | Closes the session                                                            |\n\n## Quick Start\n\n### Installation\n\n```bash\ngit clone https://github.com/sonirico/mcp-stockfish\ncd mcp-stockfish\nmake install\n```\n\n### Usage\n\n```bash\n# Default mode (stdio, because we're old school)\nmcp-stockfish\n\n# With custom Stockfish path (for the special snowflakes)\nMCP_STOCKFISH_PATH=/your/special/stockfish mcp-stockfish\n\n# HTTP mode (for the web-scale crowd)\nMCP_STOCKFISH_SERVER_MODE=http mcp-stockfish\n```\n\n## Configuration ⚙️\n\n### Environment Variables\n\n#### Server Configuration\n\n- `MCP_STOCKFISH_SERVER_MODE`: \"stdio\" or \"http\" (default: \"stdio\")\n- `MCP_STOCKFISH_HTTP_HOST`: HTTP host (default: \"localhost\") \n- `MCP_STOCKFISH_HTTP_PORT`: HTTP port (default: 8080)\n\n#### Stockfish 🐟 Configuration\n\n- `MCP_STOCKFISH_PATH`: Path to Stockfish binary (default: \"stockfish\")\n- `MCP_STOCKFISH_MAX_SESSIONS`: Max concurrent sessions (default: 10)\n- `MCP_STOCKFISH_SESSION_TIMEOUT`: Session timeout (default: \"30m\")\n- `MCP_STOCKFISH_COMMAND_TIMEOUT`: Command timeout (default: \"30s\")\n\n#### Logging\n\n- `MCP_STOCKFISH_LOG_LEVEL`: debug, info, warn, error, fatal\n- `MCP_STOCKFISH_LOG_FORMAT`: json, console  \n- `MCP_STOCKFISH_LOG_OUTPUT`: stdout, stderr\n\n## Tool Parameters\n\n- `command`: UCI command to execute\n- `session_id`: Session ID (optional, we'll make one up if you don't)\n\n## Response Format\n\n```json\n{\n  \"status\": \"success|error\", \n  \"session_id\": \"some-uuid\",\n  \"command\": \"what you asked for\",\n  \"response\": [\"what stockfish said\"],\n  \"error\": \"what went wrong (if anything)\"\n}\n```\n\n## Session Management\n\nSessions do what you'd expect:\n\n- Spawn Stockfish processes on demand\n- Keep UCI state between commands  \n- Clean up when you're done (or when they timeout)\n- Enforce limits so you don't fork-bomb yourself\n\n## Integration\n\n### Claude Desktop\n\n```json\n{\n  \"mcpServers\": {\n    \"chess\": {\n      \"command\": \"mcp-stockfish\",\n      \"env\": {\n        \"MCP_STOCKFISH_LOG_LEVEL\": \"info\"\n      }\n    }\n  }\n}\n```\n\n## Development\n\n```bash\nmake deps     # Get dependencies\nmake build    # Build the thing\nmake test     # Run tests (when they exist)\nmake fmt      # Make it pretty\n```\n\n## Credits 🐟\n\nPowered by [Stockfish](https://stockfishchess.org/), the chess engine that's stronger than both of us combined. Created by people who actually understand chess, unlike this wrapper.\n\nThanks to:\n\n- The [Stockfish team](https://github.com/official-stockfish/Stockfish) for making chess engines that don't suck\n- [MCP SDK for Go](https://github.com/mark3labs/mcp-go) for handling the protocol so I don't have to\n- Coffee\n\n## License\n\nMIT - Do whatever you want, just don't blame me when it breaks.\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-stockfish-stdio": {
+        "command": "mcp-stockfish",
+        "args": [],
+        "env": {}
+      },
+      "mcp-stockfish-custom-path": {
+        "command": "mcp-stockfish",
+        "args": [],
+        "env": {
+          "MCP_STOCKFISH_PATH": "/your/special/stockfish"
+        }
+      },
+      "mcp-stockfish-http": {
+        "command": "mcp-stockfish",
+        "args": [],
+        "env": {
+          "MCP_STOCKFISH_SERVER_MODE": "http"
+        }
+      },
+      "mcp-stockfish-log-info": {
+        "command": "mcp-stockfish",
+        "args": [],
+        "env": {
+          "MCP_STOCKFISH_LOG_LEVEL": "info"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sonirico",
+    "repo": "mcp-stockfish",
+    "url": "https://github.com/sonirico/mcp-stockfish",
+    "name": "mcp-stockfish",
+    "path": null,
+    "stars": 2,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "eafa8f5c89876222b3b3b4be7324c2f613516957"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:18.629Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "google/uuid",
+      "importance": 6
+    },
+    {
+      "name": "joho/godotenv",
+      "importance": 7
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "rs/zerolog",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/sonirico/mcp-stockfish\n\ngo 1.23.2\n\ntoolchain go1.23.9\n\nrequire (\n\tgithub.com/google/uuid v1.6.0\n\tgithub.com/joho/godotenv v1.5.1\n\tgithub.com/mark3labs/mcp-go v0.29.0\n\tgithub.com/rs/zerolog v1.34.0\n)\n\nrequire (\n\tgithub.com/mattn/go-colorable v0.1.14 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/spf13/cast v1.8.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgolang.org/x/sys v0.33.0 // indirect\n)\n"
+}

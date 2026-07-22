@@ -1,0 +1,78 @@
+{
+  "name": "stass__lldb-mcp",
+  "display_name": "lldb-mcp",
+  "description": "LLDB MCP server",
+  "author": {
+    "name": "stass"
+  },
+  "server": {
+    "command": "python3",
+    "args": ["${__dirname}/lldb_mcp.py", "${user_config.debug_mode}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "debug_mode": {
+      "type": "boolean",
+      "title": "Enable Debug Mode",
+      "description": "Enable detailed logging for the LLDB-MCP server by adding the --debug flag.",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# LLDB-MCP\n\n![Screenshot](screenshot.png)\n\nSee it in acton here, automatically debugging a buffer overflow: https://x.com/full_duplex/status/1904770477698277847\n\n## Overview\n\nLLDB-MCP is a tool that integrates the LLDB debugger with Claude's Model Context Protocol (MCP). This integration allows Claude to start, control, and interact with LLDB debugging sessions directly, enabling AI-assisted debugging workflows.\n\nThe tool provides a comprehensive set of commands for working with LLDB, including:\n- Starting and managing LLDB sessions\n- Loading programs for debugging\n- Setting breakpoints and watchpoints\n- Controlling program execution\n- Examining memory, registers, and variables\n- Analyzing stack traces and program state\n\n## Features\n\n- Create and manage multiple LLDB debugging sessions\n- Load executables and attach to running processes\n- Load core dump files for post-mortem analysis\n- Execute arbitrary LLDB commands\n- Fine-grained control over program execution\n- Memory examination and disassembly\n- Thread and stack frame inspection\n\n## Installation\n\n1. Clone the repository:\n   ```\n   git clone https://github.com/stass/lldb-mcp.git\n   cd lldb-mcp\n   ```\n\n2. Install dependencies:\n   ```\n   pip install mcp\n   ```\n\n3. Configure Claude to use the LLDB-MCP server:\n   - Open the Claude desktop app configuration\n   - Add the following to your MCP configuration:\n   ```json\n   \"mcpServers\": {\n     \"lldb-mcp\": {\n       \"command\": \"python3\",\n       \"args\": [\"/path/to/lldb-mcp/lldb_mcp.py\"],\n       \"disabled\": false\n     }\n   }\n   ```\n\n## Usage\n\nOnce installed and configured, you can interact with LLDB through Claude using natural language.\n\n### Basic Workflow\n\n1. Start a new LLDB session\n2. Load a program\n3. Set breakpoints\n4. Run the program\n5. Inspect variables and memory\n6. Control execution (continue, step, next, etc.)\n7. Terminate the session when done\n\n### Example Commands\n\nHere are some examples of how to interact with LLDB-MCP through Claude:\n\n- \"Start a new LLDB session\"\n- \"Load the program '/path/to/executable'\"\n- \"Set a breakpoint at main\"\n- \"Run the program\"\n- \"Show backtrace\"\n- \"Print the value of variable 'count'\"\n- \"Step over the next line\"\n- \"Examine memory at address 0x1000\"\n- \"Show register values\"\n- \"Continue execution\"\n- \"Kill the process\"\n- \"Terminate the LLDB session\"\n\n## Supported Commands\n\n### Session Management\n- `lldb_start`: Start a new LLDB session\n- `lldb_terminate`: Terminate an LLDB session\n- `lldb_list_sessions`: List all active LLDB sessions\n\n### Program Loading\n- `lldb_load`: Load a program into LLDB\n- `lldb_attach`: Attach to a running process\n- `lldb_load_core`: Load a core dump file\n\n### Execution Control\n- `lldb_run`: Run the loaded program\n- `lldb_continue`: Continue program execution\n- `lldb_step`: Step to next line or instruction\n- `lldb_next`: Step over function calls\n- `lldb_finish`: Execute until the current function returns\n- `lldb_kill`: Kill the running process\n\n### Breakpoints and Watchpoints\n- `lldb_set_breakpoint`: Set a breakpoint\n- `lldb_breakpoint_list`: List all breakpoints\n- `lldb_breakpoint_delete`: Delete a breakpoint\n- `lldb_watchpoint`: Set a watchpoint on a variable or memory address\n\n### Inspection\n- `lldb_backtrace`: Show call stack\n- `lldb_print`: Print value of expression\n- `lldb_examine`: Examine memory\n- `lldb_info_registers`: Display registers\n- `lldb_frame_info`: Get detailed information about a stack frame\n- `lldb_disassemble`: Disassemble code\n- `lldb_process_info`: Get information about the current process\n\n### Thread Management\n- `lldb_thread_list`: List all threads in the current process\n- `lldb_thread_select`: Select a specific thread\n\n### Miscellaneous\n- `lldb_command`: Execute an arbitrary LLDB command\n- `lldb_expression`: Evaluate an expression in the current frame\n- `lldb_help`: Get help for LLDB commands\n\n## Example program\n\n`example/overflow.c` contains an example C program that causes buffer overflow with certain arguments.\nCompile it using `cc overflow.c` and ask Claude to debug the issue with the resulting program:\n```\nI'm trying to debug my program a.out that is crashing with certain arguments, e.g. when I pass \"hello\".\nCan you help me debug it?\n```\n\n## Debugging Tips\n\n- Use `lldb_command` when you need to execute LLDB commands that don't have a dedicated function\n- Enable debug mode with `--debug` flag when starting the server for detailed logging\n- Sessions are automatically cleaned up when the server shuts down\n- Each session has a unique ID - make sure to use the correct ID when executing commands\n\n## Requirements\n\n- Python 3.7+\n- LLDB installed on the system\n- Claude desktop app with MCP support\n\n## Troubleshooting\n\n- If LLDB commands are timing out, check that LLDB is installed correctly\n- Verify the path to LLDB when starting a new session\n- Check for permission issues when attaching to processes\n- Review debug logs if commands aren't executing correctly\n\n## License\n\nBSD 2-clause\n",
+  "category": "Development",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "lldb-mcp": {
+        "command": "python3",
+        "args": ["/path/to/lldb-mcp/lldb_mcp.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "stass",
+    "repo": "lldb-mcp",
+    "url": "https://github.com/stass/lldb-mcp",
+    "name": "stass__lldb-mcp",
+    "path": null,
+    "stars": 54,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a610f2d0d3835739c41762352442ba2a13958b38"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:43.387Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

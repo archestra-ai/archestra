@@ -1,0 +1,220 @@
+{
+  "name": "wso2__fhir-mcp-server",
+  "display_name": "fhir-mcp-server",
+  "description": "FHIR MCP Server – helping you expose any FHIR Server or API as a MCP Server.",
+  "author": {
+    "name": "wso2"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["fhir-mcp-server"],
+    "env": {
+      "FHIR_SERVER_BASE_URL": "${user_config.fhir_server_base_url}",
+      "FHIR_SERVER_CLIENT_ID": "${user_config.fhir_server_client_id}",
+      "FHIR_SERVER_CLIENT_SECRET": "${user_config.fhir_server_client_secret}",
+      "FHIR_SERVER_SCOPES": "${user_config.fhir_server_scopes}",
+      "FHIR_MCP_HOST": "${user_config.fhir_mcp_host}",
+      "FHIR_MCP_PORT": "${user_config.fhir_mcp_port}",
+      "FHIR_SERVER_ACCESS_TOKEN": "${user_config.fhir_server_access_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "fhir_server_base_url": {
+      "type": "string",
+      "title": "FHIR Server Base URL",
+      "description": "The base URL of the target FHIR API server.",
+      "required": true
+    },
+    "fhir_server_client_id": {
+      "type": "string",
+      "title": "FHIR Server Client ID",
+      "description": "The client ID for SMART-on-FHIR OAuth 2.0 authorization. Leave blank if authentication is disabled.",
+      "required": false
+    },
+    "fhir_server_client_secret": {
+      "type": "string",
+      "title": "FHIR Server Client Secret",
+      "description": "The client secret for SMART-on-FHIR OAuth 2.0 authorization.",
+      "sensitive": true,
+      "required": false
+    },
+    "fhir_server_scopes": {
+      "type": "string",
+      "title": "FHIR Server Scopes",
+      "description": "The space-separated scopes required for authorization (e.g., 'patient/*.read').",
+      "required": false
+    },
+    "fhir_server_access_token": {
+      "type": "string",
+      "title": "FHIR Server Access Token",
+      "description": "Optional. A pre-existing FHIR access token to use for authentication, bypassing the OAuth flow.",
+      "sensitive": true,
+      "required": false
+    },
+    "fhir_mcp_host": {
+      "type": "string",
+      "title": "MCP Server Host",
+      "description": "The host on which the MCP server will listen.",
+      "default": "localhost",
+      "required": false
+    },
+    "fhir_mcp_port": {
+      "type": "number",
+      "title": "MCP Server Port",
+      "description": "The port on which the MCP server will listen.",
+      "default": 8000,
+      "required": false
+    }
+  },
+  "readme": "# Model Context Protocol (MCP) Server for Fast Healthcare Interoperability Resources (FHIR) APIs\n\n[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/wso2/fhir-mcp-server/blob/main/LICENSE)\n[![Get Support on Stack Overflow](https://img.shields.io/badge/stackoverflow-wso2-orange)](https://stackoverflow.com/questions/tagged/wso2)\n[![Join the community on Discord](https://img.shields.io/badge/Join%20us%20on-Discord-%23e01563.svg)](https://discord.com/invite/wso2)\n[![X](https://img.shields.io/twitter/follow/wso2.svg?style=social&label=Follow)](https://twitter.com/intent/follow?screen_name=wso2)\n\n## Table of Contents\n- [Overview](#overview)\n- [Demo](#demo)\n    - [Demo with HAPI FHIR server](#demo-with-hapi-fhir-server)\n    - [Demo with EPIC Sandbox](#demo-with-epic-sandbox)\n- [Core Features](#core-features)\n- [Prerequisites](#prerequisites)\n- [Installation](#installation)\n    - [Installing using PyPI Package](#installing-using-pypi-package)\n    - [Installing from Source](#installing-from-source)\n    <!-- - [Installing using Docker](#installing-using-docker) -->\n- [Integration with MCP Clients](#integration-with-mcp-clients)\n    - [VS Code](#vs-code)\n    - [Claude Desktop](#claude-desktop)\n    - [MCP Inspector](#mcp-inspector)\n- [Configuration](#configuration)\n    - [CLI Options](#cli-options)\n    - [Environment Variables](#environment-variables)\n- [Tools](#tools)\n- [Development & Testing](#development--testing)\n    - [Installing Development Dependencies](#installing-development-dependencies)\n    - [Running Tests](#running-tests)\n\n\n## Overview\n\nThe FHIR MCP Server is a Model Context Protocol (MCP) server that provides seamless integration with FHIR APIs. Designed for developers, integrators, and healthcare innovators, this server acts as a bridge between modern AI/LLM tools and healthcare data, making it easy to search, retrieve, and analyze clinical information.\n\n## Demo\n\n### Demo with HAPI FHIR server\n\nThis video showcases the MCP server's functionality when connected to a public [HAPI FHIR server](https://hapi.fhir.org/). This example showcases direct interaction with an open FHIR server that does not require an authorization flow.\n\nhttps://github.com/user-attachments/assets/cc6ac87e-8329-4da4-a090-2d76564a3abf\n\n### Demo with EPIC Sandbox\n\nThis video showcases the MCP server's capabilities within the [Epic EHR ecosystem](https://open.epic.com/). It demonstrates the complete OAuth 2.0 Authorization Code Grant flow.\n\nhttps://github.com/user-attachments/assets/96b433f1-3e53-4564-8466-65ab48d521de\n\n## Core Features\n\n- **MCP-compatible transport**: Serves FHIR via stdio, SSE, or streamable HTTP\n\n- **SMART-on-FHIR based authentication support**: Securely authenticate with FHIR servers and clients\n\n- **Tool integration**: Integratable with any MCP client such as VS Code, Claude Desktop, and MCP Inspector\n\n## Prerequisites\n\n- Python 3.8+\n- [uv](https://github.com/astral-sh/uv) (for dependency management)\n- An accessible FHIR API server.\n\n## Installation\n\nYou can use the FHIR MCP Server by installing our Python package, or by cloning this repository.\n\n### Installing using PyPI Package\n\n1. **Configure Environment Variables:**\n\n    To run the server, you must set `FHIR_SERVER_BASE_URL`. If you plan to use authorization, you'll also need to configure `FHIR_SERVER_CLIENT_ID`, `FHIR_SERVER_CLIENT_SECRET`, and `FHIR_SERVER_SCOPES`. By default, the MCP server will listen on http://localhost:8000. You can customize the host and port by setting `FHIR_MCP_HOST` and `FHIR_MCP_PORT` respectively.\n\n    You can set these by exporting them as environment variables like below or by creating a `.env` file (referencing `.env.example`).\n\n    ```bash \n    export FHIR_SERVER_BASE_URL=\"\"\n    export FHIR_SERVER_CLIENT_ID=\"\"\n    export FHIR_SERVER_CLIENT_SECRET=\"\"\n    export FHIR_SERVER_SCOPES=\"\"\n\n    export FHIR_MCP_HOST=\"localhost\"\n    export FHIR_MCP_PORT=\"8000\"\n    ```\n\n2. **Install the PyPI package and run the server**\n\n    If you are exposing a FHIR server with no security:\n\n    ```bash\n    uvx fhir-mcp-server --disable-auth\n    ```\n\n    else;\n    ```bash\n    uvx fhir-mcp-server\n    ```\n\n### Installing from Source\n\n1. **Clone the repository:**\n    ```bash\n    git clone <repository_url>\n    cd <repository_directory>\n    ```\n\n2. **Create a virtual environment and install dependencies:**\n    ```bash\n    uv venv\n    source .venv/bin/activate\n    uv pip sync requirements.txt\n    ```\n    Or with pip:\n    ```bash\n    python -m venv .venv\n    source .venv/bin/activate\n    pip install -r requirements.txt\n    ```\n\n3. **Configure Environment Variables:**\n    Copy the example file and customize if needed:\n    ```bash\n    cp .env.example .env\n    ```\n\n4. **Run the server:**\n    ```bash\n    uv run fhir-mcp-server\n    ```\n\n<!-- ### Installing using Docker\n\nYou can run the MCP server using Docker for a consistent, isolated environment. \n\n1. Build the Docker Image\n\n    ```bash\n    docker build -t fhir-mcp-server .\n    ```\n\n2. Configure Environment Variables\n\n    Copy the example environment file and edit as needed:\n\n    ```bash\n    cp .env.example .env\n    # Edit .env to set your FHIR server, client credentials, etc.\n    ```\n\n    Alternatively, you can pass environment variables directly with `-e` flags or use Docker secrets for sensitive values.\n\n3. Run the Container\n\n    ```bash\n    docker run --env-file .env -p 8000:8000 fhir-mcp-server\n    ```\n\n    This will start the server and expose it on port 8000. Adjust the port mapping as needed. -->\n\n## Integration with MCP Clients\n\nThe FHIR MCP Server is designed for seamless integration with various MCP clients.\n\n### VS Code\n\n[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=fhir&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22http%3A%2F%2Flocalhost%3A8000%2Fmcp%2F%22%7D)\n[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=fhir&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22http%3A%2F%2Flocalhost%3A8000%2Fmcp%2F%22%7D)\n\nAdd the following JSON block to your User Settings (JSON) file in VS Code (> V1.101). You can do this by pressing Ctrl + Shift + P and typing Preferences: Open User Settings (JSON).\n\n<table>\n<tr><th>Streamable HTTP</th><th>STDIO</th><th>SSE</th></tr>\n<tr valign=top>\n<td>\n\n```json\n\"mcp\": {\n    \"servers\": {\n        \"fhir\": {\n            \"type\": \"http\",\n            \"url\": \"http://localhost:8000/mcp\",\n        }\n    }\n}\n```\n</td>\n\n<td>\n\n```json\n\"mcp\": {\n    \"servers\": {\n        \"fhir\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"--directory\",\n                \"/path/to/fhir-mcp-server\",\n                \"run\",\n                \"fhir-mcp-server\",\n                \"--transport\",\n                \"stdio\"\n            ],\n            \"env\": {\n                \"FHIR_SERVER_ACCESS_TOKEN\": \"Your FHIR Access Token\"\n            }\n        }\n    }\n}\n```\n</td>\n\n<td>\n\n```json\n\"mcp\": {\n    \"servers\": {\n        \"fhir\": {\n            \"type\": \"sse\",\n            \"url\": \"http://localhost:8000/sse\",\n        }\n    }\n}\n```\n</td>\n</tr>\n</table>\n\n### Claude Desktop\nAdd the following JSON block to your Claude Desktop settings to connect to your local MCP server. \n - Launch the Claude Desktop app, click on the Claude menu in the top bar, and select \"Settings…\".\n - In the Settings pane, click “Developer” in the left sidebar. Then click \"Edit Config\". This will open your configuration file in your file system. If it doesn’t exist yet, Claude will create one automatically at:\n    - macOS: ~/Library/Application Support/Claude/claude_desktop_config.json\n    - Windows: %APPDATA%\\Claude\\claude_desktop_config.json\n - Open the claude_desktop_config.json file in any text editor. Replace its contents with the following JSON block to register the MCP server:\n\n<table>\n<tr><th>Streamable HTTP</th><th>STDIO</th><th>SSE</th></tr>\n<tr valign=top>\n<td>\n\n```json\n{\n    \"mcpServers\": {\n        \"fhir\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"-y\",\n                \"mcp-remote\",\n                \"http://localhost:8000/mcp\"\n            ]\n        }\n    }\n}\n```\n</td>\n<td>\n\n```json\n{\n    \"mcpServers\": {\n        \"fhir\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"--directory\",\n                \"/path/to/fhir-mcp-server\",\n                \"run\",\n                \"fhir-mcp-server\",\n                \"--transport\",\n                \"stdio\"\n            ],\n            \"env\": {\n                \"FHIR_SERVER_ACCESS_TOKEN\": \"Your FHIR Access Token\"\n            }\n        }\n    }\n}\n```\n</td>\n\n<td>\n\n```json\n{\n    \"mcpServers\": {\n        \"fhir\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"-y\",\n                \"mcp-remote\",\n                \"http://localhost:8000/sse\"\n            ]\n        }\n    }\n}\n```\n</td>\n</tr>\n</table>\n\n### MCP Inspector\nFollow these steps to get the MCP Inspector up and running:\n\n- Open a terminal and run the following command:\n    \n    `npx -y @modelcontextprotocol/inspector`\n\n- In the MCP Inspector interface:\n<table>\n<tr><th>Streamable HTTP</th><th>STDIO</th><th>SSE</th></tr>\n<tr valign=top>\n<td>\n\n- Transport Type: `Streamable HTTP`\n- URL: `http://localhost:8000/mcp`\n</td>\n\n<td>\n\n- Transport Type: `STDIO`\n- Command: `uv`\n- Arguments: `--directory /path/to/fhir-mcp-server run fhir-mcp-server --transport stdio`\n</td>\n\n<td>\n\n- Transport Type: `SSE`\n- URL: `http://localhost:8000/sse`\n</td>\n</tr>\n</table>\n\nMake sure your MCP server is already running and listening on the above endpoint.\n\nOnce connected, MCP Inspector will allow you to visualize tool invocations, inspect request/response payloads, and debug your tool implementations easily.\n\n## Configuration\n\n### CLI Options\n\nYou can customize the behavior of the MCP server using the following command-line flags:\n\n- **--transport**\n    - Description: Specifies the transport protocol used by the MCP server to communicate with clients.\n    - Accepted values: stdio, sse, streamable-http\n    - Default: streamable-http\n\n- **--log-level**\n    - Description: Sets the logging verbosity level for the server.\n    - Accepted values: DEBUG, INFO, WARN, ERROR (case-insensitive)\n    - Default: INFO\n\n- **--disable-auth**\n    - Description: Disables the security of the MCP Server. Allows you to connect with openly available FHIR servers.\n    - Type: Flag (no value required)\n    - Default: False (authentication enabled)\n\n- **--help**\n    - Description: Displays a help message with available server options and exits.\n    - Usage: Automatically provided by the command-line interface.\n\nSample Usages:\n\n```shell\nuv run fhir-mcp-server --transport streamable-http --log-level DEBUG --disable-auth\nuv run fhir-mcp-server --help\n```\n\n### Environment Variables\n\n**MCP Server Configurations:**\n- `FHIR_MCP_HOST`: The hostname or IP address the MCP server should bind to (e.g., `localhost` for local-only access, or `0.0.0.0` for all interfaces).\n- `FHIR_MCP_PORT`: The port on which the MCP server will listen for incoming client requests (e.g., `8000`).\n- `FHIR_MCP_SERVER_URL`: If set, this value will be used as the server's base URL instead of generating it from host and port. Useful for custom URL configurations or when behind a proxy.\n- `FHIR_MCP_REQUEST_TIMEOUT`: Timeout duration in seconds for requests from the MCP server to the FHIR server (default: `30`).\n\n**MCP Server OAuth2 with FHIR server Configuration (MCP Client ↔ MCP Server):**\nThese variables configure the MCP client's secure connection to the MCP server, using the OAuth2 authorization code grant flow with a FHIR server.\n\n- `FHIR_SERVER_CLIENT_ID`: The OAuth2 client ID used to authorize MCP clients with the FHIR server.\n- `FHIR_SERVER_CLIENT_SECRET`: The client secret corresponding to the FHIR client ID. Used during token exchange.\n- `FHIR_SERVER_BASE_URL`: The base URL of the FHIR server (e.g., `https://hapi.fhir.org/baseR4`). This is used to generate tool URIs and to route FHIR requests.\n- `FHIR_SERVER_SCOPES`: A space-separated list of OAuth2 scopes to request from the FHIR authorization server (e.g., `user/Patient.read user/Observation.read`). Add `fhirUser openid` to enable retrieval of user context for the `get_user` tool. If these two scopes are not configured, the `get_user` tool returns an empty result because the ID token lacks the user's FHIR resource reference.\n- `FHIR_SERVER_ACCESS_TOKEN`: The access token to use for authenticating requests to the FHIR server. If this variable is set, the server will bypass the OAuth2 authorization flow and use this token directly for all requests.\n\n## Tools\n\n- `get_capabilities`: Retrieves metadata about a specified FHIR resource type, including its supported search parameters and custom operations.\n    - `type`: The FHIR resource type name (e.g., \"Patient\", \"Observation\", \"Encounter\")\n\n- `search`: Executes a standard FHIR search interaction on a given resource type, returning a bundle or list of matching resources.\n    - `type`: The FHIR resource type name (e.g., \"MedicationRequest\", \"Condition\", \"Procedure\").\n    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {\"family\":\"Simpson\",\"birthdate\":\"1956-05-12\"}).\n\n- `read`: Performs a FHIR \"read\" interaction to retrieve a single resource instance by its type and resource ID, optionally refining the response with search parameters or custom operations.\n    - `type`: The FHIR resource type name (e.g., \"DiagnosticReport\", \"AllergyIntolerance\", \"Immunization\").\n    - `id`: The logical ID of a specific FHIR resource instance.\n    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {\"device-name\":\"glucometer\"}).\n    - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., \"$everything\").\n\n- `create`: Executes a FHIR \"create\" interaction to persist a new resource of the specified type.\n    - `type`: The FHIR resource type name (e.g., \"Device\", \"CarePlan\", \"Goal\").\n    - `payload`: A JSON object representing the full FHIR resource body to be created.\n    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {\"address-city\":\"Boston\"}).\n    - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., \"$evaluate\").\n\n- `update`: Performs a FHIR \"update\" interaction by replacing an existing resource instance's content with the provided payload.\n    - `type`: The FHIR resource type name (e.g., \"Location\", \"Organization\", \"Coverage\").\n    - `id`: The logical ID of a specific FHIR resource instance.\n    - `payload`: The complete JSON representation of the FHIR resource, containing all required elements and any optional data.\n    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {\"patient\":\"Patient/54321\",\"relationship\":\"father\"}).\n    - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., \"$lastn\").\n\n- `delete`: Execute a FHIR \"delete\" interaction on a specific resource instance.\n    - `type`: The FHIR resource type name (e.g., \"ServiceRequest\", \"Appointment\", \"HealthcareService\").\n    - `id`: The logical ID of a specific FHIR resource instance.\n    - `searchParam`: A mapping of FHIR search parameter names to their desired values (e.g., {\"category\":\"laboratory\",\"issued:\"2025-05-01\"}).\n    - `operation`: The name of a custom FHIR operation or extended query defined for the resource (e.g., \"$expand\").\n\n- `get_user`: Retrieves the currently authenticated user's FHIR resource (for example the linked `Patient` resource) and returns a concise profile containing available demographic fields such as `id`, `name`, and `birthDate`.\n\n## Development & Testing\n\n### Installing Development Dependencies\n\nTo run tests and contribute to development, install the test dependencies:\n\n**Using pip:**\n```bash\n# Install project in development mode with test dependencies\npip install -e '.[test]'\n\n# Or install from requirements file\npip install -r requirements-dev.txt\n```\n\n**Using uv:**\n```bash\n# Install development dependencies\nuv sync --dev\n```\n\n### Running Tests\n\nThe project includes a comprehensive test suite covering all major functionality:\n\n```bash\n# Simple test runner\npython run_tests.py\n\n# Or direct pytest usage\nPYTHONPATH=src python -m pytest tests/ -v --cov=src/fhir_mcp_server\n```\n**Using pytest:**\n```bash\npytest tests/\n```\nThis will discover and run all tests in the `tests/` directory.\n\n\n**Test Features:**\n- **100+ tests** with comprehensive coverage\n- **Full async/await support** using pytest-asyncio\n- **Complete mocking** of HTTP requests and external dependencies\n- **Coverage reporting** with terminal and HTML output\n- **Fast execution** with no real network calls\n\nThe test suite includes:\n- **Unit tests**: Core functionality testing\n- **Integration tests**: Component interaction validation\n- **Edge case coverage**: Error handling and validation scenarios\n- **Mocked OAuth flows**: Realistic authentication testing\n\nCoverage reports are generated in `htmlcov/index.html` for detailed analysis.\n",
+  "category": "Healthcare",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "fhir-mcp-server-uvx-disable-auth": {
+        "command": "uvx",
+        "args": ["fhir-mcp-server", "--disable-auth"],
+        "env": {}
+      },
+      "fhir-mcp-server-uvx": {
+        "command": "uvx",
+        "args": ["fhir-mcp-server"],
+        "env": {}
+      },
+      "fhir-mcp-server-uv-run": {
+        "command": "uv",
+        "args": ["run", "fhir-mcp-server"],
+        "env": {}
+      },
+      "fhir-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "--env-file", ".env", "-p", "8000:8000", "fhir-mcp-server"],
+        "env": {},
+        "docker_image": ".env"
+      },
+      "fhir-mcp-server-stdio": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/fhir-mcp-server", "run", "fhir-mcp-server", "--transport", "stdio"],
+        "env": {
+          "FHIR_SERVER_ACCESS_TOKEN": "Your FHIR Access Token"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "wso2",
+    "repo": "fhir-mcp-server",
+    "url": "https://github.com/wso2/fhir-mcp-server",
+    "name": "wso2__fhir-mcp-server",
+    "path": null,
+    "stars": 38,
+    "contributors": 6,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "da30fd191e1eeb00ebb6841f975b029da06e496a"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:13.148Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "starlette",
+      "importance": 10
+    },
+    {
+      "name": "fhirpy",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "typer",
+      "importance": 7
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 7
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "anyio",
+      "importance": 6
+    },
+    {
+      "name": "python-multipart",
+      "importance": 5
+    },
+    {
+      "name": "click",
+      "importance": 5
+    },
+    {
+      "name": "rich",
+      "importance": 4
+    },
+    {
+      "name": "typing-extensions",
+      "importance": 4
+    },
+    {
+      "name": "certifi",
+      "importance": 3
+    },
+    {
+      "name": "pytz",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nauthors = [\n  {name = \"Vimukthi Rajapaksha\", email = \"vimukthir@wso2.com\"},\n  {name = \"Joel Sathiyendra\", email = \"joel@wso2.com\"},\n  {name = \"Nirmal Fernando\", email = \"nirmal@wso2.com\"}\n]\nclassifiers = [\n  \"Development Status :: 4 - Beta\",\n  \"Programming Language :: Python :: 3\",\n  \"Programming Language :: Python :: 3.12\",\n  \"Intended Audience :: Developers\",\n  \"Operating System :: OS Independent\",\n]\ndependencies = [\n  \"mcp[cli]==1.9.1\",\n  \"aiohttp==3.12.13\",\n  \"fhirpy==2.0.15\",\n]\ndescription = \"A Model Context Protocol (MCP) server that provides seamless, standardized access to Fast Healthcare Interoperability Resources (FHIR) data from any compatible FHIR server. Designed for easy integration with AI tools, developer workflows, and healthcare applications, it enables natural language and programmatic search, retrieval, and analysis of clinical data.\"\nkeywords = [\n  \"fhir\",\n  \"healthcare\",\n  \"mcp\",\n  \"model-context-protocol\",\n  \"modelcontextprotocol\",\n  \"llm\",\n]\nlicense = \"Apache-2.0\"\nlicense-files = [\"LICEN[CS]E*\"]\nname = \"fhir-mcp-server\"\nreadme = {file = \"README.md\", content-type = \"text/markdown\"}\nrequires-python = \">=3.12\"\nversion = \"0.9.0\"\n\n[build-system]\nbuild-backend = \"hatchling.build\"\nrequires = [\"hatchling\"]\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/fhir_mcp_server\"]\n\n[project.scripts]\nfhir-mcp-server = \"fhir_mcp_server.server:main\"\n\n[[tool.uv.index]]\nname = \"pypi\"\npublish-url = \"https://upload.pypi.org/legacy/\"\nurl = \"https://pypi.org/simple/\"\n\n[project.optional-dependencies]\ndev = [\n  \"pytest==8.4.0\",\n  \"pytest-asyncio==1.0.0\",\n  \"pytest-cov==6.2.0\",\n]\ntest = [\n  \"pytest==8.4.0\",\n  \"pytest-asyncio==1.0.0\",\n  \"pytest-cov==6.2.0\",\n]\n\n[project.urls]\n\"Bug Tracker\" = \"https://github.com/wso2/fhir-mcp-server/issues\"\n\"Documentation\" = \"https://github.com/wso2/fhir-mcp-server/blob/main/README.md\"\n\"Homepage\" = \"https://github.com/wso2/fhir-mcp-server\"\n\n\n=== requirements.txt ===\naiohappyeyeballs==2.6.1\naiohttp==3.12.2\naiosignal==1.3.2\nannotated-types==0.7.0\nanyio==4.9.0\nattrs==25.3.0\ncertifi==2025.4.26\ncharset-normalizer==3.4.2\nclick==8.2.1\nfhirpy==2.0.15\nfrozenlist==1.6.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nhttpx-sse==0.4.0\nidna==3.10\nmarkdown-it-py==3.0.0\nmcp==1.9.1\nmdurl==0.1.2\nmultidict==6.4.4\npropcache==0.3.1\npydantic==2.11.5\npydantic-core==2.33.2\npydantic-settings==2.9.1\npygments==2.19.1\npython-dotenv==1.1.0\npython-multipart==0.0.20\npytz==2025.2\nrequests==2.32.3\nrich==14.0.0\nshellingham==1.5.4\nsniffio==1.3.1\nsse-starlette==2.3.5\nstarlette==0.46.2\ntyper==0.16.0\ntyping-extensions==4.13.2\ntyping-inspection==0.4.1\nurllib3==2.4.0\nuvicorn==0.34.2\nyarl==1.20.0\n"
+}

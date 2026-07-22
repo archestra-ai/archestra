@@ -1,3 +1,5 @@
+import type React from "react";
+
 export type ChatOpsProvider = "slack" | "ms-teams" | "telegram";
 
 export interface ProviderConfig {
@@ -14,6 +16,13 @@ export interface ProviderConfig {
   showVirtualDmRow?: boolean;
   docsUrl: string | null;
   slashCommand: string;
+  /**
+   * Overrides the default "when do channels appear here" line above the
+   * channels table. Telegram uses it: groups appear the moment the bot is
+   * added (my_chat_member updates), not after the first interaction — plus
+   * the Group Privacy steps needed for the bot to hear group conversation.
+   */
+  channelsAppearNote?: React.ReactNode;
   /** Web link to open a channel, or null when the provider has none (e.g. Telegram groups). */
   buildDeepLink: (binding: {
     channelId: string;

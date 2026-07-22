@@ -72,24 +72,26 @@ const lines = [
   "Try creating apps yourself"
 ];
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+const introTimers = [];
 function runIntro(){
   let i = 0;
   (function next(){
-    if (i >= lines.length){ setTimeout(showTitle, 400); return; }
+    if (i >= lines.length){ introTimers.push(setTimeout(showTitle, 400)); return; }
     introLine.innerHTML = esc(lines[i]).replace(/\n/g,'<br>') + ' <span class="cursor">_</span>';
     introLine.classList.add('show');
-    setTimeout(()=> introLine.classList.remove('show'), 2100);
-    setTimeout(()=>{ i++; next(); }, 3200);
+    introTimers.push(setTimeout(()=> introLine.classList.remove('show'), 2100));
+    introTimers.push(setTimeout(()=>{ i++; next(); }, 3200));
   })();
 }
 function showTitle(){
   if(introEl.dataset.done) return;   // guard against double-fire (timer + skip)
   introEl.dataset.done = '1';
+  introTimers.forEach(clearTimeout); // a skipped intro stops typing, not just showing
   introEl.style.opacity = '0';
   setTimeout(()=>{ introEl.style.display='none'; titleEl.style.display='flex'; requestAnimationFrame(()=> titleEl.style.opacity='1'); }, 800);
 }
 document.getElementById('skipBtn').addEventListener('click', showTitle);
-setTimeout(runIntro, 500);
+introTimers.push(setTimeout(runIntro, 500));
 
 // ============ CONSTANTS ============
 const TILE = 40, COLS = 40, ROWS = 30;

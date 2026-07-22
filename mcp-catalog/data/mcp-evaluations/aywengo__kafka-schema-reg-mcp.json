@@ -1,0 +1,377 @@
+{
+  "name": "aywengo__kafka-schema-reg-mcp",
+  "display_name": "kafka-schema-reg-mcp",
+  "description": "A comprehensive Message Control Protocol (MCP) server for Kafka Schema Registry.",
+  "author": {
+    "name": "aywengo"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/kafka_schema_registry_unified_mcp.py"],
+    "env": {
+      "SCHEMA_REGISTRY_URL": "${user_config.schema_registry_url}",
+      "SCHEMA_REGISTRY_USER": "${user_config.schema_registry_user}",
+      "SCHEMA_REGISTRY_PASSWORD": "${user_config.schema_registry_password}",
+      "VIEWONLY": "${user_config.viewonly}",
+      "SLIM_MODE": "${user_config.slim_mode}",
+      "SCHEMA_REGISTRY_NAME_1": "${user_config.schema_registry_name_1}",
+      "SCHEMA_REGISTRY_URL_1": "${user_config.schema_registry_url_1}",
+      "VIEWONLY_1": "${user_config.viewonly_1}",
+      "SCHEMA_REGISTRY_NAME_2": "${user_config.schema_registry_name_2}",
+      "SCHEMA_REGISTRY_URL_2": "${user_config.schema_registry_url_2}",
+      "VIEWONLY_2": "${user_config.viewonly_2}",
+      "SCHEMA_REGISTRY_NAME_3": "${user_config.schema_registry_name_3}",
+      "SCHEMA_REGISTRY_URL_3": "${user_config.schema_registry_url_3}",
+      "VIEWONLY_3": "${user_config.viewonly_3}",
+      "SCHEMA_REGISTRY_NAME_4": "${user_config.schema_registry_name_4}",
+      "SCHEMA_REGISTRY_URL_4": "${user_config.schema_registry_url_4}",
+      "VIEWONLY_4": "${user_config.viewonly_4}",
+      "SCHEMA_REGISTRY_NAME_5": "${user_config.schema_registry_name_5}",
+      "SCHEMA_REGISTRY_URL_5": "${user_config.schema_registry_url_5}",
+      "VIEWONLY_5": "${user_config.viewonly_5}",
+      "SCHEMA_REGISTRY_NAME_6": "${user_config.schema_registry_name_6}",
+      "SCHEMA_REGISTRY_URL_6": "${user_config.schema_registry_url_6}",
+      "VIEWONLY_6": "${user_config.viewonly_6}",
+      "SCHEMA_REGISTRY_NAME_7": "${user_config.schema_registry_name_7}",
+      "SCHEMA_REGISTRY_URL_7": "${user_config.schema_registry_url_7}",
+      "VIEWONLY_7": "${user_config.viewonly_7}",
+      "SCHEMA_REGISTRY_NAME_8": "${user_config.schema_registry_name_8}",
+      "SCHEMA_REGISTRY_URL_8": "${user_config.schema_registry_url_8}",
+      "VIEWONLY_8": "${user_config.viewonly_8}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "schema_registry_url": {
+      "type": "string",
+      "title": "Schema Registry URL",
+      "description": "URL of the Kafka Schema Registry.",
+      "required": true,
+      "default": "http://localhost:8081"
+    },
+    "schema_registry_user": {
+      "type": "string",
+      "title": "Schema Registry Username",
+      "description": "Optional username for Schema Registry authentication.",
+      "required": false,
+      "sensitive": false
+    },
+    "schema_registry_password": {
+      "type": "string",
+      "title": "Schema Registry Password",
+      "description": "Optional password for Schema Registry authentication.",
+      "required": false,
+      "sensitive": true
+    },
+    "viewonly": {
+      "type": "boolean",
+      "title": "View-Only Mode",
+      "description": "Enable read-only mode for production safety.",
+      "required": false,
+      "default": false
+    },
+    "slim_mode": {
+      "type": "boolean",
+      "title": "Slim Mode (Performance Optimization)",
+      "description": "Reduces exposed MCP tools for faster LLM response times and lower token usage.",
+      "required": false,
+      "default": false
+    },
+    "schema_registry_name_1": {
+      "type": "string",
+      "title": "Registry Name 1",
+      "description": "Name for Schema Registry instance 1.",
+      "required": false,
+      "default": ""
+    },
+    "schema_registry_url_1": {
+      "type": "string",
+      "title": "Registry URL 1",
+      "description": "URL for Schema Registry instance 1.",
+      "required": false,
+      "default": ""
+    },
+    "viewonly_1": {
+      "type": "boolean",
+      "title": "Registry 1 View-Only Mode",
+      "description": "Enable read-only mode for Schema Registry instance 1.",
+      "required": false,
+      "default": false
+    },
+    "schema_registry_name_2": {
+      "type": "string",
+      "title": "Registry Name 2",
+      "description": "Name for Schema Registry instance 2.",
+      "required": false,
+      "default": ""
+    },
+    "schema_registry_url_2": {
+      "type": "string",
+      "title": "Registry URL 2",
+      "description": "URL for Schema Registry instance 2.",
+      "required": false,
+      "default": ""
+    },
+    "viewonly_2": {
+      "type": "boolean",
+      "title": "Registry 2 View-Only Mode",
+      "description": "Enable read-only mode for Schema Registry instance 2.",
+      "required": false,
+      "default": false
+    },
+    "schema_registry_name_3": {
+      "type": "string",
+      "title": "Registry Name 3",
+      "description": "Name for Schema Registry instance 3.",
+      "required": false,
+      "default": ""
+    },
+    "schema_registry_url_3": {
+      "type": "string",
+      "title": "Registry URL 3",
+      "description": "URL for Schema Registry instance 3.",
+      "required": false,
+      "default": ""
+    },
+    "viewonly_3": {
+      "type": "boolean",
+      "title": "Registry 3 View-Only Mode",
+      "description": "Enable read-only mode for Schema Registry instance 3.",
+      "required": false,
+      "default": false
+    },
+    "schema_registry_name_4": {
+      "type": "string",
+      "title": "Registry Name 4",
+      "description": "Name for Schema Registry instance 4.",
+      "required": false,
+      "default": ""
+    },
+    "schema_registry_url_4": {
+      "type": "string",
+      "title": "Registry URL 4",
+      "description": "URL for Schema Registry instance 4.",
+      "required": false,
+      "default": ""
+    },
+    "viewonly_4": {
+      "type": "boolean",
+      "title": "Registry 4 View-Only Mode",
+      "description": "Enable read-only mode for Schema Registry instance 4.",
+      "required": false,
+      "default": false
+    },
+    "schema_registry_name_5": {
+      "type": "string",
+      "title": "Registry Name 5",
+      "description": "Name for Schema Registry instance 5.",
+      "required": false,
+      "default": ""
+    },
+    "schema_registry_url_5": {
+      "type": "string",
+      "title": "Registry URL 5",
+      "description": "URL for Schema Registry instance 5.",
+      "required": false,
+      "default": ""
+    },
+    "viewonly_5": {
+      "type": "boolean",
+      "title": "Registry 5 View-Only Mode",
+      "description": "Enable read-only mode for Schema Registry instance 5.",
+      "required": false,
+      "default": false
+    },
+    "schema_registry_name_6": {
+      "type": "string",
+      "title": "Registry Name 6",
+      "description": "Name for Schema Registry instance 6.",
+      "required": false,
+      "default": ""
+    },
+    "schema_registry_url_6": {
+      "type": "string",
+      "title": "Registry URL 6",
+      "description": "URL for Schema Registry instance 6.",
+      "required": false,
+      "default": ""
+    },
+    "viewonly_6": {
+      "type": "boolean",
+      "title": "Registry 6 View-Only Mode",
+      "description": "Enable read-only mode for Schema Registry instance 6.",
+      "required": false,
+      "default": false
+    },
+    "schema_registry_name_7": {
+      "type": "string",
+      "title": "Registry Name 7",
+      "description": "Name for Schema Registry instance 7.",
+      "required": false,
+      "default": ""
+    },
+    "schema_registry_url_7": {
+      "type": "string",
+      "title": "Registry URL 7",
+      "description": "URL for Schema Registry instance 7.",
+      "required": false,
+      "default": ""
+    },
+    "viewonly_7": {
+      "type": "boolean",
+      "title": "Registry 7 View-Only Mode",
+      "description": "Enable read-only mode for Schema Registry instance 7.",
+      "required": false,
+      "default": false
+    },
+    "schema_registry_name_8": {
+      "type": "string",
+      "title": "Registry Name 8",
+      "description": "Name for Schema Registry instance 8.",
+      "required": false,
+      "default": ""
+    },
+    "schema_registry_url_8": {
+      "type": "string",
+      "title": "Registry URL 8",
+      "description": "URL for Schema Registry instance 8.",
+      "required": false,
+      "default": ""
+    },
+    "viewonly_8": {
+      "type": "boolean",
+      "title": "Registry 8 View-Only Mode",
+      "description": "Enable read-only mode for Schema Registry instance 8.",
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.ai/badge.svg)](https://mseep.ai/app/aywengo-kafka-schema-reg-mcp)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Python Version](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)\n[![Docker Pulls](https://img.shields.io/docker/pulls/aywengo/kafka-schema-reg-mcp)](https://hub.docker.com/r/aywengo/kafka-schema-reg-mcp)\n[![GitHub Release](https://img.shields.io/github/v/release/aywengo/kafka-schema-reg-mcp)](https://github.com/aywengo/kafka-schema-reg-mcp/releases)\n[![GitHub Issues](https://img.shields.io/github/issues/aywengo/kafka-schema-reg-mcp)](https://github.com/aywengo/kafka-schema-reg-mcp/issues)\n[![Docker Image Size](https://img.shields.io/docker/image-size/aywengo/kafka-schema-reg-mcp/stable)](https://hub.docker.com/r/aywengo/kafka-schema-reg-mcp)\n[![Maintained](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/aywengo/kafka-schema-reg-mcp/graphs/commit-activity)\n[![MCP Specification](https://img.shields.io/badge/MCP-2025--06--18-brightgreen.svg)](https://modelcontextprotocol.io)\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/aywengo/kafka-schema-reg-mcp)](https://archestra.ai/mcp-catalog/aywengo__kafka-schema-reg-mcp)\n\n# Kafka Schema Registry MCP Server\n\nA comprehensive **Message Control Protocol (MCP) server** that provides Claude Desktop and other MCP clients with tools for Kafka Schema Registry operations. Features advanced schema context support, multi-registry management, and comprehensive schema export capabilities.\n\n<table width=\"100%\">\n<tr>\n<td width=\"33%\" style=\"vertical-align: top;\">\n<div style=\"background-color: white; padding: 20px; border-radius: 10px;\">\n  <img src=\"docs/logo_400_mcp_kafka_schema_reg.png\" alt=\"Kafka Schema Registry MCP Logo\" width=\"100%\">\n</div>\n</td>\n<td width=\"67%\" style=\"vertical-align: top; padding-left: 20px;\">\n\n> **🎯 True MCP Implementation**: Uses modern **FastMCP 2.8.0+ framework** with full **MCP 2025-06-18 specification compliance**. Fully compatible with Claude Desktop and other MCP clients using JSON-RPC over stdio.\n\n**Latest Version:** [v2.0.7](CHANGELOG.md) | **Docker:** `aywengo/kafka-schema-reg-mcp:stable`\n</td>\n</tr>\n</table>\n\n## 📋 Table of Contents\n\n- [🚀 Quick Start](#-quick-start)\n- [✨ Key Features](#-key-features)\n- [📦 Installation](#-installation)\n- [⚙️ Configuration](#️-configuration)\n- [💬 Usage Examples](#-usage-examples)\n- [🔒 Authentication & Security](#-authentication--security)\n- [📚 Documentation](#-documentation)\n- [🧪 Testing](#-testing)\n- [🚀 Deployment](#-deployment)\n- [🤝 Contributing](#-contributing)\n- [🆕 What's New](#-whats-new)\n\n## 🚀 Quick Start\n\n### 1. Run with Docker (Recommended)\n```bash\n# Latest stable release\ndocker pull aywengo/kafka-schema-reg-mcp:stable\n\n# Recommended: Run with SLIM_MODE for optimal performance (~9 tools)\ndocker run -e SCHEMA_REGISTRY_URL=http://localhost:8081 -e SLIM_MODE=true aywengo/kafka-schema-reg-mcp:stable\n\n# OR run with full feature set (57+ tools) for administrators/SRE\ndocker run -e SCHEMA_REGISTRY_URL=http://localhost:8081 aywengo/kafka-schema-reg-mcp:stable\n```\n\n### 2. Configure Claude Desktop\nCopy a ready-to-use configuration from [`config-examples/`](config-examples/):\n\n```bash\n# macOS\ncp config-examples/claude_desktop_stable_config.json ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n\n# Linux  \ncp config-examples/claude_desktop_stable_config.json ~/.config/claude-desktop/config.json\n```\n\n### 3. Start Using with Claude\nRestart Claude Desktop and try these prompts:\n- *\"List all schema contexts\"*\n- *\"Show me the subjects in the production context\"* \n- *\"Register a new user schema with fields for id, name, and email\"*\n\n## ✨ Key Features\n\n- **🤖 Claude Desktop Integration** - Direct MCP integration with natural language interface\n- **🏢 Multi-Registry Support** - Manage up to 8 Schema Registry instances simultaneously\n- **📋 Schema Contexts** - Logical grouping for production/staging environment isolation\n- **🔄 Schema Migration** - Cross-registry migration with backup and verification\n- **📊 Comprehensive Export** - JSON, Avro IDL formats for backup and documentation\n- **🔒 Production Safety** - VIEWONLY mode and per-registry access control\n- **🔐 OAuth 2.1 Authentication** - Enterprise-grade security with scope-based permissions\n- **📈 Real-time Progress** - Async operations with progress tracking and cancellation\n- **🔗 Resource Linking** - HATEOAS navigation with enhanced tool responses\n- **🧪 Full MCP Compliance** - 57+ tools following MCP 2025-06-18 specification\n- **🚀 SLIM_MODE** - Reduce tool overhead from 57+ to ~9 essential tools for better LLM performance\n\n> **📖 See detailed feature descriptions**: [docs/api-reference.md](docs/api-reference.md)\n\n## 📦 Installation\n\n### Option A: Docker (Recommended)\n```bash\n# Production stable\ndocker pull aywengo/kafka-schema-reg-mcp:stable\n\n# Latest development  \ndocker pull aywengo/kafka-schema-reg-mcp:latest\n\n# Specific version\ndocker pull aywengo/kafka-schema-reg-mcp:2.0.7\n```\n\n#### Running with SLIM_MODE\nTo reduce LLM overhead, run with SLIM_MODE enabled:\n```bash\n# Run with ~9 essential tools instead of 57+\ndocker run -e SCHEMA_REGISTRY_URL=http://localhost:8081 -e SLIM_MODE=true aywengo/kafka-schema-reg-mcp:stable\n```\n\n> **💡 SLIM_MODE Benefits:**\n> - Reduces tool count from 53+ to ~15 essential tools\n> - Significantly faster LLM response times\n> - Lower token usage and reduced costs\n> - Ideal for production read-only operations\n> - Maintains full remote deployment support\n\n### Option B: Local Python\n```bash\ngit clone https://github.com/aywengo/kafka-schema-reg-mcp\ncd kafka-schema-reg-mcp\npip install -r requirements.txt\npython kafka_schema_registry_unified_mcp.py\n```\n\n### Option C: Docker Compose\n```bash\ndocker-compose up -d  # Includes Schema Registry for testing\n```\n\n> **📖 Detailed installation guide**: [docs/deployment.md](docs/deployment.md)\n\n## ⚙️ Configuration\n\n### Single Registry Mode\n```bash\nexport SCHEMA_REGISTRY_URL=\"http://localhost:8081\"\nexport SCHEMA_REGISTRY_USER=\"\"           # Optional\nexport SCHEMA_REGISTRY_PASSWORD=\"\"       # Optional\nexport VIEWONLY=\"false\"                  # Production safety\nexport SLIM_MODE=\"false\"                 # Optional: Enable to reduce tool overhead (default: false)\n```\n\n### Multi-Registry Mode (Up to 8 Registries)\n```bash\n# Development Registry\nexport SCHEMA_REGISTRY_NAME_1=\"development\"\nexport SCHEMA_REGISTRY_URL_1=\"http://dev-registry:8081\"\nexport VIEWONLY_1=\"false\"\n\n# Production Registry (with safety)\nexport SCHEMA_REGISTRY_NAME_2=\"production\"  \nexport SCHEMA_REGISTRY_URL_2=\"http://prod-registry:8081\"\nexport VIEWONLY_2=\"true\"                     # Read-only protection\n```\n\n### Claude Desktop Configuration\nPre-configured examples available in [`config-examples/`](config-examples/):\n\n| Configuration | Use Case | File |\n|---------------|----------|------|\n| **Production** | Stable Docker deployment | [`claude_desktop_stable_config.json`](config-examples/claude_desktop_stable_config.json) |\n| **Multi-Environment** | DEV/STAGING/PROD registries | [`claude_desktop_multi_registry_docker.json`](config-examples/claude_desktop_multi_registry_docker.json) |\n| **Local Development** | Python local execution | [`claude_desktop_config.json`](config-examples/claude_desktop_config.json) |\n| **View-Only Safety** | Production with safety | [`claude_desktop_viewonly_config.json`](config-examples/claude_desktop_viewonly_config.json) |\n\n> **📖 Complete configuration guide**: [config-examples/README.md](config-examples/README.md)\n\n### SLIM_MODE Configuration (Performance Optimization)\n\n**SLIM_MODE** reduces the number of exposed MCP tools from 57+ to ~9 essential tools, significantly reducing LLM overhead and improving response times.\n\n> **💡 Recommendation:** SLIM_MODE is **recommended for most use cases** as it provides all essential schema management capabilities with optimal performance.\n\n#### When to Use SLIM_MODE (Recommended)\n- **Default choice** for most users and day-to-day operations\n- When experiencing slow LLM responses due to too many tools\n- For production environments focused on read-only operations\n- When you only need basic schema management capabilities\n- To reduce token usage and improve performance\n\n#### When to Use Non-SLIM Mode\n- **For administrators or SRE teams** performing long-running operations\n- When you need advanced operations like:\n  - Schema migrations across registries\n  - Bulk schema removals and cleanup operations\n  - Complex batch operations and workflows\n  - Interactive guided wizards for complex tasks\n  - Comprehensive export/import operations\n\n#### Enable SLIM_MODE\n```bash\nexport SLIM_MODE=\"true\"  # Reduces tools from 57+ to ~9\n```\n\n#### Tools Available in SLIM_MODE\n**Essential Read-Only Tools:**\n- `ping` - Server health check\n- `set_default_registry`, `get_default_registry` - Registry management\n- `count_contexts`, `count_schemas`, `count_schema_versions` - Statistics\n\n**Basic Write Operations:**\n- `register_schema` - Register new schemas\n- `check_compatibility` - Schema compatibility checking\n- `create_context` - Create new contexts\n\n**Essential Export Operations:**\n- `export_schema` - Export single schema\n- `export_subject` - Export all subject versions\n\n**Resources Available (All Modes):**\n- All 19 resources remain available in SLIM_MODE\n- `registry://`, `schema://`, `subject://` resource URIs\n- Full read access through resource-first approach\n\n**Tools Hidden in SLIM_MODE:**\n- All migration tools (`migrate_schema`, `migrate_context`)\n- All batch operations (`clear_context_batch`)\n- Advanced export/import tools (`export_context`, `export_global`)\n- All interactive/elicitation tools (`*_interactive` variants)\n- Heavy statistics tools with async operations\n- Task management and workflow tools\n- Configuration update tools\n- Delete operations\n\n> **Note:** You can switch between modes by restarting with `SLIM_MODE=false` to access all 57+ tools.\n\n## 📊 MCP Tools and Resources\n\nThis section provides a comprehensive analysis of all MCP tools and resources exposed by the Kafka Schema Registry MCP Server.\n\n### Backward Compatibility Wrapper Tools\nThese tools are maintained for backward compatibility with existing clients. They internally use efficient implementations but are exposed as tools to prevent \"Tool not listed\" errors. Consider migrating to the corresponding resources for better performance.\n\n| **Tool Name** | **SLIM_MODE** | **Scope** | **Recommended Resource** | **Description** |\n|---------------|---------------|-----------|--------------------------|-----------------|\n| `list_registries` | ✅ | read | `registry://names` | List all configured registries |\n| `get_registry_info` | ✅ | read | `registry://info/{name}` | Get registry information |\n| `test_registry_connection` | ✅ | read | `registry://status/{name}` | Test registry connection |\n| `test_all_registries` | ✅ | read | `registry://status` | Test all registry connections |\n| `list_subjects` | ✅ | read | `registry://{name}/subjects` | List all subjects |\n| `get_schema` | ✅ | read | `schema://{name}/{context}/{subject}` | Get schema content |\n| `get_schema_versions` | ✅ | read | `schema://{name}/{context}/{subject}/versions` | Get schema versions |\n| `get_global_config` | ✅ | read | `registry://{name}/config` | Get global configuration |\n| `get_mode` | ✅ | read | `registry://mode` | Get registry mode |\n| `list_contexts` | ✅ | read | `registry://{name}/contexts` | List all contexts |\n| `get_subject_config` | ✅ | read | `subject://{name}/{context}/{subject}/config` | Get subject configuration |\n| `get_subject_mode` | ✅ | read | `subject://{name}/{context}/{subject}/mode` | Get subject mode |\n\n### Core MCP Tools\n\n| **Category** | **Name** | **Type** | **SLIM_MODE** | **Scope** | **Description** |\n|--------------|----------|----------|---------------|-----------|-----------------|\n| **Core** | `ping` | Tool | ✅ | read | MCP ping/pong health check |\n| **Registry Management** | `set_default_registry` | Tool | ✅ | admin | Set default registry |\n| **Registry Management** | `get_default_registry` | Tool | ✅ | read | Get current default registry |\n| **Schema Operations** | `register_schema` | Tool | ✅ | write | Register new schema version |\n| **Schema Operations** | `check_compatibility` | Tool | ✅ | read | Check schema compatibility |\n| **Context Management** | `create_context` | Tool | ✅ | write | Create new context |\n| **Context Management** | `delete_context` | Tool | ❌ | admin | Delete context |\n| **Subject Management** | `delete_subject` | Tool | ❌ | admin | Delete subject and versions |\n| **Configuration** | `update_global_config` | Tool | ❌ | admin | Update global configuration |\n| **Configuration** | `update_subject_config` | Tool | ❌ | admin | Update subject configuration |\n| **Mode Management** | `update_mode` | Tool | ❌ | admin | Update registry mode |\n| **Mode Management** | `update_subject_mode` | Tool | ❌ | admin | Update subject mode |\n| **Statistics** | `count_contexts` | Tool | ✅ | read | Count contexts |\n| **Statistics** | `count_schemas` | Tool | ✅ | read | Count schemas |\n| **Statistics** | `count_schema_versions` | Tool | ✅ | read | Count schema versions |\n| **Statistics** | `get_registry_statistics` | Tool | ❌ | read | Get comprehensive registry stats |\n| **Export** | `export_schema` | Tool | ✅ | read | Export single schema |\n| **Export** | `export_subject` | Tool | ✅ | read | Export all subject versions |\n| **Export** | `export_context` | Tool | ❌ | read | Export all context subjects |\n| **Export** | `export_global` | Tool | ❌ | read | Export all contexts/schemas |\n| **Export** | `export_global_interactive` | Tool | ❌ | read | Interactive global export |\n| **Migration** | `migrate_schema` | Tool | ❌ | admin | Migrate schema between registries |\n| **Migration** | `migrate_context` | Tool | ❌ | admin | Migrate context between registries |\n| **Migration** | `migrate_context_interactive` | Tool | ❌ | admin | Interactive context migration |\n| **Migration** | `list_migrations` | Tool | ❌ | read | List migration tasks |\n| **Migration** | `get_migration_status` | Tool | ❌ | read | Get migration status |\n| **Comparison** | `compare_registries` | Tool | ❌ | read | Compare two registries |\n| **Comparison** | `compare_contexts_across_registries` | Tool | ❌ | read | Compare contexts across registries |\n| **Comparison** | `find_missing_schemas` | Tool | ❌ | read | Find missing schemas |\n| **Batch Operations** | `clear_context_batch` | Tool | ❌ | admin | Clear context with batch operations |\n| **Batch Operations** | `clear_multiple_contexts_batch` | Tool | ❌ | admin | Clear multiple contexts |\n| **Interactive** | `register_schema_interactive` | Tool | ❌ | write | Interactive schema registration |\n| **Interactive** | `check_compatibility_interactive` | Tool | ❌ | read | Interactive compatibility check |\n| **Interactive** | `create_context_interactive` | Tool | ❌ | write | Interactive context creation |\n| **Resource Discovery** | `list_available_resources` | Tool | ✅ | read | List all available resources |\n| **Resource Discovery** | `suggest_resource_for_tool` | Tool | ✅ | read | Get resource migration suggestions |\n| **Resource Discovery** | `generate_resource_templates` | Tool | ✅ | read | Generate resource URI templates |\n| **Task Management** | `get_task_status` | Tool | ❌ | read | Get task status |\n| **Task Management** | `get_task_progress` | Tool | ❌ | read | Get task progress |\n| **Task Management** | `list_active_tasks` | Tool | ❌ | read | List active tasks |\n| **Task Management** | `cancel_task` | Tool | ❌ | admin | Cancel running task |\n| **Task Management** | `list_statistics_tasks` | Tool | ❌ | read | List statistics tasks |\n| **Task Management** | `get_statistics_task_progress` | Tool | ❌ | read | Get statistics task progress |\n| **Elicitation** | `submit_elicitation_response` | Tool | ❌ | write | Submit elicitation response |\n| **Elicitation** | `list_elicitation_requests` | Tool | ❌ | read | List elicitation requests |\n| **Elicitation** | `get_elicitation_request` | Tool | ❌ | read | Get elicitation request details |\n| **Elicitation** | `cancel_elicitation_request` | Tool | ❌ | admin | Cancel elicitation request |\n| **Elicitation** | `get_elicitation_status` | Tool | ❌ | read | Get elicitation system status |\n| **Workflows** | `list_available_workflows` | Tool | ❌ | read | List available workflows |\n| **Workflows** | `get_workflow_status` | Tool | ❌ | read | Get workflow status |\n| **Workflows** | `guided_schema_migration` | Tool | ❌ | admin | Start schema migration wizard |\n| **Workflows** | `guided_context_reorganization` | Tool | ❌ | admin | Start context reorganization wizard |\n| **Workflows** | `guided_disaster_recovery` | Tool | ❌ | admin | Start disaster recovery wizard |\n| **Utility** | `get_mcp_compliance_status_tool` | Tool | ❌ | read | Get MCP compliance status |\n| **Utility** | `get_oauth_scopes_info_tool` | Tool | ❌ | read | Get OAuth scopes information |\n| **Utility** | `test_oauth_discovery_endpoints` | Tool | ❌ | read | Test OAuth discovery endpoints |\n| **Utility** | `get_operation_info_tool` | Tool | ❌ | read | Get operation metadata |\n| **Utility** | `check_viewonly_mode` | Tool | ❌ | read | Check if registry is in viewonly mode |\n| **RESOURCES** | `registry://status` | Resource | ✅ | read | Overall registry connection status |\n| **RESOURCES** | `registry://info` | Resource | ✅ | read | Detailed server configuration |\n| **RESOURCES** | `registry://mode` | Resource | ✅ | read | Registry mode detection |\n| **RESOURCES** | `registry://names` | Resource | ✅ | read | List of configured registry names |\n| **RESOURCES** | `registry://status/{name}` | Resource | ✅ | read | Specific registry connection status |\n| **RESOURCES** | `registry://info/{name}` | Resource | ✅ | read | Specific registry configuration |\n| **RESOURCES** | `registry://mode/{name}` | Resource | ✅ | read | Specific registry mode |\n| **RESOURCES** | `registry://{name}/subjects` | Resource | ✅ | read | List subjects for registry |\n| **RESOURCES** | `registry://{name}/contexts` | Resource | ✅ | read | List contexts for registry |\n| **RESOURCES** | `registry://{name}/config` | Resource | ✅ | read | Global config for registry |\n| **RESOURCES** | `schema://{name}/{context}/{subject}` | Resource | ✅ | read | Schema content with context |\n| **RESOURCES** | `schema://{name}/{subject}` | Resource | ✅ | read | Schema content default context |\n| **RESOURCES** | `schema://{name}/{context}/{subject}/versions` | Resource | ✅ | read | Schema versions with context |\n| **RESOURCES** | `schema://{name}/{subject}/versions` | Resource | ✅ | read | Schema versions default context |\n| **RESOURCES** | `subject://{name}/{context}/{subject}/config` | Resource | ✅ | read | Subject config with context |\n| **RESOURCES** | `subject://{name}/{subject}/config` | Resource | ✅ | read | Subject config default context |\n| **RESOURCES** | `subject://{name}/{context}/{subject}/mode` | Resource | ✅ | read | Subject mode with context |\n| **RESOURCES** | `subject://{name}/{subject}/mode` | Resource | ✅ | read | Subject mode default context |\n| **RESOURCES** | `elicitation://response/{request_id}` | Resource | ❌ | write | Elicitation response handling |\n\n## 💬 Usage Examples\n\n### Schema Management\n```bash\n# In Claude Desktop, use natural language:\n\"Register a user schema with id, name, email fields\"\n\"Check if my updated schema is compatible\"\n\"Export all schemas from staging context\"\n\"List subjects in production context\"\n```\n\n### Multi-Registry Operations  \n```bash\n\"Compare development and production registries\"\n\"Migrate user-events schema from staging to production\"\n\"Test connections to all registries\"\n\"Show me registry statistics\"\n```\n\n### Batch Operations\n```bash\n\"Clear all schemas from test context\"\n\"Export global schemas for backup\"\n\"Count schemas across all contexts\"\n```\n\n> **📖 More examples**: [examples/](examples/) | **📖 Use cases**: [docs/use-cases.md](docs/use-cases.md)\n\n## 🔒 Authentication & Security\n\n### OAuth 2.1 Support (Optional)\n```bash\n# Enable authentication\nexport ENABLE_AUTH=true\nexport AUTH_ISSUER_URL=\"https://your-oauth-provider.com\"\nexport AUTH_AUDIENCE=\"your-client-id\"\n```\n\n**Supported Providers:** Azure AD, Google OAuth, Keycloak, Okta, GitHub\n\n**Permission Scopes:**\n- `read` - View schemas, configurations\n- `write` - Register schemas, update configs (includes read)\n- `admin` - Delete subjects, full control (includes write + read)\n\n### Production Safety Features\n- **VIEWONLY Mode** - Prevent accidental changes in production\n- **URL Validation** - SSRF protection with configurable localhost access\n- **Scope-based Authorization** - Fine-grained tool-level permissions\n- **Per-Registry Controls** - Independent safety settings\n\n> **📖 Security guide**: [docs/deployment.md#security](docs/deployment.md#security)\n\n## 📚 Documentation\n\n| Guide | Description |\n|-------|-------------|\n| **[API Reference](docs/api-reference.md)** | Complete tool documentation with examples |\n| **[Use Cases](docs/use-cases.md)** | Real-world scenarios and implementation patterns |\n| **[Deployment Guide](docs/deployment.md)** | Docker, Kubernetes, cloud platforms, CI/CD |\n| **[IDE Integration](docs/ide-integration.md)** | VS Code, Claude Code, Cursor setup |\n| **[Configuration Examples](config-examples/)** | Ready-to-use Claude Desktop configs |\n| **[Testing Guide](TESTING_SETUP_GUIDE.md)** | Comprehensive testing setup |\n| **[Changelog](CHANGELOG.md)** | Version history and migration notes |\n| **[v2.0.0 Highlights](README-v2.0.0-HIGHLIGHTS.md)** | Major version features |\n\n### Additional Resources\n- **[Examples](examples/)** - Usage examples and code samples\n- **[Scripts](scripts/)** - Utility scripts and automation\n- **[Helm Charts](helm/)** - Kubernetes deployment\n- **[Tests](tests/)** - Test suites and validation\n\n## 🧪 Testing\n\n### Quick Test\n```bash\ncd tests/\n./run_all_tests.sh --quick    # Essential tests\n./run_all_tests.sh           # Complete test suite\n```\n\n### Docker Testing\n```bash\npython tests/test_docker_mcp.py\n```\n\n### MCP Inspector Tests (UI-driven)\n```bash\n# From repository root\ncd inspector-tests\n\n# Single registry (DEV)\n./run-inspector-tests.sh stable\n\n# Multi-registry (DEV + PROD)\n./run-inspector-tests.sh multi\n\n# Test a specific Docker tag\nDOCKER_VERSION=latest ./run-inspector-tests.sh stable\n```\n\n> **📖 Testing guide**: [TESTING_SETUP_GUIDE.md](TESTING_SETUP_GUIDE.md)\n\n## 🚀 Deployment\n\n### Production Docker\n```bash\n# With docker-compose\ndocker-compose up -d\n\n# Direct Docker  \ndocker run -d -p 38000:8000 \\\n  -e SCHEMA_REGISTRY_URL=http://registry:8081 \\\n  aywengo/kafka-schema-reg-mcp:stable\n```\n\n### Kubernetes\n```bash\n# Using Helm charts\nhelm install kafka-schema-mcp ./helm/kafka-schema-reg-mcp\n```\n\n> **📖 Deployment guide**: [docs/deployment.md](docs/deployment.md)\n\n## 🤝 Contributing\n\nWe welcome contributions! Please see:\n- **[Contributing Guidelines](.github/CONTRIBUTING.md)** \n- **[Code of Conduct](.github/CODE_OF_CONDUCT.md)**\n- **[Development Setup](docs/deployment.md#local-development)**\n\n### Quick Development Setup\n```bash\ngit clone https://github.com/aywengo/kafka-schema-reg-mcp\ncd kafka-schema-reg-mcp\npython -m venv .venv && source .venv/bin/activate\npip install -r requirements.txt\npython kafka_schema_registry_unified_mcp.py\n```\n\n## 🆕 What's New\n\n### v2.0.x (Latest)\n- **🔒 Security Fixes** - Resolved credential exposure in logging\n- **🤖 Interactive Schema Migration** - Smart migration with user preference elicitation\n- **💾 Automatic Backups** - Pre-migration backup creation\n- **✅ Post-Migration Verification** - Comprehensive schema validation  \n- **🚀 FastMCP 2.8.0+ Framework** - Complete architecture upgrade\n- **📊 MCP 2025-06-18 Compliance** - Latest protocol specification\n- **🔐 OAuth 2.1 Generic Discovery** - Universal provider compatibility\n- **🔗 Resource Linking** - HATEOAS navigation in tool responses\n\n> **📖 Full changelog**: [CHANGELOG.md](CHANGELOG.md) | **📖 v2.0.0 features**: [README-v2.0.0-HIGHLIGHTS.md](README-v2.0.0-HIGHLIGHTS.md)\n\n---\n**🐳 Glama.ai:** \n\n<a href=\"https://glama.ai/mcp/servers/@aywengo/kafka-schema-reg-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@aywengo/kafka-schema-reg-mcp/badge\" />\n</a>\n\n---\n\n**🐳 Docker Hub:** [`aywengo/kafka-schema-reg-mcp`](https://hub.docker.com/r/aywengo/kafka-schema-reg-mcp) | **📊 Stats:** 70+ MCP Tools (12 backward compatibility), 19 Resources, 8 Registries, OAuth 2.1, Multi-platform\n\n**License:** MIT | **Maintainer:** [@aywengo](https://github.com/aywengo) | **Issues:** [GitHub Issues](https://github.com/aywengo/kafka-schema-reg-mcp/issues)\n",
+  "category": "Development",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": {
+      "aywengo-kafka-schema-reg-mcp-stable-slim-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-e",
+          "SCHEMA_REGISTRY_URL=http://localhost:8081",
+          "-e",
+          "SLIM_MODE=true",
+          "aywengo/kafka-schema-reg-mcp:stable"
+        ],
+        "env": {
+          "SCHEMA_REGISTRY_URL": "http://localhost:8081",
+          "SLIM_MODE": "true"
+        },
+        "docker_image": "aywengo/kafka-schema-reg-mcp:stable"
+      },
+      "aywengo-kafka-schema-reg-mcp-stable-docker": {
+        "command": "docker",
+        "args": ["run", "-e", "SCHEMA_REGISTRY_URL=http://localhost:8081", "aywengo/kafka-schema-reg-mcp:stable"],
+        "env": {
+          "SCHEMA_REGISTRY_URL": "http://localhost:8081"
+        },
+        "docker_image": "aywengo/kafka-schema-reg-mcp:stable"
+      },
+      "kafka-schema-registry-unified-mcp-python": {
+        "command": "python",
+        "args": ["kafka_schema_registry_unified_mcp.py"],
+        "env": {}
+      },
+      "kafka-schema-reg-mcp-docker-compose": {
+        "command": "docker-compose",
+        "args": ["up", "-d"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "aywengo",
+    "repo": "kafka-schema-reg-mcp",
+    "url": "https://github.com/aywengo/kafka-schema-reg-mcp",
+    "name": "aywengo__kafka-schema-reg-mcp",
+    "path": null,
+    "stars": 21,
+    "contributors": 4,
+    "issues": 22,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "edf0052d503e7213d680fbd4189b6e4f47124cc1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:33.447Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "fastapi",
+      "importance": 9
+    },
+    {
+      "name": "starlette",
+      "importance": 8
+    },
+    {
+      "name": "requests",
+      "importance": 7
+    },
+    {
+      "name": "aiohttp",
+      "importance": 7
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "PyJWT",
+      "importance": 7
+    },
+    {
+      "name": "cryptography",
+      "importance": 7
+    },
+    {
+      "name": "avro-python3",
+      "importance": 6
+    },
+    {
+      "name": "jsonschema",
+      "importance": 6
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "aiofiles",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"kafka-schema-registry-mcp\"\nversion = \"2.0.0\"\ndescription = \"A Model Context Protocol (MCP) server for Kafka Schema Registry - enables AI assistants to interact with Kafka schemas through a standardized interface\"\nauthors = [\n    {name = \"Kafka Schema Registry MCP Team\", email = \"\"},\n]\nreadme = \"README.md\"\nlicense = {text = \"MIT\"}\nrequires-python = \">=3.10\"\ndependencies = [\n    \"aiofiles>=23.2.1,<25.0.0\",\n    \"httpx>=0.25.2\",\n    \"fastmcp>=2.10.1\",\n    \"requests>=2.31.0\",\n    \"python-dotenv>=1.0.0\",\n    \"aiohttp>=3.12.13\",\n    \"jsonschema>=4.24.0\",\n    \"PyJWT>=2.10.0\",\n    \"cryptography>=45.0.0\",\n    \"avro-python3>=1.10.0\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.4.0\",\n    \"black>=23.0.0\",\n    \"ruff>=0.1.0\",\n    \"mypy>=1.5.0\",\n    \"pytest-asyncio>=0.21.0\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/aywengo/kafka-schema-reg-mcp\"\nRepository = \"https://github.com/aywengo/kafka-schema-reg-mcp\"\nIssues = \"https://github.com/aywengo/kafka-schema-reg-mcp/issues\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build]\ninclude = [\n    \"oauth_provider.py\",\n    \"schema_registry_common.py\",\n    \"core_registry_tools.py\",\n    \"task_management.py\",\n    \"batch_operations.py\",\n    \"statistics_tools.py\",\n    \"export_tools.py\",\n    \"comparison_tools.py\",\n    \"migration_tools.py\",\n    \"mcp_prompts.py\",\n    \"kafka_schema_registry_unified_mcp.py\",\n    \"README.md\",\n    \"LICENSE\",\n    \"pyproject.toml\",\n]\n\n[tool.pytest.ini_options]\nminversion = \"6.0\"\naddopts = \"-ra -q\"\ntestpaths = [\n    \"tests\",\n]\npythonpath = [\n    \".\",\n]\n\n[tool.black]\nline-length = 120\ntarget-version = ['py311']\n\n[tool.ruff]\nline-length = 120\ntarget-version = \"py311\"\n\n[tool.mypy]\npython_version = \"3.11\"\nwarn_return_any = true\nwarn_unused_configs = true\ndisallow_untyped_defs = false\nignore_missing_imports = true\n\n[tool.isort]\nprofile = \"black\"\nline_length = 120\nmulti_line_output = 3\ninclude_trailing_comma = true\nforce_grid_wrap = 0\nuse_parentheses = true\nensure_newline_before_comments = true \n\n=== requirements.txt ===\n# FastMCP 2.8.0+ for MCP 2025-06-18 specification compliance - Issue #32\nfastmcp>=2.10.1\n\n# FastAPI for MCP-Protocol-Version header validation middleware\nfastapi>=0.115.0\n\n# Kafka Schema Registry integration - Updated to latest secure versions\nrequests>=2.32.4\npython-dotenv>=1.1.1\naiohttp>=3.12.13\n\n# OAuth JWT validation dependencies - Updated to latest secure versions\nPyJWT>=2.10.1\ncryptography>=45.0.4\n\n# Data processing for export functionality - Using known stable versions\navro-python3>=1.10.2\njsonschema>=4.24.0\n\n# FastMCP web framework for remote deployment - Conservative version\nstarlette>=0.27.0\n\n# Testing dependencies - Conservative but recent versions\npytest>=8.4.1\npytest-asyncio>=1.0.0\nhttpx>=0.27.0\n\n# Additional security dependencies - Conservative versions\nsafety>=3.0.0\npip-audit>=2.6.0\n\n\n=== inspector-tests/package.json ===\n{\n  \"name\": \"kafka-schema-reg-mcp-inspector-tests\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP Inspector tests for Kafka Schema Registry MCP Server\",\n  \"private\": true,\n  \"scripts\": {\n    \"test\": \"npm run test:stable && npm run test:latest && npm run test:multi\",\n    \"test:stable\": \"npx @mcpjam/inspector --config ./config/inspector-config-stable.json\",\n    \"test:latest\": \"npx @mcpjam/inspector --config ./config/inspector-config-latest.json\",\n    \"test:multi\": \"npx @mcpjam/inspector --config ./config/inspector-config-multi-registry.json\",\n    \"test:local\": \"npx @mcpjam/inspector\",\n    \"inspector\": \"npx @mcpjam/inspector\"\n  },\n  \"devDependencies\": {\n    \"@mcpjam/inspector\": \"latest\"\n  },\n  \"engines\": {\n    \"node\": \">=22.7.5\"\n  }\n}\n"
+}

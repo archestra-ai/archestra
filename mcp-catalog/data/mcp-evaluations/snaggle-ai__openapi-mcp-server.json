@@ -1,0 +1,82 @@
+{
+  "name": "snaggle-ai__openapi-mcp-server",
+  "display_name": "openapi-mcp-server",
+  "description": "Allow AI to wade through complex OpenAPIs using Simple Language",
+  "author": {
+    "name": "snaggle-ai"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "openapi-mcp-server"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# OpenAPI MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@janwilmake/openapi-mcp-server)](https://smithery.ai/server/@janwilmake/openapi-mcp-server) [![janwilmake/openapi-mcp-server context](https://badge.forgithub.com/janwilmake/openapi-mcp-server?excludePathPatterns=*.yaml)](https://uithub.com/janwilmake/openapi-mcp-server?excludePathPatterns=*.yaml)\n\nA Model Context Protocol (MCP) server for Claude/Cursor that enables searching and exploring OpenAPI specifications through oapis.org.\n\n- Demo: https://x.com/janwilmake/status/1903497808134496583\n- HN Thread: https://news.ycombinator.com/item?id=43447278\n- OpenAPISearch: https://github.com/janwilmake/openapisearch\n- OAPIS: https://github.com/janwilmake/oapis\n\nThe MCP works by applying a 3 step process :\n\n1. It figures out the openapi identifier you need\n2. It requests a summary of that in simple language\n3. It determines which endpoints you need, and checks out how exactly they work (again, in simple language)\n\n## Features\n\n- Get an overview of any OpenAPI specification\n- Retrieve details about specific API operations\n- Support for both JSON and YAML formats\n- Tested with Claude Desktop and Cursor\n\n| Summary                                       | Prompt it                                                                                                                                                                                                                                                                                                                                                 |\n| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |\n| Basic understanding of the OpenAPI MCP Server | [![](https://b.lmpify.com/overview)](https://lmpify.com?q=https%3A%2F%2Fuuithub.com%2Fjanwilmake%2Fopenapi-mcp-server%2Ftree%2Fmain%3FpathPatterns%3DREADME.md%26pathPatterns%3Dopenapi-mcp.drawio.png%0A%0ACan%20you%20explain%20what%20OpenAPI%20MCP%20Server%20does%20and%20how%20I%20can%20use%20it%20with%20Claude%20Desktop%3F)                     |\n| Core implementation details of the MCP server | [![](https://b.lmpify.com/implementation)](https://lmpify.com?q=https%3A%2F%2Fuuithub.com%2Fjanwilmake%2Fopenapi-mcp-server%2Ftree%2Fmain%3FpathPatterns%3Dindex.js%26pathPatterns%3Dpackage.json%0A%0AHow%20does%20the%20OpenAPI%20MCP%20Server%20handle%20API%20requests%3F%20Can%20you%20explain%20the%20tool%20handlers%3F)                           |\n| How to extend or contribute to the project    | [![](https://b.lmpify.com/extend)](https://lmpify.com?q=https%3A%2F%2Fuuithub.com%2Fjanwilmake%2Fopenapi-mcp-server%2Ftree%2Fmain%3FpathPatterns%3Dindex.js%26pathPatterns%3Dpackage.json%26pathPatterns%3DREADME.md%0A%0AI'd%20like%20to%20add%20support%20for%20a%20new%20feature%20to%20the%20OpenAPI%20MCP%20Server.%20Where%20should%20I%20start%3F) |\n\n## Installation\n\n### Installing via Smithery\n\nOur hosted smithery URL is https://smithery.ai/server/@janwilmake/openapi-mcp-server\n\nTo install openapi-mcp-server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@janwilmake/openapi-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @janwilmake/openapi-mcp-server --client claude\n```\n\nFor other clients, see the [smithery page](https://smithery.ai/server/@janwilmake/openapi-mcp-server) for instructions.\n\n### Installing using stdio\n\n```\n{\n  \"mcpServers\": {\n    \"openapi-mcp-server\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/openapi-mcp-server/index.js\"],\n      \"env\": {\n        \"DEBUG\": \"true\"\n      }\n    }\n  }\n}\n```\n\n## Usage in Claude\n\nOnce installed, you can ask Claude to:\n\n- \"Find information about the Stripe API\"\n- \"Explain how to use the GitHub API's repository endpoints\"\n\nClaude will use the MCP server to:\n\n1. First get an overview of the requested API\n2. Then retrieve specific operation details as needed\n\n## Requirements\n\n- Node.js >= 16.17.0\n- Claude Desktop, Cursor, or any other MCP client.\n\n## License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "openapi-mcp-server": {
+        "command": "npx",
+        "args": ["openapi-mcp-server@latest", "init"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "snaggle-ai",
+    "repo": "openapi-mcp-server",
+    "url": "https://github.com/snaggle-ai/openapi-mcp-server",
+    "name": "snaggle-ai__openapi-mcp-server",
+    "path": null,
+    "stars": 803,
+    "contributors": 6,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "df55b320f65269d866a541a9c7a487b8d404ebd1"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:43.751Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "undici",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "chalk",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"openapi-mcp-server\",\n  \"keywords\": [\n    \"openapi\",\n    \"mcp\",\n    \"server\",\n    \"proxy\"\n  ],\n  \"version\": \"2.1.0\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"module\": \"index.js\",\n  \"bin\": {\n    \"openapi-mcp-server\": \"index.js\"\n  },\n  \"description\": \"MCP server for interacting with openapisearch.com API\",\n  \"main\": \"index.js\",\n  \"files\": [\n    \"index.js\",\n    \"README.md\"\n  ],\n  \"scripts\": {\n    \"dev\": \"node index.js\",\n    \"dev-smithery\": \"npx @smithery/cli dev\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.17.5\",\n    \"zod\": \"^3.25.76\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"devDependencies\": {\n    \"tsx\": \"^4.20.5\"\n  }\n}\n"
+}

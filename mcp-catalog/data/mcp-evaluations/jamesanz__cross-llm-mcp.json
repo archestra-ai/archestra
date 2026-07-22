@@ -1,0 +1,128 @@
+{
+  "name": "jamesanz__cross-llm-mcp",
+  "display_name": "cross-llm-mcp",
+  "description": "A Model Context Protocol (MCP) server that provides access to multiple Large Language Model (LLM) APIs including ChatGPT, Claude, and DeepSeek",
+  "author": {
+    "name": "JamesANZ"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "ANTHROPIC_API_KEY": "${user_config.anthropic_api_key}",
+      "DEEPSEEK_API_KEY": "${user_config.deepseek_api_key}",
+      "DEFAULT_CHATGPT_MODEL": "${user_config.default_chatgpt_model}",
+      "DEFAULT_CLAUDE_MODEL": "${user_config.default_claude_model}",
+      "DEFAULT_DEEPSEEK_MODEL": "${user_config.default_deepseek_model}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI/ChatGPT API Key",
+      "description": "Your OpenAI API key for ChatGPT",
+      "sensitive": true,
+      "required": true
+    },
+    "anthropic_api_key": {
+      "type": "string",
+      "title": "Anthropic/Claude API Key",
+      "description": "Your Anthropic API key for Claude",
+      "sensitive": true,
+      "required": true
+    },
+    "deepseek_api_key": {
+      "type": "string",
+      "title": "DeepSeek API Key",
+      "description": "Your DeepSeek API key",
+      "sensitive": true,
+      "required": true
+    },
+    "default_chatgpt_model": {
+      "type": "string",
+      "title": "Default ChatGPT Model",
+      "description": "Default ChatGPT model to use",
+      "default": "gpt-4",
+      "required": false
+    },
+    "default_claude_model": {
+      "type": "string",
+      "title": "Default Claude Model",
+      "description": "Default Claude model to use",
+      "default": "claude-3-sonnet-20240229",
+      "required": false
+    },
+    "default_deepseek_model": {
+      "type": "string",
+      "title": "Default DeepSeek Model",
+      "description": "Default DeepSeek model to use",
+      "default": "deepseek-chat",
+      "required": false
+    }
+  },
+  "readme": "# Cross-LLM MCP Server\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/JamesANZ/cross-llm-mcp)](https://archestra.ai/mcp-catalog/jamesanz__cross-llm-mcp)\n\nA Model Context Protocol (MCP) server that provides access to multiple Large Language Model (LLM) APIs including ChatGPT, Claude, and DeepSeek. This allows you to call different LLMs from within any MCP-compatible client and combine their responses.\n\n<a href=\"https://glama.ai/mcp/servers/@JamesANZ/cross-llm-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@JamesANZ/cross-llm-mcp/badge\" alt=\"Cross-LLM Server MCP server\" />\n</a>\n\n## Features\n\nThis MCP server offers five specialized tools for interacting with different LLM providers:",
+  "category": "Aggregators",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "cross-llm-mcp": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "JamesANZ",
+    "repo": "cross-llm-mcp",
+    "url": "https://github.com/JamesANZ/cross-llm-mcp",
+    "name": "cross-llm-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f4d69706721c77a3ec85ad00404ecc1a67a0b246"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:20.766Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "superagent",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"bitcoin-mcp\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"bitcoin-mcp\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"main\": \"index.js\",\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.15.0\",\n    \"superagent\": \"^10.2.2\",\n    \"zod\": \"^3.25.75\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.0.10\",\n    \"@types/superagent\": \"^8.1.9\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

@@ -1,0 +1,97 @@
+{
+  "name": "jsdelivr__globalping-mcp-server",
+  "display_name": "globalping-mcp-server",
+  "description": "Remote MCP server that gives LLMs access to run network commands",
+  "author": {
+    "name": "jsdelivr"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {
+      "GLOBALPING_CLIENT_ID": "${user_config.globalping_client_id}",
+      "OAUTH_KV": "${user_config.oauth_kv}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "globalping_client_id": {
+      "type": "string",
+      "title": "Globalping Client ID",
+      "description": "Your Globalping OAuth Client ID. This is a secret required for the server's OAuth functionality, set via 'npx wrangler secret put GLOBALPING_CLIENT_ID'.",
+      "sensitive": true,
+      "required": true
+    },
+    "oauth_kv": {
+      "type": "string",
+      "title": "OAuth KV Namespace ID",
+      "description": "The ID of the Cloudflare KV namespace used for OAuth storage. This binding must be named 'OAUTH_KV' in your Cloudflare Workers configuration.",
+      "required": true
+    }
+  },
+  "readme": "# Globalping MCP Server\n\n<p align=\"center\">\n  <img src=\"https://raw.githubusercontent.com/jsdelivr/globalping-media/refs/heads/master/logo/full_colored_dark.svg\" alt=\"Globalping Logo\" width=\"180\"/>\n</p>\n\n<p align=\"center\">\n  <b>Enable AI models to interact with a global network measurement platform through natural language. Give network access to any LLM.</b>\n</p>\n\n<p align=\"center\">\n  <a href=\"https://github.com/modelcontextprotocol/modelcontextprotocol\">\n    <img src=\"https://img.shields.io/badge/MCP-compatible-brightgreen.svg\" alt=\"MCP Compatible\">\n  </a>\n</p>\n\n\n## What is Globalping?\n\n[Globalping](https://globalping.io) is a free, public API that provides access to a globally distributed network of probes for monitoring, debugging, and benchmarking internet infrastructure. With Globalping, you can run network tests (ping, traceroute, DNS, MTR, HTTP) from thousands of locations worldwide.\n\n\n## What is the Globalping MCP Server?\n\nThe Globalping MCP Server implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), allowing AI models like OpenAI's GPT and Anthropic's Claude to interact with Globalping's network measurement capabilities through natural language.\n\nIt also supports oAuth authentication, which offers a secure way to interact with our API and benefits from higher rate limits associated with your account.\n\n### Key Features\n\n- 🌐 **Global Network Access**: Run measurements from thousands of probes worldwide\n- 🤖 **AI-Friendly Interface**: Any LLM will easily parse the data and run new measurements as needed\n- 📊 **Comprehensive Measurements**: Support for ping, traceroute, DNS, MTR, and HTTP tests\n- 🔍 **Smart Context Handling**: Provides detailed parameter descriptions for AI clients to intelligently select measurement types and options\n- 🔄 **Comparative Analysis**: Allows to compare network performance between different targets\n- 🔑 **oAuth Support**: Use your own Globalping account for higher rate limits\n\n\n## Installation\n\nThe remote MCP server is available under these endpoints:\n- Streamable HTTP transport: `https://mcp.globalping.dev/mcp`\n- SSE transport: `https://mcp.globalping.dev/sse`\n\nYou can integrate our Globalping MCP server with various AI tools that support the Model Context Protocol. \n\nHere are instructions for the top 3 most popular tools:\n\n#### Claude Desktop App\n\nAdd to your Claude Desktop configuration file (located at `%APPDATA%\\Claude\\config.json` on Windows or `~/Library/Application Support/Claude/config.json` on macOS):\n\nStreamable HTTP transport:\n```json\n{\n    \"mcpServers\": {\n        \"globalping\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"mcp-remote\",\n                \"https://mcp.globalping.dev/mcp\"\n            ]\n        }\n    }\n}\n```\nLegacy SSE transport:\n```json\n{\n    \"mcpServers\": {\n        \"globalping\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"mcp-remote\",\n                \"https://mcp.globalping.dev/sse\"\n            ]\n        }\n    }\n}\n```\n#### Anthropic Claude API (via Console)\n\nWhen creating a Claude Assistant in the Anthropic Console:\n\n1. Go to [console.anthropic.com](https://console.anthropic.com/)\n2. Navigate to the Assistants section\n3. Create a new Assistant or edit an existing one\n4. In the Tools section, select \"Add custom tool\"\n5. Enter the following details:\n   - Tool Name: `Globalping`\n   - Description: `Run network tests from locations worldwide`\n   - Tool URL: `https://mcp.globalping.dev/mcp` (Streamable HTTP transport) or `https://mcp.globalping.dev/sse` (SSE transport)\n\n#### Cursor\n\nTo add the Globalping MCP server to Cursor:\n\n1. Open Cursor settings\n2. Navigate to the MCP tab\n3. Click on \"+ Add new global MCP server\"\n4. This opens the `mcp.json` config file, where you will need to add:\n\nStreamable HTTP transport:\n```json\n{\n    \"mcpServers\": {\n        \"globalping\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"mcp-remote\",\n                \"https://mcp.globalping.dev/mcp\"\n            ]\n        }\n    }\n}\n```\nLegacy SSE transport:\n```json\n{\n    \"mcpServers\": {\n        \"globalping\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"mcp-remote\",\n                \"https://mcp.globalping.dev/sse\"\n            ]\n        }\n    }\n}\n```\n5. Click \"Save\" and restart Cursor\n\n## Connecting AI Assistants\n\nThis MCP server can be used with any MCP-compatible AI assistant, including:\n\n- Claude Desktop\n- Anthropic Assistants\n- Cursor\n- Windsurf\n- Any custom implementation of the MCP protocol\n\nSee the MCP documentation for details on connecting clients to this server.\n\n\n## Available Tools\n\n- `ping` - Perform a ping test to a target\n- `traceroute` - Perform a traceroute test to a target\n- `dns` - Perform a DNS lookup for a domain\n- `mtr` - Perform an MTR (My Traceroute) test to a target\n- `http` - Perform an HTTP request to a URL\n- `locations` - List all available Globalping probe locations\n- `limits` - Show your current rate limits for the Globalping API\n- `getMeasurement` - Retrieve a previously run measurement by ID\n- `compareLocations` - Guide on how to run comparison measurements\n- `help` - Show a help message with documentation on available tools\n\n## Usage Examples\n\nOnce connected to an AI model through a compatible MCP client, you can interact with Globalping using natural language:\n\n```\nPing google.com from 3 locations in Europe\n```\n\n```\nRun a traceroute to github.com from Japan and compare with traceroute from the US\n```\n\n```\nCheck the DNS resolution of example.com using Google DNS (8.8.8.8)\n```\n\n```\nIs jsdelivr.com reachable from China? Test with both ping and HTTP\n```\n\n```\nWhat's the average response time for cloudflare.com across different continents?\n```\n\n\n## Location Specification\n\nLocations can be specified using the \"magic\" field, which supports various formats:\n\n- Continent codes: \"EU\", \"NA\", \"AS\", etc.\n- Country codes: \"US\", \"DE\", \"JP\", etc.\n- City names: \"London\", \"Tokyo\", \"New York\", etc.\n- Network names: \"Cloudflare\", \"Google\", etc.\n- ASN numbers: \"AS13335\", \"AS15169\", etc.\n- Cloud provider regions: \"aws-us-east-1\", \"gcp-us-central1\", etc.\n\nYou can also combine these with a plus sign for more specific targeting: \"London+UK\", \"Cloudflare+US\", etc.\n\n\n## Development\n\nThe codebase is organized into modules:\n\n- `src/index.ts` - Main entry point and MCP agent definition\n- `src/globalping/types.ts` - TypeScript interfaces for the Globalping API\n- `src/globalping/api.ts` - API wrapper functions for Globalping\n- `src/globalping/tools.ts` - MCP tool implementations\n- `src/utils.ts` - Helper utilities for rendering the web UI\n\n\n### Add Globalping credentials\n\nAdd Globalping OAuth credentials:\n\n- `npx wrangler secret put GLOBALPING_CLIENT_ID`\n\n### KV storage\nUsed for `OAuthProvider` docs https://github.com/cloudflare/workers-oauth-provider\n- create a KV namespace and copy ID\n- binding for it must be `OAUTH_KV`\n- configure `kv_namespaces` in the `wrangler.jsonc` file\n",
+  "category": "AI Tools",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jsdelivr",
+    "repo": "globalping-mcp-server",
+    "url": "https://github.com/jsdelivr/globalping-mcp-server",
+    "name": "jsdelivr__globalping-mcp-server",
+    "path": null,
+    "stars": 23,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "5a732fee031d26dd2ff2080a2296f4e166a68fe6"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:39.875Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@cloudflare/workers-oauth-provider",
+      "importance": 8
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "agents",
+      "importance": 8
+    },
+    {
+      "name": "hono",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"globalping-mcp-server\",\n\t\"version\": \"0.0.2\",\n\t\"private\": true,\n\t\"scripts\": {\n\t\t\"deploy\": \"wrangler deploy\",\n\t\t\"dev\": \"wrangler dev\",\n\t\t\"format\": \"biome format --write\",\n\t\t\"lint:fix\": \"biome lint --fix\",\n\t\t\"start\": \"wrangler dev\",\n\t\t\"cf-typegen\": \"wrangler types\"\n\t},\n\t\"devDependencies\": {\n\t\t\"@biomejs/biome\": \"^1.9.4\",\n\t\t\"@types/node\": \"^22.14.1\",\n\t\t\"marked\": \"^15.0\",\n\t\t\"typescript\": \"^5.5\",\n\t\t\"workers-mcp\": \"^0\",\n\t\t\"wrangler\": \"^4\"\n\t},\n\t\"dependencies\": {\n\t\t\"@cloudflare/workers-oauth-provider\": \"^0\",\n\t\t\"@modelcontextprotocol/sdk\": \"^1\",\n\t\t\"agents\": \"^0\",\n\t\t\"hono\": \"^4.7\",\n\t\t\"zod\": \"^3.24\"\n\t}\n}\n"
+}

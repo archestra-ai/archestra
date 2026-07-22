@@ -1,0 +1,74 @@
+{
+  "name": "kukapay__chainlist-mcp",
+  "display_name": "chainlist-mcp",
+  "description": "An MCP server that gives AI agents fast access to verified EVM chain information, including RPC URLs, chain IDs, explorers, and native tokens.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Chainlist MCP Server\n\nAn MCP server that gives AI agents fast access to verified EVM chain information, including RPC URLs, chain IDs, explorers, and native tokens — sourced from Chainlist.org.\n\n![GitHub License](https://img.shields.io/github/license/kukapay/chainlist-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Efficient Data Fetching**: Caches Chainlist API data to minimize requests.\n- **Flexible Search**: Case-insensitive keyword matching using regex for `getChainsByKeyword`.\n- **Structured Output**: Markdown responses with tabulated `rpc` and `explorers` for readability.\n\n## Installation\n\n### Prerequisites\n\n- **Python**: Version 3.10 or higher.\n- **uv**: Recommended for managing Python projects and dependencies (install via `pip install uv` or follow [uv documentation](https://docs.astral.sh/uv/)).\n\n### Steps\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/chainlist-mcp.git\n   cd chainlist-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   uv sync\n   ```\n\n3. **Installing to Claude Desktop**:\n\n    Install the server as a Claude Desktop application:\n    ```bash\n    uv run mcp install cli.py --name \"Chainlist MCP\"\n    ```\n\n    Configuration file as a reference:\n\n    ```json\n    {\n       \"mcpServers\": {\n           \"Chainlist MCP\": {\n               \"command\": \"uv\",\n               \"args\": [ \"--directory\", \"/path/to/chainlist-mcp\", \"run\", \"main.py\" ] \n           }\n       }\n    }\n    ```\n    Replace `/path/to/chainlist-mcp` with your actual installation path.\n\n## Usage\n\nThe server exposes two tools via the MCP protocol, accessible through MCP-compatible clients or the MCP Inspector.\n\n### Tools\n\n#### `getChainById`\n\n- **Description**: Retrieves details of a blockchain by its chain ID.\n- **Parameters**:\n  - `chain_id` (integer): The unique identifier of the blockchain (e.g., 1 for Ethereum Mainnet).\n- **Returns**: A Markdown string with chain details or an error message.\n\n**Example Prompt** (in an MCP client):\n```\nGet the details for the blockchain with chain ID 1.\n```\n\n**Example Response**:\n```markdown\n**Chain Details**\n- **Name**: Ethereum Mainnet\n- **Chain ID**: 1\n- **Native Currency**: Ether (ETH, 18 decimals)\n- **TVL**: 134376951329.85631\n**RPC Endpoints**:\n| URL                                          | Tracking |\n|----------------------------------------------|----------|\n| https://eth.llamarpc.com                     | none     |\n| https://go.getblock.io/...                   | none     |\n...\n**Explorers**:\n| Name       | URL                        | Standard |\n|------------|----------------------------|----------|\n| etherscan  | https://etherscan.io       | EIP3091  |\n...\n```\n\n#### `getChainsByKeyword`\n\n- **Description**: Searches for blockchains by keyword (case-insensitive partial match).\n- **Parameters**:\n  - `keyword` (string): The keyword or partial name to search (e.g., 'eth').\n  - `limit` (integer, optional): Maximum number of results (default: 5).\n- **Returns**: A Markdown string listing up to `limit` matching chains or an error message.\n\n**Example Prompt** (in an MCP client):\n```\nFind blockchains with 'eth' in their name, limit to 2 results.\n```\n\n**Example Response**:\n```markdown\n**Matching Chains**\n\n### Chain 1\n**Chain Details**\n- **Name**: Ethereum Mainnet\n- **Chain ID**: 1\n- **Native Currency**: Ether (ETH, 18 decimals)\n- **TVL**: 134376951329.85631\n**RPC Endpoints**:\n| URL                                          | Tracking |\n|----------------------------------------------|----------|\n| https://eth.llamarpc.com                     | none     |\n...\n**Explorers**:\n| Name       | URL                        | Standard |\n|------------|----------------------------|----------|\n| etherscan  | https://etherscan.io       | EIP3091  |\n...\n\n### Chain 2\n**Chain Details**\n- **Name**: Ethereum Goerli\n- **Chain ID**: 5\n- **Native Currency**: Ether (ETH, 18 decimals)\n- **TVL**: N/A\n**RPC Endpoints**:\n| URL                                          | Tracking |\n|----------------------------------------------|----------|\n| https://goerli.infura.io/...                 | yes      |\n...\n**Explorers**:\n| Name       | URL                        | Standard |\n|------------|----------------------------|----------|\n| etherscan  | https://goerli.etherscan.io | EIP3091  |\n...\n```\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "AI Tools",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "Chainlist MCP": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/chainlist-mcp", "run", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "chainlist-mcp",
+    "url": "https://github.com/kukapay/chainlist-mcp",
+    "name": "chainlist-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e416cc79b2f017547988466dc6056e0d243c90e3"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.173Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "tabulate",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"chainlist-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.9.2\",\n    \"tabulate>=0.9.0\",\n]\n"
+}

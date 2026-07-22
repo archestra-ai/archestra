@@ -1,0 +1,94 @@
+{
+  "name": "kukapay__crypto-indicators-mcp",
+  "display_name": "crypto-indicators-mcp",
+  "description": "An MCP server providing a range of cryptocurrency technical analysis indicators and strategies.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {
+      "EXCHANGE_NAME": "${user_config.exchange_name}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "exchange_name": {
+      "type": "string",
+      "title": "Exchange Name",
+      "description": "The name of the cryptocurrency exchange to use (e.g., binance, kraken, coinbasepro). Must be supported by ccxt.",
+      "required": false,
+      "default": "binance"
+    }
+  },
+  "readme": "# Crypto Indicators MCP Server\n\nAn MCP server providing a range of cryptocurrency technical analysis indicators and strategies, empowering AI trading agents to efficiently analyze market trends and develop robust quantitative strategies.\n\n[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)\n[![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)](https://nodejs.org/)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Technical Indicators**: 50+ indicators across trend, momentum, volatility, and volume categories.\n- **Trading Strategies**: Corresponding strategies outputting signals: `-1` (SELL), `0` (HOLD), `1` (BUY).\n- **Flexible Data Source**: Defaults to Binance, configurable to any `ccxt`-supported exchange.\n- **Modular Design**: Indicators and strategies are categorized for easy maintenance.\n\n## Installation\n\n### Prerequisites\n\n- [Node.js](https://nodejs.org/) (v18.x or higher)\n- npm (v8.x or higher)\n\n### Steps\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/crypto-indicators-mcp.git\n   cd crypto-indicators-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   npm install\n   ```\n\n3. **Configure MCP Client**:\n   To use this server with an MCP client like Claude Desktop, add the following to your config file (or equivalent):\n   ```json\n    {\n      \"mcpServers\": {\n        \"crypto-indicators-mcp\": {\n          \"command\": \"node\",\n          \"args\": [\"path/to/crypto-indicators-mcp/index.js\"],\n          \"env\": {\n            \"EXCHANGE_NAME\": \"binance\"\n          }\n        }\n      }\n    }   \n    ```\n\n## Available Tools\n\n### Trend Indicators\n- `calculate_absolute_price_oscillator`: Measures the difference between two EMAs to identify trend strength (APO).\n- `calculate_aroon`: Identifies trend changes and strength using high/low price extremes (Aroon).\n- `calculate_balance_of_power`: Gauges buying vs. selling pressure based on price movement (BOP).\n- `calculate_chande_forecast_oscillator`: Predicts future price movements relative to past trends (CFO).\n- `calculate_commodity_channel_index`: Detects overbought/oversold conditions and trend reversals (CCI).\n- `calculate_double_exponential_moving_average`: Smooths price data with reduced lag for trend detection (DEMA).\n- `calculate_exponential_moving_average`: Weights recent prices more heavily for trend analysis (EMA).\n- `calculate_mass_index`: Identifies potential reversals by measuring range expansion (MI).\n- `calculate_moving_average_convergence_divergence`: Tracks momentum and trend direction via EMA differences (MACD).\n- `calculate_moving_max`: Computes the maximum price over a rolling period (MMAX).\n- `calculate_moving_min`: Computes the minimum price over a rolling period (MMIN).\n- `calculate_moving_sum`: Calculates the sum of prices over a rolling period (MSUM).\n- `calculate_parabolic_sar`: Provides stop-and-reverse points for trend following (PSAR).\n- `calculate_qstick`: Measures buying/selling pressure based on open-close differences (Qstick).\n- `calculate_kdj`: Combines stochastic and momentum signals for trend analysis (KDJ).\n- `calculate_rolling_moving_average`: Applies a rolling EMA for smoother trend tracking (RMA).\n- `calculate_simple_moving_average`: Averages prices over a period to identify trends (SMA).\n- `calculate_since_change`: Tracks the time since the last significant price change.\n- `calculate_triple_exponential_moving_average`: Reduces lag further than DEMA for trend clarity (TEMA).\n- `calculate_triangular_moving_average`: Weights middle prices more for smoother trends (TRIMA).\n- `calculate_triple_exponential_average`: Measures momentum with triple smoothing (TRIX).\n- `calculate_typical_price`: Averages high, low, and close prices for a balanced trend view.\n- `calculate_volume_weighted_moving_average`: Incorporates volume into moving averages for trend strength (VWMA).\n- `calculate_vortex`: Identifies trend direction and strength using true range (Vortex).\n\n### Momentum Indicators\n- `calculate_awesome_oscillator`: Measures market momentum using midline crossovers (AO).\n- `calculate_chaikin_oscillator`: Tracks accumulation/distribution momentum (CMO).\n- `calculate_ichimoku_cloud`: Provides a comprehensive view of support, resistance, and momentum (Ichimoku).\n- `calculate_percentage_price_oscillator`: Normalizes MACD as a percentage for momentum (PPO).\n- `calculate_percentage_volume_oscillator`: Measures volume momentum via EMA differences (PVO).\n- `calculate_price_rate_of_change`: Tracks price momentum as a percentage change (ROC).\n- `calculate_relative_strength_index`: Identifies overbought/oversold conditions via momentum (RSI).\n- `calculate_stochastic_oscillator`: Compares closing prices to ranges for momentum signals (STOCH).\n- `calculate_williams_r`: Measures momentum relative to recent high-low ranges (Williams %R).\n\n### Volatility Indicators\n- `calculate_acceleration_bands`: Frames price action with dynamic volatility bands (AB).\n- `calculate_average_true_range`: Measures market volatility based on price ranges (ATR).\n- `calculate_bollinger_bands`: Encloses price action with volatility-based bands (BB).\n- `calculate_bollinger_bands_width`: Quantifies volatility via band width changes (BBW).\n- `calculate_chandelier_exit`: Sets trailing stop-losses based on volatility (CE).\n- `calculate_donchian_channel`: Tracks volatility with high/low price channels (DC).\n- `calculate_keltner_channel`: Combines ATR and EMA for volatility bands (KC).\n- `calculate_moving_standard_deviation`: Measures price deviation for volatility (MSTD).\n- `calculate_projection_oscillator`: Assesses volatility relative to projected prices (PO).\n- `calculate_true_range`: Calculates daily price range for volatility analysis (TR).\n- `calculate_ulcer_index`: Quantifies downside volatility and drawdowns (UI).\n\n### Volume Indicators\n- `calculate_accumulation_distribution`: Tracks volume flow to confirm price trends (AD).\n- `calculate_chaikin_money_flow`: Measures buying/selling pressure with volume (CMF).\n- `calculate_ease_of_movement`: Assesses how easily prices move with volume (EMV).\n- `calculate_force_index`: Combines price and volume for momentum strength (FI).\n- `calculate_money_flow_index`: Identifies overbought/oversold via price-volume (MFI).\n- `calculate_negative_volume_index`: Tracks price changes on lower volume days (NVI).\n- `calculate_on_balance_volume`: Accumulates volume to predict price movements (OBV).\n- `calculate_volume_price_trend`: Combines volume and price for trend confirmation (VPT).\n- `calculate_volume_weighted_average_price`: Averages prices weighted by volume (VWAP).\n\n### Trend Strategies\n- `calculate_absolute_price_oscillator_strategy`: Generates buy/sell signals from APO crossovers (APO Strategy).\n- `calculate_aroon_strategy`: Signals trend reversals using Aroon crossovers (Aroon Strategy).\n- `calculate_balance_of_power_strategy`: Issues signals based on BOP thresholds (BOP Strategy).\n- `calculate_chande_forecast_oscillator_strategy`: Predicts reversals with CFO signals (CFO Strategy).\n- `calculate_kdj_strategy`: Combines KDJ lines for trend-based signals (KDJ Strategy).\n- `calculate_macd_strategy`: Uses MACD crossovers for trading signals (MACD Strategy).\n- `calculate_parabolic_sar_strategy`: Signals trend direction with PSAR shifts (PSAR Strategy).\n- `calculate_typical_price_strategy`: Generates signals from typical price trends.\n- `calculate_volume_weighted_moving_average_strategy`: Issues signals based on VWMA crossovers (VWMA Strategy).\n- `calculate_vortex_strategy`: Signals trend direction with Vortex crossovers (Vortex Strategy).\n\n### Momentum Strategies\n- `calculate_momentum_strategy`: Issues signals based on momentum direction.\n- `calculate_awesome_oscillator_strategy`: Signals momentum shifts with AO crossovers (AO Strategy).\n- `calculate_ichimoku_cloud_strategy`: Generates signals from Ichimoku cloud positions (Ichimoku Strategy).\n- `calculate_rsi2_strategy`: Signals overbought/oversold with RSI thresholds (RSI Strategy).\n- `calculate_stochastic_oscillator_strategy`: Uses stochastic crossovers for signals (STOCH Strategy).\n- `calculate_williams_r_strategy`: Signals momentum reversals with Williams %R (Williams %R Strategy).\n\n### Volatility Strategies\n- `calculate_acceleration_bands_strategy`: Signals breakouts with acceleration bands (AB Strategy).\n- `calculate_bollinger_bands_strategy`: Issues signals from Bollinger Band breaches (BB Strategy).\n- `calculate_projection_oscillator_strategy`: Signals volatility shifts with PO (PO Strategy).\n\n### Volume Strategies\n- `calculate_chaikin_money_flow_strategy`: Signals volume pressure with CMF (CMF Strategy).\n- `calculate_ease_of_movement_strategy`: Issues signals based on EMV trends (EMV Strategy).\n- `calculate_force_index_strategy`: Signals momentum with force index shifts (FI Strategy).\n- `calculate_money_flow_index_strategy`: Signals overbought/oversold with MFI (MFI Strategy).\n- `calculate_negative_volume_index_strategy`: Signals trends with NVI changes (NVI Strategy).\n- `calculate_volume_weighted_average_price_strategy`: Issues signals from VWAP crossovers (VWAP Strategy).\n\n## Usage Examples\n\n### Example 1: Calculate MACD Indicator\n\n**Input (Natural Language Prompt)**:\n```\nCalculate the MACD for BTC/USDT on a 1-hour timeframe with fast period 12, slow period 26, signal period 9, and fetch 100 data points.\n```\n\n**Output**:\n```\n{\"macd\": [...], \"signal\": [...], \"histogram\": [...]}\n```\n\n### Example 2: Calculate RSI Strategy\n\n**Input (Natural Language Prompt)**:\n```\nGive me the RSI strategy signals for ETH/USDT on a 4-hour timeframe with a period of 14 and 50 data points.\n```\n\n**Output**:\n```\n[-1, 0, 1, 0, ...]\n```\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Finance",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "crypto-indicators-mcp": {
+        "command": "node",
+        "args": ["path/to/crypto-indicators-mcp/index.js"],
+        "env": {
+          "EXCHANGE_NAME": "binance"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-indicators-mcp",
+    "url": "https://github.com/kukapay/crypto-indicators-mcp",
+    "name": "crypto-indicators-mcp",
+    "path": null,
+    "stars": 60,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "23010934cfd06cdfd8d5766c787ffddc8fea4f4d"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.102Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "indicatorts",
+      "importance": 9
+    },
+    {
+      "name": "trading-indicator",
+      "importance": 9
+    },
+    {
+      "name": "undici",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"crypto-indicators-mcp\",\n  \"version\": \"1.0.1\",\n  \"main\": \"index.js\",\n  \"homepage\": \"https://github.com/kukapay/crypto-indicators-mcp\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"indicatorts\": \"^2.2.2\",\n    \"trading-indicator\": \"^2.0.4\",\n    \"undici\": \"^7.5.0\"\n  }\n}\n"
+}

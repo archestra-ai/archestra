@@ -1,0 +1,172 @@
+{
+  "name": "julien040__anyquery",
+  "display_name": "anyquery",
+  "description": "Query anything (GitHub, Notion, +40 more) with SQL and let LLMs (ChatGPT, Claude) connect to using MCP",
+  "author": {
+    "name": "julien040"
+  },
+  "server": {
+    "command": "anyquery",
+    "args": ["mcp", "--host", "${user_config.host}", "--port", "${user_config.port}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "host": {
+      "type": "string",
+      "title": "Host",
+      "description": "The host address for the MCP server to listen on.",
+      "required": false,
+      "default": "127.0.0.1"
+    },
+    "port": {
+      "type": "number",
+      "title": "Port",
+      "description": "The port for the MCP server to listen on.",
+      "required": false,
+      "default": 8070
+    }
+  },
+  "readme": "# Anyquery\n\n<img src=\"https://anyquery.dev/images/logo-shadow.png\" alt=\"Anyquery logo\" width=\"96\"></img>\n\n![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/julien040/anyquery/total)\n![GitHub commit activity](https://img.shields.io/github/commit-activity/m/julien040/anyquery)\n[![Documentation](https://img.shields.io/badge/documentation-blue)](https://anyquery.dev)\n[![GitHub issues](https://img.shields.io/github/issues/julien040/anyquery)](https://github.com/julien040/anyquery/issues)\n[![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.anyquery.dev%2Fv0%2Fregistry%2F&query=%24.plugins_count&label=Integrations%20count&cacheSeconds=3600)](https://anyquery.dev/integrations/)\n[![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.anyquery.dev%2Fv0%2Fquery%2F&query=%24.queries_count&style=flat&label=Queries%20from%20the%20hub&cacheSeconds=3600&link=https%3A%2F%2Fanyquery.dev%2Fqueries)](https://anyquery.dev/queries)\n[![Go Reference](https://pkg.go.dev/badge/github.com/julien040/anyquery@v0.1.3/namespace.svg)](https://pkg.go.dev/github.com/julien040/anyquery/namespace)\n\nAnyquery is a SQL query engine that allows you to run SQL queries on pretty much anything. It supports querying [files](https://anyquery.dev/docs/usage/querying-files/), [databases](https://anyquery.dev/docs/database), and [apps](https://anyquery.dev/integrations) (e.g. Apple Notes, Notion, Chrome, Todoist, etc.). It's built on top of [SQLite](https://www.sqlite.org) and uses [plugins](https://anyquery.dev/integrations) to extend its functionality.\n\nIt can also connect to [LLMs](https://anyquery.dev/llm) (e.g. ChatGPT, Claude, Cursor, TypingMind, etc.) to allow them to access your data.\n\nFinally, it can act as a [MySQL server](https://anyquery.dev/docs/usage/mysql-server/), allowing you to run SQL queries from your favorite MySQL-compatible client (e.g. [TablePlus](https://anyquery.dev/connection-guide/tableplus/), [Metabase](https://anyquery.dev/connection-guide/metabase/), etc.).\n\n![Anyquery header](https://anyquery.dev/images/release-header.png)\n\n## Usage\n\n### Connecting LLM\n\nLLMs can connect to Anyquery using the [Model Context Protocol (MCP)](https://anyquery.dev/docs/reference/commands/anyquery_mcp). This protocol provides context for LLMs that support it. You can start the MCP server with the following command:\n\n```bash\n# To be started by the LLM client\nanyquery mcp --stdio\n# To connect using an HTTP and SSE tunnel\nanyquery mcp --host 127.0.0.1 --port 8070\n```\n\nYou can also connect to clients that supports function calling (e.g. ChatGPT, TypingMind). Refer to each [connection guide](https://anyquery.dev/integrations#llm) in the documentation for more information.\n\n```bash\n# Copy the ID returned by the command, and paste it in the LLM client (e.g. ChatGPT, TypingMind)\nanyquery gpt\n```\n\n![5ire example](https://anyquery.dev/images/docs/llm/5ire-final.png)\n\n### Running SQL queries\n\nThe [documentation](https://anyquery.dev/docs/usage/running-queries) provides detailed instructions on how to run queries with Anyquery.\nBut let's see a quick example. Type `anyquery` in your terminal to open the shell mode. Then, run the following query:\n\n![Anyquery SQL examples](https://anyquery.dev/images/anyquery_examples.sql.png)\n\nYou can also launch the MySQL server with `anyquery server` and connect to it with your favorite MySQL-compatible client.\n\n```bash\nanyquery server &\nmysql -u root -h 127.0.0.1 -P 8070\n```\n\n## Installation\n\nThe [documentation](https://anyquery.dev/docs/#installation) provides detailed instructions on how to install Anyquery on your system. You can install anyquery from Homebrew, APT, YUM/DNF, Scoop, Winget and Chocolatey. You can also download the binary from the [releases page](https://github.com/julien040/anyquery/releases).\n\n### Homebrew\n\n```zsh\nbrew install anyquery\n```\n<!-- \n### Snap\n\n```bash\nsudo snap install anyquery\n``` -->\n\n### APT\n\n```bash\necho \"deb [trusted=yes] https://apt.julienc.me/ /\" | sudo tee /etc/apt/sources.list.d/anyquery.list\nsudo apt update\nsudo apt install anyquery\n```\n\n### YUM/DNF\n\n```bash\necho \"[anyquery]\nname=Anyquery\nbaseurl=https://yum.julienc.me/\nenabled=1\ngpgcheck=0\" | sudo tee /etc/yum.repos.d/anyquery.repo\nsudo dnf install anyquery\n```\n\n### Scoop\n\n```powershell\nscoop bucket add anyquery https://github.com/julien040/anyquery-scoop\nscoop install anyquery\n```\n\n### Winget\n\n```powershell\nwinget install JulienCagniart.anyquery\n```\n\n### Chocolatey\n\n```powershell\nchoco install anyquery\n```\n\n## Plugins\n\nAnyquery is plugin-based, and you can install plugins to extend its functionality. You can install plugins from the [official registry](https://anyquery.dev/integrations) or create your own. Anyquery can also [load any SQLite extension](https://anyquery.dev/docs/usage/plugins#using-sqlite-extensions).\n\n![Integrations](https://anyquery.dev/images/integrations_logo.png)\n\n## License\n\nAnyquery is licensed under the AGPLv3 license for the core engine. The RPC library is licensed under the MIT license so that anyone can reuse plugins in different projects.\n\nThe plugins are not subject to the AGPL license. Each plugins has its own license and the copyright is owned by the plugin author.\nSee the [LICENSE](https://github.com/julien040/anquery/blob/main/LICENSE.md) file for more information.\n\n## Contributing\n\nIf you want to contribute to Anyquery, please read the [contributing guidelines](https://anyquery.dev/docs/developers/project/contributing). I currently only accept minor contributions, but I'm open to any suggestions or feedback.\n\nYou can have a brief overview of the project in the [architecture](https://anyquery.dev/docs/developers/project/architecture/) documentation.\n",
+  "category": "Data",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "anyquery-mcp-stdio": {
+        "command": "anyquery",
+        "args": ["mcp", "--stdio"]
+      },
+      "anyquery-mcp": {
+        "command": "anyquery",
+        "args": ["mcp", "--host", "127.0.0.1", "--port", "8070"]
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "julien040",
+    "repo": "anyquery",
+    "url": "https://github.com/julien040/anyquery",
+    "name": "julien040__anyquery",
+    "path": null,
+    "stars": 1310,
+    "contributors": 6,
+    "issues": 30,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "0eccc5a40d39ca652897b7fba0858fda259eec0d"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:09.947Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 9
+    },
+    {
+      "name": "mattn/go-sqlite3",
+      "importance": 9
+    },
+    {
+      "name": "vitess.io/vitess",
+      "importance": 9
+    },
+    {
+      "name": "hashicorp/go-plugin",
+      "importance": 9
+    },
+    {
+      "name": "go-sql-driver/mysql",
+      "importance": 8
+    },
+    {
+      "name": "ClickHouse/clickhouse-go/v2",
+      "importance": 7
+    },
+    {
+      "name": "jackc/pgx/v5",
+      "importance": 7
+    },
+    {
+      "name": "jmoiron/sqlx",
+      "importance": 7
+    },
+    {
+      "name": "dgraph-io/badger/v4",
+      "importance": 7
+    },
+    {
+      "name": "google/cel-go",
+      "importance": 6
+    },
+    {
+      "name": "gorilla/websocket",
+      "importance": 6
+    },
+    {
+      "name": "parquet-go/parquet-go",
+      "importance": 6
+    },
+    {
+      "name": "PuerkitoBio/goquery",
+      "importance": 5
+    },
+    {
+      "name": "charmbracelet/huh",
+      "importance": 5
+    },
+    {
+      "name": "charmbracelet/log",
+      "importance": 5
+    },
+    {
+      "name": "golang.org/x/crypto",
+      "importance": 5
+    },
+    {
+      "name": "samber/lo",
+      "importance": 4
+    },
+    {
+      "name": "stretchr/testify",
+      "importance": 4
+    },
+    {
+      "name": "astro",
+      "importance": 1
+    },
+    {
+      "name": "alpinejs",
+      "importance": 1
+    },
+    {
+      "name": "tailwindcss",
+      "importance": 1
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/julien040/anyquery\n\ngo 1.24.2\n\ntoolchain go1.24.3\n\nreplace github.com/mattn/go-sqlite3 => github.com/julien040/go-sqlite3-anyquery v1.19.4\n\nreplace github.com/runreveal/pql => github.com/julien040/pql-anyquery v0.2.1\n\nrequire (\n\tgithub.com/BurntSushi/toml v1.5.0\n\tgithub.com/ClickHouse/clickhouse-go/v2 v2.35.0\n\tgithub.com/GuilhermeCaruso/kair v0.0.0-20200618030634-2cbc3ec356d4\n\tgithub.com/Masterminds/semver/v3 v3.3.1\n\tgithub.com/PuerkitoBio/goquery v1.10.3\n\tgithub.com/adrg/xdg v0.5.3\n\tgithub.com/andybalholm/cascadia v1.3.3\n\tgithub.com/apache/cassandra-gocql-driver/v2 v2.0.0-rc1-tentative\n\tgithub.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de\n\tgithub.com/bcicen/go-units v1.0.5\n\tgithub.com/briandowns/spinner v1.23.2\n\tgithub.com/charmbracelet/huh v0.7.0\n\tgithub.com/charmbracelet/lipgloss v1.1.0\n\tgithub.com/charmbracelet/log v0.4.2\n\tgithub.com/dgraph-io/badger/v4 v4.6.0\n\tgithub.com/edsrzf/mmap-go v1.2.0\n\tgithub.com/elk-language/go-prompt v1.3.1\n\tgithub.com/fatedier/frp v0.61.1\n\tgithub.com/gammazero/deque v1.0.0\n\tgithub.com/go-sql-driver/mysql v1.9.2\n\tgithub.com/goccy/go-json v0.10.5\n\tgithub.com/google/cel-go v0.25.0\n\tgithub.com/gorilla/websocket v1.5.3\n\tgithub.com/hashicorp/go-getter v1.7.8\n\tgithub.com/hashicorp/go-hclog v1.6.3\n\tgithub.com/hashicorp/go-plugin v1.6.3\n\tgithub.com/hjson/hjson-go/v4 v4.5.0\n\tgithub.com/huandu/go-sqlbuilder v1.35.1\n\tgithub.com/jackc/pgx/v5 v5.7.5\n\tgithub.com/jmoiron/sqlx v1.4.0\n\tgithub.com/julien040/go-ternary v1.0.1\n\tgithub.com/mark3labs/mcp-go v0.31.0\n\tgithub.com/mattn/go-sqlite3 v1.14.28\n\tgithub.com/olekukonko/tablewriter v0.0.5\n\tgithub.com/parquet-go/parquet-go v0.25.1\n\tgithub.com/runreveal/pql v0.2.0\n\tgithub.com/samber/lo v1.51.0\n\tgithub.com/santhosh-tekuri/jsonschema/v5 v5.3.1\n\tgithub.com/spf13/cobra v1.9.1\n\tgithub.com/spf13/pflag v1.0.6\n\tgithub.com/stretchr/testify v1.10.0\n\tgithub.com/trivago/grok v1.0.0\n\tgithub.com/twpayne/go-geom v1.6.1\n\tgolang.org/x/crypto v0.40.0\n\tgolang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6\n\tgolang.org/x/mod v0.25.0\n\tgolang.org/x/net v0.42.0\n\tgolang.org/x/term v0.33.0\n\tgopkg.in/inf.v0 v0.9.1\n\tgopkg.in/yaml.v3 v3.0.1\n\tvitess.io/vitess v0.22.0\n)\n\nrequire (\n\tcel.dev/expr v0.24.0 // indirect\n\tcloud.google.com/go v0.121.2 // indirect\n\tcloud.google.com/go/auth v0.16.1 // indirect\n\tcloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect\n\tcloud.google.com/go/compute/metadata v0.7.0 // indirect\n\tcloud.google.com/go/iam v1.5.2 // indirect\n\tcloud.google.com/go/monitoring v1.24.2 // indirect\n\tcloud.google.com/go/storage v1.55.0 // indirect\n\tfilippo.io/edwards25519 v1.1.0 // indirect\n\tgithub.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 // indirect\n\tgithub.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect\n\tgithub.com/ClickHouse/ch-go v0.66.0 // indirect\n\tgithub.com/DataDog/appsec-internal-go v1.12.0 // indirect\n\tgithub.com/DataDog/datadog-agent/comp/core/tagger/origindetection v0.66.0 // indirect\n\tgithub.com/DataDog/datadog-agent/pkg/obfuscate v0.66.0 // indirect\n\tgithub.com/DataDog/datadog-agent/pkg/proto v0.66.0 // indirect\n\tgithub.com/DataDog/datadog-agent/pkg/remoteconfig/state v0.66.0 // indirect\n\tgithub.com/DataDog/datadog-agent/pkg/trace v0.66.0 // indirect\n\tgithub.com/DataDog/datadog-agent/pkg/util/log v0.66.0 // indirect\n\tgithub.com/DataDog/datadog-agent/pkg/util/scrubber v0.66.0 // indirect\n\tgithub.com/DataDog/datadog-agent/pkg/version v0.66.0 // indirect\n\tgithub.com/DataDog/datadog-go/v5 v5.6.0 // indirect\n\tgithub.com/DataDog/go-libddwaf/v3 v3.5.4 // indirect\n\tgithub.com/DataDog/go-runtime-metrics-internal v0.0.4-0.20241206090539-a14610dc22b6 // indirect\n\tgithub.com/DataDog/go-sqllexer v0.1.6 // indirect\n\tgithub.com/DataDog/go-tuf v1.1.0-0.5.2 // indirect\n\tgithub.com/DataDog/opentelemetry-mapping-go/pkg/otlp/attributes v0.27.1 // indirect\n\tgithub.com/DataDog/sketches-go v1.4.7 // indirect\n\tgithub.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.28.0 // indirect\n\tgithub.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.52.0 // indirect\n\tgithub.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.52.0 // indirect\n\tgithub.com/Knetic/govaluate v3.0.0+incompatible // indirect\n\tgithub.com/Microsoft/go-winio v0.6.2 // indirect\n\tgithub.com/andybalholm/brotli v1.1.1 // indirect\n\tgithub.com/antlr4-go/antlr/v4 v4.13.1 // indirect\n\tgithub.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 // indirect\n\tgithub.com/atotto/clipboard v0.1.4 // indirect\n\tgithub.com/aws/aws-sdk-go v1.55.7 // indirect\n\tgithub.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect\n\tgithub.com/bcicen/bfstree v1.0.0 // indirect\n\tgithub.com/beorn7/perks v1.0.1 // indirect\n\tgithub.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect\n\tgithub.com/catppuccin/go v0.3.0 // indirect\n\tgithub.com/cespare/xxhash/v2 v2.3.0 // indirect\n\tgithub.com/charmbracelet/bubbles v0.21.0 // indirect\n\tgithub.com/charmbracelet/bubbletea v1.3.5 // indirect\n\tgithub.com/charmbracelet/colorprofile v0.3.1 // indirect\n\tgithub.com/charmbracelet/x/ansi v0.9.2 // indirect\n\tgithub.com/charmbracelet/x/cellbuf v0.0.13 // indirect\n\tgithub.com/charmbracelet/x/exp/strings v0.0.0-20250528180458-2d5d6cb84620 // indirect\n\tgithub.com/charmbracelet/x/term v0.2.1 // indirect\n\tgithub.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect\n\tgithub.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect\n\tgithub.com/coreos/go-oidc/v3 v3.10.0 // indirect\n\tgithub.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect\n\tgithub.com/dave/jennifer v1.7.1 // indirect\n\tgithub.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect\n\tgithub.com/dgraph-io/ristretto/v2 v2.1.0 // indirect\n\tgithub.com/dustin/go-humanize v1.0.1 // indirect\n\tgithub.com/eapache/queue/v2 v2.0.0-20230407133247-75960ed334e4 // indirect\n\tgithub.com/ebitengine/purego v0.8.4 // indirect\n\tgithub.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect\n\tgithub.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect\n\tgithub.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect\n\tgithub.com/fatedier/golib v0.5.0 // indirect\n\tgithub.com/fatih/color v1.18.0 // indirect\n\tgithub.com/felixge/httpsnoop v1.0.4 // indirect\n\tgithub.com/fsnotify/fsnotify v1.9.0 // indirect\n\tgithub.com/go-faster/city v1.0.1 // indirect\n\tgithub.com/go-faster/errors v0.7.1 // indirect\n\tgithub.com/go-jose/go-jose/v4 v4.1.0 // indirect\n\tgithub.com/go-logfmt/logfmt v0.6.0 // indirect\n\tgithub.com/go-logr/logr v1.4.3 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/go-ole/go-ole v1.3.0 // indirect\n\tgithub.com/go-task/slim-sprig/v3 v3.0.0 // indirect\n\tgithub.com/go-viper/mapstructure/v2 v2.2.1 // indirect\n\tgithub.com/gogo/protobuf v1.3.2 // indirect\n\tgithub.com/golang/glog v1.2.5 // indirect\n\tgithub.com/golang/protobuf v1.5.4 // indirect\n\tgithub.com/golang/snappy v1.0.0 // indirect\n\tgithub.com/google/flatbuffers v25.2.10+incompatible // indirect\n\tgithub.com/google/pprof v0.0.0-20241206021119-61a79c692802 // indirect\n\tgithub.com/google/s2a-go v0.1.9 // indirect\n\tgithub.com/google/safehtml v0.1.0 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect\n\tgithub.com/googleapis/gax-go/v2 v2.14.2 // indirect\n\tgithub.com/gorilla/mux v1.8.1 // indirect\n\tgithub.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect\n\tgithub.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect\n\tgithub.com/hashicorp/go-cleanhttp v0.5.2 // indirect\n\tgithub.com/hashicorp/go-safetemp v1.0.0 // indirect\n\tgithub.com/hashicorp/go-secure-stdlib/parseutil v0.2.0 // indirect\n\tgithub.com/hashicorp/go-secure-stdlib/strutil v0.1.2 // indirect\n\tgithub.com/hashicorp/go-sockaddr v1.0.7 // indirect\n\tgithub.com/hashicorp/go-version v1.7.0 // indirect\n\tgithub.com/hashicorp/yamux v0.1.2 // indirect\n\tgithub.com/huandu/xstrings v1.5.0 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/jackc/pgpassfile v1.0.0 // indirect\n\tgithub.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect\n\tgithub.com/jackc/puddle/v2 v2.2.2 // indirect\n\tgithub.com/jhump/protoreflect v1.16.0 // indirect\n\tgithub.com/jmespath/go-jmespath v0.4.0 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/klauspost/compress v1.18.0 // indirect\n\tgithub.com/klauspost/cpuid/v2 v2.2.9 // indirect\n\tgithub.com/klauspost/reedsolomon v1.12.0 // indirect\n\tgithub.com/lucasb-eyer/go-colorful v1.2.0 // indirect\n\tgithub.com/lufia/plan9stats v0.0.0-20250317134145-8bc96cf8fc35 // indirect\n\tgithub.com/mattn/go-colorable v0.1.14 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/mattn/go-localereader v0.0.1 // indirect\n\tgithub.com/mattn/go-runewidth v0.0.16 // indirect\n\tgithub.com/mattn/go-tty v0.0.7 // indirect\n\tgithub.com/mitchellh/go-homedir v1.1.0 // indirect\n\tgithub.com/mitchellh/go-testing-interface v1.14.1 // indirect\n\tgithub.com/mitchellh/hashstructure/v2 v2.0.2 // indirect\n\tgithub.com/mitchellh/mapstructure v1.5.1-0.20231216201459-8508981c8b6c // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect\n\tgithub.com/muesli/cancelreader v0.2.2 // indirect\n\tgithub.com/muesli/termenv v0.16.0 // indirect\n\tgithub.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect\n\tgithub.com/oklog/run v1.1.0 // indirect\n\tgithub.com/onsi/ginkgo/v2 v2.22.0 // indirect\n\tgithub.com/opentracing-contrib/go-grpc v0.1.2 // indirect\n\tgithub.com/opentracing/opentracing-go v1.2.0 // indirect\n\tgithub.com/outcaste-io/ristretto v0.2.3 // indirect\n\tgithub.com/paulmach/orb v0.11.1 // indirect\n\tgithub.com/pelletier/go-toml/v2 v2.2.4 // indirect\n\tgithub.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect\n\tgithub.com/pierrec/lz4/v4 v4.1.22 // indirect\n\tgithub.com/pion/dtls/v2 v2.2.7 // indirect\n\tgithub.com/pion/logging v0.2.2 // indirect\n\tgithub.com/pion/stun/v2 v2.0.0 // indirect\n\tgithub.com/pion/transport/v2 v2.2.1 // indirect\n\tgithub.com/pion/transport/v3 v3.0.1 // indirect\n\tgithub.com/pires/go-proxyproto v0.8.1 // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/pkg/term v1.2.0-beta.2 // indirect\n\tgithub.com/planetscale/vtprotobuf v0.6.1-0.20241121165744-79df5c4772f2 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect\n\tgithub.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect\n\tgithub.com/prometheus/client_golang v1.22.0 // indirect\n\tgithub.com/prometheus/client_model v0.6.2 // indirect\n\tgithub.com/prometheus/common v0.64.0 // indirect\n\tgithub.com/prometheus/procfs v0.16.1 // indirect\n\tgithub.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect\n\tgithub.com/quic-go/quic-go v0.48.2 // indirect\n\tgithub.com/rivo/uniseg v0.4.7 // indirect\n\tgithub.com/russross/blackfriday/v2 v2.1.0 // indirect\n\tgithub.com/ryanuber/go-glob v1.0.0 // indirect\n\tgithub.com/sagikazarmark/locafero v0.9.0 // indirect\n\tgithub.com/secure-systems-lab/go-securesystemslib v0.9.0 // indirect\n\tgithub.com/segmentio/asm v1.2.0 // indirect\n\tgithub.com/shirou/gopsutil/v4 v4.25.4 // indirect\n\tgithub.com/shopspring/decimal v1.4.0 // indirect\n\tgithub.com/sourcegraph/conc v0.3.0 // indirect\n\tgithub.com/spf13/afero v1.14.0 // indirect\n\tgithub.com/spf13/cast v1.8.0 // indirect\n\tgithub.com/spf13/jwalterweatherman v1.1.0 // indirect\n\tgithub.com/spf13/viper v1.20.1 // indirect\n\tgithub.com/spiffe/go-spiffe/v2 v2.5.0 // indirect\n\tgithub.com/stoewer/go-strcase v1.3.0 // indirect\n\tgithub.com/subosito/gotenv v1.6.0 // indirect\n\tgithub.com/templexxx/cpu v0.1.1 // indirect\n\tgithub.com/templexxx/xorsimd v0.4.3 // indirect\n\tgithub.com/tinylib/msgp v1.3.0 // indirect\n\tgithub.com/tjfoc/gmsm v1.4.1 // indirect\n\tgithub.com/tklauser/go-sysconf v0.3.15 // indirect\n\tgithub.com/tklauser/numcpus v0.10.0 // indirect\n\tgithub.com/trivago/tgo v1.0.7 // indirect\n\tgithub.com/uber/jaeger-client-go v2.30.0+incompatible // indirect\n\tgithub.com/uber/jaeger-lib v2.4.1+incompatible // indirect\n\tgithub.com/ulikunitz/xz v0.5.12 // indirect\n\tgithub.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect\n\tgithub.com/xtaci/kcp-go/v5 v5.6.13 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgithub.com/yusufpapurcu/wmi v1.2.4 // indirect\n\tgithub.com/zeebo/errs v1.4.0 // indirect\n\tgo.opentelemetry.io/auto/sdk v1.1.0 // indirect\n\tgo.opentelemetry.io/collector/component v1.33.0 // indirect\n\tgo.opentelemetry.io/collector/featuregate v1.33.0 // indirect\n\tgo.opentelemetry.io/collector/internal/telemetry v0.127.0 // indirect\n\tgo.opentelemetry.io/collector/pdata v1.33.0 // indirect\n\tgo.opentelemetry.io/collector/pdata/pprofile v0.127.0 // indirect\n\tgo.opentelemetry.io/collector/semconv v0.127.0 // indirect\n\tgo.opentelemetry.io/contrib/bridges/otelzap v0.11.0 // indirect\n\tgo.opentelemetry.io/contrib/detectors/gcp v1.36.0 // indirect\n\tgo.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0 // indirect\n\tgo.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect\n\tgo.opentelemetry.io/otel v1.36.0 // indirect\n\tgo.opentelemetry.io/otel/log v0.12.2 // indirect\n\tgo.opentelemetry.io/otel/metric v1.36.0 // indirect\n\tgo.opentelemetry.io/otel/sdk v1.36.0 // indirect\n\tgo.opentelemetry.io/otel/sdk/metric v1.36.0 // indirect\n\tgo.opentelemetry.io/otel/trace v1.36.0 // indirect\n\tgo.uber.org/atomic v1.11.0 // indirect\n\tgo.uber.org/mock v0.5.0 // indirect\n\tgo.uber.org/multierr v1.11.0 // indirect\n\tgo.uber.org/zap v1.27.0 // indirect\n\tgolang.org/x/oauth2 v0.30.0 // indirect\n\tgolang.org/x/sync v0.16.0 // indirect\n\tgolang.org/x/sys v0.34.0 // indirect\n\tgolang.org/x/text v0.27.0 // indirect\n\tgolang.org/x/time v0.11.0 // indirect\n\tgolang.org/x/tools v0.34.0 // indirect\n\tgolang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect\n\tgoogle.golang.org/api v0.235.0 // indirect\n\tgoogle.golang.org/genproto v0.0.0-20250528174236-200df99c418a // indirect\n\tgoogle.golang.org/genproto/googleapis/api v0.0.0-20250528174236-200df99c418a // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a // indirect\n\tgoogle.golang.org/grpc v1.72.2 // indirect\n\tgoogle.golang.org/protobuf v1.36.6 // indirect\n\tgopkg.in/DataDog/dd-trace-go.v1 v1.73.1 // indirect\n\tgopkg.in/ini.v1 v1.67.0 // indirect\n\tk8s.io/apimachinery v0.32.2 // indirect\n\tk8s.io/utils v0.0.0-20241104100929-3ea5e8cea738 // indirect\n\tsigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect\n\tsigs.k8s.io/yaml v1.4.0 // indirect\n)\n\n\n=== website/package.json ===\n{\n    \"name\": \"anyquery-website\",\n    \"type\": \"module\",\n    \"version\": \"0.0.1\",\n    \"scripts\": {\n        \"dev\": \"astro dev\",\n        \"start\": \"astro dev\",\n        \"build\": \"astro build\",\n        \"preview\": \"astro preview\",\n        \"astro\": \"astro\"\n    },\n    \"dependencies\": {\n        \"@astrojs/alpinejs\": \"^0.4.8\",\n        \"@astrojs/check\": \"^0.9.4\",\n        \"@astrojs/sitemap\": \"^3.4.2\",\n        \"@astrojs/starlight\": \"^0.35.2\",\n        \"@astrojs/starlight-tailwind\": \"^4.0.1\",\n        \"@astrojs/tailwind\": \"^6.0.2\",\n        \"@tailwindcss/vite\": \"^4.1.8\",\n        \"@types/alpinejs\": \"^3.13.10\",\n        \"alpinejs\": \"^3.14.1\",\n        \"astro\": \"^5.12.8\",\n        \"astro-navbar\": \"^2.3.3\",\n        \"dompurify\": \"^3.1.6\",\n        \"highlight.js\": \"^11.10.0\",\n        \"isomorphic-dompurify\": \"^2.14.0\",\n        \"jsdom\": \"^24.1.1\",\n        \"marked\": \"^13.0.2\",\n        \"marked-alert\": \"^2.0.2\",\n        \"marked-gfm-heading-id\": \"^4.0.0\",\n        \"marked-highlight\": \"^2.1.3\",\n        \"tailwindcss\": \"^4.1.8\",\n        \"typescript\": \"^5.5.4\"\n    },\n    \"devDependencies\": {\n        \"@types/dompurify\": \"^3.0.5\",\n        \"@types/jsdom\": \"^21.1.7\"\n    }\n}\n"
+}

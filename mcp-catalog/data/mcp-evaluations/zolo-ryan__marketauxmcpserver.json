@@ -1,0 +1,90 @@
+{
+  "name": "zolo-ryan__marketauxmcpserver",
+  "display_name": "MarketAuxMcpServer",
+  "description": "MCP server from Zolo-Ryan/MarketAuxMcpServer",
+  "author": {
+    "name": "Zolo-Ryan"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "MARKETAUX_API_KEY": "${user_config.marketaux_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "marketaux_api_key": {
+      "type": "string",
+      "title": "Marketaux API Key",
+      "description": "Your API token obtained from the Marketaux dashboard.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Marketaux MCP Server\nA MCP Server Implementation that integrates the [Marketaux api](https://www.marketaux.com/documentation) providing search based on entity, countries, industries, symbols etc.\n\n### Tools\n\n- market_aux_news_search\n    - Execute the search using market aux search all api\n    - inputs:\n      - symbols\n      - entity_types\n      - industries\n      - countries\n      - language\n      - published_before\n      - published_after\n      - published_on\n\n\n### Configuration\n#### Getting an API key\n\n1. Sign up for a [Free account on Marketaux](https://www.marketaux.com/register)\n2. Verify your email account and go to dashboard\n3. Get your api token from there\n\n#### Setting up MCP server\n\nAdd this in your `claude_desktop_config.json` file\n\n```json\n{\n    \"mcpServers\": {\n        \"newsmcp\": {\n            \"command\": \"node\",\n            \"args\": [\n                \"C:\\\\Path\\\\To\\\\Your\\\\project\\\\NewsMCP\\\\build\\\\index.js\"\n            ],\n            \"env\": {\n                \"MARKETAUX_API_KEY\": \"Your-API-TOKEN\"\n            }\n        }\n    }\n}\n```\n\n### Contributing\n\nContributions are welcomed! Please free to submit a PR.\n\n> Only the Free Tier endpoint is implemented.\n\n> Added to [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers/pull/925)\n### Disclaimer\n\nThis is not officially associated with Marketaux api. It is a third party implementation of the api with a MCP Server.\n",
+  "category": "Finance",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "newsmcp": {
+        "command": "node",
+        "args": ["C:\\Path\\To\\Your\\project\\NewsMCP\\build\\index.js"],
+        "env": {
+          "MARKETAUX_API_KEY": "Your-API-TOKEN"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Zolo-Ryan",
+    "repo": "MarketAuxMcpServer",
+    "url": "https://github.com/Zolo-Ryan/MarketAuxMcpServer",
+    "name": "MarketAuxMcpServer",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a14f20d789780bb975658a31628711456d58234f"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:18.067Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"newsmcp\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"weather\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"dev\": \"node ./build/index.js\",\n    \"start\": \"node ./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.0\",\n    \"dotenv\": \"^16.5.0\",\n    \"zod\": \"^3.25.28\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.15.21\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

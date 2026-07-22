@@ -1,0 +1,135 @@
+{
+  "name": "freema__mcp-gsheets",
+  "display_name": "mcp-gsheets",
+  "description": "MCP server for Google Sheets - Read, write and manipulate spreadsheets through Claude Desktop",
+  "author": {
+    "name": "freema"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {
+      "GOOGLE_PROJECT_ID": "${user_config.google_project_id}",
+      "GOOGLE_APPLICATION_CREDENTIALS": "${user_config.google_application_credentials}",
+      "GOOGLE_SERVICE_ACCOUNT_KEY": "${user_config.google_service_account_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "google_project_id": {
+      "type": "string",
+      "title": "Google Cloud Project ID",
+      "description": "Your Google Cloud Project ID. This is required unless the 'Google Service Account Key (JSON String)' includes a 'project_id'.",
+      "sensitive": false,
+      "required": false
+    },
+    "google_application_credentials": {
+      "type": "file",
+      "title": "Google Service Account Key File",
+      "description": "Absolute path to your Google Service Account JSON key file. Provide this OR 'Google Service Account Key (JSON String)', but not both.",
+      "sensitive": true,
+      "required": false
+    },
+    "google_service_account_key": {
+      "type": "string",
+      "title": "Google Service Account Key (JSON String)",
+      "description": "Your Google Service Account credentials as a JSON string. Provide this OR 'Google Service Account Key File', but not both. Ensure the JSON is properly escaped (e.g., newlines as \\\\n, quotes as \\\\\").",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# MCP Google Sheets Server\n\n<a href=\"https://glama.ai/mcp/servers/@freema/mcp-gsheets\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@freema/mcp-gsheets/badge\" />\n</a>\n\n[![npm version](https://badge.fury.io/js/mcp-gsheets.svg)](https://www.npmjs.com/package/mcp-gsheets)\n![CI](https://github.com/freema/mcp-gsheets/workflows/CI/badge.svg)\n![Coverage](https://codecov.io/gh/freema/mcp-gsheets/branch/main/graph/badge.svg)\n![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)\n![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-007ACC?logo=typescript&logoColor=white)\n![Node](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)\n![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?logo=prettier&logoColor=white)\n\nA Model Context Protocol (MCP) server for Google Sheets API integration. Enables reading, writing, and managing Google Sheets documents directly from your MCP client (e.g., Claude Desktop).\n\n## 🚀 Quick Start\n\n### 1. Prerequisites\n\n- Node.js v18 or higher\n- Google Cloud Project with Sheets API enabled\n- Service Account with JSON key file\n\n### 2. Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/freema/mcp-gsheets.git\n# Or using SSH\n# git clone git@github.com:freema/mcp-gsheets.git\ncd mcp-gsheets\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n\n### 3. Google Cloud Setup\n\n1. Go to [Google Cloud Console](https://console.cloud.google.com)\n2. Create a new project or select existing\n3. Enable Google Sheets API:\n   - Navigate to \"APIs & Services\" → \"Library\"\n   - Search for \"Google Sheets API\" and click \"Enable\"\n4. Create Service Account:\n   - Go to \"APIs & Services\" → \"Credentials\"\n   - Click \"Create Credentials\" → \"Service Account\"\n   - Download the JSON key file\n5. Share your spreadsheets:\n   - Open your Google Sheet\n   - Click Share and add the service account email (from JSON file)\n   - Grant \"Editor\" permissions\n\n### 4. Configure MCP Client\n\n#### Easy Setup (Recommended)\n\nRun the interactive setup script:\n\n```bash\nnpm run setup\n```\n\nThis will:\n- Guide you through the configuration\n- Automatically detect your Node.js installation (including nvm)\n- Find your Claude Desktop config\n- Create the proper JSON configuration\n- Optionally create a .env file for development\n\n#### Manual Setup\n\nIf you prefer manual configuration, add to your Claude Desktop config:\n- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n- Linux: `~/.config/claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-gsheets\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/mcp-gsheets/dist/index.js\"],\n      \"env\": {\n        \"GOOGLE_PROJECT_ID\": \"your-project-id\",\n        \"GOOGLE_APPLICATION_CREDENTIALS\": \"/absolute/path/to/service-account-key.json\"\n      }\n    }\n  }\n}\n```\n\n#### Alternative: JSON String Authentication\n\nInstead of using a file path, you can provide the service account credentials directly as a JSON string. This is useful for containerized environments, CI/CD pipelines, or when you want to avoid managing credential files.\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-gsheets\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/mcp-gsheets/dist/index.js\"],\n      \"env\": {\n        \"GOOGLE_PROJECT_ID\": \"your-project-id\",\n        \"GOOGLE_SERVICE_ACCOUNT_KEY\": \"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"your-project\\\",\\\"private_key_id\\\":\\\"...\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\n...\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"...@....iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"...\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"...\\\"}\"\n      }\n    }\n  }\n}\n```\n\n**Note**: When using `GOOGLE_SERVICE_ACCOUNT_KEY`:\n- The entire JSON must be on a single line\n- All quotes must be escaped with backslashes\n- Newlines in the private key must be represented as `\\\\n`\n- If the JSON includes a `project_id`, you can omit `GOOGLE_PROJECT_ID`\n\nRestart Claude Desktop after adding the configuration.\n\n## 📦 Build & Development\n\n### Development Commands\n\n```bash\n# Development mode with hot reload\nnpm run dev\n\n# Build for production\nnpm run build\n\n# Type checking\nnpm run typecheck\n\n# Clean build artifacts\nnpm run clean\n\n# Run MCP inspector for debugging\nnpm run inspector\n\n# Run MCP inspector in development mode\nnpm run inspector:dev\n```\n\n### Task Runner (Alternative)\n\nIf you have [Task](https://taskfile.dev) installed:\n\n```bash\n# Install dependencies\ntask install\n\n# Build the project\ntask build\n\n# Run in development mode\ntask dev\n\n# Run linter\ntask lint\n\n# Format code\ntask fmt\n\n# Run all checks\ntask check\n```\n\n### Development Setup\n\n1. Create `.env` file for testing:\n```bash\ncp .env.example .env\n# Edit .env with your credentials:\n# GOOGLE_PROJECT_ID=your-project-id\n# GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json\n# TEST_SPREADSHEET_ID=your-test-spreadsheet-id\n```\n\n2. Run in development mode:\n```bash\nnpm run dev  # Watch mode with auto-reload\n```\n\n## 📋 Available Tools\n\n### Reading Data\n- `sheets_get_values` - Read from a range\n- `sheets_batch_get_values` - Read from multiple ranges\n- `sheets_get_metadata` - Get spreadsheet info\n- `sheets_check_access` - Check access permissions\n\n### Writing Data\n- `sheets_update_values` - Write to a range\n- `sheets_batch_update_values` - Write to multiple ranges\n- `sheets_append_values` - Append rows to a table\n- `sheets_clear_values` - Clear cell contents\n\n### Sheet Management\n- `sheets_insert_sheet` - Add new sheet\n- `sheets_delete_sheet` - Remove sheet\n- `sheets_duplicate_sheet` - Copy sheet\n- `sheets_copy_to` - Copy to another spreadsheet\n- `sheets_update_sheet_properties` - Update sheet settings\n\n### Batch Operations\n- `sheets_batch_delete_sheets` - Delete multiple sheets at once\n- `sheets_batch_format_cells` - Format multiple cell ranges at once\n\n### Cell Formatting\n- `sheets_format_cells` - Format cells (colors, fonts, alignment, number formats)\n- `sheets_update_borders` - Add or modify cell borders\n- `sheets_merge_cells` - Merge cells together\n- `sheets_unmerge_cells` - Unmerge previously merged cells\n- `sheets_add_conditional_formatting` - Add conditional formatting rules\n\n### Charts\n- `sheets_create_chart` - Create various types of charts\n- `sheets_update_chart` - Modify existing charts\n- `sheets_delete_chart` - Remove charts\n\n## 🔧 Code Quality\n\n### Linting\n\n```bash\n# Run ESLint\nnpm run lint\n\n# Fix auto-fixable issues\nnpm run lint:fix\n```\n\n### Formatting\n\n```bash\n# Check formatting with Prettier\nnpm run format:check\n\n# Format code\nnpm run format\n```\n\n### Type Checking\n\n```bash\n# Run TypeScript type checking\nnpm run typecheck\n```\n\n## ❗ Troubleshooting\n\n### Common Issues\n\n**\"Authentication failed\"**\n- If using file-based auth: Verify JSON key path is absolute and correct\n- If using JSON string auth: Ensure JSON is properly escaped and valid\n- Check GOOGLE_PROJECT_ID matches your project (or is included in JSON)\n- Ensure Sheets API is enabled\n\n**\"Permission denied\"**\n- Share spreadsheet with service account email\n- Service account needs \"Editor\" role\n- Check email in JSON file (client_email field)\n\n**\"Spreadsheet not found\"**\n- Verify spreadsheet ID from URL\n- Format: `https://docs.google.com/spreadsheets/d/[SPREADSHEET_ID]/edit`\n\n**MCP Connection Issues**\n- Ensure you're using the built version (`dist/index.js`)\n- Check that Node.js path is correct in Claude Desktop config\n- Look for errors in Claude Desktop logs\n- Use `npm run inspector` to debug\n\n## 🔍 Finding IDs\n\n### Spreadsheet ID\nFrom the URL:\n```\nhttps://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit\n                                        ↑ This is the spreadsheet ID\n```\n\n### Sheet ID\nUse `sheets_get_metadata` to list all sheets with their IDs.\n\n## 📝 Tips\n\n1. Always test with a copy of your data\n2. Use batch operations for better performance\n3. Set appropriate permissions (read-only vs edit)\n4. Check rate limits for large operations\n5. Use `sheets_check_access` to verify permissions before operations\n\n## 📋 Changelog\n\nSee [CHANGELOG.md](CHANGELOG.md) for a list of changes in each version.\n\n## 🤝 Contributing\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Run tests and linting (`npm run check`)\n4. Commit your changes (`git commit -m 'Add some amazing feature'`)\n5. Push to the branch (`git push origin feature/amazing-feature`)\n6. Open a Pull Request\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.",
+  "category": "Data",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-gsheets": {
+        "command": "node",
+        "args": ["/absolute/path/to/mcp-gsheets/dist/index.js"],
+        "env": {
+          "GOOGLE_PROJECT_ID": "your-project-id",
+          "GOOGLE_APPLICATION_CREDENTIALS": "/absolute/path/to/service-account-key.json"
+        }
+      },
+      "mcp-gsheets-json-auth": {
+        "command": "node",
+        "args": ["/absolute/path/to/mcp-gsheets/dist/index.js"],
+        "env": {
+          "GOOGLE_PROJECT_ID": "your-project-id",
+          "GOOGLE_SERVICE_ACCOUNT_KEY": "{\"type\":\"service_account\",\"project_id\":\"your-project\",\"private_key_id\":\"...\",\"private_key\":\"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n\",\"client_email\":\"...@....iam.gserviceaccount.com\",\"client_id\":\"...\",\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"token_uri\":\"https://oauth2.googleapis.com/token\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\",\"client_x509_cert_url\":\"...\"}"
+        }
+      },
+      "mcp-gsheets-dev": {
+        "command": "npm",
+        "args": ["run", "dev"],
+        "env": {}
+      },
+      "mcp-gsheets-inspector": {
+        "command": "npm",
+        "args": ["run", "inspector"],
+        "env": {}
+      },
+      "mcp-gsheets-inspector-dev": {
+        "command": "npm",
+        "args": ["run", "inspector:dev"],
+        "env": {}
+      },
+      "mcp-gsheets-task-dev": {
+        "command": "task",
+        "args": ["dev"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "freema",
+    "repo": "mcp-gsheets",
+    "url": "https://github.com/freema/mcp-gsheets",
+    "name": "freema__mcp-gsheets",
+    "path": null,
+    "stars": 24,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "af67354d7fd96791233dbe0c49f7d553dab67b72"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:28.296Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "googleapis",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-gsheets\",\n  \"version\": \"1.4.3\",\n  \"description\": \"Model Context Protocol (MCP) server for Google Sheets API integration\",\n  \"author\": \"freema\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"bin\": {\n    \"mcp-gsheets\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"dev\": \"tsx watch src/index.ts\",\n    \"build\": \"tsup\",\n    \"start\": \"node dist/index.js\",\n    \"setup\": \"node scripts/setup-mcp-config.js\",\n    \"clean\": \"rm -rf dist\",\n    \"typecheck\": \"tsc --noEmit\",\n    \"lint\": \"eslint src --ext .ts\",\n    \"lint:fix\": \"eslint src --ext .ts --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\"\",\n    \"format:check\": \"prettier --check \\\"src/**/*.ts\\\"\",\n    \"check\": \"npm run typecheck && npm run lint && npm run format:check\",\n    \"check:all\": \"npm run check && npm run test:run && npm run build\",\n    \"prepublishOnly\": \"npm run clean && npm run build\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector node dist/index.js\",\n    \"inspector:dev\": \"NODE_ENV=development npx @modelcontextprotocol/inspector npx tsx src/index.ts\",\n    \"test:sheets\": \"node scripts/test-sheets-tools.js\",\n    \"test\": \"vitest\",\n    \"test:run\": \"vitest run\",\n    \"test:coverage\": \"vitest run --coverage\",\n    \"test:watch\": \"vitest watch\",\n    \"test:ui\": \"vitest --ui\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"google-sheets\",\n    \"spreadsheet\",\n    \"api\",\n    \"claude\",\n    \"ai\"\n  ],\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.17.1\",\n    \"googleapis\": \"^140.0.0\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.1.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^6.21.0\",\n    \"@typescript-eslint/parser\": \"^6.21.0\",\n    \"@vitest/coverage-v8\": \"^3.1.4\",\n    \"@vitest/ui\": \"^3.1.4\",\n    \"dotenv\": \"^17.2.1\",\n    \"eslint\": \"^8.57.1\",\n    \"eslint-config-prettier\": \"^10.1.5\",\n    \"eslint-plugin-prettier\": \"^5.4.0\",\n    \"prettier\": \"^3.5.3\",\n    \"tsup\": \"^8.0.0\",\n    \"tsx\": \"^4.7.0\",\n    \"typescript\": \"^5.3.3\",\n    \"vitest\": \"^3.1.4\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\",\n    \"LICENSE\",\n    \"scripts\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/freema/mcp-gsheets.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/freema/mcp-gsheets/issues\"\n  },\n  \"homepage\": \"https://github.com/freema/mcp-gsheets#readme\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  }\n}\n"
+}

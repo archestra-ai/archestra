@@ -1,0 +1,134 @@
+{
+  "name": "gofireflyio__firefly-mcp",
+  "display_name": "firefly-mcp",
+  "description": "Firefly MCP",
+  "author": {
+    "name": "gofireflyio"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@fireflyai/firefly-mcp"],
+    "env": {
+      "FIREFLY_ACCESS_KEY": "${user_config.firefly_access_key}",
+      "FIREFLY_SECRET_KEY": "${user_config.firefly_secret_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "firefly_access_key": {
+      "type": "string",
+      "title": "Firefly Access Key",
+      "description": "Your Firefly access key for secure communication with the Firefly platform.",
+      "sensitive": true,
+      "required": true
+    },
+    "firefly_secret_key": {
+      "type": "string",
+      "title": "Firefly Secret Key",
+      "description": "Your Firefly secret key for secure communication with the Firefly platform.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "[![Firefly](https://infralight-templates-public.s3.amazonaws.com/company-logos/firefly_logo_white.png)](https://firefly.ai)\n\n# Firefly MCP Server\n\nThe Firefly MCP (Model Context Protocol) server is a TypeScript-based server that enables seamless integration with the Firefly platform. It allows you to discover, manage, and codify resources across your Cloud and SaaS accounts connected to Firefly.\n\n## Features\n\n- 🔍 Resource Discovery: Find any resource in your Cloud and SaaS accounts\n- 📝 Resource Codification: Convert discovered resources into Infrastructure as Code\n- 🔐 Secure Authentication: Uses FIREFLY_ACCESS_KEY and FIREFLY_SECRET_KEY for secure communication\n- 🚀 Easy Integration: Works seamlessly with Claude and Cursor\n\n## Prerequisites\n\n- Node.js (v14 or higher)\n- npm or yarn\n- Firefly account with generated access keys\n\n## Installation\n\nYou can run the Firefly MCP server directly using NPX:\n\n```bash\nnpx @fireflyai/firefly-mcp\n```\n\n### Environment Variables\n\nYou can provide your Firefly credentials in two ways:\n\n1. Using environment variables:\n```bash\nFIREFLY_ACCESS_KEY=your_access_key FIREFLY_SECRET_KEY=your_secret_key npx @fireflyai/firefly-mcp\n```\n\n2. Using arguments:\n```bash\nnpx @fireflyai/firefly-mcp --access-key your_access_key --secret-key your_secret_key\n```\n\n## Usage\n\n### Stdio\n\nUpdate the `mcp.json` file with the following:  \n```bash\n{\n  \"mcpServers\": {\n    \"firefly\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@fireflyai/firefly-mcp\"],\n      \"env\": {\n        \"FIREFLY_ACCESS_KEY\": \"your_access_key\",\n        \"FIREFLY_SECRET_KEY\": \"your_secret_key\"\n      }\n    }\n  }\n}\n```\n\nRun the MCP server using one of the methods above with the following command:\n```bash\nnpx @fireflyai/firefly-mcp --sse --port 6001\n```\n\nUpdate the `mcp.json` file with the following:\n```bash\n{\n  \"mcpServers\": {\n    \"firefly\": {\n      \"url\": \"http://localhost:6001/sse\"\n    }\n  }\n}\n```\n\n### Using with Cursor\n\n1. Start the MCP server using one of the methods above\n2. Use the Cursor extension to connect to the MCP server - see [Cursor Model Context Protocol documentation](https://docs.cursor.com/context/model-context-protocol)\n3. Use natural language to query your resources\n\n#### Example:\n\n##### Prompt \n```\nFind all \"ubuntu-prod\" EC2 instance in 123456789012 AWS account and codify it into Terraform\n```\n\n##### Response\n```\nresource \"aws_instance\" \"ubuntu-prod\" {\n  ami           = \"ami-0c55b159cbfafe1f0\"\n  instance_type = \"t3.micro\"\n}\n```\n\n## Demo\n\nhttps://github.com/user-attachments/assets/0986dff5-d433-4d82-9564-876b8215b61e\n\n## Contributing\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'feat: Add amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## Support\n\nFor support, please visit [Firefly's documentation](https://docs.firefly.ai) or create an issue in this repository.\n",
+  "category": "Cloud",
+  "quality_score": 71,
+  "archestra_config": {
+    "client_config_permutations": {
+      "fireflyai-firefly-mcp": {
+        "command": "npx",
+        "args": ["-y", "@fireflyai/firefly-mcp"],
+        "env": {}
+      },
+      "fireflyai-firefly-mcp-env-vars": {
+        "command": "npx",
+        "args": ["-y", "@fireflyai/firefly-mcp"],
+        "env": {
+          "FIREFLY_ACCESS_KEY": "your_access_key",
+          "FIREFLY_SECRET_KEY": "your_secret_key"
+        }
+      },
+      "fireflyai-firefly-mcp-with-args": {
+        "command": "npx",
+        "args": ["-y", "@fireflyai/firefly-mcp", "--access-key", "your_access_key", "--secret-key", "your_secret_key"],
+        "env": {}
+      },
+      "fireflyai-firefly-mcp-sse-port": {
+        "command": "npx",
+        "args": ["-y", "@fireflyai/firefly-mcp", "--sse", "--port", "6001"],
+        "env": {}
+      },
+      "fireflyai-firefly-mcp-stdio": {
+        "command": "npx",
+        "args": ["-y", "@fireflyai/firefly-mcp"],
+        "env": {
+          "FIREFLY_ACCESS_KEY": "your_access_key",
+          "FIREFLY_SECRET_KEY": "your_secret_key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gofireflyio",
+    "repo": "firefly-mcp",
+    "url": "https://github.com/gofireflyio/firefly-mcp",
+    "name": "gofireflyio__firefly-mcp",
+    "path": null,
+    "stars": 12,
+    "contributors": 6,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "29b2bcc14ad742517d93a0ec15c962f10f27afc9"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:37.072Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    },
+    {
+      "name": "loglevel",
+      "importance": 5
+    },
+    {
+      "name": "minimist",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"@fireflyai/firefly-mcp\",\n    \"version\": \"1.0.0\",\n    \"description\": \"Firefly MCP Server\",\n    \"main\": \"dist/index.js\",\n    \"types\": \"dist/index.d.ts\",\n    \"bin\": {\n        \"firefly-mcp\": \"dist/index.js\"\n    },\n    \"scripts\": {\n        \"build\": \"tsc\",\n        \"prepublishOnly\": \"npm run build\",\n        \"start\": \"node dist/index.js\",\n        \"dev\": \"ts-node src/index.ts\",\n        \"test\": \"jest --config jest.config.js\"\n    },\n    \"files\": [\n        \"dist\",\n        \"README.md\",\n        \"LICENSE\"\n    ],\n    \"keywords\": [\n        \"firefly\",\n        \"mcp\",\n        \"iac\",\n        \"terraform\",\n        \"cloudformation\",\n        \"pulumi\"\n    ],\n    \"author\": \"Firefly.io\",\n    \"license\": \"MIT\",\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"git+https://github.com/gofireflyio/firefly-mcp.git\"\n    },\n    \"bugs\": {\n        \"url\": \"https://github.com/gofireflyio/firefly-mcp/issues\"\n    },\n    \"homepage\": \"https://firefly.ai\",\n    \"devDependencies\": {\n        \"@types/express\": \"^5.0.1\",\n        \"@types/jest\": \"^29.5.0\",\n        \"@types/minimist\": \"^1.2.5\",\n        \"@types/node\": \"^18.15.11\",\n        \"jest\": \"^29.5.0\",\n        \"ts-jest\": \"^29.1.0\",\n        \"ts-node\": \"^10.9.1\",\n        \"typescript\": \"^5.0.4\"\n    },\n    \"dependencies\": {\n        \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n        \"commander\": \"^10.0.1\",\n        \"dotenv\": \"^16.0.3\",\n        \"express\": \"^5.0.1\",\n        \"loglevel\": \"^1.9.2\",\n        \"minimist\": \"^1.2.8\"\n    },\n    \"engines\": {\n        \"node\": \">=14.0.0\"\n    }\n}\n"
+}

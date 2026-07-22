@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner");
 
-import { getApiErrorMessage, throwOnApiError } from "./api";
+import { getApiErrorMessage, handleApiError, throwOnApiError } from "./api";
 
 describe("throwOnApiError", () => {
   beforeEach(() => {
@@ -51,6 +51,41 @@ describe("throwOnApiError", () => {
         { allowNotFound: true, toastOnError: false },
       ),
     ).toThrow();
+  });
+});
+
+describe("handleApiError toast dedupe", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("keys the toast by its message so repeated identical errors collapse", () => {
+    const error = {
+      error: {
+        message: "You don't have permission to get schedule triggers.",
+        type: "api_authorization_error",
+      },
+    };
+
+    handleApiError(error);
+    handleApiError(error);
+
+    expect(toast.error).toHaveBeenCalledTimes(2);
+    const [firstMessage, firstOptions] = vi.mocked(toast.error).mock.calls[0];
+    const [secondMessage, secondOptions] = vi.mocked(toast.error).mock.calls[1];
+    expect(firstOptions?.id).toBe(firstMessage);
+    expect(secondOptions?.id).toBe(secondMessage);
+    expect(firstOptions?.id).toBe(secondOptions?.id);
+  });
+
+  it("keeps distinct messages as distinct toasts", () => {
+    handleApiError({ error: { message: "first failure" } });
+    handleApiError({ error: { message: "second failure" } });
+
+    const ids = vi
+      .mocked(toast.error)
+      .mock.calls.map(([, options]) => options?.id);
+    expect(new Set(ids).size).toBe(2);
   });
 });
 

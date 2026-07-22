@@ -71,7 +71,10 @@ overrides:
   fast-xml-parser: 5.7.2
   fast-xml-builder: '>=1.1.7'
   samlify: '>=2.13.0'
-  fast-uri: '>=3.1.2'
+  # CVE-2026-16221 / CVE-2026-13676 (HIGH, interpretation conflict) fixed in 3.1.4.
+  # Pinned exact (not a `>=` floor) because fast-uri is temporarily excluded from
+  # minimumReleaseAge below, so a floor could otherwise pull an unvetted release.
+  fast-uri: 3.1.4
   ajv: 8.18.0
   # GHSA-gcfj-64vw-6mp9 (HIGH, prototype pollution) affects >=1.15.2, fixed in 1.18.0.
   axios: '>=1.18.0'
@@ -99,8 +102,13 @@ overrides:
   # CVE-2026-54285 (GHSA-8988-4f7v-96qf, unbounded memory allocation when
   # W3CBaggagePropagator.extract parses inbound baggage headers) fixed in 2.8.0.
   '@opentelemetry/core': '>=2.8.0'
+  # CVE-2026-59892 (HIGH, uncaught exception) fixed in 2.9.0.
+  '@opentelemetry/propagator-jaeger': '>=2.9.0'
   # CVE-2026-48068 / CVE-2026-48069 (uncaught exception) fixed in 1.14.4
   '@grpc/grpc-js': '>=1.14.4'
+  # GHSA-f88m-g3jw-g9cj (HIGH, dependency on vulnerable third-party component)
+  # fixed in 0.35.0. Transitive-only (optional dep of next's image optimizer).
+  sharp: '>=0.35.0'
 packageExtensions:
   '@hookform/resolvers@*':
     dependencies:
@@ -137,6 +145,10 @@ minimumReleaseAgeExclude:
   # and clears the 7-day window on 2026-06-22. Remove on/after that date — the
   # lockfile stays pinned at 7.28.0 regardless.
   - undici
+  # TEMPORARY: fast-uri 3.1.4 (fix CVE-2026-16221 / CVE-2026-13676, HIGH) was
+  # published 2026-07-19 and clears the 7-day window on 2026-07-26. Remove
+  # on/after that date — the lockfile stays pinned at 3.1.4 regardless.
+  - fast-uri
 
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare

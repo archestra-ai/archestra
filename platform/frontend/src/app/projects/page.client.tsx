@@ -5,15 +5,7 @@ import {
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
-import {
-  FolderKanban,
-  MoreHorizontal,
-  Pencil,
-  Pin,
-  PinOff,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { FolderKanban, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
@@ -22,6 +14,11 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
+import {
+  type ListViewMode,
+  ListViewToggle,
+  useListViewMode,
+} from "@/components/list-view-toggle";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { ProjectScopeFilter } from "@/components/project-scope-filter";
@@ -33,12 +30,6 @@ import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
@@ -58,7 +49,9 @@ import {
   useProject,
   useProjects,
 } from "@/lib/projects/projects.query";
+import { ProjectActionsMenu } from "./project-actions-menu";
 import { ProjectDeleteConfirmDialog } from "./project-delete-confirm-dialog";
+import { ProjectsTable } from "./projects-table";
 
 export default function ProjectsPageClient() {
   return (
@@ -104,6 +97,7 @@ function ProjectsList() {
     refetch: refetchApiKeys,
   } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
+  const [viewMode, setViewMode] = useListViewMode("archestra-projects-view");
   const editId = searchParams.get("edit");
   const { data: editingProjectFromUrl } = useProject(editId ?? undefined);
   const {
@@ -210,6 +204,9 @@ function ProjectsList() {
         <div className="flex flex-wrap items-center gap-2">
           <SearchInput placeholder="Search projects" paramName="search" />
           <ProjectScopeFilter />
+          <span className="ml-auto">
+            <ListViewToggle value={viewMode} onChange={setViewMode} />
+          </span>
         </div>
         {projects.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
@@ -228,6 +225,7 @@ function ProjectsList() {
               <ProjectSection
                 title="Pinned"
                 projects={pinnedProjects}
+                viewMode={viewMode}
                 onTogglePin={togglePin}
                 onEdit={openEditDialog}
                 onDelete={setDeletingProject}
@@ -236,6 +234,7 @@ function ProjectsList() {
             <ProjectSection
               title={pinnedProjects.length > 0 ? "All projects" : undefined}
               projects={unpinnedProjects}
+              viewMode={viewMode}
               onTogglePin={togglePin}
               onEdit={openEditDialog}
               onDelete={setDeletingProject}
@@ -254,12 +253,14 @@ type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
 function ProjectSection({
   title,
   projects,
+  viewMode,
   onTogglePin,
   onEdit,
   onDelete,
 }: {
   title?: string;
   projects: ProjectListItem[];
+  viewMode: ListViewMode;
   onTogglePin: (project: ProjectListItem) => void;
   onEdit: (project: ProjectListItem) => void;
   onDelete: (project: ProjectListItem) => void;
@@ -273,17 +274,26 @@ function ProjectSection({
           {title}
         </h2>
       ) : null}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {projects.map((project) => (
-          <ProjectCard
-            key={project.id}
-            project={project}
-            onTogglePin={onTogglePin}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
-        ))}
-      </div>
+      {viewMode === "table" ? (
+        <ProjectsTable
+          projects={projects}
+          onTogglePin={onTogglePin}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {projects.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              onTogglePin={onTogglePin}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -331,7 +341,7 @@ function ProjectCard({
                 : "Other user"}
             </Badge>
           )}
-          <ProjectCardActions
+          <ProjectActionsMenu
             pinned={!!project.pinnedAt}
             canPin={project.viewerRole !== "admin"}
             canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}
@@ -347,56 +357,6 @@ function ProjectCard({
         {project.description}
       </p>
     </div>
-  );
-}
-
-function ProjectCardActions({
-  pinned,
-  canPin,
-  canManage,
-  onTogglePin,
-  onEdit,
-  onDelete,
-}: {
-  pinned: boolean;
-  canPin: boolean;
-  canManage: boolean;
-  onTogglePin: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Project actions">
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {canPin && (
-          <DropdownMenuItem onSelect={onTogglePin}>
-            {pinned ? (
-              <PinOff className="h-4 w-4" />
-            ) : (
-              <Pin className="h-4 w-4" />
-            )}
-            {pinned ? "Unpin" : "Pin"}
-          </DropdownMenuItem>
-        )}
-        {canManage && (
-          <>
-            <DropdownMenuItem onSelect={onEdit}>
-              <Pencil className="h-4 w-4" />
-              Edit details
-            </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 

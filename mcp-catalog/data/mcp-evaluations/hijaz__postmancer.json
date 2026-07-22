@@ -1,0 +1,139 @@
+{
+  "name": "hijaz__postmancer",
+  "display_name": "postmancer",
+  "description": "An experimental MCP server Rest Client intended to be a replacement of tools postman & insomnia",
+  "author": {
+    "name": "hijaz"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "postmancer"],
+    "env": {
+      "COLLECTIONS_PATH": "${user_config.collections_path}",
+      "LOG_LEVEL": "${user_config.log_level}",
+      "POSTMANCER_ENCRYPTION_KEY": "${user_config.postmancer_encryption_key}",
+      "ENCRYPTION_KEY": "${user_config.encryption_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "collections_path": {
+      "type": "directory",
+      "title": "Collections Path",
+      "description": "Path to store API collections",
+      "required": false,
+      "default": "${HOME}/.postmancer"
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Logging Level",
+      "description": "Logging level (debug, info, warn, error)",
+      "required": false,
+      "default": "info"
+    },
+    "postmancer_encryption_key": {
+      "type": "string",
+      "title": "Postmancer Encryption Key",
+      "description": "Secret key used to encrypt credentials and tokens. Strongly recommended for production environments.",
+      "sensitive": true,
+      "required": false
+    },
+    "encryption_key": {
+      "type": "string",
+      "title": "Environment Variable Encryption Key",
+      "description": "Secret key used to encrypt environment variables marked as secrets. Strongly recommended for production environments.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/hijaz-postmancer-badge.png)](https://mseep.ai/app/hijaz-postmancer)\n\n# Postmancer\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/hijaz/postmancer)](https://archestra.ai/mcp-catalog/hijaz__postmancer)\n\n![Postmancer](postmancer.jpg)\n\nA standalone MCP server for API testing and management, allowing AI assistants to interact with RESTful APIs through natural language.\n\n## Overview\n\nPostmancer is an MCP (Model Context Protocol) server that enables AI assistants like Claude to make HTTP requests, manage collections of API endpoints, and test API responses. It provides similar functionality to tools like Postman or Insomnia but designed specifically for AI assistants.\n\n## Features\n\n- Make HTTP requests to any REST API\n- Save and organize requests in collections\n- Set and use environment variables with variable substitution\n- Multiple authentication methods (Basic, Bearer, API Key, OAuth2)\n- Request/response history and testing\n\n## Quick Start\n\n### Installation\n\n```bash\n# Install globally\nnpm install -g postmancer\n\n# Or run directly with npx\nnpx postmancer\n```\n\n### Using with Claude Desktop\n\nAdd this to your Claude Desktop configuration file:\n- Windows: `%USERPROFILE%\\.claude\\claude_desktop_config.json`\n- macOS/Linux: `~/.claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"postmancer\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"postmancer\"],\n      \"env\": {\n        \"LOG_LEVEL\": \"info\"\n      }\n    }\n  }\n}\n```\n\n### Using with Docker\n\n```bash\ndocker run -i --rm \\\n  --mount type=bind,src=/path/to/collections,dst=/data/collections \\\n  postmancer\n```\n\n## Available Tools\n\nPostmancer provides the following tools to AI assistants:\n\n1. **http_request** - Send HTTP requests to any URL\n2. **list_collections** - View all your saved API collections\n3. **list_requests** - View all requests in a collection\n4. **save_request** - Save a request to a collection\n5. **request_from_collection** - Execute a saved request\n6. **set_environment_variable** - Set variables for request templates\n7. **get_environment_variables** - View all environment variables\n\n## Configuration\n\nConfigure Postmancer with these environment variables:\n\n- `COLLECTIONS_PATH`: Path to store collections (default: ~/.postmancer)\n- `LOG_LEVEL`: Logging level (debug, info, warn, error) (default: info)\n- `POSTMANCER_ENCRYPTION_KEY`: Secret key used to encrypt credentials and tokens (generates a random key if not provided)\n- `ENCRYPTION_KEY`: Secret key used to encrypt environment variables marked as secrets (uses default key if not provided)\n\nFor security in production environments, it's strongly recommended to set these encryption keys rather than using the defaults.\n\n## License\n\nMIT",
+  "category": "Development",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "postmancer": {
+        "command": "npx",
+        "args": ["-y", "postmancer"],
+        "env": {
+          "LOG_LEVEL": "info"
+        }
+      },
+      "postmancer-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "--mount",
+          "type=bind,src=/path/to/collections,dst=/data/collections",
+          "postmancer"
+        ],
+        "env": {},
+        "docker_image": "postmancer"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hijaz",
+    "repo": "postmancer",
+    "url": "https://github.com/hijaz/postmancer",
+    "name": "hijaz__postmancer",
+    "path": null,
+    "stars": 23,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d71f38e14421a3ff5fa65b335f164c1a0b002d5b"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.949Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "fs-extra",
+      "importance": 7
+    },
+    {
+      "name": "nanoid",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"postmancer\",\n  \"version\": \"0.1.0\",\n  \"description\": \"Standalone MCP server for REST API testing and management\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"postmancer\": \"dist/src/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"postbuild\": \"node -e \\\"try { require('fs').chmodSync('./dist/src/index.js', '755'); } catch (e) { console.log('Skipping chmod on Windows'); }\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"lint\": \"eslint . --ext .ts\",\n    \"start\": \"node dist/src/index.js\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/hijaz/postmancer.git\"\n  },\n  \"homepage\": \"https://github.com/hijaz/postmancer#readme\",\n  \"bugs\": {\n    \"url\": \"https://github.com/hijaz/postmancer/issues\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"api\",\n    \"rest\",\n    \"postman\",\n    \"insomnia\",\n    \"claude\",\n    \"ai\",\n    \"assistant\"\n  ],\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\n    \"axios\": \"^1.5.0\",\n    \"fs-extra\": \"^11.1.1\",\n    \"nanoid\": \"^4.0.2\",\n    \"zod\": \"^3.22.2\",\n    \"zod-to-json-schema\": \"^3.21.4\"\n  },\n  \"devDependencies\": {\n    \"@types/fs-extra\": \"^11.0.2\",\n    \"@types/node\": \"^20.8.2\",\n    \"@typescript-eslint/eslint-plugin\": \"^6.7.4\",\n    \"@typescript-eslint/parser\": \"^6.7.4\",\n    \"eslint\": \"^8.50.0\",\n    \"typescript\": \"^5.2.2\"\n  }\n}\n"
+}

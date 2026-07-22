@@ -1,0 +1,74 @@
+{
+  "name": "misiektoja__kill-process-mcp",
+  "display_name": "kill-process-mcp",
+  "description": "Cross-platform MCP (Model Context Protocol) server exposing tools to list and terminate OS processes via natural language queries",
+  "author": {
+    "name": "misiektoja"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "--directory", "${__dirname}", "kill_process_mcp.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# kill-process-mcp 🔫\n\nCross-platform **MCP** (Model Context Protocol) server exposing tools to **list and kill OS processes** via natural language queries.\n\nPerfect for shy ninjas who just want rogue processes gone!\n\n> **\"Find and nuke the damn CPU glutton choking my system!\"**\n\n<a href=\"https://glama.ai/mcp/servers/@misiektoja/kill-process-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@misiektoja/kill-process-mcp/badge\" alt=\"kill-process-mcp MCP server\" />\n</a>\n\n<a id=\"demo\"></a>\n## Demo\n\n![kill-process-mcp-demo](https://raw.githubusercontent.com/misiektoja/kill-process-mcp/refs/heads/main/assets/kill-process-mcp-demo.gif)\n\n<a id=\"tools\"></a>\n## Tools\n\nThe following tools are exposed to MCP clients:\n\n- `process_list`: Lists running processes sorted by CPU or memory with optional name, user, status, CPU/memory thresholds, system-process filtering, sort order and limit\n- `process_kill`: Terminates the selected process (with extreme prejudice!)\n\n<a id=\"requirements\"></a>\n## Requirements\n\n* MCP-compatible LLM client (like [Claude Desktop](https://claude.ai/download))\n* OS: macOS/Windows/Linux\n* Python 3.13 or higher\n* [uv](https://github.com/astral-sh/uv)\n* Libraries: `mcp` `psutil`\n\n<a id=\"installation\"></a>\n## Installation\n\n<a id=\"1-clone-the-repo-and-install\"></a>\n### 1. Clone the repo and install\n\n```sh\ngit clone https://github.com/misiektoja/kill-process-mcp.git\ncd kill-process-mcp\n```\n\nInstall `uv` if missing:\n\n```sh\npip install uv\n\n# or on macOS: \nbrew install uv\n```\n\nInstall dependencies:\n\n```sh\nuv sync\n```\n\n<a id=\"2-configure-mcp-client\"></a>\n### 2. Configure MCP Client\n\nRegister the `kill-process-mcp` as an MCP server in your client.\n\nFor example, in Claude Desktop add the following to `claude_desktop_config.json` file:\n\n\n  ```json\n{\n    \"mcpServers\":\n    {\n        \"kill-process-mcp\":\n        {\n            \"command\": \"uv\",\n            \"args\":\n            [\n                \"run\",\n                \"--directory\",\n                \"/path/to/kill-process-mcp\",\n                \"kill_process_mcp.py\"\n            ],\n            \"type\": \"stdio\"\n        }\n    }\n}\n  ```\n\nDefault `claude_desktop_config.json` location:\n- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\nReplace `/path/to/kill-process-mcp` with the actual path of your project folder (remember to escape backslash characters if you're on Windows, e.g.: `C:\\\\path\\\\to\\\\kill-process-mcp`)\n\nRestart your LLM client and it should be able to talk to the `kill-process-mcp` server.\n\nIn `Claude Desktop` you can check if the server is installed by going to **Profile → Settings → Integrations**.\n\n<a id=\"example-hit-contracts\"></a>\n## Example Hit Contracts\n\nHere are some example prompts you can use with your MCP-compatible AI assistant when interacting with this MCP server:\n\n- Kill the damn process slowing down my system!\n- Check my top 5 CPU parasites and flag any that look like malware\n- List the 3 greediest processes by RAM usage\n- Exterminate every process with Spotify in its name\n- List Alice's Python processes, max 10 entries\n- Which processes are over 2% CPU and 100 MB RAM\n- **anything else your imagination brings ...**\n\n<a id=\"disclaimer\"></a>\n## Disclaimer\n\nThis MCP server is armed and dangerous. If you snipe the wrong process, that's on you. \n\nProceed with caution.\n\n<a id=\"change-log\"></a>\n## Change Log\n\nSee [RELEASE_NOTES.md](https://github.com/misiektoja/kill-process-mcp/blob/main/RELEASE_NOTES.md) for details.\n\n<a id=\"license\"></a>\n## License\n\nLicensed under GPLv3. See [LICENSE](https://github.com/misiektoja/kill-process-mcp/blob/main/LICENSE).",
+  "category": "CLI Tools",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kill-process-mcp": {
+        "command": "uv",
+        "args": ["run", "--directory", "/path/to/kill-process-mcp", "kill_process_mcp.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "misiektoja",
+    "repo": "kill-process-mcp",
+    "url": "https://github.com/misiektoja/kill-process-mcp",
+    "name": "misiektoja__kill-process-mcp",
+    "path": null,
+    "stars": 7,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "6ae70dbdca53196fe664ab1ae54578be75bb97ff"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:22.045Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "psutil",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"kill-process-mcp\"\nversion = \"1.0\"\ndescription = \"Cross-platform MCP server exposing tools to list and kill OS processes\"\nreadme = \"README.md\"\nlicense = \"GPL-3.0-or-later\"\nlicense-files = [\"LICEN[CS]E*\"]\nauthors = [{ name = \"Michal Szymanski\", email = \"misiektoja-github@rm-rf.ninja\" }]\nrequires-python = \">=3.13\"\ndependencies = [\n  \"mcp>=1.9.4\",\n  \"psutil\"\n]\n\n[project.urls]\nHomepage = \"https://github.com/misiektoja/kill-process-mcp\"\nSource   = \"https://github.com/misiektoja/kill-process-mcp\"\nChangelog= \"https://github.com/misiektoja/kill-process-mcp/blob/main/RELEASE_NOTES.md\"\n"
+}

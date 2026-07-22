@@ -1,0 +1,104 @@
+{
+  "name": "hypersequent__qasphere-mcp",
+  "display_name": "qasphere-mcp",
+  "description": "MCP Server for QA Sphere TMS",
+  "author": {
+    "name": "Hypersequent"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "qasphere-mcp"],
+    "env": {
+      "QASPHERE_TENANT_URL": "${user_config.qasphere_tenant_url}",
+      "QASPHERE_API_KEY": "${user_config.qasphere_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "qasphere_tenant_url": {
+      "type": "string",
+      "title": "QA Sphere Tenant URL",
+      "description": "Your company's QA Sphere URL (e.g., `example.eu2.qasphere.com`)",
+      "required": true,
+      "default": "your-company.region.qasphere.com"
+    },
+    "qasphere_api_key": {
+      "type": "string",
+      "title": "QA Sphere API Key",
+      "description": "Your API key from QA Sphere",
+      "sensitive": true,
+      "required": true,
+      "default": "your-api-key"
+    }
+  },
+  "readme": "# QA Sphere MCP Server\n\nA [Model Context Protocol](https://github.com/modelcontextprotocol) server for the [QA Sphere](https://qasphere.com/) test management system.\n\nThis integration enables Large Language Models (LLMs) to interact directly with QA Sphere test cases, allowing you to discover, summarize, and chat about test cases. In AI-powered IDEs that support MCP, you can reference specific QA Sphere test cases within your development workflow.\n\n## Prerequisites\n\n- Node.js (recent LTS versions)\n- QA Sphere account with API access\n- API key from QA Sphere (Settings ⚙️ → API Keys → Add API Key)\n- Your company's QA Sphere URL (e.g., `example.eu2.qasphere.com`)\n\n## Setup Instructions\n\nThis server is compatible with any MCP client. Configuration instructions for popular clients are provided below.\n\n### Claude Desktop\n\n1. Navigate to `Claude` → `Settings` → `Developer` → `Edit Config`\n2. Open `claude_desktop_config.json`\n3. Add the QA Sphere configuration to the `mcpServers` dictionary\n\n### Cursor\n\n#### Option 1: Manual Configuration\n\n1. Go to `Settings...` → `Cursor settings` → `Add new global MCP server`\n2. Add the QA Sphere configuration\n\n#### Option 2: Quick Install\n\nClick the button below to automatically install and configure the QA Sphere MCP server:\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=qasphere&config=eyJjb21tYW5kIjoibnB4IC15IHFhc3BoZXJlLW1jcCIsImVudiI6eyJRQVNQSEVSRV9URU5BTlRfVVJMIjoieW91ci1jb21wYW55LnJlZ2lvbi5xYXNwaGVyZS5jb20iLCJRQVNQSEVSRV9BUElfS0VZIjoieW91ci1hcGkta2V5In19)\n\n### 5ire\n\n1. Open 'Tools' and press 'New'\n2. Complete the form with:\n   - Tool key: `qasphere`\n   - Command: `npx -y qasphere-mcp`\n   - Environment variables (see below)\n\n### Configuration Template\n\nFor any MCP client, use the following configuration format:\n\n```json\n{\n  \"mcpServers\": {\n    \"qasphere\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"qasphere-mcp\"],\n      \"env\": {\n        \"QASPHERE_TENANT_URL\": \"your-company.region.qasphere.com\",\n        \"QASPHERE_API_KEY\": \"your-api-key\"\n      }\n    }\n  }\n}\n```\n\nReplace the placeholder values with your actual QA Sphere URL and API key.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## Support\n\nIf you encounter any issues or need assistance, please file an issue on the GitHub repository.\n",
+  "category": "AI Tools",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "qasphere-mcp": {
+        "command": "npx",
+        "args": ["-y", "qasphere-mcp"],
+        "env": {
+          "QASPHERE_TENANT_URL": "your-company.region.qasphere.com",
+          "QASPHERE_API_KEY": "your-api-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Hypersequent",
+    "repo": "qasphere-mcp",
+    "url": "https://github.com/Hypersequent/qasphere-mcp",
+    "name": "hypersequent__qasphere-mcp",
+    "path": null,
+    "stars": 13,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "5b8ea56706432b5f5485fde718cdc4021a0b845d"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:38.000Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"qasphere-mcp\",\n  \"version\": \"0.2.1\",\n  \"description\": \"MCP server for QA Sphere integration\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"qasphere-mcp\": \"./dist/index.js\"\n  },\n  \"files\": [\"dist\", \"README.md\", \"LICENSE\"],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/Hypersequent/qasphere-mcp.git\"\n  },\n  \"keywords\": [\"mcp\", \"qasphere\", \"tms\"],\n  \"author\": \"Hypersequent\",\n  \"license\": \"MIT\",\n  \"scripts\": {\n    \"build\": \"tsc && chmod +x dist/index.js\",\n    \"dev\": \"tsx src/index.ts\",\n    \"lint\": \"biome lint --write .\",\n    \"format\": \"biome format --write .\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector tsx src/index.ts\",\n    \"test\": \"vitest run\",\n    \"prepare\": \"husky\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"axios\": \"^1.6.7\",\n    \"dotenv\": \"^16.4.5\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@biomejs/biome\": \"1.9.4\",\n    \"@types/node\": \"^22.13.16\",\n    \"husky\": \"^9.1.7\",\n    \"lint-staged\": \"^15.5.1\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"^5.8.2\",\n    \"vitest\": \"^3.1.1\"\n  },\n  \"lint-staged\": {\n    \"*.{ts,js}\": [\"biome lint --write\", \"biome format --write\"],\n    \"*.json\": \"biome format --write\"\n  }\n}\n"
+}

@@ -1,0 +1,94 @@
+{
+  "name": "yikakia__godoc-mcp-server",
+  "display_name": "godoc-mcp-server",
+  "description": "A mcp server provide infomation from pkg.go.dev. For all golang programmers",
+  "author": {
+    "name": "yikakia"
+  },
+  "server": {
+    "command": "${__dirname}/server/godoc-mcp-server",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# godoc-mcp-server\n\nsearch golang packages and their docs from pkg.go.dev, provide the infomation to llm as mcp server\n\n## Install\n\nYou can download the compiled binary from the [releases page](https://github.com/yikakia/godoc-mcp-server/releases/tag/latest).\n\nOr you can install it from source, compile it by yourself:\n\n```shell\ngo install github.com/yikakia/godoc-mcp-server/cmd/godoc-mcp-server@latest\n```\n\n## Usage\n\njust use your client to request. it servers on stdio\n\n## Todo\n\n- localCache\n  - [x] use a local cache to avoid search every time(From reddit user)\n- searchPackage\n  - [x] imported by how many packages\n- getPackageInfo\n  - [ ] get examples\n- release\n  - [x] use github actions to release for multiple platforms \n\n## Develop Experience\nThe description is very important, when describing the param should tell the client how \nto use one tool's output and change the format to match another tool's input.\n\nFor example, the output of `searchPackage` contains subpackage's name, but do not contain\nthe package's name. So if want the llm to use `getPackageInfo` to get the subpackage's info,\nI wrote the description for param `packageName` about how to use it to work with `searchPackage`:\n\n> package name for search. if use searchPackages before, and user want to get the \nsubpackage info. you should plus them for example, when user query mcp, and it return \npackageName: github.com/mark3labs/mcp-go/mcp and subpackage client, then if user want \nto get the client package info, you should set the packageName to \ngithub.com/mark3labs/mcp-go/mcp/client rather than client\n\n\nWhen using this detail description, the llm will tell you some subpackage's name after \nsearch. You can just tell it which package you want to get info, or which package and the \nsubpackage's name, it will combine them and call `getPackageInfo` to get the info.\n\n\nSo maybe we should make the description configurable by user, to make the tool more useful\nand efficiency.\n\n## Library Usage\n\nThe exported Go API of this module should currently be considered unstable, and subject to \nbreaking changes. In the future, we may offer stability; please file an issue if there is \na use case where this would be valuable.\n\n\n## License\n\nThis project is licensed under the terms of the MIT open source license. Please refer \nto [MIT](./LICENSE) for the full terms.\n",
+  "category": "Development",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "godoc-mcp-server-stdio": {
+        "command": "godoc-mcp-server",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "yikakia",
+    "repo": "godoc-mcp-server",
+    "url": "https://github.com/yikakia/godoc-mcp-server",
+    "name": "yikakia__godoc-mcp-server",
+    "path": null,
+    "stars": 26,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "fc5313be8414ca38f541f2f324e9db164e64b65d"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:44.323Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "modelcontextprotocol/go-sdk",
+      "importance": 10
+    },
+    {
+      "name": "PuerkitoBio/goquery",
+      "importance": 8
+    },
+    {
+      "name": "go-resty/resty/v2",
+      "importance": 8
+    },
+    {
+      "name": "coocood/freecache",
+      "importance": 7
+    },
+    {
+      "name": "golang.org/x/net",
+      "importance": 6
+    },
+    {
+      "name": "pkg/errors",
+      "importance": 4
+    },
+    {
+      "name": "go.uber.org/multierr",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/yikakia/godoc-mcp-server\n\ngo 1.24.2\n\nrequire (\n\tgithub.com/PuerkitoBio/goquery v1.10.2\n\tgithub.com/coocood/freecache v1.2.4\n\tgithub.com/go-resty/resty/v2 v2.16.5\n\tgithub.com/modelcontextprotocol/go-sdk v0.2.0\n\tgithub.com/pkg/errors v0.9.1\n\tgo.uber.org/multierr v1.11.0\n\tgolang.org/x/net v0.39.0\n)\n\nrequire (\n\tgithub.com/andybalholm/cascadia v1.3.3 // indirect\n\tgithub.com/cespare/xxhash/v2 v2.1.2 // indirect\n\tgithub.com/stretchr/testify v1.9.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n)\n"
+}

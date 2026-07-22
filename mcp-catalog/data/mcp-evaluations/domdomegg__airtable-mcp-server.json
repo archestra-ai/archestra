@@ -1,0 +1,97 @@
+{
+  "name": "domdomegg__airtable-mcp-server",
+  "display_name": "airtable-mcp-server",
+  "description": "🗂️🤖 Airtable Model Context Protocol Server, for allowing AI systems to interact with your Airtable bases",
+  "author": {
+    "name": "domdomegg"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "airtable-mcp-server"],
+    "env": {
+      "AIRTABLE_API_KEY": "${user_config.airtable_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "airtable_api_key": {
+      "type": "string",
+      "title": "Airtable API Key",
+      "description": "Your Airtable personal access token (e.g., pat123.abc123)",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# airtable-mcp-server\n\nA Model Context Protocol server that provides read and write access to Airtable databases. This server enables LLMs to inspect database schemas, then read and write records.\n\nhttps://github.com/user-attachments/assets/c8285e76-d0ed-4018-94c7-20535db6c944\n\n## Installation\n\n**Step 1**: [Create an Airtable personal access token by clicking here](https://airtable.com/create/tokens/new). Details:\n- Name: Anything you want e.g. 'Airtable MCP Server Token'.\n- Scopes: `schema.bases:read`, `data.records:read`, and optionally `schema.bases:write` and `data.records:write`.\n- Access: The bases you want to access. If you're not sure, select 'Add all resources'.\n\nKeep the token handy, you'll need it in the next step. It should look something like `pat123.abc123` (but longer).\n\n**Step 2**: Follow the instructions below for your preferred client:\n\n- [Claude Desktop](#claude-desktop)\n- [Cursor](#cursor)\n- [Cline](#cline)\n\n### Claude Desktop\n\n#### (Recommended) Via the extensions browser\n\n1. Open Claude Desktop and go to Settings → Extensions\n2. Click 'Browse Extensions' and find 'Airtable MCP Server'\n3. Click 'Install' and paste in your API key\n\n#### (Advanced) Alternative: Via manual .mcpb installation\n\n1. Find the latest mcpb build in [the GitHub Actions history](https://github.com/domdomegg/airtable-mcp-server/actions/workflows/mcpb.yaml?query=branch%3Amaster) (the top one)\n2. In the 'Artifacts' section, download the `airtable-mcp-server-mcpb` file\n3. Rename the `.zip` file to `.mcpb`\n4. Double-click the `.mcpb` file to open with Claude Desktop\n5. Click \"Install\" and configure with your API key\n\n#### (Advanced) Alternative: Via JSON configuration\n\n1. Install [Node.js](https://nodejs.org/en/download)\n2. Open Claude Desktop and go to Settings → Developer\n3. Click \"Edit Config\" to open your `claude_desktop_config.json` file\n4. Add the following configuration to the \"mcpServers\" section, replacing `pat123.abc123` with your API key:\n\n```json\n{\n  \"mcpServers\": {\n    \"airtable\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"airtable-mcp-server\"\n      ],\n      \"env\": {\n        \"AIRTABLE_API_KEY\": \"pat123.abc123\",\n      }\n    }\n  }\n}\n```\n\n5. Save the file and restart Claude Desktop\n\n### Cursor\n\n#### (Recommended) Via one-click install\n\n1. Click [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=airtable&config=JTdCJTIyY29tbWFuZCUyMiUzQSUyMm5weCUyMC15JTIwYWlydGFibGUtbWNwLXNlcnZlciUyMiUyQyUyMmVudiUyMiUzQSU3QiUyMkFJUlRBQkxFX0FQSV9LRVklMjIlM0ElMjJwYXQxMjMuYWJjMTIzJTIyJTdEJTdE)\n2. Edit your `mcp.json` file to insert your API key\n\n#### (Advanced) Alternative: Via JSON configuration\n\nCreate either a global (`~/.cursor/mcp.json`) or project-specific (`.cursor/mcp.json`) configuration file, replacing `pat123.abc123` with your API key:\n\n```json\n{\n  \"mcpServers\": {\n    \"airtable\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"airtable-mcp-server\"],\n      \"env\": {\n        \"AIRTABLE_API_KEY\": \"pat123.abc123\"\n      }\n    }\n  }\n}\n```\n\n### Cline\n\n#### (Recommended) Via marketplace\n\n1. Click the \"MCP Servers\" icon in the Cline extension\n2. Search for \"Airtable\" and click \"Install\"\n3. Follow the prompts to install the server\n\n#### (Advanced) Alternative: Via JSON configuration\n\n1. Click the \"MCP Servers\" icon in the Cline extension\n2. Click on the \"Installed\" tab, then the \"Configure MCP Servers\" button at the bottom\n3. Add the following configuration to the \"mcpServers\" section, replacing `pat123.abc123` with your API key:\n\n```json\n{\n  \"mcpServers\": {\n    \"airtable\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"airtable-mcp-server\"],\n      \"env\": {\n        \"AIRTABLE_API_KEY\": \"pat123.abc123\"\n      }\n    }\n  }\n}\n```\n\n## Components\n\n### Tools\n\n- **list_records**\n  - Lists records from a specified Airtable table\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `tableId` (string, required): The ID of the table to query\n    - `maxRecords` (number, optional): Maximum number of records to return. Defaults to 100.\n    - `filterByFormula` (string, optional): Airtable formula to filter records\n\n- **search_records**\n  - Search for records containing specific text\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `tableId` (string, required): The ID of the table to query\n    - `searchTerm` (string, required): Text to search for in records\n    - `fieldIds` (array, optional): Specific field IDs to search in. If not provided, searches all text-based fields.\n    - `maxRecords` (number, optional): Maximum number of records to return. Defaults to 100.\n\n- **list_bases**\n  - Lists all accessible Airtable bases\n  - No input parameters required\n  - Returns base ID, name, and permission level\n\n- **list_tables**\n  - Lists all tables in a specific base\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `detailLevel` (string, optional): The amount of detail to get about the tables (`tableIdentifiersOnly`, `identifiersOnly`, or `full`)\n  - Returns table ID, name, description, fields, and views (to the given `detailLevel`)\n\n- **describe_table**\n  - Gets detailed information about a specific table\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `tableId` (string, required): The ID of the table to describe\n    - `detailLevel` (string, optional): The amount of detail to get about the table (`tableIdentifiersOnly`, `identifiersOnly`, or `full`)\n  - Returns the same format as list_tables but for a single table\n  - Useful for getting details about a specific table without fetching information about all tables in the base\n\n- **get_record**\n  - Gets a specific record by ID\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `tableId` (string, required): The ID of the table\n    - `recordId` (string, required): The ID of the record to retrieve\n\n- **create_record**\n  - Creates a new record in a table\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `tableId` (string, required): The ID of the table\n    - `fields` (object, required): The fields and values for the new record\n\n- **update_records**\n  - Updates one or more records in a table\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `tableId` (string, required): The ID of the table\n    - `records` (array, required): Array of objects containing record ID and fields to update\n\n- **delete_records**\n  - Deletes one or more records from a table\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `tableId` (string, required): The ID of the table\n    - `recordIds` (array, required): Array of record IDs to delete\n\n- **create_table**\n  - Creates a new table in a base\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `name` (string, required): Name of the new table\n    - `description` (string, optional): Description of the table\n    - `fields` (array, required): Array of field definitions (name, type, description, options)\n\n- **update_table**\n  - Updates a table's name or description\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `tableId` (string, required): The ID of the table\n    - `name` (string, optional): New name for the table\n    - `description` (string, optional): New description for the table\n\n- **create_field**\n  - Creates a new field in a table\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `tableId` (string, required): The ID of the table\n    - `name` (string, required): Name of the new field\n    - `type` (string, required): Type of the field\n    - `description` (string, optional): Description of the field\n    - `options` (object, optional): Field-specific options\n\n- **update_field**\n  - Updates a field's name or description\n  - Input parameters:\n    - `baseId` (string, required): The ID of the Airtable base\n    - `tableId` (string, required): The ID of the table\n    - `fieldId` (string, required): The ID of the field\n    - `name` (string, optional): New name for the field\n    - `description` (string, optional): New description for the field\n\n### Resources\n\nThe server provides schema information for Airtable bases and tables:\n\n- **Table Schemas** (`airtable://<baseId>/<tableId>/schema`)\n  - JSON schema information for each table\n  - Includes:\n    - Base id and table id\n    - Table name and description\n    - Primary field ID\n    - Field definitions (ID, name, type, description, options)\n    - View definitions (ID, name, type)\n  - Automatically discovered from Airtable's metadata API\n\n## Contributing\n\nPull requests are welcomed on GitHub! To get started:\n\n1. Install Git and Node.js\n2. Clone the repository\n3. Install dependencies with `npm install`\n4. Run `npm run test` to run tests\n5. Build with `npm run build`\n  - You can use `npm run build:watch` to automatically build after editing [`src/index.ts`](./src/index.ts). This means you can hit save, reload Claude Desktop (with Ctrl/Cmd+R), and the changes apply.\n\n## Releases\n\nVersions follow the [semantic versioning spec](https://semver.org/).\n\nTo release:\n\n1. Use `npm version <major | minor | patch>` to bump the version\n2. Run `git push --follow-tags` to push with tags\n3. Wait for GitHub Actions to publish to the NPM registry.\n",
+  "category": "AI Tools",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "airtable-mcp-server-configured": {
+        "command": "npx",
+        "args": ["-y", "airtable-mcp-server"],
+        "env": {
+          "AIRTABLE_API_KEY": "pat123.abc123"
+        }
+      },
+      "airtable-mcp-server-stdio": {
+        "command": "npx",
+        "args": ["-y", "airtable-mcp-server"],
+        "env": {
+          "AIRTABLE_API_KEY": "pat123.abc123"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "domdomegg",
+    "repo": "airtable-mcp-server",
+    "url": "https://github.com/domdomegg/airtable-mcp-server",
+    "name": "domdomegg__airtable-mcp-server",
+    "path": null,
+    "stars": 284,
+    "contributors": 6,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "a56ec9b960a85392fd580ab0e924a42cef6bf764"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:28.414Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"airtable-mcp-server\",\n  \"version\": \"1.7.2\",\n  \"description\": \"A Model Context Protocol server that provides read and write access to Airtable databases. This server enables LLMs to inspect database schemas, then read and write records.\",\n  \"license\": \"MIT\",\n  \"author\": \"Adam Jones (domdomegg)\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/domdomegg/airtable-mcp-server.git\"\n  },\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"files\": [\n    \"dist\"\n  ],\n  \"bin\": \"dist/index.js\",\n  \"mcpName\": \"io.github.domdomegg/airtable-mcp-server\",\n  \"scripts\": {\n    \"start\": \"npm run build && node ./dist/index.js\",\n    \"test\": \"vitest run\",\n    \"test:watch\": \"vitest --watch\",\n    \"lint\": \"eslint\",\n    \"clean\": \"rm -rf dist\",\n    \"build\": \"tsc --project tsconfig.build.json\",\n    \"build:watch\": \"nodemon --watch src --ext ts --exec \\\"npm run build\\\"\",\n    \"build:mcpb\": \"./build-mcpb.sh\",\n    \"prepublishOnly\": \"npm run clean && npm run build\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.17.1\",\n    \"zod\": \"^3.24.1\",\n    \"zod-to-json-schema\": \"^3.24.1\"\n  },\n  \"devDependencies\": {\n    \"@tsconfig/node-lts\": \"^22.0.2\",\n    \"@types/node\": \"^22.10.2\",\n    \"eslint\": \"^9.32.0\",\n    \"eslint-config-domdomegg\": \"^2.0.9\",\n    \"nodemon\": \"^3.1.7\",\n    \"tsconfig-domdomegg\": \"^1.0.0\",\n    \"typescript\": \"^5.8.3\",\n    \"vitest\": \"^3.2.4\"\n  }\n}\n"
+}

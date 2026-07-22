@@ -1,0 +1,43 @@
+{
+  "name": "daloopa__remote-mcp",
+  "display_name": "Daloopa",
+  "description": "Remote MCP server for Daloopa - financial data extraction and modeling",
+  "oauth_config": {
+    "name": "Daloopa MCP",
+    "server_url": "https://mcp.daloopa.com/server/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "Daloopa MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Finance",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "daloopa"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.daloopa.com/server/mcp",
+    "docs_url": "https://docs.daloopa.com/docs/daloopa-mcp"
+  },
+  "github_info": null,
+  "programming_language": null
+}

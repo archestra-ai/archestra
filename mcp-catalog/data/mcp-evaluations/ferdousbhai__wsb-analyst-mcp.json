@@ -1,0 +1,103 @@
+{
+  "name": "ferdousbhai__wsb-analyst-mcp",
+  "display_name": "wsb-analyst-mcp",
+  "description": "MCP server for analyzing WallStreetBets",
+  "author": {
+    "name": "ferdousbhai"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["run", "wsb-analyst"],
+    "env": {
+      "REDDIT_CLIENT_ID": "${user_config.reddit_client_id}",
+      "REDDIT_CLIENT_SECRET": "${user_config.reddit_client_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "reddit_client_id": {
+      "type": "string",
+      "title": "Reddit Client ID",
+      "description": "The client ID for your Reddit application (under 'personal use script').",
+      "sensitive": true,
+      "required": true
+    },
+    "reddit_client_secret": {
+      "type": "string",
+      "title": "Reddit Client Secret",
+      "description": "The client secret for your Reddit application.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/ferdousbhai-wsb-analyst-mcp-badge.png)](https://mseep.ai/app/ferdousbhai-wsb-analyst-mcp)\n\n# WSB Analyst MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@ferdousbhai/wsb-analyst-mcp)](https://smithery.ai/server/@ferdousbhai/wsb-analyst-mcp)\n\nA Model Context Protocol (MCP) server that provides real-time WallStreetBets data for analysis with Claude or other LLM clients.\n\n<a href=\"https://glama.ai/mcp/servers/@ferdousbhai/wsb-analyst-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@ferdousbhai/wsb-analyst-mcp/badge\" alt=\"WSB Analyst Server MCP server\" />\n</a>\n\n## Features\n\n- **Fetch WallStreetBets Posts**: Filter posts by score, comment count, and content type\n- **Detailed Post Analysis**: Extract comments, links, and metadata from posts\n- **External Link Collection**: Gather links being shared in WSB discussions\n- **Analysis Templates**: Ready-to-use prompt templates for market analysis\n- **Progress Reporting**: Real-time progress updates during data collection\n- **MCP Integration**: Seamless integration with Claude Desktop and other MCP clients\n\n## Requirements\n\n- Python 3.12 or higher\n- Reddit API credentials\n- [Claude Desktop](https://claude.ai/download) or another MCP client\n\n## Installation\n\n### Installing via Smithery\n\nTo install WSB Analyst for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@ferdousbhai/wsb-analyst-mcp):\n\n```bash\nnpx -y @smithery/cli install @ferdousbhai/wsb-analyst-mcp --client claude\n```\n\nClone this repository or download the source files:\n\n```bash\ngit clone https://github.com/ferdousbhai/wsb-analyst-mcp\ncd wsb-analyst-mcp\n```\n\nCreate a virtual environment and install dependencies:\n\n```bash\n# Using uv (recommended)\nuv sync\n```\n\n## Setting Up Reddit API Credentials\n\nTo use this server, you need to create a Reddit application to get API credentials:\n\n1. Log in to your Reddit account\n2. Navigate to [https://www.reddit.com/prefs/apps](https://www.reddit.com/prefs/apps)\n3. Scroll down and click \"create another app...\" or \"create an app...\"\n4. Fill in the following details:\n   - **name**: WSB Analyst MCP (or any name you prefer)\n   - **app type**: select \"script\"\n   - **description**: Optional description of your application\n   - **about url**: Can be left blank\n   - **redirect uri**: Use `http://localhost:8000` (any valid URL works as we don't use OAuth)\n5. Click \"create app\"\n6. After creation, note down:\n   - **client_id**: The string under the app name (appears right under \"personal use script\")\n   - **client_secret**: The string labeled \"secret\"\n\n## Configuration for Claude Desktop\n\nOpen Claude Desktop's configuration file:\n\n- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\nAdd the following configuration (adjust paths as needed):\n\n```json\n{\n  \"mcpServers\": {\n    \"wsb-analyst\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"run\",\n        \"wsb-analyst\"\n      ],\n      \"env\": {\n        \"REDDIT_CLIENT_ID\": \"your_client_id_here\",\n        \"REDDIT_CLIENT_SECRET\": \"your_client_secret_here\"\n      }\n    }\n  }\n}\n```\n\nRestart Claude Desktop\n\n## Using with Claude Desktop\n\nOnce configured, you can interact with the WSB Analyst server through Claude:\n\n1. Open Claude Desktop\n2. You should see a hammer icon in the bottom right corner of the message input box\n3. Click the hammer to see available tools\n4. Access prompt templates via slash commands (e.g., `/analyze_wsb_market`)\n\nExample queries:\n\n- \"What are the top trending stocks on WallStreetBets today?\"\n- \"Analyze recent WallStreetBets posts and tell me about potential market opportunities\"\n- \"What external resources are WSB users sharing about AMD stock?\"\n\n## Available Tools\n\n### `find_top_posts`\n\nFetch and filter WSB posts based on criteria.\n\nParameters:\n\n- `min_score` (default: 100): Minimum score (upvotes) required\n- `min_comments` (default: 10): Minimum number of comments required\n- `limit` (default: 10): Maximum number of posts to return\n- `excluded_flairs` (default: `[\"Meme\", \"Shitpost\", \"Gain\", \"Loss\"]`): List of post flairs to exclude.\n\n### `fetch_post_details`\n\nFetch detailed information about a specific WSB post including top comments.\n\nParameters:\n\n- `post_id`: Reddit post ID\n\n### `fetch_batch_post_details`\n\nFetches details for multiple posts efficiently.\n\n### `fetch_detailed_wsb_posts`\n\nFetch and filter WSB posts, then get detailed information including top comments and links for each.\n\n### `get_external_links`\n\nCollects all external links from top posts.\n\n### `get_trending_tickers`\n\nIdentifies and returns a list of stock tickers frequently mentioned or discussed in recent top WSB posts.\n\n## Prompt Templates\n\n### `/analyze_wsb_market`\n\nProvides a template prompt to guide an LLM in performing a comprehensive market analysis using the available tools (`fetch_detailed_wsb_posts`, `get_external_links`). It instructs the LLM on the structure and focus of the analysis.\n\n### `/find_market_movers`\n\nCreates a prompt focused on what's moving specific stocks or the overall market. This prompt guides the LLM to use tools like `find_top_posts` and `fetch_post_details` or `fetch_batch_post_details`.\n\n## Integrating with Firecrawl MCP Server\n\nFor enhanced analysis capabilities, especially when dealing with external links found in WSB posts, you can integrate this server with the [Firecrawl MCP Server](https://github.com/mendableai/firecrawl-mcp-server). This allows your LLM agent to not only identify links shared on WSB but also scrape and analyze the content of those linked pages.\n\n## License\n\nMIT",
+  "category": "AI Tools",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "wsb-analyst": {
+        "command": "uvx",
+        "args": ["run", "wsb-analyst"],
+        "env": {
+          "REDDIT_CLIENT_ID": "your_client_id_here",
+          "REDDIT_CLIENT_SECRET": "your_client_secret_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ferdousbhai",
+    "repo": "wsb-analyst-mcp",
+    "url": "https://github.com/ferdousbhai/wsb-analyst-mcp",
+    "name": "wsb-analyst-mcp",
+    "path": null,
+    "stars": 12,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "53912e184a3c9647e7dc7db1da9840ffa583cd54"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:10.228Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "asyncpraw",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"wsb-analyst\"\nversion = \"0.1.1\"\ndescription = \"An MCP server providing tools to analyze WallStreetBets (WSB) discussions.\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\nlicense = {text = \"MIT\"}\nauthors = [\n    {name = \"Ferdous\", email = \"ferdous@hey.com\"},\n]\ndependencies = [\n    \"asyncpraw>=7.8.1\",\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.6.0\",\n    \"pydantic>=2.11.3\",\n]\nclassifiers = [\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.13\",\n    \"Operating System :: OS Independent\",\n    \"Topic :: Office/Business :: Financial :: Investment\",\n    \"Topic :: Scientific/Engineering :: Interface Engine/Protocol Translator\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/ferdousbhai/wsb-analyst-mcp\"\nRepository = \"https://github.com/ferdousbhai/wsb-analyst-mcp\"\n\n[project.scripts]\nwsb-analyst = \"server:main\"\n\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n"
+}

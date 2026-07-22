@@ -7,6 +7,7 @@ import {
   type InteractionSource,
   isInlineableTextMimeType,
   PLAYWRIGHT_MCP_CATALOG_ID,
+  requiresOpenAiResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { ModelMessage, UIMessage, UserContent } from "ai";
@@ -455,10 +456,33 @@ export async function executeA2AMessage(
       onStepFinish: (step: StepResult<ToolSet>) =>
         recordUnavailableToolCallStep(repeatTracker, step),
       abortSignal,
-      maxOutputTokens,
+      // Per-transport shape for the output budget resolved above.
+      // - Native Ollama discards the top-level `maxOutputTokens` and reads the
+      //   cap from `options.num_predict`, so it rides along in providerOptions.
+      // OpenAI transport quirks, mirroring routes/chat/routes.ts:
+      // - Responses-routed models keep maxOutputTokens (mapped to
+      //   max_output_tokens) and run with store:false so the SDK resends the
+      //   full conversation each turn instead of referencing server-stored
+      //   items by id — references break on the stateless ChatGPT-subscription
+      //   (Codex) backend.
+      // - chat-completions models get the budget as max_completion_tokens
+      //   instead: the SDK maps maxOutputTokens to the legacy max_tokens for
+      //   model names its reasoning heuristic doesn't recognize (e.g. the bare
+      //   `chat-latest` alias), and newer models reject max_tokens outright.
       ...(ollamaProviderOptions
-        ? { providerOptions: ollamaProviderOptions }
-        : {}),
+        ? { maxOutputTokens, providerOptions: ollamaProviderOptions }
+        : provider === "openai" && !requiresOpenAiResponsesApi(selectedModel)
+          ? {
+              providerOptions: {
+                openai: { maxCompletionTokens: maxOutputTokens },
+              },
+            }
+          : {
+              maxOutputTokens,
+              ...(provider === "openai"
+                ? { providerOptions: { openai: { store: false } } }
+                : {}),
+            }),
       // Per-step context guard: cap oversized tool results and keep the
       // accumulated step history inside the model's context window, compacting
       // the older prefix into an LLM summary when it overflows. Overrides only

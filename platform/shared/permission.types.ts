@@ -22,6 +22,7 @@ export const actions = [
   "execute",
   "deploy-to-restricted",
   "manage",
+  "read-all",
 ] as const;
 
 export const resources = [

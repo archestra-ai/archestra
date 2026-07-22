@@ -1,0 +1,123 @@
+{
+  "name": "cswkim__discogs-mcp-server",
+  "display_name": "discogs-mcp-server",
+  "description": "MCP Server for Discogs",
+  "author": {
+    "name": "cswkim"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "discogs-mcp-server"],
+    "env": {
+      "DISCOGS_PERSONAL_ACCESS_TOKEN": "${user_config.discogs_personal_access_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "discogs_personal_access_token": {
+      "type": "string",
+      "title": "Discogs Personal Access Token",
+      "description": "Your personal access token for the Discogs API. You can generate one from your Discogs Settings > Developers page.",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": "[![License](https://img.shields.io/github/license/cswkim/discogs-mcp-server)](LICENSE)\n[![GitHub Release](https://img.shields.io/github/v/release/cswkim/discogs-mcp-server)](https://github.com/cswkim/discogs-mcp-server/releases)\n[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/cswkim/discogs-mcp-server/.github%2Fworkflows%2Fcheck-pr.yml)](https://github.com/cswkim/discogs-mcp-server/actions/workflows/check-pr.yml)\n[![NPM Downloads](https://img.shields.io/npm/d18m/discogs-mcp-server)](https://www.npmjs.com/package/discogs-mcp-server)\n[![Sponsor](https://img.shields.io/static/v1?label=sponsor&message=%E2%9D%A4&logo=GitHub&color=ff69b4)](https://github.com/sponsors/cswkim)\n\n# Discogs MCP Server\n\nMCP Server for the Discogs API, enabling music catalog operations, search functionality, and more.\n\n## Quickstart\n\nIf you just want to get started immediately using this MCP Server with the [Claude](https://claude.ai) desktop app and don't care about development or running the server yourself, then make sure you have [Node.js](https://nodejs.org/en) installed and your Discogs personal access token ready and skip straight to the [Claude configuration section](#claude-desktop-configuration). Use the `NPX` method from that section.\n\n## Table of Contents\n\n- [Acknowledgements](#acknowledgements)\n- [Available Tools](#available-tools)\n- [Caveats](#caveats)\n- [Prerequisites](#prerequisites)\n- [Setup](#setup)\n- [Running the Server](#running-the-server-locally)\n  - [Option 1: Local Development](#option-1-local-development)\n  - [Option 2: Docker](#option-2-docker)\n- [Inspection](#inspection)\n- [MCP Clients](#mcp-clients)\n  - [Claude Desktop Configuration](#claude-desktop-configuration)\n    - [NPX](#npx)\n    - [Local Node](#local-node)\n    - [Docker](#docker)\n  - [LibreChat](#librechat)\n  - [LM Studio](#lm-studio)\n- [TODO](#todo)\n- [License](#license)\n\n## Acknowledgements\n\nThis MCP server is built using [FastMCP](https://github.com/punkpeye/fastmcp), a typescript framework for building MCP servers. For more information about MCP and how to use MCP servers, please refer to the [FastMCP documentation](https://github.com/punkpeye/fastmcp/blob/main/README.md) and the [official MCP documentation](https://modelcontextprotocol.io).\n\n## Available Tools\n\nCheck out the list of available tools: [TOOLS.md](TOOLS.md)\n\n## Caveats\n\n- The [Discogs API documentation](https://www.discogs.com/developers) is not perfect and some endpoints may not be fully documented or may have inconsistencies.\n- Due to the vast number of API endpoints and response types, it's not feasible to verify type safety for every possible response. Please report any type-related issues you encounter.\n- This MCP server allows for editing data in your Discogs collection. Please use with caution and verify your actions before executing them.\n- The Discogs API `per_page` default is `50`, which can be too much data for some clients to process effectively, so within this project a `discogs.config.defaultPerPage` value has been set to `5`. You can request more data in your prompts, but be aware that some clients may struggle with larger responses.\n\n## Prerequisites\n\n- Node.js (tested with Node.js `20.x.x`, but `18.x.x` should work as well)\n  - Check your Node.js version with: `node --version`\n- Docker (optional, for running a local docker image without having to deal with Node or dependencies)\n\n## Setup\n\n1. Clone the repository\n2. Create a `.env` file in the root directory based on `.env.example`\n3. Set the following required environment variables in your `.env`:\n   - `DISCOGS_PERSONAL_ACCESS_TOKEN`: Your Discogs personal access token\n\nTo get your Discogs personal access token, go to your [Discogs Settings > Developers](https://www.discogs.com/settings/developers) page and find your token or generate a new one. **_DO NOT SHARE YOUR TOKEN_**. OAuth support will be added in a future release.\n\nThe other environment variables in `.env.example` are optional and have sensible defaults, so you don't need to set them unless you have specific requirements.\n\n## Running the Server Locally\n\n### Option 1: Local Development\n\n1. Install dependencies:\n   ```bash\n   pnpm install\n   ```\n\n2. Available commands:\n   - `pnpm run dev`: Start the development server with hot reloading\n   - `pnpm run dev:stream`: Start the development server with hot reloading in HTTP streaming mode\n   - `pnpm run build`: Build the production version\n   - `pnpm run start`: Run the production build\n   - `pnpm run inspect`: Run the MCP Inspector (see [Inspection](#inspection) section)\n   - `pnpm run format`: Check code formatting (prettier)\n   - `pnpm run lint`: Run linter (eslint)\n   - `pnpm run test`: Run vitest\n   - `pnpm run test:coverage`: Run vitest v8 coverage\n   - `pnpm run version:check`: Checks that the package.json version and src/version.ts match\n\n### Option 2: Docker\n\n1. Build the Docker image:\n   ```bash\n   docker build -t discogs-mcp-server:latest .\n   ```\n\n2. Run the container:\n   ```bash\n   docker run --env-file .env discogs-mcp-server:latest\n   ```\n\n   For HTTP Streaming transport mode:\n   ```bash\n   # The port should match what is in your .env file\n   docker run --env-file .env -p 3001:3001 discogs-mcp-server:latest stream\n   ```\n\n## Inspection\n\nRun the MCP Inspector to test your local MCP server:\n\n```bash\npnpm run inspect\n```\n\nThis will start the MCP Inspector at `http://127.0.0.1:6274`. Visit this URL in your browser to interact with your local MCP server.\n\nFor more information about the MCP Inspector, visit [the official documentation](https://modelcontextprotocol.io/docs/tools/inspector).\n\n## MCP Clients\n\nMore client examples will be added in the future. If you'd like configuration for a specific client, either\nrequest it by opening a new issue or creating the pull request to edit this section of the README yourself.\n\n### Claude Desktop Configuration\n\nFind your `claude_desktop_config.json` at `Claude > Settings > Developer > Edit Config` and depending on which option you'd like, add **JUST ONE** of the following:\n\n#### NPX\n\nRunning it straight from the npm registry.\n\n```json\n{\n  \"mcpServers\": {\n    \"discogs\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"discogs-mcp-server\"\n      ],\n      \"env\": {\n        \"DISCOGS_PERSONAL_ACCESS_TOKEN\": \"<YOUR_TOKEN>\"\n      }\n    }\n  }\n}\n```\n\n#### Local Node\n\nDependencies should have been installed before you use this method (`pnpm install`).\n\n```json\n{\n  \"mcpServers\": {\n    \"discogs\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"tsx\",\n        \"/PATH/TO/YOUR/PROJECT/FOLDER/src/index.ts\"\n      ],\n      \"env\": {\n        \"DISCOGS_PERSONAL_ACCESS_TOKEN\": \"<YOUR_TOKEN>\"\n      }\n    }\n  }\n}\n```\n\n#### Docker\n\nThe docker image should have been built before using this method.\n\n```json\n{\n  \"mcpServers\": {\n    \"discogs\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"--env-file\",\n        \"/PATH/TO/YOUR/PROJECT/FOLDER/.env\",\n        \"discogs-mcp-server:latest\"\n      ]\n    }\n  }\n}\n```\n\nAny changes to local code will require Claude to be restarted to take effect. Also, Claude requires human-in-the-loop interaction to allow an MCP tool to be run, so everytime a new tool is accessed Claude will ask for permission. You usually only have to do this once per tool per chat. _If using the free version, long chats may result in more frequent errors trying to run tools as Claude limits the amount of context within a single chat._\n\n### LibreChat\n\nIn the `librechat.yaml` configuration file, add this under the `mcpServers` section:\n\n```yaml\ndiscogs:\n  type: stdio\n  command: npx\n  args: [\"-y\", \"discogs-mcp-server\"]\n  env:\n    DISCOGS_PERSONAL_ACCESS_TOKEN: YOUR_TOKEN_GOES_HERE\n```\n\n### LM Studio\n\nGet to the Chat `Settings`. In the `Program` tab there will be a dropdown with a default of `Install`. Select `Edit mcp.json`. Add this under the `mcpServers` section:\n\n```json\n\"discogs\": {\n  \"command\": \"npx\",\n  \"args\": [\n    \"-y\",\n    \"discogs-mcp-server\"\n  ],\n  \"env\": {\n    \"DISCOGS_PERSONAL_ACCESS_TOKEN\": \"YOUR_TOKEN_GOES_HERE\"\n  }\n}\n```\n\nAfter you Save, in the `Program` tab there should now be an `mcp/discogs` toggle to enable the server. Within every chat box there is an `Integrations` menu where you can also enable mcp servers.\n\n## TODO\n\n- OAuth support\n- Missing tools:\n  - Inventory uploading\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "AI Tools",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "discogs-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "discogs-mcp-server"],
+        "env": {
+          "DISCOGS_PERSONAL_ACCESS_TOKEN": "<YOUR_TOKEN>"
+        }
+      },
+      "discogs-mcp-server-local": {
+        "command": "npx",
+        "args": ["tsx", "/PATH/TO/YOUR/PROJECT/FOLDER/src/index.ts"],
+        "env": {
+          "DISCOGS_PERSONAL_ACCESS_TOKEN": "<YOUR_TOKEN>"
+        }
+      },
+      "discogs-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "--env-file", "/PATH/TO/YOUR/PROJECT/FOLDER/.env", "discogs-mcp-server:latest"],
+        "env": {},
+        "docker_image": "/PATH/TO/YOUR/PROJECT/FOLDER/.env"
+      },
+      "discogs-mcp-server-pnpm-dev": {
+        "command": "pnpm",
+        "args": ["run", "dev"],
+        "env": {}
+      },
+      "discogs-mcp-server-pnpm-start": {
+        "command": "pnpm",
+        "args": ["run", "start"],
+        "env": {}
+      },
+      "discogs-mcp-server-docker-stream": {
+        "command": "docker",
+        "args": ["run", "--env-file", ".env", "-p", "3001:3001", "discogs-mcp-server:latest", "stream"],
+        "env": {},
+        "docker_image": ".env"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "cswkim",
+    "repo": "discogs-mcp-server",
+    "url": "https://github.com/cswkim/discogs-mcp-server",
+    "name": "cswkim__discogs-mcp-server",
+    "path": null,
+    "stars": 46,
+    "contributors": 2,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "68d344db4f60601e509874100c945b2bf9d7c89f"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:12.259Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"discogs-mcp-server\",\n  \"version\": \"0.4.2\",\n  \"description\": \"MCP server for Discogs\",\n  \"license\": \"MIT\",\n  \"author\": \"Christopher Kim <hi@cswkim.dev>\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"module\": \"dist/index.js\",\n  \"files\": [\n    \"dist\",\n    \"LICENSE\",\n    \"README.md\"\n  ],\n  \"bin\": {\n    \"discogs-mcp-server\": \"dist/index.js\"\n  },\n  \"repository\": {\n    \"url\": \"https://github.com/cswkim/discogs-mcp-server\"\n  },\n  \"bugs\": \"https://github.com/cswkim/discogs-mcp-server/issues\",\n  \"keywords\": [\n    \"Discogs\",\n    \"MCP\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsup\",\n    \"build:watch\": \"pnpm build --watch\",\n    \"postbuild\": \"shx chmod +x dist/*.js\",\n    \"start\": \"cross-env NODE_ENV=production node dist/index.js\",\n    \"dev\": \"tsx watch src/index.ts\",\n    \"dev:stdio\": \"pnpm run dev stdio\",\n    \"dev:stream\": \"pnpm run dev stream\",\n    \"format\": \"prettier --check .\",\n    \"format:fix\": \"prettier --write .\",\n    \"lint\": \"eslint . --ext .js,.ts,.jsx,.tsx\",\n    \"lint:fix\": \"eslint . --ext .js,.ts,.jsx,.tsx --fix\",\n    \"inspect\": \"npx @modelcontextprotocol/inspector npx tsx src/index.ts\",\n    \"test\": \"vitest run\",\n    \"test:coverage\": \"vitest run --coverage\",\n    \"test:ui\": \"vitest --ui\",\n    \"test:watch\": \"vitest watch\",\n    \"version:check\": \"node .github/scripts/check-version.js\",\n    \"version:sync\": \"node scripts/sync-version.js\",\n    \"changeset:version\": \"changeset version && pnpm version:sync && git add --all\",\n    \"changeset:tag\": \"changeset tag\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.0\",\n    \"dotenv\": \"^17.0.0\",\n    \"fastmcp\": \"^3.0.0\",\n    \"zod\": \"^4.0.5\"\n  },\n  \"devDependencies\": {\n    \"@changesets/cli\": \"^2.28.1\",\n    \"@eslint/js\": \"^9.24.0\",\n    \"@svitejs/changesets-changelog-github-compact\": \"^1.2.0\",\n    \"@types/node\": \"^24.0.3\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.29.0\",\n    \"@typescript-eslint/parser\": \"^8.29.0\",\n    \"@vitest/coverage-v8\": \"^3.1.1\",\n    \"cross-env\": \"^10.0.0\",\n    \"eslint\": \"^9.24.0\",\n    \"eslint-config-prettier\": \"^10.1.1\",\n    \"eslint-plugin-prettier\": \"^5.2.6\",\n    \"get-port-please\": \"^3.1.2\",\n    \"prettier\": \"^3.5.3\",\n    \"shx\": \"^0.4.0\",\n    \"tsup\": \"^8.4.0\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"^5.8.3\",\n    \"typescript-eslint\": \"^8.29.0\",\n    \"vitest\": \"^3.1.1\"\n  }\n}\n"
+}

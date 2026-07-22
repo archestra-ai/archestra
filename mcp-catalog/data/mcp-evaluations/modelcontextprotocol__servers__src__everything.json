@@ -1,0 +1,149 @@
+{
+  "name": "modelcontextprotocol__servers__src__everything",
+  "display_name": "Everything",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPjxwYXRoIGZpbGw9IiMwMDAwMDAiIGQ9Ik0xMy44NSAwYTQuMTYgNC4xNiAwIDAgMC0yLjk1IDEuMjE3TDEuNDU2IDEwLjY2YS44MzUuODM1IDAgMCAwIDAgMS4xOGEuODM1LjgzNSAwIDAgMCAxLjE4IDBsOS40NDItOS40NDJhMi40OSAyLjQ5IDAgMCAxIDMuNTQxIDBhMi40OSAyLjQ5IDAgMCAxIDAgMy41NDFMOC41OSAxMi45N2wtLjEuMWEuODM1LjgzNSAwIDAgMCAwIDEuMThhLjgzNS44MzUgMCAwIDAgMS4xOCAwbC4xLS4wOThsNy4wMy03LjAzNGEyLjQ5IDIuNDkgMCAwIDEgMy41NDIgMGwuMDQ5LjA1YTIuNDkgMi40OSAwIDAgMSAwIDMuNTRsLTguNTQgOC41NGExLjk2IDEuOTYgMCAwIDAgMCAyLjc1NWwxLjc1MyAxLjc1M2EuODM1LjgzNSAwIDAgMCAxLjE4IDBhLjgzNS44MzUgMCAwIDAgMC0xLjE4bC0xLjc1My0xLjc1M2EuMjY2LjI2NiAwIDAgMSAwLS4zOTRsOC41NC04LjU0YTQuMTg1IDQuMTg1IDAgMCAwIDAtNS45bC0uMDUtLjA1YTQuMTYgNC4xNiAwIDAgMC0yLjk1LTEuMjE4Yy0uMiAwLS40MDEuMDItLjYuMDQ4YTQuMTcgNC4xNyAwIDAgMC0xLjE3LTMuNTUyQTQuMTYgNC4xNiAwIDAgMCAxMy44NSAwbTAgMy4zMzNhLjg0Ljg0IDAgMCAwLS41OS4yNDVMNi4yNzUgMTAuNTZhNC4xODYgNC4xODYgMCAwIDAgMCA1LjkwMmE0LjE4NiA0LjE4NiAwIDAgMCA1LjkwMiAwTDE5LjE2IDkuNDhhLjgzNS44MzUgMCAwIDAgMC0xLjE4YS44MzUuODM1IDAgMCAwLTEuMTggMGwtNi45ODUgNi45ODRhMi40OSAyLjQ5IDAgMCAxLTMuNTQgMGEyLjQ5IDIuNDkgMCAwIDEgMC0zLjU0bDYuOTgzLTYuOTg1YS44MzUuODM1IDAgMCAwIDAtMS4xOGEuODQuODQgMCAwIDAtLjU5LS4yNDUiLz48L3N2Zz4=",
+  "description": "Official MCP reference and test server that exercises every protocol feature: tools, resources, prompts, sampling, elicitation, roots, logging, and tasks",
+  "author": {
+    "name": "modelcontextprotocol"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-everything"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [
+    {
+      "name": "echo",
+      "description": "Echoes back the provided message"
+    },
+    {
+      "name": "get-sum",
+      "description": "Adds two numbers and returns their sum"
+    },
+    {
+      "name": "get-env",
+      "description": "Returns all environment variables of the server process as pretty-printed JSON"
+    },
+    {
+      "name": "get-tiny-image",
+      "description": "Returns a tiny PNG of the MCP logo as image content"
+    },
+    {
+      "name": "get-annotated-message",
+      "description": "Returns a message annotated with priority and audience based on the message type"
+    },
+    {
+      "name": "get-structured-content",
+      "description": "Returns both backward-compatible text content and schema-validated structuredContent"
+    },
+    {
+      "name": "get-resource-reference",
+      "description": "Returns an embedded resource content block for a given resource type and id"
+    },
+    {
+      "name": "get-resource-links",
+      "description": "Returns multiple resource_link items alternating between dynamic text and blob resources"
+    },
+    {
+      "name": "get-roots-list",
+      "description": "Returns the last list of roots sent by the client"
+    },
+    {
+      "name": "gzip-file-as-resource",
+      "description": "Fetches data from a URL or data URI, gzips it, and registers it as a session-scoped resource"
+    },
+    {
+      "name": "trigger-long-running-operation",
+      "description": "Simulates a multi-step operation that reports progress notifications"
+    },
+    {
+      "name": "toggle-simulated-logging",
+      "description": "Starts or stops simulated random-level log messages for the session"
+    },
+    {
+      "name": "toggle-subscriber-updates",
+      "description": "Starts or stops simulated resource update notifications for subscribed URIs"
+    },
+    {
+      "name": "trigger-elicitation-request",
+      "description": "Issues a form-mode elicitation request and returns the resulting action and content"
+    },
+    {
+      "name": "trigger-url-elicitation",
+      "description": "Issues a URL-mode elicitation request, including the URL-elicitation-required error path"
+    },
+    {
+      "name": "trigger-sampling-request",
+      "description": "Issues a sampling request to the client LLM and returns the response"
+    },
+    {
+      "name": "simulate-research-query",
+      "description": "Demonstrates MCP Tasks with a simulated multi-stage research operation"
+    },
+    {
+      "name": "trigger-sampling-request-async",
+      "description": "Demonstrates bidirectional tasks via a sampling request the client executes as a background task"
+    },
+    {
+      "name": "trigger-elicitation-request-async",
+      "description": "Demonstrates bidirectional tasks via an elicitation request the client executes as a background task"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["reference", "test", "protocol", "demo", "everything"],
+  "user_config": {},
+  "readme": null,
+  "category": "MCP Apps Demo",
+  "quality_score": null,
+  "instructions": "The official MCP reference and test server. It is not a productivity tool — it exists to exercise every MCP protocol feature: tools, resources (static, dynamic, and session-scoped), prompts, sampling, elicitation, roots, logging, progress notifications, and long-running tasks, including MCP Apps UI extensions where present. Runs locally via `npx` and needs no credentials or configuration.",
+  "archestra_config": {
+    "client_config_permutations": {
+      "everything": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-everything"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "github_info": {
+    "owner": "modelcontextprotocol",
+    "repo": "servers",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/everything",
+    "name": "modelcontextprotocol__servers__src__everything",
+    "path": "src/everything",
+    "stars": 0,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

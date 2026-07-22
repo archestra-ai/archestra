@@ -1,0 +1,127 @@
+{
+  "name": "c4pt0r__mcp-server-tidb",
+  "display_name": "mcp-server-tidb",
+  "description": "mcp server for tidb",
+  "author": {
+    "name": "c4pt0r"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "src/main.py"],
+    "env": {
+      "TIDB_HOST": "${user_config.tidb_host}",
+      "TIDB_PORT": "${user_config.tidb_port}",
+      "TIDB_USERNAME": "${user_config.tidb_username}",
+      "TIDB_PASSWORD": "${user_config.tidb_password}",
+      "TIDB_DATABASE": "${user_config.tidb_database}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "tidb_host": {
+      "type": "string",
+      "title": "TiDB Host Address",
+      "description": "TiDB host address, e.g. 'gateway01.us-east-1.prod.aws.tidbcloud.com'",
+      "required": true
+    },
+    "tidb_port": {
+      "type": "number",
+      "title": "TiDB Port",
+      "description": "TiDB port (default: 4000)",
+      "default": 4000,
+      "required": false
+    },
+    "tidb_username": {
+      "type": "string",
+      "title": "Database Username",
+      "description": "Database username, e.g. 'xxxxxxxxxx.<username>'",
+      "required": true
+    },
+    "tidb_password": {
+      "type": "string",
+      "title": "Database Password",
+      "description": "Database password",
+      "sensitive": true,
+      "required": true
+    },
+    "tidb_database": {
+      "type": "string",
+      "title": "Database Name",
+      "description": "Database name, default is test",
+      "default": "test",
+      "required": false
+    }
+  },
+  "readme": "# mcp-server-tidb\n\nMCP server implementation for TiDB (serverless) database.\n\n## Prerequisites\n\n- uv (Python package installer)\n\n## Installation\n\n```\n# Clone the repository\ngit clone https://github.com/c4pt0r/mcp-server-tidb\ncd mcp-server-tidb\n\n# Install the package and dependencies using uv\nuv venv\nuv pip install -e .\n```\n\n## Configuration\n\nGo [tidbcloud.com](https://tidbcloud.com) to create a free TiDB database cluster\n\nConfiguration can be provided through environment variables, or using .env:\n- `TIDB_HOST` - TiDB host address, e.g. 'gateway01.us-east-1.prod.aws.tidbcloud.com'\n- `TIDB_PORT` - TiDB port (default: 4000)\n- `TIDB_USERNAME` - Database username, e.g.  'xxxxxxxxxx.\\<username\\>'\n- `TIDB_PASSWORD` - Database password\n- `TIDB_DATABASE` - Database name, default is test\n\n## Run with Claude Desktop\n\nConfig Claude Desktop, [HOWTO](https://modelcontextprotocol.io/quickstart/user)\n\n`claude_desktop_config.json`:\n\n```\n{\n  \"mcpServers\": {\n      \"tidb\": {\n          \"command\": \"uv\",\n          \"args\": [\n              \"--directory\",\n              \"/path/to/mcp-server-tidb\",\n              \"run\",\n              \"src/main.py\"\n          ]\n      }\n  }\n}\n```\n\n\nIf you're running mcp-server-tidb in WSL, the `claude_desktop_config.json` should look like this:\n\n```\n{\n  \"mcpServers\": {\n    \"tool-with-env-vars\": {\n      \"command\": \"wsl.exe\",\n      \"args\": [\n        \"bash\",\n        \"-c\",\n        \"/path/to/uv --directory /path/to/mcp-server-tidb run python src/main.py\"\n      ]\n    }\n  }\n}\n```\n",
+  "category": "Data",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-tidb": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/mcp-server-tidb", "run", "src/main.py"],
+        "env": {}
+      },
+      "mcp-server-tidb-wsl": {
+        "command": "wsl.exe",
+        "args": ["bash", "-c", "/path/to/uv --directory /path/to/mcp-server-tidb run python src/main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "c4pt0r",
+    "repo": "mcp-server-tidb",
+    "url": "https://github.com/c4pt0r/mcp-server-tidb",
+    "name": "c4pt0r__mcp-server-tidb",
+    "path": null,
+    "stars": 22,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "080a1bf3f6d013befb1c358f80bc8c3f093ea558"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:26.117Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "pymysql",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-tidb\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"mcp[cli]>=1.3.0\",\n    \"pydantic>=2.10.6\",\n    \"pymysql>=1.1.1\",\n    \"python-dotenv>=1.0.1\",\n]\n"
+}

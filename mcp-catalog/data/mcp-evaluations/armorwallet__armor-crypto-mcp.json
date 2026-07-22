@@ -1,0 +1,105 @@
+{
+  "name": "armorwallet__armor-crypto-mcp",
+  "display_name": "armor-crypto-mcp",
+  "description": "The MCP server for interacting with Blockchain, Swaps, Strategic Planning and more.",
+  "author": {
+    "name": "armorwallet"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["armor-crypto-mcp@latest"],
+    "env": {
+      "ARMOR_API_KEY": "${user_config.armor_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "armor_api_key": {
+      "type": "string",
+      "title": "Armor API Key",
+      "description": "Your API key for authentication with the Armor MCP server.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Armor Crypto MCP\n*Alpha Test version 0.1.24*\n\nA single source for integrating AI Agents with the Crypto ecosystem. This includes Wallet creation and management, swaps, transfers, event-based trades like DCA, stop loss and take profit, and much more. The Armor MCP supports Solana in Alpha and, when in beta, will support more than a dozen blockchains, including Ethereum. Base, Avalanche, Bitcoin, Sui, Berachain, megaETH, Optimism, Ton, BNB, and Arbitrum, among others. Using Armor's MCP you can bring all of crypto into your AI Agent with unified logic and a complete set of tools.\n       \n![Armor MCP](https://armor-assets-repository.s3.nl-ams.scw.cloud/MCP_sm.png)\n<br />\n<br />\n<br />\n<br />\n<br />\n<br />\n# Features\n\n🧠 AI Native\n\n📙 Wallet Management\n\n🔃 Swaps\n\n🌈 Specialized trades (DCA, Stop Loss etc.)\n\n⛓️ Multi-chain\n\n↔️ Cross-chain transations\n\n🥩 Staking\n\n🤖 Fast intergration to Agentic frameworks\n\n👫 Social Sentiment\n\n🔮 Prediction\n<br />\n<br />\n![Armor MCP Diagram](https://armor-assets-repository.s3.nl-ams.scw.cloud/amor_mcp_diagram.png)\n<br />\n<br />\n<br />\n<br />\n<br />\n<br />\n\n# Requirements\n\n### 1. Make sure you have python installed\n<br />\n\n### 2. Install `uv`\n*Linux / Windows*\n\n```sh\npip install uv\n```\n*Mac*\n\n```sh\nbrew install uv\n```\n<br />\n\n### 3. Claude Desktop or your AI Agent will run the MCP\nSee [Usage & Configuration](#usage--configuration) for details.\n<br />\n<br />\n<br />\n<br />\n<br />\n\n# Alpha Testing\n\nWe are currently in pre-alpha, and we are testing the capabilities of various agents and agentic frameworks like Claude Desktop, Cline, Cursor, n8n, etc. \n\n## Current Features & Tools\n- Wallet Management\n    - Grouping & Organization\n    - Archiving\n- Swap & Trades\n    - Normal swap\n    - DCA (place / list / cancel)\n    - Scheduled Orders\n    - Limit Orders (place / list / cancel)\n- Staking and Unstaking\n- Token Search and Trending Tokens\n- Statistical Calculator for accurate Analysis\n- Supports Solana blockchain\n\n## Coming Soon\n- More Blockchain Support\n- Minting\n- Armor Agents as a Tool (or A2A)\n\n## MCP Setup\nCurrently you need to have the Armor NFT to get an API Key.\nGet it [here](https://codex.armorwallet.ai/)\n\n## Usage & Configuration\nTo use the Armor MCP with your agent, you need the following configuration, replace `<PUT-YOUR-KEY-HERE>` with your API key:\n```json\n{\n  \"mcpServers\": {\n    \"armor-crypto-mcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\"armor-crypto-mcp@latest\", \"--version\"],\n      \"env\": {\n        \"ARMOR_API_KEY\": \"<PUT-YOUR-KEY-HERE>\"\n      }\n    }\n  }\n}\n```\n<br />\n<br />\n<br />\n<br />\n<br />\n<br />\n\n# Use in Claude Desktop\n1. Must have Developer Mode enabled\n2. Open Claude Desktop's File Menu top left of the window.\n3. Go to File > Settings\n4. Under Developer, click Edit Configuration\n5. In the config file, insert the `armor-wallet-mcp` section from above\n6. Make sure to replace the placeholder with your API key\n7. Save the file and start a new Chat in Claude Desktop\n\n## Use in Cline\n1. Click on the `MCP Servers` button in the Cline tab in VSCode on the left panel\n2. Scroll to the bottom of the left panel and click on `Configure MCP Servers`\n3. In the config file, insert `armor-wallet-mcp` section from above\n4. Make sure to replace the placeholder with your API key\n5. Save the file, click `Done` under the `MCP Servers` tab and start chatting with Cline\n\n## Use in n8n\n1. Open the n8n app\n2. Bottom-left of screen click `...` next to your username and click `Settings`\n3. On the left panel, click `Community nodes` and then `Install a Community Node` button\n4. In the search field for `npm Package Name` type in *mcp*\n5. Install `MCP Nodes`\n6. Add any MCP node, for example: `List Tools`\n7. In the MCP Client `Parameters` tab, click `Select Credential` and click `Create new credential`\n8. Under `Command` enter `uvx`\n9. Under `Arguments` enter `armor-crypto-mcp`\n10. Under `Environments` enter `ARMOR_API_KEY=eyJhbGciOiJIUzI1NiIsIn...` paste the full API Key value after the `=`\n11. Back in the `Parameters` tab you can choose the MCP `Operation` for that Node\n<br />\n<br />\n<br />\n<br />\n<br />\n<br />\n\n# Using Armor MCP\n\nOnce you have setup the Armor MCP [here are some prompts you can use to get started](https://github.com/armorwallet/armor-crypto-mcp/blob/main/README_prompts.md)\n<br />\n<br />\n<br />\n",
+  "category": "AI Tools",
+  "quality_score": 73,
+  "archestra_config": {
+    "client_config_permutations": {
+      "armor-crypto-mcp-configured": {
+        "command": "uvx",
+        "args": ["armor-crypto-mcp@latest", "--version"],
+        "env": {
+          "ARMOR_API_KEY": "<PUT-YOUR-KEY-HERE>"
+        }
+      },
+      "armor-crypto-mcp": {
+        "command": "uvx",
+        "args": ["armor-crypto-mcp"],
+        "env": {
+          "ARMOR_API_KEY": "<PUT-YOUR-KEY-HERE>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "armorwallet",
+    "repo": "armor-crypto-mcp",
+    "url": "https://github.com/armorwallet/armor-crypto-mcp",
+    "name": "armorwallet__armor-crypto-mcp",
+    "path": null,
+    "stars": 186,
+    "contributors": 0,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:09.340Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 7
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": null
+}

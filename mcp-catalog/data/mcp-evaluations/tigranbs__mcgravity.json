@@ -1,0 +1,161 @@
+{
+  "name": "tigranbs__mcgravity",
+  "display_name": "mcgravity",
+  "description": "A proxy tool for composing multiple MCP servers into one unified endpoint. Scale your AI tools by load balancing requests across multiple MCP servers, similar to how Nginx works for web servers.",
+  "author": {
+    "name": "tigranbs"
+  },
+  "server": {
+    "command": "${__dirname}/mcgravity",
+    "args": [
+      "--host",
+      "${user_config.host}",
+      "--port",
+      "${user_config.port}",
+      "--config",
+      "${user_config.config_file}",
+      "--mcp-version",
+      "${user_config.mcp_version}",
+      "--mcp-name",
+      "${user_config.mcp_name}",
+      "${user_config.mcp_server_addresses}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mcp_server_addresses": {
+      "type": "string",
+      "title": "Upstream MCP Server Addresses",
+      "description": "One or more URLs of the MCP servers to connect to (e.g., http://mcp1.example.com).",
+      "required": true,
+      "multiple": true
+    },
+    "host": {
+      "type": "string",
+      "title": "Host",
+      "description": "Host to bind the McGravity server to.",
+      "required": false,
+      "default": "localhost"
+    },
+    "port": {
+      "type": "number",
+      "title": "Port",
+      "description": "Port to bind the McGravity server to.",
+      "required": false,
+      "default": 3001
+    },
+    "config_file": {
+      "type": "file",
+      "title": "Configuration File",
+      "description": "Path to the YAML config file. If provided, it may override other settings.",
+      "required": false,
+      "default": "config.yaml"
+    },
+    "mcp_version": {
+      "type": "string",
+      "title": "McGravity MCP Version",
+      "description": "Version of the McGravity MCP server itself.",
+      "required": false,
+      "default": "1.0.0"
+    },
+    "mcp_name": {
+      "type": "string",
+      "title": "McGravity MCP Name",
+      "description": "Name of the McGravity MCP server itself.",
+      "required": false,
+      "default": "mcgravity"
+    }
+  },
+  "readme": "# McGravity\n\n<div align=\"center\">\n  <img src=\"./assets/thumbnail.png\" alt=\"McGravity Thumbnail\" width=\"400\">\n</div>\n\n## About\n\nMcGravity is a tool that connects multiple MCP (Model Context Protocol) servers into one unified service. It lets you reuse the same MCP server and scale underlying MCP server connections almost infinitely.\n\nThe current version works as a basic CLI tool, but McGravity will grow to become a full-featured proxy for MCP servers - like Nginx but for modern Gen AI tools and servers.\n\n## Why McGravity?\n\n```\nWithout McGravity:\n┌─────────┐     ┌─────────┐\n│ Client  │────▶│MCP      │\n│         │     │Server 1 │\n└─────────┘     └─────────┘\n    │\n    │           ┌─────────┐\n    └──────────▶│MCP      │\n                │Server 2 │\n                └─────────┘\n```\n\n```\nWith McGravity:\n┌─────────┐     ┌─────────┐     ┌─────────┐\n│ Client  │────▶│McGravity│────▶│MCP      │\n│         │     │         │     │Server 1 │\n└─────────┘     └─────────┘     └─────────┘\n                     │\n                     │          ┌─────────┐\n                     └─────────▶│MCP      │\n                                │Server 2 │\n                                └─────────┘\n```\n\nMcGravity solves these problems:\n\n- Connect to multiple MCP servers through one endpoint\n- Balance load between MCP servers\n- Provide a single point of access for your applications\n\n## Installation\n\n```bash\n# Install dependencies\nbun install\n\n# Build the project into a single executable\nbun build src/index.ts --compile --outfile mcgravity\n```\n\n## Docker\n\nMcGravity is available on Docker Hub: [tigranbs/mcgravity](https://hub.docker.com/r/tigranbs/mcgravity).\n\n```bash\ndocker pull tigranbs/mcgravity\n\n# Basic usage\ndocker run -p 3001:3001 tigranbs/mcgravity http://mcp1.example.com http://mcp2.example.com\n\n# With custom host and port\ndocker run -p 4000:4000 tigranbs/mcgravity --host 0.0.0.0 --port 4000 http://mcp1.example.com\n```\n\n## Usage\n\nBasic command:\n\n```bash\n./mcgravity <mcp-server-address1> <mcp-server-address2> ...\n```\n\nWith options:\n\n```bash\n./mcgravity --host localhost --port 3001 http://mcp1.example.com http://mcp2.example.com\n```\n\nUsing configuration file:\n\n```bash\n./mcgravity --config config.yaml\n```\n\n### Options\n\n- `--host <host>`: Host to bind the server to (default: localhost)\n- `--port <port>`: Port to bind the server to (default: 3001)\n- `--config <path>`: Path to the config file (default: config.yaml)\n- `--mcp-version <version>`: Version of the MCP server (default: 1.0.0)\n- `--mcp-name <name>`: Name of the MCP server (default: mcgravity)\n- `--help`: Show help information\n\n### Configuration\n\nMcGravity can be configured using a YAML file. See `config.example.yaml` for a sample configuration:\n\n```yaml\nname: mcgravity\nversion: 1.0.0\ndescription: A simple MCP server\n\nservers:\n  echo-server:\n    url: http://localhost:3000/sse\n    name: echo-server\n    version: 1.0.0\n    description: A simple echo server\n    tags:\n      - echo\n```\n\nYou can run the included echo server example for testing:\n\n```bash\n# Start the echo server first\nbun examples/echo-server.ts\n\n# Then start McGravity pointing to the echo server\n./mcgravity --config config.yaml\n```\n\n## Examples\n\nStart McGravity with default settings:\n\n```bash\n./mcgravity http://mcp1.example.com http://mcp2.example.com\n```\n\nSpecify host and port:\n\n```bash\n./mcgravity --host 0.0.0.0 --port 4000 http://mcp1.example.com http://mcp2.example.com\n```\n\n## Running Tests\n\nTo run all tests:\n\n```bash\nbun test\n```\n\nTo run integration tests only:\n\n```bash\nbun run test:integration\n```\n\n### Integration Tests\n\nThe integration tests verify that McGravity can:\n\n1. Connect to an MCP server (the example echo server)\n2. Correctly proxy capabilities from the target MCP server\n3. Pass requests from clients to the target MCP server and return responses\n\nFor more details about the test suite, see the [test README](test/README.md).\n\nThe tests are automatically run in GitHub Actions CI on push and PR events.\n\n## Future Plans\n\nMcGravity will expand to include:\n\n- Web interface for monitoring\n- Advanced load balancing\n- MCP server health checks\n- Authentication and access control\n- Plugin system for custom integrations\n\n## Development\n\n### TypeScript and Code Style\n\nThis project uses:\n\n- TypeScript with Bun runtime\n- ESLint for code linting with TypeScript-specific rules\n- Prettier for code formatting\n\nThe configuration is optimized for Bun with appropriate TypeScript settings for the runtime environment.\n\nRun the following commands:\n\n```bash\n# Format code with Prettier\nbun run format\n\n# Check if code is properly formatted\nbun run format:check\n\n# Lint code with ESLint\nbun run lint\n\n# Fix auto-fixable linting issues\nbun run lint:fix\n```\n\nVS Code is configured to format code on save and provide linting information when the recommended extensions are installed.\n\n## Contributing\n\nContributions are welcome! Feel free to open issues or submit pull requests.\n",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcgravity": {
+        "command": "./mcgravity",
+        "args": ["http://mcp1.example.com", "http://mcp2.example.com"],
+        "env": {}
+      },
+      "mcgravity-configured": {
+        "command": "./mcgravity",
+        "args": ["--host", "0.0.0.0", "--port", "4000", "http://mcp1.example.com", "http://mcp2.example.com"],
+        "env": {}
+      },
+      "mcgravity-with-config": {
+        "command": "./mcgravity",
+        "args": ["--config", "config.yaml"],
+        "env": {}
+      },
+      "tigranbs-mcgravity-docker": {
+        "command": "docker",
+        "args": ["run", "-p", "3001:3001", "tigranbs/mcgravity", "http://mcp1.example.com", "http://mcp2.example.com"],
+        "env": {},
+        "docker_image": "tigranbs/mcgravity"
+      },
+      "tigranbs-mcgravity-docker-configured": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-p",
+          "4000:4000",
+          "tigranbs/mcgravity",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "4000",
+          "http://mcp1.example.com"
+        ],
+        "env": {},
+        "docker_image": "tigranbs/mcgravity"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tigranbs",
+    "repo": "mcgravity",
+    "url": "https://github.com/tigranbs/mcgravity",
+    "name": "tigranbs__mcgravity",
+    "path": null,
+    "stars": 68,
+    "contributors": 1,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "8ed51ec31db5d8979322aa6acbda44587628f003"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:11.241Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "js-yaml",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcgravity\",\n  \"module\": \"src/index.ts\",\n  \"type\": \"module\",\n  \"private\": true,\n  \"scripts\": {\n    \"dev\": \"bun run --watch index.ts\",\n    \"build\": \"bun build ./src/index.ts --compile --outfile mcgravity\",\n    \"test\": \"bun test\",\n    \"test:integration\": \"bun run ./test/run-integration-tests.ts\",\n    \"lint\": \"eslint --ext .ts,.tsx,.js,.jsx .\",\n    \"lint:fix\": \"eslint --ext .ts,.tsx,.js,.jsx . --fix\",\n    \"format\": \"prettier --write \\\"**/*.{ts,tsx,js,jsx,json,md}\\\"\",\n    \"format:check\": \"prettier --check \\\"**/*.{ts,tsx,js,jsx,json,md}\\\"\"\n  },\n  \"devDependencies\": {\n    \"@types/bun\": \"latest\",\n    \"@types/js-yaml\": \"^4.0.9\",\n    \"@types/node\": \"^22.14.1\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.30.1\",\n    \"@typescript-eslint/parser\": \"^8.30.1\",\n    \"eslint\": \"^9.24.0\",\n    \"eslint-config-prettier\": \"^10.1.2\",\n    \"eslint-plugin-prettier\": \"^5.2.6\",\n    \"prettier\": \"^3.5.3\",\n    \"typescript-eslint\": \"^8.30.1\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"peerDependencies\": {\n    \"typescript\": \"^5\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.9.0\",\n    \"js-yaml\": \"^4.1.0\"\n  }\n}\n"
+}

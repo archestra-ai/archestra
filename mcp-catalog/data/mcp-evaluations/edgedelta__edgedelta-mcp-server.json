@@ -1,0 +1,125 @@
+{
+  "name": "edgedelta__edgedelta-mcp-server",
+  "display_name": "edgedelta-mcp-server",
+  "description": "Edge Delta MCP Server",
+  "author": {
+    "name": "edgedelta"
+  },
+  "server": {
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "-e",
+      "ED_ORG_ID",
+      "-e",
+      "ED_API_TOKEN",
+      "ghcr.io/edgedelta/edgedelta-mcp-server:latest"
+    ],
+    "env": {
+      "ED_API_TOKEN": "${user_config.ed_api_token}",
+      "ED_ORG_ID": "${user_config.ed_org_id}"
+    },
+    "type": "local",
+    "docker_image": "ghcr.io/edgedelta/edgedelta-mcp-server:latest"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ed_api_token": {
+      "type": "string",
+      "title": "Edge Delta API Token",
+      "description": "Your Edge Delta API token with the required scope.",
+      "sensitive": true,
+      "required": true
+    },
+    "ed_org_id": {
+      "type": "string",
+      "title": "Edge Delta Organization ID",
+      "description": "Your Edge Delta organisation ID.",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "readme": "# Edge Delta MCP Server\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/edgedelta/edgedelta-mcp-server)](https://archestra.ai/mcp-catalog/edgedelta__edgedelta-mcp-server)\n\nThe **Edge Delta MCP Server** is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)\nserver that provides seamless integration with Edge Delta APIs, enabling advanced\nautomation and interaction capabilities for developers and tools.\n\n## Use Cases\n\n- Extract and analyse observability data from Edge Delta.\n- Build AI‑powered tools and applications that interact with Edge Delta’s platform.\n\n## Prerequisites\n\n1. **Docker Engine ≥ 20.10** installed *and running*.\n2. **Docker Buildx plug‑in** available:\n   - **macOS / Windows** – included with Docker Desktop.\n   - **Debian / Ubuntu**\n     ```bash\n     sudo apt-get update && sudo apt-get install -y docker-buildx-plugin\n     ```\n   - **Fedora / RHEL / CentOS**\n     ```bash\n     sudo dnf install -y docker-buildx-plugin   # or yum install …\n     ```\n   - **Other distros (manual fallback)**\n     ```bash\n     mkdir -p ~/.docker/cli-plugins\n     curl -sSL \\\n       https://github.com/docker/buildx/releases/latest/download/buildx-$(uname -s | tr '[:upper:]' '[:lower:]')-amd64 \\\n       -o ~/.docker/cli-plugins/docker-buildx\n     chmod +x ~/.docker/cli-plugins/docker-buildx\n     ```\n3. An **Edge Delta API token** with the required scope – [create one here](https://docs.edgedelta.com/api-tokens/).\n4. Your **Edge Delta organisation ID** – [find it here](https://docs.edgedelta.com/my-organization/).\n\n## Build (container image)\n\nFirst‑time setup (creates a multi‑platform builder and boots it):\n\n```bash\ndocker buildx create --name edgedelta-builder --use\ndocker buildx inspect --bootstrap\n```\n\nBuild the image and load it into the local Docker daemon:\n\n```bash\ndocker buildx build --load -t mcp/edgedelta .\n```\n\n> ℹ️  The `--load` flag streams the image back to your local Docker engine so you can\n> run it directly with `docker run mcp/edgedelta …`.\n\n## Installation\n\n### Usage with Cursor\n\n```json\n{\n  \"mcpServers\": {\n    \"edgedelta\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e ED_ORG_ID\",\n        \"-e ED_API_TOKEN\",\n        \"ghcr.io/edgedelta/edgedelta-mcp-server:latest\"\n      ],\n      \"env\": {\n        \"ED_API_TOKEN\": \"<YOUR_TOKEN>\",\n        \"ED_ORG_ID\": \"<YOUR_ORG_ID>\"\n      }\n    }\n  }\n}\n```\n\n## Library Usage\n\nThe exported Go API of this module is **experimental** and may change without notice.\nIf you rely on it in production, please open an issue describing your use case so we\ncan stabilise the relevant surface.\n\n## License\n\nLicensed under the terms of the **MIT** licence. See [LICENSE](./LICENSE) for full details.\n\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "edgedelta-mcp-server-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e ED_ORG_ID",
+          "-e ED_API_TOKEN",
+          "ghcr.io/edgedelta/edgedelta-mcp-server:latest"
+        ],
+        "env": {
+          "ED_API_TOKEN": "<YOUR_TOKEN>",
+          "ED_ORG_ID": "<YOUR_ORG_ID>"
+        },
+        "docker_image": "ghcr.io/edgedelta/edgedelta-mcp-server:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "edgedelta",
+    "repo": "edgedelta-mcp-server",
+    "url": "https://github.com/edgedelta/edgedelta-mcp-server",
+    "name": "edgedelta-mcp-server",
+    "path": null,
+    "stars": 4,
+    "contributors": 6,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b1c4451640a3f63964544b2c614cc1701c4f133e"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:23.744Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "gorilla/mux",
+      "importance": 8
+    },
+    {
+      "name": "go-openapi/spec",
+      "importance": 7
+    },
+    {
+      "name": "spf13/viper",
+      "importance": 7
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/edgedelta/edgedelta-mcp-server\n\ngo 1.23.0\n\ntoolchain go1.23.8\n\nrequire (\n\tgithub.com/go-openapi/spec v0.21.0\n\tgithub.com/gorilla/mux v1.8.0\n\tgithub.com/mark3labs/mcp-go v0.34.0\n\tgithub.com/spf13/cobra v1.9.1\n\tgithub.com/spf13/viper v1.20.1\n)\n\nrequire (\n\tgithub.com/fsnotify/fsnotify v1.9.0 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.21.0 // indirect\n\tgithub.com/go-openapi/jsonreference v0.21.0 // indirect\n\tgithub.com/go-openapi/swag v0.23.0 // indirect\n\tgithub.com/go-viper/mapstructure/v2 v2.2.1 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/pelletier/go-toml/v2 v2.2.4 // indirect\n\tgithub.com/rogpeppe/go-internal v1.12.0 // indirect\n\tgithub.com/sagikazarmark/locafero v0.9.0 // indirect\n\tgithub.com/sourcegraph/conc v0.3.0 // indirect\n\tgithub.com/spf13/afero v1.14.0 // indirect\n\tgithub.com/spf13/cast v1.9.2 // indirect\n\tgithub.com/spf13/pflag v1.0.6 // indirect\n\tgithub.com/subosito/gotenv v1.6.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.uber.org/multierr v1.11.0 // indirect\n\tgolang.org/x/sys v0.33.0 // indirect\n\tgolang.org/x/text v0.26.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

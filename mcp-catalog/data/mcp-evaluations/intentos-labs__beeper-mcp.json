@@ -1,0 +1,123 @@
+{
+  "name": "intentos-labs__beeper-mcp",
+  "display_name": "beeper-mcp",
+  "description": "A backend service for executing beeper transactions on Binance Smart Chain",
+  "author": {
+    "name": "intentos-labs"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "src/beeper_mcp/server.py"],
+    "env": {
+      "BEEPER_CHAIN": "${user_config.beeper_chain}",
+      "BEEPER_ACCOUNT": "${user_config.beeper_account}",
+      "BEEPER_SECRET_KEY": "${user_config.beeper_secret_key}",
+      "BEEPER_TARGET_TOKEN": "${user_config.beeper_target_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "beeper_chain": {
+      "type": "string",
+      "title": "Beeper Chain",
+      "description": "The blockchain network to connect to (bsc or bsc-testnet)",
+      "required": true,
+      "default": "bsc"
+    },
+    "beeper_account": {
+      "type": "string",
+      "title": "Beeper Wallet Address",
+      "description": "Your wallet address (e.g., 0x...)",
+      "sensitive": false,
+      "required": true
+    },
+    "beeper_secret_key": {
+      "type": "string",
+      "title": "Beeper Private Key",
+      "description": "Your wallet private key",
+      "sensitive": true,
+      "required": true
+    },
+    "beeper_target_token": {
+      "type": "string",
+      "title": "Beeper Default Target Token Address",
+      "description": "The default token address for operations",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# beeper-mcp\n\nA backend service for executing beeper transactions on Binance Smart Chain (BSC). This service provides a set of tools for interacting with the BSC blockchain, including balance checking, balance transfers, token transfers, token swaps in Pancakeswap and beeper reward claims.\n\n## Features\n\n- Get BNB and token balances\n- Transfer BNB and tokens\n- Swap tokens in Pancakeswap\n- Get token prices\n- Buy and sell tokens\n- Claim rewards of beeper tokens\n- Manage default wallet and token addresses\n\n## Prerequisites\n\n- Python >=3.10\n- Access to BSC network (mainnet or testnet)\n- Wallet account and private key\n\n## Environment Variables\n\nCreate a `.env` file in the project root with the following variables:\n\n```env\nBEEPER_CHAIN=<bsc or bsc-testnet>\nBEEPER_ACCOUNT=<your-wallet-address>\nBEEPER_SECRET_KEY=<your-private-key>\nBEEPER_TARGET_TOKEN=<default-token-address>  # Optional\n```\n\n## API Endpoints\n\nThe service exposes the following MCP tools:\n\n### Wallet and Token Management\n- `get_default_wallet_address() -> str`: Get the default wallet address\n- `get_default_token_address() -> str`: Get the default token address\n- `switch_default_token_address(new_token_address: str) -> str`: Switch to a new default token address\n\n### Balance Operations\n- `get_balance(address: str) -> str`: Get BNB balance of an address\n- `get_token_balance(address: str, token_address: str) -> str`: Get token balance of an address\n\n### Transfer Operations\n- `transfer(recipient_address: str, amount: Decimal = 0.01) -> dict`: Transfer BNB to an address\n- `transfer_token(recipient_address: str, token_address: str, amount: Decimal = 0.01) -> dict`: Transfer tokens to an address\n\n### Trading Operations\n- `swap_token(token_in: str, token_out: str, amount: Decimal = 0.01) -> dict`: Swap between tokens\n- `get_token_price(token_address: str) -> float`: Get token price in BNB\n- `buy_token(token_address: str, amount: Decimal = 0.01) -> dict`: Buy tokens with BNB\n- `sell_token(token_address: str, amount: Decimal = 0.01) -> dict`: Sell tokens for BNB\n\n### Reward Operations\n- `claim_rewards(token_address: str) -> dict`: Claim rewards for a token\n\n## Running the Service\n\n```bash\ngit clone https://github.com/unibaseio/beeper-mcp.git\ncd beeper-mcp\n# start server over stdio\nuv run src/beeper_mcp/server.py \n```\n\n+ start using sse\n\nThe sse service will start on port 8000 by default. You can specify a different port using the `--port` argument:\n\n```bash\nuv run src/beeper_mcp/server.py --port 8008 --transport=sse\n```\n\n### Configuration on Claude/Windsurf/Cursor/Cline\n\n```json\n{\n  \"mcpServers\": {\n    \"beeper\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"path/to/beeper-mcp\",\n        \"run\", \n        \"src/beeper_mcp/server.py\"\n        ],\n      \"env\": {\n        \"BEEPER_ACCOUNT\": \"your account, 0x...\",\n        \"BEEPER_SECRET_KEY\": \"your private key or in .env\",\n        \"BEEPER_TARGET_TOKEN\": \"default token address\",\n        \"BEEPER_CHAIN\": \"chain type <bsc/bsc-testnet>\"\n      }\n    }\n  }\n}\n```\n\n## Notes\n\n- All amounts are in native units (e.g., BNB, tokens)\n- Token addresses should be provided in the correct format\n- Make sure you have sufficient BNB for gas fees\n- The service supports both BSC mainnet and testnet\n- All operations return detailed response objects with transaction hashes and status information\n- The service includes built-in error handling and status tracking for transactions\n\n\n## Usage\n\ncall functions in llm chat\n\n+ show wallet and buy tokens\n\n![show wallet and buy tokens](./asset/buy.png)\n\n+ sell tokens\n\n![sell tokens](./asset/sell.png)",
+  "category": "Finance",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "beeper_mcp-stdio": {
+        "command": "uv",
+        "args": ["run", "src/beeper_mcp/server.py"],
+        "env": {}
+      },
+      "beeper_mcp-sse": {
+        "command": "uv",
+        "args": ["run", "src/beeper_mcp/server.py", "--port", "8008", "--transport=sse"],
+        "env": {}
+      },
+      "beeper-configured": {
+        "command": "uv",
+        "args": ["--directory", "path/to/beeper-mcp", "run", "src/beeper_mcp/server.py"],
+        "env": {
+          "BEEPER_ACCOUNT": "your account, 0x...",
+          "BEEPER_SECRET_KEY": "your private key or in .env",
+          "BEEPER_TARGET_TOKEN": "default token address",
+          "BEEPER_CHAIN": "chain type <bsc/bsc-testnet>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "intentos-labs",
+    "repo": "beeper-mcp",
+    "url": "https://github.com/intentos-labs/beeper-mcp",
+    "name": "beeper-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4c5de00013b982c13b5e304a0b8986227d002d28"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:10.372Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "beeper-python",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"beeper-mcp\"\nversion = \"0.1.1\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"beeper-python>=0.1.1\",\n    \"mcp>=1.6.0\",\n]\n"
+}

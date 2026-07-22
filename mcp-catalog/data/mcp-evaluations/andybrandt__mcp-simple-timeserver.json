@@ -1,0 +1,83 @@
+{
+  "name": "andybrandt__mcp-simple-timeserver",
+  "display_name": "mcp-simple-timeserver",
+  "description": "Simple solution to give Claude ability to check current time via MCP",
+  "author": {
+    "name": "andybrandt"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/andybrandt-mcp-simple-timeserver-badge.png)](https://mseep.ai/app/andybrandt-mcp-simple-timeserver)\n\n# MCP Simple Timeserver\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/andybrandt/mcp-simple-timeserver)](https://archestra.ai/mcp-catalog/andybrandt__mcp-simple-timeserver)\n[![smithery badge](https://smithery.ai/badge/mcp-simple-timeserver)](https://smithery.ai/server/mcp-simple-timeserver)\n\n*One of the strange design decisions Anthropic made was depriving Claude of timestamps for messages sent by the user or current time in general. Poor Claude can't tell what time it is! `mcp-simple-timeserver` is a simple MCP server that fixes that.*\n\nThis server provides two tools:\n - `get_local_time` provides the current local time and timezone information from the user's machine. This way Claude can know what time it is at the user's location. He can also calculate how much time passed since his last interaction with the user should he want to do so. \n - `get_utc` provides current UTC time obtained from an [NTP time server](https://en.wikipedia.org/wiki/Network_Time_Protocol). \n\n## Installation\n\n### Installing via Smithery\n\nTo install Simple Timeserver for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-simple-timeserver):\n\n```bash\nnpx -y @smithery/cli install mcp-simple-timeserver --client claude\n```\n\n### Manual Installation\nFirst install the module using:\n\n```bash\npip install mcp-simple-timeserver\n\n```\n\nThen configure in MCP client - the [Claude desktop app](https://claude.ai/download).\n\nUnder Mac OS this will look like this:\n\n```json\n\"mcpServers\": {\n  \"simple-timeserver\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"mcp_simple_timeserver\"]\n  }\n}\n```\n\nUnder Windows you have to check the path to your Python executable using `where python` in the `cmd` (Windows command line). \n\nTypical configuration would look like this:\n\n```json\n\"mcpServers\": {\n  \"simple-timeserver\": {\n    \"command\": \"C:\\\\Users\\\\YOUR_USERNAME\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe\",\n    \"args\": [\"-m\", \"mcp_simple_timeserver\"]\n  }\n}\n```\n\n## Web Server Variant\n\nThis project also includes a network-hostable version that can be deployed as a standalone web server. For instructions on how to run and deploy it, please see the [Web Server Deployment Guide](WEB_DEPLOYMENT.md).\n\nOr you can simply use my server by adding it under https://mcp.andybrandt.net/timeserver to Claude. (*It does not work with ChatGPT since it currently works only with MCP servers that implement `search()` and `fetch()` tools to serve data in response to LLM's querries*).\n\n",
+  "category": "AI Tools",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "simple-timeserver-mac": {
+        "command": "python",
+        "args": ["-m", "mcp_simple_timeserver"],
+        "env": {}
+      },
+      "simple-timeserver-windows": {
+        "command": "C:\\Users\\YOUR_USERNAME\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+        "args": ["-m", "mcp_simple_timeserver"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "andybrandt",
+    "repo": "mcp-simple-timeserver",
+    "url": "https://github.com/andybrandt/mcp-simple-timeserver",
+    "name": "mcp-simple-timeserver",
+    "path": null,
+    "stars": 19,
+    "contributors": 4,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "552c19ccd95b2d9fa66b4e3b92c74ef95e3ad67b"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:43.642Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "ntplib",
+      "importance": 8
+    },
+    {
+      "name": "pywin32",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"mcp-simple-timeserver\"\nversion = \"1.1.2\"\nauthors = [\n  { name=\"Andy Brandt\", email=\"andy@codesprinters.com\" },\n]\ndescription = \"A simple MCP server that provides current time - either local or from an NTP server.\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n]\ndependencies = [\n    \"fastmcp\",\n    \"ntplib\",\n    \"pywin32; sys_platform == 'win32'\"\n]\n\n[tool.setuptools.packages.find]\nexclude = [\"mcp_simple_timeserver.web*\"]\n\n[project.urls]\n\"Homepage\" = \"https://github.com/andybrandt/mcp-simple-timeserver\"\n\n[project.scripts]\nmcp-simple-timeserver = \"mcp_simple_timeserver:main\"\n\n[project.optional-dependencies]\ncli = [\"fastmcp[cli]\"]\n\n\n=== setup.py ===\nfrom setuptools import setup\n\nsetup()"
+}

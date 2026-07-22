@@ -63,8 +63,19 @@ const TRANSCRIPT: Awaited<ReturnType<typeof snapshotConversationTranscript>> = [
 
 function fakeIframe() {
   const postMessage = vi.fn();
-  const el = { contentWindow: { postMessage } } as unknown as HTMLIFrameElement;
-  return { el, postMessage };
+  const el = {
+    contentWindow: { postMessage },
+    // The recorder locks onto a frame only while it is in the DOM.
+    isConnected: true,
+  } as unknown as HTMLIFrameElement;
+  return {
+    el,
+    postMessage,
+    /** Model the frame leaving the DOM (surface teardown). */
+    disconnect: () => {
+      (el as unknown as { isConnected: boolean }).isConnected = false;
+    },
+  };
 }
 
 /**
@@ -198,9 +209,11 @@ describe("useAppSessionRecorder", () => {
     );
 
     // The user opens the app in the right panel: the inline frame tears down
-    // (bindIframe(null)) and the panel frame mounts. Capture must follow it.
+    // (bindIframe(null), element leaves the DOM) and the panel frame mounts.
+    // The recording's frame lock must heal onto the panel.
     act(() => {
       surface.frame.runtimeHooks.bindIframe(null);
+      inlineFrame.disconnect();
       surface.frame.runtimeHooks.bindIframe(panelFrame.el);
     });
 
@@ -245,6 +258,59 @@ describe("useAppSessionRecorder", () => {
     expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
       expect.stringContaining("Recording ready"),
     );
+  });
+
+  it("seeds the first replay segment from the live record-start DOM, not the served source html", async () => {
+    const conversationId = freshConversationId("snap");
+    const surface = renderChatSurface({ conversationId, appId: APP_ID });
+    const frame = fakeIframe();
+
+    // Segment 0 starts as the served source html — the app before its own code
+    // ran (here, an intro overlay that hides the real app).
+    act(() => {
+      surface.frame.runtimeHooks.bindIframe(frame.el);
+      surface.frame.runtimeHooks.captureSnapshot(
+        "<html><body><div id='intro'></div><main id='app'></main></body></html>",
+        1,
+      );
+      surface.composer.start();
+    });
+
+    // The SDK reports the live DOM the moment recording starts (intro dismissed,
+    // app shown) as a `snapshot` control on the event channel, followed by a
+    // normal input event.
+    const liveHtml =
+      "<html><body><div id='intro' style='display:none'></div><main id='app' class='show'>charts</main></body></html>";
+    act(() => {
+      surface.frame.runtimeHooks.onRecordingEvents({
+        events: [
+          { kind: "snapshot", html: liveHtml, ts: Date.now() },
+          { kind: "pointer", type: "click", x: 5, y: 6, ts: Date.now() },
+        ],
+      });
+    });
+
+    await act(async () => {
+      await surface.composer.stop();
+    });
+
+    const bundle = await waitFor(async () => {
+      const stored = await recordingStore.get(conversationId);
+      expect(stored).not.toBeNull();
+      return stored;
+    });
+
+    // The initial segment is the on-screen state, so replay opens on the app the
+    // session actually showed rather than frozen behind the dismissed intro.
+    expect(bundle?.recording.segments[0]?.html).toBe(liveHtml);
+    // The snapshot is a control, never a stored timeline event (it is not part
+    // of the event union and would fail validation if stored).
+    expect(
+      (bundle?.recording.events ?? []).map((e) => e.kind as string),
+    ).not.toContain("snapshot");
+    expect(
+      (bundle?.recording.events ?? []).filter((e) => e.kind === "pointer"),
+    ).toHaveLength(1);
   });
 
   it("records from scratch before a conversation exists, then adopts its id", async () => {

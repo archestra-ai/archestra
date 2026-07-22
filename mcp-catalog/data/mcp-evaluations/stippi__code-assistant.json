@@ -1,0 +1,124 @@
+{
+  "name": "stippi__code-assistant",
+  "display_name": "code-assistant",
+  "description": "An LLM-powered, autonomous coding assistant. Also offers an MCP mode.",
+  "author": {
+    "name": "stippi"
+  },
+  "server": {
+    "command": "${__dirname}/target/release/code-assistant",
+    "args": ["server"],
+    "env": {
+      "PERPLEXITY_API_KEY": "${user_config.perplexity_api_key}",
+      "SHELL": "${user_config.shell}",
+      "ANTHROPIC_API_KEY": "${user_config.anthropic_api_key}",
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "GOOGLE_API_KEY": "${user_config.google_api_key}",
+      "OPENROUTER_API_KEY": "${user_config.openrouter_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "perplexity_api_key": {
+      "type": "string",
+      "title": "Perplexity API Key",
+      "description": "Your API key for Perplexity search, enables perplexity_ask tool.",
+      "sensitive": true,
+      "required": false
+    },
+    "shell": {
+      "type": "string",
+      "title": "Login Shell",
+      "description": "Your login shell, required when configuring 'env' in Claude Desktop.",
+      "sensitive": false,
+      "required": false,
+      "default": "/bin/zsh"
+    },
+    "anthropic_api_key": {
+      "type": "string",
+      "title": "Anthropic API Key",
+      "description": "Your API key for the Anthropic LLM provider.",
+      "sensitive": true,
+      "required": false
+    },
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your API key for the OpenAI LLM provider.",
+      "sensitive": true,
+      "required": false
+    },
+    "google_api_key": {
+      "type": "string",
+      "title": "Google API Key",
+      "description": "Your API key for the Vertex LLM provider.",
+      "sensitive": true,
+      "required": false
+    },
+    "openrouter_api_key": {
+      "type": "string",
+      "title": "OpenRouter API Key",
+      "description": "Your API key for the OpenRouter LLM provider.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Code Assistant\n\n[![CI](https://github.com/stippi/code-assistant/actions/workflows/build.yml/badge.svg)](https://github.com/stippi/code-assistant/actions/workflows/build.yml)\n\nAn AI coding assistant built in Rust that provides both command-line and graphical interfaces for autonomous code analysis and modification.\n\n## Key Features\n\n**Multi-Modal Tool Execution**: Adapts to different LLM capabilities with pluggable tool invocation modes - native function calling, XML-style tags, and triple-caret blocks - ensuring compatibility across various AI providers.\n\n**Real-Time Streaming Interface**: Advanced streaming processors parse and display tool invocations as they stream from the LLM, with smart filtering to prevent unsafe tool combinations.\n\n**Session-Based Project Management**: Each chat session is tied to a specific project and maintains persistent state, working memory, and draft messages with attachment support.\n\n**Multiple Interface Options**: Choose between a modern GUI built on Zed's GPUI framework, traditional terminal interface, or headless MCP server mode for integration with MCP clients such as Claude Desktop.\n\n**Intelligent Project Exploration**: Autonomously builds understanding of codebases through working memory that tracks file structures, dependencies, and project context.\n\n**Auto-Loaded Repository Guidance**: Automatically includes `AGENTS.md` (or `CLAUDE.md` fallback) from the project root in the assistant's system context to align behavior with repo-specific instructions.\n\n## Installation\n\n```bash\ngit clone https://github.com/stippi/code-assistant\ncd code-assistant\ncargo build --release\n```\n\nThe binary will be available at `target/release/code-assistant`.\n\n## Project Configuration\n\nCreate `~/.config/code-assistant/projects.json` to define available projects:\n\n```jsonc\n{\n  \"code-assistant\": {\n    \"path\": \"/Users/<username>/workspace/code-assistant\",\n    \"format_on_save\": {\n      \"**/*.rs\": \"cargo fmt\" // Formats all files in project, so make sure files are already formatted\n    }\n  },\n  \"my-project\": {\n    \"path\": \"/Users/<username>/workspace/my-project\",\n    \"format_on_save\": {\n      \"**/*.ts\": \"prettier --write {path}\" // If the formatter accepts a path, provide \"{path}\"\n    }\n  }\n}\n```\n\n### Format-on-Save Feature\n\nThe _optional_ `format_on_save` field allows automatic formatting of files after modifications. It maps file patterns (using glob syntax) to shell commands:\n- Files matching the glob patterns will be automatically formatted after being modified by the assistant\n- The tool parameters are updated to reflect the formatted content, keeping the LLM's mental model in sync\n- This prevents edit conflicts caused by auto-formatting\n\nSee [docs/format-on-save-feature.md](docs/format-on-save-feature.md) for detailed documentation.\n\n**Important Notes:**\n- When launching from a folder not in this configuration, a temporary project is created automatically\n- The assistant has access to the current project (including temporary ones) plus all configured projects\n- Each chat session is permanently associated with its initial project and folder - this cannot be changed later\n- Tool syntax (native/xml/caret) is also fixed per session at creation time\n- The LLM provider selected at startup is used for the entire application session (UI switching planned for future releases)\n\n## Usage\n\n### GUI Mode (Recommended)\n\n```bash\n# Start with graphical interface\ncode-assistant --ui\n\n# Start GUI with initial task\ncode-assistant --ui --task \"Analyze the authentication system\"\n```\n\n### Terminal Mode\n\n```bash\n# Basic usage\ncode-assistant --task \"Explain the purpose of this codebase\"\n\n# With specific provider and model\ncode-assistant --task \"Add error handling\" --provider openai --model gpt-5\n```\n\n### MCP Server Mode\n\n```bash\ncode-assistant server\n```\n\n## Configuration\n\n<details>\n<summary>Claude Desktop Integration</summary>\n\nConfigure in Claude Desktop settings (**Developer** tab → **Edit Config**):\n\n```jsonc\n{\n  \"mcpServers\": {\n    \"code-assistant\": {\n      \"command\": \"/path/to/code-assistant/target/release/code-assistant\",\n      \"args\": [\"server\"],\n      \"env\": {\n        \"PERPLEXITY_API_KEY\": \"pplx-...\", // optional, enables perplexity_ask tool\n        \"SHELL\": \"/bin/zsh\" // your login shell, required when configuring \"env\" here\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary>LLM Providers</summary>\n\n**Anthropic** (default):\n```bash\nexport ANTHROPIC_API_KEY=\"sk-ant-...\"\ncode-assistant --provider anthropic --model claude-sonnet-4-20250514\n```\n\n**OpenAI**:\n```bash\nexport OPENAI_API_KEY=\"sk-...\"\ncode-assistant --provider openai --model gpt-4o\n```\n\n**SAP AI Core**:\nCreate `~/.config/code-assistant/ai-core.json`:\n```json\n{\n  \"auth\": {\n    \"client_id\": \"<service-key-client-id>\",\n    \"client_secret\": \"<service-key-client-secret>\",\n    \"token_url\": \"https://<your-url>/oauth/token\",\n    \"api_base_url\": \"https://<your-url>/v2/inference\"\n  },\n  \"models\": {\n    \"claude-sonnet-4\": \"<deployment-id>\"\n  }\n}\n```\n\n**Ollama**:\n```bash\ncode-assistant --provider ollama --model llama2 --num-ctx 4096\n```\n\n**Other providers**: Vertex AI (Google), OpenRouter, Groq, MistralAI\n</details>\n\n<details>\n<summary>Advanced Options</summary>\n\n**Tool Syntax Modes**:\n- `--tool-syntax native`: Use the provider's built-in tool calling (most reliable, but streaming of parameters depends on provider)\n- `--tool-syntax xml`: XML-style tags for streaming of parameters\n- `--tool-syntax caret`: Triple-caret blocks for token-efficency and streaming of parameters\n\n**Session Recording**:\n```bash\n# Record session (Anthropic only)\ncode-assistant --record session.json --task \"Optimize database queries\"\n\n# Playback session\ncode-assistant --playback session.json --fast-playback\n```\n\n**Other Options**:\n- `--continue-task`: Resume from previous session state\n- `--use-diff-format`: Enable alternative diff format for file editing\n- `--verbose`: Enable detailed logging\n- `--base-url`: Custom API endpoint\n</details>\n\n## Architecture Highlights\n\nThe code-assistant features several innovative architectural decisions:\n\n**Adaptive Tool Syntax**: Automatically generates different system prompts and streaming processors based on the target LLM's capabilities, allowing the same core logic to work across providers with varying function calling support.\n\n**Smart Tool Filtering**: Real-time analysis of tool invocation patterns prevents logical errors like attempting to edit files before reading them, with the ability to truncate responses mid-stream when unsafe combinations are detected.\n\n**Multi-Threaded Streaming**: Sophisticated async architecture that handles real-time parsing of tool invocations while maintaining responsive UI updates and proper state management across multiple chat sessions.\n\n## Contributing\n\nContributions are welcome! The codebase demonstrates advanced patterns in async Rust, AI agent architecture, and cross-platform UI development.\n\n## Roadmap\n\nThis section is not really a roadmap, as the items are in no particular order.\nBelow are some topics that are likely the next focus.\n\n- **Block Replacing in Changed Files**: When streaming a tool use block, we already know the LLM attempts to use `replace_in_file` and we know in which file quite early.\n  If we also know this file has changed since the LLM last read it, we can block the attempt with an appropriate error message.\n- **Compact Tool Use Failures**: When the LLM produces an invalid tool call, or a mismatching search block, we should be able to strip the failed attempt from the message history, saving tokens.\n- **Improve UI**: There are various ways in which the UI can be improved.\n- **Add Memory Tools**: Add tools that facilitate building up a knowledge base useful work working in a given project.\n- **Security**: Ideally, the execution for all tools would run in some sort of sandbox that restricts access to the files in the project tracked by git.\n  Currently, the tools reject absolute paths, but do not check whether the relative paths point outside the project or try to access git-ignored files.\n  The `execute_command` tool runs a shell with the provided command line, which at the moment is completely unchecked.\n- **Fuzzy matching search blocks**: Investigate the benefit of fuzzy matching search blocks.\n  Currently, files are normalized (always `\\n` line endings, no trailing white space).\n  This increases the success rate of matching search blocks quite a bit, but certain ways of fuzzy matching might increase the success even more.\n  Failed matches introduce quite a bit of inefficiency, since they almost always trigger the LLM to re-read a file.\n  Even when the error output of the `replace_in_file` tool includes the complete file and tells the LLM *not* to re-read the file.\n- **Edit user messages**: Editing a user message should create a new branch in the session.\n  The user should still be able to toggle the active banches.\n- **Select in messages**: Allow to copy/paste from any message in the session.\n",
+  "category": "Development",
+  "quality_score": 72,
+  "archestra_config": {
+    "client_config_permutations": {
+      "code-assistant": {
+        "command": "/Users/<username>/workspace/code-assistant/target/release/code-assistant",
+        "args": ["server"],
+        "env": {
+          "PERPLEXITY_API_KEY": "pplx-...",
+          "SHELL": "/bin/zsh"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "stippi",
+    "repo": "code-assistant",
+    "url": "https://github.com/stippi/code-assistant",
+    "name": "stippi__code-assistant",
+    "path": null,
+    "stars": 92,
+    "contributors": 7,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "51a2e32e0fe542dfbfd2f99a0127ee3e1d88f6d1"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:21.198Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "gpui",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[workspace]\nmembers = [\"crates/code_assistant\", \"crates/llm\", \"crates/web\"]\n\nresolver = \"2\"\n"
+}

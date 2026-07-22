@@ -1,0 +1,82 @@
+{
+  "name": "seym0n__tiktok-mcp",
+  "display_name": "tiktok-mcp",
+  "description": "Model Context Protocol (MCP) with TikTok integration",
+  "author": {
+    "name": "Seym0n"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "TIKNEURON_MCP_API_KEY": "${user_config.tikneuron_mcp_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "tikneuron_mcp_api_key": {
+      "type": "string",
+      "title": "TikNeuron MCP API Key",
+      "description": "Your TikNeuron API Key for the TikTok MCP.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# <img src=\"https://cdn.worldvectorlogo.com/logos/tiktok-icon-2.svg\" height=\"32\"> TikTok MCP\n\n![image (12)](https://github.com/user-attachments/assets/006f9983-b9dd-447c-87c6-ee27a414fd4c)\n\n\nThe TikTok MCP integrates TikTok access into Claude AI and other apps via TikNeuron. This TikTok MCP allows you to\n- analyze TikTok videos to determine virality factors\n- get content from TikTok videos\n- chat with TikTok videos\n\n## Available Tools\n\n### tiktok_get_subtitle\n\n**Description:**  \nGet the subtitle (content) for a TikTok video url. This is used for getting the subtitle, content or context for a TikTok video. If no language code is provided, the tool will return the subtitle of automatic speech recognition.\n\n**Input Parameters:**\n- `tiktok_url` (required): TikTok video URL, e.g., https://www.tiktok.com/@username/video/1234567890 or https://vm.tiktok.com/1234567890\n- `language_code` (optional): Language code for the subtitle, e.g., en for English, es for Spanish, fr for French, etc.\n\n### tiktok_get_post_details\n\n**Description:**  \nGet the details of a TikTok post. Returns the details of the video like:\n- Description\n- Video ID\n- Creator username\n- Hashtags\n- Number of likes, shares, comments, views and bookmarks\n- Date of creation\n- Duration of the video\n- Available subtitles with language and source information\n\n**Input Parameters:**\n- `tiktok_url` (required): TikTok video URL, e.g., https://www.tiktok.com/@username/video/1234567890 or https://vm.tiktok.com/1234567890, or just the video ID like 7409731702890827041\n\n### tiktok_search\n\n**Description:**  \nSearch for TikTok videos based on a query. Returns a list of videos matching the search criteria with their details including description, video ID, creator, hashtags, engagement metrics, date of creation, duration and available subtitles, plus pagination metadata for continuing the search.\n\n**Input Parameters:**\n- `query` (required): Search query for TikTok videos, e.g., 'funny cats', 'dance', 'cooking tutorial'\n- `cursor` (optional): Pagination cursor for getting more results\n- `search_uid` (optional): Search session identifier for pagination\n\n## Requirements\n\nFor this TikTok MCP, you need\n- NodeJS v18 or higher (https://nodejs.org/)\n- Git (https://git-scm.com/)\n- TikNeuron Account and MCP API Key (https://tikneuron.com/tools/tiktok-mcp)\n\n## Setup\n\n1. Clone the repository\n```\ngit clone https://github.com/Seym0n/tiktok-mcp.git\n```\n\n2. Install dependencies\n```\nnpm install\n```\n\n3. Build project\n```\nnpm run build\n```\n\nThis creates the file `build\\index.js`\n\n## Using in Claude AI\n\nAdd the following entry to `mcpServers`:\n\n```\n\"tiktok-mcp\": {\n    \"command\": \"node\",\n    \"args\": [\n      \"path\\\\build\\\\index.js\"\n    ],\n    \"env\": {\n      \"TIKNEURON_MCP_API_KEY\": \"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\"\n    }\n}\n```\n\nand replace path with the `path` to TikTok MCP and `XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` with TIkNeuron API Key\n\nso that `mcpServers` will look like this:\n\n```\n{\n  \"mcpServers\": {\n    \"tiktok-mcp\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"path\\\\build\\\\index.js\"\n      ],\n      \"env\": {\n        \"TIKNEURON_MCP_API_KEY\": \"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\"\n      }\n    }\n  }\n}\n```\n",
+  "category": "AI Tools",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "tiktok-mcp": {
+        "command": "node",
+        "args": ["path\\build\\index.js"],
+        "env": {
+          "TIKNEURON_MCP_API_KEY": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Seym0n",
+    "repo": "tiktok-mcp",
+    "url": "https://github.com/Seym0n/tiktok-mcp",
+    "name": "tiktok-mcp",
+    "path": null,
+    "stars": 82,
+    "contributors": 1,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "4490a9b0967e9265bb3ba65cedcf2036fd3e3ade"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:52.617Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"tiktok-mcp\",\n    \"version\": \"0.0.1\",\n    \"description\": \"MCP server for TikTok\",\n    \"license\": \"MIT\",\n    \"author\": \"Simon\",\n    \"homepage\": \"https://tikneuron.com\",\n    \"type\": \"module\",\n    \"bin\": {\n      \"tiktok-mcp-server\": \"build/index.js\"\n    },\n    \"files\": [\n      \"build\"\n    ],\n    \"scripts\": {\n      \"build\": \"tsc && shx chmod +x build/*.js\",\n      \"prepare\": \"npm run build\",\n      \"watch\": \"tsc --watch\"\n    },\n    \"dependencies\": {\n      \"@modelcontextprotocol/sdk\": \"1.10.1\"\n    },\n    \"devDependencies\": {\n      \"@types/node\": \"^22\",\n      \"shx\": \"^0.3.4\",\n      \"typescript\": \"^5.6.2\"\n    }\n  }"
+}

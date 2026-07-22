@@ -1,0 +1,78 @@
+{
+  "name": "jamesanz__bitcoin-mcp",
+  "display_name": "bitcoin-mcp",
+  "description": "A Model Context Protocol (MCP) server that provides real-time Bitcoin blockchain data",
+  "author": {
+    "name": "JamesANZ"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Bitcoin MCP Server\n\nA Model Context Protocol (MCP) server that provides real-time Bitcoin blockchain data by querying the [mempool.space](https://mempool.space) API.\n\n<a href=\"https://glama.ai/mcp/servers/@JamesANZ/bitcoin-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@JamesANZ/bitcoin-mcp/badge\" alt=\"Bitcoin Server MCP server\" />\n</a>\n\n## Features\n\nThis MCP server offers five specialized tools for querying Bitcoin blockchain data:\n\n### 🔍 Address Tools\n\n#### `get-address-stats`\n\nGet basic statistics for any Bitcoin address.\n\n**Input:**\n\n- `address` (string): Bitcoin address to query\n\n**Output:**\n\n- Chain statistics (funded/spent amounts, transaction counts)\n- Mempool statistics (pending transactions)\n\n**Example:**\n\n```\nAddress: 1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv\n\nChain Stats:\n- Funded TXOs: 10\n- Funded Sum: 150.07686949 BTC\n- Spent TXOs: 5\n- Spent Sum: 150.07599040 BTC\n- Total Transactions: 12\n\nMempool Stats:\n- Pending TXOs: 0\n- Pending Sum: 0.00000000 BTC\n- Pending Transactions: 0\n```\n\n#### `get-address-transactions`\n\nGet transaction history for a Bitcoin address.\n\n**Input:**\n\n- `address` (string): Bitcoin address to query\n- `limit` (optional, number): Number of transactions to return (1-50, default: 10)\n\n**Output:**\n\n- List of recent transactions with status, dates, fees, and sizes\n\n#### `get-address-utxos`\n\nGet current UTXOs (unspent transaction outputs) for a Bitcoin address.\n\n**Input:**\n\n- `address` (string): Bitcoin address to query\n- `limit` (optional, number): Number of UTXOs to return (1-50, default: 10)\n\n**Output:**\n\n- List of current UTXOs with amounts, confirmation status, and dates\n\n### 🔗 Transaction Tools\n\n#### `get-transaction`\n\nGet detailed information about a specific Bitcoin transaction.\n\n**Input:**\n\n- `txid` (string): Transaction ID (hash) to query\n\n**Output:**\n\n- Complete transaction details including:\n  - Basic info (version, size, weight, fee)\n  - Confirmation status and block information\n  - Input and output details with amounts and addresses\n\n### 🧱 Block Tools\n\n#### `get-block`\n\nGet information about a specific Bitcoin block.\n\n**Input:**\n\n- `block_height` (number): Block height to query\n\n**Output:**\n\n- Block details including:\n  - Hash, version, merkle root\n  - Previous block hash and timestamp\n  - Size, weight, and transaction count\n  - Fee statistics\n\n## Installation\n\n1. Clone this repository:\n\n```bash\ngit clone <repository-url>\ncd bitcoin-mcp\n```\n\n2. Install dependencies:\n\n```bash\nnpm install\n```\n\n3. Build the project:\n\n```bash\nnpm run build\n```\n\n## Usage\n\n### Running the Server\n\nStart the MCP server:\n\n```bash\nnpm start\n```\n\nThe server runs on stdio and can be connected to any MCP-compatible client.\n\n### Example Queries\n\nHere are some example queries you can make with this MCP server:\n\n#### Get Address Statistics\n\n```json\n{\n  \"tool\": \"get-address-stats\",\n  \"arguments\": {\n    \"address\": \"1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv\"\n  }\n}\n```\n\n#### Get Recent Transactions\n\n```json\n{\n  \"tool\": \"get-address-transactions\",\n  \"arguments\": {\n    \"address\": \"1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv\",\n    \"limit\": 5\n  }\n}\n```\n\n#### Get Transaction Details\n\n```json\n{\n  \"tool\": \"get-transaction\",\n  \"arguments\": {\n    \"txid\": \"15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521\"\n  }\n}\n```\n\n#### Get Block Information\n\n```json\n{\n  \"tool\": \"get-block\",\n  \"arguments\": {\n    \"block_height\": 857808\n  }\n}\n```\n\n## API Endpoints\n\nThis MCP server uses the following mempool.space API endpoints:\n\n- `GET /api/address/{address}` - Address statistics\n- `GET /api/address/{address}/txs` - Address transaction history\n- `GET /api/address/{address}/utxo` - Address UTXOs\n- `GET /api/tx/{txid}` - Transaction details\n- `GET /api/block/{height}` - Block information\n\n## Data Format\n\nAll amounts are displayed in BTC (converted from satoshis) for better readability. Timestamps are converted to ISO format for easy parsing.\n\n## Error Handling\n\nThe server includes comprehensive error handling:\n\n- Network errors are caught and reported with descriptive messages\n- Invalid addresses or transaction IDs return appropriate error messages\n- Rate limiting and API errors are handled gracefully\n\n## Dependencies\n\n- `@modelcontextprotocol/sdk` - MCP SDK for server implementation\n- `superagent` - HTTP client for API requests\n- `zod` - Schema validation for tool parameters\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.",
+  "category": "Finance",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bitcoin-mcp-stdio": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "JamesANZ",
+    "repo": "bitcoin-mcp",
+    "url": "https://github.com/JamesANZ/bitcoin-mcp",
+    "name": "bitcoin-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "7a74f4eeca7ce0456c96be1266771f25c20b60d3"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:17.332Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "superagent",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"bitcoin-mcp\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"bitcoin-mcp\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"main\": \"index.js\",\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.15.0\",\n    \"superagent\": \"^10.2.2\",\n    \"zod\": \"^3.25.75\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.0.10\",\n    \"@types/superagent\": \"^8.1.9\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

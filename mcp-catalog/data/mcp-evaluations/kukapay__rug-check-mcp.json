@@ -1,0 +1,90 @@
+{
+  "name": "kukapay__rug-check-mcp",
+  "display_name": "rug-check-mcp",
+  "description": "An MCP server that detects potential risks in Solana meme tokens.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {
+      "SOLSNIFFER_API_KEY": "${user_config.solsniffer_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "solsniffer_api_key": {
+      "type": "string",
+      "title": "Solsniffer API Key",
+      "description": "Your Solsniffer API key (sign up at Solsniffer.com to obtain one)",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Rug-Check-MCP\n\nAn MCP server that detects potential risks in Solana meme tokens, helping AI agents avoid rug pulls and unsafe projects.\n\n![License](https://img.shields.io/github/license/kukapay/rug-check-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)\n[![smithery badge](https://smithery.ai/badge/@kukapay/rug-check-mcp)](https://smithery.ai/server/@kukapay/rug-check-mcp)\n\n## Features\n\n- **Token Analysis Tool**: The `analysis_token` tool retrieves and processes Solana token data from the Solsniffer API.\n- **Structured Output**: Returns detailed token information including name, symbol, Snif score, market cap, price, supply, risks, and audit status.\n\n## Prerequisites\n\n- Python 3.10 or higher\n- A Solsniffer API key (sign up at [Solsniffer](https://solsniffer.com) to obtain one)\n\n## Installation\n\n### Installing via Smithery\n\nTo install Rug Check for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kukapay/rug-check-mcp):\n\n```bash\nnpx -y @smithery/cli install @kukapay/rug-check-mcp --client claude\n```\n\n### Manual Installation\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/rug-check-mcp.git\n   cd rug-check-mcp\n   ```\n\n2. **Install Dependencies**:\n   Ensure you have `pip` installed, then run:\n   ```bash\n   pip install mcp[cli] requests python-dotenv\n   ```\n\n3. **Client Configuration**:\n\n    ```\n    \"mcpServers\": { \n      \"rug-check-mcp\": { \n        \"command\": \"python\", \n        \"args\": [\"path/to/rug-check-mcp/main.py\"], \n        \"env\": { \n          \"SOLSNIFFER_API_KEY\": \"your_solsniffer_api_key_here\" \n        } \n      } \n    }\n    ```\n\n## Tool: `analysis_token`\n\n- **Description**: Analyzes a Solana token based on its address.\n- **Input**: `token_address` (string) - The Solana token address to analyze.\n- **Output**: A dictionary containing:\n  - `token_address`: Token address\n  - `token_name`: Token name\n  - `token_symbol`: Token symbol\n  - `snif_score`: Solsniffer risk score (0-100)\n  - `market_cap`: Market capitalization in USD\n  - `price`: Token price in USD\n  - `supply_amount`: Total supply of the token\n  - `risks`: High, moderate, and low risk details with counts and descriptions\n  - `audit_risk`: Audit status (mint/freeze disabled, LP burned, top 10 holders)\n\n  \n### Example Output\nFor token address `9VxExA1iRPbuLLdSJ2rB3nyBxsyLReT4aqzZBMaBaY1p`:\n```json\n{\n  'token_address': '9VxExA1iRPbuLLdSJ2rB3nyBxsyLReT4aqzZBMaBaY1p',\n  'token_name': 'REVSHARE',\n  'token_symbol': 'REVS',\n  'snif_score': 55,\n  'market_cap': 271893.9423965262,\n  'price': 0.000280011574,\n  'supply_amount': 971009656.8955618,\n  'risks': {\n    'high': {\n      'count': 3,\n      'details': {\n        'Mintable risks found': True,\n        'Freeze risks found': True,\n        'A private wallet owns a significant share of the supply': False,\n        'Tokens auto-freeze risks found': True,\n        'Significant ownership by top 10 wallets': False,\n        'Significant ownership by top 20 wallets': False,\n        'Permanent control risks found': True,\n        'Presence of token metadata': True,\n        'High locked supply risks found': None,\n        'Sufficient liquidity detected': None,\n        'Very low liquidity': None\n      }\n    },\n    'moderate': {\n      'count': 3,\n      'details': {\n        'Token metadata are immutable': False,\n        'Token operates without custom fees': False,\n        'Token has recent user activity': True,\n        'Unknown liquidity pools': False,\n        'Low count of LP providers': True\n      }\n    },\n    'low': {\n      'count': 1,\n      'details': {\n        'Contract was not recently deployed': False\n      }\n    }\n  },\n  'audit_risk': {\n    'mint_disabled': True,\n    'freeze_disabled': True,\n    'lp_burned': False,\n    'top_10_holders_significant': False\n  }\n}\n```\n\n### Prompt Examples\n\nBelow are examples of prompts you might use in an MCP-compatible client (e.g., Claude Desktop) and the expected responses after the `analysis_token` tool is invoked.\n\n**Prompt**: \n\n> \"Can you analyze the Solana token at address `9VxExA1iRPbuLLdSJ2rB3nyBxsyLReT4aqzZBMaBaY1p`?\"\n   \n**Response**:\n```plaintext\nI've analyzed the token at address 9VxExA1iRPbuLLdSJ2rB3nyBxsyLReT4aqzZBMaBaY1p. Here's the summary:\n\n- Token Name: REVSHARE (Symbol: REVS)\n- Snif Score: 55/100 (Moderate risk)\n- Market Cap: $288,875.29\n- Price: $0.000297\n- Total Supply: 971,266,696.90 tokens\n- Risks:\n  - High (3 risks):\n    - Mintable risks found: True\n    - Freeze risks found: True\n    - Permanent control risks found: True\n    - (Other factors: False)\n  - Moderate (1 risk):\n    - Low count of LP providers: True\n    - (Other factors: False)\n  - Low (0 risks):\n    - (All factors: False)\n- Audit Status:\n  - Mint Disabled: Yes\n  - Freeze Disabled: Yes\n  - LP Burned: No\n  - Top 10 Holders Significant: No\n\nThis token has moderate risks due to potential control issues and liquidity concerns, but minting and freezing are disabled for added safety.     \n```\n\n**Prompt**: \n\n> \"What’s the risk profile of the token `So11111111111111111111111111111111111111112`?\"\n\n**Response**:\n```plaintext\nHere's the risk profile for the token at address So11111111111111111111111111111111111111112:\n\n- Token Name: Wrapped SOL (Symbol: SOL)\n- Snif Score: 92/100 (Low risk)\n- Market Cap: $82,345,678.90\n- Price: $176.54\n- Total Supply: 466,567,890.12 tokens\n- Risks:\n  - High (0 risks):\n    - (All factors: False)\n  - Moderate (0 risks):\n    - (All factors: False)\n  - Low (1 risk):\n    - Minor liquidity concentration: True\n    - (Other factors: False)\n- Audit Status:\n  - Mint Disabled: Yes\n  - Freeze Disabled: Yes\n  - LP Burned: Yes\n  - Top 10 Holders Significant: No\n\nWrapped SOL is a low-risk token with strong audit protections and only a minor liquidity concern, typical for a well-established asset.     \n```\n\n**Prompt**: \n> \"Tell me about the token `4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R`.\"\n\n**Response**:\n```plaintext\nHere's the analysis for the token at address 4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R:\n\n- Token Name: Raydium (Symbol: RAY)\n- Snif Score: 85/100 (Low risk)\n- Market Cap: $1,234,567.89\n- Price: $4.72\n- Total Supply: 261,567,890.12 tokens\n- Risks:\n  - High (0 risks):\n    - (All factors: False)\n  - Moderate (1 risk):\n    - Moderate holder concentration: True\n    - (Other factors: False)\n  - Low (0 risks):\n    - (All factors: False)\n- Audit Status:\n  - Mint Disabled: Yes\n  - Freeze Disabled: Yes\n  - LP Burned: Yes\n  - Top 10 Holders Significant: No\n\nRaydium is a low-risk token with solid audit protections. The moderate holder concentration indicates some centralization, but it’s not a major issue.     \n```\n\n\n## License\n\nThis project is licensed under the MIT License. See [LICENSE](LICENSE) for details.\n",
+  "category": "Finance",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "rug-check-mcp": {
+        "command": "python",
+        "args": ["path/to/rug-check-mcp/main.py"],
+        "env": {
+          "SOLSNIFFER_API_KEY": "your_solsniffer_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "rug-check-mcp",
+    "url": "https://github.com/kukapay/rug-check-mcp",
+    "name": "rug-check-mcp",
+    "path": null,
+    "stars": 11,
+    "contributors": 2,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "9707e02a4d09f440f23cebc1c888ae36a7a338ff"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:14.416Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"rug-check-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that detects potential rug pull risks in Solana meme tokens.\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"dotenv>=0.9.9\",\n    \"mcp[cli]>=1.5.0\",\n    \"requests>=2.32.3\",\n]\n"
+}

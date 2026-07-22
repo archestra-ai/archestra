@@ -1,0 +1,74 @@
+{
+  "name": "dockergiant__rolldev-mcp-server",
+  "display_name": "rolldev-mcp-server",
+  "description": "RollDev MCP Server to use in Ai agents",
+  "author": {
+    "name": "dockergiant"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@disrex/rolldev-mcp-server"],
+    "env": {},
+    "type": "local"
+  },
+  "readme": "# RollDev MCP Server\n\n[![npm version](https://badge.fury.io/js/@disrex%2Frolldev-mcp-server.svg)](https://badge.fury.io/js/@disrex%2Frolldev-mcp-server)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Node.js CI](https://github.com/dockergiant/rolldev-mcp-server/actions/workflows/nodejs-ci.yml/badge.svg)](https://github.com/dockergiant/rolldev-mcp-server/actions/workflows/nodejs-ci.yml)\n[![JavaScript](https://img.shields.io/badge/JavaScript-ES2022-f7df1e.svg)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)\n[![RollDev](https://img.shields.io/badge/RollDev-Compatible-blue)](https://rolldev.com)\n[![Magento](https://img.shields.io/badge/Magento-2.4.x-orange)](https://magento.com)\n[![Docker](https://img.shields.io/badge/Docker-Required-2496ed)](https://docker.com)\n[![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-green)](https://modelcontextprotocol.io)\n\nA Model Context Protocol (MCP) server for [RollDev](https://dockergiant.github.io/rolldev) + Magento 2 development environments. This server enables Claude and other LLMs to interact with RollDev projects, manage environments, execute commands, and initialize new Magento 2 projects seamlessly.\n\n## Features\n\n### Environment Management\n- **Environment Control**: List, start, and stop RollDev project environments\n- **Service Management**: Control RollDev system services (database, Redis, OpenSearch, etc.)\n- **Project Initialization**: Create new Magento 2 projects with automatic configuration\n\n### Development Tools\n- **Database Operations**: Execute SQL queries directly in project databases\n- **PHP Script Execution**: Run PHP scripts within project containers\n- **Magento CLI Access**: Execute Magento commands through `roll magento`\n- **Composer Integration**: Run Composer commands in project environments\n\n## Prerequisites\n\n- [RollDev](https://rolldev.com) installed and configured\n- Node.js 18+\n- Active RollDev project environments (for some operations)\n\n## Installation\n\n### Option 1: Using NPM (Recommended)\n\n```json\n{\n  \"mcpServers\": {\n    \"rolldev\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@disrex/rolldev-mcp-server\"\n      ]\n    }\n  }\n}\n```\n\nAdd this configuration to your Claude for Desktop config file:\n- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n### Option 2: Manual Setup\n\n1. Clone this repository:\n```bash\ngit clone https://github.com/dockergiant/rolldev-mcp-server.git\ncd rolldev-mcp-server\n```\n\n2. Install dependencies:\n```bash\nnpm install\n```\n\n3. Add to Claude configuration:\n```json\n{\n  \"mcpServers\": {\n    \"rolldev\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/rolldev-mcp-server/server.js\"]\n    }\n  }\n}\n```\n\n## Available Tools\n\n### rolldev_list_environments\nLists all running RollDev environments with structured information including project names, paths, URLs, Docker networks, and container counts.\n\n### rolldev_start_project\nStarts a RollDev project environment.\n- **project_path**: Path to the project directory\n\n### rolldev_stop_project  \nStops a RollDev project environment.\n- **project_path**: Path to the project directory\n\n### rolldev_start_svc\nStarts RollDev system services.\n- **project_path**: Path to the project directory\n\n### rolldev_stop_svc\nStops RollDev system services.\n- **project_path**: Path to the project directory\n\n### rolldev_db_query\nExecutes SQL queries in project databases.\n- **project_path**: Path to the project directory\n- **query**: SQL query to execute\n- **database**: Database name (optional, defaults to \"magento\")\n\n### rolldev_php_script\nRuns PHP scripts inside project containers.\n- **project_path**: Path to the project directory  \n- **script_path**: Path to PHP script relative to project root\n- **args**: Additional arguments (optional)\n\n### rolldev_magento_cli\nExecutes Magento CLI commands.\n- **project_path**: Path to the project directory\n- **command**: Magento command (without 'bin/magento' prefix)\n- **args**: Additional arguments (optional)\n\n### rolldev_composer\nRuns Composer commands in project environments.\n- **project_path**: Path to the project directory\n- **command**: Composer command (e.g., \"install\", \"update\", \"require symfony/console\")\n\n### rolldev_magento2_init\nInitializes new Magento 2 projects with automatic configuration.\n- **project_name**: Project name (lowercase, letters, numbers, hyphens only)\n- **magento_version**: Magento version (optional, defaults to \"2.4.x\")\n- **target_directory**: Target directory (optional, defaults to current directory)\n\n## Examples\n\nHere are some example interactions you can try with Claude after setting up the RollDev MCP server:\n\n### Basic Environment Management\n1. \"Can you list all my RollDev environments?\"\n2. \"Start the project at /path/to/my-magento-project\"\n3. \"Stop the services for my current project\"\n\n### Database Operations\n4. \"Run the query 'SELECT * FROM admin_user LIMIT 5' in my project\"\n5. \"Show me all enabled modules in the database\"\n6. \"Check the current configuration values for my store\"\n\n### Magento Development\n7. \"Execute 'cache:flush' Magento command in my project\"\n8. \"Run 'setup:upgrade' on my Magento installation\"\n9. \"List all available Magento CLI commands\"\n\n### Project Initialization\n10. \"Initialize a new Magento 2.4.7 project called 'my-store'\"\n11. \"Create a Magento project with the latest version in /Users/dev/projects\"\n\n### Composer Operations\n12. \"Install dependencies with Composer in my project\"\n13. \"Require the symfony/console package in my project\"\n\n## Development\n\n```bash\n# Start in development mode with debugging\nnpm run dev\n\n# Run tests\nnpm test\n```\n\n## Testing\n\nYou can test the server using the MCP Inspector:\n\n```bash\nnpx @modelcontextprotocol/inspector node server.js\n```\n\n## Contributing\n\n1. Fork the repository from [dockergiant/rolldev-mcp-server](https://github.com/dockergiant/rolldev-mcp-server)\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Support\n\nIf you encounter any issues or have questions:\n\n1. Check the [GitHub Issues section](https://github.com/dockergiant/rolldev-mcp-server/issues)\n2. Consult the MCP documentation at [modelcontextprotocol.io](https://modelcontextprotocol.io)\n3. Open a new issue with detailed reproduction steps\n\n\n\n<img src=\"https://files.disrex.nl/disrex-character.gif?t=572693425\" alt=\"Disrex T-Rex Mascot Waving\" width=\"150\">\n\n---\n\n## Sponsored by\n\n<picture>\n  <source srcset=\"https://files.disrex.nl/logos/logo-w.png\" media=\"(prefers-color-scheme: dark)\">\n  <img src=\"https://files.disrex.nl/logos/logo-b.png\" alt=\"Disrex Logo\" width=\"200\">\n</picture>",
+  "category": "Development",
+  "quality_score": 38,
+  "programming_language": "JavaScript",
+  "framework": null,
+  "github_info": {
+    "owner": "dockergiant",
+    "repo": "rolldev-mcp-server",
+    "url": "https://github.com/dockergiant/rolldev-mcp-server",
+    "name": "dockergiant__rolldev-mcp-server",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "039a8dd5a519826e1c7162ac901a693955bbc270"
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "user_config": {},
+  "archestra_config": {
+    "client_config_permutations": {
+      "disrex-rolldev-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "@disrex/rolldev-mcp-server"]
+      },
+      "disrex-rolldev-mcp-server-node": {
+        "command": "node",
+        "args": ["/path/to/rolldev-mcp-server/server.js"]
+      },
+      "disrex-rolldev-mcp-server-dev": {
+        "command": "npm",
+        "args": ["run", "dev"]
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-flash",
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@disrex/rolldev-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP Server for RollDev + Magento 2 development workflow with project initialization\",\n  \"license\": \"MIT\",\n  \"author\": \"RollDev Team & Disrex\",\n  \"homepage\": \"https://github.com/dockergiant/rolldev-mcp-server\",\n  \"bugs\": \"https://github.com/dockergiant/rolldev-mcp-server/issues\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/dockergiant/rolldev-mcp-server.git\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"rolldev\",\n    \"magento\",\n    \"magento2\",\n    \"development\",\n    \"php\",\n    \"mysql\",\n    \"docker\",\n    \"project-initialization\",\n    \"environment-setup\",\n    \"redis\",\n    \"opensearch\",\n    \"claude\",\n    \"llm\",\n    \"ai\"\n  ],\n  \"type\": \"module\",\n  \"scripts\": {\n    \"start\": \"node server.js\",\n    \"dev\": \"node --inspect server.js\",\n    \"test\": \"jest\",\n    \"test:watch\": \"jest --watch\",\n    \"test:coverage\": \"jest --coverage\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.4.0\"\n  },\n  \"bin\": {\n    \"rolldev-mcp-server\": \"server.js\"\n  },\n  \"main\": \"server.js\",\n  \"files\": [\n    \"server.js\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"devDependencies\": {\n    \"jest\": \"^30.0.5\"\n  }\n}\n",
+  "last_scraped_at": "2025-09-09T13:06:35.082Z"
+}

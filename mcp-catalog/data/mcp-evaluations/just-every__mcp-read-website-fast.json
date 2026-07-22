@@ -1,0 +1,83 @@
+{
+  "name": "just-every__mcp-read-website-fast",
+  "display_name": "Fast Website Reader",
+  "description": "Quickly reads webpages and converts to markdown for fast, token efficient web scraping",
+  "author": {
+    "name": "just-every"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@just-every/mcp-read-website-fast"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# @just-every/mcp-read-website-fast\n\nFast, token-efficient web content extraction for AI agents - converts websites to clean Markdown.\n\n[![npm version](https://badge.fury.io/js/@just-every%2Fmcp-read-website-fast.svg)](https://www.npmjs.com/package/@just-every/mcp-read-website-fast)\n[![GitHub Actions](https://github.com/just-every/mcp-read-website-fast/workflows/Release/badge.svg)](https://github.com/just-every/mcp-read-website-fast/actions)\n\n<a href=\"https://glama.ai/mcp/servers/@just-every/mcp-read-website-fast\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@just-every/mcp-read-website-fast/badge\" alt=\"read-website-fast MCP server\" />\n</a>\n\n## Overview\n\nExisting MCP web crawlers are slow and consume large quantities of tokens. This pauses the development process and provides incomplete results as LLMs need to parse whole web pages.\n\nThis MCP package fetches web pages locally, strips noise, and converts content to clean Markdown while preserving links. Designed for Claude Code, IDEs and LLM pipelines with minimal token footprint. Crawl sites locally with minimal dependencies.\n\n**Note:** This package now uses [@just-every/crawl](https://www.npmjs.com/package/@just-every/crawl) for its core crawling and markdown conversion functionality.\n\n## Features\n\n- **Fast startup** using official MCP SDK with lazy loading for optimal performance\n- **Content extraction** using Mozilla Readability (same as Firefox Reader View)\n- **HTML to Markdown** conversion with Turndown + GFM support\n- **Smart caching** with SHA-256 hashed URLs\n- **Polite crawling** with robots.txt support and rate limiting\n- **Concurrent fetching** with configurable depth crawling\n- **Stream-first design** for low memory usage\n- **Link preservation** for knowledge graphs\n- **Optional chunking** for downstream processing\n\n## Installation\n\n### Claude Code\n\n```bash\nclaude mcp add read-website-fast -s user -- npx -y @just-every/mcp-read-website-fast\n```\n\n### VS Code\n\n```bash\ncode --add-mcp '{\"name\":\"read-website-fast\",\"command\":\"npx\",\"args\":[\"-y\",\"@just-every/mcp-read-website-fast\"]}'\n```\n\n### Cursor\n\n```bash\ncursor://anysphere.cursor-deeplink/mcp/install?name=read-website-fast&config=eyJyZWFkLXdlYnNpdGUtZmFzdCI6eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBqdXN0LWV2ZXJ5L21jcC1yZWFkLXdlYnNpdGUtZmFzdCJdfX0=\n```\n\n### JetBrains IDEs\n\nSettings → Tools → AI Assistant → Model Context Protocol (MCP) → Add\n\nChoose “As JSON” and paste:\n\n```json\n{\"command\":\"npx\",\"args\":[\"-y\",\"@just-every/mcp-read-website-fast\"]}\n```\n\nOr, in the chat window, type /add and fill in the same JSON—both paths land the server in a single step. ￼\n\n### Raw JSON (works in any MCP client)\n\n```json\n{\n  \"mcpServers\": {\n    \"read-website-fast\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@just-every/mcp-read-website-fast\"]\n    }\n  }\n}\n```\n\nDrop this into your client’s mcp.json (e.g. .vscode/mcp.json, ~/.cursor/mcp.json, or .mcp.json for Claude).\n\n\n\n## Features\n\n- **Fast startup** using official MCP SDK with lazy loading for optimal performance\n- **Content extraction** using Mozilla Readability (same as Firefox Reader View)\n- **HTML to Markdown** conversion with Turndown + GFM support\n- **Smart caching** with SHA-256 hashed URLs\n- **Polite crawling** with robots.txt support and rate limiting\n- **Concurrent fetching** with configurable depth crawling\n- **Stream-first design** for low memory usage\n- **Link preservation** for knowledge graphs\n- **Optional chunking** for downstream processing\n\n### Available Tools\n\n- `read_website` - Fetches a webpage and converts it to clean markdown\n  - Parameters:\n    - `url` (required): The HTTP/HTTPS URL to fetch\n    - `pages` (optional): Maximum number of pages to crawl (default: 1, max: 100)\n\n### Available Resources\n\n- `read-website-fast://status` - Get cache statistics\n- `read-website-fast://clear-cache` - Clear the cache directory\n\n## Development Usage\n\n### Install\n\n```bash\nnpm install\nnpm run build\n```\n\n### Single page fetch\n```bash\nnpm run dev fetch https://example.com/article\n```\n\n### Crawl with depth\n```bash\nnpm run dev fetch https://example.com --depth 2 --concurrency 5\n```\n\n### Output formats\n```bash\n# Markdown only (default)\nnpm run dev fetch https://example.com\n\n# JSON output with metadata\nnpm run dev fetch https://example.com --output json\n\n# Both URL and markdown\nnpm run dev fetch https://example.com --output both\n```\n\n### CLI Options\n\n- `-p, --pages <number>` - Maximum number of pages to crawl (default: 1)\n- `-c, --concurrency <number>` - Max concurrent requests (default: 3)\n- `--no-robots` - Ignore robots.txt\n- `--all-origins` - Allow cross-origin crawling\n- `-u, --user-agent <string>` - Custom user agent\n- `--cache-dir <path>` - Cache directory (default: .cache)\n- `-t, --timeout <ms>` - Request timeout in milliseconds (default: 30000)\n- `-o, --output <format>` - Output format: json, markdown, or both (default: markdown)\n\n### Clear cache\n```bash\nnpm run dev clear-cache\n```\n\n## Auto-Restart Feature\n\nThe MCP server includes automatic restart capability by default for improved reliability:\n\n- Automatically restarts the server if it crashes\n- Handles unhandled exceptions and promise rejections\n- Implements exponential backoff (max 10 attempts in 1 minute)\n- Logs all restart attempts for monitoring\n- Gracefully handles shutdown signals (SIGINT, SIGTERM)\n\nFor development/debugging without auto-restart:\n```bash\n# Run directly without restart wrapper\nnpm run serve:dev\n```\n\n## Architecture\n\n```\nmcp/\n├── src/\n│   ├── crawler/        # URL fetching, queue management, robots.txt\n│   ├── parser/         # DOM parsing, Readability, Turndown conversion\n│   ├── cache/          # Disk-based caching with SHA-256 keys\n│   ├── utils/          # Logger, chunker utilities\n│   ├── index.ts        # CLI entry point\n│   ├── serve.ts        # MCP server entry point\n│   └── serve-restart.ts # Auto-restart wrapper\n```\n\n## Development\n\n```bash\n# Run in development mode\nnpm run dev fetch https://example.com\n\n# Build for production\nnpm run build\n\n# Run tests\nnpm test\n\n# Type checking\nnpm run typecheck\n\n# Linting\nnpm run lint\n```\n\n## Contributing\n\nContributions are welcome! Please:\n\n1. Fork the repository\n2. Create a feature branch\n3. Add tests for new functionality\n4. Submit a pull request\n\n## Troubleshooting\n\n### Cache Issues\n```bash\nnpm run dev clear-cache\n```\n\n### Timeout Errors\n- Increase timeout with `-t` flag\n- Check network connectivity\n- Verify URL is accessible\n\n### Content Not Extracted\n- Some sites block automated access\n- Try custom user agent with `-u` flag\n- Check if site requires JavaScript (not supported)\n\n## License\n\nMIT",
+  "category": "AI Tools",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "read-website-fast": {
+        "command": "npx",
+        "args": ["-y", "@just-every/mcp-read-website-fast"],
+        "env": {}
+      },
+      "read-website-fast-dev-no-restart": {
+        "command": "npm",
+        "args": ["run", "serve:dev"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "github_info": {
+    "owner": "just-every",
+    "repo": "mcp-read-website-fast",
+    "url": "https://github.com/just-every/mcp-read-website-fast",
+    "name": "mcp-read-website-fast",
+    "path": null,
+    "stars": 60,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "dc2ce44d0a4d8424e67d830b992b5df76e03b192"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:28.877Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@just-every/crawl",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@just-every/mcp-read-website-fast\",\n  \"version\": \"0.1.18\",\n  \"description\": \"Markdown Content Preprocessor - Fetch web pages, extract content, convert to clean Markdown\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"mcp-read-website-fast\": \"bin/mcp-read-website.js\"\n  },\n  \"files\": [\n    \"dist/**/*\",\n    \"bin/**/*\",\n    \"README.md\",\n    \"LICENSE\",\n    \"package.json\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc -p tsconfig.prod.json\",\n    \"build:dev\": \"tsc\",\n    \"dev\": \"tsx src/index.ts\",\n    \"start\": \"node dist/index.js\",\n    \"serve\": \"node dist/serve-restart.js\",\n    \"serve:dev\": \"tsx src/serve.ts\",\n    \"test\": \"vitest\",\n    \"test:deploy\": \"vitest run test/deployment.test.ts\",\n    \"lint\": \"eslint src\",\n    \"typecheck\": \"tsc --noEmit\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"mcp-server\",\n    \"model-context-protocol\",\n    \"markdown\",\n    \"web-scraper\",\n    \"readability\",\n    \"content-extraction\",\n    \"rag\",\n    \"llm\",\n    \"claude\",\n    \"cursor\",\n    \"vscode\"\n  ],\n  \"author\": \"Just Every\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/just-every/mcp-read-website-fast.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/just-every/mcp-read-website-fast/issues\"\n  },\n  \"homepage\": \"https://github.com/just-every/mcp-read-website-fast#readme\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@just-every/crawl\": \"^1.0.6\",\n    \"@modelcontextprotocol/sdk\": \"^1.12.3\",\n    \"commander\": \"^14.0.0\"\n  },\n  \"devDependencies\": {\n    \"@types/jsdom\": \"^21.1.6\",\n    \"@types/node\": \"^24.0.0\",\n    \"@types/turndown\": \"^5.0.4\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.34.0\",\n    \"@typescript-eslint/parser\": \"^8.34.0\",\n    \"eslint\": \"^9.28.0\",\n    \"eslint-config-prettier\": \"^10.1.5\",\n    \"eslint-plugin-prettier\": \"^5.4.1\",\n    \"tsx\": \"^4.7.0\",\n    \"typescript\": \"^5.3.3\",\n    \"typescript-eslint\": \"^8.34.0\",\n    \"vitest\": \"^3.2.3\"\n  },\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"type\": \"module\"\n}\n"
+}

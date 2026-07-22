@@ -1,0 +1,79 @@
+{
+  "name": "kukapay__twitter-username-changes-mcp",
+  "display_name": "twitter-username-changes-mcp",
+  "description": "An MCP server that tracks the historical changes of Twitter usernames.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Twitter Username Changes MCP Server\n\nAn MCP server that tracks the historical changes of Twitter usernames—frequent screen name changes in crypto projects can be a red flag for potential scam risks.\n\n![License](https://img.shields.io/badge/License-MIT-green.svg)\n![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)\n![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)\n\n## Features\n\n- **Username Change History**: Query the historical usernames of a Twitter user by their current screen name (e.g., `@OSINT_Ukraine` or `@Mormonger`).\n- **Prompt Support**: Includes a prompt template to guide users in formulating queries.\n- **Lightweight Design**: Built with minimal dependencies (`mcp` and `requests`) for easy setup.\n\n## Installation\n\n### Prerequisites\n\n- Python 3.10+\n- `pip` or `uv` for dependency management\n- [Claude Desktop](https://www.anthropic.com/) (optional, for MCP integration)\n\n### Setup\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/twitter-username-changes-mcp.git\n   cd twitter-username-changes-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   pip install mcp[cli] requests\n   ```\n\n## Usage\n\n### Running the Server\n\nStart the server in development mode to test locally:\n```bash\nmcp dev main.py\n```\n\nThis launches the MCP Inspector, where you can:\n- List available tools (`query_username_changes`).\n- Test queries (e.g., `screen_name: \"OSINT_Ukraine\"`).\n- Debug prompts.\n\n### Integrating with Claude Desktop\n\n1. **Configure MCP Server**:\n   Edit the Claude Desktop configuration file:\n   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n   Add the server:\n   ```json\n   {\n     \"mcpServers\": {\n       \"twitter-username-changes\": {\n         \"command\": \"python\",\n         \"args\": [\n           \"/absolute/path/to/twitter-username-changes-mcp/main.py\"\n         ]\n       }\n     }\n   }\n   ```\n   Replace `/absolute/path/to/` with the full path to `main.py`.\n\n2. **Install the Server**:\n   ```bash\n   mcp install main.py --name \"TwitterUsernameChanges\"\n   ```\n\n3. **Query in Claude Desktop**:\n   - Open Claude Desktop and look for the hammer icon (indicating MCP tools).\n   - Enter a query like:\n     ```\n     Show the username change history for Twitter user @OSINT_Ukraine\n     ```\n   - Expected output:\n     ```\n     Username change history for OSINT_Ukraine:\n\n     User ID 4725638310:\n     - The_HelpfulHand (2016-01-09 to 2020-09-27)\n     - nftpromo_s (2022-02-10 to 2022-02-23)\n     - OSINT_Ukraine (2022-02-24 to 2022-02-25)\n     ```\n\n### Example Queries\n\n1. **Query `@Mormonger`**:\n   \n   Tool input: `screen_name: \"Mormonger\"`\n   \n   Output:\n   ```\n   Username change history for Mormonger:\n\n   User ID 1408886100:\n   - colenoorda (2016-04-02)\n   - Mormonger (2017-01-19 to 2025-02-25)\n   ```\n\n2. **Query Invalid Handle**:\n   \n   Tool input: `screen_name: \"InvalidUser123\"`\n   \n   Output:\n   ```\n   No username change history found for InvalidUser123\n   ```\n\n## License\n\nThis project is licensed under the MIT License. See [LICENSE](LICENSE) for details.\n\n",
+  "category": "Security",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "twitter-username-changes-mcp-dev": {
+        "command": "mcp",
+        "args": ["dev", "main.py"],
+        "env": {}
+      },
+      "twitter-username-changes": {
+        "command": "python",
+        "args": ["/absolute/path/to/twitter-username-changes-mcp/main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "twitter-username-changes-mcp",
+    "url": "https://github.com/kukapay/twitter-username-changes-mcp",
+    "name": "twitter-username-changes-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "89bb1916504e4c4557d9860558cd4aec59444002"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:14.983Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"twitter-name-changes-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that tracks the historical changes of Twitter usernames.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.6.0\",\n    \"requests>=2.32.3\",\n]\n"
+}

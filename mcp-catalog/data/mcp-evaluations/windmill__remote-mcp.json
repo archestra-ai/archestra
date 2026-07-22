@@ -1,0 +1,196 @@
+{
+  "name": "windmill__remote-mcp",
+  "display_name": "Windmill",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PHBhdGggZmlsbD0iIzNiODJmNiIgZD0iTTQ1NS4xIDEzOS41SDIwMi43bDU2LjkgOTguNUg1MTJ6TTI3My45IDI2NC45bC00MSA3MWwtODUuMyAxNDcuN2gxMTMuOGwyOC40LTQ5LjJsNzAuNS0xMjJsMjcuMy00Ny41em0tMzAuNS0xTDIwMi41IDE5M0wxMTcuMiA0NS4zbC01Ni45IDk4LjVMODguNyAxOTNsNzAuNCAxMjJsMjcuNCA0Ny40eiIvPjxwYXRoIGZpbGw9IiNiY2Q0ZmMiIGQ9Im0yNjkuNiAyOC40bC00MSA2OGwtMjUuOSA0My4xaDExMy43bDM5LjUtNjUuNmwyNy40LTQ1LjV6bS0xNDAgMjM1LjVsLTc5LjMtMS41bC01MC4zLS45TDU2LjkgMzYwbDc2LjYgMS40bDUzIDF6bTIwMS4yIDk5LjZsMzguNCA2OS40bDI0LjMgNDRsNTYuOS05OC41bC0zNy4xLTY3bC0yNS42LTQ2LjV6Ii8+PC9zdmc+",
+  "description": "Official Windmill MCP server, served by every Windmill instance (Cloud or self-hosted) at /api/mcp/gateway. Exposes deployed scripts and flows as individual tools, plus built-in API tools to run and manage scripts, flows, resources, variables, jobs, schedules, and apps.",
+  "homepage": "https://www.windmill.dev",
+  "instructions": "**⚠️ Replace the server URL with your instance's MCP endpoint.** There is no central Windmill MCP server — every Windmill deployment serves its own. The pre-filled URL is a placeholder and will not connect. Use `https://app.windmill.dev/api/mcp/gateway` on Windmill Cloud, or `https://<your-windmill-host>/api/mcp/gateway` on self-hosted. To pin a single workspace, use `https://<your-windmill-host>/api/mcp/w/<workspace-id>/mcp` instead.\n\n**⚠️ Only deployed scripts and flows within the selected scope become tools.** Each deployed script and flow in the connected workspace is exposed as its own tool, on top of the built-in API tools. During setup you can restrict the scope to specific folders or “favorites only” — anything outside that scope, or not yet deployed, will not appear. A missing tool usually means scope or deployment status, not a broken connection.\n\n1. Paste your instance's gateway URL (see above) as the server URL.\n2. Connect — no client ID or secret needed. Windmill supports OAuth dynamic client registration (authorization code + PKCE); during authorization you pick the workspace and the tool scope (`mcp:all`, `mcp:favorites`, or per-folder `mcp:scripts:*` / `mcp:flows:*`).\n3. Approve — your deployed scripts and flows plus the built-in tools appear.\n\nPrefer token auth? In Windmill, open your **account settings → Tokens**, create a token with **Generate MCP URL**, and paste the resulting URL (`https://<host>/api/mcp/w/<workspace-id>/mcp?token=<token>`) as the server URL — no OAuth step. Treat that URL like an API key: anyone with it can trigger actions in your workspace.\n\nNotes:\n\n- The server uses the HTTP streamable transport.\n- Give scripts and flows descriptive titles and descriptions — that is what the model sees when choosing tools.\n- `queryDocumentation` is available on Enterprise Edition only.\n\nDocs: https://www.windmill.dev/docs/core_concepts/mcp",
+  "tools": [
+    {
+      "name": "listScripts",
+      "description": "List all scripts in the workspace"
+    },
+    {
+      "name": "createScript",
+      "description": "Create a new script"
+    },
+    {
+      "name": "getScriptByPath",
+      "description": "Get a script by its path"
+    },
+    {
+      "name": "deleteScriptByHash",
+      "description": "Delete a script by hash (admin only)"
+    },
+    {
+      "name": "deleteScriptByPath",
+      "description": "Delete a script at a given path (admin only)"
+    },
+    {
+      "name": "runScriptByPath",
+      "description": "Run a script by path"
+    },
+    {
+      "name": "runScriptPreviewAndWaitResult",
+      "description": "Run a script preview and wait for the result"
+    },
+    {
+      "name": "listFlows",
+      "description": "List all flows"
+    },
+    {
+      "name": "getFlowByPath",
+      "description": "Get a flow by its path"
+    },
+    {
+      "name": "createFlow",
+      "description": "Create a new flow"
+    },
+    {
+      "name": "updateFlow",
+      "description": "Update an existing flow"
+    },
+    {
+      "name": "deleteFlowByPath",
+      "description": "Delete a flow by path"
+    },
+    {
+      "name": "runFlowByPath",
+      "description": "Run a flow by path"
+    },
+    {
+      "name": "listResource",
+      "description": "List all resources"
+    },
+    {
+      "name": "getResource",
+      "description": "Get a resource"
+    },
+    {
+      "name": "createResource",
+      "description": "Create a new resource"
+    },
+    {
+      "name": "updateResource",
+      "description": "Update an existing resource"
+    },
+    {
+      "name": "deleteResource",
+      "description": "Delete a resource"
+    },
+    {
+      "name": "listResourceType",
+      "description": "List available resource types"
+    },
+    {
+      "name": "listVariable",
+      "description": "List all variables"
+    },
+    {
+      "name": "getVariable",
+      "description": "Get a variable"
+    },
+    {
+      "name": "createVariable",
+      "description": "Create a new variable"
+    },
+    {
+      "name": "updateVariable",
+      "description": "Update an existing variable"
+    },
+    {
+      "name": "deleteVariable",
+      "description": "Delete a variable"
+    },
+    {
+      "name": "getJob",
+      "description": "Get details of a specific job by ID"
+    },
+    {
+      "name": "getJobLogs",
+      "description": "Get logs for a specific job by ID"
+    },
+    {
+      "name": "listJobs",
+      "description": "List all completed jobs"
+    },
+    {
+      "name": "listQueue",
+      "description": "List all queued jobs"
+    },
+    {
+      "name": "listSchedules",
+      "description": "List all schedules"
+    },
+    {
+      "name": "getSchedule",
+      "description": "Get a schedule"
+    },
+    {
+      "name": "createSchedule",
+      "description": "Create a new schedule"
+    },
+    {
+      "name": "updateSchedule",
+      "description": "Update an existing schedule"
+    },
+    {
+      "name": "deleteSchedule",
+      "description": "Delete a schedule"
+    },
+    {
+      "name": "createApp",
+      "description": "Create a new app"
+    },
+    {
+      "name": "updateApp",
+      "description": "Update an existing app"
+    },
+    {
+      "name": "listWorkers",
+      "description": "List workers and their status"
+    },
+    {
+      "name": "queryDocumentation",
+      "description": "Query the Windmill AI documentation assistant (Enterprise Edition only)"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["windmill", "workflow", "automation", "scripts", "flows", "orchestration", "official"],
+  "user_config": {},
+  "oauth_config": {
+    "name": "Windmill MCP",
+    "server_url": "https://windmill.dev/api/mcp/gateway",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["mcp:all", "mcp:favorites", "mcp:scripts:*", "mcp:flows:*", "mcp:endpoints:*"],
+    "description": "Windmill MCP Server (dynamic registration)",
+    "default_scopes": ["mcp:all"],
+    "supports_resource_metadata": true
+  },
+  "readme": null,
+  "category": "Development",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "Windmill Labs"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://windmill.dev/api/mcp/gateway",
+    "docs_url": "https://www.windmill.dev/docs/core_concepts/mcp"
+  },
+  "github_info": null,
+  "programming_language": null
+}

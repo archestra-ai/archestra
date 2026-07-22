@@ -1,0 +1,109 @@
+{
+  "name": "unibaseio__membase-mcp",
+  "display_name": "membase-mcp",
+  "description": "A lightweight decentralized memory gateway that connects AI agents to Membase for persistent, verifiable multi-session memory.",
+  "author": {
+    "name": "unibaseio"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "src/membase_mcp/server.py"],
+    "env": {
+      "MEMBASE_ACCOUNT": "${user_config.membase_account}",
+      "MEMBASE_CONVERSATION_ID": "${user_config.membase_conversation_id}",
+      "MEMBASE_ID": "${user_config.membase_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "membase_account": {
+      "type": "string",
+      "title": "Membase Account",
+      "description": "Your account address to upload memories (e.g., 0x...).",
+      "sensitive": false,
+      "required": true
+    },
+    "membase_conversation_id": {
+      "type": "string",
+      "title": "Membase Conversation ID",
+      "description": "Your unique conversation ID. Its history will be preloaded if available.",
+      "sensitive": false,
+      "required": true
+    },
+    "membase_id": {
+      "type": "string",
+      "title": "Membase Instance ID",
+      "description": "Your sub-account or instance identifier (any string).",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "readme": "# membase mcp server\n\n## Description\n\nMembase is the first decentralized memory layer for AI agents, powered by Unibase. It provides secure, persistent storage for conversation history, interaction records, and knowledge — ensuring agent continuity, personalization, and traceability.\n\nThe Membase-MCP Server enables seamless integration with the Membase protocol, allowing agents to upload and retrieve memory from the Unibase DA network for decentralized, verifiable storage.\n\n## Functions\n\nMessages or memoiries can be visit at: <https://testnet.hub.membase.io/>\n\n- **get_conversation_id**: Get the current conversation id.\n- **switch_conversation**: Switch to a different conversation.\n- **save_message**: Save a message/memory into the current conversation.\n- **get_messages**: Get the last n messages from the current conversation.\n\n## Installation\n\n```shell\ngit clone https://github.com/unibaseio/membase-mcp.git\ncd membase-mcp\nuv run src/membase_mcp/server.py\n```\n\n## Environment variables\n\n- MEMBASE_ACCOUNT: your account to upload\n- MEMBASE_CONVERSATION_ID: your conversation id, should be unique, will preload its history\n- MEMBASE_ID: your instance id\n\n## Configuration on Claude/Windsurf/Cursor/Cline\n\n```json\n{\n  \"mcpServers\": {\n    \"membase\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"path/to/membase-mcp\",\n        \"run\", \n        \"src/membase_mcp/server.py\"\n      ],\n      \"env\": {\n        \"MEMBASE_ACCOUNT\": \"your account, 0x...\",\n        \"MEMBASE_CONVERSATION_ID\": \"your conversation id, should be unique\",\n        \"MEMBASE_ID\": \"your sub account, any string\"\n      }\n    }\n  }\n}\n```\n\n## Usage\n\ncall functions in llm chat\n\n- get conversation id and switch conversation\n\n![get conversation id and switch conversation](./asset/switch.png)\n\n- save message and get messages\n\n![save message and get messages](./asset/save.png)\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "membase_mcp": {
+        "command": "uv",
+        "args": ["run", "src/membase_mcp/server.py"],
+        "env": {}
+      },
+      "membase_mcp-configured": {
+        "command": "uv",
+        "args": ["--directory", "path/to/membase-mcp", "run", "src/membase_mcp/server.py"],
+        "env": {
+          "MEMBASE_ACCOUNT": "your account, 0x...",
+          "MEMBASE_CONVERSATION_ID": "your conversation id, should be unique",
+          "MEMBASE_ID": "your sub account, any string"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "unibaseio",
+    "repo": "membase-mcp",
+    "url": "https://github.com/unibaseio/membase-mcp",
+    "name": "membase-mcp",
+    "path": null,
+    "stars": 9,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "c810ef06d260690a2584390e448b63134e0ec299"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:20.900Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "membase",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"membase-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp>=1.6.0\",\n    \"membase>=0.1.8\",\n]\n\n[tool.uv.sources]\nmembase = { git = \"https://github.com/unibaseio/membase.git\" }\n"
+}

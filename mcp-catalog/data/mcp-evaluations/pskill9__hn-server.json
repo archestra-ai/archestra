@@ -1,0 +1,78 @@
+{
+  "name": "pskill9__hn-server",
+  "display_name": "hn-server",
+  "description": "Hacker news MCP server",
+  "author": {
+    "name": "pskill9"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Hacker News MCP Server\n\nA Model Context Protocol (MCP) server that provides tools for fetching stories from Hacker News. This server parses the HTML content from news.ycombinator.com and provides structured data for different types of stories (top, new, ask, show, jobs).\n\n<a href=\"https://glama.ai/mcp/servers/oge85xl22f\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/oge85xl22f/badge\" alt=\"Hacker News MCP server\" /></a>\n\n## Features\n\n- Fetch different types of stories (top, new, ask, show, jobs)\n- Get structured data including titles, URLs, points, authors, timestamps, and comment counts\n- Configurable limit on number of stories returned\n- Clean error handling and validation\n\n## Installation\n\n1. Clone the repository:\n```bash\ngit clone https://github.com/pskill9/hn-server\ncd hn-server\n```\n\n2. Install dependencies:\n```bash\nnpm install\n```\n\n3. Build the server:\n```bash\nnpm run build\n```\n\n4. Add to your MCP settings configuration file (location depends on your system):\n\nFor VSCode Claude extension:\n```json\n{\n  \"mcpServers\": {\n    \"hacker-news\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/hn-server/build/index.js\"]\n    }\n  }\n}\n```\n\n## Usage\n\nThe server provides a tool called `get_stories` that can be used to fetch stories from Hacker News.\n\n### Tool: get_stories\n\nParameters:\n- `type` (string): Type of stories to fetch\n  - Options: 'top', 'new', 'ask', 'show', 'jobs'\n  - Default: 'top'\n- `limit` (number): Number of stories to return\n  - Range: 1-30\n  - Default: 10\n\nExample usage:\n```typescript\nuse_mcp_tool with:\nserver_name: \"hacker-news\"\ntool_name: \"get_stories\"\narguments: {\n  \"type\": \"top\",\n  \"limit\": 5\n}\n```\n\nSample output:\n```json\n[\n  {\n    \"title\": \"Example Story Title\",\n    \"url\": \"https://example.com/story\",\n    \"points\": 100,\n    \"author\": \"username\",\n    \"time\": \"2024-12-28T00:03:05\",\n    \"commentCount\": 50,\n    \"rank\": 1\n  },\n  // ... more stories\n]\n```\n\n## Integrating with Claude\n\nTo use this MCP server with Claude, you'll need to:\n\n1. Have the Claude desktop app or VSCode Claude extension installed\n2. Configure the MCP server in your settings\n3. Use Claude's natural language interface to interact with Hacker News\n\n### Configuration\n\nFor the Claude desktop app, add the server configuration to:\n```json\n// ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)\n// %APPDATA%\\Claude\\claude_desktop_config.json (Windows)\n{\n  \"mcpServers\": {\n    \"hacker-news\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/hn-server/build/index.js\"]\n    }\n  }\n}\n```\n\nFor the VSCode Claude extension, add to:\n```json\n// VSCode Settings JSON\n{\n  \"mcpServers\": {\n    \"hacker-news\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/hn-server/build/index.js\"]\n    }\n  }\n}\n```\n\n### Example Interactions\n\nOnce configured, you can interact with Claude using natural language to fetch Hacker News stories. Examples:\n\n- \"Show me the top 5 stories from Hacker News\"\n- \"What are the latest Ask HN posts?\"\n- \"Get me the top Show HN submissions from today\"\n\nClaude will automatically use the appropriate parameters to fetch the stories you want.\n\n![Claude using the Hacker News MCP server](Claude.png)\n\n### Story Object Structure\n\nEach story object contains:\n- `title` (string): The story title\n- `url` (string, optional): URL of the story (may be internal HN URL for text posts)\n- `points` (number): Number of upvotes\n- `author` (string): Username of the poster\n- `time` (string): Timestamp of when the story was posted\n- `commentCount` (number): Number of comments\n- `rank` (number): Position in the list\n\n## Development\n\nThe server is built using:\n- TypeScript\n- Model Context Protocol SDK\n- Axios for HTTP requests\n- Cheerio for HTML parsing\n\nTo modify the server:\n\n1. Make changes to `src/index.ts`\n2. Rebuild:\n```bash\nnpm run build\n```\n\n## Error Handling\n\nThe server includes robust error handling for:\n- Invalid story types\n- Network failures\n- HTML parsing errors\n- Invalid parameter values\n\nErrors are returned with appropriate error codes and descriptive messages.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## License\n\nMIT License - feel free to use this in your own projects.\n",
+  "category": "Aggregators",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "hacker-news": {
+        "command": "node",
+        "args": ["/path/to/hn-server/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pskill9",
+    "repo": "hn-server",
+    "url": "https://github.com/pskill9/hn-server",
+    "name": "hn-server",
+    "path": null,
+    "stars": 34,
+    "contributors": 3,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ed1a4b951e9a7cdd7de0575a16d53bbe53330a9d"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:51.144Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "cheerio",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"hn-server\",\n  \"version\": \"0.1.0\",\n  \"description\": \"MCP server for fetching and parsing Hacker News stories\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"hn-server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"axios\": \"^1.7.9\",\n    \"cheerio\": \"^1.0.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"hacker-news\",\n    \"hn\",\n    \"news\",\n    \"api\",\n    \"scraper\"\n  ],\n  \"author\": \"Manav Kundra\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/pskill9/hn-server.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/pskill9/hn-server/issues\"\n  },\n  \"homepage\": \"https://github.com/pskill9/hn-server#readme\"\n}\n"
+}

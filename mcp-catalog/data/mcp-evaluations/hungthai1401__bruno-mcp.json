@@ -1,0 +1,82 @@
+{
+  "name": "hungthai1401__bruno-mcp",
+  "display_name": "bruno-mcp",
+  "description": "MCP Server for running Bruno Collections",
+  "author": {
+    "name": "hungthai1401"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "bruno-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/hungthai1401-bruno-mcp-badge.png)](https://mseep.ai/app/hungthai1401-bruno-mcp)\n\n# Bruno MCP Server\n<a href=\"https://glama.ai/mcp/servers/@hungthai1401/bruno-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@hungthai1401/bruno-mcp/badge\" alt=\"Bruno MCP server\" />\n</a>\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/hungthai1401/bruno-mcp)](https://archestra.ai/mcp-catalog/hungthai1401__bruno-mcp)\n[![smithery badge](https://smithery.ai/badge/@hungthai1401/bruno-mcp)](https://smithery.ai/server/@hungthai1401/bruno-mcp)\n\nAn MCP (Model Context Protocol) server that enables running Bruno collections. This server allows LLMs to execute API tests using Bruno and get detailed results through a standardized interface.\n\n## Features\n\n* Run Bruno collections using the Bruno CLI\n* Support for environment files\n* Support for environment variables\n* Detailed test results including:\n  * Overall success/failure status\n  * Test summary (total, passed, failed)\n  * Detailed failure information\n  * Execution timings\n\n## Installation\n\n### Installing via Smithery\n\nTo install Bruno MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@hungthai1401/bruno-mcp):\n\n```bash\nnpx -y @smithery/cli install @hungthai1401/bruno-mcp --client claude\n```\n\n### Manual Installation\n```bash\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n\n## Configuration\n\nAdd the server to your Claude desktop configuration file at `~/Library/Application Support/Claude/claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"bruno-runner\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"bruno-mcp\"],\n    }\n  }\n}\n```\n\n## Available Tools\n\n### run-collection\n\nRuns a Bruno collection and returns the test results.\n\n**Parameters:**\n\n* `collection` (required): Path to the Bruno collection\n* `environment` (optional): Path to environment file\n* `variables` (optional): Environment variables as key-value pairs\n\n**Example Response:**\n\n```json\n{\n  \"success\": true,\n  \"summary\": {\n    \"total\": 5,\n    \"failed\": 0,\n    \"passed\": 5\n  },\n  \"failures\": [],\n  \"timings\": {\n    \"started\": \"2024-03-14T10:00:00.000Z\",\n    \"completed\": \"2024-03-14T10:00:01.000Z\",\n    \"duration\": 1000\n  }\n}\n```\n\n### Example Usage in Claude\n\nYou can use the server in Claude by asking it to run a Bruno collection:\n\n\"Run the Bruno collection at /path/to/collection.bru and tell me if all tests passed\"\n\nClaude will:\n1. Use the run-collection tool\n2. Analyze the test results\n3. Provide a human-friendly summary of the execution\n\n## Development\n\n### Project Structure\n\n```\nsrc/\n  ├── index.ts           # Entry point\n  ├── server.ts          # MCP Server implementation\n  ├── runner.ts          # Bruno runner implementation\n  └── types.ts           # Type definitions\n```\n\n### Running Tests\n\n```bash\n# Run tests\nnpm test\n\n# Run tests with coverage\nnpm test:coverage\n```\n\n### Building\n\n```bash\n# Build the project\nnpm run build\n\n# Clean build artifacts\nnpm run clean\n```\n\n## License\n\nMIT ",
+  "category": "Development",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bruno-mcp": {
+        "command": "npx",
+        "args": ["-y", "bruno-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hungthai1401",
+    "repo": "bruno-mcp",
+    "url": "https://github.com/hungthai1401/bruno-mcp",
+    "name": "hungthai1401__bruno-mcp",
+    "path": null,
+    "stars": 30,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "06c0fad6bb98194cf148b22206bd795239dc7978"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:37.871Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@usebruno/cli",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"bruno-mcp\",\n  \"version\": \"0.1.0\",\n  \"description\": \"MCP Server for running Bruno Collections\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"bruno-mcp\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod +x build/index.js\",\n    \"clean\": \"rm -rf build\",\n    \"lint\": \"eslint . --ext .ts\",\n    \"prepare\": \"npm run build\",\n    \"deploy\": \"npm run build && npm publish\"\n  },\n  \"keywords\": [\n    \"bruno\",\n    \"mcp\",\n    \"api-testing\",\n    \"claude\"\n  ],\n  \"author\": \"Thai Nguyen Hung\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"@usebruno/cli\": \"^1.40.0\",\n    \"zod\": \"^3.22.4\",\n    \"zod-to-json-schema\": \"^3.24.5\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"@typescript-eslint/eslint-plugin\": \"^7.1.0\",\n    \"@typescript-eslint/parser\": \"^7.1.0\",\n    \"eslint\": \"^8.57.0\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

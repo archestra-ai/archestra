@@ -1,0 +1,133 @@
+{
+  "name": "suekou__mcp-notion-server",
+  "display_name": "mcp-notion-server",
+  "description": "MCP server from suekou/mcp-notion-server",
+  "author": {
+    "name": "suekou"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@suekou/mcp-notion-server"],
+    "env": {
+      "NOTION_API_TOKEN": "${user_config.notion_api_token}",
+      "NOTION_MARKDOWN_CONVERSION": "${user_config.notion_markdown_conversion}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "notion_api_token": {
+      "type": "string",
+      "title": "Notion API Token",
+      "description": "Your Notion API integration token.",
+      "sensitive": true,
+      "required": true
+    },
+    "notion_markdown_conversion": {
+      "type": "boolean",
+      "title": "Enable Markdown Conversion",
+      "description": "Set to true to enable experimental Markdown conversion. This can significantly reduce token consumption when viewing content, but may cause issues when trying to edit page content.",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# Notion MCP Server\n\nMCP Server for the Notion API, enabling LLM to interact with Notion workspaces. Additionally, it employs Markdown conversion to reduce context size when communicating with LLMs, optimizing token usage and making interactions more efficient.\n\n## Setup\n\nHere is a detailed explanation of the steps mentioned above in the following articles:\n\n- English Version: https://dev.to/suekou/operating-notion-via-claude-desktop-using-mcp-c0h\n- Japanese Version: https://qiita.com/suekou/items/44c864583f5e3e6325d9\n\n1. **Create a Notion Integration**:\n\n   - Visit the [Notion Your Integrations page](https://www.notion.so/profile/integrations).\n   - Click \"New Integration\".\n   - Name your integration and select appropriate permissions (e.g., \"Read content\", \"Update content\").\n\n2. **Retrieve the Secret Key**:\n\n   - Copy the \"Internal Integration Token\" from your integration.\n   - This token will be used for authentication.\n\n3. **Add the Integration to Your Workspace**:\n\n   - Open the page or database you want the integration to access in Notion.\n   - Click the \"···\" button in the top right corner.\n   - Click the \"Connections\" button, and select the the integration you created in step 1 above.\n\n4. **Configure Claude Desktop**:\n   Add the following to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"notion\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@suekou/mcp-notion-server\"],\n      \"env\": {\n        \"NOTION_API_TOKEN\": \"your-integration-token\"\n      }\n    }\n  }\n}\n```\n\nor\n\n```json\n{\n  \"mcpServers\": {\n    \"notion\": {\n      \"command\": \"node\",\n      \"args\": [\"your-built-file-path\"],\n      \"env\": {\n        \"NOTION_API_TOKEN\": \"your-integration-token\"\n      }\n    }\n  }\n}\n```\n\n## Environment Variables\n\n- `NOTION_API_TOKEN` (required): Your Notion API integration token.\n- `NOTION_MARKDOWN_CONVERSION`: Set to \"true\" to enable experimental Markdown conversion. This can significantly reduce token consumption when viewing content, but may cause issues when trying to edit page content.\n\n## Command Line Arguments\n\n- `--enabledTools`: Comma-separated list of tools to enable (e.g. \"notion_retrieve_page,notion_query_database\"). When specified, only the listed tools will be available. If not specified, all tools are enabled.\n\nRead-only tools example (copy-paste friendly):\n\n```bash\nnode build/index.js --enabledTools=notion_retrieve_block,notion_retrieve_block_children,notion_retrieve_page,notion_query_database,notion_retrieve_database,notion_search,notion_list_all_users,notion_retrieve_user,notion_retrieve_bot_user,notion_retrieve_comments\n```\n\n## Advanced Configuration\n\n### Markdown Conversion\n\nBy default, all responses are returned in JSON format. You can enable experimental Markdown conversion to reduce token consumption:\n\n```json\n{\n  \"mcpServers\": {\n    \"notion\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@suekou/mcp-notion-server\"],\n      \"env\": {\n        \"NOTION_API_TOKEN\": \"your-integration-token\",\n        \"NOTION_MARKDOWN_CONVERSION\": \"true\"\n      }\n    }\n  }\n}\n```\n\nor\n\n```json\n{\n  \"mcpServers\": {\n    \"notion\": {\n      \"command\": \"node\",\n      \"args\": [\"your-built-file-path\"],\n      \"env\": {\n        \"NOTION_API_TOKEN\": \"your-integration-token\",\n        \"NOTION_MARKDOWN_CONVERSION\": \"true\"\n      }\n    }\n  }\n}\n```\n\nWhen `NOTION_MARKDOWN_CONVERSION` is set to `\"true\"`, responses will be converted to Markdown format (when `format` parameter is set to `\"markdown\"`), making them more human-readable and significantly reducing token consumption. However, since this feature is experimental, it may cause issues when trying to edit page content as the original structure is lost in conversion.\n\nYou can control the format on a per-request basis by setting the `format` parameter to either `\"json\"` or `\"markdown\"` in your tool calls:\n\n- Use `\"markdown\"` for better readability when only viewing content\n- Use `\"json\"` when you need to modify the returned content\n\n## Troubleshooting\n\nIf you encounter permission errors:\n\n1. Ensure the integration has the required permissions.\n2. Verify that the integration is invited to the relevant pages or databases.\n3. Confirm the token and configuration are correctly set in `claude_desktop_config.json`.\n\n## Project Structure\n\nThe project is organized in a modular way to improve maintainability and readability:\n\n```\n./\n├── src/\n│   ├── index.ts              # Entry point and command-line handling\n│   ├── client/\n│   │   └── index.ts          # NotionClientWrapper class for API interactions\n│   ├── server/\n│   │   └── index.ts          # MCP server setup and request handling\n│   ├── types/\n│   │   ├── index.ts          # Type exports\n│   │   ├── args.ts           # Tool argument interfaces\n│   │   ├── common.ts         # Common schema definitions\n│   │   ├── responses.ts      # API response type definitions\n│   │   └── schemas.ts        # Tool schema definitions\n│   ├── utils/\n│   │   └── index.ts          # Utility functions\n│   └── markdown/\n│       └── index.ts          # Markdown conversion utilities\n```\n\n### Directory Descriptions\n\n- **index.ts**: Application entry point. Parses command-line arguments and starts the server.\n- **client/**: Module responsible for communication with the Notion API.\n  - **index.ts**: NotionClientWrapper class implements all API calls.\n- **server/**: MCP server implementation.\n  - **index.ts**: Processes requests received from Claude and calls appropriate client methods.\n- **types/**: Type definition module.\n  - **index.ts**: Exports for all types.\n  - **args.ts**: Interface definitions for tool arguments.\n  - **common.ts**: Definitions for common schemas (ID formats, rich text, etc.).\n  - **responses.ts**: Type definitions for Notion API responses.\n  - **schemas.ts**: Definitions for MCP tool schemas.\n- **utils/**: Utility functions.\n  - **index.ts**: Functions like filtering enabled tools.\n- **markdown/**: Markdown conversion functionality.\n  - **index.ts**: Logic for converting JSON responses to Markdown format.\n\n## Tools\n\nAll tools support the following optional parameter:\n\n- `format` (string, \"json\" or \"markdown\", default: \"markdown\"): Controls the response format. Use \"markdown\" for human-readable output, \"json\" for programmatic access to the original data structure. Note: Markdown conversion only works when the `NOTION_MARKDOWN_CONVERSION` environment variable is set to \"true\".\n\n1. `notion_append_block_children`\n\n   - Append child blocks to a parent block.\n   - Required inputs:\n     - `block_id` (string): The ID of the parent block.\n     - `children` (array): Array of block objects to append.\n   - Returns: Information about the appended blocks.\n\n2. `notion_retrieve_block`\n\n   - Retrieve information about a specific block.\n   - Required inputs:\n     - `block_id` (string): The ID of the block to retrieve.\n   - Returns: Detailed information about the block.\n\n3. `notion_retrieve_block_children`\n\n   - Retrieve the children of a specific block.\n   - Required inputs:\n     - `block_id` (string): The ID of the parent block.\n   - Optional inputs:\n     - `start_cursor` (string): Cursor for the next page of results.\n     - `page_size` (number, default: 100, max: 100): Number of blocks to retrieve.\n   - Returns: List of child blocks.\n\n4. `notion_delete_block`\n\n   - Delete a specific block.\n   - Required inputs:\n     - `block_id` (string): The ID of the block to delete.\n   - Returns: Confirmation of the deletion.\n\n5. `notion_retrieve_page`\n\n   - Retrieve information about a specific page.\n   - Required inputs:\n     - `page_id` (string): The ID of the page to retrieve.\n   - Returns: Detailed information about the page.\n\n6. `notion_update_page_properties`\n\n   - Update properties of a page.\n   - Required inputs:\n     - `page_id` (string): The ID of the page to update.\n     - `properties` (object): Properties to update.\n   - Returns: Information about the updated page.\n\n7. `notion_create_database`\n\n   - Create a new database.\n   - Required inputs:\n     - `parent` (object): Parent object of the database.\n     - `properties` (object): Property schema of the database.\n   - Optional inputs:\n     - `title` (array): Title of the database as a rich text array.\n   - Returns: Information about the created database.\n\n8. `notion_query_database`\n\n   - Query a database.\n   - Required inputs:\n     - `database_id` (string): The ID of the database to query.\n   - Optional inputs:\n     - `filter` (object): Filter conditions.\n     - `sorts` (array): Sorting conditions.\n     - `start_cursor` (string): Cursor for the next page of results.\n     - `page_size` (number, default: 100, max: 100): Number of results to retrieve.\n   - Returns: List of results from the query.\n\n9. `notion_retrieve_database`\n\n   - Retrieve information about a specific database.\n   - Required inputs:\n     - `database_id` (string): The ID of the database to retrieve.\n   - Returns: Detailed information about the database.\n\n10. `notion_update_database`\n\n    - Update information about a database.\n    - Required inputs:\n      - `database_id` (string): The ID of the database to update.\n    - Optional inputs:\n      - `title` (array): New title for the database.\n      - `description` (array): New description for the database.\n      - `properties` (object): Updated property schema.\n    - Returns: Information about the updated database.\n\n11. `notion_create_database_item`\n\n    - Create a new item in a Notion database.\n    - Required inputs:\n      - `database_id` (string): The ID of the database to add the item to.\n      - `properties` (object): The properties of the new item. These should match the database schema.\n    - Returns: Information about the newly created item.\n\n12. `notion_search`\n\n    - Search pages or databases by title.\n    - Optional inputs:\n      - `query` (string): Text to search for in page or database titles.\n      - `filter` (object): Criteria to limit results to either only pages or only databases.\n      - `sort` (object): Criteria to sort the results\n      - `start_cursor` (string): Pagination start cursor.\n      - `page_size` (number, default: 100, max: 100): Number of results to retrieve.\n    - Returns: List of matching pages or databases.\n\n13. `notion_list_all_users`\n\n    - List all users in the Notion workspace.\n    - Note: This function requires upgrading to the Notion Enterprise plan and using an Organization API key to avoid permission errors.\n    - Optional inputs:\n      - start_cursor (string): Pagination start cursor for listing users.\n      - page_size (number, max: 100): Number of users to retrieve.\n    - Returns: A paginated list of all users in the workspace.\n\n14. `notion_retrieve_user`\n\n    - Retrieve a specific user by user_id in Notion.\n    - Note: This function requires upgrading to the Notion Enterprise plan and using an Organization API key to avoid permission errors.\n    - Required inputs:\n      - user_id (string): The ID of the user to retrieve.\n    - Returns: Detailed information about the specified user.\n\n15. `notion_retrieve_bot_user`\n\n    - Retrieve the bot user associated with the current token in Notion.\n    - Returns: Information about the bot user, including details of the person who authorized the integration.\n\n16. `notion_create_comment`\n\n    - Create a comment in Notion.\n    - Requires the integration to have 'insert comment' capabilities.\n    - Either specify a `parent` object with a `page_id` or a `discussion_id`, but not both.\n    - Required inputs:\n      - `rich_text` (array): Array of rich text objects representing the comment content.\n    - Optional inputs:\n      - `parent` (object): Must include `page_id` if used.\n      - `discussion_id` (string): An existing discussion thread ID.\n    - Returns: Information about the created comment.\n\n17. `notion_retrieve_comments`\n    - Retrieve a list of unresolved comments from a Notion page or block.\n    - Requires the integration to have 'read comment' capabilities.\n    - Required inputs:\n      - `block_id` (string): The ID of the block or page whose comments you want to retrieve.\n    - Optional inputs:\n      - `start_cursor` (string): Pagination start cursor.\n      - `page_size` (number, max: 100): Number of comments to retrieve.\n    - Returns: A paginated list of comments associated with the specified block or page.\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "AI Tools",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "suekou-mcp-notion-server": {
+        "command": "npx",
+        "args": ["-y", "@suekou/mcp-notion-server"],
+        "env": {
+          "NOTION_API_TOKEN": "your-integration-token"
+        }
+      },
+      "suekou-mcp-notion-server-markdown-conversion": {
+        "command": "npx",
+        "args": ["-y", "@suekou/mcp-notion-server"],
+        "env": {
+          "NOTION_API_TOKEN": "your-integration-token",
+          "NOTION_MARKDOWN_CONVERSION": "true"
+        }
+      },
+      "suekou-mcp-notion-server-local-build": {
+        "command": "node",
+        "args": ["your-built-file-path"],
+        "env": {
+          "NOTION_API_TOKEN": "your-integration-token"
+        }
+      },
+      "suekou-mcp-notion-server-local-build-markdown-conversion": {
+        "command": "node",
+        "args": ["your-built-file-path"],
+        "env": {
+          "NOTION_API_TOKEN": "your-integration-token",
+          "NOTION_MARKDOWN_CONVERSION": "true"
+        }
+      },
+      "suekou-mcp-notion-server-local-build-readonly-tools": {
+        "command": "node",
+        "args": [
+          "build/index.js",
+          "--enabledTools=notion_retrieve_block,notion_retrieve_block_children,notion_retrieve_page,notion_query_database,notion_retrieve_database,notion_search,notion_list_all_users,notion_retrieve_user,notion_retrieve_bot_user,notion_retrieve_comments"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "suekou",
+    "repo": "mcp-notion-server",
+    "url": "https://github.com/suekou/mcp-notion-server",
+    "name": "mcp-notion-server",
+    "path": null,
+    "stars": 801,
+    "contributors": 9,
+    "issues": 13,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "f924bd8afae6a5f7b773d695a0ef8914e37512d4"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:52.706Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    },
+    {
+      "name": "vitest",
+      "importance": 3
+    },
+    {
+      "name": "yargs",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@suekou/mcp-notion-server\",\n  \"version\": \"1.2.4\",\n  \"description\": \"MCP server for interacting with Notion API based on Node\",\n  \"license\": \"MIT\",\n  \"author\": \"Kosuke Suenaga (https://github.com/suekou/mcp-notion-server)\",\n  \"type\": \"module\",\n  \"main\": \"build/index.js\",\n  \"bin\": {\n    \"mcp-notion-server\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build\",\n    \"Readme.md\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"test\": \"vitest run\",\n    \"test:watch\": \"vitest\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.11.2\",\n    \"node-fetch\": \"^2.7.0\",\n    \"vitest\": \"3.0.9\",\n    \"yargs\": \"^17.7.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"@types/yargs\": \"^17.0.33\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

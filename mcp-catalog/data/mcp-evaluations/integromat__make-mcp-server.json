@@ -1,0 +1,98 @@
+{
+  "name": "integromat__make-mcp-server",
+  "display_name": "make-mcp-server",
+  "description": "Make MCP Server",
+  "author": {
+    "name": "integromat"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@makehq/mcp-server"],
+    "env": {
+      "MAKE_API_KEY": "${user_config.make_api_key}",
+      "MAKE_ZONE": "${user_config.make_zone}",
+      "MAKE_TEAM": "${user_config.make_team}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "make_api_key": {
+      "type": "string",
+      "title": "Make API Key",
+      "description": "You can generate an API key in your Make profile.",
+      "sensitive": true,
+      "required": true
+    },
+    "make_zone": {
+      "type": "string",
+      "title": "Make Zone",
+      "description": "The zone your organization is hosted in (e.g., `eu2.make.com`).",
+      "required": true
+    },
+    "make_team": {
+      "type": "string",
+      "title": "Make Team ID",
+      "description": "You can find the ID in the URL of the Team page.",
+      "required": true
+    }
+  },
+  "readme": "# Make MCP Server (legacy)\n\n**A modern, cloud-based version of the Make MCP Server is now available. For most use cases, we recommend using [this new version](https://developers.make.com/mcp-server).**\n\nA Model Context Protocol server that enables Make scenarios to be utilized as tools by AI assistants. This integration allows AI systems to trigger and interact with your Make automation workflows.\n\n## How It Works\n\nThe MCP server:\n\n-   Connects to your Make account and identifies all scenarios configured with \"On-Demand\" scheduling\n-   Parses and resolves input parameters for each scenario, providing AI assistants with meaningful parameter descriptions\n-   Allows AI assistants to invoke scenarios with appropriate parameters\n-   Returns scenario output as structured JSON, enabling AI assistants to properly interpret the results\n\n## Benefits\n\n-   Turn your Make scenarios into callable tools for AI assistants\n-   Maintain complex automation logic in Make while exposing functionality to AI systems\n-   Create bidirectional communication between your AI assistants and your existing automation workflows\n\n## Usage with Claude Desktop\n\n### Prerequisites\n\n-   NodeJS\n-   MCP Client (like Claude Desktop App)\n-   Make API Key with `scenarios:read` and `scenarios:run` scopes\n\n### Installation\n\nTo use this server with the Claude Desktop app, add the following configuration to the \"mcpServers\" section of your `claude_desktop_config.json`:\n\n```json\n{\n    \"mcpServers\": {\n        \"make\": {\n            \"command\": \"npx\",\n            \"args\": [\"-y\", \"@makehq/mcp-server\"],\n            \"env\": {\n                \"MAKE_API_KEY\": \"<your-api-key>\",\n                \"MAKE_ZONE\": \"<your-zone>\",\n                \"MAKE_TEAM\": \"<your-team-id>\"\n            }\n        }\n    }\n}\n```\n\n-   `MAKE_API_KEY` - You can generate an API key in your Make profile.\n-   `MAKE_ZONE` - The zone your organization is hosted in (e.g., `eu2.make.com`).\n-   `MAKE_TEAM` - You can find the ID in the URL of the Team page.\n",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "makehq-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "@makehq/mcp-server"],
+        "env": {
+          "MAKE_API_KEY": "<your-api-key>",
+          "MAKE_ZONE": "<your-zone>",
+          "MAKE_TEAM": "<your-team-id>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "integromat",
+    "repo": "make-mcp-server",
+    "url": "https://github.com/integromat/make-mcp-server",
+    "name": "make-mcp-server",
+    "path": null,
+    "stars": 121,
+    "contributors": 2,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "d43b191f4c9134585e1853da8744ff8984eeabee"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:48.038Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"@makehq/mcp-server\",\n    \"version\": \"0.5.0\",\n    \"description\": \"MCP server for interacting with Make automations\",\n    \"license\": \"MIT\",\n    \"author\": \"Make\",\n    \"repository\": \"github:integromat/make-mcp-server\",\n    \"homepage\": \"https://www.make.com\",\n    \"type\": \"module\",\n    \"bin\": {\n        \"mcp-server-make\": \"build/index.js\"\n    },\n    \"files\": [\n        \"build\"\n    ],\n    \"scripts\": {\n        \"test\": \"jest --runInBand --forceExit --verbose false\",\n        \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n        \"prepare\": \"npm run build\",\n        \"watch\": \"tsc --watch\",\n        \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n    },\n    \"dependencies\": {\n        \"@modelcontextprotocol/sdk\": \"^1.6.1\"\n    },\n    \"devDependencies\": {\n        \"@jest/globals\": \"^29.7.0\",\n        \"@types/node\": \"^22.13.10\",\n        \"jest\": \"^29.7.0\",\n        \"jest-fetch-mock\": \"^3.0.3\",\n        \"ts-jest\": \"^29.2.6\",\n        \"ts-node\": \"^10.9.2\",\n        \"typescript\": \"^5.8.2\"\n    }\n}\n"
+}

@@ -1,0 +1,88 @@
+{
+  "name": "2niuhe__plantuml_web",
+  "display_name": "plantuml_web",
+  "description": "Generate PlantUML Diagrams as PNG/SVG with Embedded Web Viewer",
+  "author": {
+    "name": "2niuhe"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# plantuml_web\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/2niuhe/plantuml_web)](https://archestra.ai/mcp-catalog/2niuhe__plantuml_web)\nUsing nicegui as a PlantUML frontend, you can deploy PlantUML on an intranet.\n\nIt's a nicegui demo project with an added MCP (Model Context Protocol) server that exposes PlantUML functionality to AI assistants.\n\nPlantuml jar version: plantuml-1.2025.3.jar\n\n![demo](https://github.com/2niuhe/plantuml_web/blob/main/demo_img/demo.png)\n\n## Features\n\n### Web Interface\n- Interactive PlantUML editor with live preview\n- Save and load diagrams\n- Responsive UI with resizable panels\n\n### MCP Server\n- Generate PlantUML diagrams in SVG or PNG format\n- Validate PlantUML code with detailed error messages\n\n## Usage:\n\n### With Docker\n\n```shell\ndocker build -t plantuml_web_mcp .\n\n# or pull from dockerhub\n# docker pull  2niuhe/plantuml_web_mcp:latest\n\ndocker run -d -p 8080:8080 -p 8765:8765 plantuml_web_mcp:latest\n```\n\nThen you can access:\n- Web interface: http://127.0.0.1:8080\n- MCP server: http://127.0.0.1:8765/sse\n\n### Without Docker\n\n```shell\npip install -r requirements.txt\nsh start.sh\n```\n\nThe start script will launch:\n1. PlantUML server on port 8000\n2. Web interface on port 8080\n3. MCP server on port 8765\n\n## Connecting to the MCP Server\n\nYou can connect to the MCP server using any MCP client, such as Claude Desktop:\n\n1. Open Claude Desktop\n2. Go to Settings > MCP Servers\n3. Add a new server with the URL: `http://localhost:8765/sse`\n4. Restart Claude Desktop\n\n## Testing the MCP Server\n\nA test client is provided to verify the MCP server functionality:\n\n```shell\npython test_plantuml_mcp.py http://localhost:8765/sse\n```\n\n\n\n## Available MCP Tools\n\n- `generate_plantuml_image`: Generate a diagram image from PlantUML code\n- `validate_plantuml_syntax`: Validate PlantUML code and return validation result\n\n\n### ref\n\n[Home · zauberzeug/nicegui Wiki](https://github.com/zauberzeug/nicegui/wiki)\n\n[How to use nicegui for beginners？ · zauberzeug/nicegui · Discussion #1486](https://github.com/zauberzeug/nicegui/discussions/1486)\n\n[Nicegui example and suggestions · zauberzeug/nicegui · Discussion #1778](https://github.com/zauberzeug/nicegui/discussions/1778)\n\n[NiceGUI](https://nicegui.io/documentation)\n\n[syejing/nicegui-reference-cn: NiceGUI 中文版本文档](https://github.com/syejing/nicegui-reference-cn?tab=readme-ov-file)\n\n[(1) Use NiceGUI to watch images and do it from the COMMAND LINE! - YouTube](https://www.youtube.com/watch?v=eq0k642zQQ8)\n",
+  "category": "Development",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "plantuml-web-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-d", "-p", "8080:8080", "-p", "8765:8765", "plantuml_web_mcp:latest"],
+        "env": {},
+        "docker_image": "plantuml_web_mcp:latest"
+      },
+      "plantuml-web-mcp": {
+        "command": "sh",
+        "args": ["start.sh"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "2niuhe",
+    "repo": "plantuml_web",
+    "url": "https://github.com/2niuhe/plantuml_web",
+    "name": "plantuml_web",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d9d482ca87a62e61cbd855706e92e6a3f90f9d47"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:43.121Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "nicegui",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nnicegui>=2.0.0\nmcp\nuvicorn\nhttpx"
+}

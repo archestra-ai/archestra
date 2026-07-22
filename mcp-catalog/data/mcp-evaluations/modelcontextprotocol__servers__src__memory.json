@@ -1,0 +1,93 @@
+{
+  "name": "modelcontextprotocol__servers__src__memory",
+  "display_name": "memory",
+  "description": "Model Context Protocol Servers",
+  "author": {
+    "name": "modelcontextprotocol"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-memory"],
+    "env": {
+      "MEMORY_FILE_PATH": "${user_config.memory_file_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "memory_file_path": {
+      "type": "file",
+      "title": "Memory File Path",
+      "description": "Path to the memory storage JSON file (default: memory.json in the server directory)",
+      "required": false,
+      "default": "memory.json"
+    }
+  },
+  "readme": "# Knowledge Graph Memory Server\n\nA basic implementation of persistent memory using a local knowledge graph. This lets Claude remember information about the user across chats.\n\n## Core Concepts\n\n### Entities\nEntities are the primary nodes in the knowledge graph. Each entity has:\n- A unique name (identifier)\n- An entity type (e.g., \"person\", \"organization\", \"event\")\n- A list of observations\n\nExample:\n```json\n{\n  \"name\": \"John_Smith\",\n  \"entityType\": \"person\",\n  \"observations\": [\"Speaks fluent Spanish\"]\n}\n```\n\n### Relations\nRelations define directed connections between entities. They are always stored in active voice and describe how entities interact or relate to each other.\n\nExample:\n```json\n{\n  \"from\": \"John_Smith\",\n  \"to\": \"Anthropic\",\n  \"relationType\": \"works_at\"\n}\n```\n### Observations\nObservations are discrete pieces of information about an entity. They are:\n\n- Stored as strings\n- Attached to specific entities\n- Can be added or removed independently\n- Should be atomic (one fact per observation)\n\nExample:\n```json\n{\n  \"entityName\": \"John_Smith\",\n  \"observations\": [\n    \"Speaks fluent Spanish\",\n    \"Graduated in 2019\",\n    \"Prefers morning meetings\"\n  ]\n}\n```\n\n## API\n\n### Tools\n- **create_entities**\n  - Create multiple new entities in the knowledge graph\n  - Input: `entities` (array of objects)\n    - Each object contains:\n      - `name` (string): Entity identifier\n      - `entityType` (string): Type classification\n      - `observations` (string[]): Associated observations\n  - Ignores entities with existing names\n\n- **create_relations**\n  - Create multiple new relations between entities\n  - Input: `relations` (array of objects)\n    - Each object contains:\n      - `from` (string): Source entity name\n      - `to` (string): Target entity name\n      - `relationType` (string): Relationship type in active voice\n  - Skips duplicate relations\n\n- **add_observations**\n  - Add new observations to existing entities\n  - Input: `observations` (array of objects)\n    - Each object contains:\n      - `entityName` (string): Target entity\n      - `contents` (string[]): New observations to add\n  - Returns added observations per entity\n  - Fails if entity doesn't exist\n\n- **delete_entities**\n  - Remove entities and their relations\n  - Input: `entityNames` (string[])\n  - Cascading deletion of associated relations\n  - Silent operation if entity doesn't exist\n\n- **delete_observations**\n  - Remove specific observations from entities\n  - Input: `deletions` (array of objects)\n    - Each object contains:\n      - `entityName` (string): Target entity\n      - `observations` (string[]): Observations to remove\n  - Silent operation if observation doesn't exist\n\n- **delete_relations**\n  - Remove specific relations from the graph\n  - Input: `relations` (array of objects)\n    - Each object contains:\n      - `from` (string): Source entity name\n      - `to` (string): Target entity name\n      - `relationType` (string): Relationship type\n  - Silent operation if relation doesn't exist\n\n- **read_graph**\n  - Read the entire knowledge graph\n  - No input required\n  - Returns complete graph structure with all entities and relations\n\n- **search_nodes**\n  - Search for nodes based on query\n  - Input: `query` (string)\n  - Searches across:\n    - Entity names\n    - Entity types\n    - Observation content\n  - Returns matching entities and their relations\n\n- **open_nodes**\n  - Retrieve specific nodes by name\n  - Input: `names` (string[])\n  - Returns:\n    - Requested entities\n    - Relations between requested entities\n  - Silently skips non-existent nodes\n\n# Usage with Claude Desktop\n\n### Setup\n\nAdd this to your claude_desktop_config.json:\n\n#### Docker\n\n```json\n{\n  \"mcpServers\": {\n    \"memory\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"-i\", \"-v\", \"claude-memory:/app/dist\", \"--rm\", \"mcp/memory\"]\n    }\n  }\n}\n```\n\n#### NPX\n```json\n{\n  \"mcpServers\": {\n    \"memory\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-memory\"\n      ]\n    }\n  }\n}\n```\n\n#### NPX with custom setting\n\nThe server can be configured using the following environment variables:\n\n```json\n{\n  \"mcpServers\": {\n    \"memory\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-memory\"\n      ],\n      \"env\": {\n        \"MEMORY_FILE_PATH\": \"/path/to/custom/memory.json\"\n      }\n    }\n  }\n}\n```\n\n- `MEMORY_FILE_PATH`: Path to the memory storage JSON file (default: `memory.json` in the server directory)\n\n# VS Code Installation Instructions\n\nFor quick installation, use one of the one-click installation buttons below:\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=memory&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-memory%22%5D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=memory&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-memory%22%5D%7D&quality=insiders)\n\n[![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Docker-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=memory&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22-v%22%2C%22claude-memory%3A%2Fapp%2Fdist%22%2C%22--rm%22%2C%22mcp%2Fmemory%22%5D%7D) [![Install with Docker in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Docker-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=memory&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22-v%22%2C%22claude-memory%3A%2Fapp%2Fdist%22%2C%22--rm%22%2C%22mcp%2Fmemory%22%5D%7D&quality=insiders)\n\nFor manual installation, you can configure the MCP server using one of these methods:\n\n**Method 1: User Configuration (Recommended)**\nAdd the configuration to your user-level MCP configuration file. Open the Command Palette (`Ctrl + Shift + P`) and run `MCP: Open User Configuration`. This will open your user `mcp.json` file where you can add the server configuration.\n\n**Method 2: Workspace Configuration**\nAlternatively, you can add the configuration to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n> For more details about MCP configuration in VS Code, see the [official VS Code MCP documentation](https://code.visualstudio.com/docs/copilot/mcp).\n\n#### NPX\n\n```json\n{\n  \"servers\": {\n    \"memory\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-memory\"\n      ]\n    }\n  }\n}\n```\n\n#### Docker\n\n```json\n{\n  \"servers\": {\n    \"memory\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"-v\",\n        \"claude-memory:/app/dist\",\n        \"--rm\",\n        \"mcp/memory\"\n      ]\n    }\n  }\n}\n```\n\n### System Prompt\n\nThe prompt for utilizing memory depends on the use case. Changing the prompt will help the model determine the frequency and types of memories created.\n\nHere is an example prompt for chat personalization. You could use this prompt in the \"Custom Instructions\" field of a [Claude.ai Project](https://www.anthropic.com/news/projects). \n\n```\nFollow these steps for each interaction:\n\n1. User Identification:\n   - You should assume that you are interacting with default_user\n   - If you have not identified default_user, proactively try to do so.\n\n2. Memory Retrieval:\n   - Always begin your chat by saying only \"Remembering...\" and retrieve all relevant information from your knowledge graph\n   - Always refer to your knowledge graph as your \"memory\"\n\n3. Memory\n   - While conversing with the user, be attentive to any new information that falls into these categories:\n     a) Basic Identity (age, gender, location, job title, education level, etc.)\n     b) Behaviors (interests, habits, etc.)\n     c) Preferences (communication style, preferred language, etc.)\n     d) Goals (goals, targets, aspirations, etc.)\n     e) Relationships (personal and professional relationships up to 3 degrees of separation)\n\n4. Memory Update:\n   - If any new information was gathered during the interaction, update your memory as follows:\n     a) Create entities for recurring organizations, people, and significant events\n     b) Connect them to the current entities using relations\n     c) Store facts about them as observations\n```\n\n## Building\n\nDocker:\n\n```sh\ndocker build -t mcp/memory -f src/memory/Dockerfile . \n```\n\nFor Awareness: a prior mcp/memory volume contains an index.js file that could be overwritten by the new container. If you are using a docker volume for storage, delete the old docker volume's `index.js` file before starting the new container.\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "AI Tools",
+  "quality_score": 78,
+  "archestra_config": {
+    "client_config_permutations": {
+      "memory-server-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "-v", "claude-memory:/app/dist", "--rm", "mcp/memory"],
+        "env": {},
+        "docker_image": "mcp/memory"
+      },
+      "modelcontextprotocol-server-memory": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-memory"],
+        "env": {}
+      },
+      "modelcontextprotocol-server-memory-configured": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-memory"],
+        "env": {
+          "MEMORY_FILE_PATH": "/path/to/custom/memory.json"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "modelcontextprotocol",
+    "repo": "servers",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
+    "name": "servers",
+    "path": "src/memory",
+    "stars": 62690,
+    "contributors": 724,
+    "issues": 348,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4b6ce397924982a93f8af25390b1e7d45073b282"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:20.192Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@modelcontextprotocol/server-memory\",\n  \"version\": \"0.6.3\",\n  \"description\": \"MCP server for enabling memory for Claude through a knowledge graph\",\n  \"license\": \"MIT\",\n  \"author\": \"Anthropic, PBC (https://anthropic.com)\",\n  \"homepage\": \"https://modelcontextprotocol.io\",\n  \"bugs\": \"https://github.com/modelcontextprotocol/servers/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-memory\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}"
+}

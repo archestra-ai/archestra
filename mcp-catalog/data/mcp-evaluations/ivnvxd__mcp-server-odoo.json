@@ -1,0 +1,194 @@
+{
+  "name": "ivnvxd__mcp-server-odoo",
+  "display_name": "mcp-server-odoo",
+  "description": "A Model Context Protocol (MCP) server that enables AI assistants to securely interact with Odoo ERP systems through standardized resources and tools for data retrieval and manipulation.",
+  "author": {
+    "name": "ivnvxd"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-odoo"],
+    "env": {
+      "ODOO_URL": "${user_config.odoo_url}",
+      "ODOO_API_KEY": "${user_config.odoo_api_key}",
+      "ODOO_USER": "${user_config.odoo_user}",
+      "ODOO_PASSWORD": "${user_config.odoo_password}",
+      "ODOO_DB": "${user_config.odoo_db}",
+      "ODOO_MCP_TRANSPORT": "${user_config.odoo_mcp_transport}",
+      "ODOO_MCP_HOST": "${user_config.odoo_mcp_host}",
+      "ODOO_MCP_PORT": "${user_config.odoo_mcp_port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "odoo_url": {
+      "type": "string",
+      "title": "Odoo Instance URL",
+      "description": "Your Odoo instance URL (e.g., https://mycompany.odoo.com)",
+      "required": true
+    },
+    "odoo_api_key": {
+      "type": "string",
+      "title": "Odoo API Key",
+      "description": "API key for authentication. Either this or Odoo Username/Password is required.",
+      "sensitive": true,
+      "required": false
+    },
+    "odoo_user": {
+      "type": "string",
+      "title": "Odoo Username",
+      "description": "Username for authentication (if not using API key).",
+      "required": false
+    },
+    "odoo_password": {
+      "type": "string",
+      "title": "Odoo Password",
+      "description": "Password for authentication (if not using API key).",
+      "sensitive": true,
+      "required": false
+    },
+    "odoo_db": {
+      "type": "string",
+      "title": "Odoo Database Name",
+      "description": "Database name (auto-detected if not set, but required if database listing is restricted on your server).",
+      "required": false
+    },
+    "odoo_mcp_transport": {
+      "type": "string",
+      "title": "MCP Transport Type",
+      "description": "Transport type for the MCP server: stdio or streamable-http.",
+      "default": "stdio",
+      "required": false
+    },
+    "odoo_mcp_host": {
+      "type": "string",
+      "title": "MCP Host",
+      "description": "Host to bind for HTTP transports.",
+      "default": "localhost",
+      "required": false
+    },
+    "odoo_mcp_port": {
+      "type": "number",
+      "title": "MCP Port",
+      "description": "Port to bind for HTTP transports.",
+      "default": 8000,
+      "min": 1,
+      "max": 65535,
+      "required": false
+    }
+  },
+  "readme": "# MCP Server for Odoo\n\n[![CI](https://github.com/ivnvxd/mcp-server-odoo/actions/workflows/ci.yml/badge.svg)](https://github.com/ivnvxd/mcp-server-odoo/actions/workflows/ci.yml)\n[![codecov](https://codecov.io/gh/ivnvxd/mcp-server-odoo/branch/main/graph/badge.svg)](https://codecov.io/gh/ivnvxd/mcp-server-odoo)\n[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)\n[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)\n[![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)\n[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)\n[![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)\n\nAn MCP server that enables AI assistants like Claude to interact with Odoo ERP systems. Access business data, search records, create new entries, update existing data, and manage your Odoo instance through natural language.\n\n## Features\n\n- 🔍 **Search and retrieve** any Odoo record (customers, products, invoices, etc.)\n- ✨ **Create new records** with field validation and permission checks\n- ✏️ **Update existing data** with smart field handling\n- 🗑️ **Delete records** respecting model-level permissions\n- 📊 **Browse multiple records** and get formatted summaries\n- 🔢 **Count records** matching specific criteria\n- 📋 **Inspect model fields** to understand data structure\n- 🔐 **Secure access** with API key or username/password authentication\n- 🎯 **Smart pagination** for large datasets\n- 💬 **LLM-optimized output** with hierarchical text formatting\n\n## Installation\n\n### Prerequisites\n\n- Python 3.10 or higher\n- Access to an Odoo instance (version 17.0+)\n- The [Odoo MCP module](https://apps.odoo.com/apps/modules/18.0/mcp_server) installed on your Odoo server\n- (optional) An API key generated in Odoo (Settings > Users > API Keys)\n\n### Install UV First\n\nThe MCP server runs on your **local computer** (where Claude Desktop is installed), not on your Odoo server. You need to install UV on your local machine:\n\n<details>\n<summary>macOS/Linux</summary>\n\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n</details>\n\n<details>\n<summary>Windows</summary>\n\n```powershell\npowershell -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n```\n</details>\n\nAfter installation, restart your terminal to ensure UV is in your PATH.\n\n### Installing via MCP Settings (Recommended)\n\nAdd this configuration to your MCP settings:\n\n```json\n{\n  \"mcpServers\": {\n    \"odoo\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-odoo\"],\n      \"env\": {\n        \"ODOO_URL\": \"https://your-odoo-instance.com\",\n        \"ODOO_API_KEY\": \"your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\n<details>\n<summary>Claude Desktop</summary>\n\nAdd to `~/Library/Application Support/Claude/claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"odoo\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-odoo\"],\n      \"env\": {\n        \"ODOO_URL\": \"https://your-odoo-instance.com\",\n        \"ODOO_API_KEY\": \"your-api-key-here\",\n        \"ODOO_DB\": \"your-database-name\"\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary>Cursor</summary>\n\nAdd to `~/.cursor/mcp_settings.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"odoo\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-odoo\"],\n      \"env\": {\n        \"ODOO_URL\": \"https://your-odoo-instance.com\",\n        \"ODOO_API_KEY\": \"your-api-key-here\",\n        \"ODOO_DB\": \"your-database-name\"\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary>VS Code (with GitHub Copilot)</summary>\n\nAdd to your VS Code settings (`~/.vscode/mcp_settings.json` or workspace settings):\n\n```json\n{\n  \"github.copilot.chat.mcpServers\": {\n    \"odoo\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-odoo\"],\n      \"env\": {\n        \"ODOO_URL\": \"https://your-odoo-instance.com\",\n        \"ODOO_API_KEY\": \"your-api-key-here\",\n        \"ODOO_DB\": \"your-database-name\"\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary>Zed</summary>\n\nAdd to `~/.config/zed/settings.json`:\n\n```json\n{\n  \"context_servers\": {\n    \"odoo\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-odoo\"],\n      \"env\": {\n        \"ODOO_URL\": \"https://your-odoo-instance.com\",\n        \"ODOO_API_KEY\": \"your-api-key-here\",\n        \"ODOO_DB\": \"your-database-name\"\n      }\n    }\n  }\n}\n```\n</details>\n\n### Alternative Installation Methods\n\n<details>\n<summary>Using pip</summary>\n\n```bash\n# Install globally\npip install mcp-server-odoo\n\n# Or use pipx for isolated environment\npipx install mcp-server-odoo\n```\n\nThen use `mcp-server-odoo` as the command in your MCP configuration.\n</details>\n\n<details>\n<summary>From source</summary>\n\n```bash\ngit clone https://github.com/ivnvxd/mcp-server-odoo.git\ncd mcp-server-odoo\npip install -e .\n```\n\nThen use the full path to the package in your MCP configuration.\n</details>\n\n## Configuration\n\n### Environment Variables\n\nThe server requires the following environment variables:\n\n| Variable | Required | Description | Example |\n|----------|----------|-------------|---------|\n| `ODOO_URL` | Yes | Your Odoo instance URL | `https://mycompany.odoo.com` |\n| `ODOO_API_KEY` | Yes* | API key for authentication | `0ef5b399e9ee9c11b053dfb6eeba8de473c29fcd` |\n| `ODOO_USER` | Yes* | Username (if not using API key) | `admin` |\n| `ODOO_PASSWORD` | Yes* | Password (if not using API key) | `admin` |\n| `ODOO_DB` | No | Database name (auto-detected if not set) | `mycompany` |\n\n*Either `ODOO_API_KEY` or both `ODOO_USER` and `ODOO_PASSWORD` are required.\n\n**Notes:**\n- If database listing is restricted on your server, you must specify `ODOO_DB`\n- API key authentication is recommended for better security\n\n### Transport Options\n\nThe server supports multiple transport protocols for different use cases:\n\n#### 1. **stdio** (Default)\nStandard input/output transport - used by desktop AI applications like Claude Desktop.\n\n```bash\n# Default transport - no additional configuration needed\nuvx mcp-server-odoo\n```\n\n#### 2. **streamable-http**\nStandard HTTP transport for REST API-style access and remote connectivity.\n\n```bash\n# Run with HTTP transport\nuvx mcp-server-odoo --transport streamable-http --host 0.0.0.0 --port 8000\n\n# Or use environment variables\nexport ODOO_MCP_TRANSPORT=streamable-http\nexport ODOO_MCP_HOST=0.0.0.0\nexport ODOO_MCP_PORT=8000\nuvx mcp-server-odoo\n```\n\nThe HTTP endpoint will be available at: `http://localhost:8000/mcp/`\n\n> **Note**: SSE (Server-Sent Events) transport has been deprecated in MCP protocol version 2025-03-26. Use streamable-http transport instead for HTTP-based communication. Requires MCP library v1.9.4 or higher for proper session management.\n\n#### Transport Configuration\n\n| Variable/Flag | Description | Default |\n|--------------|-------------|---------|\n| `ODOO_MCP_TRANSPORT` / `--transport` | Transport type: stdio, streamable-http | `stdio` |\n| `ODOO_MCP_HOST` / `--host` | Host to bind for HTTP transports | `localhost` |\n| `ODOO_MCP_PORT` / `--port` | Port to bind for HTTP transports | `8000` |\n\n<details>\n<summary>Running streamable-http transport for remote access</summary>\n\n```json\n{\n  \"mcpServers\": {\n    \"odoo-remote\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-odoo\", \"--transport\", \"streamable-http\", \"--port\", \"8080\"],\n      \"env\": {\n        \"ODOO_URL\": \"https://your-odoo-instance.com\",\n        \"ODOO_API_KEY\": \"your-api-key-here\",\n        \"ODOO_DB\": \"your-database-name\"\n      }\n    }\n  }\n}\n```\n</details>\n\n### Setting up Odoo\n\n1. **Install the MCP module**:\n   - Download the [mcp_server](https://apps.odoo.com/apps/modules/18.0/mcp_server) module\n   - Install it in your Odoo instance\n   - Navigate to Settings > MCP Server\n\n2. **Enable models for MCP access**:\n   - Go to Settings > MCP Server > Enabled Models\n   - Add models you want to access (e.g., res.partner, product.product)\n   - Configure permissions (read, write, create, delete) per model\n\n3. **Generate an API key**:\n   - Go to Settings > Users & Companies > Users\n   - Select your user\n   - Under the \"API Keys\" tab, create a new key\n   - Copy the key for your MCP configuration\n\n## Usage Examples\n\nOnce configured, you can ask Claude:\n\n**Search & Retrieve:**\n- \"Show me all customers from Spain\"\n- \"Find products with stock below 10 units\"\n- \"List today's sales orders over $1000\"\n- \"Search for unpaid invoices from last month\"\n- \"Count how many active employees we have\"\n- \"Show me the contact information for Microsoft\"\n\n**Create & Manage:**\n- \"Create a new customer contact for Acme Corporation\"\n- \"Add a new product called 'Premium Widget' with price $99.99\"\n- \"Create a calendar event for tomorrow at 2 PM\"\n- \"Update the phone number for customer John Doe to +1-555-0123\"\n- \"Change the status of order SO/2024/001 to confirmed\"\n- \"Delete the test contact we created earlier\"\n\n## Available Tools\n\n### `search_records`\nSearch for records in any Odoo model with filters.\n\n```json\n{\n  \"model\": \"res.partner\",\n  \"domain\": [[\"is_company\", \"=\", true], [\"country_id.code\", \"=\", \"ES\"]],\n  \"fields\": [\"name\", \"email\", \"phone\"],\n  \"limit\": 10\n}\n```\n\n**Field Selection Options:**\n- Omit `fields` or set to `null`: Returns smart selection of common fields\n- Specify field list: Returns only those specific fields\n- Use `[\"__all__\"]`: Returns all fields (use with caution)\n\n### `get_record`\nRetrieve a specific record by ID.\n\n```json\n{\n  \"model\": \"res.partner\",\n  \"record_id\": 42,\n  \"fields\": [\"name\", \"email\", \"street\", \"city\"]\n}\n```\n\n**Field Selection Options:**\n- Omit `fields` or set to `null`: Returns smart selection of common fields with metadata\n- Specify field list: Returns only those specific fields\n- Use `[\"__all__\"]`: Returns all fields without metadata\n\n### `list_models`\nList all models enabled for MCP access.\n\n```json\n{}\n```\n\n### `create_record`\nCreate a new record in Odoo.\n\n```json\n{\n  \"model\": \"res.partner\",\n  \"values\": {\n    \"name\": \"New Customer\",\n    \"email\": \"customer@example.com\",\n    \"is_company\": true\n  }\n}\n```\n\n### `update_record`\nUpdate an existing record.\n\n```json\n{\n  \"model\": \"res.partner\",\n  \"record_id\": 42,\n  \"values\": {\n    \"phone\": \"+1234567890\",\n    \"website\": \"https://example.com\"\n  }\n}\n```\n\n### `delete_record`\nDelete a record from Odoo.\n\n```json\n{\n  \"model\": \"res.partner\",\n  \"record_id\": 42\n}\n```\n\n## Resources\n\nThe server also provides direct access to Odoo data through resource URIs:\n\n- `odoo://res.partner/record/1` - Get partner with ID 1\n- `odoo://product.product/search?domain=[[\"qty_available\",\">\",0]]` - Search products in stock\n- `odoo://sale.order/browse?ids=1,2,3` - Browse multiple sales orders\n- `odoo://res.partner/count?domain=[[\"customer_rank\",\">\",0]]` - Count customers\n- `odoo://product.product/fields` - List available fields for products\n\n## Security\n\n- Always use HTTPS in production environments\n- Keep your API keys secure and rotate them regularly\n- Configure model access carefully - only enable necessary models\n- The MCP module respects Odoo's built-in access rights and record rules\n- Each API key is linked to a specific user with their permissions\n\n## Troubleshooting\n\n<details>\n<summary>Connection Issues</summary>\n\nIf you're getting connection errors:\n1. Verify your Odoo URL is correct and accessible\n2. Check that the MCP module is installed: visit `https://your-odoo.com/mcp/health`\n3. Ensure your firewall allows connections to Odoo\n</details>\n\n<details>\n<summary>Authentication Errors</summary>\n\nIf authentication fails:\n1. Verify your API key is active in Odoo\n2. Check that the user has appropriate permissions\n3. Try regenerating the API key\n4. For username/password auth, ensure 2FA is not enabled\n</details>\n\n<details>\n<summary>Model Access Errors</summary>\n\nIf you can't access certain models:\n1. Go to Settings > MCP Server > Enabled Models in Odoo\n2. Ensure the model is in the list and has appropriate permissions\n3. Check that your user has access to that model in Odoo's security settings\n</details>\n\n<details>\n<summary>\"spawn uvx ENOENT\" Error</summary>\n\nThis error means UV is not installed or not in your PATH:\n\n**Solution 1: Install UV** (see Installation section above)\n\n**Solution 2: macOS PATH Issue**\nClaude Desktop on macOS doesn't inherit your shell's PATH. Try:\n1. Quit Claude Desktop completely (Cmd+Q)\n2. Open Terminal\n3. Launch Claude from Terminal:\n   ```bash\n   open -a \"Claude\"\n   ```\n\n**Solution 3: Use Full Path**\nFind UV location and use full path:\n```bash\nwhich uvx\n# Example output: /Users/yourname/.local/bin/uvx\n```\n\nThen update your config:\n```json\n{\n  \"command\": \"/Users/yourname/.local/bin/uvx\",\n  \"args\": [\"mcp-server-odoo\"]\n}\n```\n</details>\n\n<details>\n<summary>Database Configuration Issues</summary>\n\nIf you see \"Access Denied\" when listing databases:\n- This is normal - some Odoo instances restrict database listing for security\n- Make sure to specify `ODOO_DB` in your configuration\n- The server will use your specified database without validation\n\nExample configuration:\n```json\n{\n  \"env\": {\n    \"ODOO_URL\": \"https://your-odoo.com\",\n    \"ODOO_API_KEY\": \"your-key\",\n    \"ODOO_DB\": \"your-database-name\"\n  }\n}\n```\nNote: `ODOO_DB` is required if database listing is restricted on your server.\n</details>\n\n<details>\n<summary>\"SSL: CERTIFICATE_VERIFY_FAILED\" Error</summary>\n\nThis error occurs when Python cannot verify SSL certificates, often on macOS or corporate networks.\n\n**Solution**: Add SSL certificate path to your environment configuration:\n\n```json\n{\n  \"env\": {\n    \"ODOO_URL\": \"https://your-odoo.com\",\n    \"ODOO_API_KEY\": \"your-key\",\n    \"SSL_CERT_FILE\": \"/etc/ssl/cert.pem\"\n  }\n}\n```\n\nThis tells Python where to find the system's SSL certificate bundle for HTTPS connections. The path `/etc/ssl/cert.pem` is the standard location on most systems.\n</details>\n\n<details>\n<summary>Debug Mode</summary>\n\nEnable debug logging for more information:\n\n```json\n{\n  \"env\": {\n    \"ODOO_URL\": \"https://your-odoo.com\",\n    \"ODOO_API_KEY\": \"your-key\",\n    \"ODOO_MCP_LOG_LEVEL\": \"DEBUG\"\n  }\n}\n```\n</details>\n\n## Development\n\n<details>\n<summary>Running from source</summary>\n\n```bash\n# Clone the repository\ngit clone https://github.com/ivnvxd/mcp-server-odoo.git\ncd mcp-server-odoo\n\n# Install in development mode\npip install -e \".[dev]\"\n\n# Run tests\npytest --cov\n\n# Run the server\npython -m mcp_server_odoo\n```\n</details>\n\n<details>\n<summary>Testing with MCP Inspector</summary>\n\n```bash\n# Using uvx\nnpx @modelcontextprotocol/inspector uvx mcp-server-odoo\n\n# Using local installation\nnpx @modelcontextprotocol/inspector python -m mcp_server_odoo\n```\n</details>\n\n## Testing\n\n### Transport Tests\n\nYou can test both stdio and streamable-http transports to ensure they're working correctly:\n\n```bash\n# Run comprehensive transport tests\npython tests/run_transport_tests.py\n```\n\nThis will test:\n- **stdio transport**: Basic initialization and communication\n- **streamable-http transport**: HTTP endpoint, session management, and tool calls\n\n### Unit Tests\n\nFor complete testing including unit and integration tests:\n\n```bash\n# Run all tests\nuv run pytest --cov\n\n# Run specific test categories\nuv run pytest tests/test_tools.py -v\nuv run pytest tests/test_server_foundation.py -v\n```\n\n## License\n\nThis project is licensed under the Mozilla Public License 2.0 (MPL-2.0) - see the [LICENSE](LICENSE) file for details.\n\n## Contributing\n\nContributions are very welcome! Please see the [CONTRIBUTING](CONTRIBUTING.md) guide for details.\n\n## Support\n\nThank you for using this project! If you find it helpful and would like to support my work, kindly consider buying me a coffee. Your support is greatly appreciated!\n\n<a href=\"https://www.buymeacoffee.com/ivnvxd\" target=\"_blank\"><img src=\"https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png\" alt=\"Buy Me A Coffee\" style=\"height: 60px !important;width: 217px !important;\" ></a>\n\nAnd do not forget to give the project a star if you like it! :star:",
+  "category": "Enterprise",
+  "quality_score": 68,
+  "archestra_config": {
+    "client_config_permutations": {
+      "odoo": {
+        "command": "uvx",
+        "args": ["mcp-server-odoo"],
+        "env": {
+          "ODOO_URL": "https://your-odoo-instance.com",
+          "ODOO_API_KEY": "your-api-key-here",
+          "ODOO_DB": "your-database-name"
+        }
+      },
+      "mcp-server-odoo-pip": {
+        "command": "mcp-server-odoo",
+        "args": [],
+        "env": {
+          "ODOO_URL": "https://your-odoo-instance.com",
+          "ODOO_API_KEY": "your-api-key-here",
+          "ODOO_DB": "your-database-name"
+        }
+      },
+      "mcp-server-odoo-streamable-http-args": {
+        "command": "uvx",
+        "args": ["mcp-server-odoo", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8000"],
+        "env": {
+          "ODOO_URL": "https://your-odoo-instance.com",
+          "ODOO_API_KEY": "your-api-key-here",
+          "ODOO_DB": "your-database-name"
+        }
+      },
+      "mcp-server-odoo-streamable-http-env": {
+        "command": "uvx",
+        "args": ["mcp-server-odoo"],
+        "env": {
+          "ODOO_MCP_TRANSPORT": "streamable-http",
+          "ODOO_MCP_HOST": "0.0.0.0",
+          "ODOO_MCP_PORT": "8000",
+          "ODOO_URL": "https://your-odoo-instance.com",
+          "ODOO_API_KEY": "your-api-key-here",
+          "ODOO_DB": "your-database-name"
+        }
+      },
+      "odoo-remote": {
+        "command": "uvx",
+        "args": ["mcp-server-odoo", "--transport", "streamable-http", "--port", "8080"],
+        "env": {
+          "ODOO_URL": "https://your-odoo-instance.com",
+          "ODOO_API_KEY": "your-api-key-here",
+          "ODOO_DB": "your-database-name"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ivnvxd",
+    "repo": "mcp-server-odoo",
+    "url": "https://github.com/ivnvxd/mcp-server-odoo",
+    "name": "mcp-server-odoo",
+    "path": null,
+    "stars": 35,
+    "contributors": 2,
+    "issues": 8,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "a8318f672c3f8e78bdbb599715f05f3314fbea52"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.941Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"mcp-server-odoo\"\nversion = \"0.2.1\"\ndescription = \"A Model Context Protocol server for Odoo ERP systems\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nauthors = [\n    { name = \"Andrey Ivanov\", email = \"ivnv.xd@gmail.com\" }\n]\nmaintainers = [\n    { name = \"Andrey Ivanov\", email = \"ivnv.xd@gmail.com\" }\n]\nlicense = { text = \"MPL-2.0\" }\nkeywords = [\"mcp\", \"odoo\", \"erp\", \"model-context-protocol\", \"ai\", \"llm\", \"claude\", \"anthropic\"]\nclassifiers = [\n    \"Development Status :: 3 - Alpha\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Operating System :: OS Independent\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n    \"Topic :: Office/Business\",\n    \"Topic :: Scientific/Engineering :: Artificial Intelligence\",\n]\ndependencies = [\n    \"mcp>=1.9.4\",\n    \"httpx>=0.27.0\",\n    \"python-dotenv>=1.0.0\",\n    \"pydantic>=2.0.0\",\n    \"pydantic-settings>=2.0.0\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/ivnvxd/mcp-server-odoo\"\nDocumentation = \"https://github.com/ivnvxd/mcp-server-odoo#readme\"\nRepository = \"https://github.com/ivnvxd/mcp-server-odoo\"\nIssues = \"https://github.com/ivnvxd/mcp-server-odoo/issues\"\nChangelog = \"https://github.com/ivnvxd/mcp-server-odoo/releases\"\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=8.3.5\",\n    \"pytest-asyncio>=1.0.0\",\n    \"pytest-cov>=6.1.1\",\n    \"mypy>=1.16.0\",\n    \"ruff>=0.11.12\",\n    \"black>=25.1.0\",\n    \"types-requests>=2.32.0\",\n    \"requests>=2.32.3\",\n]\n\n[project.scripts]\nmcp-server-odoo = \"mcp_server_odoo.__main__:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"mcp_server_odoo\"]\n\n[tool.pytest.ini_options]\nminversion = \"8.0\"\ntestpaths = [\"tests\"]\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\npythonpath = [\".\"]\nmarkers = [\n    \"integration: marks tests as integration tests (deselect with '-m \\\"not integration\\\"')\",\n]\n\n[tool.coverage.run]\nsource = [\"mcp_server_odoo\"]\nomit = [\"tests/*\", \"*/__pycache__/*\", \"*/__init__.py\"]\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"if self.debug:\",\n    \"if __name__ == .__main__.:\",\n    \"raise AssertionError\",\n    \"raise NotImplementedError\",\n    \"if TYPE_CHECKING:\",\n]\n\n[tool.mypy]\npython_version = \"3.10\"\nwarn_return_any = false\nwarn_unused_configs = true\ndisallow_untyped_defs = false\ndisallow_any_unimported = false\nignore_missing_imports = true\nno_implicit_optional = false\ncheck_untyped_defs = false\nstrict_optional = false\nallow_untyped_calls = true\nallow_incomplete_defs = true\nallow_untyped_globals = true\nallow_redefinition = true\nno_warn_no_return = true\nwarn_unreachable = false\n# Disable specific error codes that are problematic\ndisable_error_code = [\"str-bytes-safe\", \"union-attr\", \"arg-type\", \"return-value\", \"assignment\", \"list-item\", \"var-annotated\"]\nexclude = [\n    \"venv/\",\n    \".venv/\",\n    \"build/\",\n    \"dist/\",\n]\n\n[[tool.mypy.overrides]]\nmodule = \"mcp.*\"\nignore_errors = true\n\n[[tool.mypy.overrides]]\nmodule = \"tests.*\"\ndisallow_untyped_defs = false\nignore_errors = true\n\n[tool.ruff]\nline-length = 100\ntarget-version = \"py310\"\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\", \"N\", \"W\", \"B\", \"Q\"]\nignore = [\"E501\"]\n\n[tool.black]\nline-length = 100\ntarget-version = [\"py310\"]\n\n[dependency-groups]\ndev = [\n    \"mypy>=1.16.0\",\n]\n"
+}

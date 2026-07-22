@@ -11,6 +11,7 @@ import {
   isModelSelectionComplete,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   RouteId,
+  requiresOpenAiResponsesApi,
   type SupportedProvider,
   TimeInMs,
   type TokenUsage,
@@ -1280,19 +1281,56 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 }
 
+                // Responses-routed OpenAI models run with store:false so the
+                // SDK resends the full conversation (with encrypted reasoning)
+                // each turn instead of referencing server-stored items by id.
+                // Item references break on the stateless ChatGPT-subscription
+                // (Codex) backend, which forces store:false and therefore never
+                // has the referenced items ("Items are not persisted when
+                // `store` is set to false").
+                if (
+                  provider === "openai" &&
+                  requiresOpenAiResponsesApi(selectedModel)
+                ) {
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    openai: { store: false },
+                  };
+                }
+
                 // Request the model's real output ceiling (clamped by the
                 // operator ceiling), or a safe fallback when it is unknown.
                 // Without this, providers that inject a small default max
                 // (e.g. Anthropic's ~4096) truncated large tool-call payloads
                 // and final submission turns.
-                streamTextConfig.maxOutputTokens = resolveAgentMaxOutputTokens({
+                const maxOutputTokens = resolveAgentMaxOutputTokens({
                   outputLength: modelRow?.outputLength ?? null,
                   ceiling: config.chat.maxOutputTokensCeiling,
                   provider,
+                  // Effective (not architectural) window: for Ollama the
+                  // admin-pinned `num_ctx` is what the request actually runs
+                  // with, and it is the budget's fallback source.
                   contextLength: modelRow
                     ? ModelModel.resolveEffectiveContextLength(modelRow)
                     : null,
                 });
+                if (
+                  provider === "openai" &&
+                  !requiresOpenAiResponsesApi(selectedModel)
+                ) {
+                  // OpenAI chat-completions models get the budget as
+                  // max_completion_tokens (accepted by every OpenAI chat model)
+                  // instead of maxOutputTokens: the SDK maps the latter to the
+                  // legacy max_tokens for model names its reasoning heuristic
+                  // doesn't recognize (e.g. the bare `chat-latest` alias), and
+                  // newer models reject max_tokens outright.
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    openai: { maxCompletionTokens: maxOutputTokens },
+                  };
+                } else {
+                  streamTextConfig.maxOutputTokens = maxOutputTokens;
+                }
 
                 // Send the per-model generation parameters
                 // (num_ctx, num_predict, top_k, think, …) on native Ollama turns.
@@ -1736,6 +1774,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         userId: user.id,
         organizationId,
+        canReadOthersViaProject: () =>
+          userHasPermission(user.id, organizationId, "project", "read-all"),
       });
 
       if (!conversation) {
@@ -3932,6 +3972,13 @@ async function findReadableConversationById(params: {
       id: params.conversationId,
       userId: params.userId,
       organizationId: params.organizationId,
+      canReadOthersViaProject: () =>
+        userHasPermission(
+          params.userId,
+          params.organizationId,
+          "project",
+          "read-all",
+        ),
     })) ??
     (await findScheduleRunConversationForAdmin({
       conversationId: params.conversationId,

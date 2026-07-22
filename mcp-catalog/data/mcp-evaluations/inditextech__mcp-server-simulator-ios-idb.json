@@ -1,0 +1,83 @@
+{
+  "name": "inditextech__mcp-server-simulator-ios-idb",
+  "display_name": "mcp-server-simulator-ios-idb",
+  "description": "A Model Context Protocol (MCP) server that enables LLMs to interact with iOS simulators through natural language commands.",
+  "author": {
+    "name": "InditexTech"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# 📱 MCP Server for iOS Simulator\n\n[![MCP Server](https://glama.ai/mcp/servers/@InditexTech/mcp-server-simulator-ios-idb/badge)](https://glama.ai/mcp/servers/@InditexTech/mcp-server-simulator-ios-idb)\n\nA Model Context Protocol (MCP) server that enables LLMs to interact with iOS simulators through natural language commands.\n\n## ℹ️ Overview\n\nThis MCP server provides a bridge between Large Language Models (LLMs) and iOS simulators, offering comprehensive control through natural language commands. Here's what it can do:\n\nFor detailed usage, see the Installation guide and Supported Commands sections. You can use this server either through direct MCP integration or as a standalone library.\n\nCheck out the Architecture section to understand how the components work together to enable natural language control of iOS simulators.\n\n![demo](demo/demo.gif)\n\n### 🎮 Simulator Control\n- Create and manage simulator sessions\n- Boot, shutdown, and monitor simulator states\n- List available and running simulators\n- Focus simulator windows\n\n### 📱 Application Management\n- Install and manage iOS applications\n- Launch, terminate, and uninstall apps\n- Monitor app states and verify installations\n- Handle app permissions and configurations\n\n### 🖱️ UI Interaction & Testing\n- Interact with the simulator UI\n- Execute tap, swipe, and button press actions\n- Input text and key sequences\n- Access accessibility elements for UI testing\n- Record videos of UI interactions\n\n### 🛠️ Development & Debugging\n- Capture screenshots and system logs\n- Debug applications in real-time\n- Monitor and analyze crash logs\n- Install dynamic libraries and manage app data\n\n### ⚡ Advanced Features\n- Additional functionality includes:\n  - Location simulation\n  - Media injection\n  - URL scheme handling\n  - Contact database management\n  - Keychain operations\n\nFor detailed usage, see the Installation guide and Supported Commands sections. You can use this server either through direct MCP integration or as a standalone library.\n\nCheck out the Architecture section to understand how the components work together to enable natural language control of iOS simulators.\n\n## 📋 Requirements\n\n- **macOS**: Required for iOS simulator support\n- **Node.js**: v14.0.0 or higher\n- **Homebrew**: Required for installing dependencies\n- **XCode**: With iOS simulators installed\n\n## 🚀 Installation\n\nThe easiest way to install this server is through Cline:\n\n1. Simply ask Cline:\n```\nAdd this mcp to cline https://github.com/InditexTech/mcp-server-simulator-ios-idb\n```\n\n2. Cline will handle the installation process automatically, including dependency management and configuration.\n\nAlternatively, you can install it manually:\n\n```bash\n# Clone the repository\ngit clone https://github.com/InditexTech/mcp-server-simulator-ios-idb.git\ncd mcp-server-simulator-ios-idb\n\n# Create and activate Python virtual environment\npython3 -m venv venv\nsource venv/bin/activate  # On Unix/macOS\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n\n# Start the project\nnpm start\n\n# Run tests\nnpm test\n```\n\nThe installation process will automatically:\n1. Check if you're running macOS\n2. Install idb-companion via Homebrew\n3. Install fb-idb via pip in the virtual environment\n\nNote: Make sure to keep the virtual environment activated while using the server. If you close your terminal and come back later, you'll need to reactivate the virtual environment with the `source venv/bin/activate` command before running `npm start`.\n\n## 🔌 MCP Integration\n\nTo use this server with Claude or other LLM assistants:\n\n1. Add the server to your MCP settings in Claude Desktop:\n\n```json\n{\n  \"mcpServers\": {\n    \"ios-simulator\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/mcp-server-simulator-ios-idb/dist/index.js\"],\n      \"env\": {}\n    }\n  }\n}\n```\n\n2. The LLM can now use natural language commands to control iOS simulators:\n\n```\ncreate a simulator session with iPhone 14\ninstall app /path/to/my-app.ipa\nlaunch app com.example.myapp\ntap at 100, 200\ntake a screenshot\n```\n\n## 📚 Usage as a Library\n\nYou can also use this package as a library in your own projects:\n\n### 🔰 Basic Usage\n\n```typescript\nimport { createMCPServer } from 'mcp-server-simulator-ios-idb';\n\nasync function main() {\n  // Create an instance of the MCP server\n  const { orchestrator } = createMCPServer();\n  \n  // Process natural language commands\n  \n  // Create a simulator session\n  const sessionResult = await orchestrator.processInstruction('create session');\n  console.log(`Session created: ${sessionResult.data}`);\n  \n  // Interact with the simulator\n  await orchestrator.processInstruction('tap at 100, 200');\n  \n  // Capture a screenshot\n  const screenshotResult = await orchestrator.processInstruction('take screenshot');\n  console.log(`Screenshot saved at: ${screenshotResult.data}`);\n}\n\nmain().catch(console.error);\n```\n\n### 🚀 Advanced Usage\n\nYou can also use the individual components directly:\n\n```typescript\nimport { \n  IDBManager, \n  NLParser, \n  MCPOrchestrator,\n  ParserToOrchestrator,\n  OrchestratorToIDB\n} from 'mcp-server-simulator-ios-idb';\n\n// Create instances\nconst idbManager = new IDBManager();\nconst parser = new NLParser();\nconst orchestrator = new MCPOrchestrator(parser, idbManager);\n\n// Use the components directly\nconst sessionId = await idbManager.createSimulatorSession({\n  deviceName: 'iPhone 12',\n  platformVersion: '15.0'\n});\n\nawait idbManager.tap(sessionId, 100, 200);\n```\n\n## 🏗️ Project Structure\n\n```\nmcp-server-simulator-ios-idb/\n├── src/                      # Source code\n│   ├── adapters/             # Adapter components\n│   ├── idb/                  # IDB manager implementation\n│   ├── mcp/                  # MCP server implementation\n│   ├── orchestrator/         # Command orchestrator\n│   ├── parser/              # Natural language parser\n│   └── index.ts             # Main entry point\n├── types/                   # TypeScript type definitions\n├── scripts/                 # Installation scripts\n├── package.json            # Project configuration\n└── tsconfig.json          # TypeScript configuration\n```\n\n## 🎯 Supported Commands\n\nThe NLParser supports the following natural language commands:\n\n### 🎮 Simulator Management\n| Command | Description | Example |\n|---------|-------------|---------|\n| Create session | Creates a new simulator session | \"create session\", \"create simulator iPhone 12\" |\n| Terminate session | Terminates the current session | \"terminate session\", \"close simulator\" |\n| List simulators | Lists available simulators | \"list simulators\", \"show simulators\" |\n| List booted simulators | Lists running simulators | \"list booted simulators\", \"show running simulators\" |\n| Boot simulator | Boots a simulator by UDID | \"boot simulator 5A321B8F-4D85-4267-9F79-2F5C91D142C2\" |\n| Shutdown simulator | Shuts down a simulator | \"shutdown simulator 5A321B8F-4D85-4267-9F79-2F5C91D142C2\" |\n| Focus simulator | Brings simulator window to front | \"focus simulator\", \"bring simulator to front\" |\n| List simulator sessions | Lists active simulator sessions | \"list simulator sessions\", \"show active sessions\" |\n\n### 📱 App Management\n| Command | Description | Example |\n|---------|-------------|---------|\n| Install app | Installs an app on the simulator | \"install app /path/to/app.ipa\" |\n| Launch app | Launches an app on the simulator | \"launch app com.example.app\" |\n| Terminate app | Terminates a running app | \"terminate app com.example.app\" |\n| Uninstall app | Uninstalls an app | \"uninstall app com.example.app\" |\n| List apps | Lists installed applications | \"list apps\", \"show installed apps\" |\n| Check if app installed | Checks if an app is installed | \"is app com.example.app installed\" |\n\n### 🖱️ UI Interaction\n| Command | Description | Example |\n|---------|-------------|---------|\n| Tap | Taps at specific coordinates | \"tap at 100, 200\" |\n| Swipe | Performs a swipe gesture | \"swipe from 100, 200 to 300, 400\" |\n| Press button | Presses a device button | \"press button HOME\", \"press button SIRI\" |\n| Input text | Types text | \"input text Hello World\" |\n| Press key | Presses a key by code | \"press key 4\" |\n| Press key sequence | Presses a sequence of keys | \"press key sequence 4 5 6\" |\n\n### ♿ Accessibility\n| Command | Description | Example |\n|---------|-------------|---------|\n| Describe elements | Lists all accessibility elements | \"describe all elements\", \"show accessibility elements\" |\n| Describe point | Describes element at coordinates | \"describe point 100, 200\", \"what's at 150, 300\" |\n\n### 📸 Capture and Logs\n| Command | Description | Example |\n|---------|-------------|---------|\n| Take screenshot | Captures a screenshot | \"take screenshot\", \"capture screen\" |\n| Record video | Records screen activity | \"record video /path/output.mp4\" |\n| Stop recording | Stops video recording | \"stop recording\", \"stop video recording\" |\n| Get logs | Retrieves system or app logs | \"get logs\", \"get logs for com.example.app\" |\n\n### 🐛 Debug\n| Command | Description | Example |\n|---------|-------------|---------|\n| Start debug | Starts a debug session | \"debug app com.example.app\", \"start debug com.example.app\" |\n| Stop debug | Stops a debug session | \"stop debug\", \"terminate debug session\" |\n| Debug status | Gets debug session status | \"debug status\", \"show debug info\" |\n\n### 💥 Crash Logs\n| Command | Description | Example |\n|---------|-------------|---------|\n| List crash logs | Lists available crash logs | \"list crash logs\", \"show crash logs\" |\n| Show crash log | Shows content of a crash log | \"show crash log crash_2023-01-01\" |\n| Delete crash logs | Deletes crash logs | \"delete crash logs\", \"clear crash logs\" |\n\n### 🔧 Additional Commands\n| Command | Description | Example |\n|---------|-------------|---------|\n| Install dylib | Installs a dynamic library | \"install dylib /path/to/library.dylib\" |\n| Open URL | Opens a URL in the simulator | \"open url https://example.com\" |\n| Clear keychain | Clears the simulator's keychain | \"clear keychain\" |\n| Set location | Sets the simulator's location | \"set location 37.7749, -122.4194\" |\n| Add media | Adds media to the camera roll | \"add media /path/to/image.jpg\" |\n| Approve permissions | Approves app permissions | \"approve permissions com.example.app photos camera\" |\n| Update contacts | Updates contacts database | \"update contacts /path/to/contacts.sqlite\" |\n\nThe interface supports all commands available in the idb CLI tool, providing a comprehensive set of operations for iOS simulator automation.\n\n## 🔍 Architecture\n\nThe server consists of three main components:\n\n1. **IDBManager**: Low-level component that interacts directly with iOS simulators through idb.\n2. **NLParser**: Component that interprets natural language instructions and converts them into structured commands.\n3. **MCPOrchestrator**: Central component that coordinates interactions between the parser and the IDBManager.\n\nThese components are connected through adapters:\n- **ParserToOrchestrator**: Converts parser results into orchestrator commands.\n- **OrchestratorToIDB**: Translates orchestrator commands into IDBManager calls.\n\n## 🔌 MCP Integration\n\nTo use this server with the Model Context Protocol:\n\n1. Add the server to your MCP settings:\n\n```json\n{\n  \"mcpServers\": {\n    \"ios-simulator\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/mcp-server-simulator-ios-idb/dist/index.js\"],\n      \"env\": {}\n    }\n  }\n}\n```\n\n2. Connect to the server in your LLM application:\n\n```typescript\nconst result = await useMcpTool({\n  serverName: \"ios-simulator\",\n  toolName: \"process-instruction\",\n  arguments: {\n    instruction: \"create simulator session\"\n  }\n});\n```\n\n## 🙏 Acknowledgments\n\nThis project would not be possible without [facebook/idb](https://github.com/facebook/idb), which provides the underlying iOS simulator control capabilities. We extend our sincere gratitude to the Facebook/Meta team and all contributors to the idb project for creating and maintaining such a powerful and reliable tool.\n\n## 📄 License\n\nThis tool is available as open source under the terms of the Apache-2.0.\n",
+  "category": "Development",
+  "quality_score": 68,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-simulator-ios-idb": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "mcp-server-simulator-ios-idb-configured": {
+        "command": "node",
+        "args": ["/path/to/mcp-server-simulator-ios-idb/dist/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "InditexTech",
+    "repo": "mcp-server-simulator-ios-idb",
+    "url": "https://github.com/InditexTech/mcp-server-simulator-ios-idb",
+    "name": "inditextech__mcp-server-simulator-ios-idb",
+    "path": null,
+    "stars": 238,
+    "contributors": 7,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "437dbda02f6a52931158f802b0d7b0f63e20ded9"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:38.020Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "uuid",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-server-simulator-ios-idb\",\n  \"version\": \"1.0.1\",\n  \"description\": \"Model Context Protocol server for iOS simulator automation via IDB\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"NODE_OPTIONS=--experimental-vm-modules jest\",\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\",\n    \"postinstall\": \"chmod +x ./scripts/install_dependencies.sh && ./scripts/install_dependencies.sh\"\n  },\n  \"engines\": {\n    \"node\": \">=14.0.0\",\n    \"os\": \"darwin\"\n  },\n  \"author\": \"arturono[at]inditex[dot]com\",\n  \"license\": \"Apache-2.0\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.6.1\",\n    \"uuid\": \"^9.0.0\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/node\": \"^20.11.0\",\n    \"@types/uuid\": \"^9.0.0\",\n    \"jest\": \"^29.7.0\",\n    \"ts-jest\": \"^29.2.6\",\n    \"typescript\": \"^5.0.0\"\n  }\n}\n"
+}

@@ -1,0 +1,183 @@
+{
+  "name": "pab1it0__adx-mcp-server",
+  "display_name": "adx-mcp-server",
+  "description": "A Model Context Protocol (MCP) server that enables AI assistants to query and analyze Azure Data Explorer databases through standardized interfaces.",
+  "author": {
+    "name": "pab1it0"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "src/adx_mcp_server/main.py"],
+    "env": {
+      "ADX_CLUSTER_URL": "${user_config.adx_cluster_url}",
+      "ADX_DATABASE": "${user_config.adx_database}",
+      "AZURE_TENANT_ID": "${user_config.azure_tenant_id}",
+      "AZURE_CLIENT_ID": "${user_config.azure_client_id}",
+      "ADX_TOKEN_FILE_PATH": "${user_config.adx_token_file_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "adx_cluster_url": {
+      "type": "string",
+      "title": "ADX Cluster URL",
+      "description": "The URL of your Azure Data Explorer cluster (e.g., https://yourcluster.region.kusto.windows.net)",
+      "required": true,
+      "default": "https://yourcluster.region.kusto.windows.net"
+    },
+    "adx_database": {
+      "type": "string",
+      "title": "ADX Database Name",
+      "description": "The name of the database to connect to in your ADX cluster",
+      "required": true,
+      "default": "your_database"
+    },
+    "azure_tenant_id": {
+      "type": "string",
+      "title": "Azure Tenant ID",
+      "description": "Your Azure Tenant ID for Workload Identity credentials (optional)",
+      "required": false,
+      "sensitive": false
+    },
+    "azure_client_id": {
+      "type": "string",
+      "title": "Azure Client ID",
+      "description": "Your Azure Client ID for Workload Identity credentials (optional)",
+      "required": false,
+      "sensitive": false
+    },
+    "adx_token_file_path": {
+      "type": "string",
+      "title": "ADX Token File Path",
+      "description": "Path to the Azure Identity token file for Workload Identity (optional)",
+      "required": false,
+      "default": "/var/run/secrets/azure/tokens/azure-identity-token",
+      "sensitive": false
+    }
+  },
+  "readme": "# Azure Data Explorer MCP Server\n\n<a href=\"https://glama.ai/mcp/servers/1yysyd147h\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/1yysyd147h/badge\" />\n</a>\n\nA [Model Context Protocol][mcp] (MCP) server for Azure Data Explorer/Eventhouse in Microsoft Fabric.\n\nThis provides access to your Azure Data Explorer/Eventhouse clusters and databases through standardized MCP interfaces, allowing AI assistants to execute KQL queries and explore your data.\n\n[mcp]: https://modelcontextprotocol.io\n\n## Features\n\n- [x] Execute KQL queries against Azure Data Explorer\n- [x] Discover and explore database resources\n  - [x] List tables in the configured database\n  - [x] View table schemas\n  - [x] Sample data from tables\n  - [x] Get table statistics/details\n\n- [x] Authentication support\n  - [x] Token credential support (Azure CLI, MSI, etc.)\n  - [x] Workload Identity credential support for AKS\n- [x] Docker containerization support\n\n- [x] Provide interactive tools for AI assistants\n\nThe list of tools is configurable, so you can choose which tools you want to make available to the MCP client.\nThis is useful if you don't use certain functionality or if you don't want to take up too much of the context window.\n\n## Usage\n\n1. Login to your Azure account which has the permission to the ADX cluster using Azure CLI.\n\n2. Configure the environment variables for your ADX cluster, either through a `.env` file or system environment variables:\n\n```env\n# Required: Azure Data Explorer configuration\nADX_CLUSTER_URL=https://yourcluster.region.kusto.windows.net\nADX_DATABASE=your_database\n\n# Optional: Azure Workload Identity credentials \n# AZURE_TENANT_ID=your-tenant-id\n# AZURE_CLIENT_ID=your-client-id \n# ADX_TOKEN_FILE_PATH=/var/run/secrets/azure/tokens/azure-identity-token\n\n# Optional: Custom MCP Server configuration\nADX_MCP_SERVER_TRANSPORT=stdio # Choose between http/sse/stdio, default = stdio\n\n# Optional: Only relevant for non-stdio transports\nADX_MCP_BIND_HOST=127.0.0.1 # default = 127.0.0.1\nADX_MCP_BIND_PORT=8080 # default = 8080\n```\n\n#### Azure Workload Identity Support\n\nThe server now uses WorkloadIdentityCredential by default when running in Azure Kubernetes Service (AKS) environments with workload identity configured. It prioritizes the use of WorkloadIdentityCredential whenever the necessary environment variables are present.\n\nFor AKS with Azure Workload Identity, you only need to:\n1. Make sure the pod has `AZURE_TENANT_ID` and `AZURE_CLIENT_ID` environment variables set\n2. Ensure the token file is mounted at the default path or specify a custom path with `ADX_TOKEN_FILE_PATH`\n\nIf these environment variables are not present, the server will automatically fall back to DefaultAzureCredential, which tries multiple authentication methods in sequence.\n\n3. Add the server configuration to your client configuration file. For example, for Claude Desktop:\n\n```json\n{\n  \"mcpServers\": {\n    \"adx\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"<full path to adx-mcp-server directory>\",\n        \"run\",\n        \"src/adx_mcp_server/main.py\"\n      ],\n      \"env\": {\n        \"ADX_CLUSTER_URL\": \"https://yourcluster.region.kusto.windows.net\",\n        \"ADX_DATABASE\": \"your_database\"\n      }\n    }\n  }\n}\n```\n\n> Note: if you see `Error: spawn uv ENOENT` in Claude Desktop, you may need to specify the full path to `uv` or set the environment variable `NO_UV=1` in the configuration.\n\n## Docker Usage\n\nThis project includes Docker support for easy deployment and isolation.\n\n### Building the Docker Image\n\nBuild the Docker image using:\n\n```bash\ndocker build -t adx-mcp-server .\n```\n\n### Running with Docker\n\nYou can run the server using Docker in several ways:\n\n#### Using docker run directly:\n\n```bash\ndocker run -it --rm \\\n  -e ADX_CLUSTER_URL=https://yourcluster.region.kusto.windows.net \\\n  -e ADX_DATABASE=your_database \\\n  -e AZURE_TENANT_ID=your_tenant_id \\\n  -e AZURE_CLIENT_ID=your_client_id \\\n  adx-mcp-server\n```\n\n#### Using docker-compose:\n\nCreate a `.env` file with your Azure Data Explorer credentials and then run:\n\n```bash\ndocker-compose up\n```\n\n### Running with Docker in Claude Desktop\n\nTo use the containerized server with Claude Desktop, update the configuration to use Docker with the environment variables:\n\n```json\n{\n  \"mcpServers\": {\n    \"adx\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"-e\", \"ADX_CLUSTER_URL\",\n        \"-e\", \"ADX_DATABASE\",\n        \"-e\", \"AZURE_TENANT_ID\",\n        \"-e\", \"AZURE_CLIENT_ID\",\n        \"-e\", \"ADX_TOKEN_FILE_PATH\",\n        \"adx-mcp-server\"\n      ],\n      \"env\": {\n        \"ADX_CLUSTER_URL\": \"https://yourcluster.region.kusto.windows.net\",\n        \"ADX_DATABASE\": \"your_database\",\n        \"AZURE_TENANT_ID\": \"your_tenant_id\",\n        \"AZURE_CLIENT_ID\": \"your_client_id\",\n        \"ADX_TOKEN_FILE_PATH\": \"/var/run/secrets/azure/tokens/azure-identity-token\"\n      }\n    }\n  }\n}\n```\n\nThis configuration passes the environment variables from Claude Desktop to the Docker container by using the `-e` flag with just the variable name, and providing the actual values in the `env` object.\n\n#### Using Docker with HTTP Transport\n\nFor HTTP mode deployment, you can use the following Docker configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"adx\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"-p\", \"8080:8080\",\n        \"-e\", \"ADX_CLUSTER_URL\",\n        \"-e\", \"ADX_DATABASE\", \n        \"-e\", \"ADX_MCP_SERVER_TRANSPORT\",\n        \"-e\", \"ADX_MCP_BIND_HOST\",\n        \"-e\", \"ADX_MCP_BIND_PORT\",\n        \"adx-mcp-server\"\n      ],\n      \"env\": {\n        \"ADX_CLUSTER_URL\": \"https://yourcluster.region.kusto.windows.net\",\n        \"ADX_DATABASE\": \"your_database\",\n        \"ADX_MCP_SERVER_TRANSPORT\": \"http\",\n        \"ADX_MCP_BIND_HOST\": \"0.0.0.0\",\n        \"ADX_MCP_BIND_PORT\": \"8080\"\n      }\n    }\n  }\n}\n```\n\n## Using as a Dev Container / GitHub Codespace\n\nThis repository can also be used as a development container for a seamless development experience. The dev container setup is located in the `devcontainer-feature/adx-mcp-server` folder.\n\nFor more details, check the [devcontainer README](devcontainer-feature/adx-mcp-server/README.md).\n\n\n\n## Development\n\nContributions are welcome! Please open an issue or submit a pull request if you have any suggestions or improvements.\n\nThis project uses [`uv`](https://github.com/astral-sh/uv) to manage dependencies. Install `uv` following the instructions for your platform:\n\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\nYou can then create a virtual environment and install the dependencies with:\n\n```bash\nuv venv\nsource .venv/bin/activate  # On Unix/macOS\n.venv\\Scripts\\activate     # On Windows\nuv pip install -e .\n```\n\n## Project Structure\n\nThe project has been organized with a `src` directory structure:\n\n```\nadx-mcp-server/\n├── src/\n│   └── adx_mcp_server/\n│       ├── __init__.py      # Package initialization\n│       ├── server.py        # MCP server implementation\n│       ├── main.py          # Main application logic\n├── Dockerfile               # Docker configuration\n├── docker-compose.yml       # Docker Compose configuration\n├── .dockerignore            # Docker ignore file\n├── pyproject.toml           # Project configuration\n└── README.md                # This file\n```\n\n### Testing\n\nThe project includes a comprehensive test suite that ensures functionality and helps prevent regressions.\n\nRun the tests with pytest:\n\n```bash\n# Install development dependencies\nuv pip install -e \".[dev]\"\n\n# Run the tests\npytest\n\n# Run with coverage report\npytest --cov=src --cov-report=term-missing\n```\nTests are organized into:\n\n- Configuration validation tests\n- Server functionality tests\n- Error handling tests\n- Main application tests\n\nWhen adding new features, please also add corresponding tests.\n\n### Tools\n\n| Tool | Category | Description |\n| --- | --- | --- |\n| `execute_query` | Query | Execute a KQL query against Azure Data Explorer |\n| `list_tables` | Discovery | List all tables in the configured database |\n| `get_table_schema` | Discovery | Get the schema for a specific table |\n| `sample_table_data` | Discovery | Get sample data from a table with optional sample size |\n\n\n## License\n\nMIT\n\n---\n\n[mcp]: https://modelcontextprotocol.io\n",
+  "category": "AI Tools",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "adx-mcp-server-uv": {
+        "command": "uv",
+        "args": ["--directory", "<full path to adx-mcp-server directory>", "run", "src/adx_mcp_server/main.py"],
+        "env": {
+          "ADX_CLUSTER_URL": "https://yourcluster.region.kusto.windows.net",
+          "ADX_DATABASE": "your_database"
+        }
+      },
+      "adx-mcp-server-docker-cli": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-it",
+          "--rm",
+          "-e",
+          "ADX_CLUSTER_URL=https://yourcluster.region.kusto.windows.net",
+          "-e",
+          "ADX_DATABASE=your_database",
+          "-e",
+          "AZURE_TENANT_ID=your_tenant_id",
+          "-e",
+          "AZURE_CLIENT_ID=your_client_id",
+          "adx-mcp-server"
+        ],
+        "env": {
+          "ADX_CLUSTER_URL": "https://yourcluster.region.kusto.windows.net",
+          "ADX_DATABASE": "your_database",
+          "AZURE_TENANT_ID": "your_tenant_id",
+          "AZURE_CLIENT_ID": "your_client_id"
+        },
+        "docker_image": "adx-mcp-server"
+      },
+      "adx-mcp-server-docker-claude-desktop": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "-e",
+          "ADX_CLUSTER_URL",
+          "-e",
+          "ADX_DATABASE",
+          "-e",
+          "AZURE_TENANT_ID",
+          "-e",
+          "AZURE_CLIENT_ID",
+          "-e",
+          "ADX_TOKEN_FILE_PATH",
+          "adx-mcp-server"
+        ],
+        "env": {
+          "ADX_CLUSTER_URL": "https://yourcluster.region.kusto.windows.net",
+          "ADX_DATABASE": "your_database",
+          "AZURE_TENANT_ID": "your_tenant_id",
+          "AZURE_CLIENT_ID": "your_client_id",
+          "ADX_TOKEN_FILE_PATH": "/var/run/secrets/azure/tokens/azure-identity-token"
+        },
+        "docker_image": "adx-mcp-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pab1it0",
+    "repo": "adx-mcp-server",
+    "url": "https://github.com/pab1it0/adx-mcp-server",
+    "name": "pab1it0__adx-mcp-server",
+    "path": null,
+    "stars": 46,
+    "contributors": 5,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "f81c250370a81ab92e467e054df7d44d497e644e"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.018Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "azure-kusto-data",
+      "importance": 9
+    },
+    {
+      "name": "azure-identity",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "pyproject-toml",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"adx_mcp_server\"\nversion = \"1.1.0\"\ndescription = \"MCP server for Azure Data Explorer integration\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]\",\n    \"azure-kusto-data\",\n    \"azure-identity\",\n    \"python-dotenv\",\n    \"pyproject-toml>=0.1.0\",\n    \"fastmcp>=2.11.3\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.0.0\",\n    \"pytest-cov>=4.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-mock>=3.10.0\",\n]\n\n[project.scripts]\nadx-mcp-server = \"adx_mcp_server.main:run_server\"\n\n[tool.setuptools]\npackages = [\"adx_mcp_server\"]\npackage-dir = {\"\" = \"src\"}\n\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_functions = \"test_*\"\npython_classes = \"Test*\"\naddopts = \"--cov=src --cov-report=term-missing\"\n\n[tool.coverage.run]\nsource = [\"src/adx_mcp_server\"]\nomit = [\"*/__pycache__/*\", \"*/tests/*\", \"*/.venv/*\", \"*/venv/*\"]\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"if self.debug:\",\n    \"raise NotImplementedError\",\n    \"if __name__ == .__main__.:\",\n    \"pass\",\n    \"raise ImportError\"\n]"
+}

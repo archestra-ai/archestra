@@ -1,0 +1,76 @@
+{
+  "name": "chatmcp__remote-mcp",
+  "display_name": "Google Chat",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPjxwYXRoIGZpbGw9IiM0Mjg1RjQiIGQ9Ik0xLjYzNyAwQy43MzMgMCAwIC43MzMgMCAxLjYzN3YxNi41YzAgLjkwNC43MzMgMS42MzYgMS42MzcgMS42MzZoMy45NTV2My4zMjNjMCAuODA0Ljk3IDEuMjA3IDEuNTM5LjYzOGwzLjk2My0zLjk2aDExLjI3Yy45MDMgMCAxLjYzNi0uNzMzIDEuNjM2LTEuNjM3VjUuNTkyTDE4LjQwOCAwWm0zLjk1NSA1LjU5MmgxMi44MTZ2OC41OUg4LjQ1NWwtMi44NjMgMi44NjNaIi8+PC9zdmc+",
+  "description": "Official Google remote MCP server for Google Chat. Search spaces and threads, read messages, and send chat messages. OAuth 2.0.",
+  "homepage": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+  "instructions": "**⚠️ Apply for the [Google Workspace Developer Preview Program](https://developers.google.com/workspace/preview) first.** The Google Chat MCP server (`chatmcp.googleapis.com`) is preview-only. You can enable the API and list its tools without enrollment, but every tool call fails with \"The caller does not have permission\" until your Google Workspace organization is accepted into the program. A Workspace super-admin must enroll and wait for acceptance before this connection will work.\n\n**Requires your own Google Cloud OAuth client** — these servers do not support dynamic client registration.\n\n1. Enable the APIs in your Google Cloud project:\n   ```\n   gcloud services enable chat.googleapis.com chatmcp.googleapis.com\n   ```\n2. Configure the OAuth consent screen, then add these scopes:\n- `https://www.googleapis.com/auth/chat.spaces.readonly`\n- `https://www.googleapis.com/auth/chat.memberships.readonly`\n- `https://www.googleapis.com/auth/chat.messages.readonly`\n- `https://www.googleapis.com/auth/chat.messages.create`\n- `https://www.googleapis.com/auth/chat.users.readstate.readonly`\n3. Create an OAuth client (**Web application**) and register this redirect URI:\n   `http://localhost:3000/oauth-callback`\n4. Paste the **Client ID** and **Client Secret** into this form.\n\nEndpoints (if not auto-discovered from the server URL):\n- Authorization Server URL — `https://accounts.google.com`\n- Authorization Endpoint — `https://accounts.google.com/o/oauth2/v2/auth`\n- Token Endpoint — `https://oauth2.googleapis.com/token`\n\nSetup guide: https://developers.google.com/workspace/guides/configure-mcp-servers",
+  "tools": [
+    {
+      "name": "search_conversations",
+      "description": "Find chat spaces and threads"
+    },
+    {
+      "name": "list_messages",
+      "description": "Display messages in a conversation"
+    },
+    {
+      "name": "search_messages",
+      "description": "Locate specific messages by content"
+    },
+    {
+      "name": "send_message",
+      "description": "Compose and deliver chat messages"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["google", "google-workspace", "google-chat", "chat", "messaging", "spaces", "communication", "oauth"],
+  "user_config": {},
+  "oauth_config": {
+    "name": "Google Chat",
+    "server_url": "https://chatmcp.googleapis.com/mcp/v1",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": [
+      "https://www.googleapis.com/auth/chat.spaces.readonly",
+      "https://www.googleapis.com/auth/chat.memberships.readonly",
+      "https://www.googleapis.com/auth/chat.messages.readonly",
+      "https://www.googleapis.com/auth/chat.messages.create",
+      "https://www.googleapis.com/auth/chat.users.readstate.readonly"
+    ],
+    "description": "Google Chat MCP Server (Google OAuth 2.0)",
+    "default_scopes": [
+      "https://www.googleapis.com/auth/chat.spaces.readonly",
+      "https://www.googleapis.com/auth/chat.memberships.readonly",
+      "https://www.googleapis.com/auth/chat.messages.readonly",
+      "https://www.googleapis.com/auth/chat.messages.create",
+      "https://www.googleapis.com/auth/chat.users.readstate.readonly"
+    ],
+    "supports_resource_metadata": true
+  },
+  "readme": null,
+  "category": "Communication",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "Google"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://chatmcp.googleapis.com/mcp/v1",
+    "docs_url": "https://developers.google.com/workspace/guides/configure-mcp-servers"
+  },
+  "github_info": null,
+  "programming_language": null
+}

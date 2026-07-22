@@ -1,0 +1,114 @@
+{
+  "name": "tqiqbal__mcp-confluence-server",
+  "display_name": "mcp-confluence-server",
+  "description": "MCP server from tqiqbal/mcp-confluence-server",
+  "author": {
+    "name": "tqiqbal"
+  },
+  "server": {
+    "command": "mcp",
+    "args": ["dev", "confluence.py"],
+    "env": {
+      "CONFLUENCE_API_BASE": "${user_config.confluence_api_base}",
+      "CONFLUENCE_USERNAME": "${user_config.confluence_username}",
+      "CONFLUENCE_PASSWORD": "${user_config.confluence_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "confluence_api_base": {
+      "type": "string",
+      "title": "Confluence API Base URL",
+      "description": "The base URL for the Confluence REST API (e.g., http://localhost:8090/rest/api)",
+      "required": true,
+      "default": "http://localhost:8090/rest/api",
+      "sensitive": false
+    },
+    "confluence_username": {
+      "type": "string",
+      "title": "Confluence Username",
+      "description": "Your Confluence username for authentication",
+      "required": true,
+      "sensitive": false
+    },
+    "confluence_password": {
+      "type": "string",
+      "title": "Confluence Password",
+      "description": "Your Confluence password for authentication",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": "# Confluence MCP Server\n\nA Model Context Protocol (MCP) server for interacting with Confluence Data Center via REST API. This server provides a set of tools that allow AI models to interact with Confluence content.\n\n## Features\n\nThis MCP server provides the following operations for Confluence:\n\n- Execute CQL (Confluence Query Language) searches\n- Get page content by ID\n- Get page content with body\n- Find pages by space key\n- Find page by title and space key\n- Create new pages (with optional parent page)\n- Update existing pages\n- Delete pages\n\n## Installation\n\n1. Clone this repository\n2. Install dependencies:\n\n```bash\npip install -r requirements.txt\n```\n\n## Configuration\n\nCreate a `.env` file in the project root with the following variables:\n\n```\nCONFLUENCE_API_BASE=http://localhost:8090/rest/api\nCONFLUENCE_USERNAME=your_username\nCONFLUENCE_PASSWORD=your_password\n```\n\nAdjust the values to match your Confluence instance.\n\n## Running the Server\n\n### Development Mode (Recommended)\n\nThe proper way to run an MCP server is using the MCP CLI tool with the development mode. This will start the MCP Inspector UI which allows you to test and debug the server:\n\n```bash\nmcp dev confluence.py\n```\n\nThis will start the MCP Inspector at http://127.0.0.1:6274 by default.\n\n### Direct Execution (Not Recommended)\n\nMCP servers are designed to be run with the MCP CLI tool or integrated with Claude Desktop. Direct execution with Python is not the standard way to run an MCP server, but the script includes a fallback mode for testing:\n\n```bash\npython confluence.py\n```\n\nHowever, this mode has limited functionality and is only intended for basic testing.\n\n### Installing in Claude Desktop\n\nTo install the server in Claude Desktop:\n\n```bash\nmcp install confluence.py\n```\n\n## API Reference\n\n### execute_cql_search\n\nExecute a CQL query on Confluence to search pages.\n\n**Parameters:**\n- `cql`: CQL query string\n- `limit`: Number of results to return (default: 10)\n\n### get_page_content\n\nGet the content of a Confluence page.\n\n**Parameters:**\n- `pageId`: Confluence Page ID\n\n### get_page_with_body\n\nGet a page with its body content.\n\n**Parameters:**\n- `pageId`: Confluence Page ID\n\n### find_pages_by_space\n\nFind pages by space key.\n\n**Parameters:**\n- `spaceKey`: Confluence Space Key\n- `limit`: Maximum number of results to return (default: 10)\n- `expand`: Optional comma-separated list of properties to expand\n\n### find_page_by_title\n\nFind a page by title and space key.\n\n**Parameters:**\n- `title`: Page title\n- `spaceKey`: Confluence Space Key\n\n### create_page\n\nCreate a new page in Confluence.\n\n**Parameters:**\n- `title`: Page title\n- `spaceKey`: Confluence Space Key\n- `content`: Page content in storage format (HTML)\n- `parentId`: Optional parent page ID\n\n### update_page\n\nUpdate an existing page in Confluence.\n\n**Parameters:**\n- `pageId`: Confluence Page ID\n- `content`: New page content in storage format (HTML)\n- `title`: Optional new title for the page\n- `spaceKey`: Optional space key (only needed if changing space)\n\n### delete_page\n\nDelete a page by ID.\n\n**Parameters:**\n- `pageId`: Confluence Page ID\n\n## Example Usage\n\nOnce the server is running and connected to an AI model, you can interact with Confluence using natural language. For example:\n\n- \"Find all pages in the DOCS space\"\n- \"Get the content of page with ID 123456\"\n- \"Create a new page titled 'Meeting Notes' in the TEAM space with content '<p>Notes from our meeting</p>'\"\n- \"Update page with ID 123456 to have the content '<p>Updated meeting notes</p>'\"\n- \"Update the title of page 123456 to 'Revised Meeting Notes'\"\n\n## License\n\nMIT\n",
+  "category": "Enterprise",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "confluence-py": {
+        "command": "mcp",
+        "args": ["dev", "confluence.py"],
+        "env": {}
+      },
+      "confluence-py-fallback": {
+        "command": "python",
+        "args": ["confluence.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tqiqbal",
+    "repo": "mcp-confluence-server",
+    "url": "https://github.com/tqiqbal/mcp-confluence-server",
+    "name": "mcp-confluence-server",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1f3cbfb4ef6d401cc147d00901ffe92c70cd5ee6"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:53.804Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-confluence-server\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.6.0\",\n    \"python-dotenv>=1.1.0\",\n    \"uvicorn>=0.34.2\",\n]\n\n\n=== requirements.txt ===\nhttpx>=0.24.0\nmcp>=0.4.0\nuvicorn>=0.23.0\npython-dotenv>=1.0.0\n"
+}

@@ -1,0 +1,167 @@
+{
+  "name": "ariadng__metatrader-mcp-server",
+  "display_name": "metatrader-mcp-server",
+  "description": "Model Context Protocol (MCP) to enable AI LLMs to trade using MetaTrader platform",
+  "author": {
+    "name": "ariadng"
+  },
+  "server": {
+    "command": "metatrader-mcp-server",
+    "args": [
+      "--login",
+      "${user_config.login}",
+      "--password",
+      "${user_config.password}",
+      "--server",
+      "${user_config.server}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "login": {
+      "type": "string",
+      "title": "MetaTrader 5 Login",
+      "description": "Your MetaTrader 5 account login ID.",
+      "sensitive": false,
+      "required": true
+    },
+    "password": {
+      "type": "string",
+      "title": "MetaTrader 5 Password",
+      "description": "Your MetaTrader 5 account password.",
+      "sensitive": true,
+      "required": true
+    },
+    "server": {
+      "type": "string",
+      "title": "MetaTrader 5 Server",
+      "description": "The name of your MetaTrader 5 trading server (e.g., 'MetaQuotes-Demo').",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "readme": "# MetaTrader MCP Server\n\n[![PyPI version](https://img.shields.io/pypi/v/metatrader-mcp-server.svg?style=flat&color=blue)](https://pypi.org/project/metatrader-mcp-server/)\n\nThis is a Model Context Protocol (MCP) server built with Python to enable AI LLMs to trade using MetaTrader platform.\n\n![MetaTrader MCP Server](https://yvkbpmmzjmfqjxusmyop.supabase.co/storage/v1/object/public/github//metatrader-mcp-server-1.png)\n\n## Disclaimer\n\n**Financial trading involves significant risk, and the developers of this package disclaim any liability for any losses or profits; this package is provided solely to facilitate MetaTrader 5 trade executions via AI LLMs using the Model Context Protocol (MCP). By using this package, you assume all risks and agree not to hold the developers liable or to initiate any legal action for any damages, losses, or profits.**\n\n## Updates\n\n- May 5, 2025: Use broker-based filling modes (0.2.5)\n- April 23, 2025: Published to PyPi (0.2.0) \n- April 16, 2025: We have our first minor version release (0.1.0) \n\n## Installation Guide\n\nMake sure you have Python version 3.10+ and MetaTrader 5 terminal installed in your workspace. Then install the package:\n\n```bash\npip install metatrader-mcp-server\n```\n\nThen you need to enable algorithmic trading on MetaTrader 5 terminal. Open `Tools > Options` and check `Allow algorithmic trading`.\n\n## Claude Desktop Integration\n\nTo use this package to enable trading operations via Claude Desktop app, please add this into your Claude Desktop configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"metatrader\": {\n      \"command\": \"metatrader-mcp-server\",\n      \"args\": [\n        \"--login\",    \"<YOUR_MT5_LOGIN>\",\n        \"--password\", \"<YOUR_MT5_PASSWORD>\",\n        \"--server\",   \"<YOUR_MT5_SERVER>\"\n      ]\n    }\n  }\n}\n```\n\n## Other LLMs using Open WebUI\n\nYou can use this MCP server with other LLMs such as OpenAI's GPT by using its HTTP server and Open WebUI.\n\nTo start, make sure you have installed the package. Then, run the server:\n\n```\nmetatrader-http-server --login <YOUR_MT5_LOGIN> --password <YOUR_MT5_PASSWORD> --server <YOUR_MT5_SERVER> --host 0.0.0.0 --port 8000\n```\n\nIt will launch HTTP server locally on port 8000 and automatically launch MetaTrader 5 terminal.\n\nOn Open WebUI settings page, navigate to **Tools** menu. Then click plus button on \"Manage Tool Servers\". Add `http://localhost:8000` (or whatever you set your port is).\n\n![Open WebUI - Add Connection](https://yvkbpmmzjmfqjxusmyop.supabase.co/storage/v1/object/public/github//openwebui-add-tools.png)\n\nIf all is well, you can now access the tools via chat using available models, such as `gpt-4o` or `o4-mini`.\n\n![Open WebUI - Chat](https://yvkbpmmzjmfqjxusmyop.supabase.co/storage/v1/object/public/github//openwebui-macos.png)\n\n## Project Roadmap\n\nFor full version checklist, see [version-checklist.md](docs/roadmap/version-checklist.md).\n\n| Task | Status | Done | Tested |\n|------|--------|------|--------|\n| Connect to MetaTrader 5 terminal | Finished | ✅ | ✅ |\n| Develop MetaTrader client module | Finished | ✅ | ✅ |\n| Develop MCP Server module | Finished | ✅ | ✅ |\n| Implement MCP tools | Finished | ✅ | ✅ |\n| Publish to PyPi | Finished | ✅ | ✅ |\n| Claude Desktop integration | Finished | ✅ | ✅ |\n| OpenAPI server | Finished | ✅ | ✅ |\n| Open WebUI integration | Finished | ✅ | ✅ |\n| Google ADK integration | On progress | - | - |\n\n## Developer Documentation\n\nFor developers, see [Developer's Documentation](docs/README.md).\n",
+  "category": "Finance",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "metatrader-mcp-server": {
+        "command": "metatrader-mcp-server",
+        "args": ["--login", "<YOUR_MT5_LOGIN>", "--password", "<YOUR_MT5_PASSWORD>", "--server", "<YOUR_MT5_SERVER>"],
+        "env": {}
+      },
+      "metatrader-http-server": {
+        "command": "metatrader-http-server",
+        "args": [
+          "--login",
+          "<YOUR_MT5_LOGIN>",
+          "--password",
+          "<YOUR_MT5_PASSWORD>",
+          "--server",
+          "<YOUR_MT5_SERVER>",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8000"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ariadng",
+    "repo": "metatrader-mcp-server",
+    "url": "https://github.com/ariadng/metatrader-mcp-server",
+    "name": "ariadng__metatrader-mcp-server",
+    "path": null,
+    "stars": 92,
+    "contributors": 2,
+    "issues": 8,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "04f49f93f482bedaff074344d7a986fd4473e202"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:08.537Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "MetaTrader5",
+      "importance": 9
+    },
+    {
+      "name": "numpy",
+      "importance": 5
+    },
+    {
+      "name": "pandas",
+      "importance": 5
+    },
+    {
+      "name": "tabulate",
+      "importance": 4
+    },
+    {
+      "name": "pytest",
+      "importance": 2
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "build",
+      "importance": 2
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "click",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"metatrader-mcp-server\"\nversion = \"0.2.8\"\nauthors = [\n  { name = \"Aria Dhanang\", email = \"ariadng@gmail.com\" },\n]\ndescription = \"Model Context Protocol (MCP) server built with Python to enable AI LLMs to trade using MetaTrader platform.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = { file=\"LICENSE\" }\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Programming Language :: Python :: 3.13\",\n    \"Topic :: Office/Business :: Financial :: Investment\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n]\ndependencies = [\n  \"python-dotenv>=1.1.0\",\n  \"MetaTrader5>=5.0.45\",\n  \"numpy>=2.2.4\",\n  \"pandas>=2.2.3\",\n  \"tabulate>=0.9.0\",\n  \"pytest>=8.3.5\",\n  \"httpx>=0.24.0\",\n  \"build>=1.2.2.post1\",\n  \"fastapi>=0.115.12\",\n  \"uvicorn[standard]>=0.34.1\",\n  \"pydantic>=2.11.3\",\n  \"pydantic-settings>=2.8.1\",\n  \"mcp[cli]>=1.6.0\",\n  \"click>=8.0.0\",\n]\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\ninclude = [\"metatrader_mcp*\", \"metatrader_client*\", \"metatrader_openapi*\"]\n\n[project.urls]\n\"Homepage\" = \"https://github.com/ariadng/metatrader-mcp-server\"\n\"Bug Tracker\" = \"https://github.com/ariadng/metatrader-mcp-server/issues\"\n\n[project.optional-dependencies]\nclient = []\n\n[project.scripts]\n\"metatrader-mcp-server\" = \"metatrader_mcp.cli:main\"\n\"metatrader-http-server\" = \"metatrader_openapi.main:main\""
+}

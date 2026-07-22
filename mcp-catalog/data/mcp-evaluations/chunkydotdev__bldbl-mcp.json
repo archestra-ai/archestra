@@ -1,0 +1,159 @@
+{
+  "name": "chunkydotdev__bldbl-mcp",
+  "display_name": "bldbl-mcp",
+  "description": "MCP server from chunkydotdev/bldbl-mcp",
+  "author": {
+    "name": "chunkydotdev"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@bldbl/mcp"],
+    "env": {
+      "BUILDABLE_API_KEY": "${user_config.buildable_api_key}",
+      "BUILDABLE_PROJECT_ID": "${user_config.buildable_project_id}",
+      "BUILDABLE_AI_ASSISTANT_ID": "${user_config.buildable_ai_assistant_id}",
+      "BUILDABLE_API_URL": "${user_config.buildable_api_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "buildable_api_key": {
+      "type": "string",
+      "title": "Buildable API Key",
+      "description": "Your API key for authentication (starts with 'bp_')",
+      "sensitive": true,
+      "required": true
+    },
+    "buildable_project_id": {
+      "type": "string",
+      "title": "Buildable Project ID",
+      "description": "The ID of the Buildable project to interact with",
+      "sensitive": false,
+      "required": true
+    },
+    "buildable_ai_assistant_id": {
+      "type": "string",
+      "title": "Buildable AI Assistant ID",
+      "description": "Unique identifier for your AI assistant (e.g., 'claude-desktop', 'cursor-ide'). This helps track which AI assistant is doing what work.",
+      "sensitive": false,
+      "required": false,
+      "default": "default-ai-assistant"
+    },
+    "buildable_api_url": {
+      "type": "string",
+      "title": "Buildable API URL",
+      "description": "The base URL for the Buildable API endpoint.",
+      "sensitive": false,
+      "required": false,
+      "default": "https://bldbl.dev/api"
+    }
+  },
+  "readme": "# @bldbl/mcp\n\n**Official MCP client for Buildable - AI-powered development platform that makes any project buildable**\n\n<a href=\"https://glama.ai/mcp/servers/@chunkydotdev/bldbl-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@chunkydotdev/bldbl-mcp/badge\" alt=\"@bldbl/mcp MCP server\" />\n</a>\n\n[![npm version](https://badge.fury.io/js/@bldbl%2Fmcp.svg)](https://badge.fury.io/js/@bldbl%2Fmcp)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![smithery badge](https://smithery.ai/badge/@buildable/bldbl-mcp)](https://smithery.ai/server/@buildable/bldbl-mcp)\n\nThis package enables AI assistants (Claude, GPT, etc.) to work directly with Buildable projects using the Model Context Protocol (MCP). AI assistants can get project context, manage tasks, track progress, and communicate with human developers.\n\n## 🌟 What is Buildable?\n\nBuildable (bldbl.dev) is an AI-powered development platform that makes any project buildable. It provides:\n\n- **AI-Generated Build Plans**: Comprehensive project roadmaps with implementation details\n- **Smart Task Management**: Automated task breakdown with dependencies and priorities  \n- **AI Assistant Integration**: Direct integration with Claude, GPT, and other AI assistants\n- **Real-time Collaboration**: Seamless human-AI collaboration on complex projects\n- **Progress Tracking**: Live monitoring of development progress and blockers\n\n## 🚀 Features\n\n- **Full Project Integration**: Get complete project context, plans, and task details\n- **Autonomous Task Management**: Start, update progress, and complete tasks\n- **Human Collaboration**: Create discussions for questions and blockers\n- **Real-time Progress Tracking**: Live updates and status monitoring\n- **Type-Safe API**: Full TypeScript support with comprehensive type definitions\n- **Claude Desktop Ready**: CLI interface for seamless Claude Desktop integration\n\n## 📦 Installation\n\n### Installing via Smithery\n\nTo install @bldbl/mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@buildable/bldbl-mcp):\n\n```bash\nnpx -y @smithery/cli install @buildable/bldbl-mcp --client claude\n```\n\n### Manual Installation\n```bash\nnpm install @bldbl/mcp\n```\n\n## 🚀 Quick Start\n\n### **Step 1: Install the MCP Server**\n```bash\nnpm install -g @bldbl/mcp\n```\n\n### **Step 2: Get Your Buildable API Key**\n1. Go to [bldbl.dev](https://bldbl.dev) and create an account\n2. Create or select a project \n3. Go to **Project Settings** → **AI Assistants** → **Generate API Key**\n\n### **Step 3: Configure Your AI Assistant**\n\n#### **🤖 For Claude Desktop:**\nAdd this to your Claude Desktop config file (`~/.config/claude/claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"buildable\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@bldbl/mcp\"],\n      \"env\": {\n        \"BUILDABLE_API_KEY\": \"bp_your_api_key_here\",\n        \"BUILDABLE_PROJECT_ID\": \"your-project-id\",\n        \"BUILDABLE_AI_ASSISTANT_ID\": \"claude-desktop\"\n      }\n    }\n  }\n}\n```\n\n*Minimal setup - only API URL is auto-detected.*\n\n#### **✨ For Cursor AI:**\n\n**Option 1: One-Click Setup (Recommended)**\n1. Go to your project on [bldbl.dev](https://bldbl.dev) \n2. Navigate to **Integrations** \n3. Click **\"Add to Cursor\"** - Done! 🎉\n\n**Option 2: Manual Configuration**\nAdd this to your Cursor AI config file:\n\n```json\n{\n  \"mcpServers\": {\n    \"buildable\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@bldbl/mcp\"],\n      \"env\": {\n        \"BUILDABLE_API_KEY\": \"bp_your_api_key_here\",\n        \"BUILDABLE_PROJECT_ID\": \"your-project-id\",\n        \"BUILDABLE_AI_ASSISTANT_ID\": \"cursor-ide\"\n      }\n    }\n  }\n}\n```\n\n*Minimal setup - only API URL is auto-detected.*\n\n### **Step 4: Start AI-Powered Development!**\n\nOnce configured, your AI assistant has access to these powerful tools:\n\n- **🏗️ `get_project_context`** - Understand your entire project structure\n- **📋 `get_next_task`** - Find what to work on next based on priorities  \n- **▶️ `start_task`** - Begin working on a specific task\n- **📊 `update_progress`** - Report detailed progress updates\n- **✅ `complete_task`** - Mark tasks finished with comprehensive notes\n- **💬 `create_discussion`** - Ask questions when you need human input\n- **🔍 `health_check`** - Verify connection to Buildable\n\n### **💡 Example AI Conversation:**\n\n```\nYou: \"What should I work on next in my project?\"\n\nAI: *calls get_project_context & get_next_task*\n    \"I see you're building a React dashboard app. The next \n     high-priority task is 'Implement user authentication'. \n     Should I start working on it?\"\n\nYou: \"Yes, go ahead!\"\n\nAI: *calls start_task*\n    \"Perfect! I'm starting the authentication task. I'll use \n     NextAuth.js with GitHub OAuth. Let me break this down:\n     1. Install dependencies\n     2. Set up NextAuth config  \n     3. Create login/logout components\n     4. Add protected routes\n     \n     I'll update you on progress as I work!\"\n\n[AI works and calls update_progress periodically]\n\nAI: *calls update_progress*\n    \"Progress update: 75% complete! I've implemented:\n     ✅ NextAuth.js configuration\n     ✅ GitHub OAuth provider setup  \n     ✅ Login/logout components\n     🔄 Currently working on: Protected route middleware\n     \n     Should I continue with the remaining work?\"\n```\n\n## 🔧 Advanced Configuration\n\n### **Environment Variables**\n3 environment variables are recommended for proper AI assistant tracking:\n\n```bash\nexport BUILDABLE_API_KEY=\"bp_your_api_key_here\"           # Your API key (required)\nexport BUILDABLE_PROJECT_ID=\"your-project-id\"             # Target project (required)\nexport BUILDABLE_AI_ASSISTANT_ID=\"my-ai-assistant\"        # AI Assistant ID (recommended)\n\n# Optional (has smart default):\n# export BUILDABLE_API_URL=\"https://bldbl.dev/api\"        # API endpoint (default)\n```\n\n**Why AI Assistant ID matters:** This helps you track which AI assistant is doing what work in your project dashboard.\n\n### **CLI Usage**\nYou can also run the MCP server directly:\n\n```bash\n# Install globally and use bldbl command\nnpm install -g @bldbl/mcp\nbldbl\n\n# Or run with npx (no installation needed)\nnpx @bldbl/mcp\n```\n\n### **Multiple Projects**\nTo work with multiple Buildable projects, create different MCP server configs:\n\n```json\n{\n  \"mcpServers\": {\n    \"buildable-frontend\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@bldbl/mcp\"],\n      \"env\": {\n        \"BUILDABLE_API_KEY\": \"bp_frontend_key_here\",\n        \"BUILDABLE_PROJECT_ID\": \"frontend-project-id\",\n        \"BUILDABLE_AI_ASSISTANT_ID\": \"claude-frontend\"\n      }\n    },\n    \"buildable-backend\": {\n      \"command\": \"npx\", \n      \"args\": [\"-y\", \"@bldbl/mcp\"],\n      \"env\": {\n        \"BUILDABLE_API_KEY\": \"bp_backend_key_here\",\n        \"BUILDABLE_PROJECT_ID\": \"backend-project-id\",\n        \"BUILDABLE_AI_ASSISTANT_ID\": \"claude-backend\"\n      }\n    }\n  }\n}\n```\n\n## 🛠️ API Reference\n\n### BuildPlannerMCPClient\n\nThe main client class for interacting with Buildable projects.\n\n#### Constructor\n\n```typescript\nnew BuildPlannerMCPClient(config: BuildPlannerConfig, options?: ClientOptions)\n```\n\n**Config Parameters:**\n- `apiUrl`: Buildable API URL (defaults to 'https://bldbl.dev/api')\n- `apiKey`: Your Buildable API key (starts with 'bp_')\n- `projectId`: Target project ID\n- `aiAssistantId`: Unique identifier for your AI assistant\n- `timeout`: Request timeout in milliseconds (default: 30000)\n\n**Options:**\n- `retryAttempts`: Number of retry attempts (default: 3)\n- `retryDelay`: Delay between retries in ms (default: 1000)\n\n#### Methods\n\n##### `getProjectContext(): Promise<ProjectContext>`\nGet complete project context including plan, tasks, and recent activity.\n\n##### `getNextTask(): Promise<NextTaskResponse>`\nGet the next recommended task to work on based on dependencies and priority.\n\n##### `startTask(taskId: string, options?: StartTaskOptions): Promise<StartTaskResponse>`\nStart working on a specific task with optional approach and timing estimates.\n\n##### `updateProgress(taskId: string, progress: ProgressUpdate): Promise<ProgressResponse>`\nUpdate progress on the current task with detailed status information.\n\n##### `completeTask(taskId: string, completion: CompleteTaskRequest): Promise<CompleteTaskResponse>`\nMark a task as completed with detailed completion information.\n\n##### `createDiscussion(discussion: CreateDiscussionRequest): Promise<DiscussionResponse>`\nCreate a discussion/question for human input when you need guidance.\n\n##### `healthCheck(): Promise<{status: string, timestamp: string}>`\nCheck connectivity and health of the Buildable API.\n\n##### `disconnect(): Promise<void>`\nProperly disconnect and cleanup the client connection.\n\n## 🔐 Authentication\n\n1. **Generate API Key**: Go to your Buildable project → AI Assistant tab → Generate API Key\n2. **Secure Storage**: Store your API key securely (environment variables recommended)\n3. **Key Format**: API keys start with `bp_` followed by project and random identifiers\n\n## 🐛 Error Handling\n\nThe client includes comprehensive error handling:\n\n```typescript\ntry {\n  const context = await client.getProjectContext();\n} catch (error) {\n  if (error.code === 'UNAUTHORIZED') {\n    console.error('Invalid or expired API key');\n  } else if (error.code === 'PROJECT_NOT_FOUND') {\n    console.error('Project not found or access denied');\n  } else {\n    console.error('API error:', error.message);\n  }\n}\n```\n\n## 🔄 Development Workflow\n\nTypical AI assistant workflow with Buildable:\n\n1. **Initialize** - Connect to Buildable with API key\n2. **Get Context** - Understand the project structure and current state\n3. **Find Work** - Get the next priority task\n4. **Start Task** - Begin working with approach and estimates\n5. **Progress Updates** - Regular progress reports with details\n6. **Ask Questions** - Create discussions for blockers or decisions\n7. **Complete Task** - Finish with comprehensive completion notes\n8. **Repeat** - Continue with next tasks\n\n## 📊 Usage Statistics\n\n```typescript\n// Get usage statistics for your AI assistant\nconst stats = await client.getUsageStats();\nconsole.log(`Tasks completed: ${stats.tasksCompleted}`);\nconsole.log(`Average completion time: ${stats.avgCompletionTime}min`);\nconsole.log(`Success rate: ${stats.successRate}%`);\n```\n\n## ⚡ CLI Usage\n\nOnce installed, you can use the CLI in several ways:\n\n```bash\n# Run directly with npx (no installation needed)\nnpx @bldbl/mcp\n\n# Or install globally and use the bldbl command\nnpm install -g @bldbl/mcp\nbldbl\n\n# For Claude Desktop, use the bldbl command in your config\n```\n\n**Environment Variables Required:**\n- `BUILDABLE_API_URL` - Your Buildable API URL\n- `BUILDABLE_API_KEY` - Your API key (starts with 'bp_')\n- `BUILDABLE_PROJECT_ID` - Target project ID\n- `BUILDABLE_AI_ASSISTANT_ID` - Unique assistant identifier\n\n## 🧪 Testing\n\nThe package includes comprehensive test utilities:\n\n```typescript\nimport { createTestClient } from '@bldbl/mcp/test';\n\n// Create a test client with mock responses\nconst testClient = createTestClient({\n  mockProject: {\n    id: 'test-project',\n    title: 'Test Project'\n  }\n});\n\n// Use in your tests\nawait testClient.startTask('test-task-id');\n```\n\n## 🔗 Links\n\n- **🌐 Homepage**: [bldbl.dev](https://bldbl.dev)\n- **📚 Documentation**: [bldbl.dev/docs](https://bldbl.dev/docs)\n- **💬 Community**: [Discord](https://discord.gg/buildable)\n- **🐛 Support**: [support@bldbl.dev](mailto:support@bldbl.dev)\n- **📦 NPM Package**: [npmjs.com/package/@bldbl/mcp](https://www.npmjs.com/package/@bldbl/mcp)\n\n## 🏗️ Built With\n\n- **TypeScript** - Type-safe development\n- **Model Context Protocol (MCP)** - Standardized AI assistant communication\n- **Node.js** - Runtime environment\n- **REST API** - Simple and reliable communication\n\n## 📄 License\n\nCopyright © 2025 Buildable Team. All rights reserved.\n\nThis software is proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited.\n\n---\n\n**Made with ❤️ by the Buildable team**\n\n*Buildable is a commercial AI-powered development platform. Visit [bldbl.dev](https://bldbl.dev) to get started.*\n\n## 🆘 Support\n\n- **Documentation**: [https://bldbl.dev/docs](https://bldbl.dev/docs)\n- **Email**: [support@bldbl.dev](mailto:support@bldbl.dev)\n- **Website**: [https://bldbl.dev](https://bldbl.dev)\n\n---\n\n**Built with ❤️ by the BuildPlanner team**",
+  "category": "AI Tools",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bldbl-mcp-claude-desktop": {
+        "command": "npx",
+        "args": ["-y", "@bldbl/mcp"],
+        "env": {
+          "BUILDABLE_API_KEY": "bp_your_api_key_here",
+          "BUILDABLE_PROJECT_ID": "your-project-id",
+          "BUILDABLE_AI_ASSISTANT_ID": "claude-desktop"
+        }
+      },
+      "bldbl-mcp-cursor-ide": {
+        "command": "npx",
+        "args": ["-y", "@bldbl/mcp"],
+        "env": {
+          "BUILDABLE_API_KEY": "bp_your_api_key_here",
+          "BUILDABLE_PROJECT_ID": "your-project-id",
+          "BUILDABLE_AI_ASSISTANT_ID": "cursor-ide"
+        }
+      },
+      "bldbl-mcp-npx": {
+        "command": "npx",
+        "args": ["-y", "@bldbl/mcp"],
+        "env": {}
+      },
+      "bldbl-mcp-cli": {
+        "command": "bldbl",
+        "args": [],
+        "env": {}
+      },
+      "bldbl-mcp-frontend": {
+        "command": "npx",
+        "args": ["-y", "@bldbl/mcp"],
+        "env": {
+          "BUILDABLE_API_KEY": "bp_frontend_key_here",
+          "BUILDABLE_PROJECT_ID": "frontend-project-id",
+          "BUILDABLE_AI_ASSISTANT_ID": "claude-frontend"
+        }
+      },
+      "bldbl-mcp-backend": {
+        "command": "npx",
+        "args": ["-y", "@bldbl/mcp"],
+        "env": {
+          "BUILDABLE_API_KEY": "bp_backend_key_here",
+          "BUILDABLE_PROJECT_ID": "backend-project-id",
+          "BUILDABLE_AI_ASSISTANT_ID": "claude-backend"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "chunkydotdev",
+    "repo": "bldbl-mcp",
+    "url": "https://github.com/chunkydotdev/bldbl-mcp",
+    "name": "chunkydotdev__bldbl-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d1d2305faf5e3bc5fcca3fe5f3221b7da10d7d92"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:35.521Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "uuid",
+      "importance": 3
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@bldbl/mcp\",\n  \"version\": \"1.0.7\",\n  \"description\": \"Official MCP client for Buildable - AI-powered development platform that makes any project buildable\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"bin\": {\n    \"bldbl\": \"dist/cli.js\"\n  },\n  \"files\": [\n    \"dist/\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"dev\": \"tsc --watch\",\n    \"test\": \"node test-local.js\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"keywords\": [\n    \"buildable\",\n    \"bldbl\",\n    \"buildplanner\",\n    \"mcp\",\n    \"ai\",\n    \"project-management\",\n    \"cursor\",\n    \"claude\",\n    \"development\",\n    \"automation\",\n    \"typescript\",\n    \"ai-development\",\n    \"project-builder\"\n  ],\n  \"author\": \"Buildable Team\",\n  \"license\": \"MIT\",\n  \"homepage\": \"https://bldbl.dev\",\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"axios\": \"^1.6.0\",\n    \"uuid\": \"^9.0.0\",\n    \"zod\": \"^3.22.0\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5.0.0\",\n    \"@types/node\": \"^20.0.0\",\n    \"@types/uuid\": \"^9.0.0\"\n  },\n  \"peerDependencies\": {},\n  \"publishConfig\": {\n    \"access\": \"public\"\n  }\n}\n"
+}

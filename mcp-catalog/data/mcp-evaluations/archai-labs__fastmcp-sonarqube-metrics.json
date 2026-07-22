@@ -1,0 +1,181 @@
+{
+  "name": "archai-labs__fastmcp-sonarqube-metrics",
+  "display_name": "fastmcp-sonarqube-metrics",
+  "description": "Chat with your SonarQube data: explore metrics, compare trends, and track issues—effortlessly.",
+  "author": {
+    "name": "ArchAI-Labs"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server.py"],
+    "env": {
+      "SONARQUBE_URL": "${user_config.sonarqube_url}",
+      "SONARQUBE_TOKEN": "${user_config.sonarqube_token}",
+      "TRANSPORT": "${user_config.transport}",
+      "GEMINI_API_KEY": "${user_config.gemini_api_key}",
+      "GEMINI_MODEL": "${user_config.gemini_model}",
+      "AZURE_OPENAI_API_KEY": "${user_config.azure_openai_api_key}",
+      "AZURE_OPENAI_ENDPOINT": "${user_config.azure_openai_endpoint}",
+      "AZURE_DEPLOYMENT": "${user_config.azure_deployment}",
+      "AZURE_API_VERSION": "${user_config.azure_api_version}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "sonarqube_url": {
+      "type": "string",
+      "title": "SonarQube URL",
+      "description": "The URL of your SonarQube instance (e.g., http://localhost:9000)",
+      "required": true,
+      "sensitive": false
+    },
+    "sonarqube_token": {
+      "type": "string",
+      "title": "SonarQube API Token",
+      "description": "Your SonarQube API token with appropriate permissions",
+      "required": true,
+      "sensitive": true
+    },
+    "transport": {
+      "type": "string",
+      "title": "FastMCP Transport Type",
+      "description": "The communication transport type for FastMCP (stdio or sse)",
+      "required": true,
+      "default": "stdio",
+      "sensitive": false
+    },
+    "gemini_api_key": {
+      "type": "string",
+      "title": "Gemini API Key",
+      "description": "Your API key for Google Gemini",
+      "required": false,
+      "sensitive": true
+    },
+    "gemini_model": {
+      "type": "string",
+      "title": "Gemini Model",
+      "description": "The Gemini model to use (Optional)",
+      "required": false,
+      "sensitive": false
+    },
+    "azure_openai_api_key": {
+      "type": "string",
+      "title": "Azure OpenAI API Key",
+      "description": "Your API key for Azure OpenAI",
+      "required": false,
+      "sensitive": true
+    },
+    "azure_openai_endpoint": {
+      "type": "string",
+      "title": "Azure OpenAI Endpoint",
+      "description": "The endpoint URL for your Azure OpenAI instance",
+      "required": false,
+      "sensitive": false
+    },
+    "azure_deployment": {
+      "type": "string",
+      "title": "Azure OpenAI Deployment Name",
+      "description": "The deployment name for your Azure OpenAI model",
+      "required": false,
+      "sensitive": false
+    },
+    "azure_api_version": {
+      "type": "string",
+      "title": "Azure OpenAI API Version",
+      "description": "The API version for Azure OpenAI (e.g., 2023-05-15)",
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "readme": "# FastMCP SonarQube Metrics\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/ArchAI-Labs/fastmcp-sonarqube-metrics)](https://archestra.ai/mcp-catalog/archai-labs__fastmcp-sonarqube-metrics)\n\n![logo](https://github.com/ArchAI-Labs/fastmcp-sonarqube-metrics/blob/main/img/logo.png)\n\n## Overview\n\nThis project provides a set of tools for retrieving information about SonarQube projects using the FastMCP (Fast Model Context Protocol) framework. It serves as an interface to SonarQube, allowing users to programmatically access metrics, historical data, and component tree metrics for specified projects. This automated access enables reporting, analysis, and integration of SonarQube data with other systems.\n\nThe project distinguishes itself by offering a simplified, message-based approach to interacting with the SonarQube API, abstracting away the complexities of direct API calls and data handling. It's designed for developers, DevOps engineers, and analysts who need to incorporate SonarQube data into their workflows or build custom reporting solutions.\n\nThis repository specifically houses the client and server components that facilitate communication and data retrieval. The server exposes tools to fetch data from SonarQube, while the client provides a command-line interface for users to invoke these tools and display the results. Each internal module contributes to this goal by encapsulating specific functionalities, such as API interaction, data processing, and client-server communication.\n\nThe client included in the project is only for testing how the code works; we recommend using [Claude Desktop](https://claude.ai/download) or developing your own custom client.\n\n> ***REMEMBER, THIS REPO IS WORK IN PROGRESS, SOME FEATURES MAY NOT BE PERFECT.***\n\n## Supported MCP Tools\n\n* `get_status`: Performs a health check on the configured SonarQube instance.\n* `create_sonarqube_project`: Creates a new SonarQube project.  Requires administrator privileges.\n* `delete_sonarqube_project`: Deletes a SonarQube project.  Requires administrator privileges. **USE WITH CAUTION!**\n* `list_projects`: Lists all accessible SonarQube projects, optionally filtered by name or key.\n* `get_sonarqube_metrics`: Retrieves specified metrics (bugs, vulnerabilities, code smells, coverage, duplication density) for a given SonarQube project key.\n* `get_sonarqube_metrics_history`: Retrieves historical metrics (bugs, vulnerabilities, code smells, coverage, duplication density) for a given SonarQube project using /api/measures/search_history. Optional date filters can be applied.\n* `get_sonarqube_component_tree_metrics`: Retrieves metric values for all components (e.g., files or directories) in a project using /api/measures/component_tree Automatically handles pagination to retrieve all results.\n* `get_project_issues`: Fetch SonarQube issues for a given project, optionally filtered by type, severity, and resolution status. Returns up to *limit* results (default: 10).\n\n## Technology Stack\n\n*   **Language:** Python\n*   **Frameworks:** FastMCP\n*   **Libraries:** httpx, pydantic, dotenv, asyncio, json, pathlib, typing, base64\n*   **Tools:** SonarQube API\n\n## Directory Structure\n\n```\n├── client_test.py - Client application for testing and interacting with the server.\n├── server.py - Server application exposing tools to retrieve SonarQube metrics.\n├── client_tool.py - Client with a graphical interface to interact with the SonarQube server.\n├── client_langchain.py - Command-line client to interact with the FastMCP server and SonarQube tools via LangChain\n├── .env - Environment configuration file (stores SonarQube URL and token).\n└── README.md - Project documentation.\n```\n\n## Getting Started\n\n### Prerequisites\n\n*   Python 3.7+\n*   SonarQube instance with API access\n*   A SonarQube API token with appropriate permissions\n*   FastMCP installed (`pip install fastmcp`)\n*   httpx installed (`pip install httpx`)\n*   pydantic installed (`pip install pydantic`)\n*   python-dotenv installed (`pip install python-dotenv`)\n\n### General Build Steps\n\n1.  **Clone the repository:** `git clone <repository_url>`\n2.  **Navigate to the project directory:** `cd fastmcp-sonarqube-metrics`\n3.  **Set up environment variables:** Create a `.env` file in the project root directory with the following content:\n\n    ```\n    SONARQUBE_URL=<your_sonarqube_url>\n    SONARQUBE_TOKEN=<your_sonarqube_token>\n    TRANSPORT=<stdio or sse>\n    GEMINI_API_KEY=<your-gemini-api_key>\n    GEMINI_MODEL=<your-gemini-model> (Optional)\n    ```\n\n    The schema is the same for *OpenAI* and *Groq*, if you want to use *AzureOpenAI*:\n\n    ```\n    SONARQUBE_URL=<your_sonarqube_url>\n    SONARQUBE_TOKEN=<your_sonarqube_token>\n    TRANSPORT=<stdio or sse>\n    AZURE_OPENAI_API_KEY=<your-azureopenai-api_key>\n    AZURE_OPENAI_ENDPOINT=<your-azureopenai-endpoint>\n    AZURE_DEPLOYMENT=<your-azureopenai-deployment>\n    AZURE_API_VERSION=<your-azureopenai-api_version>\n    ```\n\n    Replace `<your_sonarqube_url>` with the URL of your SonarQube instance (e.g., `http://localhost:9000`) and `<your_sonarqube_token>` with your SonarQube API token.\n4.  **Run the server:** `python server.py`\n5.  **Run the client:** `python client_test.py` *(Optionally, only for test)*\n6.  **Connect to your client:** follow the [official documentation](https://modelcontextprotocol.io/quickstart/user#windows)\n\n\n### Module Usage\n\n#### Server (`server.py`)\n\nThe `server.py` module defines the FastMCP server that exposes tools for retrieving SonarQube metrics. It initializes the server, loads environment variables, defines the available tools, and handles communication with the SonarQube API. To use the server, you need to set the `SONARQUBE_URL` and `SONARQUBE_TOKEN` environment variables. The server is started by running the `server.py` script directly.\n\n#### Client (`client_test.py`)\n\nThe `client_test.py` module defines the FastMCP client that interacts with the server. It prompts the user for a SonarQube project key, connects to the server, invokes the `get_sonarqube_metrics` and `get_sonarqube_component_tree_metrics` tools, and displays the results. To use the client, you need to run the `client_test.py` script directly and provide a valid SonarQube project key when prompted and set the transport type in the .env file to *stdio*.\n\n#### Client_tool (`client_tool.py`)\nThe `client_tool.py` module implements the FastMCP client with a Tkinter-based graphical interface to interact with the SonarQube server. On startup, it configures loggers to suppress non-essential messages, loads environment variables, and launches the chat backend (ChatBackend) in the background, which uses an LLM and the MCP tools exposed by the server via stdio. The frontend (ChatGUI) manages the Tkinter window, displays the message history in a scrollable area, and allows the user to send commands to the server—prompting for a valid SonarQube project key when needed. To use the client, simply run the `client_tool.py` script and interact through the GUI.\n\n#### Client_langchain (`client_langchain.py`)\nThe `client_langchain.py` module provides a command-line client to interact with the FastMCP server and SonarQube tools via LangChain. On startup, it loads environment variables, and configures the chosen LLM. It establishes a stdio connection to the server (`server.py`), initializes the MCP session, and loads available tools (health check, current and historical metrics, project listing, issue retrieval). A detailed system prompt describes each tool and its parameters. In an interactive loop, it reads user input from the console, updates the message history, invokes the React agent, and prints the formatted response.\n\n### Example: Integrating the `get_sonarqube_metrics` tool in an external project\n\nTo use the `get_sonarqube_metrics` tool in an external project, you can create a client that connects to the FastMCP server and invokes the tool. Here's a basic example:\n\n```python\nimport asyncio\nfrom fastmcp import Client\nfrom fastmcp.types import TextContent\n\nasync def get_metrics(project_key: str):\n    server_path = \"server.py\" # Adjust if necessary\n    client = Client(server_path)\n    try:\n        async with client:\n            result = await client.call_tool(\n                \"get_sonarqube_metrics\", {\"project_key\": project_key}\n            )\n            if result:\n                content = result[0]\n                if isinstance(content, TextContent):\n                    metrics = json.loads(content.text)\n                    print(metrics)\n    except Exception as e:\n        print(f\"Error: {e}\")\n\nif __name__ == \"__main__\":\n    asyncio.run(get_metrics(\"your-project-key\")) # Replace with your project key\n```\n\nThis example demonstrates how to create a client, connect to the server, invoke the `get_sonarqube_metrics` tool with a project key, and process the results. You would need to adapt the `server_path` variable to the actual location of the `server.py` script in your environment.\n\n\n\n## ArchAI-SonarQube Chat (GUI)\n\nA lightweight Tkinter client that connects over stdio to the FastMCP server and exposes a real-time chat interface for querying SonarQube metrics, browsing component trees and running health checks via an LLM-driven assistant.\n\n<br>\n\n![img_tool](https://github.com/ArchAI-Labs/fastmcp-sonarqube-metrics/blob/main/img/img_tool.png)\n\n<br>\n\n## Usage with TRANSPORT=SSE\nYou can switch the client’s transport layer to Server-Sent Events (SSE) by setting the `TRANSPORT` environment variable before launching the GUI. This enables real-time, uni-directional updates from the FastMCP server.\nWhen the server is started in SSE mode, a persistent HTTP connection is opened on port **8001**. This allows you to connect via compatible interfaces such as MCP Inspector.*\n\n1. **Start the server in SSE mode**  \n    ```bash\n   uv run mcp dev \"<server_name>\" \n   ```\n2. **Open MCP Inspector**\n   A link (e.g. `http://127.0.0.1:6274`) will be provided to launch MCP Inspector in your browser.\n3. **Configure SSE in MCP Inspector**\n\n   * Select **SSE** as the transport type\n   * Enter the URL: `http://localhost:8001/sse`\n\n4. **Initiate the connection**\n\n5. **Browse available tools**\n   In the **Tools** section you will see:\n\n   * `get_status`\n   * `get_sonarqube_metrics`\n   * `get_sonarqube_metrics_history`\n   * `get_sonarqube_component_tree_metrics`\n   * `list_projects`\n   * `get_project_issues`\n\n6. **Select and invoke a tool**\n   For example, choose **get\\_project\\_issues** and provide:\n\n   * `project_key`: the SonarQube project key\n   * `issue_type` (optional): e.g. `BUG`, `CODE_SMELL`\n   * `severity` (optional): e.g. `MAJOR`, `CRITICAL`\n   * `resolved` (optional): `true` or `false`\n   * `limit` (optional): maximum number of issues to return\n\n7. **Execute and retrieve results**\n   The server will call the appropriate SonarQube API and return a formatted JSON response.\n\n## Usage with Claude Desktop\n\nYou can install this server directly into Claude Desktop using fastmcp:\n\n1. Make sure FastMCP is installed (pip install fastmcp or uv pip install fastmcp).\n2. Configure Claude for Desktop for whichever MCP servers you want to use (in Windows using VSCode): `code $env:AppData\\Claude\\claude_desktop_config.json`\n3. Add your server and then save:\n\n```json\n{\n    \"mcpServers\": {\n        \"fastmcp-sonarqube-metrics\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"--directory\",\n                \"/ABSOLUTE/PATH/TO/PARENT/FOLDER/fastmcp-sonarqube-metrics\",\n                \"run\",\n                \"server.py\"\n            ]\n        }\n    }\n}\n```\n\n4. To launch it by running:\n\n```bash\n uv --directory  /ABSOLUTE/PATH/TO/PARENT/FOLDER/fastmcp-sonarqube-metrics run server.py\n```\n\n5. Restart Claude Desktop if it was running. The *\"FastMCP SonarQube Metrics\"* tool should now be available.\n\n<br>\n\n![claude](https://github.com/ArchAI-Labs/fastmcp-sonarqube-metrics/blob/main/img/img_claude_desktop.png)\n\n<br>\n\n## Functional Analysis\n\n### 1. Main Responsibilities of the System\n\nThe system's primary responsibility is to act as a bridge between a user and the SonarQube API, providing a simplified way to retrieve project quality metrics. It encapsulates the complexities of the SonarQube API, offering a set of tools that can be easily invoked and integrated into automated workflows. The core services include fetching metrics, retrieving historical data, and exploring component-level metrics within a SonarQube project. The foundational service is the FastMCP server, which manages the tool definitions and client-server communication.\n\n### 2. Problems the System Solves\n\nThe system solves the problem of programmatically accessing SonarQube data without requiring users to directly interact with the SonarQube API. It addresses the need for automated reporting, analysis, and integration of SonarQube metrics with other systems. Specifically, it simplifies tasks such as:\n\n*   Generating regular reports on code quality metrics.\n*   Monitoring trends in code quality over time.\n*   Identifying problematic components within a project.\n*   Integrating SonarQube data with other development tools.\n\nThe architecture solves these problems by providing a set of well-defined tools that abstract away the complexities of the SonarQube API and provide a consistent interface for accessing data.\n\n### 3. Interaction of Modules and Components\n\nThe system consists of two main components: the client and the server. The client initiates requests to the server, specifying the tool to be executed and any input parameters. The server receives the request, interacts with the SonarQube API, processes the data, and sends the results back to the client.\n\nThe interaction between the client and server is facilitated by the FastMCP framework, which handles message passing and serialization. The server defines the available tools using the `@mcp.tool()` decorator, which registers the functions as callable endpoints. The client invokes these tools using the `client.call_tool()` method, which sends a message to the server with the tool name and input parameters.\n\nThe server uses the `httpx` library to make asynchronous HTTP requests to the SonarQube API. It constructs the API URLs and request parameters based on the tool being executed and the input parameters provided by the client. The server then parses the JSON responses from the SonarQube API and extracts the relevant metric values.\n\n### 4. User-Facing vs. System-Facing Functionalities\n\nThe user-facing functionality of the system is the client application (`client_test.py`), which provides a command-line interface for invoking the SonarQube metric retrieval tools. Users interact with the client by providing a SonarQube project key and, optionally, other parameters such as date ranges or metric keys. The client then displays the retrieved metrics in a human-readable format.\n\nThe system-facing functionalities are the server-side tools (`get_sonarqube_metrics`, `get_sonarqube_metrics_history`, `get_sonarqube_component_tree_metrics`) defined in `server.py`. These tools handle the interaction with the SonarQube API, data processing, and formatting. They are not directly visible to end-users but are essential for providing the core functionality of the system.\n\nThe `@mcp.tool()` decorator systematically applies common behaviors across all tool functions, ensuring they are registered with the FastMCP server and accessible to clients. Additionally, the use of `Annotated` and `Field` ensures consistent parameter definition and documentation across all tools.\n\n## Architectural Patterns and Design Principles Applied\n\n*   **Client-Server Architecture:** The project follows a client-server architecture, where the client requests services from the server.\n*   **Message Passing:** The FastMCP framework facilitates communication between the client and server using message passing.\n*   **Asynchronous Programming:** The use of `asyncio` and `httpx` enables asynchronous operations, improving the performance and responsiveness of the application.\n*   **Configuration via Environment Variables:** The SonarQube URL and token are configured using environment variables, making it easier to deploy and manage the application in different environments.\n*   **Tool-Based Design:** The server exposes functionality through well-defined tools, making it easy to add or modify features.\n*   **Error Handling:** The project includes comprehensive error handling to gracefully handle potential issues, such as network errors, API errors, and invalid data.\n*   **Logging:** The use of the `logging` module provides detailed logs, aiding in debugging and monitoring.\n*   **Dependency Injection:** While not explicitly implemented as a framework, the configuration of the SonarQube URL and token through environment variables allows for easy substitution of different SonarQube instances without modifying the code.\n\n## Code Quality Analysis\n\nDue to the lack of a SonarQube report, a comprehensive code quality analysis cannot be performed. However, based on the code structure and functionality, potential areas of concern include:\n\n*   **Error Handling Granularity:** While error handling is present, the specific error messages could be improved to provide more actionable information to the user.\n*   **Test Coverage:** The provided code does not include unit tests. Test coverage should be added to ensure the reliability and correctness of the code.\n*   **Code Duplication:** There might be opportunities to reduce code duplication by extracting common logic into reusable functions or classes.\n\n## Weaknesses and Areas for Improvement\n\n*    **Improve error message clarity:** Enhance error messages to provide more specific guidance to users on how to resolve issues.\n*    **Add unit tests:** Implement unit tests for the server-side tools to ensure their correctness and reliability.\n*    **Refactor common logic:** Identify and refactor duplicated code into reusable functions or classes.\n*    **Implement input validation:** Add input validation to the server-side tools to prevent invalid data from being processed.\n*    **Improve documentation:** Add more detailed documentation for the server-side tools, including examples and usage instructions.\n*    **Implement a more robust configuration system:** Consider using a more robust configuration system, such as a configuration file or a dedicated settings class, instead of relying solely on environment variables.\n*    **Add support for additional SonarQube API endpoints:** Extend the system to support additional SonarQube API endpoints, such as those for managing projects, rules, or quality profiles.\n*    **Implement a more user-friendly client interface:** Consider developing a graphical user interface (GUI) or a more sophisticated command-line interface (CLI) for the client application.\n*    **Address potential security vulnerabilities:** Review the code for potential security vulnerabilities, such as those related to input validation or authentication.\n\n## Further Areas of Investigation\n\n*   **Performance Bottlenecks:** Investigate potential performance bottlenecks in the server-side tools, such as those related to API request handling or data processing.\n*   **Scalability Considerations:** Evaluate the scalability of the system and identify potential areas for improvement, such as using a message queue or a distributed caching system.\n*   **Integrations with External Systems:** Explore potential integrations with other development tools, such as CI/CD systems or issue trackers.\n*   **Advanced Features:** Research and implement advanced features, such as real-time metric monitoring or automated code quality analysis.\n*   **Code Smells and Low Test Coverage:** Conduct a thorough analysis of the codebase to identify and address code smells and areas with low test coverage.\n\n## Attribution\n\nGenerated with the support of [ArchAI](https://github.com/ArchAI-Labs/code_explainer), an automated documentation system.\n",
+  "category": "Monitoring",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "fastmcp-sonarqube-metrics-server": {
+        "command": "python",
+        "args": ["server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ArchAI-Labs",
+    "repo": "fastmcp-sonarqube-metrics",
+    "url": "https://github.com/ArchAI-Labs/fastmcp-sonarqube-metrics",
+    "name": "archai-labs__fastmcp-sonarqube-metrics",
+    "path": null,
+    "stars": 11,
+    "contributors": 3,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "1654b4162d9cf9acf96faea2c7d96ccb3bdfa5a4"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:34.704Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "langchain-google-genai",
+      "importance": 7
+    },
+    {
+      "name": "langchain-mcp-adapters",
+      "importance": 9
+    },
+    {
+      "name": "langchain-openai",
+      "importance": 7
+    },
+    {
+      "name": "langchain-groq",
+      "importance": 7
+    },
+    {
+      "name": "langgraph",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 6
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"fastmcp-sonarqube-metrics\"\nversion = \"0.0.1\"\ndescription = \"An MCP server that interacts with SonarQube for metrics.\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"fastmcp>=2.2.7\",\n    \"httpx>=0.28.1\",\n    \"langchain-google-genai>=2.1.4\",\n    \"langchain-mcp-adapters>=0.0.11\",\n    \"langchain-openai>=0.3.16\",\n    \"langchain-groq>=0.3.2\",\n    \"langgraph>=0.4.3\",\n    \"mcp[cli]>=1.7.1\",\n    \"pydantic>=2.11.4\",\n    \"python-dotenv>=1.1.0\",\n]\n"
+}

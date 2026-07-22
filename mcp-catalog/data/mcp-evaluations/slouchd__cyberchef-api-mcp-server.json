@@ -1,0 +1,115 @@
+{
+  "name": "slouchd__cyberchef-api-mcp-server",
+  "display_name": "cyberchef-api-mcp-server",
+  "description": "CyberChef API MCP Server ✨🧑‍🍳",
+  "author": {
+    "name": "slouchd"
+  },
+  "server": {
+    "command": "uv",
+    "args": [
+      "run",
+      "--with",
+      "mcp[cli]",
+      "--directory",
+      "cyberchef-api-mcp-server/cyberchef_api_mcp_server/",
+      "mcp",
+      "run",
+      "server.py"
+    ],
+    "env": {
+      "CYBERCHEF_API_URL": "${user_config.cyberchef_api_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "cyberchef_api_url": {
+      "type": "string",
+      "title": "CyberChef API URL",
+      "description": "The URL for the CyberChef API",
+      "required": true
+    }
+  },
+  "readme": "# CyberChef API MCP Server\n\nThis model context protocol (MCP) server interfaces with the [CyberChef Server](https://github.com/gchq/CyberChef-server) API. Allowing you to use any LLM/MCP client of your choosing to utilise the tools and resources within CyberChef.\n\n🧰 Available Tools and Resources\n---\n- `get_cyberchef_operations_categories`: __resource__ - gets updated Cyber Chef categories for additional context / selection of the correct operations\n- `get_cyberchef_operation_by_category`: __resource__ - gets list of Cyber Chef operations for a selected category\n- `bake_recipe`: __tool__ - bake (execute) a recipe (a list of operations) in order to derive an outcome from the input data\n- `batch_bake_recipe`: __tool__ - bake (execute) a recipe (a list of operations) in order to derive an outcome from a batch of input data\n- `perform_magic_operation`: __tool__ - perform CyberChef's magic operation which is designed to automatically detect how your data is encoded and which operations can be used to decode it\n\n📝 Usage\n---\nStart the server using the default stdio transport and specifying an environment variable pointing to a CyberChef API\n\n```bash\nCYBERCHEF_API_URL=\"your-cyberchef-api-url\" uv run cyberchef_api_mcp_server\n```\n\n🧑‍💻Usage (Development)\n---\nStart the server and test it with the MCP inspector\n\n```bash\nuv add \"mcp[cli]\"\nmcp dev server.py\n```\n\n📚 Client Configuration\n---\nThe following commands will generate a client configuration file, the location will depend on your operating system\n\n```bash\nuv add \"mcp[cli]\"\nmcp install server.py --name \"CyberChef API MCP Server\"\n```\n\n> [!TIP]\n> After running the above command you can then tweak the client configuration to include the environment variable for the CyberChef API URL\n\n```json\n{\n \"mcpServers\": {\n   \"CyberChef API MCP Server\": {\n     \"command\": \"uv\",\n     \"args\": [\n       \"run\",\n       \"--with\",\n       \"mcp[cli]\",\n       \"--directory\",\n       \"cyberchef-api-mcp-server/cyberchef_api_mcp_server/\",\n       \"mcp\",\n       \"run\",\n       \"server.py\"\n     ],\n     \"env\": {\n       \"CYBERCHEF_API_URL\": \"your-cyberchef-api-url\"\n     }\n   }\n }\n}\n```\n\n🔍 Demo\n---\nUsing the MCP server in this example use case, the following prerequisites apply: \n- You must have Claude desktop installed\n- Have a running CyberChef API instance or one you are able to use\n\nHere is a basic prompt being solved using the MCP server tools:\n<img width=\"1511\" src=\"https://github.com/user-attachments/assets/657f52b3-43eb-4c3b-94f1-289fc12817b2\" />\n\n🙇 References\n---\n- [CyberChef](https://github.com/gchq/CyberChef)\n- [CyberChef Server](https://github.com/gchq/CyberChef-server)\n- [Model Context Protocol](https://github.com/modelcontextprotocol)\n- [FastMCP](https://github.com/jlowin/fastmcp)\n\n🪪 License\n---\nMIT License\n",
+  "category": "Security",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "cyberchef_api_mcp_server-stdio": {
+        "command": "uv",
+        "args": ["run", "cyberchef_api_mcp_server"],
+        "env": {
+          "CYBERCHEF_API_URL": "your-cyberchef-api-url"
+        }
+      },
+      "cyberchef_api_mcp_server-dev": {
+        "command": "mcp",
+        "args": ["dev", "server.py"],
+        "env": {}
+      },
+      "cyberchef_api_mcp_server-configured": {
+        "command": "uv",
+        "args": [
+          "run",
+          "--with",
+          "mcp[cli]",
+          "--directory",
+          "cyberchef-api-mcp-server/cyberchef_api_mcp_server/",
+          "mcp",
+          "run",
+          "server.py"
+        ],
+        "env": {
+          "CYBERCHEF_API_URL": "your-cyberchef-api-url"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "slouchd",
+    "repo": "cyberchef-api-mcp-server",
+    "url": "https://github.com/slouchd/cyberchef-api-mcp-server",
+    "name": "cyberchef-api-mcp-server",
+    "path": null,
+    "stars": 17,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a1483a29df6c223186d27b659c71badc9b38de98"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.097Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"cyberchef-api-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"MCP server that has the ability to interact with the CyberChef server RESTful API\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\nkeywords = [\"mcp\", \"llm\", \"cyberchef\", \"cyber\", \"web\", \"fetch\"]\nlicense = { text = \"MIT\"}\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp>=1.6.0\",\n]\n\n[project.scripts]\ncyberchef-api-mcp-server = \"cyberchef_api_mcp_server.server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"cyberchef_api_mcp_server\"]\n\n[tool.uv]\ndev-dependencies = [\"pytest>=8.3.5\"]"
+}

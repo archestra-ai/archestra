@@ -1,0 +1,141 @@
+{
+  "name": "cobanov__teslamate-mcp",
+  "display_name": "teslamate-mcp",
+  "description": "A Model Context Protocol (MCP) server that provides access to your TeslaMate database, allowing AI assistants to query Tesla vehicle data and analytics.",
+  "author": {
+    "name": "cobanov"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "python", "${__dirname}/main.py"],
+    "env": {
+      "DATABASE_URL": "${user_config.database_url}",
+      "AUTH_TOKEN": "${user_config.auth_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "database_url": {
+      "type": "string",
+      "title": "TeslaMate Database URL",
+      "description": "PostgreSQL connection string for your TeslaMate database (e.g., postgresql://username:password@hostname:port/teslamate)",
+      "sensitive": true,
+      "required": true
+    },
+    "auth_token": {
+      "type": "string",
+      "title": "Authentication Token",
+      "description": "Optional bearer token for securing your remote MCP server. Generate with `python3 generate_token.py` or `openssl rand -base64 32`.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/cobanov-teslamate-mcp-badge.png)](https://mseep.ai/app/cobanov-teslamate-mcp)\n\n# TeslaMate MCP Server\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/cobanov/teslamate-mcp)](https://archestra.ai/mcp-catalog/cobanov__teslamate-mcp)\n\nA Model Context Protocol (MCP) server that provides access to your TeslaMate database, allowing AI assistants to query Tesla vehicle data and analytics.\n\n<a href=\"https://glama.ai/mcp/servers/@cobanov/teslamate-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@cobanov/teslamate-mcp/badge\" alt=\"teslamate-mcp MCP server\" />\n</a>\n\n![teslamate-mcp](assets/teslamcp.gif)\n\n\n## Overview\n\nThis MCP server connects to your TeslaMate PostgreSQL database and exposes various tools to retrieve Tesla vehicle information, driving statistics, charging data, battery health, efficiency metrics, and location analytics. It's designed to work with MCP-compatible AI assistants like Claude Desktop, enabling natural language queries about your Tesla data.\n\n## Prerequisites\n\n- [TeslaMate](https://github.com/teslamate-org/teslamate) running with a PostgreSQL database\n- Python 3.11 or higher\n- Access to your TeslaMate database\n\n## Installation\n\n### Option 1: Local Installation\n\n1. Clone this repository:\n\n   ```bash\n   git clone https://github.com/yourusername/teslamate-mcp.git\n   cd teslamate-mcp\n   ```\n\n2. Install dependencies using uv (recommended):\n\n   ```bash\n   uv sync\n   ```\n\n   Or using pip:\n\n   ```bash\n   pip install -r requirements.txt\n   ```\n\n3. Create a `.env` file in the project root:\n   ```env\n   DATABASE_URL=postgresql://username:password@hostname:port/teslamate\n   ```\n\n### Option 2: Docker Deployment (Remote Access)\n\nFor remote deployment using Docker. Quick start:\n\n```bash\n# Clone and navigate to the repository\ngit clone https://github.com/yourusername/teslamate-mcp.git\ncd teslamate-mcp\n\n# Run the deployment script\n./deploy.sh deploy\n\n# Or manually:\ncp env.example .env\n# Edit .env with your database credentials\ndocker-compose up -d\n```\n\nThe remote server will be available at:\n- Streamable HTTP: `http://localhost:8888/mcp`\n\n#### Configuring Authentication (Optional)\n\nTo secure your remote MCP server with bearer token authentication:\n\n1. Set a bearer token in your `.env` file:\n   ```env\n   AUTH_TOKEN=your-secret-bearer-token-here\n   ```\n\n   Generate a secure token:\n   ```bash\n   # Use the provided token generator\n   python3 generate_token.py\n   \n   # Or generate manually with openssl\n   openssl rand -base64 32\n   \n   # Or use any other method to create a secure random string\n   ```\n\n2. When connecting from MCP clients, include the Authorization header:\n   ```json\n   {\n     \"mcpServers\": {\n       \"teslamate-remote\": {\n         \"url\": \"http://your-server:8888/mcp\",\n         \"transport\": \"streamable_http\",\n         \"headers\": {\n           \"Authorization\": \"Bearer your-secret-bearer-token-here\"\n         }\n       }\n     }\n   }\n   ```\n\n3. Or use curl for testing:\n   ```bash\n   curl -H \"Authorization: Bearer your-secret-bearer-token-here\" \\\n        http://localhost:8888/mcp\n   ```\n\n#### Security Considerations\n\n- **Use HTTPS in production**: Bearer tokens are sent in plain text. Always use HTTPS/TLS in production environments.\n- **Strong tokens**: Use long, random tokens (at least 32 characters).\n- **Environment variables**: Never commit tokens to version control. Use environment variables or secrets management.\n- **Network security**: Consider using a VPN or restricting access by IP address for additional security.\n- **Token rotation**: Regularly rotate your bearer tokens.\n\n## Available Tools\n\nThe MCP server provides 20 tools for querying your TeslaMate data:\n\n### Pre-defined Query Tools\n1. `get_basic_car_information` - Basic vehicle details (VIN, model, name, color, etc.)\n2. `get_current_car_status` - Current state, location, battery level, and temperature\n3. `get_software_update_history` - Timeline of software updates\n4. `get_battery_health_summary` - Battery degradation and health metrics\n5. `get_battery_degradation_over_time` - Historical battery capacity trends\n6. `get_daily_battery_usage_patterns` - Daily battery consumption patterns\n7. `get_tire_pressure_weekly_trends` - Tire pressure history and trends\n8. `get_monthly_driving_summary` - Monthly distance, efficiency, and driving time\n9. `get_daily_driving_patterns` - Daily driving habits and patterns\n10. `get_longest_drives_by_distance` - Top drives by distance with details\n11. `get_total_distance_and_efficiency` - Overall driving statistics\n12. `get_drive_summary_per_day` - Daily drive summaries\n13. `get_efficiency_by_month_and_temperature` - Efficiency analysis by temperature\n14. `get_average_efficiency_by_temperature` - Temperature impact on efficiency\n15. `get_unusual_power_consumption` - Anomalous power usage detection\n16. `get_charging_by_location` - Charging statistics by location\n17. `get_all_charging_sessions_summary` - Complete charging history summary\n18. `get_most_visited_locations` - Frequently visited places\n\n### Custom Query Tools\n19. `get_database_schema` - Returns complete database schema (tables, columns, data types)\n20. `run_sql` - Execute custom SELECT queries with safety validation\n    - Only SELECT statements allowed\n    - Prevents DROP, CREATE, INSERT, UPDATE, DELETE, ALTER, etc.\n    - Blocks multiple statement execution\n    - Safely handles strings and comments\n\n## Configuration\n\n### Environment Variables\n\n- `DATABASE_URL`: PostgreSQL connection string for your TeslaMate database\n\n### MCP Client Configuration\n\nTo use this server with Claude Desktop, add the following to your MCP configuration file:\n\n**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n**Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n#### Local Configuration (stdio transport)\n\n```json\n{\n  \"mcpServers\": {\n    \"teslamate\": {\n      \"command\": \"uv\",\n      \"args\": [\"run\", \"python\", \"/path/to/teslamate-mcp/main.py\"],\n      \"env\": {\n        \"DATABASE_URL\": \"postgresql://username:password@hostname:port/teslamate\"\n      }\n    }\n  }\n}\n```\n\n#### Remote Configuration (streamable HTTP transport)\n\nFor connecting to a remote server:\n\n```json\n{\n  \"mcpServers\": {\n    \"TeslaMate\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-remote\",\n        \"http://your-private-server:8888/mcp\",\n        \"--allow-http\"\n      ]\n    }\n  }\n}\n```\n\nWith authentication enabled:\n\n```json\n{\n  \"mcpServers\": {\n    \"TeslaMate\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-remote\",\n        \"http://your-private-server:8888/mcp\",\n        \"--allow-http\",\n        \"--header\",\n        \"Authorization:${AUTH_HEADER}\"\n      ],\n      \"env\": {\n        \"AUTH_HEADER\": \"Bearer <secret bearer token>\"\n      }\n    }\n  }\n}\n```\n\n## Usage\n\n### Running the Server (STDIO)\n\n```bash\nuv run python main.py\n```\n\n### Example Queries\n\nOnce configured with an MCP client, you can ask natural language questions organized by category:\n\n#### Basic Vehicle Information\n\n- \"What's my Tesla's basic information?\"\n- \"Show me my current car status\"\n- \"What software updates has my Tesla received?\"\n\n#### Battery and Health\n\n- \"How is my battery health?\"\n- \"Show me battery degradation over time\"\n- \"What are my daily battery usage patterns?\"\n- \"How are my tire pressures trending?\"\n\n#### Driving Analytics\n\n- \"Show me my monthly driving summary\"\n- \"What are my daily driving patterns?\"\n- \"What are my longest drives by distance?\"\n- \"What's my total distance driven and efficiency?\"\n\n#### Efficiency Analysis\n\n- \"How does temperature affect my efficiency?\"\n- \"Show me efficiency trends by month and temperature\"\n- \"Are there any unusual power consumption patterns?\"\n\n#### Charging and Location Data\n\n- \"Where do I charge most frequently?\"\n- \"Show me all my charging sessions summary\"\n- \"What are my most visited locations?\"\n\n#### Custom SQL Queries\n\n- \"Show me the database schema\"\n- \"Run a SQL query to find drives longer than 100km\"\n- \"Query the average charging power by location\"\n- \"Find all charging sessions at superchargers\"\n\n**Note**: The `run_sql` tool only allows SELECT queries. All data modification operations (INSERT, UPDATE, DELETE, DROP, etc.) are strictly forbidden for safety.\n\n## Adding New Queries\n\n1. Create a new SQL file in the `queries/` directory\n2. Add a corresponding tool function in `main.py`\n3. Follow the existing pattern for error handling and database connections\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Acknowledgments\n\n- [TeslaMate](https://github.com/teslamate-org/teslamate) - Tesla data logging software\n- [Model Context Protocol](https://modelcontextprotocol.io/) - Protocol for AI-tool integration\n\nFor bugs and feature requests, please open an issue on GitHub.",
+  "category": "Monitoring",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "teslamate-mcp-docker": {
+        "command": "docker-compose",
+        "args": ["up", "-d"],
+        "env": {
+          "DATABASE_URL": "postgresql://username:password@hostname:port/teslamate",
+          "AUTH_TOKEN": "your-secret-bearer-token-here"
+        }
+      },
+      "teslamate-mcp-local": {
+        "command": "uv",
+        "args": ["run", "python", "main.py"],
+        "env": {
+          "DATABASE_URL": "postgresql://username:password@hostname:port/teslamate"
+        }
+      },
+      "teslamate-mcp-stdio": {
+        "command": "uv",
+        "args": ["run", "python", "/path/to/teslamate-mcp/main.py"],
+        "env": {
+          "DATABASE_URL": "postgresql://username:password@hostname:port/teslamate"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "cobanov",
+    "repo": "teslamate-mcp",
+    "url": "https://github.com/cobanov/teslamate-mcp",
+    "name": "teslamate-mcp",
+    "path": null,
+    "stars": 94,
+    "contributors": 2,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "3b6bf1cc52cc3a4572e4b2bff5af76745c418e2a"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:39.720Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "black",
+      "importance": 1
+    },
+    {
+      "name": "isort",
+      "importance": 1
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "psycopg",
+      "importance": 9
+    },
+    {
+      "name": "psycopg-pool",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "click",
+      "importance": 6
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "starlette",
+      "importance": 9
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"teslamate-mcp\"\nversion = \"0.1.0\"\ndescription = \"A Model Context Protocol (MCP) server that provides access to your TeslaMate database, allowing AI assistants to query Tesla vehicle data and analytics.\"\nreadme = \"README.md\"\nlicense = {text = \"MIT\"}\nrequires-python = \">=3.11\"\nauthors = [\n    {name = \"Mert Cobanov\", email = \"mertcobanov@gmail.com\"},\n]\nkeywords = [\"tesla\", \"teslamate\", \"mcp\", \"model-context-protocol\", \"ai\", \"assistant\", \"vehicle-data\"]\ndependencies = [\n    \"black>=25.1.0\",\n    \"isort>=6.0.1\",\n    \"mcp[cli]>=1.10.1\",\n    \"psycopg[binary]>=3.2.9\",\n    \"psycopg-pool>=3.2.0\",\n    \"python-dotenv>=1.0.0\",\n    \"click>=8.1.0\",\n    \"uvicorn>=0.25.0\",\n    \"starlette>=0.36.0\",\n    \"fastmcp>=2.10.1\",\n]\n"
+}

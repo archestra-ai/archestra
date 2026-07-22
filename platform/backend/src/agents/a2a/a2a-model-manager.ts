@@ -26,16 +26,28 @@ export type A2ATaskWithData = A2ATask & {
   statusMessage?: A2AMessage;
 };
 
+/**
+ * Context/task lookups are actor-owned by default. Trusted internal callers
+ * that authorize access themselves (the chatops manager verifies channel
+ * membership and agent access before executing) may share one context across
+ * several actors — e.g. a Telegram group thread where every linked member
+ * talks to the same conversation.
+ */
+interface A2AContextAccessOptions {
+  trustedActorAccess?: boolean;
+}
+
 export class A2AContextManager {
   static async findAndValidateContext(
     contextId: string,
     actor: A2AActor,
+    options?: A2AContextAccessOptions,
   ): Promise<A2AContext> {
     const context = await A2AContextModel.findById(contextId);
     if (
       !context ||
-      context.actorKind !== actor.kind ||
-      context.actorId !== actor.id
+      (!options?.trustedActorAccess &&
+        (context.actorKind !== actor.kind || context.actorId !== actor.id))
     ) {
       throw new A2AError(A2AErrorKind.ContextNotFound);
     }
@@ -131,6 +143,7 @@ export class A2ATaskManager {
     taskId: string,
     context: A2AContext | undefined,
     actor: A2AActor,
+    options?: A2AContextAccessOptions,
   ): Promise<{ task: A2ATaskWithData; context: A2AContext }> {
     const task = await A2ATaskModel.findById(taskId);
     if (!task) {
@@ -140,6 +153,7 @@ export class A2ATaskManager {
       context = await A2AContextManager.findAndValidateContext(
         task.contextId,
         actor,
+        options,
       );
     }
     if (context.id !== task.contextId) {
@@ -172,6 +186,7 @@ export class A2ATaskManager {
     actor: A2AActor;
     state: A2AProtocolTaskState;
     approvalRequests: A2AArchestraApprovalRequest[];
+    options?: A2AContextAccessOptions;
   }): Promise<A2ATaskWithData> {
     const {
       context,
@@ -185,7 +200,10 @@ export class A2ATaskManager {
       a.approvalId.localeCompare(b.approvalId),
     );
 
-    if (context.actorKind !== actor.kind || context.actorId !== actor.id) {
+    if (
+      !params.options?.trustedActorAccess &&
+      (context.actorKind !== actor.kind || context.actorId !== actor.id)
+    ) {
       // This should never happen. Context is always validated or created for the same actor.
       throw new Error(
         "[A2AModelManager] Actor is not the owner of the context when creating task",

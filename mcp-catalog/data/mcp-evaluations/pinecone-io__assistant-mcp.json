@@ -1,0 +1,199 @@
+{
+  "name": "pinecone-io__assistant-mcp",
+  "display_name": "assistant-mcp",
+  "description": "Pinecone Assistant MCP server",
+  "author": {
+    "name": "pinecone-io"
+  },
+  "server": {
+    "command": "${__dirname}/server/assistant-mcp",
+    "args": [],
+    "env": {
+      "PINECONE_API_KEY": "${user_config.pinecone_api_key}",
+      "PINECONE_ASSISTANT_HOST": "${user_config.pinecone_assistant_host}",
+      "LOG_LEVEL": "${user_config.log_level}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "pinecone_api_key": {
+      "type": "string",
+      "title": "Pinecone API Key",
+      "description": "Your Pinecone API key",
+      "sensitive": true,
+      "required": true
+    },
+    "pinecone_assistant_host": {
+      "type": "string",
+      "title": "Pinecone Assistant API Host",
+      "description": "Pinecone Assistant API host",
+      "required": false,
+      "default": "https://prod-1-data.ke.pinecone.io"
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Logging Level",
+      "description": "Logging level for the server",
+      "required": false,
+      "default": "info"
+    }
+  },
+  "readme": "# Pinecone Assistant MCP Server\n\nAn MCP server implementation for retrieving information from Pinecone Assistant.\n\n## Features\n\n- Retrieves information from Pinecone Assistant\n- Supports multiple results retrieval with a configurable number of results\n\n## Prerequisites\n\n- Docker installed on your system\n- Pinecone API key - obtain from the [Pinecone Console](https://app.pinecone.io)\n- Pinecone Assistant API host - after creating an Assistant (e.g. in Pinecone Console), you can find the host in the Assistant details page\n\n## Building with Docker\n\nTo build the Docker image:\n\n```sh\ndocker build -t pinecone/assistant-mcp .\n```\n\n## Running with Docker\n\nRun the server with your Pinecone API key:\n\n```sh\ndocker run -i --rm \\\n  -e PINECONE_API_KEY=<YOUR_PINECONE_API_KEY_HERE> \\\n  -e PINECONE_ASSISTANT_HOST=<YOUR_PINECONE_ASSISTANT_HOST_HERE> \\\n  pinecone/assistant-mcp\n```\n\n### Environment Variables\n\n- `PINECONE_API_KEY` (required): Your Pinecone API key\n- `PINECONE_ASSISTANT_HOST` (optional): Pinecone Assistant API host (default: https://prod-1-data.ke.pinecone.io)\n- `LOG_LEVEL` (optional): Logging level (default: info)\n\n## Usage with Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"pinecone-assistant\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \n        \"-i\", \n        \"--rm\", \n        \"-e\", \n        \"PINECONE_API_KEY\", \n        \"-e\", \n        \"PINECONE_ASSISTANT_HOST\", \n        \"pinecone/assistant-mcp\"\n      ],\n      \"env\": {\n        \"PINECONE_API_KEY\": \"<YOUR_PINECONE_API_KEY_HERE>\",\n        \"PINECONE_ASSISTANT_HOST\": \"<YOUR_PINECONE_ASSISTANT_HOST_HERE>\"\n      }\n    }\n  }\n}\n```\n\n## Building from Source\n\nIf you prefer to build from source without Docker:\n\n1. Make sure you have Rust installed (https://rustup.rs/)\n2. Clone this repository\n3. Run `cargo build --release`\n4. The binary will be available at `target/release/assistant-mcp`\n\n### Testing with the inspector\n```sh\nexport PINECONE_API_KEY=<YOUR_PINECONE_API_KEY_HERE>\nexport PINECONE_ASSISTANT_HOST=<YOUR_PINECONE_ASSISTANT_HOST_HERE>\n# Run the inspector alone\nnpx @modelcontextprotocol/inspector cargo run\n# Or run with Docker directly through the inspector\nnpx @modelcontextprotocol/inspector -- docker run -i --rm -e PINECONE_API_KEY -e PINECONE_ASSISTANT_HOST pinecone/assistant-mcp\n```\n\n## License\n\nThis project is licensed under the terms specified in the LICENSE file.\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pinecone-assistant-mcp-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "PINECONE_API_KEY=<YOUR_PINECONE_API_KEY_HERE>",
+          "-e",
+          "PINECONE_ASSISTANT_HOST=<YOUR_PINE_ASSISTANT_HOST_HERE>",
+          "pinecone/assistant-mcp"
+        ],
+        "env": {
+          "PINECONE_API_KEY": "<YOUR_PINECONE_API_KEY_HERE>",
+          "PINECONE_ASSISTANT_HOST": "<YOUR_PINE_ASSISTANT_HOST_HERE>"
+        },
+        "docker_image": "pinecone/assistant-mcp"
+      },
+      "pinecone-assistant": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "PINECONE_API_KEY",
+          "-e",
+          "PINECONE_ASSISTANT_HOST",
+          "pinecone/assistant-mcp"
+        ],
+        "env": {
+          "PINECONE_API_KEY": "<YOUR_PINECONE_API_KEY_HERE>",
+          "PINECONE_ASSISTANT_HOST": "<YOUR_PINECONE_ASSISTANT_HOST_HERE>"
+        },
+        "docker_image": "pinecone/assistant-mcp"
+      },
+      "assistant-mcp-source": {
+        "command": "./target/release/assistant-mcp",
+        "args": [],
+        "env": {
+          "PINECONE_API_KEY": "<YOUR_PINECONE_API_KEY_HERE>",
+          "PINECONE_ASSISTANT_HOST": "<YOUR_PINECONE_ASSISTANT_HOST_HERE>"
+        }
+      },
+      "assistant-mcp-inspector-cargo": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/inspector", "cargo", "run"],
+        "env": {
+          "PINECONE_API_KEY": "<YOUR_PINECONE_API_KEY_HERE>",
+          "PINECONE_ASSISTANT_HOST": "<YOUR_PINECONE_ASSISTANT_HOST_HERE>"
+        }
+      },
+      "pinecone-assistant-mcp-inspector-docker": {
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/inspector",
+          "--",
+          "docker",
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "PINECONE_API_KEY",
+          "-e",
+          "PINECONE_ASSISTANT_HOST",
+          "pinecone/assistant-mcp"
+        ],
+        "env": {
+          "PINECONE_API_KEY": "<YOUR_PINECONE_API_KEY_HERE>",
+          "PINECONE_ASSISTANT_HOST": "<YOUR_PINECONE_ASSISTANT_HOST_HERE>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pinecone-io",
+    "repo": "assistant-mcp",
+    "url": "https://github.com/pinecone-io/assistant-mcp",
+    "name": "assistant-mcp",
+    "path": null,
+    "stars": 33,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "7e32e35c20fe3f79d2504d4371f28e1b1eb34009"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:21.033Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp-server",
+      "importance": 10
+    },
+    {
+      "name": "mcp-spec",
+      "importance": 9
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "reqwest",
+      "importance": 8
+    },
+    {
+      "name": "serde",
+      "importance": 8
+    },
+    {
+      "name": "serde_json",
+      "importance": 8
+    },
+    {
+      "name": "tracing",
+      "importance": 6
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 6
+    },
+    {
+      "name": "thiserror",
+      "importance": 5
+    },
+    {
+      "name": "is-terminal",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"assistant-mcp\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmcp-spec = \"0.1\"\nmcp-server = \"0.1\"\nserde_json = \"1.0.139\"\nserde = { version = \"1.0.197\", features = [\"derive\"] }\ntokio = { version = \"1.43.0\", features = [\"full\"] }\ntracing-subscriber = { version = \"0.3.19\", features = [\"env-filter\"] }\ntracing = \"0.1.41\"\nthiserror = \"1.0.58\"\nreqwest = { version = \"0.11.26\", features = [\"json\"] }\nis-terminal = \"0.4.12\"\n\n[dev-dependencies]\ntokio-test = \"0.4.4\"\nmockito = \"1.4.0\"\n"
+}

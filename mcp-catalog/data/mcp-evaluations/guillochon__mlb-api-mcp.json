@@ -1,0 +1,139 @@
+{
+  "name": "guillochon__mlb-api-mcp",
+  "display_name": "mlb-api-mcp",
+  "description": "A Model Context Protocol (MCP) server that provides comprehensive access to MLB statistics and baseball data through a FastMCP-based interface.",
+  "author": {
+    "name": "guillochon"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {
+      "TZ": "${user_config.timezone}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "timezone": {
+      "type": "string",
+      "title": "Server Timezone",
+      "description": "Set the timezone for the server (e.g., America/New_York). Defaults to UTC.",
+      "required": false,
+      "default": "UTC"
+    }
+  },
+  "readme": "# MLB API MCP Server\n\n[![CI Status](https://github.com/guillochon/mlb-api-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/guillochon/mlb-api-mcp/actions/workflows/ci.yml)\n![License](https://img.shields.io/github/license/guillochon/mlb-api-mcp)\n[![smithery badge](https://smithery.ai/badge/@guillochon/mlb-api-mcp)](https://smithery.ai/server/@guillochon/mlb-api-mcp)\n![Coverage](https://img.shields.io/badge/coverage-86.27%25-brightgreen)\n\nA [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides comprehensive access to MLB statistics and baseball data through a FastMCP-based interface.\n\n## Overview\n\nThis MCP server acts as a bridge between AI applications and MLB data sources, enabling seamless integration of baseball statistics, game information, player data, and more into AI workflows and applications.\n\n## Features\n\n### MLB Data Access\n- **Current standings** for all MLB teams with flexible filtering by league, season, and date\n- **Game schedules** and results with date range support\n- **Player statistics** including traditional and sabermetric stats (WAR, wOBA, wRC+)\n- **Team information** and rosters with various roster types\n- **Live game data** including boxscores, linescores, and play-by-play\n- **Game highlights** and scoring plays\n- **Player and team search** functionality\n- **Draft information** and award recipients\n- **Game pace statistics** and lineup information\n\n### MCP Tools\n\nAll MLB/statistics/game/player/team/etc. functionality is exposed as MCP tools, not as RESTful HTTP endpoints. These tools are accessible via the `/mcp/` endpoint using the MCP protocol. For a list of available tools and their descriptions, visit `/tools/` when the server is running.\n\n#### Key MCP Tools\n- `get_mlb_standings` - Current MLB standings with league and season filters\n- `get_mlb_schedule` - Game schedules for specific dates, ranges, or teams\n- `get_mlb_team_info` - Detailed team information\n- `get_mlb_player_info` - Player biographical information\n- `get_mlb_boxscore` - Complete game boxscores\n- `get_mlb_linescore` - Inning-by-inning game scores\n- `get_mlb_game_highlights` - Video highlights for games\n- `get_mlb_game_scoring_plays` - Play-by-play data with event filtering\n- `get_mlb_game_pace` - Game duration and pace statistics\n- `get_mlb_game_lineup` - Detailed lineup information for games\n- `get_multiple_mlb_player_stats` - Traditional player statistics\n- `get_mlb_sabermetrics` - Advanced sabermetric statistics (WAR, wOBA, etc.)\n- `get_mlb_roster` - Team rosters with various roster types\n- `get_mlb_search_players` - Search players by name\n- `get_mlb_search_teams` - Search teams by name\n- `get_mlb_players` - All players for a sport/season\n- `get_mlb_teams` - All teams for a sport/season\n- `get_mlb_draft` - Draft information by year\n- `get_mlb_awards` - Award recipients\n- `get_current_date` - Current date\n- `get_current_time` - Current time\n\nFor the full list and detailed descriptions, see `/tools/` or `/docs` when the server is running.\n\n### HTTP Endpoints\n\nThe following HTTP endpoints are available:\n- `/` - Redirects to `/docs`\n- `/docs` - Interactive API documentation and tool listing\n- `/health/` - Health check endpoint\n- `/mcp/info` - MCP server information\n- `/tools/` - List of all available MCP tools\n- `/mcp/` (POST) - MCP protocol endpoint for MCP-compatible clients\n\n> **Note:** There are no RESTful HTTP endpoints for MLB/statistics/game/player/team/etc. All such functionality is accessed via MCP tools through the `/mcp/` endpoint.\n\n### MCP Integration\n- Compatible with MCP-enabled AI applications\n- Tool-based interaction model with comprehensive endpoint descriptions\n- Automatic API documentation generation\n- Schema validation and type safety\n- Full response schema descriptions for better AI integration\n\n## Installation\n\n### Installing via Smithery\n\nTo install MLB API Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@guillochon/mlb-api-mcp):\n\n```bash\nnpx -y @smithery/cli install @guillochon/mlb-api-mcp --client claude\n```\n\n### Option 1: Local Installation\n\n1. Install uv if you haven't already:\n\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n2. Clone the repository:\n```bash\ngit clone https://github.com/guillochon/mlb-api-mcp.git\ncd mlb-api-mcp\n```\n\n3. Create and activate a virtual environment:\n\n```bash\nuv venv\nsource .venv/bin/activate  # On Unix/macOS\n# or\n.venv\\Scripts\\activate  # On Windows\n```\n\n4. Install dependencies:\n\n```bash\nuv pip install -e .\n```\n\n### Option 2: Docker Installation\n\n1. Clone the repository:\n```bash\ngit clone https://github.com/guillochon/mlb-api-mcp.git\ncd mlb-api-mcp\n```\n\n2. Build the Docker image:\n```bash\ndocker build -t mlb-api-mcp .\n```\n\n3. Run the container (default timezone is UTC, uses Python 3.12):\n```bash\ndocker run -p 8000:8000 mlb-api-mcp\n```\n\n#### Setting the Timezone\n\nTo run the container in your local timezone, pass the `TZ` environment variable (e.g., for New York):\n\n```bash\ndocker run -e TZ=America/New_York -p 8000:8000 mlb-api-mcp\n```\n\nReplace `America/New_York` with your desired [IANA timezone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).\n\nThe server will be available at `http://localhost:8000` with:\n- **MCP Server**: `http://localhost:8000/mcp/`\n- **Documentation**: `http://localhost:8000/docs`\n\n#### Docker Options\n\nYou can also run the container with additional options:\n\n```bash\n# Run in detached mode\ndocker run -d -p 8000:8000 --name mlb-api-server mlb-api-mcp\n\n# Run with custom port mapping\ndocker run -p 3000:8000 mlb-api-mcp\n\n# View logs\ndocker logs mlb-api-server\n\n# Stop the container\ndocker stop mlb-api-server\n\n# Remove the container\ndocker rm mlb-api-server\n```\n\n## Usage\n\n### Starting the Server\n\nRun the MCP server locally:\n```bash\n# For stdio transport (default, for MCP clients like Smithery)\nuv run python main.py\n\n# For HTTP transport (for web access)\nuv run python main.py --http\n```\n\nThe server will start with:\n- **MCP Server** on `http://localhost:8000/mcp/`\n- **Interactive API documentation** available at `http://localhost:8000/docs`\n\n### MCP Client Integration\n\nThis server can be integrated into any MCP-compatible application. The server provides tools for:\n- Retrieving team standings and schedules\n- Getting comprehensive player and team statistics\n- Accessing live game data and historical records\n- Searching for players and teams\n- Fetching sabermetric statistics like WAR\n- And much more...\n\n## API Documentation\n\nOnce the server is running, visit `http://localhost:8000/docs` for comprehensive API documentation including:\n- Available HTTP endpoints\n- List of all available MCP tools at `/tools/`\n- Tool descriptions and parameters\n- Interactive testing interface\n- Parameter descriptions and examples\n\n## Dependencies\n\n- **mcp[cli]**: MCP-compliant server framework with CLI support\n- **FastAPI**: Web framework for HTTP transport\n- **python-mlb-statsapi**: Official MLB Statistics API wrapper\n- **uvicorn[standard]**: ASGI server for running the app\n- **websockets**: WebSocket support (latest version to avoid deprecation warnings)\n- **python-dotenv**: Environment variable management\n- **httpx**: HTTP client for API requests\n\n## Development\n\nThis project uses:\n- Python 3.10+ (Docker uses Python 3.12)\n- FastMCP for the web framework\n- uv for fast Python package management\n- Hatchling for build management\n- MLB Stats API for comprehensive baseball data access\n- Ruff for linting and formatting\n\n### Setup Pre-commit Hooks\n\n1. Install pre-commit:\n\n```bash\npip install pre-commit\n```\n\n2. Initialize pre-commit hooks:\n\n```bash\npre-commit install\n```\n\nNow, the linting checks will run automatically whenever you commit code. You can also run them manually:\n\n```bash\npre-commit run --all-files\n```\n\n## Contributing\n\nContributions are welcome! Please feel free to submit issues or pull requests.\n\n## License\n\nThis project is open source. Please check the license file for details.\n\n## Testing\n\nThis project includes comprehensive test coverage with pytest and coverage reporting.\n\n### Running Tests\n\n```bash\n# Run all tests with coverage (default)\nuv run pytest\n\n# Run tests with verbose output\nuv run pytest -v\n\n# Run specific test file\nuv run pytest tests/test_mlb_api.py\n\n# Run specific test function\nuv run pytest tests/test_mlb_api.py::test_get_mlb_standings\n\n# Run tests without coverage\nuv run tests/run_coverage.py test\n\n# Generate HTML coverage report\nuv run tests/run_coverage.py html\n\n# Clean up coverage files\nuv run tests/run_coverage.py clean\n```\n\n### Coverage\n\n- **Current Coverage**: 86.27% (exceeds 80% threshold)\n- **Coverage Source**: `mlb_api.py` and `generic_api.py`\n- **Reports**: Terminal output, HTML (`htmlcov/index.html`), and XML (`coverage.xml`)\n- **CI Integration**: Coverage checking and badge updates run automatically on every push/PR\n\n### Test Structure\n\nThe test suite includes:\n- **Unit tests** for all MCP tools (MLB API and Generic API)\n- **Error handling tests** for API failures\n- **Edge case tests** for boundary conditions\n- **Mock-based tests** to avoid external API calls\n\n### Adding New Tests\n\nWhen adding new functionality:\n\n1. Add corresponding test cases to `tests/test_mlb_api.py`\n2. Include both success and error scenarios\n3. Use mocking to avoid external dependencies\n4. Ensure coverage remains above 80%\n\nExample test structure:\n```python\ndef test_new_function_success(mcp):\n    \"\"\"Test successful execution of new function\"\"\"\n    new_function = get_tool(mcp, 'new_function')\n    with patch('mlb_api.external_api_call', return_value={'data': 'success'}):\n        result = new_function(param='value')\n        assert 'data' in result\n\ndef test_new_function_error_handling(mcp):\n    \"\"\"Test error handling in new function\"\"\"\n    new_function = get_tool(mcp, 'new_function')\n    with patch('mlb_api.external_api_call', side_effect=Exception(\"API Error\")):\n        result = new_function(param='value')\n        assert 'error' in result\n```\n",
+  "category": "Sports",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mlb-api-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-p", "8000:8000", "mlb-api-mcp"],
+        "env": {},
+        "docker_image": "mlb-api-mcp"
+      },
+      "mlb-api-mcp-docker-timezone": {
+        "command": "docker",
+        "args": ["run", "-e", "TZ=America/New_York", "-p", "8000:8000", "mlb-api-mcp"],
+        "env": {
+          "TZ": "America/New_York"
+        },
+        "docker_image": "mlb-api-mcp"
+      },
+      "mlb-api-mcp-docker-detached": {
+        "command": "docker",
+        "args": ["run", "-d", "-p", "8000:8000", "--name", "mlb-api-server", "mlb-api-mcp"],
+        "env": {},
+        "docker_image": "mlb-api-mcp"
+      },
+      "mlb-api-mcp-docker-custom-port": {
+        "command": "docker",
+        "args": ["run", "-p", "3000:8000", "mlb-api-mcp"],
+        "env": {},
+        "docker_image": "mlb-api-mcp"
+      },
+      "mlb-api-mcp-stdio": {
+        "command": "uv",
+        "args": ["run", "python", "main.py"],
+        "env": {}
+      },
+      "mlb-api-mcp-http": {
+        "command": "uv",
+        "args": ["run", "python", "main.py", "--http"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "guillochon",
+    "repo": "mlb-api-mcp",
+    "url": "https://github.com/guillochon/mlb-api-mcp",
+    "name": "mlb-api-mcp",
+    "path": null,
+    "stars": 18,
+    "contributors": 4,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "4795cc2dc3cb5686d428848e3540646594cacead"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:36.659Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "python-mlb-statsapi",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "pybaseball",
+      "importance": 8
+    },
+    {
+      "name": "websockets",
+      "importance": 7
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"mlb-api-mcp\"\nversion = \"0.1.0\"\ndescription = \"MLB API MCP Server - Model Context Protocol server for MLB statistics and baseball data\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"fastmcp>=2.10.6\",\n    \"fastapi>=0.115.12\",\n    \"python-mlb-statsapi>=0.5.26\",\n    \"uvicorn[standard]>=0.24.0\",\n    \"pybaseball>=2.2.7\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"ruff>=0.0.292\",\n    \"pre-commit>=3.5.0\",\n]\ntest = [\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-cov>=4.1.0\",\n    \"coverage>=7.3.0\",\n]\n\n[tool.hatch.build.targets.wheel]\npackages = [\".\"]\n\n[tool.hatch.metadata]\nallow-direct-references = true\n\n[tool.ruff]\nline-length = 120\ntarget-version = \"py312\"\nextend-exclude = [\n    \".venv\",\n    \"__pycache__\",\n    \".git\",\n    \".pytest_cache\",\n]\n\n[tool.ruff.lint]\nselect = [\n    \"E\",  # pycodestyle errors\n    \"W\",  # pycodestyle warnings\n    \"F\",  # pyflakes\n    \"I\",  # isort\n    \"B\",  # flake8-bugbear\n    \"C4\", # flake8-comprehensions\n    \"RUF\", # Ruff-specific rules\n]\nignore = []\n\n[tool.ruff.lint.isort]\nknown-first-party = [\"mlb_api_mcp\"]\n\n[tool.ruff.lint.per-file-ignores]\n\"__init__.py\" = [\"F401\"]\n\"**/tests/**\" = [\"E501\"]\n\"main.py\" = [\"E501\", \"W293\"]\n\n# Suppress specific deprecation warnings\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\ntestpaths = [\"tests\"]\nfilterwarnings = [\n    \"ignore::DeprecationWarning:websockets.*\",\n    \"ignore::DeprecationWarning:uvicorn.protocols.websockets.*\",\n]\naddopts = [\n    \"--cov=mlb_api\",\n    \"--cov=generic_api\",\n    \"--cov-report=term-missing\",\n    \"--cov-report=html:htmlcov\",\n    \"--cov-report=xml:coverage.xml\",\n    \"--cov-fail-under=80\",\n]\n\n[tool.coverage.run]\nsource = [\"mlb_api.py\", \"generic_api.py\"]\nomit = [\n    \"*/tests/*\",\n    \"*/test_*\",\n    \"*/__pycache__/*\",\n    \"*/venv/*\",\n    \"*/.venv/*\",\n]\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"if self.debug:\",\n    \"if settings.DEBUG\",\n    \"raise AssertionError\",\n    \"raise NotImplementedError\",\n    \"if 0:\",\n    \"if __name__ == .__main__.:\",\n    \"class .*\\\\bProtocol\\\\):\",\n    \"@(abc\\\\.)?abstractmethod\",\n]\nshow_missing = true\nprecision = 2\n\n[dependency-groups]\ndev = [\n    \"pre-commit>=4.2.0\",\n]\n"
+}

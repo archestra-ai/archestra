@@ -1,0 +1,241 @@
+{
+  "name": "nwiizo__tfmcp",
+  "display_name": "tfmcp",
+  "description": "🌍 Terraform Model Context Protocol (MCP) Tool - An experimental CLI tool that enables AI assistants to manage and operate Terraform environments. Supports reading Terraform configurations, analyzing plans, applying configurations, and managing state with Claude Desktop integration. ⚡️",
+  "author": {
+    "name": "nwiizo"
+  },
+  "server": {
+    "command": "tfmcp",
+    "args": ["mcp"],
+    "env": {
+      "HOME": "${HOME}",
+      "TERRAFORM_DIR": "${user_config.terraform_dir}",
+      "TFMCP_LOG_LEVEL": "${user_config.tfmcp_log_level}",
+      "TFMCP_DEMO_MODE": "${user_config.tfmcp_demo_mode}",
+      "TFMCP_ALLOW_DANGEROUS_OPS": "${user_config.tfmcp_allow_dangerous_ops}",
+      "TFMCP_ALLOW_AUTO_APPROVE": "${user_config.tfmcp_allow_auto_approve}",
+      "TFMCP_MAX_RESOURCES": "${user_config.tfmcp_max_resources}",
+      "TFMCP_AUDIT_ENABLED": "${user_config.tfmcp_audit_enabled}",
+      "TFMCP_AUDIT_LOG_FILE": "${user_config.tfmcp_audit_log_file}",
+      "TFMCP_AUDIT_LOG_SENSITIVE": "${user_config.tfmcp_audit_log_sensitive}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "terraform_dir": {
+      "type": "directory",
+      "title": "Terraform Project Directory",
+      "description": "Set this to specify a custom Terraform project directory. If not set, tfmcp will use the directory provided by command line arguments, configuration files, or fall back to ~/terraform.",
+      "required": false,
+      "default": "${HOME}/terraform"
+    },
+    "tfmcp_log_level": {
+      "type": "string",
+      "title": "TFMCP Log Level",
+      "description": "Set to debug, info, warn, or error to control logging verbosity.",
+      "required": false,
+      "default": "info"
+    },
+    "tfmcp_demo_mode": {
+      "type": "boolean",
+      "title": "TFMCP Demo Mode",
+      "description": "Set to true to enable demo mode with additional safety features.",
+      "required": false,
+      "default": false
+    },
+    "tfmcp_allow_dangerous_ops": {
+      "type": "boolean",
+      "title": "Allow Dangerous Operations",
+      "description": "Set to true to enable apply/destroy operations.",
+      "required": false,
+      "default": false
+    },
+    "tfmcp_allow_auto_approve": {
+      "type": "boolean",
+      "title": "Allow Auto-Approve",
+      "description": "Set to true to enable auto-approve for dangerous operations.",
+      "required": false,
+      "default": false
+    },
+    "tfmcp_max_resources": {
+      "type": "number",
+      "title": "Maximum Resources",
+      "description": "Set maximum number of resources that can be managed.",
+      "required": false,
+      "default": 50,
+      "min": 1
+    },
+    "tfmcp_audit_enabled": {
+      "type": "boolean",
+      "title": "Audit Logging Enabled",
+      "description": "Set to false to disable audit logging.",
+      "required": false,
+      "default": true
+    },
+    "tfmcp_audit_log_file": {
+      "type": "file",
+      "title": "Audit Log File Path",
+      "description": "Custom path for audit log file.",
+      "required": false,
+      "default": "${HOME}/.tfmcp/audit.log"
+    },
+    "tfmcp_audit_log_sensitive": {
+      "type": "boolean",
+      "title": "Include Sensitive Info in Audit Logs",
+      "description": "Set to true to include sensitive information in audit logs.",
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "# tfmcp: Terraform Model Context Protocol Tool\n\n*⚠️  This project includes production-ready security features but is still under active development. While the security system provides robust protection, please review all operations carefully in production environments. ⚠️*\n\ntfmcp is a command-line tool that helps you interact with Terraform via the Model Context Protocol (MCP). It allows LLMs to manage and operate your Terraform environments, including:\n\n## 🎮 Demo\n\nSee tfmcp in action with Claude Desktop:\n\n![tfmcp Demo with Claude Desktop](.github/images/tfmcp-demo.gif)\n\n- Reading Terraform configuration files\n- Analyzing Terraform plan outputs\n- Applying Terraform configurations\n- Managing Terraform state\n- Creating and modifying Terraform configurations\n\n## 🎉 Latest Release\n\nThe latest version of tfmcp (v0.1.3) is now available on Crates.io! You can easily install it using Cargo:\n\n```bash\ncargo install tfmcp\n```\n\n### 🆕 What's New in v0.1.3\n- **🔐 Comprehensive Security System**: Production-ready security controls with audit logging\n- **📊 Enhanced Terraform Analysis**: Detailed validation and best practice recommendations  \n- **🛡️ Access Controls**: File pattern-based restrictions and resource limits\n- **📝 Audit Logging**: Complete operation tracking for compliance and monitoring\n\n## Features\n\n- 🚀 **Terraform Integration**  \n  Deeply integrates with the Terraform CLI to analyze and execute operations.\n\n- 📄 **MCP Server Capabilities**  \n  Runs as a Model Context Protocol server, allowing AI assistants to access and manage Terraform.\n\n- 🔐 **Enterprise Security**  \n  Production-ready security controls with configurable policies, audit logging, and access restrictions.\n\n- 📊 **Advanced Analysis**  \n  Detailed Terraform configuration analysis with best practice recommendations and security checks.\n\n- ⚡️ **Blazing Fast**  \n  High-speed processing powered by the Rust ecosystem with optimized parsing and caching.\n\n- 🛠️ **Automatic Setup**  \n  Automatically creates sample Terraform projects when needed, ensuring smooth operation even for new users.\n\n- 🐳 **Docker Support**  \n  Run tfmcp in a containerized environment with all dependencies pre-installed.\n\n## Installation\n\n### From Source\n```bash\n# Clone the repository\ngit clone https://github.com/nwiizo/tfmcp\ncd tfmcp\n\n# Build and install\ncargo install --path .\n```\n\n### From Crates.io\n```bash\ncargo install tfmcp\n```\n\n### Using Docker\n```bash\n# Clone the repository\ngit clone https://github.com/nwiizo/tfmcp\ncd tfmcp\n\n# Build the Docker image\ndocker build -t tfmcp .\n\n# Run the container\ndocker run -it tfmcp\n```\n\n## Requirements\n\n- Rust (edition 2021)\n- Terraform CLI installed and available in PATH\n- Claude Desktop (for AI assistant integration)\n- Docker (optional, for containerized deployment)\n\n## Usage\n\n```bash\n$ tfmcp --help\n✨ A CLI tool to manage Terraform configurations and operate Terraform through the Model Context Protocol (MCP).\n\nUsage: tfmcp [OPTIONS] [COMMAND]\n\nCommands:\n  mcp       Launch tfmcp as an MCP server\n  analyze   Analyze Terraform configurations\n  help      Print this message or the help of the given subcommand(s)\n\nOptions:\n  -c, --config <PATH>    Path to the configuration file\n  -d, --dir <PATH>       Terraform project directory\n  -V, --version          Print version\n  -h, --help             Print help\n```\n\n### Using Docker\n\nWhen using Docker, you can run tfmcp commands like this:\n\n```bash\n# Run as MCP server (default)\ndocker run -it tfmcp\n\n# Run with specific command and options\ndocker run -it tfmcp analyze --dir /app/example\n\n# Mount your Terraform project directory\ndocker run -it -v /path/to/your/terraform:/app/terraform tfmcp --dir /app/terraform\n\n# Set environment variables\ndocker run -it -e TFMCP_LOG_LEVEL=debug tfmcp\n```\n\n### Integrating with Claude Desktop\n\nTo use tfmcp with Claude Desktop:\n\n1. If you haven't already, install tfmcp:\n   ```bash\n   cargo install tfmcp\n   ```\n\n   Alternatively, you can use Docker:\n   ```bash\n   docker build -t tfmcp .\n   ```\n\n2. Find the path to your installed tfmcp executable:\n   ```bash\n   which tfmcp\n   ```\n\n3. Add the following configuration to `~/Library/Application\\ Support/Claude/claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"tfmcp\": {\n      \"command\": \"/path/to/your/tfmcp\",  // Replace with the actual path from step 2\n      \"args\": [\"mcp\"],\n      \"env\": {\n        \"HOME\": \"/Users/yourusername\",  // Replace with your username\n        \"PATH\": \"/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\",\n        \"TERRAFORM_DIR\": \"/path/to/your/terraform/project\"  // Optional: specify your Terraform project\n      }\n    }\n  }\n}\n```\n\nIf you're using Docker with Claude Desktop, you can set up the configuration like this:\n\n```json\n{\n  \"mcpServers\": {\n    \"tfmcp\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"--rm\", \"-v\", \"/path/to/your/terraform:/app/terraform\", \"tfmcp\", \"mcp\"],\n      \"env\": {\n        \"TERRAFORM_DIR\": \"/app/terraform\"\n      }\n    }\n  }\n}\n```\n\n4. Restart Claude Desktop and enable the tfmcp tool.\n\n5. tfmcp will automatically create a sample Terraform project in `~/terraform` if one doesn't exist, ensuring Claude can start working with Terraform right away. The sample project is based on the examples included in the `example/demo` directory of this repository.\n\n## Logs and Troubleshooting\n\nThe tfmcp server logs are available at:\n```\n~/Library/Logs/Claude/mcp-server-tfmcp.log\n```\n\nCommon issues and solutions:\n\n- **Claude can't connect to the server**: Make sure the path to the tfmcp executable is correct in your configuration\n- **Terraform project issues**: tfmcp automatically creates a sample Terraform project if none is found\n- **Method not found errors**: MCP protocol support includes resources/list and prompts/list methods\n- **Docker issues**: If using Docker, ensure your container has proper volume mounts and permissions\n\n## Environment Variables\n\n### Core Configuration\n- `TERRAFORM_DIR`: Set this to specify a custom Terraform project directory. If not set, tfmcp will use the directory provided by command line arguments, configuration files, or fall back to `~/terraform`. You can also change the project directory at runtime using the `set_terraform_directory` tool.\n- `TFMCP_LOG_LEVEL`: Set to `debug`, `info`, `warn`, or `error` to control logging verbosity.\n- `TFMCP_DEMO_MODE`: Set to `true` to enable demo mode with additional safety features.\n\n### Security Configuration\n- `TFMCP_ALLOW_DANGEROUS_OPS`: Set to `true` to enable apply/destroy operations (default: `false`)\n- `TFMCP_ALLOW_AUTO_APPROVE`: Set to `true` to enable auto-approve for dangerous operations (default: `false`)\n- `TFMCP_MAX_RESOURCES`: Set maximum number of resources that can be managed (default: 50)\n- `TFMCP_AUDIT_ENABLED`: Set to `false` to disable audit logging (default: `true`)\n- `TFMCP_AUDIT_LOG_FILE`: Custom path for audit log file (default: `~/.tfmcp/audit.log`)\n- `TFMCP_AUDIT_LOG_SENSITIVE`: Set to `true` to include sensitive information in audit logs (default: `false`)\n\n## Security Considerations\n\ntfmcp includes comprehensive security features designed for production use:\n\n### 🔒 Built-in Security Features\n- **Access Controls**: Automatic blocking of production/sensitive file patterns\n- **Operation Restrictions**: Dangerous operations (apply/destroy) disabled by default\n- **Resource Limits**: Configurable maximum resource count protection\n- **Audit Logging**: Complete operation tracking with timestamps and user identification\n- **Directory Validation**: Security policy enforcement for project directories\n\n### 🛡️ Security Best Practices\n- **Default Safety**: Apply/destroy operations are disabled by default - explicitly enable only when needed\n- **Review Plans**: Always review Terraform plans before applying, especially AI-generated ones\n- **IAM Boundaries**: Use appropriate IAM permissions and role boundaries in cloud environments\n- **Audit Monitoring**: Regularly review audit logs at `~/.tfmcp/audit.log`\n- **File Patterns**: Built-in protection against accessing `prod*`, `production*`, and `secret*` patterns\n- **Docker Security**: When using containers, carefully consider volume mounts and exposed data\n\n### ⚙️ Production Configuration\n```bash\n# Recommended production settings\nexport TFMCP_ALLOW_DANGEROUS_OPS=false    # Keep disabled for safety\nexport TFMCP_ALLOW_AUTO_APPROVE=false     # Require manual approval\nexport TFMCP_MAX_RESOURCES=10             # Limit resource scope\nexport TFMCP_AUDIT_ENABLED=true           # Enable audit logging\nexport TFMCP_AUDIT_LOG_SENSITIVE=false    # Don't log sensitive data\n```\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## Roadmap\n\nHere are some planned improvements and future features for tfmcp:\n\n### Completed\n- [x] **Basic Terraform Integration**  \n  Core integration with Terraform CLI for analyzing and executing operations.\n\n- [x] **MCP Server Implementation**  \n  Initial implementation of the Model Context Protocol server for AI assistants.\n\n- [x] **Automatic Project Creation**  \n  Added functionality to automatically create sample Terraform projects when needed.\n\n- [x] **Claude Desktop Integration**  \n  Support for seamless integration with Claude Desktop.\n\n- [x] **Core MCP Methods**  \n  Implementation of essential MCP methods including resources/list and prompts/list.\n\n- [x] **Error Handling Improvements**  \n  Better error handling and recovery mechanisms for robust operation.\n\n- [x] **Dynamic Project Directory Switching**  \n  Added ability to change the active Terraform project directory without restarting the service.\n\n- [x] **Crates.io Publication**  \n  Published the package to Crates.io for easy installation via Cargo.\n  \n- [x] **Docker Support**  \n  Added containerization support for easier deployment and cross-platform compatibility.\n\n- [x] **Security Enhancements**  \n  Comprehensive security system with configurable policies, audit logging, access controls, and production-ready safety features.\n\n### In Progress\n- [ ] **Enhanced Terraform Analysis**  \n  Implement deeper parsing and analysis of Terraform configurations, plans, and state files.\n\n- [ ] **Comprehensive Testing Framework**  \n  Expand test coverage including integration tests with real Terraform configurations.\n\n### Planned\n- [ ] **Multi-Environment Support**  \n  Add support for managing multiple Terraform environments, workspaces, and modules.\n\n- [ ] **Expanded MCP Protocol Support**  \n  Implement additional MCP methods and capabilities for richer integration with AI assistants.\n\n- [ ] **Performance Optimization**  \n  Optimize resource usage and response times for large Terraform projects.\n\n- [ ] **Cost Estimation**  \n  Integrate with cloud provider pricing APIs to provide cost estimates for Terraform plans.\n\n- [ ] **Interactive TUI**  \n  Develop a terminal-based user interface for easier local usage and debugging.\n\n- [ ] **Integration with Other AI Platforms**  \n  Extend beyond Claude to support other AI assistants and platforms.\n\n- [ ] **Plugin System**  \n  Develop a plugin architecture to allow extensions of core functionality.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Development",
+  "quality_score": 71,
+  "archestra_config": {
+    "client_config_permutations": {
+      "tfmcp": {
+        "command": "tfmcp",
+        "args": ["mcp"],
+        "env": {}
+      },
+      "tfmcp-configured": {
+        "command": "tfmcp",
+        "args": ["mcp"],
+        "env": {
+          "TERRAFORM_DIR": "/path/to/your/terraform/project"
+        }
+      },
+      "tfmcp-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-it", "tfmcp", "mcp"],
+        "env": {},
+        "docker_image": "tfmcp"
+      },
+      "tfmcp-docker-configured": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-it",
+          "-v",
+          "/path/to/your/terraform:/app/terraform",
+          "tfmcp",
+          "mcp",
+          "--dir",
+          "/app/terraform"
+        ],
+        "env": {
+          "TERRAFORM_DIR": "/app/terraform"
+        },
+        "docker_image": "tfmcp"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "nwiizo",
+    "repo": "tfmcp",
+    "url": "https://github.com/nwiizo/tfmcp",
+    "name": "nwiizo__tfmcp",
+    "path": null,
+    "stars": 342,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d8017c93caccb7bf3492de0546e65d2e3c1e3f38"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:16.327Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "tokio",
+      "importance": 10
+    },
+    {
+      "name": "clap",
+      "importance": 9
+    },
+    {
+      "name": "serde",
+      "importance": 9
+    },
+    {
+      "name": "serde_json",
+      "importance": 9
+    },
+    {
+      "name": "futures",
+      "importance": 8
+    },
+    {
+      "name": "anyhow",
+      "importance": 7
+    },
+    {
+      "name": "thiserror",
+      "importance": 7
+    },
+    {
+      "name": "async-trait",
+      "importance": 7
+    },
+    {
+      "name": "tracing",
+      "importance": 6
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 6
+    },
+    {
+      "name": "reqwest",
+      "importance": 5
+    },
+    {
+      "name": "chrono",
+      "importance": 5
+    },
+    {
+      "name": "regex",
+      "importance": 4
+    },
+    {
+      "name": "which",
+      "importance": 4
+    },
+    {
+      "name": "dirs",
+      "importance": 3
+    },
+    {
+      "name": "tempfile",
+      "importance": 3
+    },
+    {
+      "name": "once_cell",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"tfmcp\"\nversion = \"0.1.5\"\nedition = \"2021\"\nauthors = [\"nwiizo <syu.m.5151@gmail.com>\"]\ndescription = \"Terraform Model Context Protocol Tool - A CLI tool to manage Terraform through MCP\"\nreadme = \"README.md\"\nrepository = \"https://github.com/nwiizo/tfmcp\"\nlicense = \"MIT\"\nkeywords = [\"terraform\", \"mcp\", \"llm\", \"ai\", \"claude\"]\ncategories = [\"command-line-utilities\", \"development-tools\"]\nbuild = \"build.rs\"\nrust-version = \"1.78.0\"\n\n[lib]\nname = \"tfmcp\"\npath = \"src/lib.rs\"\n\n[[bin]]\nname = \"tfmcp\"\npath = \"src/main.rs\"\n\n[dependencies]\nclap = { version = \"4.5.31\", features = [\"derive\"] }\nserde = { version = \"1.0.217\", features = [\"derive\"] }\nserde_json = \"1.0.137\"\nanyhow = \"1.0.75\"\nthiserror = \"2.0.11\"\nfutures = \"0.3.31\"\ntokio = { version = \"1.37.0\", features = [\"full\"] }\nasync-trait = \"0.1.85\"\ndirs = \"6.0.0\"\ntempfile = \"3.15.0\"\nregex = \"1.11.1\"\nonce_cell = \"1.21\"\nreqwest = { version = \"0.12\", default-features = false, features = [\n  \"json\",\n  \"rustls-tls\",\n] }\nwhich = \"6.0.1\"\nchrono = { version = \"0.4.35\", features = [\"serde\"] }\n# Logging improvements\ntracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\"env-filter\"] }\n\n[dev-dependencies]\ntempfile = \"3.15.0\"\n"
+}

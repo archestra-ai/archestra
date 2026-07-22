@@ -1,0 +1,115 @@
+{
+  "name": "lucygoodchild__mcp-national-rail",
+  "display_name": "mcp-national-rail",
+  "description": "A Model Context Protocol (MCP) server to retrieve train schedules from National Rail",
+  "author": {
+    "name": "lucygoodchild"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {
+      "RTT_API_USERNAME": "${user_config.rtt_api_username}",
+      "RTT_API_PASSWORD": "${user_config.rtt_api_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "rtt_api_username": {
+      "type": "string",
+      "title": "Realtime Trains API Username",
+      "description": "Your username for the Realtime Trains API (api.rtt.io)",
+      "sensitive": true,
+      "required": true
+    },
+    "rtt_api_password": {
+      "type": "string",
+      "title": "Realtime Trains API Password",
+      "description": "Your password for the Realtime Trains API (api.rtt.io)",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "[![smithery badge](https://smithery.ai/badge/@lucygoodchild/mcp-national-rail)](https://smithery.ai/server/@lucygoodchild/mcp-national-rail)\n\n# mcp-national-rail\n\nA Model Context Protocol (MCP) server to retrieve train schedules from National Rail.\n\n## Overview\n\nThis project implements a server using the Model Context Protocol (MCP) that allows AI agents to retrieve train information on National Rail trains using the Realtime Trains API. \n\nIt provides tools for:\n- get_live_departures\n- get_live_arrivals\n- get_departures_by_date\n- get_arrivals_by_date\n\n## Installation\n\nReal Time Trains API account can be created from here: https://api.rtt.io/ \n\nYou will need to note down your API Auth credentials \n\n### Installing via Smithery\n\nTo install mcp-national-rail for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@lucygoodchild/mcp-national-rail):\n\n```bash\nnpx -y @smithery/cli install @lucygoodchild/mcp-national-rail --client claude\n```\n\n### Manual Installation for Claude Desktop\n\n#### Prerequisites\n- Node.js\n\n#### Setup\n\n1. Clone this repository\n2. Install dependencies\n```bash\nnpm install\n```\n3. Build and start the project\n```bash\nnpm run build\nnpm run start\n```\n4. Add the following to your MCP client configuration (~/Library/Application Support/Claude/claude_desktop_config.json):\n```bash\n{\n  \"mcpServers\": {\n    \"mcp-national-rail\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/mcp-national-rail/dist/index.js\"],\n      \"env\": {\n        \"RTT_API_USERNAME\": \"your_rtt_api_username\",\n        \"RTT_API_PASSWORD\": \"your_rtt_api_password\"\n      }\n    }\n  }\n}\n```\nMake sure to replace \"/path/to/mcp-national-rail/dist/index.js\" with the actual path and add your RTT API username and password which can be created from here: https://api.rtt.io/\n\n5. Restart Claude\n\n### Development\n- Create .env file based on the example file\n```bash\nRTT_API_USERNAME=your_rtt_api_username\nRTT_API_PASSWORD=your_rtt_api_password\n```\n\nRun the inspector with the following command:\n```bash\nnpx @modelcontextprotocol/inspector node dist/index.js\n```\n",
+  "category": "Travel",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "lucygoodchild-mcp-national-rail-claude-config": {
+        "command": "node",
+        "args": ["/path/to/mcp-national-rail/dist/index.js"],
+        "env": {
+          "RTT_API_USERNAME": "your_rtt_api_username",
+          "RTT_API_PASSWORD": "your_rtt_api_password"
+        }
+      },
+      "lucygoodchild-mcp-national-rail-npm-start": {
+        "command": "npm",
+        "args": ["run", "start"],
+        "env": {
+          "RTT_API_USERNAME": "your_rtt_api_username",
+          "RTT_API_PASSWORD": "your_rtt_api_password"
+        }
+      },
+      "lucygoodchild-mcp-national-rail-inspector": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/inspector", "node", "dist/index.js"],
+        "env": {
+          "RTT_API_USERNAME": "your_rtt_api_username",
+          "RTT_API_PASSWORD": "your_rtt_api_password"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "lucygoodchild",
+    "repo": "mcp-national-rail",
+    "url": "https://github.com/lucygoodchild/mcp-national-rail",
+    "name": "mcp-national-rail",
+    "path": null,
+    "stars": 0,
+    "contributors": 3,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "68e2d57b50d1eeb513c75eb6d1303d9c43e5b43b"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:39.664Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"national-rail-mcp-server\",\n  \"version\": \"0.1.0\",\n  \"description\": \"Model Context Protocol server for National Rail train information via RTT API\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('dist/index.js', '755')\\\"\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"tsx src/index.ts\"\n  },\n  \"bin\": {\n    \"national-rail-mcp-server\": \"./dist/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.4.0\",\n    \"dotenv\": \"^16.5.0\",\n    \"node-fetch\": \"^3.3.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.0.0\",\n    \"tsx\": \"^4.0.0\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"author\": \"Lucy Goodchild\",\n  \"license\": \"MIT\"\n}\n"
+}

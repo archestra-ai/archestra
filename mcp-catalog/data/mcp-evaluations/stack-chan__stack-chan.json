@@ -1,0 +1,59 @@
+{
+  "name": "stack-chan__stack-chan",
+  "display_name": "stack-chan",
+  "description": "A JavaScript-driven M5Stack-embedded super-kawaii robot.",
+  "author": {
+    "name": "stack-chan"
+  },
+  "server": {
+    "command": "node",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Stack-chan\n\n[![Build Stack-chan Firmware](https://github.com/stack-chan/stack-chan/actions/workflows/build.yml/badge.svg)](https://github.com/stack-chan/stack-chan/actions/workflows/build.yml)\n[![Discord server invitation](https://dcbadge.vercel.app/api/server/eGhd9adnBm)](https://discord.gg/eGhd9adnBm)\n\n[日本語](./README_ja.md)\n\n![stackchan](./docs/images/stackchan.gif)\n\nStack-chan is a JavaScript-driven M5Stack-embedded super-kawaii robot.\n\n* Video (with English subtitles): https://youtu.be/fZb_mF08xV0\n* Official hashtag: [`#stackchan` | `#ｽﾀｯｸﾁｬﾝ` (JP)](https://twitter.com/search?q=%23stackchan%20OR%20%23%EF%BD%BD%EF%BE%80%EF%BD%AF%EF%BD%B8%EF%BE%81%EF%BD%AC%EF%BE%9D).\n\n## Features\n\n* :neutral_face:     Show cute face\n* :smile:            Expression(Happy, Angry, Sad etc.)\n* :smiley_cat:       Customize face\n* :eyes:             Glance/stare/gaze\n* :speech_balloon:   Say things\n* :bulb:             Addon M5Units\n* :cyclone:          Drive Serial(TTL)/PWM servos\n* :game_die:         Make applications on your own\n\n## Contents\n\nThis repository includes all the component of the robot.\n\n* __firmware__ : Source codes of the firmware.\n* __case__ : Stereolithography(STL) of the case.\n* __schematics__ : Schematics and board layout data.\n\n## Installation\n\n### Assemble board\n\n* See [schematics/README.md](./schematics/README.md) and [case/README.md](./case/README.md)\n* OR You can get a pre-assembled module(COMING SOON)\n\n### Flash firmware to M5Stack\n\n* See [firmware/README.md](./firmware/README.md)\n\n## Contribution\n\n__Feature requests/Bug reports__ are extremely welcome! See [issues](https://github.com/stack-chan/stack-chan/issues) page to post some.\n\n__Wanna be a sponsor__? It would be my great honor. please visit my [sponsor](https://github.com/sponsors/meganetaaan/) page.\n\n## License\n\nResources of this repository are distributed under Apache version 2.0 license.\nSee [LICENSE](./LICENSE).\n\n## BibTeX\n\n```bibtex\n@misc{stackchan,\n  author       = {Shinya Ishikawa and the Stack-chan community},\n  title        = {Stack-chan: A JavaScript-driven Super-kawaii Robot},\n  year         = {2021},\n  howpublished = {\\url{https://github.com/stack-chan/stack-chan}},\n  note         = {Open-source hardware and software.},\n}\n```\n",
+  "category": "IoT",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "stack-chan",
+    "repo": "stack-chan",
+    "url": "https://github.com/stack-chan/stack-chan",
+    "name": "stack-chan__stack-chan",
+    "path": null,
+    "stars": 945,
+    "contributors": 18,
+    "issues": 100,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "80e895bc54761174e28483cc0d16e783cd3c636b"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:06.260Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [],
+  "raw_dependencies": "=== firmware/package.json ===\n{\n  \"name\": \"stack-chan\",\n  \"version\": \"0.2.1\",\n  \"description\": \"A firmware of M5Stack Stack-chan module\",\n  \"main\": \"stackchan/main.ts\",\n  \"scripts\": {\n    \"format\": \"biome format\",\n    \"format:fix\": \"npm run format -- --write\",\n    \"lint\": \"biome lint\",\n    \"lint:fix\": \"npm run lint -- --write\",\n    \"generate-speech-coqui\": \"node scripts/generate-speech-coqui.js\",\n    \"generate-speech-voicevox\": \"node scripts/generate-speech-voicevox.js\",\n    \"generate-speech-google\": \"cross-env GOOGLE_APPLICATION_CREDENTIALS=scripts/key.json node scripts/generate-speech-google.js\",\n    \"generate-apidoc\": \"typedoc --entryPointStrategy expand --plugin typedoc-plugin-markdown --out docs/api ./stackchan\",\n    \"build\": \"cross-env npm_config_target?=esp32/m5stack cross-env-shell mcconfig -d -m -p \\\\$npm_config_target -t build ./stackchan/manifest_local.json\",\n    \"bundle\": \"mcbundle -d -m ./stackchan/manifest.json\",\n    \"deploy\": \"cross-env npm_config_target?=esp32/m5stack cross-env-shell mcconfig -d -m -p \\\\$npm_config_target -t deploy ./stackchan/manifest_local.json\",\n    \"debug\": \"cross-env npm_config_target?=esp32/m5stack cross-env-shell mcconfig -d -m -p \\\\$npm_config_target ./stackchan/manifest_local.json\",\n    \"mod\": \"cross-env npm_config_target?=esp32/m5stack cross-env-shell mcrun -d -m -p \\\\$npm_config_target\",\n    \"setup\": \"xs-dev setup\",\n    \"update\": \"xs-dev update\",\n    \"doctor\": \"echo stack-chan environment info: && git rev-parse HEAD && git rev-parse --show-toplevel && xs-dev doctor\",\n    \"scan\": \"xs-dev scan\",\n    \"erase-flash\": \"esptool.py erase_flash\",\n    \"install-hook\": \"lefthook install\",\n    \"uninstall-hook\": \"lefthook uninstall\"\n  },\n  \"type\": \"module\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+ssh://git@github.com/meganetaaan/stack-chan.git\"\n  },\n  \"keywords\": [\n    \"M5Stack\",\n    \"Robot\",\n    \"Moddable\",\n    \"Kawaii\"\n  ],\n  \"author\": \"Shinya Ishikawa\",\n  \"license\": \"Apache-2.0\",\n  \"bugs\": {\n    \"url\": \"https://github.com/meganetaaan/stack-chan/issues\"\n  },\n  \"homepage\": \"https://github.com/meganetaaan/stack-chan#readme\",\n  \"private\": true,\n  \"devDependencies\": {\n    \"@biomejs/biome\": \"2.1.1\",\n    \"@ffmpeg/core\": \"^0.11.0\",\n    \"@ffmpeg/ffmpeg\": \"^0.11.6\",\n    \"@google-cloud/text-to-speech\": \"^6.1.0\",\n    \"@microsoft/tsdoc\": \"^0.15.0\",\n    \"@moddable/typings\": \"^5.7.0\",\n    \"cross-env-default\": \"^5.1.3-1\",\n    \"lefthook\": \"^1.8.2\",\n    \"node-fetch\": \"^3.3.0\",\n    \"typedoc\": \"^0.28.4\",\n    \"typedoc-plugin-markdown\": \"^4.2.7\",\n    \"typescript\": \"^5.8.3\",\n    \"web-audio-engine\": \"^0.13.4\",\n    \"xs-dev\": \"^0.37.0\",\n    \"yargs\": \"^17.6.2\"\n  }\n}\n\n\n=== web/package.json ===\n{\n  \"name\": \"stackchan-web\",\n  \"version\": \"0.1.0\",\n  \"description\": \"Stack-chan development server\",\n  \"scripts\": {\n    \"dev\": \"live-server --verbose\"\n  },\n  \"keywords\": [],\n  \"author\": \"Shinya Ishikawa\",\n  \"devDependencies\": {\n    \"live-server\": \"^1.2.2\",\n    \"prettier\": \"^3.0.0\"\n  }\n}\n"
+}

@@ -1,0 +1,98 @@
+{
+  "name": "nebula-block-data__nebulablock-mcp-server",
+  "display_name": "nebulablock-mcp-server",
+  "description": "MCP server from Nebula-Block-Data/nebulablock-mcp-server",
+  "author": {
+    "name": "Nebula-Block-Data"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "-m", "src.main"],
+    "env": {
+      "NEBULA_BLOCK_API_KEY": "${user_config.nebula_block_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "nebula_block_api_key": {
+      "type": "string",
+      "title": "NebulaBlock API Key",
+      "description": "Your API key for the NebulaBlock API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# NebulaBlock API MCP\n\nThis repository hosts the official NebulaBlock API Model Context Protocol (MCP) server. This server integrates with the `fastmcp` library to expose the full range of NebulaBlock API functionalities as accessible tools, enabling seamless and efficient interaction within any MCP-compatible environment.\n\n## Project Structure\n\n```\n.\n├── src/\n│   ├── __init__.py\n│   ├── config.py\n│   ├── main.py\n│   ├── tools.py\n│   └── mcp_project.egg-info/\n├── tests/\n│   ├── __init__.py\n│   └── test_main.py\n├── scripts/\n├── docs/\n├── .env.example\n├── .gitignore\n├── pyproject.toml\n├── README.md\n└── uv.lock\n```\n\n*   `src/`: Contains the main application source code, including configuration and tool definitions.\n*   `tests/`: Contains unit and integration tests.\n*   `scripts/`: Reserved for utility scripts (e.g., setup, data generation).\n*   `docs/`: Reserved for supplementary documentation.\n*   `.env.example`: Example file for environment variables.\n*   `.gitignore`: Specifies intentionally untracked files to ignore.\n*   `pyproject.toml`: Project metadata and build system configuration, including dependencies and project information.\n*   `README.md`: This documentation file.\n*   `uv.lock`: Lock file for `uv` dependency management.\n\n## Installation and Setup\n\nTo set up and run this project, follow these steps:\n\n1.  **Clone the repository (if applicable):**\n    ```bash\n    git clone https://github.com/Nebula-Block-Data/api-mcp\n    cd mcp-project\n    ```\n\n2.  **Create a virtual environment:**\n    It's highly recommended to use a virtual environment to manage project dependencies.\n    ```bash\n    python3 -m venv .venv\n    ```\n\n3.  **Activate the virtual environment:**\n    *   **macOS/Linux:**\n```bash\nsource .venv/bin/activate\n```\n\n4.  **Install dependencies:**\n    This project uses `pyproject.toml` for dependency management. Install `setuptools` and then the project in editable mode.\n    ```bash\n    uv pip install -e .\n    ```\n    This will install `fastmcp` and any other dependencies specified in `pyproject.toml`.\n\n## Running the NebulaBlock API MCP Server\n\nTo start the NebulaBlock API MCP server:\n\n```bash\nuv run -m src.main\n```\n\nYou should see output similar to: `[05/29/25 17:32:58] INFO     Starting MCP server 'FastMCP' with transport 'stdio'`\n\n### Configuring API Key\n\nThe NebulaBlock API key can be configured in two ways:\n\n1.  **Using the `--api-key` command-line argument:**\n    You can provide the API key directly when running the application:\n    ```bash\n    python -m src.main --api-key your_nebula_block_api_key\n    ```\n    This method will override any API key set in the `.env` file.\n\n2.  **Using a `.env` file:**\n    Create a file named `.env` in the root directory of the project and add your API key to it:\n    ```\n    NEBULA_BLOCK_API_KEY=your_nebula_block_api_key\n    ```\n    The application will automatically load the API key from this file if the `--api-key` argument is not provided.\n\n## Running Tests\n\nTo run the unit tests, ensure your virtual environment is activated and `pytest` is installed (it will be installed with `pip install -e .`):\n\n```bash\npytest\n```\n\nYou should see output indicating that the tests passed.\n\n## Integrating with an MCP Client\n\nTo utilize the NebulaBlock API MCP server, you need to configure your MCP client (e.g., VS Code with an MCP extension) to connect to this server. Below is an example configuration for a `settings.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"nebula\": {\n      \"command\": \"~/path/to/uv\",\n      \"args\": [\n        \"--directory\",\n        \"~/path/to/nebulablock_mcp\",\n        \"run\",\n        \"-m\",\n        \"src.main\",\n        \"--api-key=YOUR_API_KEY\"\n      ]\n    }\n  }\n}\n```\n\n*   Replace `~/path/to/uv` with the actual path to your `uv` executable.\n*   Replace `~/path/to/nebulablock_mcp` with the actual path to your project directory.\n*   Replace `YOUR_API_KEY` with your actual NebulaBlock API key.\n\n## License\n\nThis project is licensed under the MIT License. See the `LICENSE` file (if created) for details.",
+  "category": "AI Tools",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-project": {
+        "command": "uv",
+        "args": ["run", "-m", "src.main"],
+        "env": {}
+      },
+      "mcp-project-api-key": {
+        "command": "python",
+        "args": ["-m", "src.main", "--api-key", "your_nebula_block_api_key"],
+        "env": {}
+      },
+      "mcp-project-configured": {
+        "command": "uv",
+        "args": ["--directory", "~/path/to/nebulablock_mcp", "run", "-m", "src.main", "--api-key=YOUR_API_KEY"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Nebula-Block-Data",
+    "repo": "nebulablock-mcp-server",
+    "url": "https://github.com/Nebula-Block-Data/nebulablock-mcp-server",
+    "name": "nebula-block-data__nebulablock-mcp-server",
+    "path": null,
+    "stars": 1,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "2983eb853dbe806470430f29d52bece59e83c1d0"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:16.367Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-project\"\nversion = \"0.1.0\"\ndescription = \"A simple project demonstrating fastmcp integration.\"\nauthors = [\n    { name = \"Roo\", email = \"roo@example.com\" },\n]\ndependencies = [\n    \"fastmcp==2.5.1\",\n    \"pydantic-settings==2.9.1\",\n    \"requests==2.32.3\",\n]\nrequires-python = \">=3.10\"\nreadme = \"README.md\"\nlicense = { text = \"MIT\" }\nkeywords = [\"fastmcp\", \"python\"]\n\n[project.urls]\nHomepage = \"https://github.com/yourusername/mcp-project\"\nIssues = \"https://github.com/yourusername/mcp-project/issues\"\n\n[tool.poetry.group.dev.dependencies]\npytest = \"^8.2.2\"\npytest-asyncio = \"^0.23.0\"\n\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n\n[tool.pytest.ini_options]\npythonpath = [\".\"]"
+}

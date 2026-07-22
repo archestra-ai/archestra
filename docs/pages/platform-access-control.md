@@ -263,11 +263,12 @@ The following table lists all available permissions that can be assigned to cust
 | `optimizationRule:delete` | Remove optimization rules |
 | `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
 | `organizationSettings:update` | Customize organization appearance, authentication, etc |
-| `project:read` | View projects and the chats inside them |
+| `project:read` | View projects and your own chats inside them |
 | `project:create` | Create projects |
 | `project:update` | Edit project descriptions, instructions, and sharing |
 | `project:delete` | Delete projects |
 | `project:admin` | Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role). |
+| `project:read-all` | View chats that other members started in any project you can access. Without this, you only see the chats you started yourself — including in projects you own. |
 | `sandbox:execute` | Run commands and upload/download files in code execution sandboxes |
 | `scheduledTask:read` | View scheduled tasks and their run history |
 | `scheduledTask:create` | Create new scheduled tasks and trigger runs |

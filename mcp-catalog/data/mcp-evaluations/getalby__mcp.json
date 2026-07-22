@@ -1,0 +1,118 @@
+{
+  "name": "getalby__mcp",
+  "display_name": "mcp",
+  "description": "Connect a bitcoin lightning wallet to your LLM using Nostr Wallet Connect and Model Context Protocol",
+  "author": {
+    "name": "getAlby"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@getalby/mcp"],
+    "env": {
+      "NWC_CONNECTION_STRING": "${user_config.nwc_connection_string}",
+      "MODE": "${user_config.mode}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "nwc_connection_string": {
+      "type": "string",
+      "title": "NWC Connection String",
+      "description": "Your Nostr Wallet Connect connection secret.",
+      "sensitive": true,
+      "required": true
+    },
+    "mode": {
+      "type": "string",
+      "title": "Server Mode",
+      "description": "Set the server operating mode (e.g., HTTP for remote access).",
+      "default": "STDIO",
+      "required": false
+    }
+  },
+  "readme": "# Alby Bitcoin Payments MCP Server\n\nConnect a bitcoin lightning wallet to your LLM using Nostr Wallet Connect ([NWC](https://nwc.dev)).\n\nThis MCP server uses the [official MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)\n\nThis MCP server has knowledge of [NWC](https://nwc.dev/), [LNURL](https://github.com/lnurl/luds) and [L402](https://docs.lightning.engineering/the-lightning-network/l402) using [Alby SDK](https://github.com/getAlby/js-sdk) and [Alby Lightning Tools](https://github.com/getAlby/js-lightning-tools).\n\n<a href=\"https://glama.ai/mcp/servers/@getAlby/mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@getAlby/mcp/badge\" />\n</a>\n\n## Quick Start\n\n> In case you get stuck, see troubleshooting section below.\n\n### Use the Alby-Hosted MCP Server\n\nIf your agent supports remote MCP servers - SSE (e.g. N8N) or HTTP Streamable transports, you can connect to Alby's MCP server.\n\n- SSE: `https://mcp.getalby.com/sse`\n- HTTP Streamable: `https://mcp.getalby.com/mcp`\n\n#### Authentication\n\nBoth require providing an NWC connection secret as authentication, either as `Bearer` authentication (preferred) or via the `nwc` query parameter.\n\n##### Bearer Auth\n\nExample: `Authorization: Bearer nostr+walletconnect://...`\n\n> If your agent UI supports bearer auth, just paste the connection secret into the bearer auth field.\n\n##### Query Parameter\n\nIf your agent doesn't support bearer auth, you can pass the NWC connection secret as a query parameter.\n\nExample: `https://mcp.getalby.com/sse?nwc=ENCODED_CONNECTION_SECRET` or `https://mcp.getalby.com/mcp?nwc=ENCODED_CONNECTION_SECRET`\n\n_To get ENCODED_CONNECTION_SECRET, open browser devtools (right click -> inspect) and enter this in the console, with your own NWC connection secret set:_\n\n```js\nencodeURIComponent(\"nostr+walletconnect://...\");\n```\n\nIn case there is a message asking for confirmation for pasting, follow the instructions, and then enter the above command again.\n\nOnce the command has run, copy the output and replace ENCODED_CONNECTION_SECRET. It will look like this: `nostr%2Bwalletconnect%3A%2F%2F...`\n\n### Add to Claude Web or Claude Desktop\n\n#### Use the remote Alby MCP server\n\nCurrently, at least a Claude Pro subscription is required to be able to connect to remote MCP servers.\n\n1. Go to Settings -> Integrations\n2. Click on \"Add Integration\"\n3. Call it `alby`\n4. What is the endpoint URI: `https://mcp.getalby.com/mcp?nwc=ENCODED_NWC_URL` (see above for instructions)\n\n#### Client-side\n\nAdd this to your claude_desktop_config.json:\n\n```json\n{\n  \"mcpServers\": {\n    \"nwc\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@getalby/mcp\"],\n      \"env\": {\n        \"NWC_CONNECTION_STRING\": \"YOUR NWC CONNECTION STRING HERE\"\n      }\n    }\n  }\n}\n```\n\n### Add to Goose Desktop\n\n1. Open Goose Desktop\n2. Go To Settings -> Advanced Settings\n3. Click on \"Add custom Extension\"\n4. Call it `alby`, and change the type to `HTTP Streamable`\n5. What is the SSE endpoint URI: `https://mcp.getalby.com/mcp`\n6. Timeout: 30\n7. Description: no\n8. environment variables: no\n\n### Add to Goose CLI\n\n#### Use the Alby MCP server\n\n1. Type `goose configure`\n2. Add extension -> Remote Extension (HTTP Streamable)\n3. Call it `alby`\n4. What is the HTTP Streamable endpoint URI: `https://mcp.getalby.com/mcp`\n5. Timeout: 30\n6. Description: no\n7. environment variables: no\n8. add custom headers: yes\n9. header name: `Authorization`\n10. header value: `Bearer nostr+walletconnect://...` (replace with your connection secret)\n\n#### Client-side\n\n1. Type `goose configure`\n2. Add extension -> Command Line Extension\n3. Call it `alby`\n4. What command should be run: `npx -y @getalby/mcp`\n5. Timeout: 30\n6. Description: no\n7. environment variables: yes\n8. environment variable name: `NWC_CONNECTION_STRING`\n9. environment variable value: `nostr+walletconnect://...` (your NWC connection secret here)\n\n### Add to Cline\n\n> Copy the below and paste it into a cline prompt. It should prompt you to update the connection string.\n\n```json\nAdd the following to my MCP servers list:\n\n\"nwc\": {\n  \"command\": \"npx\",\n  \"args\": [\"-y\", \"@getalby/mcp\"],\n  \"env\": {\n    \"NWC_CONNECTION_STRING\": \"nostr+walletconnect://...\"\n  },\n  \"disabled\": false,\n  \"autoApprove\": []\n}\n```\n\n### Add to Claude Code\n\n#### Use the Alby MCP server\n\n```bash\nclaude mcp add --transport http alby https://mcp.getalby.com/mcp --header \"Authorization: Bearer nostr+walletconnect://...\"\n```\n\n### Add to N8N via SSE\n\nYou can use the native N8N MCP Client tool connected to an AI agent. Enter your SSE endpoint, set authentication to \"Bearer\" and paste your NWC connection secret.\n\nTested with OpenRouter + anthropic/claude-3.7-sonnet\n\nSee the [N8N workflow](examples/n8n-sse) for a simple example\n\n### Add to N8N via STDIO (Community Node)\n\nCurrently this MCP server only works via command line (STDIO).\n\nYou can install the [n8n-nodes-mcp](https://github.com/nerding-io/n8n-nodes-mcp) community node and run n8n with tools enabled e.g.\n\n```bash\nN8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true npx n8n\n```\n\nCreate a blank workflow and add an AI agent node. Configure your LLM model and add a new tool \"MCP Client\" (which will have a cube next to it showing it's a community node).\n\nConfigure the MCP Client by adding a credential with Command Line (STDIO) selected.\n\ncommand: `npx`\narguments: `-y @getalby/mcp`\nenvironments `NWC_CONNECTION_STRING=nostr+walletconnect://your_key_here` (create the whole line in a text editor and paste it in, since the password field cannot be switched to plaintext)\n\nSee the [N8N paid chat workflow](examples/n8n-paid-chat-stdio) for a full example\n\n### Add to Windsurf\n\n#### Use the remote Alby MCP server\n\n1. Download and open your Windsurf Editor\n2. Click on \"Windsurf - Settings\" in the toolbar at the bottom -> \"Advanced Settings\" -> \"Cascade\" -> Plugins (MCP Servers): Click on \"Manage plugins\" -> \"View raw config\" -> you'll see your \"mcp_config.json\"\n3. Paste this to your mcp_config.json:\n\n```json\n{\n  \"mcpServers\": {\n    \"alby\": {\n      \"serverUrl\": \"https://mcp.getalby.com/sse?nwc=ENCODED_NWC_URL\"\n    }\n  }\n}\n```\n\n4. Replace \"ENCODED_NWC_URL\" as descripted above. Click \"Save\" and restart the Windsurf editor.\n\n## Modes\n\n### STDIO\n\nBy default NWC MCP Server runs locally in `STDIO` mode.\n\n### HTTP\n\nYou can set the following environment variable: `MODE=HTTP` which will enable Streamable HTTP (`http://localhost:3000/mcp`) and SSE (`http://localhost:3000/sse` Note: SSE is deprecated).\n\nHTTP requires bearer authorization, where the token is a wallet's NWC connection secret. See the authentication section further above in the README.\n\n## From Source\n\n### Prerequisites\n\n- Node.js 20+\n- Yarn\n- A connection string from a lightning wallet that supports NWC\n\n### Installation\n\n```bash\nyarn install\n```\n\n### Building\n\n```bash\nyarn build\n```\n\n### Add your NWC connection\n\nCopy `.env.example` to `.env` and update your connection string\n\n### Inspect the tools (use/test without an LLM)\n\n`yarn inspect`\n\n### Supported Tools\n\nSee the [tools directory](./src/tools)\n\n## Troubleshooting\n\n### Model Usage\n\nMake sure you use a decent model (e.g. Claude Sonnet 3.7) otherwise the MCP server will not work.\n\n### Failure to connect to wallet, secret missing\n\nMake sure you copied the entire NWC connection secret, without spaces\n\n### Contact Alby Support\n\nVisit [support.getalby.com](https://support.getalby.com) and we're happy to help you get the MCP server working.\n",
+  "category": "Finance",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "getalby-mcp-stdio": {
+        "command": "npx",
+        "args": ["-y", "@getalby/mcp"],
+        "env": {
+          "NWC_CONNECTION_STRING": "YOUR NWC CONNECTION STRING HERE"
+        }
+      },
+      "getalby-mcp-http": {
+        "command": "npx",
+        "args": ["-y", "@getalby/mcp"],
+        "env": {
+          "MODE": "HTTP",
+          "NWC_CONNECTION_STRING": "YOUR NWC CONNECTION STRING HERE"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "getAlby",
+    "repo": "mcp",
+    "url": "https://github.com/getAlby/mcp",
+    "name": "getalby__mcp",
+    "path": null,
+    "stars": 30,
+    "contributors": 4,
+    "issues": 7,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "bad3d964c0b2483fd7085370e4f204551a9a9db6"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:08.598Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@getalby/lightning-tools",
+      "importance": 9
+    },
+    {
+      "name": "@getalby/sdk",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "express",
+      "importance": 8
+    },
+    {
+      "name": "websocket-polyfill",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@getalby/mcp\",\n  \"description\": \"MCP server for controlling a Lightning wallet using Nostr Wallet Connect\",\n  \"repository\": \"https://github.com/getAlby/mcp.git\",\n  \"version\": \"1.1.1\",\n  \"type\": \"module\",\n  \"main\": \"build/index.js\",\n  \"bin\": {\n    \"mcp\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build/**/*\"\n  ],\n  \"scripts\": {\n    \"prepack\": \"yarn build\",\n    \"build\": \"tsc && chmod 755 build/index.js\",\n    \"start\": \"node build/index.js\",\n    \"start:http\": \"MODE=HTTP node build/index.js\",\n    \"inspect\": \"npx @modelcontextprotocol/inspector node build/index.js\"\n  },\n  \"keywords\": [\n    \"lightning\",\n    \"nostr\",\n    \"nwc\",\n    \"wallet\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"ai\"\n  ],\n  \"author\": \"Alby contributors\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@getalby/lightning-tools\": \"^5.2.0\",\n    \"@getalby/sdk\": \"^5.1.1\",\n    \"@modelcontextprotocol/sdk\": \"^1.13.0\",\n    \"@types/node\": \"^20.11.5\",\n    \"dotenv\": \"^16.4.7\",\n    \"express\": \"^5.1.0\",\n    \"typescript\": \"^5.3.3\",\n    \"websocket-polyfill\": \"0.0.3\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"^5.0.2\"\n  }\n}\n"
+}

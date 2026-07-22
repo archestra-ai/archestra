@@ -1,0 +1,92 @@
+{
+  "name": "matvey-kuk__gaggimate-mcp",
+  "display_name": "gaggimate-mcp",
+  "description": "MCP server for Gaggimate espresso machine profiles - AI-powered optimization for perfect espresso extraction",
+  "author": {
+    "name": "Matvey-Kuk"
+  },
+  "server": {
+    "type": "local",
+    "command": "npx",
+    "args": ["-y", "gaggimate-mcp"],
+    "env": {}
+  },
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "user_config": {
+    "GAGGIMATE_HOST": {
+      "type": "string",
+      "title": "Gaggimate Host",
+      "description": "Hostname or IP address of the Gaggimate device",
+      "default": "localhost"
+    },
+    "GAGGIMATE_PROTOCOL": {
+      "type": "string",
+      "title": "Gaggimate Protocol",
+      "description": "WebSocket protocol (ws or wss)",
+      "default": "ws"
+    }
+  },
+  "category": "IoT",
+  "quality_score": 75,
+  "github_info": {
+    "owner": "Matvey-Kuk",
+    "repo": "gaggimate-mcp",
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null,
+    "path": null,
+    "url": "https://github.com/Matvey-Kuk/gaggimate-mcp",
+    "name": "matvey-kuk__gaggimate-mcp"
+  },
+  "programming_language": "JavaScript",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "tools": [
+    {
+      "name": "list_profiles",
+      "description": "List all available espresso profiles"
+    },
+    {
+      "name": "get_profile",
+      "description": "Get details of a specific espresso profile"
+    },
+    {
+      "name": "update_ai_profile",
+      "description": "Update the AI-optimized espresso profile"
+    },
+    {
+      "name": "list_shot_history",
+      "description": "List historical espresso shot data"
+    },
+    {
+      "name": "get_shot",
+      "description": "Get details of a specific espresso shot"
+    }
+  ],
+  "prompts": [],
+  "readme": "# Gaggimate MCP Server\n\nAI-powered espresso machine profile optimization via Model Context Protocol.\n\n## Features\n- Continuous learning and improvement of extraction parameters\n- WebSocket-based communication with espresso machine\n- Real-time shot data analysis\n- Automatic profile optimization\n\n## Installation\n\nQuick start:\n```bash\nGAGGIMATE_HOST=192.168.1.100 npx -y gaggimate-mcp\n```",
+  "framework": null,
+  "last_scraped_at": "2025-12-25T00:00:00.000Z",
+  "evaluation_model": null,
+  "dependencies": [],
+  "raw_dependencies": null
+}

@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -156,7 +163,9 @@ async function runClaudeSettingsMerge(params: {
         HOME: home,
         // The script exports one "Name: Value" per line — the client-attribution
         // header plus the passthrough key header — so the merge dedupes both.
-        ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS: `${AGENT_ID_HEADER_LINE}\nX-Archestra-Virtual-Key: arch_passthroughcafe`,
+        // The continuation line arrives indented (the script's env-assignment
+        // block indents multi-line values); the merge must strip it.
+        ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS: `${AGENT_ID_HEADER_LINE}\n  X-Archestra-Virtual-Key: arch_passthroughcafe`,
       },
     });
     return JSON.parse(await readFile(settingsPath, "utf8"));
@@ -402,10 +411,61 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain(`select "${MCP.serverName}"`);
   });
 
+  test("claude-code: installs the startup guard and wraps claude in the shell profiles", () => {
+    const script = renderSetupScript(fullContext("claude-code"));
+    // The guard file is written and made executable…
+    expect(script).toContain(
+      'cat > "$HOME/.archestra/claude-startup-guard.sh"',
+    );
+    expect(script).toContain(
+      'chmod +x "$HOME/.archestra/claude-startup-guard.sh"',
+    );
+    // …and the profile hook is marker-delimited so re-runs never duplicate it.
+    expect(script).toContain("# >>> archestra claude guard >>>");
+    expect(script).toContain("# <<< archestra claude guard <<<");
+    expect(script).toContain('command claude "$@"');
+    // The guard probes every configured remote, in pre-loader order.
+    expect(script).toContain("LLM proxy (Anthropic)");
+    expect(script).toContain(`MCP gateway (${MCP.serverName})`);
+    expect(script).toContain(`Skills marketplace (${SKILLS.marketplaceName})`);
+    expect(script).toContain("ARCHESTRA_CLAUDE_GUARD");
+    // The single health URL is derived from the connect-wired data-plane
+    // URLs, so the guard can tell a resource the platform reports down
+    // (prompt immediately) from an unreachable platform (retry ladder).
+    expect(script).toContain(
+      "https://archestra.example.com/v1/health?mcp=prod-gateway&llm=profile-123",
+    );
+  });
+
+  test("only claude-code gets the startup guard", () => {
+    for (const clientId of ["codex", "copilot-cli", "cursor"] as const) {
+      expect(renderSetupScript(fullContext(clientId))).not.toContain(
+        "claude-startup-guard",
+      );
+      expect(renderSetupScript(fullContext(clientId, "windows"))).not.toContain(
+        "claude-startup-guard",
+      );
+    }
+  });
+
   test("claude-code (windows): next steps carry the same OAuth guidance", () => {
     const script = renderSetupScript(fullContext("claude-code", "windows"));
     expect(script).toContain("claude /mcp");
     expect(script).toContain(`select "${MCP.serverName}"`);
+  });
+
+  test("claude-code (windows): installs the PowerShell startup guard and profile wrapper", () => {
+    const script = renderSetupScript(fullContext("claude-code", "windows"));
+    expect(script).toContain("claude-startup-guard.ps1");
+    expect(script).toContain("# >>> archestra claude guard >>>");
+    expect(script).toContain("# <<< archestra claude guard <<<");
+    expect(script).toContain("function claude {");
+    // Same probe set and retry contract as the bash guard.
+    expect(script).toContain("LLM proxy (Anthropic)");
+    expect(script).toContain(`MCP gateway (${MCP.serverName})`);
+    expect(script).toContain(`Skills marketplace (${SKILLS.marketplaceName})`);
+    expect(script).toContain("$RetryTotalSeconds = 15");
+    expect(script).toContain("ARCHESTRA_CLAUDE_GUARD");
   });
 
   test("claude-code bedrock: keeps the bearer token out of settings.json", () => {
@@ -448,9 +508,11 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain("X-Archestra-Virtual-Key: arch_passthroughcafe");
     expect(script).toContain("ANTHROPIC_CUSTOM_HEADERS");
     // The base URL is still set; the subscription token passes through, so no
-    // ANTHROPIC_AUTH_TOKEN is injected (that would override the subscription).
+    // ANTHROPIC_AUTH_TOKEN is injected into the settings merge (that would
+    // override the subscription). The key name itself still appears in the
+    // startup guard's disconnect strip list.
     expect(script).toContain("ANTHROPIC_BASE_URL");
-    expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
+    expect(script).not.toContain("ARCHESTRA_SET_ENV_ANTHROPIC_AUTH_TOKEN");
   });
 
   test("claude-code anthropic passthrough: always sends the client-id header, no virtual key when there's no passthrough key", () => {
@@ -492,8 +554,9 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain("X-Archestra-Virtual-Key: arch_passthroughcafe");
     expect(script).toContain("CLAUDE_CODE_USE_BEDROCK");
     // Passthrough: the user's own AWS credentials keep working — no bearer
-    // token export is printed.
-    expect(script).not.toContain("AWS_BEARER_TOKEN_BEDROCK");
+    // token export is printed. (The startup guard's disconnect note may still
+    // *mention* the variable; only the export line injects a secret.)
+    expect(script).not.toContain("export AWS_BEARER_TOKEN_BEDROCK");
   });
 
   test("claude-code passthrough merge: preserves existing headers, no duplicate on re-run", async () => {
@@ -518,6 +581,54 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
       lines.filter((l) => l.startsWith("X-Archestra-Virtual-Key:")),
     ).toEqual(["X-Archestra-Virtual-Key: arch_passthroughcafe"]);
     expect(second.env.ANTHROPIC_CUSTOM_HEADERS).toContain("X-Foo: bar");
+  });
+
+  test("claude-code settings merge: expands $HOME, creates the config dir, and backs up on re-run", async () => {
+    // Regression: sh()-quoting the config path kept $HOME literal, so the
+    // merge block dropped a junk ./'$HOME' dir in the cwd, never took the
+    // promised backup, and crashed the whole script (set -e) on a machine
+    // without ~/.claude. Run the real rendered block against a fresh HOME.
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: null,
+      skills: null,
+      proxy: ANTHROPIC_PASSTHROUGH_PROXY,
+    });
+    const start = script.indexOf("if command -v python3");
+    const endMarker = "\nARCHESTRA_MANUAL\nfi";
+    const end = script.indexOf(endMarker, start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const block = `set -euo pipefail\n${script.slice(start, end + endMarker.length)}\n`;
+
+    const home = await mkdtemp(path.join(tmpdir(), "archestra-home-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "archestra-cwd-"));
+    try {
+      const blockFile = path.join(cwd, "merge-block.sh");
+      await writeFile(blockFile, block, "utf8");
+      const env = { ...process.env, HOME: home };
+
+      // Fresh machine: no ~/.claude yet — the merge creates it, no crash.
+      await execFileAsync("bash", [blockFile], { cwd, env });
+      const settingsPath = path.join(home, ".claude", "settings.json");
+      const settings = JSON.parse(await readFile(settingsPath, "utf8"));
+      expect(settings.env.ANTHROPIC_BASE_URL).toBe(
+        ANTHROPIC_PASSTHROUGH_PROXY.url,
+      );
+      // No junk literal-$HOME directory in the cwd.
+      await expect(stat(path.join(cwd, "$HOME"))).rejects.toThrow();
+      // Nothing existed on the first run, so no backup yet…
+      await expect(stat(`${settingsPath}.archestra-backup`)).rejects.toThrow();
+      // …and a re-run backs up the now-existing file, exactly once.
+      await execFileAsync("bash", [blockFile], { cwd, env });
+      const backup = JSON.parse(
+        await readFile(`${settingsPath}.archestra-backup`, "utf8"),
+      );
+      expect(backup).toEqual(settings);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
 
   test("codex: manages a marker-delimited TOML block and logs in via stdin", () => {
@@ -760,8 +871,10 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("-split ':',2");
     expect(script).toContain("$arch_hname");
     expect(script).toContain("ANTHROPIC_BASE_URL");
-    // Subscription passes through — no auth token injected.
-    expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
+    // Subscription passes through — no auth token injected into the settings
+    // merge. (The key name itself still appears in the startup guard's
+    // disconnect strip list.)
+    expect(script).not.toContain("-NotePropertyName 'ANTHROPIC_AUTH_TOKEN'");
   });
 
   test("claude-code bedrock passthrough: appends the attribution headers (PowerShell)", () => {
@@ -935,9 +1048,10 @@ describe("color output", () => {
 describe("idempotent re-runs", () => {
   test("config backups are taken once, never clobbering the pristine copy", () => {
     const claude = renderSetupScript(fullContext("claude-code"));
-    // Guarded so a second run keeps the original (pre-Archestra) backup.
+    // Guarded so a second run keeps the original (pre-Archestra) backup. The
+    // path is double-quoted: $HOME must expand for the guard to ever match.
     expect(claude).toContain(
-      "[ ! -f '$HOME/.claude/settings.json.archestra-backup' ]",
+      '[ ! -f "$HOME/.claude/settings.json.archestra-backup" ]',
     );
 
     const codex = renderSetupScript(fullContext("codex"));

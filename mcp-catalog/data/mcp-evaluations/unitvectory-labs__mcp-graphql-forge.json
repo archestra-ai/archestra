@@ -1,0 +1,111 @@
+{
+  "name": "unitvectory-labs__mcp-graphql-forge",
+  "display_name": "mcp-graphql-forge",
+  "description": "A lightweight, configuration-driven MCP server that exposes curated GraphQL queries as modular tools, enabling intentional API interactions from your agents.",
+  "author": {
+    "name": "UnitVectorY-Labs"
+  },
+  "server": {
+    "command": "./mcp-graphql-forge",
+    "args": [],
+    "env": {
+      "FORGE_CONFIG": "${user_config.forge_config}",
+      "FORGE_DEBUG": "${user_config.forge_debug}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "forge_config": {
+      "type": "string",
+      "title": "Forge Configuration Path",
+      "description": "Specifies the path to the folder containing the YAML configuration files (forge.yaml and tool definitions).",
+      "required": false,
+      "default": "."
+    },
+    "forge_debug": {
+      "type": "boolean",
+      "title": "Enable Debug Logging",
+      "description": "If set to true, enables detailed debug logging to stderr, including the obtained token and the full HTTP request/response for GraphQL calls.",
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "[![GitHub release](https://img.shields.io/github/release/UnitVectorY-Labs/mcp-graphql-forge.svg)](https://github.com/UnitVectorY-Labs/mcp-graphql-forge/releases/latest) [![License](https://img.shields.io/badge/license-MIT-blue)](https://opensource.org/licenses/MIT) [![Active](https://img.shields.io/badge/Status-Active-green)](https://guide.unitvectorylabs.com/bestpractices/status/#active) [![Go Report Card](https://goreportcard.com/badge/github.com/UnitVectorY-Labs/mcp-graphql-forge)](https://goreportcard.com/report/github.com/UnitVectorY-Labs/mcp-graphql-forge) [![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/UnitVectorY-Labs/mcp-graphql-forge)](https://archestra.ai/mcp-catalog/unitvectory-labs__mcp-graphql-forge)\n\n# mcp-graphql-forge\n\nA lightweight, configuration-driven MCP server that exposes curated GraphQL queries as modular tools, enabling intentional API interactions from your agents.\n\n## Purpose\n\n`mcp-graphql-forge` lets you turn any GraphQL endpoint into an MCP server whose tools are defined in YAML files that specify the GraphQL queries and their parameters. This allows you to create a modular, secure, and minimal server that can be easily extended without modifying the application code.\n\n## Releases\n\nAll official versions of **mcp-graphql-forge** are published on [GitHub Releases](https://github.com/UnitVectorY-Labs/mcp-graphql-forge/releases). Since this MCP server is written in Go, each release provides pre-compiled executables for macOS, Linux, and Windows—ready to download and run.\n\nAlternatively, if you have Go installed, you can install **mcp-graphql-forge** directly from source using the following command:\n\n```bash\ngo install github.com/UnitVectorY-Labs/mcp-graphql-forge@latest\n```\n\n## Configuration\n\nThe server is configured using command line parameters, environment variables, and YAML files.\n\n\n### Command Line Parameters\n\n- `--forgeConfig`: Specifies the path to the folder containing the YAML configuration files (`forge.yaml` and tool definitions). If set, this takes precedence over the `FORGE_CONFIG` environment variable. If neither is set, the application will return an error and exit.\n- `--forgeDebug`: If provided, enables detailed debug logging to `stderr`, including the obtained token and the full HTTP request/response for GraphQL calls. If set, this takes precedence over the `FORGE_DEBUG` environment variable.\n\n### Environment Variables\n\n- `FORGE_CONFIG`: Specifies the path to the folder containing the YAML configuration files (`forge.yaml` and tool definitions). Used if `--forgeConfig` is not set.\n- `FORGE_DEBUG`: If set to `true` (case-insensitive), enables detailed debug logging to `stderr`, including the obtained token and the full HTTP request/response for GraphQL calls. Used if `--forgeDebug` is not set.\n\n### forge.yaml\n\nThe configuration folder uses a special configuration file `forge.yaml` that specifies the common configuration attributes.\n\nThe following attributes can be specified in the file:\n\n- `name`: The name of the MCP server\n- `url`: The URL of the GraphQL endpoint\n- `token_command`: The command to use to request the Bearer token for the `Authorization` header (optional)\n- `env`: A map of environment variables to pass to the token command (optional)\n- `env_passthrough`: If set to `true`, passes all environment variables used when invoking mcp-graphql-forge to the token command; if used in conjunction with `env`, the variables from `env` will take precedence (optional, defaults to `false`)\n\nAn example configuration would look like:\n\n```yaml\nname: \"ExampleServer\"\nurl: \"https://api.github.com/graphql\"\ntoken_command: \"gh auth token\"\n```\n\n### Tool Configuration\n\nAll other YAML files located in the folder are treated as configuration files. Each YAML file defines a tool for the MCP server.\n\n\nThe following attributes can be specified in the file:\n\n- `name`: The name of the MCP tool\n- `description`: The description of the MCP tool\n- `query`: The GraphQL query to execute\n- `inputs`: The list of inputs defined by the MCP tool and passed into the GraphQL query as variables\n  - `name`: The name of the input\n  - `type`: The parameter type; can be 'string' or 'number'\n  - `description`: The description of the parameter for the MCP tool to use\n  - `required`: Boolean value specifying if the attribute is required\n- `annotations`: MCP annotations that provide hints about the tool's behavior (optional)\n  - `title`: A human-readable title for the tool, useful for UI display (optional)\n  - `readOnlyHint`: If true, indicates the tool does not modify its environment (optional, default: false)\n  - `destructiveHint`: If true, the tool may perform destructive updates (only meaningful when readOnlyHint is false) (optional, default: true)\n  - `idempotentHint`: If true, calling the tool repeatedly with the same arguments has no additional effect (only meaningful when readOnlyHint is false) (optional, default: false)\n  - `openWorldHint`: If true, the tool may interact with an \"open world\" of external entities (optional, default: true)\n\nAn example configuration would look like:\n\n```yaml\nname: \"getUser\"\ndescription: \"Fetch basic information about a user by `login`, including their name, URL, and location.\"\nquery: |\n  query ($login: String!) {\n    user(login: $login) {\n      id\n      name\n      url\n      location\n    }\n  }\ninputs:\n  - name: \"login\"\n    type: \"string\"\n    description: \"The user `login` that uniquely identifies their account.\"\n    required: true\nannotations:\n  title: \"Get User Information\"\n  readOnlyHint: true\n  destructiveHint: false\n  idempotentHint: true\n  openWorldHint: true\n```\n\n\n### Run in Streamable HTTP Mode\n\nBy default the server runs in stdio mode, but if you want to run in streamable HTTP mode, you can specify the `--http` command line flag with the server address and port (ex: `--http 8080`). This will run the server with the following endpoint that your MCP client can connect to:\n\n`http://localhost:8080/mcp`\n\n```bash\n./mcp-graphql-forge --http 8080\n```\n\nIf you do not specify `token_command` in the configuration, the \"Authorization\" header, if passed to the MCP server, will be passed through from the incoming MCP request to the backend GraphQL endpoint.\n\n## Limitations\n\n- Each instance of `mcp-graphql-forge` can only be used with a single GraphQL server at a single URL.\n- The GraphQL queries are all exposed as Tools and not as Resources, even if they are not mutations.\n",
+  "category": "Development",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-graphql-forge": {
+        "command": "mcp-graphql-forge",
+        "args": [],
+        "env": {}
+      },
+      "mcp-graphql-forge-sse": {
+        "command": "mcp-graphql-forge",
+        "args": ["--sse", "localhost:8080"],
+        "env": {}
+      },
+      "mcp-graphql-forge-configured": {
+        "command": "mcp-graphql-forge",
+        "args": [],
+        "env": {
+          "FORGE_CONFIG": "/path/to/your/config"
+        }
+      },
+      "mcp-graphql-forge-debug": {
+        "command": "mcp-graphql-forge",
+        "args": [],
+        "env": {
+          "FORGE_DEBUG": "true"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "UnitVectorY-Labs",
+    "repo": "mcp-graphql-forge",
+    "url": "https://github.com/UnitVectorY-Labs/mcp-graphql-forge",
+    "name": "mcp-graphql-forge",
+    "path": null,
+    "stars": 1,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4330ebb5511c1de22c712fd9e7a37d0a9f46623f"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:53.368Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 9
+    },
+    {
+      "name": "gopkg.in/yaml.v3",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/UnitVectorY-Labs/mcp-graphql-forge\n\ngo 1.24.5 // GOVERSION\n\nrequire (\n\tgithub.com/mark3labs/mcp-go v0.36.0\n\tgopkg.in/yaml.v3 v3.0.1\n)\n\nrequire (\n\tgithub.com/bahlo/generic-list-go v0.2.0 // indirect\n\tgithub.com/buger/jsonparser v1.1.1 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/invopop/jsonschema v0.13.0 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/wk8/go-ordered-map/v2 v2.1.8 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n)\n"
+}

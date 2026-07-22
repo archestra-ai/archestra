@@ -85,3 +85,70 @@ describe("chatOpsRunRegistry", () => {
     run.unregister();
   });
 });
+
+describe("chatOpsRunRegistry supersede", () => {
+  const TG_THREAD = {
+    provider: "telegram",
+    channelId: "1399696",
+    threadId: "1399696",
+  } as const;
+
+  test("a newer same-sender run aborts the older one", () => {
+    const older = chatOpsRunRegistry.register(TG_THREAD, {
+      supersede: { senderId: "u1", sequence: 100 },
+    });
+    const newer = chatOpsRunRegistry.register(TG_THREAD, {
+      supersede: { senderId: "u1", sequence: 101 },
+    });
+
+    expect(older.signal.aborted).toBe(true);
+    expect(newer.signal.aborted).toBe(false);
+
+    older.unregister();
+    newer.unregister();
+  });
+
+  test("a stale run registering after a newer one is aborted immediately", () => {
+    // Concurrent dispatch can invert registration order; the sequence decides.
+    const newer = chatOpsRunRegistry.register(TG_THREAD, {
+      supersede: { senderId: "u1", sequence: 101 },
+    });
+    const stale = chatOpsRunRegistry.register(TG_THREAD, {
+      supersede: { senderId: "u1", sequence: 100 },
+    });
+
+    expect(newer.signal.aborted).toBe(false);
+    expect(stale.signal.aborted).toBe(true);
+
+    newer.unregister();
+    stale.unregister();
+  });
+
+  test("does not touch other senders' runs in the same thread", () => {
+    const alice = chatOpsRunRegistry.register(TG_THREAD, {
+      supersede: { senderId: "alice", sequence: 100 },
+    });
+    const bob = chatOpsRunRegistry.register(TG_THREAD, {
+      supersede: { senderId: "bob", sequence: 101 },
+    });
+
+    expect(alice.signal.aborted).toBe(false);
+    expect(bob.signal.aborted).toBe(false);
+
+    alice.unregister();
+    bob.unregister();
+  });
+
+  test("runs registered without supersede are never superseded", () => {
+    const plain = chatOpsRunRegistry.register(TG_THREAD);
+    const followUp = chatOpsRunRegistry.register(TG_THREAD, {
+      supersede: { senderId: "u1", sequence: 101 },
+    });
+
+    expect(plain.signal.aborted).toBe(false);
+    expect(followUp.signal.aborted).toBe(false);
+
+    plain.unregister();
+    followUp.unregister();
+  });
+});

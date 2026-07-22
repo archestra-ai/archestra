@@ -1,0 +1,78 @@
+{
+  "name": "pskill9__web-search",
+  "display_name": "web-search",
+  "description": "Web search using free google search (NO API KEYS REQUIRED)",
+  "author": {
+    "name": "pskill9"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Web Search MCP Server\n\nA Model Context Protocol (MCP) server that enables free web searching using Google search results, with no API keys required.\n\n## Features\n\n- Search the web using Google search results\n- No API keys or authentication required\n- Returns structured results with titles, URLs, and descriptions\n- Configurable number of results per search\n\n## Installation\n\n1. Clone or download this repository\n2. Install dependencies:\n```bash\nnpm install\n```\n3. Build the server:\n```bash\nnpm run build\n```\n4. Add the server to your MCP configuration:\n\nFor VSCode (Claude Dev Extension):\n```json\n{\n  \"mcpServers\": {\n    \"web-search\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/web-search/build/index.js\"]\n    }\n  }\n}\n```\n\nFor Claude Desktop:\n```json\n{\n  \"mcpServers\": {\n    \"web-search\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/web-search/build/index.js\"]\n    }\n  }\n}\n```\n\n## Usage\n\nThe server provides a single tool named `search` that accepts the following parameters:\n\n```typescript\n{\n  \"query\": string,    // The search query\n  \"limit\": number     // Optional: Number of results to return (default: 5, max: 10)\n}\n```\n\nExample usage:\n```typescript\nuse_mcp_tool({\n  server_name: \"web-search\",\n  tool_name: \"search\",\n  arguments: {\n    query: \"your search query\",\n    limit: 3  // optional\n  }\n})\n```\n\nExample response:\n```json\n[\n  {\n    \"title\": \"Example Search Result\",\n    \"url\": \"https://example.com\",\n    \"description\": \"Description of the search result...\"\n  }\n]\n```\n\n## Limitations\n\nSince this tool uses web scraping of Google search results, there are some important limitations to be aware of:\n\n1. **Rate Limiting**: Google may temporarily block requests if too many searches are performed in a short time. To avoid this:\n   - Keep searches to a reasonable frequency\n   - Use the limit parameter judiciously\n   - Consider implementing delays between searches if needed\n\n2. **Result Accuracy**: \n   - The tool relies on Google's HTML structure, which may change\n   - Some results might be missing descriptions or other metadata\n   - Complex search operators may not work as expected\n\n3. **Legal Considerations**:\n   - This tool is intended for personal use\n   - Respect Google's terms of service\n   - Consider implementing appropriate rate limiting for your use case\n\n## Contributing\n\nFeel free to submit issues and enhancement requests!\n",
+  "category": "Search",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "web-search": {
+        "command": "node",
+        "args": ["/path/to/web-search/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pskill9",
+    "repo": "web-search",
+    "url": "https://github.com/pskill9/web-search",
+    "name": "pskill9__web-search",
+    "path": null,
+    "stars": 278,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1b3ead82b45e81af4e27467f1db90168b22fe7ef"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:14.533Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "cheerio",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"web-search\",\n  \"version\": \"0.1.0\",\n  \"description\": \"web search the internet\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"bin\": {\n    \"web-search\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"@types/axios\": \"^0.14.4\",\n    \"@types/cheerio\": \"^0.22.35\",\n    \"axios\": \"^1.7.9\",\n    \"cheerio\": \"^1.0.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.17.10\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

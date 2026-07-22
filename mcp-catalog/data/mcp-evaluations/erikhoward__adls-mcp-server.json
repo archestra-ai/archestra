@@ -1,0 +1,148 @@
+{
+  "name": "erikhoward__adls-mcp-server",
+  "display_name": "adls-mcp-server",
+  "description": "Microsoft Azure Data Lake Storage MCP Server",
+  "author": {
+    "name": "erikhoward"
+  },
+  "server": {
+    "command": "adls2-mcp-server",
+    "args": [],
+    "env": {
+      "LOG_LEVEL": "${user_config.log_level}",
+      "UPLOAD_ROOT": "${user_config.upload_root}",
+      "DOWNLOAD_ROOT": "${user_config.download_root}",
+      "AZURE_STORAGE_ACCOUNT_NAME": "${user_config.azure_storage_account_name}",
+      "AZURE_STORAGE_ACCOUNT_KEY": "${user_config.azure_storage_account_key}",
+      "READ_ONLY_MODE": "${user_config.read_only_mode}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "log_level": {
+      "type": "string",
+      "title": "Logging Level",
+      "description": "Logging level",
+      "default": "INFO",
+      "required": false
+    },
+    "upload_root": {
+      "type": "directory",
+      "title": "Upload Root Directory",
+      "description": "Root directory for file uploads",
+      "default": "./uploads",
+      "required": false
+    },
+    "download_root": {
+      "type": "directory",
+      "title": "Download Root Directory",
+      "description": "Root directory for file downloads",
+      "default": "./downloads",
+      "required": false
+    },
+    "azure_storage_account_name": {
+      "type": "string",
+      "title": "Azure ADLS2 Storage Account Name",
+      "description": "Azure ADLS2 storage account name",
+      "required": true
+    },
+    "azure_storage_account_key": {
+      "type": "string",
+      "title": "Azure ADLS2 Storage Account Key",
+      "description": "Azure ADLS2 storage account key (optional)",
+      "sensitive": true,
+      "required": false
+    },
+    "read_only_mode": {
+      "type": "boolean",
+      "title": "Read-Only Mode",
+      "description": "Whether the server should operate in read-only mode",
+      "default": true,
+      "required": false
+    }
+  },
+  "readme": "# ADLS2 MCP Server 🚀\n\nA Model Context Protocol (MCP) server implementation for Azure Data Lake Storage Gen2. This service provides a standardized interface for interacting with ADLS2 storage, enabling file operations through MCP tools.\n\n[![License](https://img.shields.io/github/license/erikhoward/adls-mcp-server)](https://opensource.org/licenses/MIT) [![Python Version](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/) [![uv](https://img.shields.io/badge/uv-package%20manager-blueviolet)](https://docs.astral.sh/uv/) [![MCP](https://img.shields.io/badge/MCP-compatible-green.svg)](https://github.com/modelcontextprotocol/spec)\n\n## Setup 🛠️\n\n### Installation 📦\n\nRequires Python 3.13 or higher.\n\nInstall the package using `uv`:\n\n```bash\nuv pip install adls2-mcp-server\n```\n\n### MCP Configuration ⚙️\n\n### Claude Desktop Configuration\n\n1 - Edit Claude Desktop Configuration:\n\nOpen `claude_desktop_config.json` and add the following configuration.\n\nOn MacOs, the file is located here:\n`~/Library/Application Support/Claude Desktop/claude_desktop_config.json`.\n\nOn Windows, the file is located here:\n`%APPDATA%\\Claude Desktop\\claude_desktop_config.json`.\n\n```json\n{\n    \"mcpServers\": {\n        \"adls2\": {\n            \"command\": \"adls2-mcp-server\",\n            \"env\": {\n                \"LOG_LEVEL\": \"DEBUG\",\n                \"UPLOAD_ROOT\": \"/path/to/store/uploads\",\n                \"DOWNLOAD_ROOT\": \"/path/to/store/downloads\",\n                \"AZURE_STORAGE_ACCOUNT_NAME\": \"your-azure-adls2-storage-account-name\",\n                \"READ_ONLY_MODE\": \"false\"\n            }\n        }\n    }\n}\n```\n\nThe following is a table of available environment configuration variables:\n\n| Variable | Description | Default |\n| --- | --- | --- |\n| `LOG_LEVEL` | Logging level | `INFO` |\n| `UPLOAD_ROOT` | Root directory for file uploads | `./uploads` |\n| `DOWNLOAD_ROOT` | Root directory for file downloads | `./downloads` |\n| `AZURE_STORAGE_ACCOUNT_NAME` | Azure ADLS2 storage account name | `None` |\n| `AZURE_STORAGE_ACCOUNT_KEY` | Azure ADLS2 storage account key (optional) | `None` |\n| `READ_ONLY_MODE` | Whether the server should operate in read-only mode | `true` |\n\n\nIf `AZURE_STORAGE_ACCOUNT_KEY` is not set, the server will attempt to authenticate using Azure CLI credentials. Ensure you have logged in with Azure CLI before running the server:\n\n```bash\naz login\n```\n\n2 - Restart Claude Desktop.\n\n### Available Tools 🔧\n\n#### Filesystem (container) Operations\n\n- `list_filesystems` - List all filesystems in the storage account\n- `create_filesystem` - Create a new filesystem\n- `delete_filesystem` - Delete an existing filesystem\n\n#### File Operations\n\n- `upload_file` - Upload a file to ADLS2\n- `download_file` - Download a file from ADLS2\n- `file_exists` - Check if a file exists\n- `rename_file` - Rename/move a file\n- `get_file_properties` - Get file properties\n- `get_file_metadata` - Get file metadata\n- `set_file_metadata` - Set file metadata\n- `set_file_metadata_json` - Set multiple metadata key-value pairs using JSON\n\n#### Directory Operations\n\n- `create_directory` - Create a new directory\n- `delete_directory` - Delete a directory\n- `rename_directory` - Rename/move a directory\n- `directory_exists` - Check if a directory exists\n- `directory_get_paths` - Get all paths under the specified directory\n\n## Development 💻\n\n### Local Development Setup\n\n1 - Clone the repository:\n\n```bash\ngit clone https://github.com/erikhoward/adls2-mcp-server.git\ncd adls2-mcp-server\n```\n\n2 - Create and activate virtual environment:\n\nLinux/macOS:\n\n```bash\npython -m venv .venv\nsource .venv/bin/activate\n```\n\nWindows:\n\n```bash\n.venv\\Scripts\\activate\n```\n\n3 - Install dependencies:\n\n```bash\npip install -e \".[dev]\"\n```\n\n4 - Copy and configure environment variables:\n\n```bash\ncp .env.example .env\n```\n\nEdit .env with your settings.\n\n```bash\nAZURE_STORAGE_ACCOUNT_NAME=your_azure_adls2_storage_account_name\nAZURE_STORAGE_ACCOUNT_KEY=your_azure_adls2_storage_key (optional)\nDOWNLOAD_ROOT=/path/to/download/folder\nUPLOAD_ROOT=/path/to/upload/folder\nREAD_ONLY_MODE=True\nLOG_LEVEL=INFO\n```\n\nIf `AZURE_STORAGE_ACCOUNT_KEY` is not set, the server will attempt to authenticate using Azure CLI credentials. Ensure you have logged in with Azure CLI before running the server:\n\n```bash\naz login\n```\n\n5 - Claude Desktop Configuration\n\nOpen `claude_desktop_config.json` and add the following configuration.\n\nOn MacOs, the file is located here:\n`~/Library/Application Support/Claude Desktop/claude_desktop_config.json`.\n\nOn Windows, the file is located here:\n`%APPDATA%\\Claude Desktop\\claude_desktop_config.json`.\n\n```json\n{\n    \"mcpServers\": {\n        \"adls2\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"--directory\",\n                \"/path/to/adls2-mcp-server/repo\",\n                \"run\",\n                \"adls2-mcp-server\"\n            ],\n            \"env\": {\n                \"LOG_LEVEL\": \"DEBUG\",\n                \"UPLOAD_ROOT\": \"/path/to/store/uploads\",\n                \"DOWNLOAD_ROOT\": \"/path/to/store/downloads\",\n                \"AZURE_STORAGE_ACCOUNT_NAME\": \"your-azure-adls2-storage-account-name\",\n                \"READ_ONLY_MODE\": \"false\"\n            }\n        }\n    }\n}\n```\n\n6 - Restart Claude Desktop.\n\n## Contributions 🤝\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/AmazingFeature`)\n3. Commit your changes (`git commit -m '✨ Add some AmazingFeature'`)\n4. Push to the branch (`git push origin feature/AmazingFeature`)\n5. Open a Pull Request\n\n## License ⚖️\n\nLicensed under MIT - see [LICENSE.md](LICENSE) file.\n\n**This is not an official Microsoft product.**\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "adls2-mcp-server": {
+        "command": "adls2-mcp-server",
+        "args": [],
+        "env": {
+          "LOG_LEVEL": "DEBUG",
+          "UPLOAD_ROOT": "/path/to/store/uploads",
+          "DOWNLOAD_ROOT": "/path/to/store/downloads",
+          "AZURE_STORAGE_ACCOUNT_NAME": "your-azure-adls2-storage-account-name",
+          "READ_ONLY_MODE": "false"
+        }
+      },
+      "adls2-mcp-server-configured": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/adls2-mcp-server/repo", "run", "adls2-mcp-server"],
+        "env": {
+          "LOG_LEVEL": "DEBUG",
+          "UPLOAD_ROOT": "/path/to/store/uploads",
+          "DOWNLOAD_ROOT": "/path/to/store/downloads",
+          "AZURE_STORAGE_ACCOUNT_NAME": "your-azure-adls2-storage-account-name",
+          "READ_ONLY_MODE": "false"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "erikhoward",
+    "repo": "adls-mcp-server",
+    "url": "https://github.com/erikhoward/adls-mcp-server",
+    "name": "erikhoward__adls-mcp-server",
+    "path": null,
+    "stars": 4,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "6bec230a039f5bafc6c5be1a7bfd961aed91a83c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:15.796Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "azure-storage-file-datalake",
+      "importance": 9
+    },
+    {
+      "name": "azure-identity",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"adls2-mcp-server\"\nversion = \"0.1.4\"\ndescription = \"Azure Data Lake Storage Gen2 Model Context Protocol (MCP) service\"\nauthors = [\n    { name = \"Erik Howard\", email = \"erikhoward@pm.me\" },\n]\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\nlicense = {text = \"MIT\"}\nkeywords = [\"azure\", \"adls\", \"mcp\", \"model-context-protocol\", \"llm\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.13\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n]\ndependencies = [\n    \"azure-identity>=1.21.0\",\n    \"azure-storage-file-datalake>=12.20.0\",\n    \"mcp>=1.6.0\",\n    \"python-dotenv>=1.1.0\",\n]\n\n[project.scripts]\nadls2-mcp-server = \"adls2_mcp_server.server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/adls2_mcp_server\"]\n\n# Configure PyPI publishing\n[[tool.uv.index]]\nname = \"pypi\"\nurl = \"https://pypi.org/simple/\"\npublish-url = \"https://upload.pypi.org/legacy/\"\n\n[project.urls]\n\"Homepage\" = \"https://github.com/erikhoward/adls-mcp-server\"\n\"Bug Tracker\" = \"https://github.com/erikhoward/adls-mcp-server/issues\"\n\"Documentation\" = \"https://github.com/erikhoward/adls-mcp-server/tree/main#adls2-mcp-server-\"\n"
+}

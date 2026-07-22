@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: A shared workspace to organize your work
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -46,4 +46,4 @@ A finance person approves incoming invoices against the company's vendor list. A
 
 ![Sharing the project with the Finance team](/docs/automated_screenshots/platform-projects_sharing-dialog.webp)
 
-Everyone with access to a shared project can read its chats, start their own, and work with its files. Deleting a project keeps the chats but removes the files and schedules. See [Access Control](./platform-access-control) for permissions.
+Everyone with access to a shared project can start their own chats and work with its files. Reading other members' chats takes a separate permission that admins have by default. Deleting a project keeps the chats but removes the files and schedules. See [Access Control](./platform-access-control) for permissions.

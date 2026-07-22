@@ -1,0 +1,137 @@
+{
+  "name": "yworks__mcp-typescribe",
+  "display_name": "mcp-typescribe",
+  "description": "An MCP server implementation enabling LLMs to work with new APIs and frameworks",
+  "author": {
+    "name": "yWorks"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-typescribe@latest", "run-server", "${user_config.api_json_path}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_json_path": {
+      "type": "file",
+      "title": "Path to API JSON",
+      "description": "The path to your TypeDoc-generated JSON documentation file (e.g., docs/api.json).",
+      "required": true
+    }
+  },
+  "readme": "[![npm version](https://img.shields.io/npm/v/mcp-typescribe.svg)](https://www.npmjs.com/package/mcp-typescribe)\n\n# MCP-Typescribe - an MCP Server providing LLMs API information\n\n## The Problem\n\nLarge Language Models (LLMs) have made incredible strides in code generation and developer productivity. However, they face a key limitation: they can only reliably use APIs and libraries they’ve seen during training. This creates a bottleneck for adopting new tools, SDKs, or internal APIs — LLMs simply don’t know how to use them effectively.\n\nWhile tools can be given source code access (when interacting with APIs for which the sources are available) or access to documentation files (e.g. typescript type definition files), this doesn't scale well for large APIs. LLMs need a more efficient way to learn more about an API. Putting all the documentation into context for every request is inefficient, unfeasible, and leads to poor results.\n\n## As a result:\n\nLarger new or internal APIs remain \"invisible\" to LLMs.\n\nDevelopers must manually guide LLMs or provide example usage.\n\nInnovation is slowed by the lag between an API’s release and its widespread understanding by AI tools.\n\n## The Idea\n\nThis project is an open-source implementation of the Model Context Protocol (MCP)—a protocol designed to provide LLMs with contextual, real-time access to information. In this case it's the API documentation, and particularly for now in this project TypeScript definitions.\n\n## Our goal is to:\n\nParse TypeScript (and other) definitions into a machine-readable format.\n\nServe this context dynamically to LLMs through tools like Claude, Cline, Cursor, or Windsurf and other custom interfaces.\n\nEnable agentic behavior by letting LLMs query, plan, and adapt to unfamiliar APIs without retraining.\n\n## What This Enables\n\nPlug-and-play API support for LLM-based coding assistants.\n\nFaster onboarding for new or proprietary SDKs.\n\nA step toward more autonomous, context-aware coding agents.\n\n## Project Overview\n\n![Image](docs/screenshot.png)\n\nThis project provides a way for AI agents to efficiently explore and understand unknown TypeScript APIs. It loads TypeDoc-generated JSON documentation and exposes it through a set of query endpoints that allow agents to search for symbols, get detailed information about specific parts of the API, and understand relationships between different components.\n\n## Current Features\n\n- **TypeDoc Integration**: Loads and indexes TypeDoc JSON documentation for efficient querying\n- **Comprehensive Query Capabilities**: Provides a wide range of tools for exploring TypeScript APIs\n- **MCP Protocol**: Follows the Model Context Protocol for seamless integration with AI agents\n\n## Query Capabilities\n\nThe server provides the following tools for querying the API:\n\n- `search_symbols`: Find symbols by name with optional filtering by kind\n- `get_symbol_details`: Get detailed information about a specific symbol\n- `list_members`: List methods and properties of a class or interface\n- `get_parameter_info`: Get information about function parameters\n- `find_implementations`: Find implementations of interfaces or subclasses\n- `search_by_return_type`: Find functions returning a specific type\n- `search_by_description`: Search in JSDoc comments\n- `get_type_hierarchy`: Show inheritance relationships\n- `find_usages`: Find where a type/function is used\n\n## Getting Started\n\n### Prerequisites\n\n- Node.js\n- npm\n\n### Installation\n\n1. Clone the repository\n2. Install dependencies:\n   ```bash\n   npm install\n   ```\n\n### Usage\n\n1. Generate TypeDoc JSON for your TypeScript API:\n\n   ```bash\n   npx typedoc --json docs/api.json --entryPointStrategy expand path/to/your/typescript/files\n   ```\n\n   If you (only) have an existing`.d.ts` file, you can create an api json file like so:\n\n   Create a separate `tsconfig.docs.json`:\n\n   ```json\n   {\n     \"extends\": \"./tsconfig.json\",\n     \"files\": [\"existing.d.ts\"],\n     \"typedocOptions\": {\n       \"entryPoints\": [\"existing.d.ts\"],\n       \"json\": \"docs/api.json\",\n       \"pretty\": false\n     }\n   }\n   ```\n\n   Then do\n\n   ```bash\n   npx typedoc --tsconfig tsconfig.docs.json\n   ```\n\n2. Build the project:\n\n   ```bash\n   npm run build\n   ```\n\n3. Explore the MCP server:\n\n   ```bash\n   npx @modelcontextprotocol/inspector node ./dist/mcp-server/cli.js run-server docs/api.json\n   ```\n\n4. Connect an AI agent to the server to query the API\n\n   E.g. with cline in VSCode, specify the following MCP server in `cline_mcp_settings.json`:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"typescribe\": {\n         \"command\": \"npx\",\n         \"args\": [\n           \"-y\",\n           \"mcp-typescribe@latest\",\n           \"run-server\",\n           \"<PATH_TO_API_DOT_JSON>\"\n         ],\n         \"env\": {}\n       }\n     }\n   }\n   ```\n\n5. Enable the server and likely auto-approve the various tools. Tell the agent to use the \"typescribe\" tool to learn about your API.\n\n## Project Structure\n\n- `src/sample-api/`: A sample TypeScript API for testing - it uses a weird German-like dialect for the API names to test that the LLM does not hallucinate the API\n- `src/mcp-server/`: The MCP server implementation\n  - `utils/`: Utility functions\n  - `schemas/`: JSON schemas for the MCP tools\n  - `core/`: Core functionality\n  - `server.ts`: The MCP server implementation\n  - `index.ts`: Entry point for the library exports\n  - `cli.ts`: the entry point for the CLI/binary\n- `tests/`: Tests for the API functionality\n\n## Development\n\n### Running Tests\n\n```bash\nnpm test\n```\n\n### Building\n\n```bash\nnpm run build\n```\n\n## License\n\nMIT\n\nCopyright 2025 yWorks GmbH - https://www.yworks.com\n",
+  "category": "AI Tools",
+  "quality_score": 34,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-typescribe": {
+        "command": "npx",
+        "args": ["-y", "mcp-typescribe@latest", "run-server", "<PATH_TO_API_DOT_JSON>"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "yWorks",
+    "repo": "mcp-typescribe",
+    "url": "https://github.com/yWorks/mcp-typescribe",
+    "name": "yworks__mcp-typescribe",
+    "path": null,
+    "stars": 39,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "8539f88c9987af06ef0ad7c93a13d830a4271a7e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:04.246Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "langchain",
+      "importance": 10
+    },
+    {
+      "name": "@langchain/core",
+      "importance": 9
+    },
+    {
+      "name": "@langchain/anthropic",
+      "importance": 9
+    },
+    {
+      "name": "@langchain/langgraph",
+      "importance": 9
+    },
+    {
+      "name": "@langchain/openai",
+      "importance": 9
+    },
+    {
+      "name": "typedoc",
+      "importance": 9
+    },
+    {
+      "name": "@xenova/transformers",
+      "importance": 8
+    },
+    {
+      "name": "hnswlib-node",
+      "importance": 8
+    },
+    {
+      "name": "kuzu",
+      "importance": 8
+    },
+    {
+      "name": "commander",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 6
+    },
+    {
+      "name": "object-hash",
+      "importance": 5
+    },
+    {
+      "name": "yaml",
+      "importance": 5
+    },
+    {
+      "name": "@types/object-hash",
+      "importance": 2
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-typescribe\",\n  \"version\": \"0.8.2\",\n  \"description\": \"An MCP server that answers questions about TypeScript APIs using TypeDoc JSON documentation\",\n  \"main\": \"dist/mcp-server/index.js\",\n  \"type\": \"module\",\n  \"bin\": \"dist/mcp-server/cli.js\",\n  \"module\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",\n  \"exports\": {\n    \".\": {\n      \"import\": \"./dist/index.js\",\n      \"types\": \"./dist/index.d.ts\"\n    }\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"watch\": \"tsc --watch\",\n    \"docs\": \"typedoc --json docs/api.json --entryPointStrategy expand --readme src/sample-api/docs/README.md src/sample-api/\",\n    \"cache-docs\": \"node dist/mcp-server/cli.js build-cache-db docs/api.json\",\n    \"start\": \"node dist/mcp-server/cli.js run-server docs/api.json\",\n    \"format\": \"prettier --ignore-unknown --cache --check .\",\n    \"format:write\": \"prettier --ignore-unknown --write .\",\n    \"lint\": \"eslint . --ext .ts,.js,.mjs\",\n    \"dev:agent\": \"npx @langchain/langgraph-cli dev --port 2024 --config ./langgraph.json\",\n    \"dev\": \"tsc -w\",\n    \"test\": \"vitest run\",\n    \"test:watch\": \"vitest\",\n    \"test:ui\": \"vitest --ui\",\n    \"inspect\": \"npx -y @modelcontextprotocol/inspector node ./dist/mcp-server/cli.js run-server docs/api.json\",\n    \"release\": \"npm run build && changeset publish\",\n    \"new-version\": \"changeset version && npm run format:write && npm run build\"\n  },\n  \"files\": [\n    \"dist/index.*\",\n    \"dist/mcp-server\",\n    \"dist/typescribe-agent\"\n  ],\n  \"keywords\": [\n    \"MCP Server\",\n    \"typescript\",\n    \"api\",\n    \"mcp\",\n    \"typedoc\",\n    \"documentation\",\n    \"model-context-protocol\",\n    \"langgraph-agent\"\n  ],\n  \"author\": \"yWorks Support Team\",\n  \"license\": \"MIT\",\n  \"devDependencies\": {\n    \"@changesets/cli\": \"^2.28.1\",\n    \"@types/node\": \"^22.13.9\",\n    \"@vitest/ui\": \"^3.1.1\",\n    \"eslint\": \"^9.23.0\",\n    \"eslint-config-prettier\": \"^10.1.1\",\n    \"prettier\": \"^3.5.3\",\n    \"typescript\": \"^5.8.2\",\n    \"typescript-eslint\": \"^8.29.0\",\n    \"vitest\": \"^3.1.1\"\n  },\n  \"dependencies\": {\n    \"@langchain/anthropic\": \"^0.3.20\",\n    \"@langchain/core\": \"^0.3.56\",\n    \"@langchain/langgraph\": \"^0.2.72\",\n    \"@langchain/openai\": \"^0.5.10\",\n    \"@modelcontextprotocol/sdk\": \"^1.11.3\",\n    \"@types/object-hash\": \"^3.0.6\",\n    \"@xenova/transformers\": \"2.17.2\",\n    \"commander\": \"^13.1.0\",\n    \"hnswlib-node\": \"^3.0.0\",\n    \"kuzu\": \"^0.10.0\",\n    \"langchain\": \"0.3.26\",\n    \"object-hash\": \"^3.0.0\",\n    \"typedoc\": \"0.28.6\",\n    \"yaml\": \"^2.8.0\",\n    \"zod\": \"^3.24.4\",\n    \"zod-to-json-schema\": \"^3.24.5\"\n  },\n  \"engines\": {\n    \"node\": \">= 20\"\n  }\n}\n"
+}

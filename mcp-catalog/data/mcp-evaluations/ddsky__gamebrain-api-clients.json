@@ -1,0 +1,206 @@
+{
+  "name": "ddsky__gamebrain-api-clients",
+  "display_name": "gamebrain-api-clients",
+  "description": "MCP server from ddsky/gamebrain-api-clients",
+  "author": {
+    "name": "ddsky"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-remote", "https://api.gamebrain.co/v1/mcp?api-key=${user_config.api_key}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "GameBrain API Key",
+      "description": "Your free API key for the GameBrain MCP server.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# MCP Setup\n\nRead more about setting up the [GameBrain MCP server](https://gamebrain.co/api/docs/mcp-setup). Simply get your free API key and copy this config into your MCP client:\n\n```json\n{\n  \"mcpServers\": {\n    \"gamebrain\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-remote\",\n        \"https://api.gamebrain.co/v1/mcp?api-key=YOUR_KEY\"\n      ]\n    }\n  }\n}\n```\n",
+  "category": "Gaming",
+  "quality_score": 12,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-remote": {
+        "command": "npx",
+        "args": ["-y", "mcp-remote", "https://api.gamebrain.co/v1/mcp?api-key=YOUR_KEY"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ddsky",
+    "repo": "gamebrain-api-clients",
+    "url": "https://github.com/ddsky/gamebrain-api-clients",
+    "name": "gamebrain-api-clients",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "8dd4940e3e6377601c67dc80a1638d0f7da2a5c1"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:17.321Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "swagger-annotations",
+      "importance": 6
+    },
+    {
+      "name": "gson",
+      "importance": 5
+    },
+    {
+      "name": "httpcore",
+      "importance": 5
+    },
+    {
+      "name": "httpmime",
+      "importance": 5
+    },
+    {
+      "name": "volley",
+      "importance": 7
+    },
+    {
+      "name": "jsr305",
+      "importance": 4
+    },
+    {
+      "name": "okhttp",
+      "importance": 7
+    },
+    {
+      "name": "logging-interceptor",
+      "importance": 6
+    },
+    {
+      "name": "gson-fire",
+      "importance": 5
+    },
+    {
+      "name": "jakarta.ws.rs-api",
+      "importance": 6
+    },
+    {
+      "name": "commons-lang3",
+      "importance": 5
+    },
+    {
+      "name": "jakarta.annotation-api",
+      "importance": 5
+    },
+    {
+      "name": "jackson-databind-nullable",
+      "importance": 5
+    },
+    {
+      "name": "superagent",
+      "importance": 7
+    },
+    {
+      "name": "kotlin-stdlib-jdk8",
+      "importance": 8
+    },
+    {
+      "name": "kotlin-reflect",
+      "importance": 7
+    },
+    {
+      "name": "moshi-kotlin",
+      "importance": 6
+    },
+    {
+      "name": "moshi-adapters",
+      "importance": 6
+    },
+    {
+      "name": "guzzlehttp/guzzle",
+      "importance": 7
+    },
+    {
+      "name": "guzzlehttp/psr7",
+      "importance": 6
+    },
+    {
+      "name": "urllib3",
+      "importance": 7
+    },
+    {
+      "name": "python-dateutil",
+      "importance": 5
+    },
+    {
+      "name": "pydantic",
+      "importance": 6
+    },
+    {
+      "name": "typing-extensions",
+      "importance": 4
+    },
+    {
+      "name": "serde",
+      "importance": 6
+    },
+    {
+      "name": "serde_with",
+      "importance": 5
+    },
+    {
+      "name": "serde_json",
+      "importance": 6
+    },
+    {
+      "name": "url",
+      "importance": 4
+    },
+    {
+      "name": "uuid",
+      "importance": 4
+    },
+    {
+      "name": "reqwest",
+      "importance": 7
+    },
+    {
+      "name": "whatwg-fetch",
+      "importance": 5
+    },
+    {
+      "name": "es6-promise",
+      "importance": 5
+    },
+    {
+      "name": "url-parse",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{}\n\n\n=== android/build.gradle ===\nplugins {\n    id 'com.android.library' version '8.0.0'\n    id 'maven-publish'\n}\n\nandroid {\n    namespace \"co.gamebrain.client\"\n    compileSdkVersion 33\n    buildToolsVersion '34.0.0'\n    defaultConfig {\n        minSdkVersion 14\n        targetSdkVersion 33\n    }\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_1_8\n        targetCompatibility JavaVersion.VERSION_1_8\n    }\n    lintOptions {\n        abortOnError false\n    }\n    packagingOptions {\n        resources.excludes += \"META-INF/DEPENDENCIES\"\n    }\n    testOptions {\n        unitTests.returnDefaultValues = true\n    }\n    publishing {\n        singleVariant('release') {\n            withSourcesJar()\n        }\n    }\n}\n\next {\n    swagger_annotations_version = \"1.6.6\"\n    gson_version = \"2.10.1\"\n    httpcore_version = \"4.4.16\"\n    httpmime_version = \"4.5.14\"\n    volley_version = \"1.2.1\"\n    junit_version = \"4.13.2\"\n}\n\ndependencies {\n    implementation \"io.swagger:swagger-annotations:$swagger_annotations_version\"\n    implementation \"com.google.code.gson:gson:$gson_version\"\n    implementation (\"org.apache.httpcomponents:httpcore:$httpcore_version\") {\n        exclude(group: \"org.apache.httpcomponents\", module: \"httpclient\")\n    }\n    implementation (\"org.apache.httpcomponents:httpmime:$httpmime_version\") {\n        exclude(group: \"org.apache.httpcomponents\", module: \"httpclient\")\n    }\n    implementation \"com.android.volley:volley:${volley_version}\"\n    testImplementation \"junit:junit:$junit_version\"\n}\n\npublishing {\n    publications {\n        release(MavenPublication) {\n            groupId = 'co.gamebrain'\n            artifactId = 'android-client'\n            version = '1.0.1'\n\n            afterEvaluate {\n                from components.release\n            }\n        }\n    }\n}\n\n\n=== android/pom.xml ===\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\" xmlns=\"http://maven.apache.org/POM/4.0.0\"\n    xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n  <modelVersion>4.0.0</modelVersion>\n  <groupId>co.gamebrain</groupId>\n  <artifactId>android-client</artifactId>\n  <version>1.0.1</version>\n  <dependencies>\n    <dependency>\n      <groupId>io.swagger</groupId>\n      <artifactId>swagger-annotations</artifactId>\n      <version>${swagger-annotations-version}</version>\n    </dependency>\n    <!-- @Nullable annotation -->\n    <dependency>\n        <groupId>com.google.code.findbugs</groupId>\n        <artifactId>jsr305</artifactId>\n        <version>3.0.2</version>\n    </dependency>\n    <dependency>\n      <groupId>org.apache.httpcomponents</groupId>\n      <artifactId>httpmime</artifactId>\n      <version>${httpcomponents-httpmime-version}</version>\n    </dependency>\n    <dependency>\n      <groupId>com.google.code.gson</groupId>\n      <artifactId>gson</artifactId>\n      <version>${google-code-gson-version}</version>\n    </dependency>\n    <dependency>\n      <groupId>com.android.volley</groupId>\n      <artifactId>volley</artifactId>\n      <version>${volley-library-version}</version>\n    </dependency>\n    <dependency>\n        <groupId>com.google.android</groupId>\n        <artifactId>android</artifactId>\n        <version>${android-platform-version}</version>\n    </dependency>\n  </dependencies>\n  <build>\n    <plugins>\n      <plugin>\n        <groupId>org.apache.maven.plugins</groupId>\n        <artifactId>maven-compiler-plugin</artifactId>\n        <version>3.8.1</version>\n        <configuration>\n          <source>1.8</source>\n          <target>1.8</target>\n        </configuration>\n      </plugin>\n    </plugins>\n  </build>\n  <properties>\n    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n    <swagger-annotations-version>1.6.6</swagger-annotations-version>\n    <httpcomponents-httpmime-version>4.5.14</httpcomponents-httpmime-version>\n    <google-code-gson-version>2.10.1</google-code-gson-version>\n    <volley-library-version>1.2.1</volley-library-version>\n    <android-platform-version>4.1.1.4</android-platform-version>\n  </properties>\n</project>\n\n\n=== go/go.mod ===\nmodule github.com/ddsky/gamebrain-clients/tree/master/go/\n\ngo 1.18\n\nrequire (\n)\n\n\n=== java/build.gradle ===\napply plugin: 'idea'\napply plugin: 'eclipse'\napply plugin: 'java'\napply plugin: 'com.diffplug.spotless'\n\ngroup = 'co.gamebrain'\nversion = '1.0.1'\n\nbuildscript {\n    repositories {\n        mavenCentral()\n    }\n    dependencies {\n        classpath 'com.android.tools.build:gradle:2.3.+'\n        classpath 'com.github.dcendents:android-maven-gradle-plugin:2.1'\n        classpath 'com.diffplug.spotless:spotless-plugin-gradle:6.11.0'\n    }\n}\n\nrepositories {\n    mavenCentral()\n}\nsourceSets {\n    main.java.srcDirs = ['src/main/java']\n}\n\nif(hasProperty('target') && target == 'android') {\n\n    apply plugin: 'com.android.library'\n    apply plugin: 'com.github.dcendents.android-maven'\n\n    android {\n        compileSdkVersion 25\n        buildToolsVersion '25.0.2'\n        defaultConfig {\n            minSdkVersion 14\n            targetSdkVersion 25\n        }\n        compileOptions {\n            sourceCompatibility JavaVersion.VERSION_1_8\n            targetCompatibility JavaVersion.VERSION_1_8\n        }\n\n        // Rename the aar correctly\n        libraryVariants.all { variant ->\n            variant.outputs.each { output ->\n                def outputFile = output.outputFile\n                if (outputFile != null && outputFile.name.endsWith('.aar')) {\n                    def fileName = \"${project.name}-${variant.baseName}-${version}.aar\"\n                    output.outputFile = new File(outputFile.parent, fileName)\n                }\n            }\n        }\n\n        dependencies {\n            provided \"jakarta.annotation:jakarta.annotation-api:$jakarta_annotation_version\"\n        }\n    }\n\n    afterEvaluate {\n        android.libraryVariants.all { variant ->\n            def task = project.tasks.create \"jar${variant.name.capitalize()}\", Jar\n            task.description = \"Create jar artifact for ${variant.name}\"\n            task.dependsOn variant.javaCompile\n            task.from variant.javaCompile.destinationDirectory\n            task.destinationDirectory = project.file(\"${project.buildDir}/outputs/jar\")\n            task.archiveFileName = \"${project.name}-${variant.baseName}-${version}.jar\"\n            artifacts.add('archives', task)\n        }\n    }\n\n    task sourcesJar(type: Jar) {\n        from android.sourceSets.main.java.srcDirs\n        classifier = 'sources'\n    }\n\n    artifacts {\n        archives sourcesJar\n    }\n\n} else {\n\n    apply plugin: 'java'\n    apply plugin: 'maven-publish'\n\n    sourceCompatibility = JavaVersion.VERSION_1_8\n    targetCompatibility = JavaVersion.VERSION_1_8\n\n    publishing {\n        publications {\n            maven(MavenPublication) {\n               artifactId = 'java-client'\n               from components.java\n            }\n        }\n    }\n\n    task execute(type:JavaExec) {\n       main = System.getProperty('mainClass')\n       classpath = sourceSets.main.runtimeClasspath\n    }\n}\n\next {\n    jakarta_annotation_version = \"1.3.5\"\n}\n\ndependencies {\n    implementation 'io.swagger:swagger-annotations:1.6.8'\n    implementation \"com.google.code.findbugs:jsr305:3.0.2\"\n    implementation 'com.squareup.okhttp3:okhttp:4.12.0'\n    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'\n    implementation 'com.google.code.gson:gson:2.9.1'\n    implementation 'io.gsonfire:gson-fire:1.9.0'\n    implementation 'jakarta.ws.rs:jakarta.ws.rs-api:2.1.6'\n    implementation 'org.openapitools:jackson-databind-nullable:0.2.6'\n    implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.12.0'\n    implementation \"jakarta.annotation:jakarta.annotation-api:$jakarta_annotation_version\"\n    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.3'\n    testImplementation 'org.mockito:mockito-core:3.12.4'\n    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.3'\n}\n\njavadoc {\n    options.tags = [ \"http.response.details:a:Http Response Details\" ]\n}\n\n// Use spotless plugin to automatically format code, remove unused import, etc\n// To apply changes directly to the file, run `gradlew spotlessApply`\n// Ref: https://github.com/diffplug/spotless/tree/main/plugin-gradle\nspotless {\n    // comment out below to run spotless as part of the `check` task\n    enforceCheck false\n\n    format 'misc', {\n        // define the files (e.g. '*.gradle', '*.md') to apply `misc` to\n        target '.gitignore'\n\n        // define the steps to apply to those files\n        trimTrailingWhitespace()\n        indentWithSpaces() // Takes an integer argument if you don't like 4\n        endWithNewline()\n    }\n    java {\n        // don't need to set target, it is inferred from java\n\n        // apply a specific flavor of google-java-format\n        googleJavaFormat('1.8').aosp().reflowLongStrings()\n\n        removeUnusedImports()\n        importOrder()\n    }\n}\n\ntest {\n    // Enable JUnit 5 (Gradle 4.6+).\n    useJUnitPlatform()\n\n    // Always run tests, even when nothing changed.\n    dependsOn 'cleanTest'\n\n    // Show test results.\n    testLogging {\n        events \"passed\", \"skipped\", \"failed\"\n    }\n\n}\n\n\n=== java/pom.xml ===\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd\">\n    <modelVersion>4.0.0</modelVersion>\n    <groupId>co.gamebrain</groupId>\n    <artifactId>java-client</artifactId>\n    <packaging>jar</packaging>\n    <name>java-client</name>\n    <version>1.0.1</version>\n    <url>https://gamebrain.co/api/sdks/</url>\n    <description>Java Client for the Game Brain API</description>\n    <scm>\n        <connection>scm:git:git@github.com:openapitools/openapi-generator.git</connection>\n        <developerConnection>scm:git:git@github.com:openapitools/openapi-generator.git</developerConnection>\n        <url>https://github.com/openapitools/openapi-generator</url>\n    </scm>\n\n    <licenses>\n        <license>\n            <name>Game Brain API License</name>\n            <url>https://gamebrain.co/api/terms/</url>\n            <distribution>repo</distribution>\n        </license>\n    </licenses>\n\n    <developers>\n        <developer>\n            <name>David Urbansky</name>\n            <email>mail@gamebrain.co</email>\n            <organization>gamebrain.co</organization>\n            <organizationUrl>https://gamebrain.co</organizationUrl>\n        </developer>\n    </developers>\n\n    <build>\n        <plugins>\n           <plugin>\n                <groupId>org.apache.maven.plugins</groupId>\n                <artifactId>maven-compiler-plugin</artifactId>\n                <version>3.8.1</version>\n                <configuration>\n                    <fork>true</fork>\n                    <meminitial>128m</meminitial>\n                    <maxmem>512m</maxmem>\n                    <compilerArgs>\n                        <arg>-Xlint:all</arg>\n                        <arg>-J-Xss4m</arg><!-- Compiling the generated JSON.java file may require larger stack size. -->\n                    </compilerArgs>\n                </configuration>\n            </plugin>\n            <plugin>\n                <groupId>org.apache.maven.plugins</groupId>\n                <artifactId>maven-enforcer-plugin</artifactId>\n                <version>3.4.1</version>\n                <executions>\n                    <execution>\n                        <id>enforce-maven</id>\n                        <goals>\n                            <goal>enforce</goal>\n                        </goals>\n                        <configuration>\n                            <rules>\n                                <requireMavenVersion>\n                                    <version>2.2.0</version>\n                                </requireMavenVersion>\n                            </rules>\n                        </configuration>\n                    </execution>\n                </executions>\n            </plugin>\n            <plugin>\n                <groupId>org.apache.maven.plugins</groupId>\n                <artifactId>maven-surefire-plugin</artifactId>\n                <version>2.22.2</version>\n                <configuration>\n                    <systemPropertyVariables>\n                        <property>\n                            <name>loggerPath</name>\n                            <value>conf/log4j.properties</value>\n                        </property>\n                    </systemPropertyVariables>\n                    <argLine>-Xms512m -Xmx1500m</argLine>\n                    <parallel>methods</parallel>\n                    <threadCount>10</threadCount>\n                </configuration>\n                <dependencies>\n                    <!--Custom provider and engine for Junit 5 to surefire-->\n                    <dependency>\n                        <groupId>org.junit.jupiter</groupId>\n                        <artifactId>junit-jupiter-engine</artifactId>\n                        <version>${junit-version}</version>\n                    </dependency>\n                </dependencies>\n            </plugin>\n            <plugin>\n                <artifactId>maven-dependency-plugin</artifactId>\n                <version>3.6.1</version>\n                <executions>\n                    <execution>\n                        <phase>package</phase>\n                        <goals>\n                            <goal>copy-dependencies</goal>\n                        </goals>\n                        <configuration>\n                            <outputDirectory>${project.build.directory}/lib</outputDirectory>\n                        </configuration>\n                    </execution>\n                </executions>\n            </plugin>\n            <!-- attach test jar -->\n            <plugin>\n                <groupId>org.apache.maven.plugins</groupId>\n                <artifactId>maven-jar-plugin</artifactId>\n                <version>3.3.0</version>\n                <executions>\n                    <execution>\n                        <goals>\n                            <goal>test-jar</goal>\n                        </goals>\n                    </execution>\n                </executions>\n                <configuration>\n                </configuration>\n            </plugin>\n            <plugin>\n                <groupId>org.codehaus.mojo</groupId>\n                <artifactId>build-helper-maven-plugin</artifactId>\n                <version>3.5.0</version>\n                <executions>\n                    <execution>\n                        <id>add_sources</id>\n                        <phase>generate-sources</phase>\n                        <goals>\n                            <goal>add-source</goal>\n                        </goals>\n                        <configuration>\n                            <sources>\n                                <source>src/main/java</source>\n                            </sources>\n                        </configuration>\n                    </execution>\n                    <execution>\n                        <id>add_test_sources</id>\n                        <phase>generate-test-sources</phase>\n                        <goals>\n                            <goal>add-test-source</goal>\n                        </goals>\n                        <configuration>\n                            <sources>\n                                <source>src/test/java</source>\n                            </sources>\n                        </configuration>\n                    </execution>\n                </executions>\n            </plugin>\n            <plugin>\n                <groupId>org.apache.maven.plugins</groupId>\n                <artifactId>maven-javadoc-plugin</artifactId>\n                <version>3.6.3</version>\n                <executions>\n                    <execution>\n                        <id>attach-javadocs</id>\n                        <goals>\n                            <goal>jar</goal>\n                        </goals>\n                    </execution>\n                </executions>\n                <configuration>\n                    <doclint>none</doclint>\n                    <tags>\n                        <tag>\n                            <name>http.response.details</name>\n                            <placement>a</placement>\n                            <head>Http Response Details:</head>\n                        </tag>\n                    </tags>\n                </configuration>\n            </plugin>\n            <plugin>\n                <groupId>org.apache.maven.plugins</groupId>\n                <artifactId>maven-source-plugin</artifactId>\n                <version>3.3.0</version>\n                <executions>\n                    <execution>\n                        <id>attach-sources</id>\n                        <goals>\n                            <goal>jar-no-fork</goal>\n                        </goals>\n                    </execution>\n                </executions>\n            </plugin>\n            <!-- Use spotless plugin to automatically format code, remove unused import, etc\n                 To apply changes directly to the file, run `mvn spotless:apply`\n                 Ref: https://github.com/diffplug/spotless/tree/main/plugin-maven\n            -->\n            <plugin>\n              <groupId>com.diffplug.spotless</groupId>\n              <artifactId>spotless-maven-plugin</artifactId>\n              <version>${spotless.version}</version>\n              <configuration>\n                <formats>\n                  <!-- you can define as many formats as you want, each is independent -->\n                  <format>\n                    <!-- define the files to apply to -->\n                    <includes>\n                      <include>.gitignore</include>\n                    </includes>\n                    <!-- define the steps to apply to those files -->\n                    <trimTrailingWhitespace/>\n                    <endWithNewline/>\n                    <indent>\n                      <spaces>true</spaces> <!-- or <tabs>true</tabs> -->\n                      <spacesPerTab>4</spacesPerTab> <!-- optional, default is 4 -->\n                    </indent>\n                  </format>\n                </formats>\n                <!-- define a language-specific format -->\n                <java>\n                  <!-- no need to specify files, inferred automatically, but you can if you want -->\n\n                  <!-- apply a specific flavor of google-java-format and reflow long strings -->\n                  <googleJavaFormat>\n                    <version>1.8</version>\n                    <style>AOSP</style>\n                    <reflowLongStrings>true</reflowLongStrings>\n                  </googleJavaFormat>\n\n                  <removeUnusedImports/>\n                  <importOrder/>\n\n                </java>\n              </configuration>\n            </plugin>\n        </plugins>\n    </build>\n\n    <profiles>\n        <profile>\n            <id>sign-artifacts</id>\n            <build>\n                <plugins>\n                    <plugin>\n                        <groupId>org.apache.maven.plugins</groupId>\n                        <artifactId>maven-gpg-plugin</artifactId>\n                        <version>3.2.1</version>\n                        <executions>\n                            <execution>\n                                <id>sign-artifacts</id>\n                                <phase>verify</phase>\n                                <goals>\n                                    <goal>sign</goal>\n                                </goals>\n                            </execution>\n                        </executions>\n                    </plugin>\n                </plugins>\n            </build>\n        </profile>\n    </profiles>\n\n    <dependencies>\n        <!-- @Nullable annotation -->\n        <dependency>\n            <groupId>com.google.code.findbugs</groupId>\n            <artifactId>jsr305</artifactId>\n            <version>3.0.2</version>\n        </dependency>\n        <dependency>\n            <groupId>com.squareup.okhttp3</groupId>\n            <artifactId>okhttp</artifactId>\n            <version>${okhttp-version}</version>\n        </dependency>\n        <dependency>\n            <groupId>com.squareup.okhttp3</groupId>\n            <artifactId>logging-interceptor</artifactId>\n            <version>${okhttp-version}</version>\n        </dependency>\n        <dependency>\n            <groupId>com.google.code.gson</groupId>\n            <artifactId>gson</artifactId>\n            <version>${gson-version}</version>\n        </dependency>\n        <dependency>\n            <groupId>io.gsonfire</groupId>\n            <artifactId>gson-fire</artifactId>\n            <version>${gson-fire-version}</version>\n        </dependency>\n        <dependency>\n            <groupId>org.apache.commons</groupId>\n            <artifactId>commons-lang3</artifactId>\n            <version>${commons-lang3-version}</version>\n        </dependency>\n        <dependency>\n            <groupId>jakarta.annotation</groupId>\n            <artifactId>jakarta.annotation-api</artifactId>\n            <version>${jakarta-annotation-version}</version>\n            <scope>provided</scope>\n        </dependency>\n        <dependency>\n            <groupId>org.openapitools</groupId>\n            <artifactId>jackson-databind-nullable</artifactId>\n            <version>${jackson-databind-nullable-version}</version>\n        </dependency>\n        <dependency>\n            <groupId>jakarta.ws.rs</groupId>\n            <artifactId>jakarta.ws.rs-api</artifactId>\n            <version>${jakarta.ws.rs-api-version}</version>\n        </dependency>\n        <!-- test dependencies -->\n        <dependency>\n            <groupId>org.junit.jupiter</groupId>\n            <artifactId>junit-jupiter-engine</artifactId>\n            <version>${junit-version}</version>\n            <scope>test</scope>\n        </dependency>\n        <dependency>\n            <groupId>org.junit.platform</groupId>\n            <artifactId>junit-platform-runner</artifactId>\n            <version>${junit-platform-runner.version}</version>\n            <scope>test</scope>\n        </dependency>\n    </dependencies>\n    <properties>\n        <java.version>1.8</java.version>\n        <maven.compiler.source>${java.version}</maven.compiler.source>\n        <maven.compiler.target>${java.version}</maven.compiler.target>\n        <gson-fire-version>1.9.0</gson-fire-version>\n        <okhttp-version>4.12.0</okhttp-version>\n        <gson-version>2.10.1</gson-version>\n        <commons-lang3-version>3.14.0</commons-lang3-version>\n        <jackson-databind-nullable-version>0.2.6</jackson-databind-nullable-version>\n        <jakarta-annotation-version>1.3.5</jakarta-annotation-version>\n        <junit-version>5.10.3</junit-version>\n        <junit-platform-runner.version>1.10.0</junit-platform-runner.version>\n        <jakarta.ws.rs-api-version>2.1.6</jakarta.ws.rs-api-version>\n        <jsr311-api-version>1.1.1</jsr311-api-version>\n        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n        <spotless.version>2.43.0</spotless.version>\n    </properties>\n</project>\n\n\n=== javascript/package.json ===\n{\n  \"name\": \"gamebrain-js\",\n  \"version\": \"1.0.1\",\n  \"description\": \"GameBrain API\",\n  \"license\": \"Unlicense\",\n  \"main\": \"dist/index.js\",\n  \"scripts\": {\n    \"build\": \"babel src -d dist\",\n    \"prepare\": \"npm run build\",\n    \"test\": \"mocha --require @babel/register --recursive\"\n  },\n  \"browser\": {\n    \"fs\": false\n  },\n  \"dependencies\": {\n    \"@babel/cli\": \"^7.0.0\",\n    \"superagent\": \"^5.3.0\"\n  },\n  \"devDependencies\": {\n    \"@babel/core\": \"^7.0.0\",\n    \"@babel/plugin-proposal-class-properties\": \"^7.0.0\",\n    \"@babel/plugin-proposal-decorators\": \"^7.0.0\",\n    \"@babel/plugin-proposal-do-expressions\": \"^7.0.0\",\n    \"@babel/plugin-proposal-export-default-from\": \"^7.0.0\",\n    \"@babel/plugin-proposal-export-namespace-from\": \"^7.0.0\",\n    \"@babel/plugin-proposal-function-bind\": \"^7.0.0\",\n    \"@babel/plugin-proposal-function-sent\": \"^7.0.0\",\n    \"@babel/plugin-proposal-json-strings\": \"^7.0.0\",\n    \"@babel/plugin-proposal-logical-assignment-operators\": \"^7.0.0\",\n    \"@babel/plugin-proposal-nullish-coalescing-operator\": \"^7.0.0\",\n    \"@babel/plugin-proposal-numeric-separator\": \"^7.0.0\",\n    \"@babel/plugin-proposal-optional-chaining\": \"^7.0.0\",\n    \"@babel/plugin-proposal-pipeline-operator\": \"^7.0.0\",\n    \"@babel/plugin-proposal-throw-expressions\": \"^7.0.0\",\n    \"@babel/plugin-syntax-dynamic-import\": \"^7.0.0\",\n    \"@babel/plugin-syntax-import-meta\": \"^7.0.0\",\n    \"@babel/preset-env\": \"^7.0.0\",\n    \"@babel/register\": \"^7.0.0\",\n    \"expect.js\": \"^0.3.1\",\n    \"mocha\": \"^8.0.1\",\n    \"sinon\": \"^7.2.0\"\n  },\n  \"files\": [\n    \"dist\"\n  ]\n}\n\n\n=== kotlin/build.gradle ===\ngroup 'co.gamebrain'\nversion '1.0.1'\n\nwrapper {\n    gradleVersion = '8.7'\n    distributionUrl = \"https://services.gradle.org/distributions/gradle-$gradleVersion-all.zip\"\n}\n\nbuildscript {\n    ext.kotlin_version = '1.9.23'\n    ext.spotless_version = \"6.25.0\"\n\n    repositories {\n        maven { url \"https://repo1.maven.org/maven2\" }\n    }\n    dependencies {\n        classpath \"org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version\"\n        classpath \"com.diffplug.spotless:spotless-plugin-gradle:$spotless_version\"\n    }\n}\n\napply plugin: 'kotlin'\napply plugin: 'maven-publish'\napply plugin: 'com.diffplug.spotless'\n\nrepositories {\n    maven { url \"https://repo1.maven.org/maven2\" }\n}\n\n// Use spotless plugin to automatically format code, remove unused import, etc\n// To apply changes directly to the file, run `gradlew spotlessApply`\n// Ref: https://github.com/diffplug/spotless/tree/main/plugin-gradle\nspotless {\n    // comment out below to run spotless as part of the `check` task\n    enforceCheck false\n\n    format 'misc', {\n        // define the files (e.g. '*.gradle', '*.md') to apply `misc` to\n        target '.gitignore'\n\n        // define the steps to apply to those files\n        trimTrailingWhitespace()\n        indentWithSpaces() // Takes an integer argument if you don't like 4\n        endWithNewline()\n    }\n    kotlin {\n        ktfmt()\n    }\n}\n\ntest {\n    useJUnitPlatform()\n}\n\ndependencies {\n    implementation \"org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version\"\n    implementation \"org.jetbrains.kotlin:kotlin-reflect:$kotlin_version\"\n    implementation \"com.squareup.moshi:moshi-kotlin:1.15.1\"\n    implementation \"com.squareup.moshi:moshi-adapters:1.15.1\"\n    implementation \"com.squareup.okhttp3:okhttp:4.12.0\"\n    testImplementation \"io.kotlintest:kotlintest-runner-junit5:3.4.2\"\n}\n\n\n=== php/composer.json ===\n{\n    \"version\": \"1.0.1\",\n    \"description\": \"GameBrain API\",\n    \"keywords\": [\n        \"openapitools\",\n        \"openapi-generator\",\n        \"openapi\",\n        \"php\",\n        \"sdk\",\n        \"rest\",\n        \"api\"\n    ],\n    \"homepage\": \"https://openapi-generator.tech\",\n    \"license\": \"unlicense\",\n    \"authors\": [\n        {\n            \"name\": \"OpenAPI\",\n            \"homepage\": \"https://openapi-generator.tech\"\n        }\n    ],\n    \"require\": {\n        \"php\": \"^7.4 || ^8.0\",\n        \"ext-curl\": \"*\",\n        \"ext-json\": \"*\",\n        \"ext-mbstring\": \"*\",\n        \"guzzlehttp/guzzle\": \"^7.3\",\n        \"guzzlehttp/psr7\": \"^1.7 || ^2.0\"\n    },\n    \"require-dev\": {\n        \"phpunit/phpunit\": \"^8.0 || ^9.0\",\n        \"friendsofphp/php-cs-fixer\": \"^3.5\"\n    },\n    \"autoload\": {\n        \"psr-4\": { \"OpenAPI\\\\Client\\\\\" : \"lib/\" }\n    },\n    \"autoload-dev\": {\n        \"psr-4\": { \"OpenAPI\\\\Client\\\\Test\\\\\" : \"test/\" }\n    }\n}\n\n\n=== python/pyproject.toml ===\n[tool.poetry]\nname = \"gamebrain\"\nversion = \"1.0.1\"\ndescription = \"GameBrain API\"\nauthors = [\"David Urbansky <mail@gamebrain.co>\"]\nlicense = \"NoLicense\"\nreadme = \"README.md\"\nrepository = \"https://github.com/ddsky/gamebrain-clients/tree/master/python/\"\nkeywords = [\"OpenAPI\", \"OpenAPI-Generator\", \"GameBrain API\"]\ninclude = [\"gamebrain/py.typed\"]\n\n[tool.poetry.dependencies]\npython = \"^3.7\"\n\nurllib3 = \">= 1.25.3\"\npython-dateutil = \">=2.8.2\"\npydantic = \">=2\"\ntyping-extensions = \">=4.7.1\"\n\n[tool.poetry.dev-dependencies]\npytest = \">=7.2.1\"\ntox = \">=3.9.0\"\nflake8 = \">=4.0.0\"\ntypes-python-dateutil = \">=2.8.19.14\"\nmypy = \"1.4.1\"\n\n\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.pylint.'MESSAGES CONTROL']\nextension-pkg-whitelist = \"pydantic\"\n\n[tool.mypy]\nfiles = [\n  \"gamebrain\",\n  #\"test\",  # auto-generated tests\n  \"tests\", # hand-written tests\n]\n# TODO: enable \"strict\" once all these individual checks are passing\n# strict = true\n\n# List from: https://mypy.readthedocs.io/en/stable/existing_code.html#introduce-stricter-options\nwarn_unused_configs = true\nwarn_redundant_casts = true\nwarn_unused_ignores = true\n\n## Getting these passing should be easy\nstrict_equality = true\nstrict_concatenate = true\n\n## Strongly recommend enabling this one as soon as you can\ncheck_untyped_defs = true\n\n## These shouldn't be too much additional work, but may be tricky to\n## get passing if you use a lot of untyped libraries\ndisallow_subclassing_any = true\ndisallow_untyped_decorators = true\ndisallow_any_generics = true\n\n### These next few are various gradations of forcing use of type annotations\n#disallow_untyped_calls = true\n#disallow_incomplete_defs = true\n#disallow_untyped_defs = true\n#\n### This one isn't too hard to get passing, but return on investment is lower\n#no_implicit_reexport = true\n#\n### This one can be tricky to get passing if you use a lot of untyped libraries\n#warn_return_any = true\n\n\n=== python/requirements.txt ===\npython_dateutil >= 2.5.3\nsetuptools >= 21.0.0\nurllib3 >= 1.25.3, < 2.1.0\npydantic >= 2\ntyping-extensions >= 4.7.1\n\n\n=== python/setup.py ===\n# coding: utf-8\n\n\"\"\"\n    GameBrain API\n\n    GameBrain API\n\n    The version of the OpenAPI document: 1.0.1\n    Contact: mail@gamebrain.co\n    Generated by OpenAPI Generator (https://openapi-generator.tech)\n\n    Do not edit the class manually.\n\"\"\"  # noqa: E501\n\n\nfrom setuptools import setup, find_packages  # noqa: H301\n\n# To install the library, run the following\n#\n# python setup.py install\n#\n# prerequisite: setuptools\n# http://pypi.python.org/pypi/setuptools\nNAME = \"gamebrain\"\nVERSION = \"1.0.1\"\nPYTHON_REQUIRES = \">=3.7\"\nREQUIRES = [\n    \"urllib3 >= 1.25.3, < 2.1.0\",\n    \"python-dateutil\",\n    \"pydantic >= 2\",\n    \"typing-extensions >= 4.7.1\",\n]\n\nsetup(\n    name=NAME,\n    version=VERSION,\n    description=\"GameBrain API\",\n    author=\"David Urbansky\",\n    author_email=\"mail@gamebrain.co\",\n    url=\"\",\n    keywords=[\"OpenAPI\", \"OpenAPI-Generator\", \"GameBrain API\"],\n    install_requires=REQUIRES,\n    packages=find_packages(exclude=[\"test\", \"tests\"]),\n    include_package_data=True,\n    long_description_content_type='text/markdown',\n    long_description=\"\"\"\\\n    GameBrain API\n    \"\"\",  # noqa: E501\n    package_data={\"gamebrain\": [\"py.typed\"]},\n)\n\n\n=== ruby/Gemfile ===\nsource 'https://rubygems.org'\n\ngemspec\n\ngroup :development, :test do\n  gem 'rake', '~> 13.0.1'\n  gem 'pry-byebug'\n  gem 'rubocop', '~> 0.66.0'\nend\n\n\n=== rust/Cargo.toml ===\n[package]\nname = \"gamebrain\"\nversion = \"1.0.1\"\nauthors = [\"mail@gamebrain.co\"]\ndescription = \"GameBrain API\"\n# Override this license by providing a License Object in the OpenAPI.\nlicense = \"Unlicense\"\nedition = \"2021\"\n\n[dependencies]\nserde = { version = \"^1.0\", features = [\"derive\"] }\nserde_with = { version = \"^3.8\", default-features = false, features = [\"base64\", \"std\", \"macros\"] }\nserde_json = \"^1.0\"\nurl = \"^2.5\"\nuuid = { version = \"^1.8\", features = [\"serde\", \"v4\"] }\nreqwest = { version = \"^0.12\", features = [\"json\", \"multipart\"] }\n\n\n=== typescript/package.json ===\n{\n  \"name\": \"\",\n  \"version\": \"\",\n  \"description\": \"OpenAPI client for \",\n  \"author\": \"OpenAPI-Generator Contributors\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/ddsky/gamebrain-clients/tree/master/typescript/.git\"\n  },\n  \"keywords\": [\n    \"fetch\",\n    \"typescript\",\n    \"openapi-client\",\n    \"openapi-generator\"\n  ],\n  \"license\": \"Unlicense\",\n  \"main\": \"./dist/index.js\",\n  \"type\": \"commonjs\",\n  \"exports\": {\n    \".\": {\n      \"require\": \"./dist/index.js\",\n      \"types\": \"./dist/index.d.js\"\n    }\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"typings\": \"./dist/index.d.ts\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"prepare\": \"npm run build\"\n  },\n  \"dependencies\": {\n    \"whatwg-fetch\": \"^3.0.0\",\n    \"es6-promise\": \"^4.2.4\",\n    \"url-parse\": \"^1.4.3\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^4.0\",\n    \"@types/url-parse\": \"1.4.4\"\n  }\n}\n"
+}

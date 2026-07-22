@@ -1,0 +1,98 @@
+{
+  "name": "imprvhub__mcp-rss-aggregator",
+  "display_name": "mcp-rss-aggregator",
+  "description": "Model Context Protocol Server for aggregating RSS feeds in Claude Desktop",
+  "author": {
+    "name": "imprvhub"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js", "--feeds-path", "${user_config.feeds_path}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "feeds_path": {
+      "type": "file",
+      "title": "Feeds File Path",
+      "description": "Path to your OPML or JSON file containing RSS feed subscriptions. If omitted, the sample feeds file will be used.",
+      "required": false,
+      "default": "${__dirname}/public/sample-feeds.opml"
+    }
+  },
+  "readme": "# MCP RSS Aggregator\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/imprvhub/mcp-rss-aggregator)](https://archestra.ai/mcp-catalog/imprvhub__mcp-rss-aggregator)\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/51854dcf-6cb2-4bd0-a37f-5b87ba25d7c7)\n[![smithery badge](https://smithery.ai/badge/@imprvhub/mcp-rss-aggregator)](https://smithery.ai/server/@imprvhub/mcp-rss-aggregator)\n\n<table style=\"border-collapse: collapse; width: 100%; table-layout: fixed;\">\n<tr>\n<td style=\"padding: 15px; vertical-align: middle; border: none; text-align: center;\">\n  <a href=\"https://mseep.ai/app/imprvhub-mcp-rss-aggregator\">\n    <img src=\"https://mseep.net/pr/imprvhub-mcp-rss-aggregator-badge.png\" alt=\"MseeP.ai Security Assessment Badge\" />\n  </a>\n</td>\n<td style=\"width: 40%; padding: 15px; vertical-align: middle; border: none;\">An integration that allows Claude Desktop to fetch and read content from your favorite RSS feeds using the Model Context Protocol (MCP).</td>\n<td style=\"width: 60%; padding: 0; vertical-align: middle; border: none; min-width: 300px; text-align: center;\"><a href=\"https://glama.ai/mcp/servers/@imprvhub/mcp-rss-aggregator\">\n  <img style=\"max-width: 100%; height: auto; min-width: 300px;\" src=\"https://glama.ai/mcp/servers/@imprvhub/mcp-rss-aggregator/badge\" alt=\"RSS Aggregator MCP server\" />\n</a></td>\n</tr>\n</table>\n\n## Features\n\n- Read articles from your favorite RSS feeds directly in Claude Desktop\n- Support for OPML files to import your existing feed subscriptions\n- Organize feeds by categories\n- Get the latest articles across all your feeds\n- Filter articles by feed source or category\n- Well-formatted article presentation with titles, snippets, and links\n\n## Demo\n\n<p>\n  <a href=\"https://youtu.be/9pvm078fHkQ\">\n    <img src=\"public/assets/preview.png\" width=\"600\" alt=\"Status Observer MCP Demo\">\n  </a>\n</p>\n\n<details>\n<summary> Timestamps </summary>\n\nClick on any timestamp to jump to that section of the video\n\n[00:00](https://youtu.be/9pvm078fHkQ&t=0s) - **Sample RSS Feed Demonstration**:\nUsing the default 'sample-feeds.opml' file included in the repository. This segment displays how Claude processes and presents news content from sources like TechCrunch, The Verge, and other technology publications through the MCP (Model Context Protocol).\n\n[01:05](https://youtu.be/9pvm078fHkQ&t=65s) - **Configuration File Editing Process**:\nStep-by-step walkthrough of accessing and modifying the claude_desktop_config.json file to change the OPML file path reference from the default sample to a customized 'my-feeds.opml' file.\n\n[01:15](https://youtu.be/9pvm078fHkQ&t=75s) - **Application Restart Procedure**:\nIllustrating the necessary step of closing and reopening the Claude Desktop application to properly load and apply the modified OPML file configuration changes.\n\n[01:25](https://youtu.be/9pvm078fHkQ&t=85s) - **Custom RSS Feed Results**:\nDemonstration of the results after implementing the custom OPML file. This section highlights the expanded and more diverse news sources now available through Claude Desktop, including Spanish-language content.\n</details>\n\n## Requirements\n\n- Node.js 16 or higher\n- Claude Desktop\n- Internet connection to access RSS feeds\n\n## Installation\n\n### Installing Manually\n1. Clone or download this repository:\n```bash\ngit clone https://github.com/imprvhub/mcp-rss-aggregator\ncd mcp-rss-aggregator\n```\n\n2. Install dependencies:\n```bash\nnpm install\n```\n\n3. Build the project:\n```bash\nnpm run build\n```\n\n## Feed Configuration\n\nThe RSS Aggregator supports both OPML and JSON formats for feed configuration.\n\n### Using OPML (Recommended)\n\nOPML (Outline Processor Markup Language) is a standard format used by most RSS readers to export and import feed subscriptions. \n\nA sample OPML file with popular feeds is included in the `public/sample-feeds.opml` file. You can:\n\n1. Use this file as-is\n2. Edit it to add your own feeds\n3. Replace it with an export from your existing RSS reader\n\nMost RSS readers allow you to export your subscriptions as an OPML file.\n\n### Using JSON\n\nAlternatively, you can define your feeds in a JSON file with the following format:\n\n```json\n[\n  {\n    \"title\": \"Hacker News\",\n    \"url\": \"https://news.ycombinator.com/rss\",\n    \"htmlUrl\": \"https://news.ycombinator.com/\",\n    \"category\": \"Tech News\"\n  },\n  {\n    \"title\": \"TechCrunch\",\n    \"url\": \"https://techcrunch.com/feed/\",\n    \"htmlUrl\": \"https://techcrunch.com/\",\n    \"category\": \"Tech News\"\n  }\n]\n```\n\n## Running the MCP Server\n\nThere are two ways to run the MCP server:\n\n### Option 1: Running manually\n\n1. Open a terminal or command prompt\n2. Navigate to the project directory\n3. Run the server directly:\n\n```bash\nnode build/index.js\n```\n\nKeep this terminal window open while using Claude Desktop. The server will run until you close the terminal.\n\n### Option 2: Auto-starting with Claude Desktop (recommended for regular use)\n\nThe Claude Desktop can automatically start the MCP server when needed. To set this up:\n\n#### Configuration\n\nThe Claude Desktop configuration file is located at:\n\n- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n- **Linux**: `~/.config/Claude/claude_desktop_config.json`\n\nEdit this file to add the RSS Aggregator MCP configuration. If the file doesn't exist, create it:\n\n```json\n{\n  \"mcpServers\": {\n    \"rssAggregator\": {\n      \"command\": \"node\",\n      \"args\": [\"ABSOLUTE_PATH_TO_DIRECTORY/mcp-rss-aggregator/build/index.js\"],\n      \"feedsPath\": \"ABSOLUTE_PATH_TO_YOUR_FEEDS_FILE.opml\"\n    }\n  }\n}\n```\n\n**Important Notes**: \n- Replace `ABSOLUTE_PATH_TO_DIRECTORY` with the **complete absolute path** where you installed the MCP\n  - macOS/Linux example: `/Users/username/mcp-rss-aggregator`\n  - Windows example: `C:\\\\Users\\\\username\\\\mcp-rss-aggregator`\n- Replace `ABSOLUTE_PATH_TO_YOUR_FEEDS_FILE.opml` with the path to your OPML or JSON file\n  - If omitted, the sample feeds file will be used\n\nIf you already have other MCPs configured, simply add the \"rssAggregator\" section inside the \"mcpServers\" object:\n\n```json\n{\n  \"mcpServers\": {\n    \"otherMcp1\": {\n      \"command\": \"...\",\n      \"args\": [\"...\"]\n    },\n    \"rssAggregator\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"ABSOLUTE_PATH_TO_DIRECTORY/mcp-rss-aggregator/build/index.js\"\n      ],\n      \"feedsPath\": \"ABSOLUTE_PATH_TO_YOUR_FEEDS_FILE.opml\"\n    }\n  }\n}\n```\n\nThe MCP server will automatically start when Claude Desktop needs it, based on the configuration in your `claude_desktop_config.json` file.\n\n## Usage\n\n1. Restart Claude Desktop after modifying the configuration\n2. In Claude, use the `rss` command to interact with the RSS Aggregator MCP Server\n3. The MCP server runs as a subprocess managed by Claude Desktop\n\n## Available Commands\n\nThe RSS Aggregator MCP provides a tool named `rss` with several commands:\n\n| Command | Description | Parameters | Example |\n|---------|-------------|------------|---------|\n| `latest` | Show latest articles from all feeds | Optional limit (--N) | `rss latest --20` |\n| `top` or `best` | Show top articles from all feeds | Optional limit (--N) | `rss top --15` |\n| `list` | List all available feeds | None | `rss list` |\n| `--[feed-id]` | Show articles from a specific feed | Optional limit (--N) | `rss --hackernews --10` |\n| `[category]` | Show articles from a specific category | Optional limit (--N) | `rss \"Tech News\" --20` |\n| `set-feeds-path --[path]` | Set path to OPML/JSON file | Path to file | `rss set-feeds-path --/path/to/feeds.opml` |\n\n## Example Usage\n\nHere are various examples of how to use the RSS Aggregator with Claude:\n\n### Direct Commands:\n\n```\nrss latest\nrss top --20\nrss list\nrss \"Tech News\"\nrss --hackernews\nrss --techcrunch --15\n```\n\n### Natural Language Queries:\n\nYou can also interact with the MCP using natural language. Claude will interpret these requests and use the appropriate commands:\n\n- \"What are the latest news on Hacker News?\"\n- \"Show me the top tech articles today\"\n- \"Fetch the latest articles from my programming feeds\"\n- \"List all my RSS feeds\"\n\n## Extended Usage Examples\n\n### Daily News Briefing\n\nGet your news briefing from all your sources:\n\n```\nrss latest --25\n```\n\nThis will fetch the 25 most recent articles across all your feeds, giving you a quick overview of the latest news.\n\n### Exploring Top Content\n\nFind the most important or popular articles:\n\n```\nrss top --20\n```\n\n### Category-Based Reading\n\nFocus on specific content categories:\n\n```\nrss \"Tech News\" --30\nrss \"Politics\" --15\nrss \"Science\" --10\n```\n\n### Source-Specific Updates\n\nRead updates from specific sources you follow:\n\n```\nrss --hackernews --20\nrss --nytimes\nrss --techcrunch --15\n```\n\n### Discover Your Available Feeds\n\nFind out what feeds you have configured:\n\n```\nrss list\n```\n\n### Combining Multiple Requests\n\nYou can make multiple sequential requests to build a comprehensive view:\n\n```\nrss \"Tech News\" --10\nrss \"Finance\" --10\nrss top --5\n```\n\n### Practical Workflows\n\n1. **Morning Routine**:\n   ```\n   rss top --10\n   rss \"News\" --5\n   ```\n\n2. **Industry Research**:\n   ```\n   rss \"Industry News\" --15\n   rss --bloomberg --5\n   ```\n\n3. **Tech Updates**:\n   ```\n   rss --hackernews --10\n   rss --techcrunch --5\n   ```\n\n### Working with Claude\n\nYou can ask Claude to analyze or summarize the articles:\n\n1. After running: `rss latest --10`\n   Ask: \"Can you summarize these articles?\"\n\n2. After running: `rss \"Tech News\" --15`\n   Ask: \"What are the key trends in these tech articles?\"\n\n3. After running: `rss --nytimes --washingtonpost --10`\n   Ask: \"Compare how these sources cover current events\"\n\n## Troubleshooting\n\n### \"Server disconnected\" error\nIf you see the error \"MCP RSS Aggregator: Server disconnected\" in Claude Desktop:\n\n1. **Verify the server is running**:\n   - Open a terminal and manually run `node build/index.js` from the project directory\n   - If the server starts successfully, use Claude while keeping this terminal open\n\n2. **Check your configuration**:\n   - Ensure the absolute path in `claude_desktop_config.json` is correct for your system\n   - Double-check that you've used double backslashes (`\\\\`) for Windows paths\n   - Verify you're using the complete path from the root of your filesystem\n\n### Tools not appearing in Claude\nIf the RSS Aggregator tools don't appear in Claude:\n- Make sure you've restarted Claude Desktop after configuration\n- Check the Claude Desktop logs for any MCP communication errors\n- Ensure the MCP server process is running (run it manually to confirm)\n\n### Feeds not loading\nIf your feeds aren't loading properly:\n- Make sure your OPML/JSON file is correctly formatted\n- Check if the `feedsPath` in your configuration is correct\n- Try running the server manually with a known good feeds file\n\n## Contributing\n\nContributions to improve the RSS Aggregator are welcome! Here are some ways you can contribute:\n\n1. Add support for more feed formats\n2. Improve feed parsing and error handling\n3. Add more visualization options for articles\n4. Improve categorization and filtering capabilities\n\n## License\n\nThis project is licensed under the Mozilla Public License 2.0 - see the [LICENSE](https://github.com/imprvhub/mcp-rss-aggregator/blob/main/LICENSE) file for details.\n\n## Related Links\n\n- [Model Context Protocol](https://modelcontextprotocol.io/)\n- [Claude Desktop](https://claude.ai/download)\n- [MCP Series](https://github.com/mcp-series)\n",
+  "category": "Aggregators",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-rss-aggregator-configured": {
+        "command": "node",
+        "args": ["ABSOLUTE_PATH_TO_DIRECTORY/mcp-rss-aggregator/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "imprvhub",
+    "repo": "mcp-rss-aggregator",
+    "url": "https://github.com/imprvhub/mcp-rss-aggregator",
+    "name": "mcp-rss-aggregator",
+    "path": null,
+    "stars": 5,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "8f11ab7e5b34e93a789cfffceae4c5496e014d60"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:32.934Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "cheerio",
+      "importance": 7
+    },
+    {
+      "name": "fast-xml-parser",
+      "importance": 8
+    },
+    {
+      "name": "opml-to-json",
+      "importance": 8
+    },
+    {
+      "name": "rss-parser",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-rss-aggregator\",\n  \"version\": \"0.1.0\",\n  \"description\": \"Model Context Protocol Server for aggregating RSS feeds in Claude Desktop\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.1\",\n    \"axios\": \"^1.9.0\",\n    \"cheerio\": \"^1.0.0\",\n    \"fast-xml-parser\": \"^4.3.5\",\n    \"opml-to-json\": \"^1.0.1\",\n    \"rss-parser\": \"^3.13.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.1\",\n    \"typescript\": \"^5.2.2\"\n  }\n}\n"
+}

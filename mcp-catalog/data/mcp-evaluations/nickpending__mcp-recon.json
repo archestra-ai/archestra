@@ -1,0 +1,106 @@
+{
+  "name": "nickpending__mcp-recon",
+  "display_name": "mcp-recon",
+  "description": "Tellix is a conversational recon interface powered by httpx and LLMs. Just ask.",
+  "author": {
+    "name": "nickpending"
+  },
+  "server": {
+    "command": "docker",
+    "args": ["run", "--rm", "-i", "-e", "PDCP_API_KEY=${user_config.pdcp_api_key}", "mcp/recon"],
+    "env": {
+      "PDCP_API_KEY": "${user_config.pdcp_api_key}"
+    },
+    "type": "local",
+    "docker_image": "mcp/recon"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "pdcp_api_key": {
+      "type": "string",
+      "title": "ProjectDiscovery API Key",
+      "description": "Your ProjectDiscovery API key for enhanced reconnaissance features.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# mcp-recon\n\n> **mcp-recon** (formerly Tellix) is a conversational reconnaissance interface and MCP server powered by `httpx` and `asnmap`. Just ask.\n\n## Overview\n\n**mcp-recon** bridges the gap between natural language and HTTP infrastructure analysis. It exposes reconnaissance tools through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction), allowing you to perform web domain reconnaissance via any compatible AI interface, such as Claude Desktop.\n\n## Features\n\n- **Conversational Commands**: Execute reconnaissance through simple text prompts\n- **MCP Server**: Integrates with Claude Desktop or other MCP-compatible tools\n- **Multiple Analysis Modes**: Choose from lite and full reconnaissance levels\n- **Standalone ASN Lookup**: Query IPs, ASNs, or organizations directly\n- **Docker Ready**: Run in an isolated container for security and portability\n- **Powered by `httpx`**: Utilizes ProjectDiscovery's robust reconnaissance tools\n- **Bug Workarounds**: Automatically handles `httpx`'s stdin/stdout leakage issue\n- **MCP Prompts**: Includes predefined prompts like `http_lite_scan` and `katana_command_generator` for streamlined operations\n\n## What is the Model Context Protocol (MCP)?\n\nThe [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) is an open standard developed by Anthropic that enables AI assistants to interact with external tools, systems, and data sources. MCP provides a standardized interface for AI models to access and execute functions, retrieve resources, and utilize prompts, facilitating seamless integration between AI applications and various software environments.\n\n## MCP Prompts in mcp-recon\n\nIn MCP, a **prompt** is a predefined template that guides AI assistants in performing specific tasks. Prompts can accept dynamic arguments, include context from resources, and chain multiple interactions, enabling structured and efficient workflows.\n\n**mcp-recon** includes the following prompts:\n\n- **`http_lite_scan`**: Initiates a quick HTTP scan for basic information about specified targets.\n- **`katana_command_generator`**: Generates optimized Katana crawl commands based on reconnaissance goals and desired thoroughness.\n\n## Quick Start Guide\n\n**mcp-recon** provides three main reconnaissance tools:\n\n### 1. Quick/Lightweight Reconnaissance (`http_lite_recon`)\n\nFast, lightweight HTTP fingerprinting that provides essential information with minimal overhead.\n\n**Example:**\n\n```\nUser: \"Using quick http recon, what's the status code for example.com?\"\n\nAI: \"I checked example.com and it's currently returning a 200 OK status code, indicating the site is up and functioning normally. It's being served from an Nginx web server on IP 93.184.216.34.\"\n```\n\n### 2. Full Reconnaissance (`http_full_recon`)\n\nComprehensive metadata collection including page previews, headers, certificates, and technology detection.\n\n**Example:**\n\n```\nUser: \"Using full http recon, what certificates is www.google.com using?\"\n\nAI: \"Based on my analysis, www.google.com is using a TLS 1.3 certificate issued by Google Trust Services. The certificate was issued on March 20, 2025, and is valid until June 12, 2025. It was specifically issued for 'www.google.com' and uses the TLS_AES_128_GCM_SHA256 cipher suite.\"\n```\n\n### 3. ASN Lookup (`asn_lookup`)\n\nStandalone lookup of IPs, ASNs, or organization names using ProjectDiscovery's `asnmap` library.\n\n**Example:**\n\n```\nUser: \"Who owns ASN 14421?\"\n\nAI: \"ASN 14421 is operated by 'PPLINKNET' in the US.\"\n```\n\n## Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/nickpending/mcp-recon.git\ncd mcp-recon\n\n# Build the Docker image\ndocker build -t mcp/recon -f Dockerfile .\n```\n\n**mcp-recon** is designed to run as a Docker container to be used with Claude Desktop via the MCP protocol.\n\n## MCP Configuration\n\n**mcp-recon** runs as a standalone MCP server. Add it to your MCP configuration like so:\n\n```json\n\"mcp-recon\": {\n  \"command\": \"docker\",\n  \"args\": [\n    \"run\",\n    \"--rm\",\n    \"-i\",\n    \"mcp/recon\"\n  ]\n}\n```\n\nUsing an `.env` file:\n\n```json\n\"mcp-recon\": {\n  \"command\": \"docker\",\n  \"args\": [\n    \"run\",\n    \"--rm\",\n    \"-i\",\n    \"--env-file\", \"/Users/yourname/.config/mcp-recon.env\",\n    \"mcp/recon\"\n  ]\n}\n```\n\nYour `.env` should contain:\n\n```env\nPDCP_API_KEY=your_projectdiscovery_api_key\n```\n\n## Troubleshooting\n\n**No Results Returned**:\n- Domain is publicly accessible\n- You've specified the correct tool (`http_lite_recon`, `http_full_recon`, `asn_lookup`)\n- Target domain isn't blocking scans\n\n**Performance Issues**:\n- Start with `http_lite_recon` for faster results\n- Scan fewer domains at once for better performance\n\n## Known Issues\n\n- **httpx Stdin Leak**: The `httpx` library attempts to read stdin even when used as a library. `mcp-recon` shields `os.Stdin` to prevent interference with MCP.\n- **ASN Silent Failures**: Even when `Asn = true`, `httpx` may fail to enrich IPs. `mcp-recon` includes a fallback using the official `asnmap` Go library.\n\n## Security Considerations\n\n- Only scan domains you own or have permission to test\n- The full_recon mode retrieves complete page content — use judiciously\n- Consider rate limiting to avoid impacting target systems\n\n## Screenshots\n\n![mcp-recon Screenshot - Quick Recon](docs/tellix-screenshot-01.png)\n> This example shows a quick recon request on `www.google.com`, returning status code, title, server details, and IP address — all from a natural language query.\n\n![mcp-recon Screenshot - Complete Recon](docs/tellix-screenshot-02.png)\n> This example demonstrates a complete recon on `www.microsoft.com`, including TLS config, headers, CDN, and security observations.\n\n## Name Change Notice\n\nThis project was formerly known as **Tellix**. It has been renamed to **mcp-recon** to better align with the Model Context Protocol (MCP) naming convention used in security tools. All links to the previous repository name will be redirected to the new name, but you should update your references when possible.\n\n## License\n\nMIT License. See `LICENSE` file for full details.\n\n## References & Related Work\n\n- [Model Context Protocol SDK](https://modelcontextprotocol.io/introduction)\n- [mcp-go](https://github.com/mark3labs/mcp-go)\n- [httpx](https://github.com/projectdiscovery/httpx)\n- [asnmap](https://github.com/projectdiscovery/asnmap)\n- [Claude Desktop](https://www.anthropic.com)",
+  "category": "Security",
+  "quality_score": 39,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-recon-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "mcp/recon"],
+        "env": {},
+        "docker_image": "mcp/recon"
+      },
+      "mcp-recon-docker-with-env-file": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "--env-file", "/Users/yourname/.config/mcp-recon.env", "mcp/recon"],
+        "env": {
+          "PDCP_API_KEY": "your_projectdiscovery_api_key"
+        },
+        "docker_image": "/Users/yourname/.config/mcp-recon.env"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "nickpending",
+    "repo": "mcp-recon",
+    "url": "https://github.com/nickpending/mcp-recon",
+    "name": "mcp-recon",
+    "path": null,
+    "stars": 15,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "3eb5a9e21cc0361e3270ed20e48d7d19f989c1fe"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:34.287Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "projectdiscovery/asnmap",
+      "importance": 9
+    },
+    {
+      "name": "projectdiscovery/goflags",
+      "importance": 8
+    },
+    {
+      "name": "projectdiscovery/gologger",
+      "importance": 7
+    },
+    {
+      "name": "projectdiscovery/httpx",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule tellix\n\ngo 1.23.2\n\nrequire (\n\tgithub.com/mark3labs/mcp-go v0.18.0\n\tgithub.com/projectdiscovery/asnmap v1.1.1\n\tgithub.com/projectdiscovery/goflags v0.1.74\n\tgithub.com/projectdiscovery/gologger v1.1.51\n\tgithub.com/projectdiscovery/httpx v1.6.10\n)\n\nrequire (\n\taead.dev/minisign v0.2.0 // indirect\n\tgithub.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect\n\tgithub.com/Masterminds/semver/v3 v3.2.1 // indirect\n\tgithub.com/Mzack9999/gcache v0.0.0-20230410081825-519e28eab057 // indirect\n\tgithub.com/Mzack9999/go-http-digest-auth-client v0.6.1-0.20220414142836-eb8883508809 // indirect\n\tgithub.com/PuerkitoBio/goquery v1.8.1 // indirect\n\tgithub.com/VividCortex/ewma v1.2.0 // indirect\n\tgithub.com/akrylysov/pogreb v0.10.2 // indirect\n\tgithub.com/alecthomas/chroma/v2 v2.14.0 // indirect\n\tgithub.com/andybalholm/brotli v1.1.0 // indirect\n\tgithub.com/andybalholm/cascadia v1.3.2 // indirect\n\tgithub.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect\n\tgithub.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect\n\tgithub.com/aymerick/douceur v0.2.0 // indirect\n\tgithub.com/bits-and-blooms/bitset v1.13.0 // indirect\n\tgithub.com/charmbracelet/glamour v0.8.0 // indirect\n\tgithub.com/charmbracelet/lipgloss v0.13.0 // indirect\n\tgithub.com/charmbracelet/x/ansi v0.3.2 // indirect\n\tgithub.com/cheggaaa/pb/v3 v3.1.4 // indirect\n\tgithub.com/cloudflare/cfssl v1.6.4 // indirect\n\tgithub.com/cloudflare/circl v1.3.8 // indirect\n\tgithub.com/cnf/structhash v0.0.0-20201127153200-e1b16c1ebc08 // indirect\n\tgithub.com/corona10/goimagehash v1.1.0 // indirect\n\tgithub.com/dimchansky/utfbom v1.1.1 // indirect\n\tgithub.com/dlclark/regexp2 v1.11.4 // indirect\n\tgithub.com/docker/go-units v0.5.0 // indirect\n\tgithub.com/dsnet/compress v0.0.2-0.20210315054119-f66993602bf5 // indirect\n\tgithub.com/fatih/color v1.16.0 // indirect\n\tgithub.com/gaissmai/bart v0.9.5 // indirect\n\tgithub.com/go-faker/faker/v4 v4.1.1 // indirect\n\tgithub.com/go-ole/go-ole v1.2.6 // indirect\n\tgithub.com/go-rod/rod v0.114.0 // indirect\n\tgithub.com/go-viper/mapstructure/v2 v2.1.0 // indirect\n\tgithub.com/golang/protobuf v1.5.4 // indirect\n\tgithub.com/golang/snappy v0.0.4 // indirect\n\tgithub.com/google/certificate-transparency-go v1.1.4 // indirect\n\tgithub.com/google/go-github/v30 v30.1.0 // indirect\n\tgithub.com/google/go-querystring v1.1.0 // indirect\n\tgithub.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/gorilla/css v1.0.1 // indirect\n\tgithub.com/hashicorp/go-version v1.6.0 // indirect\n\tgithub.com/hbakhtiyor/strsim v0.0.0-20190107154042-4d2bbb273edf // indirect\n\tgithub.com/hdm/jarm-go v0.0.7 // indirect\n\tgithub.com/jaytaylor/html2text v0.0.0-20230321000545-74c2419ad056 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/kataras/jwt v0.1.10 // indirect\n\tgithub.com/klauspost/compress v1.17.8 // indirect\n\tgithub.com/klauspost/pgzip v1.2.6 // indirect\n\tgithub.com/kljensen/snowball v0.8.0 // indirect\n\tgithub.com/logrusorgru/aurora v2.0.3+incompatible // indirect\n\tgithub.com/lucasb-eyer/go-colorful v1.2.0 // indirect\n\tgithub.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect\n\tgithub.com/mattn/go-colorable v0.1.13 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/mattn/go-runewidth v0.0.16 // indirect\n\tgithub.com/mfonda/simhash v0.0.0-20151007195837-79f94a1100d6 // indirect\n\tgithub.com/mholt/archiver/v3 v3.5.1 // indirect\n\tgithub.com/microcosm-cc/bluemonday v1.0.27 // indirect\n\tgithub.com/miekg/dns v1.1.59 // indirect\n\tgithub.com/minio/selfupdate v0.6.1-0.20230907112617-f11e74f84ca7 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/muesli/reflow v0.3.0 // indirect\n\tgithub.com/muesli/termenv v0.15.3-0.20240618155329-98d742f6907a // indirect\n\tgithub.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect\n\tgithub.com/nwaples/rardecode v1.1.3 // indirect\n\tgithub.com/olekukonko/tablewriter v0.0.5 // indirect\n\tgithub.com/pierrec/lz4/v4 v4.1.21 // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect\n\tgithub.com/projectdiscovery/blackrock v0.0.1 // indirect\n\tgithub.com/projectdiscovery/cdncheck v1.1.0 // indirect\n\tgithub.com/projectdiscovery/clistats v0.1.1 // indirect\n\tgithub.com/projectdiscovery/dsl v0.3.13 // indirect\n\tgithub.com/projectdiscovery/fastdialer v0.3.0 // indirect\n\tgithub.com/projectdiscovery/fdmax v0.0.4 // indirect\n\tgithub.com/projectdiscovery/freeport v0.0.7 // indirect\n\tgithub.com/projectdiscovery/goconfig v0.0.1 // indirect\n\tgithub.com/projectdiscovery/gostruct v0.0.2 // indirect\n\tgithub.com/projectdiscovery/hmap v0.0.81 // indirect\n\tgithub.com/projectdiscovery/machineid v0.0.0-20240226150047-2e2c51e35983 // indirect\n\tgithub.com/projectdiscovery/mapcidr v1.1.34 // indirect\n\tgithub.com/projectdiscovery/networkpolicy v0.1.1 // indirect\n\tgithub.com/projectdiscovery/ratelimit v0.0.68 // indirect\n\tgithub.com/projectdiscovery/rawhttp v0.1.84 // indirect\n\tgithub.com/projectdiscovery/retryabledns v1.0.94 // indirect\n\tgithub.com/projectdiscovery/retryablehttp-go v1.0.101 // indirect\n\tgithub.com/projectdiscovery/tlsx v1.1.8 // indirect\n\tgithub.com/projectdiscovery/useragent v0.0.87 // indirect\n\tgithub.com/projectdiscovery/utils v0.4.15 // indirect\n\tgithub.com/projectdiscovery/wappalyzergo v0.2.12 // indirect\n\tgithub.com/refraction-networking/utls v1.6.7 // indirect\n\tgithub.com/rivo/uniseg v0.4.7 // indirect\n\tgithub.com/rs/xid v1.5.0 // indirect\n\tgithub.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect\n\tgithub.com/sashabaranov/go-openai v1.15.3 // indirect\n\tgithub.com/shirou/gopsutil/v3 v3.24.2 // indirect\n\tgithub.com/shoenig/go-m1cpu v0.1.6 // indirect\n\tgithub.com/spaolacci/murmur3 v1.1.0 // indirect\n\tgithub.com/ssor/bom v0.0.0-20170718123548-6386211fdfcf // indirect\n\tgithub.com/syndtr/goleveldb v1.0.0 // indirect\n\tgithub.com/tidwall/btree v1.7.0 // indirect\n\tgithub.com/tidwall/buntdb v1.3.1 // indirect\n\tgithub.com/tidwall/gjson v1.17.1 // indirect\n\tgithub.com/tidwall/grect v0.1.4 // indirect\n\tgithub.com/tidwall/match v1.1.1 // indirect\n\tgithub.com/tidwall/pretty v1.2.1 // indirect\n\tgithub.com/tidwall/rtred v0.1.2 // indirect\n\tgithub.com/tidwall/tinyqueue v0.1.1 // indirect\n\tgithub.com/tklauser/go-sysconf v0.3.12 // indirect\n\tgithub.com/tklauser/numcpus v0.6.1 // indirect\n\tgithub.com/ulikunitz/xz v0.5.12 // indirect\n\tgithub.com/weppos/publicsuffix-go v0.30.2 // indirect\n\tgithub.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgithub.com/ysmood/fetchup v0.2.3 // indirect\n\tgithub.com/ysmood/goob v0.4.0 // indirect\n\tgithub.com/ysmood/got v0.34.1 // indirect\n\tgithub.com/ysmood/gson v0.7.3 // indirect\n\tgithub.com/ysmood/leakless v0.8.0 // indirect\n\tgithub.com/yuin/goldmark v1.7.4 // indirect\n\tgithub.com/yuin/goldmark-emoji v1.0.3 // indirect\n\tgithub.com/yusufpapurcu/wmi v1.2.4 // indirect\n\tgithub.com/zcalusic/sysinfo v1.0.2 // indirect\n\tgithub.com/zmap/rc2 v0.0.0-20190804163417-abaa70531248 // indirect\n\tgithub.com/zmap/zcrypto v0.0.0-20240512203510-0fef58d9a9db // indirect\n\tgo.etcd.io/bbolt v1.3.10 // indirect\n\tgo.uber.org/multierr v1.11.0 // indirect\n\tgolang.org/x/crypto v0.32.0 // indirect\n\tgolang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect\n\tgolang.org/x/mod v0.17.0 // indirect\n\tgolang.org/x/net v0.34.0 // indirect\n\tgolang.org/x/oauth2 v0.18.0 // indirect\n\tgolang.org/x/sync v0.10.0 // indirect\n\tgolang.org/x/sys v0.29.0 // indirect\n\tgolang.org/x/term v0.28.0 // indirect\n\tgolang.org/x/text v0.21.0 // indirect\n\tgolang.org/x/time v0.5.0 // indirect\n\tgolang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect\n\tgoogle.golang.org/appengine v1.6.8 // indirect\n\tgoogle.golang.org/protobuf v1.33.0 // indirect\n\tgopkg.in/djherbis/times.v1 v1.3.0 // indirect\n\tgopkg.in/ini.v1 v1.67.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

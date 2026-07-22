@@ -1,0 +1,115 @@
+{
+  "name": "rootly-ai-labs__rootly-mcp-server",
+  "display_name": "Rootly-MCP-server",
+  "description": "Rootly MCP server",
+  "author": {
+    "name": "Rootly-AI-Labs"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["tool", "run", "--from", "rootly-mcp-server", "rootly-mcp-server"],
+    "env": {
+      "ROOTLY_API_TOKEN": "${user_config.rootly_api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "rootly_api_token": {
+      "type": "string",
+      "title": "Rootly API Token",
+      "description": "Your Rootly API token for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Rootly MCP Server\n\n[![PyPI version](https://badge.fury.io/py/rootly-mcp-server.svg)](https://pypi.org/project/rootly-mcp-server/)\n[![PyPI - Downloads](https://img.shields.io/pypi/dm/rootly-mcp-server)](https://pypi.org/project/rootly-mcp-server/)\n[![Python Version](https://img.shields.io/pypi/pyversions/rootly-mcp-server.svg)](https://pypi.org/project/rootly-mcp-server/)\n\nAn MCP server for the [Rootly API](https://docs.rootly.com/api-reference/overview) that integrates seamlessly with MCP-compatible editors like Cursor, Windsurf, and Claude. Resolve production incidents in under a minute without leaving your IDE.\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=rootly&config=eyJjb21tYW5kIjoibnB4IC15IG1jcC1yZW1vdGUgaHR0cHM6Ly9tY3Aucm9vdGx5LmNvbS9zc2UgLS1oZWFkZXIgQXV0aG9yaXphdGlvbjoke1JPT1RMWV9BVVRIX0hFQURFUn0iLCJlbnYiOnsiUk9PVExZX0FVVEhfSEVBREVSIjoiQmVhcmVyIDxZT1VSX1JPT1RMWV9BUElfVE9LRU4%2BIn19)\n\n![Demo GIF](rootly-mcp-server-demo.gif)\n\n## Prerequisites\n\n- Python 3.12 or higher\n- `uv` package manager\n  ```bash\n  curl -LsSf https://astral.sh/uv/install.sh | sh\n  ```\n- [Rootly API token](https://docs.rootly.com/api-reference/overview#how-to-generate-an-api-key%3F)\n\n## Installation\n\nConfigure your MCP-compatible editor (tested with Cursor) with one of the configurations below. The package will be automatically downloaded and installed when you first open your editor.\n\n### With uv\n\n```json\n{\n  \"mcpServers\": {\n    \"rootly\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"tool\",\n        \"run\",\n        \"--from\",\n        \"rootly-mcp-server\",\n        \"rootly-mcp-server\",\n      ],      \n      \"env\": {\n        \"ROOTLY_API_TOKEN\": \"<YOUR_ROOTLY_API_TOKEN>\"\n      }\n    }\n  }\n}\n```\n\n### With uvx\n\n```json\n{\n  \"mcpServers\": {\n    \"rootly\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--from\",\n        \"rootly-mcp-server\",\n        \"rootly-mcp-server\",\n      ],      \n      \"env\": {\n        \"ROOTLY_API_TOKEN\": \"<YOUR_ROOTLY_API_TOKEN>\"\n      }\n    }\n  }\n}\n```\n\nTo customize `allowed_paths` and access additional Rootly API paths, clone the repository and use this configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"rootly\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--directory\",\n        \"/path/to/rootly-mcp-server\",\n        \"rootly-mcp-server\"\n      ],\n      \"env\": {\n        \"ROOTLY_API_TOKEN\": \"<YOUR_ROOTLY_API_TOKEN>\"\n      }\n    }\n  }\n}\n```\n\n### Connect to Hosted MCP Server\n\nAlternatively, connect directly to our hosted MCP server:\n\n```json\n{\n  \"mcpServers\": {\n    \"rootly\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-remote\",\n        \"https://mcp.rootly.com/sse\",\n        \"--header\",\n        \"Authorization:${ROOTLY_AUTH_HEADER}\"\n      ],\n      \"env\": {\n        \"ROOTLY_AUTH_HEADER\": \"Bearer <YOUR_ROOTLY_API_TOKEN>\"\n      }\n    }\n  }\n}\n```\n\n## Features\n\n- **Dynamic Tool Generation**: Automatically creates MCP resources from Rootly's OpenAPI (Swagger) specification\n- **Smart Pagination**: Defaults to 10 items per request for incident endpoints to prevent context window overflow\n- **API Filtering**: Limits exposed API endpoints for security and performance\n- **AI-Powered Incident Analysis**: Smart tools that learn from historical incident data\n  - **`find_related_incidents`**: Uses TF-IDF similarity analysis to find historically similar incidents\n  - **`suggest_solutions`**: Mines past incident resolutions to recommend actionable solutions\n- **MCP Resources**: Exposes incident and team data as structured resources for easy AI reference\n- **Intelligent Pattern Recognition**: Automatically identifies services, error types, and resolution patterns\n\n### Whitelisted Endpoints\n\nBy default, the following Rootly API endpoints are exposed to the AI agent (see `allowed_paths` in `src/rootly_mcp_server/server.py`):\n\n```\n/v1/incidents\n/v1/incidents/{incident_id}/alerts\n/v1/alerts\n/v1/alerts/{alert_id}\n/v1/severities\n/v1/severities/{severity_id}\n/v1/teams\n/v1/teams/{team_id}\n/v1/services\n/v1/services/{service_id}\n/v1/functionalities\n/v1/functionalities/{functionality_id}\n/v1/incident_types\n/v1/incident_types/{incident_type_id}\n/v1/incident_action_items\n/v1/incident_action_items/{incident_action_item_id}\n/v1/incidents/{incident_id}/action_items\n/v1/workflows\n/v1/workflows/{workflow_id}\n/v1/workflow_runs\n/v1/workflow_runs/{workflow_run_id}\n/v1/environments\n/v1/environments/{environment_id}\n/v1/users\n/v1/users/{user_id}\n/v1/users/me\n/v1/status_pages\n/v1/status_pages/{status_page_id}\n```\n\n### Why Path Limiting?\n\nWe limit exposed API paths for two key reasons:\n\n1. **Context Management**: Rootly's comprehensive API can overwhelm AI agents, affecting their ability to perform simple tasks effectively\n2. **Security**: Controls which information and actions are accessible through the MCP server\n\nTo expose additional paths, modify the `allowed_paths` variable in `src/rootly_mcp_server/server.py`.\n\n### AI-Powered Smart Tools\n\nThe MCP server includes intelligent tools that analyze historical incident data to provide actionable insights:\n\n#### `find_related_incidents`\nFinds historically similar incidents using machine learning text analysis:\n```\nfind_related_incidents(incident_id=\"12345\", similarity_threshold=0.3, max_results=5)\n```\n- **Input**: Incident ID, similarity threshold (0.0-1.0), max results\n- **Output**: Similar incidents with confidence scores, matched services, and resolution times\n- **Use Case**: Get context from past incidents to understand patterns and solutions\n\n#### `suggest_solutions` \nRecommends solutions by analyzing how similar incidents were resolved:\n```\nsuggest_solutions(incident_id=\"12345\", max_solutions=3)\n# OR for new incidents:\nsuggest_solutions(incident_title=\"Payment API errors\", incident_description=\"Users getting 500 errors during checkout\")\n```\n- **Input**: Either incident ID OR title/description text\n- **Output**: Actionable solution recommendations with confidence scores and time estimates  \n- **Use Case**: Get AI-powered suggestions based on successful past resolutions\n\n#### How It Works\n- **Text Similarity**: Uses TF-IDF vectorization and cosine similarity (scikit-learn)\n- **Service Detection**: Automatically identifies affected services from incident text\n- **Pattern Recognition**: Finds common error types, resolution patterns, and time estimates\n- **Fallback Mode**: Works without ML libraries using keyword-based similarity\n- **Solution Mining**: Extracts actionable steps from resolution summaries\n\n#### Data Requirements\nFor optimal results, ensure your Rootly incidents have descriptive:\n- **Titles**: Clear, specific incident descriptions\n- **Summaries**: Detailed resolution steps when closing incidents\n- **Service Tags**: Proper service identification\n\nExample good resolution summary: `\"Restarted auth-service, cleared Redis cache, and increased connection pool from 10 to 50\"`\n\n## About Rootly AI Labs\n\nThis project was developed by [Rootly AI Labs](https://labs.rootly.ai/), where we're building the future of system reliability and operational excellence. As an open-source incubator, we share ideas, experiment, and rapidly prototype solutions that benefit the entire community.\n![Rootly AI logo](https://github.com/Rootly-AI-Labs/EventOrOutage/raw/main/rootly-ai.png)\n\n## Developer Setup & Troubleshooting\n\n### Prerequisites\n- Python 3.12 or higher\n- [`uv`](https://github.com/astral-sh/uv) for dependency management\n\n### 1. Set Up Virtual Environment\n\nCreate and activate a virtual environment:\n\n```bash\nuv venv .venv\nsource .venv/bin/activate  # Always activate before running scripts\n```\n\n### 2. Install Dependencies\n\nInstall all project dependencies:\n\n```bash\nuv pip install .\n```\n\nTo add new dependencies during development:\n```bash\nuv pip install <package>\n```\n\n### 3. Verify Installation\n\nThe server should now be ready to use with your MCP-compatible editor.\n\n**For developers:** Additional testing tools are available in the `tests/` directory.\n\n",
+  "category": "Development",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "rootly-mcp-server-uv-tool-run": {
+        "command": "uv",
+        "args": ["tool", "run", "--from", "rootly-mcp-server", "rootly-mcp-server"],
+        "env": {
+          "ROOTLY_API_TOKEN": "<YOUR_ROOTLY_API_TOKEN>"
+        }
+      },
+      "rootly-mcp-server-uvx": {
+        "command": "uvx",
+        "args": ["--from", "rootly-mcp-server", "rootly-mcp-server"],
+        "env": {
+          "ROOTLY_API_TOKEN": "<YOUR_ROOTLY_API_TOKEN>"
+        }
+      },
+      "rootly-mcp-server-local-clone": {
+        "command": "uv",
+        "args": ["run", "--directory", "/path/to/rootly-mcp-server", "rootly-mcp-server"],
+        "env": {
+          "ROOTLY_API_TOKEN": "<YOUR_ROOTLY_API_TOKEN>"
+        }
+      },
+      "mcp-remote-hosted": {
+        "command": "npx",
+        "args": ["-y", "mcp-remote", "https://mcp.rootly.com/sse", "--header", "Authorization:${ROOTLY_AUTH_HEADER}"],
+        "env": {
+          "ROOTLY_AUTH_HEADER": "Bearer <YOUR_ROOTLY_API_TOKEN>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Rootly-AI-Labs",
+    "repo": "Rootly-MCP-server",
+    "url": "https://github.com/Rootly-AI-Labs/Rootly-MCP-server",
+    "name": "rootly-ai-labs__rootly-mcp-server",
+    "path": null,
+    "stars": 32,
+    "contributors": 7,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "0e44ad8ef76d0fd6c3d78af56c267ec486ccedeb"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:42.810Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"rootly-mcp-server\"\nversion = \"2.0.13\"\ndescription = \"A Model Context Protocol server for Rootly APIs using OpenAPI spec\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\nauthors = [{ name = \"Rootly AI Labs\", email = \"support@rootly.com\" }]\nkeywords = [\"rootly\", \"mcp\", \"llm\", \"automation\", \"incidents\"]\nlicense = \"Apache-2.0\"\nlicense-files = [\"LICEN[CS]E*\"]\nclassifiers = [\n    \"Development Status :: 5 - Production/Stable\",\n    \"Intended Audience :: Developers\",\n    \"Topic :: Software Development :: Build Tools\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.12\",\n]\ndependencies = [\n    \"fastmcp>=2.9.0\",\n    \"requests>=2.28.0\", # For API calls\n    \"httpx>=0.24.0\",    # For async HTTP client\n    \"pydantic>=2.0.0\",  # For data validation\n    \"brotli>=1.0.0\",    # For Brotli compression support in httpx\n    \"scikit-learn>=1.3.0\", # For text similarity and ML utilities\n    \"numpy>=1.24.0\",    # For numerical operations\n]\n\n[project.urls]\nHomepage = \"https://github.com/Rootly-AI-Labs/Rootly-MCP-server\"\nIssues = \"https://github.com/Rootly-AI-Labs/Rootly-MCP-server/issues\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/rootly_mcp_server\"]\n\n[tool.hatch.metadata]\nallow-direct-references = true\n\n[tool.hatch.build.targets.wheel.sources]\n\"src\" = \"\"\n\n[tool.hatch.build.targets.wheel.include]\n\"src/rootly_mcp_server/data\" = \"rootly_mcp_server/data\"\n\n[project.scripts]\nrootly-mcp-server = \"rootly_mcp_server.__main__:main\"\n\n[project.optional-dependencies]\ndev = [\"black>=23.0.0\", \"isort>=5.0.0\"]\n\n[tool.uv]\ndev-dependencies = [\n    \"pyright>=1.1.404\",\n    \"ruff>=0.7.3\",\n    \"pytest>=8.0.0\",\n    \"pytest-cov>=4.0.0\", # Coverage reporting\n    \"pytest-asyncio>=0.23.0\", # Async testing support\n    \"pytest-mock>=3.12.0\", # Mocking utilities\n    \"pytest-timeout>=2.2.0\", # Test timeout handling\n    \"respx>=0.20.0\", # HTTP request mocking\n    \"sseclient-py>=1.8.0\", # Server-Sent Events client for remote tests\n]\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_classes = \"Test*\"\npython_functions = \"test_*\"\naddopts = [\n    \"-v\",                          # Verbose output\n    \"--strict-markers\",            # Require marker registration\n    \"--tb=short\",                  # Short traceback format\n    \"--cov=src/rootly_mcp_server\", # Coverage for main package\n    \"--cov-report=term-missing\",   # Show missing lines in coverage\n    \"--cov-report=xml\",            # XML coverage for CI\n]\nmarkers = [\n    \"unit: Unit tests\",\n    \"integration: Integration tests\", \n    \"remote: Remote server tests (require API token)\",\n    \"slow: Tests that take longer to run\",\n]\nasyncio_mode = \"auto\"              # Auto-detect async tests\n"
+}

@@ -29,24 +29,31 @@ function isOllamaProvider(provider: SupportedProvider | undefined): boolean {
  * When the output ceiling is unknown: Ollama providers fall back to the model's
  * context window (see {@link isOllamaProvider}); every other provider keeps the
  * conservative {@link UNKNOWN_MODEL_OUTPUT_TOKENS}.
+ *
+ * Legacy shared-window models (e.g. gpt-4: output 8192 == context 8192) count
+ * `max_tokens` against the same window as the prompt, so requesting the full
+ * output ceiling leaves zero prompt room and every request 400s with a
+ * context-length error. When the context window is known, the budget is
+ * additionally capped at half of it so the prompt always has room; for modern
+ * models (output far below context) the cap never binds. This applies to the
+ * Ollama context fallback too — `num_predict` is drawn from the same `num_ctx`
+ * window as the prompt, so the full window would leave nothing to prompt with.
  */
 export function resolveAgentMaxOutputTokens(params: {
   outputLength: number | null;
+  contextLength?: number | null;
   ceiling: number;
   provider?: SupportedProvider;
-  contextLength?: number | null;
 }): number {
-  const knownOutput = sanitizeOutputLimit(params.outputLength);
-  if (knownOutput !== null) {
-    return Math.min(params.ceiling, knownOutput);
-  }
-
-  if (isOllamaProvider(params.provider)) {
-    const contextWindow = sanitizeOutputLimit(params.contextLength);
-    if (contextWindow !== null) {
-      return Math.min(params.ceiling, contextWindow);
-    }
-  }
-
-  return Math.min(params.ceiling, UNKNOWN_MODEL_OUTPUT_TOKENS);
+  const contextLength = sanitizeOutputLimit(params.contextLength ?? null);
+  const base =
+    sanitizeOutputLimit(params.outputLength) ??
+    (isOllamaProvider(params.provider) && contextLength !== null
+      ? contextLength
+      : UNKNOWN_MODEL_OUTPUT_TOKENS);
+  const sharedWindowCap =
+    contextLength !== null
+      ? Math.max(1, Math.floor(contextLength / 2))
+      : Number.POSITIVE_INFINITY;
+  return Math.min(params.ceiling, base, sharedWindowCap);
 }

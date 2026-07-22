@@ -1,0 +1,78 @@
+{
+  "name": "robspectre__mvf1",
+  "display_name": "mvf1",
+  "description": "A Python package and command line interface to control video players for MultiViewer For F1, the best way to watch Formula 1.",
+  "author": {
+    "name": "RobSpectre"
+  },
+  "server": {
+    "command": "mvf1-cli",
+    "args": ["mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "***************\nmvf1\n***************\n\nA Python package, command line interface and MCP server to control video players for\n`MultiViewer`_, the best way to watch Formula 1.\n\n.. image:: https://dl.circleci.com/status-badge/img/gh/RobSpectre/mvf1/tree/main.svg?style=svg\n        :target: https://dl.circleci.com/status-badge/redirect/gh/RobSpectre/mvf1/tree/main\n\n.. image:: https://codecov.io/gh/RobSpectre/mvf1/branch/main/graph/badge.svg?token=L5N96KXN2V \n :target: https://codecov.io/gh/RobSpectre/mvf1\n\n.. image:: https://readthedocs.org/projects/mvf1/badge/?version=latest\n    :target: https://mvf1.readthedocs.io/en/latest/?badge=latest\n    :alt: Documentation Status\n\n\nTable of Contents\n=================\n\n\n.. contents::\n    :local:\n    :depth: 1\n    :backlinks: none\n\n\nFeatures\n===============\n\n* Command line interface for controlling `MultiViewer`_. Useful for\n  integrations with control interfaces like `StreamDeck`_\n* Pythonic interface for controlling `MultiViewer`_. No GraphQL needed!\n* MCP server for controlling `MultiViewer`_ - perfect for controlling the\n  broadcast for with AI agents.\n* `Type hints`_\n* `Full documentation`_\n* `Test coverage`_\n* `black`_ Praise the Dark Lord\n\n\nInstallation\n===============\n\nThe latest version can be installed via `pip`_.\n\n.. code-block:: bash\n\n   $ pip install mvf1\n\n\nQuickstart\n================\n\nCommand Line\n----------------\n\n.. code-block:: bash\n\n    $ mvf1-cli --help\n\nModel Context Protocol (MCP) Server\n------------------------------------\n\n.. code-block:: bash\n\n    $ mvf1-cli mcp \n\nTo use in an AI agent, use your framework's affordance for a `stdio` MCP\nserver.\n\nHere is an example with PydanticAI.\n\n.. code-block:: python\n\n    from pydantic_ai import Agent\n    from pydantic_ai.mcp import MCPServerStdio\n\n    server = MCPServerStdio(  \n        'mvf1-cli',\n        args=[\n            'mcp'\n        ]\n    )\n    agent = Agent('openai:gpt-4o', mcp_servers=[server])\n\nLibrary\n----------------\n\nDisplaying all players\n\n.. code-block:: python\n\n    >>> from mvf1 import MultiViewerForF1\n    >>> remote = MultiViewerForF1()\n    >>> remote.players\n    [6: INTERNATIONAL, 7: PER]\n\nPause all players\n\n.. code-block:: python\n\n    >>> from mvf1 import MultiViewerForF1\n    >>> remote = MultiViewerForF1()\n    >>> for player in remote.players:\n    >>>     player.mute()\n    {'data': {'playerSetMuted': True}}\n    {'data': {'playerSetMuted': True}}\n\nRetrieve specific player\n\n.. code-block:: python\n\n    >>> from mvf1 import MultiViewerForF1\n    >>> remote = MultiViewerForF1()\n    >>> player = remote.player(6)\n    >>> player.state\n    {'ts': 1677168293.21, 'paused': False, 'muted': True, 'volume': 100, 'live': False, 'currentTime': 10.002025, 'interpolatedCurrentTime': 363.656025}\n\nSwitch stream of player to data channel\n\n.. code-block:: python\n\n    >>> from mvf1 import MultiViewerForF1\n    >>> remote = MultiViewerForF1()\n    >>> player = remote.player(6)\n    >>> player.switch_stream('DATA')\n    {'data': {'playerCreate': '12'}}\n\nSynchronize all players to specific player\n\n.. code-block:: python\n\n    >>> from mvf1 import MultiViewerForF1\n    >>> remote = MultiViewerForF1()\n    >>> player = remote.player(6)\n    >>> player.sync()\n    {'data': {'playerSync': True}}\n\nSynchornize all players to player streaming broadcast commentary\n\n.. code-block:: python\n\n    >>> from mvf1 import MultiViewerForF1\n    >>> remote = MultiViewerForF1()\n    >>> remote.player_sync_to_commentary()\n    {'data': {'playerSync': True}}\n\n\nDevelopment\n================\n\nHacking\n---------------\n\nTo hack on the project, clone the `GitHub repo`_:\n\n.. code-block:: bash\n   \n   $ git clone https://github.com/RobSpectre/mvf1\n\nThen install in a `virtualenv`_.\n\n.. code-block:: bash\n\n   $ pip install -e ./\n\n\nTest\n---------------\n\nThe project uses `tox`_ for tests. Simply run from project root\n\n.. code-block:: bash\n\n    $ tox\n\n\nMeta\n================\n\n* Written by `Rob Spectre`_.\n* Released under `MIT License`_.\n* Software is as is - no warranty expressed or implied, diggity.\n* This package is not developed or maintained by `MultiViewer`_ or\n  `Formula 1 TV`_.\n* Shout out to the excellent `MultiViewer`_ team! This app absolutely\n  changed how I enjoy Formula 1.\n* 🏎️ Go Weeyums! 🏎️\n\n\n.. _MultiViewer: https://multiviewer.app/\n.. _pip: https://multiviewer.app/\n.. _GitHub Repo: https://github.com/RobSpectre/mvf1\n.. _virtualenv: https://multiviewer.app/\n.. _Rob Spectre: https://brooklynhacker.com\n.. _MIT License: http://opensource.org/licenses/MIT\n.. _tox: https://tox.wiki/en/latest/\n.. _black: https://black.readthedocs.io/en/stable/\n.. _StreamDeck: https://www.elgato.com/en/welcome-to-stream-deck\n.. _type hints: https://docs.python.org/3/library/typing.html\n.. _Full documentation: https://mvf1.readthedocs.io/en/latest/\n.. _Test coverage: https://app.codecov.io/gh/RobSpectre/mvf1\n.. _Formula 1 TV: https://f1tv.formula1.com/\n",
+  "category": "Sports",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mvf1-stdio": {
+        "command": "mvf1-cli",
+        "args": ["mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "RobSpectre",
+    "repo": "mvf1",
+    "url": "https://github.com/RobSpectre/mvf1",
+    "name": "mvf1",
+    "path": null,
+    "stars": 12,
+    "contributors": 2,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "6e11cfd3d12a8f1418f149ab3e69fe47c0e6b0fd"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:36.707Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "click",
+      "importance": 8
+    },
+    {
+      "name": "sgqlc",
+      "importance": 9
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"mvf1\"\nversion = \"2.0.1\"\ndescription = \"A Python package and MCP server to control video players for MultiViewer, the best way to watch motorsports like Formula 1.\"\nreadme = \"README.rst\"\nrequires-python = \">=3.10\"\nlicense = { text = \"MIT\" }\nauthors = [\n    { name = \"Rob Spectre\", email = \"rob@brooklynhacker.com\" },\n]\nkeywords = [\"multiviewer\", \"formula1\", \"mcp\", \"video\", \"motorsports\"]\nclassifiers = [\n    'Programming Language :: Python :: 3',\n    'License :: OSI Approved :: MIT License',\n    'Operating System :: OS Independent',\n    'Development Status :: 5 - Production/Stable',\n    'Intended Audience :: Developers',\n    'Natural Language :: English',\n    'Environment :: Console',\n]\n\ndependencies = [\n    \"click\",\n    \"sgqlc\",\n    \"fastmcp\",\n]\n\n[project.urls]\n\"Homepage\" = \"https://github.com/RobSpectre/mvf1\"\n\"Repository\" = \"https://github.com/RobSpectre/mvf1\"\n\"Bug Tracker\" = \"https://github.com/RobSpectre/mvf1/issues\"\n\n[project.scripts]\nmvf1-cli = \"mvf1.cmdline:cli\"\n\n[tool.setuptools]\npackages = [\"mvf1\"]\ninclude-package-data = true\n\n\n=== requirements.txt ===\nclick>=8.2\nsgqlc>=16.4\nfastmcp>=2.6\n"
+}

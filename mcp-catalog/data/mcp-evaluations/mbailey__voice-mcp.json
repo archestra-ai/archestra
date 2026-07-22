@@ -1,0 +1,160 @@
+{
+  "name": "mbailey__voice-mcp",
+  "display_name": "voice-mcp",
+  "description": "Voice Mode for Claude Code",
+  "author": {
+    "name": "mbailey"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["voice-mode"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key for authentication. Optional, as Voice Mode can install free, open-source transcription and text-to-speech services locally.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Voice Mode\n\n> **Install via:** `uvx voice-mode` | `pip install voice-mode` | [getvoicemode.com](https://getvoicemode.com)\n\n[![PyPI Downloads](https://static.pepy.tech/badge/voice-mode)](https://pepy.tech/project/voice-mode)\n[![PyPI Downloads](https://static.pepy.tech/badge/voice-mode/month)](https://pepy.tech/project/voice-mode)\n[![PyPI Downloads](https://static.pepy.tech/badge/voice-mode/week)](https://pepy.tech/project/voice-mode)\n[![Documentation](https://readthedocs.org/projects/voice-mode/badge/?version=latest)](https://voice-mode.readthedocs.io/en/latest/?badge=latest)\n\nNatural voice conversations for AI assistants. Voice Mode brings human-like voice interactions to Claude Code, AI code editors through the Model Context Protocol (MCP).\n\n## 🖥️ Compatibility\n\n**Runs on:** Linux • macOS • Windows (WSL) • NixOS | **Python:** 3.10+\n\n## ✨ Features\n\n- **🎙️ Voice conversations** with Claude - ask questions and hear responses\n- **🔄 Multiple transports** - local microphone or LiveKit room-based communication  \n- **🗣️ OpenAI-compatible** - works with any STT/TTS service (local or cloud)\n- **⚡ Real-time** - low-latency voice interactions with automatic transport selection\n- **🔧 MCP Integration** - seamless with Claude Desktop and other MCP clients\n- **🎯 Silence detection** - automatically stops recording when you stop speaking (no more waiting!)\n\n## 🎯 Simple Requirements\n\n**All you need to get started:**\n\n1. **🎤 Computer with microphone and speakers** OR **☁️ LiveKit server** ([LiveKit Cloud](https://docs.livekit.io/home/cloud/) or [self-hosted](https://github.com/livekit/livekit))\n2. **🔑 OpenAI API Key** (optional) - Voice Mode can install free, open-source transcription and text-to-speech services locally\n\n**Optional for enhanced performance:**\n\n- **🍎 Xcode** (macOS only) - Required for Core ML acceleration of Whisper models (2-3x faster inference). Install from [Mac App Store](https://apps.apple.com/app/xcode/id497799835) then run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`\n\n## Quick Start\n\n> 📖 **Using a different tool?** See our [Integration Guides](docs/integrations/README.md) for Cursor, VS Code, Gemini CLI, and more!\n\n### Automatic Installation (Recommended)\n\nInstall Claude Code with Voice Mode configured and ready to run on Linux, macOS, and Windows WSL:\n\n```bash\n# Download and run the installer\ncurl -O https://getvoicemode.com/install.sh && bash install.sh\n\n# While local voice services can be installed automatically, we recommend\n# providing an OpenAI API key as a fallback in case local services are unavailable\nexport OPENAI_API_KEY=your-openai-key  # Optional but recommended\n\n# Start a voice conversation\nclaude /voicemode:converse\n```\n\nThis installer will:\n- Install all system dependencies (Node.js, audio libraries, etc.)\n- Install Claude Code if not already installed\n- Configure Voice Mode as an MCP server\n- Set up your system for voice conversations\n- Offer to install free local STT/TTS services if no API key is provided\n\n### Manual Installation\n\nFor manual setup steps, see the [Claude Code Integration Guide](docs/integrations/claude-code/README.md).\n\n## 🎬 Demo\n\nWatch Voice Mode in action with Claude Code:\n\n[![Voice Mode Demo](https://img.youtube.com/vi/cYdwOD_-dQc/maxresdefault.jpg)](https://www.youtube.com/watch?v=cYdwOD_-dQc)\n\n### Voice Mode with Gemini CLI\n\nSee Voice Mode working with Google's Gemini CLI (their implementation of Claude Code):\n\n[![Voice Mode with Gemini CLI](https://img.youtube.com/vi/HC6BGxjCVnM/maxresdefault.jpg)](https://www.youtube.com/watch?v=HC6BGxjCVnM)\n\n## Example Usage\n\nOnce configured, try these prompts with Claude:\n\n### 👨‍💻 Programming & Development\n- `\"Let's debug this error together\"` - Explain the issue verbally, paste code, and discuss solutions\n- `\"Walk me through this code\"` - Have Claude explain complex code while you ask questions\n- `\"Let's brainstorm the architecture\"` - Design systems through natural conversation\n- `\"Help me write tests for this function\"` - Describe requirements and iterate verbally\n\n### 💡 General Productivity  \n- `\"Let's do a daily standup\"` - Practice presentations or organize your thoughts\n- `\"Interview me about [topic]\"` - Prepare for interviews with back-and-forth Q&A\n- `\"Be my rubber duck\"` - Explain problems out loud to find solutions\n\n### 🎯 Voice Control Features\n- `\"Read this error message\"` (Claude speaks, then waits for your response)\n- `\"Just give me a quick summary\"` (Claude speaks without waiting)\n- Use `converse(\"message\", wait_for_response=False)` for one-way announcements\n\nThe `converse` function makes voice interactions natural - it automatically waits for your response by default, creating a real conversation flow.\n\n## Supported Tools\n\nVoice Mode works with your favorite AI coding assistants:\n\n- 🤖 **[Claude Code](docs/integrations/claude-code/README.md)** - Anthropic's official CLI\n- 🖥️ **[Claude Desktop](docs/integrations/claude-desktop/README.md)** - Desktop application\n- 🌟 **[Gemini CLI](docs/integrations/gemini-cli/README.md)** - Google's CLI tool\n- ⚡ **[Cursor](docs/integrations/cursor/README.md)** - AI-first code editor\n- 💻 **[VS Code](docs/integrations/vscode/README.md)** - With MCP preview support\n- 🦘 **[Roo Code](docs/integrations/roo-code/README.md)** - AI dev team in VS Code\n- 🔧 **[Cline](docs/integrations/cline/README.md)** - Autonomous coding agent\n- ⚡ **[Zed](docs/integrations/zed/README.md)** - High-performance editor\n- 🏄 **[Windsurf](docs/integrations/windsurf/README.md)** - Agentic IDE by Codeium\n- 🔄 **[Continue](docs/integrations/continue/README.md)** - Open-source AI assistant\n\n## Installation\n\n### Prerequisites\n- Python >= 3.10\n- [Astral UV](https://github.com/astral-sh/uv) - Package manager (install with `curl -LsSf https://astral.sh/uv/install.sh | sh`)\n- OpenAI API Key (or compatible service)\n\n#### System Dependencies\n\n<details>\n<summary><strong>Ubuntu/Debian</strong></summary>\n\n```bash\nsudo apt update\nsudo apt install -y python3-dev libasound2-dev libasound2-plugins libportaudio2 portaudio19-dev ffmpeg pulseaudio pulseaudio-utils\n```\n\n**Note for WSL2 users**: WSL2 requires additional audio packages (pulseaudio, libasound2-plugins) for microphone access. See our [WSL2 Microphone Access Guide](docs/troubleshooting/wsl2-microphone-access.md) if you encounter issues.\n</details>\n\n<details>\n<summary><strong>Fedora/RHEL</strong></summary>\n\n```bash\nsudo dnf install python3-devel alsa-lib-devel portaudio-devel ffmpeg\n```\n</details>\n\n<details>\n<summary><strong>macOS</strong></summary>\n\n```bash\n# Install Homebrew if not already installed\n/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\n\n# Install dependencies\nbrew install portaudio ffmpeg cmake\n```\n</details>\n\n<details>\n<summary><strong>Windows (WSL)</strong></summary>\n\nFollow the Ubuntu/Debian instructions above within WSL.\n</details>\n\n<details>\n<summary><strong>NixOS</strong></summary>\n\nVoice Mode includes a flake.nix with all required dependencies. You can either:\n\n1. **Use the development shell** (temporary):\n```bash\nnix develop github:mbailey/voicemode\n```\n\n2. **Install system-wide** (see Installation section below)\n</details>\n\n### Quick Install\n\n```bash\n# Using Claude Code (recommended)\nclaude mcp add --scope user voice-mode uvx voice-mode\n\n# Using Claude Code with Nix (NixOS)\nclaude mcp add voice-mode nix run github:mbailey/voicemode\n\n# Using UV\nuvx voice-mode\n\n# Using pip\npip install voice-mode\n\n# Using Nix (NixOS)\nnix run github:mbailey/voicemode\n```\n\n### Configuration for AI Coding Assistants\n\n> 📖 **Looking for detailed setup instructions?** Check our comprehensive [Integration Guides](docs/integrations/README.md) for step-by-step instructions for each tool!\n\nBelow are quick configuration snippets. For full installation and setup instructions, see the integration guides above.\n\n<details>\n<summary><strong>Claude Code (CLI)</strong></summary>\n\n```bash\nclaude mcp add voice-mode -- uvx voice-mode\n```\n\nOr with environment variables:\n```bash\nclaude mcp add voice-mode --env OPENAI_API_KEY=your-openai-key -- uvx voice-mode\n```\n</details>\n\n<details>\n<summary><strong>Claude Desktop</strong></summary>\n\n**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  \n**Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"voice-mode\": {\n      \"command\": \"uvx\",\n      \"args\": [\"voice-mode\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-openai-key\"\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary><strong>Cline</strong></summary>\n\nAdd to your Cline MCP settings:\n\n**Windows**:\n```json\n{\n  \"mcpServers\": {\n    \"voice-mode\": {\n      \"command\": \"cmd\",\n      \"args\": [\"/c\", \"uvx\", \"voice-mode\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-openai-key\"\n      }\n    }\n  }\n}\n```\n\n**macOS/Linux**:\n```json\n{\n  \"mcpServers\": {\n    \"voice-mode\": {\n      \"command\": \"uvx\",\n      \"args\": [\"voice-mode\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-openai-key\"\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary><strong>Continue</strong></summary>\n\nAdd to your `.continue/config.json`:\n```json\n{\n  \"experimental\": {\n    \"modelContextProtocolServers\": [\n      {\n        \"transport\": {\n          \"type\": \"stdio\",\n          \"command\": \"uvx\",\n          \"args\": [\"voice-mode\"],\n          \"env\": {\n            \"OPENAI_API_KEY\": \"your-openai-key\"\n          }\n        }\n      }\n    ]\n  }\n}\n```\n</details>\n\n<details>\n<summary><strong>Cursor</strong></summary>\n\nAdd to `~/.cursor/mcp.json`:\n```json\n{\n  \"mcpServers\": {\n    \"voice-mode\": {\n      \"command\": \"uvx\",\n      \"args\": [\"voice-mode\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-openai-key\"\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary><strong>VS Code</strong></summary>\n\nAdd to your VS Code MCP config:\n```json\n{\n  \"mcpServers\": {\n    \"voice-mode\": {\n      \"command\": \"uvx\",\n      \"args\": [\"voice-mode\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-openai-key\"\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary><strong>Windsurf</strong></summary>\n\n```json\n{\n  \"mcpServers\": {\n    \"voice-mode\": {\n      \"command\": \"uvx\",\n      \"args\": [\"voice-mode\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-openai-key\"\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary><strong>Zed</strong></summary>\n\nAdd to your Zed settings.json:\n```json\n{\n  \"context_servers\": {\n    \"voice-mode\": {\n      \"command\": {\n        \"path\": \"uvx\",\n        \"args\": [\"voice-mode\"],\n        \"env\": {\n          \"OPENAI_API_KEY\": \"your-openai-key\"\n        }\n      }\n    }\n  }\n}\n```\n</details>\n\n<details>\n<summary><strong>Roo Code</strong></summary>\n\n1. Open VS Code Settings (`Ctrl/Cmd + ,`)\n2. Search for \"roo\" in the settings search bar\n3. Find \"Roo-veterinaryinc.roo-cline → settings → Mcp_settings.json\"\n4. Click \"Edit in settings.json\"\n5. Add Voice Mode configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"voice-mode\": {\n      \"command\": \"uvx\",\n      \"args\": [\"voice-mode\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-openai-key\"\n      }\n    }\n  }\n}\n```\n</details>\n\n### Alternative Installation Options\n\n<details>\n<summary><strong>Using Docker</strong></summary>\n\n```bash\ndocker run -it --rm \\\n  -e OPENAI_API_KEY=your-openai-key \\\n  --device /dev/snd \\\n  -v /tmp/.X11-unix:/tmp/.X11-unix \\\n  -e DISPLAY=$DISPLAY \\\n  ghcr.io/mbailey/voicemode:latest\n```\n</details>\n\n<details>\n<summary><strong>Using pipx</strong></summary>\n\n```bash\npipx install voice-mode\n```\n</details>\n\n<details>\n<summary><strong>From source</strong></summary>\n\n```bash\ngit clone https://github.com/mbailey/voicemode.git\ncd voicemode\npip install -e .\n```\n</details>\n\n<details>\n<summary><strong>NixOS Installation Options</strong></summary>\n\n**1. Install with nix profile (user-wide):**\n```bash\nnix profile install github:mbailey/voicemode\n```\n\n**2. Add to NixOS configuration (system-wide):**\n```nix\n# In /etc/nixos/configuration.nix\nenvironment.systemPackages = [\n  (builtins.getFlake \"github:mbailey/voicemode\").packages.${pkgs.system}.default\n];\n```\n\n**3. Add to home-manager:**\n```nix\n# In home-manager configuration\nhome.packages = [\n  (builtins.getFlake \"github:mbailey/voicemode\").packages.${pkgs.system}.default\n];\n```\n\n**4. Run without installing:**\n```bash\nnix run github:mbailey/voicemode\n```\n</details>\n\n## Tools\n\n| Tool | Description | Key Parameters |\n|------|-------------|----------------|\n| `converse` | Have a voice conversation - speak and optionally listen | `message`, `wait_for_response` (default: true), `listen_duration` (default: 30s), `transport` (auto/local/livekit) |\n| `listen_for_speech` | Listen for speech and convert to text | `duration` (default: 5s) |\n| `check_room_status` | Check LiveKit room status and participants | None |\n| `check_audio_devices` | List available audio input/output devices | None |\n| `start_kokoro` | Start the Kokoro TTS service | `models_dir` (optional, defaults to ~/Models/kokoro) |\n| `stop_kokoro` | Stop the Kokoro TTS service | None |\n| `kokoro_status` | Check the status of Kokoro TTS service | None |\n| `install_whisper_cpp` | Install whisper.cpp for local STT | `install_dir`, `model` (default: base.en), `use_gpu` (auto-detect) |\n| `install_kokoro_fastapi` | Install kokoro-fastapi for local TTS | `install_dir`, `port` (default: 8880), `auto_start` (default: true) |\n\n**Note:** The `converse` tool is the primary interface for voice interactions, combining speaking and listening in a natural flow.\n\n**New:** The `install_whisper_cpp` and `install_kokoro_fastapi` tools help you set up free, private, open-source voice services locally. See [Installation Tools Documentation](docs/installation-tools.md) for detailed usage.\n\n## Configuration\n\n- 📖 **[Integration Guides](docs/integrations/README.md)** - Step-by-step setup for each tool\n- 🔧 **[Configuration Reference](docs/configuration.md)** - All environment variables\n- 📁 **[Config Examples](config-examples/)** - Ready-to-use configuration files\n\n### Quick Setup\n\nThe only required configuration is your OpenAI API key:\n\n```bash\nexport OPENAI_API_KEY=\"your-key\"\n```\n\n### Optional Settings\n\n```bash\n# Custom STT/TTS services (OpenAI-compatible)\nexport STT_BASE_URL=\"http://127.0.0.1:2022/v1\"  # Local Whisper\nexport TTS_BASE_URL=\"http://127.0.0.1:8880/v1\"  # Local TTS\nexport TTS_VOICE=\"alloy\"                        # Voice selection\n\n# Or use voice preference files (see Configuration docs)\n# Project: /your-project/voices.txt or /your-project/.voicemode/voices.txt\n# User: ~/voices.txt or ~/.voicemode/voices.txt\n\n# LiveKit (for room-based communication)\n# See docs/livekit/ for setup guide\nexport LIVEKIT_URL=\"wss://your-app.livekit.cloud\"\nexport LIVEKIT_API_KEY=\"your-api-key\"\nexport LIVEKIT_API_SECRET=\"your-api-secret\"\n\n# Debug mode\nexport VOICEMODE_DEBUG=\"true\"\n\n# Save all audio (TTS output and STT input)\nexport VOICEMODE_SAVE_AUDIO=\"true\"\n\n# Audio format configuration (default: pcm)\nexport VOICEMODE_AUDIO_FORMAT=\"pcm\"         # Options: pcm, mp3, wav, flac, aac, opus\nexport VOICEMODE_TTS_AUDIO_FORMAT=\"pcm\"     # Override for TTS only (default: pcm)\nexport VOICEMODE_STT_AUDIO_FORMAT=\"mp3\"     # Override for STT upload\n\n# Format-specific quality settings\nexport VOICEMODE_OPUS_BITRATE=\"32000\"       # Opus bitrate (default: 32kbps)\nexport VOICEMODE_MP3_BITRATE=\"64k\"          # MP3 bitrate (default: 64k)\n```\n\n### Audio Format Configuration\n\nVoice Mode uses **PCM** audio format by default for TTS streaming for optimal real-time performance:\n\n- **PCM** (default for TTS): Zero latency, best streaming performance, uncompressed\n- **MP3**: Wide compatibility, good compression for uploads\n- **WAV**: Uncompressed, good for local processing\n- **FLAC**: Lossless compression, good for archival\n- **AAC**: Good compression, Apple ecosystem\n- **Opus**: Small files but NOT recommended for streaming (quality issues)\n\nThe audio format is automatically validated against provider capabilities and will fallback to a supported format if needed.\n\n## Local STT/TTS Services\n\nFor privacy-focused or offline usage, Voice Mode supports local speech services:\n\n- **[Whisper.cpp](docs/whisper.cpp.md)** - Local speech-to-text with OpenAI-compatible API\n- **[Kokoro](docs/kokoro.md)** - Local text-to-speech with multiple voice options\n\nThese services provide the same API interface as OpenAI, allowing seamless switching between cloud and local processing.\n\n### OpenAI API Compatibility Benefits\n\nBy strictly adhering to OpenAI's API standard, Voice Mode enables powerful deployment flexibility:\n\n- **🔀 Transparent Routing**: Users can implement their own API proxies or gateways outside of Voice Mode to route requests to different providers based on custom logic (cost, latency, availability, etc.)\n- **🎯 Model Selection**: Deploy routing layers that select optimal models per request without modifying Voice Mode configuration\n- **💰 Cost Optimization**: Build intelligent routers that balance between expensive cloud APIs and free local models\n- **🔧 No Lock-in**: Switch providers by simply changing the `BASE_URL` - no code changes required\n\nExample: Simply set `OPENAI_BASE_URL` to point to your custom router:\n```bash\nexport OPENAI_BASE_URL=\"https://router.example.com/v1\"\nexport OPENAI_API_KEY=\"your-key\"\n# Voice Mode now uses your router for all OpenAI API calls\n```\n\nThe OpenAI SDK handles this automatically - no Voice Mode configuration needed!\n\n## Architecture\n\n```\n┌─────────────────────┐     ┌──────────────────┐     ┌─────────────────────┐\n│   Claude/LLM        │     │  LiveKit Server  │     │  Voice Frontend     │\n│   (MCP Client)      │◄────►│  (Optional)     │◄───►│  (Optional)         │\n└─────────────────────┘     └──────────────────┘     └─────────────────────┘\n         │                            │\n         │                            │\n         ▼                            ▼\n┌─────────────────────┐     ┌──────────────────┐\n│  Voice MCP Server   │     │   Audio Services │\n│  • converse         │     │  • OpenAI APIs   │\n│  • listen_for_speech│◄───►│  • Local Whisper │\n│  • check_room_status│     │  • Local TTS     │\n│  • check_audio_devices    └──────────────────┘\n└─────────────────────┘\n```\n\n## Troubleshooting\n\n### Common Issues\n\n- **No microphone access**: Check system permissions for terminal/application\n  - **WSL2 Users**: See [WSL2 Microphone Access Guide](docs/troubleshooting/wsl2-microphone-access.md)\n- **UV not found**: Install with `curl -LsSf https://astral.sh/uv/install.sh | sh`\n- **OpenAI API error**: Verify your `OPENAI_API_KEY` is set correctly\n- **No audio output**: Check system audio settings and available devices\n\n### Debug Mode\n\nEnable detailed logging and audio file saving:\n\n```bash\nexport VOICEMODE_DEBUG=true\n```\n\nDebug audio files are saved to: `~/voicemode_recordings/`\n\n### Audio Diagnostics\n\nRun the diagnostic script to check your audio setup:\n\n```bash\npython scripts/diagnose-wsl-audio.py\n```\n\nThis will check for required packages, audio services, and provide specific recommendations.\n\n### Audio Saving\n\nTo save all audio files (both TTS output and STT input):\n\n```bash\nexport VOICEMODE_SAVE_AUDIO=true\n```\n\nAudio files are saved to: `~/.voicemode/audio/YYYY/MM/` with timestamps in the filename.\n\n## Documentation\n\n📚 **[Read the full documentation at voice-mode.readthedocs.io](https://voice-mode.readthedocs.io)**\n\n### Getting Started\n- **[Integration Guides](docs/integrations/README.md)** - Step-by-step setup for all supported tools\n- **[Configuration Guide](docs/configuration.md)** - Complete environment variable reference\n\n### Development\n- **[Using uv/uvx](docs/uv.md)** - Package management with uv and uvx\n- **[Local Development](docs/local-development-uvx.md)** - Development setup guide\n- **[Audio Formats](docs/audio-format-migration.md)** - Audio format configuration and migration\n- **[Statistics Dashboard](docs/statistics-dashboard.md)** - Performance monitoring and metrics\n\n### Service Guides\n- **[Whisper.cpp Setup](docs/whisper.cpp.md)** - Local speech-to-text configuration\n- **[Kokoro Setup](docs/kokoro.md)** - Local text-to-speech configuration\n- **[Service Health Checks](docs/service-health-checks.md)** - Service readiness and health monitoring\n- **[LiveKit Integration](docs/livekit/README.md)** - Real-time voice communication\n\n### Troubleshooting\n- **[WSL2 Microphone Access](docs/troubleshooting/wsl2-microphone-access.md)** - WSL2 audio setup\n- **[Migration Guide](docs/migration-guide.md)** - Upgrading from older versions\n\n## Links\n\n- **Website**: [getvoicemode.com](https://getvoicemode.com)\n- **Documentation**: [voice-mode.readthedocs.io](https://voice-mode.readthedocs.io)\n- **GitHub**: [github.com/mbailey/voicemode](https://github.com/mbailey/voicemode)\n- **PyPI**: [pypi.org/project/voice-mode](https://pypi.org/project/voice-mode/)\n- **npm**: [npmjs.com/package/voicemode](https://www.npmjs.com/package/voicemode)\n\n### Community\n\n- **Discord**: [Join our community](https://discord.gg/Hm7dF3uCfG)\n- **Twitter/X**: [@getvoicemode](https://twitter.com/getvoicemode)\n- **YouTube**: [@getvoicemode](https://youtube.com/@getvoicemode)\n\n## See Also\n\n- 🚀 [Integration Guides](docs/integrations/README.md) - Setup instructions for all supported tools\n- 🔧 [Configuration Reference](docs/configuration.md) - Environment variables and options\n- 🎤 [Local Services Setup](docs/kokoro.md) - Run TTS/STT locally for privacy\n- 🐛 [Troubleshooting](docs/troubleshooting/README.md) - Common issues and solutions\n\n## License\n\nMIT - A [Failmode](https://failmode.com) Project\n\n---\n\n<sub>[Project Statistics](docs/project-stats/README.md)</sub>\n",
+  "category": "Development",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "voice-mode": {
+        "command": "uvx",
+        "args": ["voice-mode"],
+        "env": {}
+      },
+      "voicemode-nix": {
+        "command": "nix",
+        "args": ["run", "github:mbailey/voicemode"],
+        "env": {}
+      },
+      "voice-mode-with-openai-key": {
+        "command": "uvx",
+        "args": ["voice-mode"],
+        "env": {
+          "OPENAI_API_KEY": "your-openai-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mbailey",
+    "repo": "voice-mcp",
+    "url": "https://github.com/mbailey/voice-mcp",
+    "name": "voice-mcp",
+    "path": null,
+    "stars": 165,
+    "contributors": 7,
+    "issues": 7,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "9a9608fc6013225413755d8de851f183484a1496"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:37.769Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "uv",
+      "importance": 8
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "numpy",
+      "importance": 9
+    },
+    {
+      "name": "sounddevice",
+      "importance": 9
+    },
+    {
+      "name": "scipy",
+      "importance": 9
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    },
+    {
+      "name": "pydub",
+      "importance": 9
+    },
+    {
+      "name": "audioop-lts",
+      "importance": 9
+    },
+    {
+      "name": "simpleaudio",
+      "importance": 9
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "psutil",
+      "importance": 4
+    },
+    {
+      "name": "setuptools",
+      "importance": 3
+    },
+    {
+      "name": "webrtcvad",
+      "importance": 9
+    },
+    {
+      "name": "livekit",
+      "importance": 9
+    },
+    {
+      "name": "livekit-agents",
+      "importance": 9
+    },
+    {
+      "name": "livekit-plugins-openai",
+      "importance": 9
+    },
+    {
+      "name": "livekit-plugins-silero",
+      "importance": 9
+    },
+    {
+      "name": "click",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"voice-mode\"\ndynamic = [\"version\"]\ndescription = \"VoiceMode - Voice interaction capabilities for AI assistants (formerly voice-mcp)\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = {text = \"MIT\"}\nauthors = [\n    {name = \"mbailey\", email = \"mbailey@example.com\"},\n]\nkeywords = [\"mcp\", \"voice\", \"livekit\", \"speech\", \"tts\", \"stt\", \"ai\", \"llm\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.8\",\n    \"Programming Language :: Python :: 3.9\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Programming Language :: Python :: 3.13\",\n    \"Topic :: Software Development :: Libraries\",\n    \"Topic :: Multimedia :: Sound/Audio :: Speech\",\n]\n\ndependencies = [\n    \"uv>=0.4.0\",\n    \"fastmcp>=2.0.0\",\n    \"numpy\",\n    \"sounddevice\",\n    \"scipy\",\n    \"openai>=1.0.0\",\n    \"pydub\",\n    \"audioop-lts; python_version >= '3.13'\",\n    \"simpleaudio\",\n    \"httpx\",\n    \"psutil>=5.9.0\",\n    \"setuptools\",  # Required for pkg_resources used by webrtcvad\n    \"webrtcvad>=2.0.10\",\n    \"livekit>=0.13.1\",\n    \"livekit-agents>=0.10.2\",\n    \"livekit-plugins-openai>=0.10.1\",\n    \"livekit-plugins-silero>=0.6.5\",\n    \"click>=8.0.0\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"build>=1.0.0\",\n    \"twine>=4.0.0\",\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-cov>=4.0.0\",\n    \"pytest-mock>=3.10.0\",\n]\ntest = [\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-cov>=4.0.0\",\n    \"pytest-mock>=3.10.0\",\n]\nnotebooks = [\n    \"gradio>=4.0.0\",\n    \"jupyter>=1.0.0\",\n    \"notebook>=7.0.0\",\n    \"pandas>=2.0.0\",\n]\nscripts = [\n    \"flask>=3.0.0\",\n]\ndocs = [\n    \"mkdocs>=1.5.0\",\n    \"mkdocs-material[imaging]>=9.0.0\",\n    \"pymdown-extensions>=10.0\",\n    \"mkdocs-git-revision-date-localized-plugin>=1.2.0\",\n    \"mkdocs-minify-plugin>=0.7.0\",\n    \"mkdocs-gen-files>=0.5.0\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/mbailey/voicemode\"\nRepository = \"https://github.com/mbailey/voicemode\"\nIssues = \"https://github.com/mbailey/voicemode/issues\"\n\n[project.scripts]\nvoice-mode = \"voice_mode.cli:voice_mode\"\nvoicemode = \"voice_mode.cli:voice_mode\"\nvoice-mode-cli = \"voice_mode.cli:cli\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"voice_mode\"]\n\n[tool.hatch.build.targets.sdist]\ninclude = [\n  \"/voice_mode\",\n  \"/README.md\",\n  \"/LICENSE\",\n  \"/pyproject.toml\",\n  \"/CHANGELOG.md\",\n]\nexclude = [\n  \"**/__pycache__\",\n  \"**/*.pyc\",\n  \"**/*.pyo\",\n  \"**/*.pyd\",\n  \"**/.DS_Store\",\n  \"**/*.log\",\n]\n\n[tool.hatch.version]\npath = \"voice_mode/__version__.py\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_classes = \"Test*\"\npython_functions = \"test_*\"\n# Exclude manual test directory\naddopts = \"--ignore=tests/manual\"\n\n\n=== docs/requirements.txt ===\n# Documentation dependencies\nmkdocs>=1.5.0\nmkdocs-material[imaging]>=9.0.0\npymdown-extensions>=10.0\nmkdocs-git-revision-date-localized-plugin>=1.2.0\nmkdocs-minify-plugin>=0.7.0\nmkdocs-gen-files>=0.5.0"
+}

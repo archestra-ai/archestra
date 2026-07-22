@@ -1,0 +1,123 @@
+{
+  "name": "techdocsstudio__biel-mcp",
+  "display_name": "biel-mcp",
+  "description": "Connect AI tools like Cursor, VS Code, and Claude to your product docs.",
+  "author": {
+    "name": "TechDocsStudio"
+  },
+  "server": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "mcp-remote",
+      "https://mcp.biel.ai/sse?project_slug=${user_config.project_slug}&domain=${user_config.domain}"
+    ],
+    "env": {
+      "API_KEY": "${user_config.api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "project_slug": {
+      "type": "string",
+      "title": "Project Slug",
+      "description": "Your Biel.ai project slug.",
+      "required": true
+    },
+    "domain": {
+      "type": "string",
+      "title": "Documentation Domain",
+      "description": "The domain of your product documentation (e.g., https://your-docs-domain.com).",
+      "required": true
+    },
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "Your Biel.ai API key (only needed for private projects).",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "<div align=\"center\">\n  <picture>\n    <source media=\"(prefers-color-scheme: dark)\" srcset=\"./logo-dark..jpg\" />\n    <img alt=\"Biel.ai\" src=\"./logo.jpg\" />\n  </picture>\n  <h1>Biel.ai MCP Server</h1>\n  <h3>Connect your IDE to your product docs</h3>\n</div>\n\n\nGive AI tools like Cursor, VS Code, and Claude Desktop access to your company's product knowledge through the [Biel.ai platform](https://biel.ai).\n\nBiel.ai provides a hosted Retrieval-Augmented Generation (RAG) layer that makes your documentation searchable and useful to AI tools. This enables smarter completions, accurate technical answers, and context-aware suggestions—directly in your IDE or chat environment.\n\n![Demo](./demo.png)\n\nWhen AI tools can read your product documentation, they become **significantly** more helpful—generating more accurate code completions, answering technical questions with context, and guiding developers with real-time product knowledge.\n\n\n> **Note:** Requires a Biel.ai account and project setup. **[Start your free 15-day trial](https://app.biel.ai/accounts/signup/)**.\n\n<h3><a href=\"https://docs.biel.ai/integrations/mcp-server?utm_source=github&utm_medium=referral&utm_campaign=readme\">See quickstart instructions →</a></h3>\n\n## Getting started\n\n### 1. Get your MCP configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"biel-ai\": {\n      \"description\": \"Query your product's documentation, APIs, and knowledge base.\",\n      \"command\": \"npx\",\n      \"args\": [\n        \"mcp-remote\",\n        \"https://mcp.biel.ai/sse?project_slug=YOUR_PROJECT_SLUG&domain=https://your-docs-domain.com\"\n      ]\n    }\n  }\n}\n```\n\n**Required:** `project_slug` and `domain`  \n**Optional:** `api_key` (only needed for private projects)\n\n### 2. Add to your AI tool\n\n* **Cursor**: **Settings** → **Tools & Integrations* → **New MCP server**.\n* **Claude Desktop**: Edit `claude_desktop_config.json`  \n* **VS Code**: Install **MCP extension**.\n\n### 3. Start asking questions\n\n```\nCan you check in biel_ai what the auth headers are for the /users endpoint?\n```\n\n## Self-hosting (Optional)\n\nFor advanced users who prefer to run their own MCP server instance:\n\n### Local development\n```bash\n# Clone and run locally\ngit clone https://github.com/techdocsStudio/biel-mcp\ncd biel-mcp\npip install -r requirements.txt\npython biel_mcp_server.py\n```\n\n### Docker deployment\n```bash\n# Docker Compose (recommended)\ndocker-compose up -d --build\n\n# Or Docker directly\ndocker build -t biel-mcp .\ndocker run -d -p 7832:7832 biel-mcp\n```\n\n## Support\n\n- **Issues**: [GitHub Issues](https://github.com/techdocsStudio/biel-mcp/issues)\n- **Contact**: [support@biel.ai](mailto:support@biel.ai)\n- **Custom Demo**: [Book a demo](https://biel.ai/contact)\n",
+  "category": "AI Tools",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "biel-ai": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "mcp-remote",
+          "https://mcp.biel.ai/sse?project_slug=YOUR_PROJECT_SLUG&domain=https://your-docs-domain.com"
+        ],
+        "env": {}
+      },
+      "biel-mcp-server-python": {
+        "command": "python",
+        "args": ["biel_mcp_server.py"],
+        "env": {}
+      },
+      "biel-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-d", "-p", "7832:7832", "biel-mcp"],
+        "env": {},
+        "docker_image": "biel-mcp"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "TechDocsStudio",
+    "repo": "biel-mcp",
+    "url": "https://github.com/TechDocsStudio/biel-mcp",
+    "name": "biel-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "081fe19c4e705369af0d4e4adc909d0ea0462671"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:21.027Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp>=1.0.0\nhttpx>=0.24.0\nuvicorn>=0.24.0\nfastapi>=0.104.0"
+}

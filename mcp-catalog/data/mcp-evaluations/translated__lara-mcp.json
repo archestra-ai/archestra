@@ -1,0 +1,121 @@
+{
+  "name": "translated__lara-mcp",
+  "display_name": "lara-mcp",
+  "description": "MCP server from translated/lara-mcp",
+  "author": {
+    "name": "translated"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@translated/lara-mcp", "stdio"],
+    "env": {
+      "LARA_TRANSLATE_API_KEY": "${user_config.lara_translate_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "lara_translate_api_key": {
+      "type": "string",
+      "title": "Lara Translate API Key",
+      "description": "Your API key for authenticating with the Lara Translate API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Lara Translate MCP Server\n\nA Model Context Protocol (MCP) Server for [Lara Translate](https://laratranslate.com/translate) API, enabling powerful translation capabilities with support for language detection, context-aware translations and translation memories.\n\n[![License](https://img.shields.io/github/license/translated/lara-mcp.svg)](https://github.com/translated/lara-mcp/blob/main/LICENSE)\n[![Docker Pulls](https://img.shields.io/docker/pulls/translatednet/lara-mcp.svg)](https://hub.docker.com/r/translatednet/lara-mcp)\n[![npm downloads](https://img.shields.io/npm/dm/@translated/lara-mcp.svg)](https://www.npmjs.com/package/@translated/lara-mcp)\n\n## 📚 Table of Contents\n- 📖 [Introduction](#-introduction)\n- 🛠 [Available Tools](#-available-tools)\n- 🚀 [Getting Started](#-getting-started)\n  - 📋 [HTTP Server](#http-server-)\n  - 🔌 [STDIO Server](#stdio-server-%EF%B8%8F)\n- 🧪 [Verify Installation](#-verify-installation)\n- 💻 [Popular Clients that supports MCPs](#-popular-clients-that-supports-mcps)\n- 🆘 [Support](#-support)\n\n## 📖 Introduction\n\n<details>\n<summary><strong>What is MCP?</strong></summary>\n\nModel Context Protocol (MCP) is an open standardized communication protocol that enables AI applications to connect with external tools, data sources, and services. Think of MCP like a USB-C port for AI applications - just as USB-C provides a standardized way to connect devices to various peripherals, MCP provides a standardized way to connect AI models to different data sources and tools.\n\nLara Translate MCP Server enables AI applications to access Lara Translate's powerful translation capabilities through this standardized protocol.\n\n> More info about Model Context Protocol on: https://modelcontextprotocol.io/\n</details>\n\n<details>\n<summary><strong>How Lara Translate MCP Works</strong></summary>\n\nLara Translate MCP Server implements the Model Context Protocol to provide seamless translation capabilities to AI applications. The integration follows this flow:\n\n1. **Connection Establishment**: When an MCP-compatible AI application starts, it connects to configured MCP servers, including the Lara Translate MCP Server\n2. **Tool & Resource Discovery**: The AI application discovers available translation tools and resources provided by the Lara Translate MCP Server\n3. **Request Processing**: When translation needs are identified:\n   - The AI application formats a structured request with text to translate, language pairs, and optional context\n   - The MCP server validates the request and transforms it into Lara Translate API calls\n   - The request is securely sent to Lara Translate's API using your credentials\n4. **Translation & Response**: Lara Translate processes the translation using advanced AI models\n5. **Result Integration**: The translation results are returned to the AI application, which can then incorporate them into its response\n\nThis integration architecture allows AI applications to access professional-grade translations without implementing the API directly, while maintaining the security of your API credentials and offering flexibility to adjust translation parameters through natural language instructions.\n</details>\n\n<details>\n<summary><strong>Why to use Lara inside an LLM</strong></summary>\n\nIntegrating Lara with LLMs creates a powerful synergy that significantly enhances translation quality for non-English languages.\n\n#### Why General LLMs Fall Short in Translation\nWhile large language models possess broad linguistic capabilities, they often lack the specialized expertise and up-to-date terminology required for accurate translations in specific domains and languages.\n\n#### Lara’s Domain-Specific Advantage\nLara overcomes this limitation by leveraging Translation Language Models (T-LMs) trained on billions of professionally translated segments. These models provide domain-specific machine translation that captures cultural nuances and industry terminology that generic LLMs may miss. The result: translations that are contextually accurate and sound natural to native speakers.\n\n#### Designed for Non-English Strength\nLara has a strong focus on non-English languages, addressing the performance gap found in models such as GPT-4. The dominance of English in datasets such as Common Crawl and Wikipedia results in lower quality output in other languages. Lara helps close this gap by providing higher quality understanding, generation, and restructuring in a multilingual context.\n\n#### Faster, Smarter Multilingual Performance\nBy offloading complex translation tasks to specialized T-LMs, Lara reduces computational overhead and minimizes latency—a common issue for LLMs handling non-English input. Its architecture processes translations in parallel with the LLM, enabling for real-time, high-quality output without compromising speed or efficiency.\n\n#### Cost-Efficient Translation at Scale\nLara also lowers the cost of using models like GPT-4 in non-English workflows. Since tokenization (and pricing) is optimized for English, using Lara allows translation to take place before hitting the LLM, meaning that only the translated English content is processed. This improves cost efficiency and supports competitive scalability for global enterprises.\n</details>\n\n## 🛠 Available Tools\n\n### Translation Tools\n\n<details>\n<summary><strong>translate</strong> - Translate text between languages</summary>\n\n**Inputs**:\n- `text` (array): An array of text blocks to translate, each with:\n    - `text` (string): The text content\n    - `translatable` (boolean): Whether this block should be translated\n- `source` (optional string): Source language code (e.g., 'en-EN')\n- `target` (string): Target language code (e.g., 'it-IT')\n- `context` (optional string): Additional context to improve translation quality\n- `instructions` (optional string[]): Instructions to adjust translation behavior\n- `source_hint` (optional string): Guidance for language detection\n\n**Returns**: Translated text blocks maintaining the original structure\n</details>\n\n### Translation Memories Tools\n\n<details>\n\n<summary><strong>list_memories</strong> - List saved translation memories</summary>\n\n**Returns**: Array of memories and their details\n</details>\n\n<details>\n<summary><strong>create_memory</strong> - Create a new translation memory</summary>\n\n**Inputs**:\n- `name` (string): Name of the new memory\n- `external_id` (optional string): ID of the memory to import from MyMemory (e.g., 'ext_my_[MyMemory ID]')\n\n**Returns**: Created memory data\n</details>\n\n<details>\n<summary><strong>update_memory</strong> - Update translation memory name</summary>\n\n**Inputs**:\n- `id` (string): ID of the memory to update\n- `name` (string): The new name for the memory\n\n**Returns**: Updated memory data\n</details>\n\n<details>\n<summary><strong>delete_memory</strong> - Delete a translation memory</summary>\n\n**Inputs**:\n- `id` (string): ID of the memory to delete\n\n**Returns**: Deleted memory data\n</details>\n\n<details>\n<summary><strong>add_translation</strong> - Add a translation unit to memory</summary>\n\n**Inputs**:\n- `id` (string | string[]): ID or IDs of memories where to add the translation unit\n- `source` (string): Source language code\n- `target` (string): Target language code\n- `sentence` (string): The source sentence\n- `translation` (string): The translated sentence\n- `tuid` (optional string): Translation Unit unique identifier\n- `sentence_before` (optional string): Context sentence before\n- `sentence_after` (optional string): Context sentence after\n\n**Returns**: Added translation details\n</details>\n\n<details>\n<summary><strong>delete_translation</strong> - Delete a translation unit from memory</summary>\n\n**Inputs**:\n- `id` (string): ID of the memory\n- `source` (string): Source language code\n- `target` (string): Target language code\n- `sentence` (string): The source sentence\n- `translation` (string): The translated sentence\n- `tuid` (optional string): Translation Unit unique identifier\n- `sentence_before` (optional string): Context sentence before\n- `sentence_after` (optional string): Context sentence after\n\n**Returns**: Removed translation details\n</details>\n\n<details>\n<summary><strong>import_tmx</strong> - Import a TMX file into a memory</summary>\n\n**Inputs**:\n- `id` (string): ID of the memory to update\n- `tmx_content` (string): The content of the tmx file to upload\n- `gzip` (boolean): Indicates if the file is compressed (.gz)\n\n**Returns**: Import details\n</details>\n\n<details>\n<summary><strong>check_import_status</strong> - Checks the status of a TMX file import</summary>\n\n**Inputs**:\n- `id` (string): The ID of the import job\n\n**Returns**: Import details\n</details>\n\n## 🚀 Getting Started\nLara supports both the STDIO and streamable HTTP protocols. For a hassle-free setup, we recommend using the HTTP protocol. If you prefer to use STDIO, it must be installed locally on your machine.\n\nYou'll find setup instructions for both protocols in the sections below.\n\n### HTTP Server 🌐\n<details>\n<summary><strong>❌ Clients NOT supporting <code>url</code> configuration (e.g., Claude, OpenAI)</strong></summary>\n\nThis installation guide is intended for clients that do NOT support the url-based configuration. This option requires Node.js to be installed on your system.\n\n> If you're unsure how to configure an MCP with your client, please refer to your MCP client's official documentation.\n\n---\n\n1. Open your client's MCP configuration JSON file with a text editor, then copy and paste the following snippet:\n\n```json\n{\n  \"mcpServers\": {\n    \"lara\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"mcp-remote\",\n        \"https://mcp.laratranslate.com/v1\",\n        \"--header\",\n        \"x-lara-access-key-id: ${X_LARA_ACCESS_KEY_ID}\",\n        \"--header\",\n        \"x-lara-access-key-secret: ${X_LARA_ACCESS_KEY_SECRET}\"\n      ],\n      \"env\": {\n        \"X_LARA_ACCESS_KEY_ID\": \"<YOUR_ACCESS_KEY_ID>\",\n        \"X_LARA_ACCESS_KEY_SECRET\": \"<YOUR_ACCESS_KEY_SECRET>\"\n      }\n    }\n  }\n}\n```\n\n2. Replace `<YOUR_ACCESS_KEY_ID>` and `<YOUR_ACCESS_KEY_SECRET>` with your Lara Translate API credentials. Refer to the [Official Documentation](https://developers.laratranslate.com/docs/getting-started#step-3---configure-your-credentials) for details.\n\n3. Restart your MCP client.\n\n</details>\n\n<details>\n<summary><strong>✅ Clients supporting <code>url</code> configuration (e.g., Cursor, Continue)</strong></summary>\n\nThis installation guide is intended for clients that support the url-based configuration. These clients can connect to Lara through a remote HTTP endpoint by specifying a simple configuration object.\n\nSome examples of supported clients include Cursor, Continue, OpenDevin, and Aider.\n> If you're unsure how to configure an MCP with your client, please refer to your MCP client's official documentation.\n\n---\n\n1. Open your client's MCP configuration JSON file with a text editor, then copy and paste the following snippet:\n\n```json\n{\n  \"mcpServers\": {\n    \"lara\": {\n      \"url\": \"https://mcp.laratranslate.com/v1\",\n      \"headers\": {\n        \"x-lara-access-key-id\": \"<YOUR_ACCESS_KEY_ID>\",\n        \"x-lara-access-key-secret\": \"<YOUR_ACCESS_KEY_SECRET>\"\n      }\n    }\n  }\n}\n```\n\n2. Replace `<YOUR_ACCESS_KEY_ID>` and `<YOUR_ACCESS_KEY_SECRET>` with your Lara Translate API credentials. Refer to the [Official Documentation](https://developers.laratranslate.com/docs/getting-started#step-3---configure-your-credentials) for details.\n\n3. Restart your MCP client.\n\n</details>\n\n---\n\n### STDIO Server 🖥️\n<details>\n<summary><strong>Using NPX</strong></summary>\n\nThis option requires Node.js to be installed on your system.\n\n1. Add the following to your MCP configuration file:\n```json\n{\n  \"mcpServers\": {\n    \"lara-translate\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@translated/lara-mcp@latest\"],\n      \"env\": {\n        \"LARA_ACCESS_KEY_ID\": \"<YOUR_ACCESS_KEY_ID>\",\n        \"LARA_ACCESS_KEY_SECRET\": \"<YOUR_ACCESS_KEY_SECRET>\"\n      }\n    }\n  }\n}\n```\n\n2. Replace `<YOUR_ACCESS_KEY_ID>` and `<YOUR_ACCESS_KEY_SECRET>` with your actual Lara API credentials.\n</details>\n\n<details>\n<summary><strong>Using Docker</strong></summary>\n\nThis option requires Docker to be installed on your system.\n\n1. Add the following to your MCP configuration file:\n```json\n{\n  \"mcpServers\": {\n    \"lara-translate\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"LARA_ACCESS_KEY_ID\",\n        \"-e\",\n        \"LARA_ACCESS_KEY_SECRET\",\n        \"translatednet/lara-mcp:latest\"\n      ],\n      \"env\": {\n        \"LARA_ACCESS_KEY_ID\": \"<YOUR_ACCESS_KEY_ID>\",\n        \"LARA_ACCESS_KEY_SECRET\": \"<YOUR_ACCESS_KEY_SECRET>\"\n      }\n    }\n  }\n}\n```\n\n2. Replace `<YOUR_ACCESS_KEY_ID>` and `<YOUR_ACCESS_KEY_SECRET>` with your actual Lara API credentials.\n</details>\n\n<details>\n<summary><strong>Building from Source</strong></summary>\n\n#### Using Node.js\n\n1. Clone the repository:\n```bash\ngit clone https://github.com/translated/lara-mcp.git\ncd lara-mcp\n```\n\n2. Install dependencies and build:\n```bash\n# Install dependencies\npnpm install\n\n# Build\npnpm run build\n```\n\n3. Add the following to your MCP configuration file:\n```json\n{\n  \"mcpServers\": {\n    \"lara-translate\": {\n      \"command\": \"node\",\n      \"args\": [\"<FULL_PATH_TO_PROJECT_FOLDER>/dist/index.js\"],\n      \"env\": {\n        \"LARA_ACCESS_KEY_ID\": \"<YOUR_ACCESS_KEY_ID>\",\n        \"LARA_ACCESS_KEY_SECRET\": \"<YOUR_ACCESS_KEY_SECRET>\"\n      }\n    }\n  }\n}\n```\n4. Replace:\n   - `<FULL_PATH_TO_PROJECT_FOLDER>` with the absolute path to your project folder\n   - `<YOUR_ACCESS_KEY_ID>` and `<YOUR_ACCESS_KEY_SECRET>` with your actual Lara API credentials.\n\n#### Building a Docker Image\n\n1. Clone the repository:\n```bash\ngit clone https://github.com/translated/lara-mcp.git\ncd lara-mcp\n```\n\n2. Build the Docker image:\n```bash\ndocker build -t lara-mcp .\n```\n\n3. Add the following to your MCP configuration file:\n```json\n{\n  \"mcpServers\": {\n    \"lara-translate\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"LARA_ACCESS_KEY_ID\",\n        \"-e\",\n        \"LARA_ACCESS_KEY_SECRET\",\n        \"lara-mcp\"\n      ],\n      \"env\": {\n        \"LARA_ACCESS_KEY_ID\": \"<YOUR_ACCESS_KEY_ID>\",\n        \"LARA_ACCESS_KEY_SECRET\": \"<YOUR_ACCESS_KEY_SECRET>\"\n      }\n    }\n  }\n}\n```\n\n4. Replace `<YOUR_ACCESS_KEY_ID>` and `<YOUR_ACCESS_KEY_SECRET>` with your actual credentials.\n</details>\n\n## 🧪 Verify Installation\n\nAfter restarting your MCP client, you should see Lara Translate MCP in the list of available MCPs.\n> The method for viewing installed MCPs varies by client. Please consult your MCP client's documentation.\n\nTo verify that Lara Translate MCP is working correctly, try translating with a simple prompt:\n```text\nTranslate with Lara \"Hello world\" to Spanish\n```\n\nYour MCP client will begin generating a response. If Lara Translate MCP is properly installed and configured, your client will either request approval for the action or display a notification that Lara Translate is being used.\n\n## 💻 Popular Clients that supports MCPs \n\n> For a complete list of MCP clients and their feature support, visit the [official MCP clients page](https://modelcontextprotocol.io/clients).\n\n| Client                                                            | Description                                          |\n|-------------------------------------------------------------------|------------------------------------------------------|\n| [Claude Desktop](https://claude.ai/download)                      | Desktop application for Claude AI                    |\n| [Aixplain](https://aixplain.com/)                                 | Production-ready AI Agents                           |\n| [Cursor](https://www.cursor.com/)                                 | AI-first code editor                                 |\n| [Cline for VS Code](https://github.com/cline/cline)               | VS Code extension for AI assistance                  |\n| [GitHub Copilot MCP](https://github.com/VikashLoomba/copilot-mcp) | VS Code extension for GitHub Copilot MCP integration |\n| [Windsurf](https://windsurf.com/editor)                           | AI-powered code editor and development environment   |\n\n## 🆘 Support\n\n- For issues with Lara Translate API: Visit [Lara Translate API and Integrations Support](https://support.laratranslate.com)\n- For issues with this MCP Server: Open an issue on [GitHub](https://github.com/translated/lara-mcp/issues)\n",
+  "category": "Translation",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "translated-lara-mcp": {
+        "command": "lara-mcp",
+        "args": ["--port", "3000", "--api-key", "YOUR_LARA_API_KEY"],
+        "env": {
+          "LARA_API_KEY": "YOUR_LARA_API_KEY"
+        }
+      },
+      "translatednet-lara-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-p", "3000:3000", "-e", "LARA_API_KEY=YOUR_LARA_API_KEY", "translatednet/lara-mcp"],
+        "env": {
+          "LARA_API_KEY": "YOUR_LARA_API_KEY"
+        },
+        "docker_image": "translatednet/lara-mcp"
+      },
+      "translated-lara-mcp-stdio": {
+        "command": "lara-mcp",
+        "args": ["stdio", "--api-key", "YOUR_LARA_API_KEY"],
+        "env": {
+          "LARA_API_KEY": "YOUR_LARA_API_KEY"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "translated",
+    "repo": "lara-mcp",
+    "url": "https://github.com/translated/lara-mcp",
+    "name": "lara-mcp",
+    "path": null,
+    "stars": 67,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "d46169616dcaa98b35d2b8e35850e1c9cc941ea4"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:37.496Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@translated/lara",
+      "importance": 9
+    },
+    {
+      "name": "cors",
+      "importance": 8
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "helmet",
+      "importance": 8
+    },
+    {
+      "name": "pino",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@translated/lara-mcp\",\n  \"version\": \"0.0.12\",\n  \"description\": \"Lara API official MCP server\",\n  \"author\": {\n    \"name\": \"Translated\",\n    \"email\": \"support@laratranslate.com\"\n  },\n  \"license\": \"MIT\",\n  \"homepage\": \"https://laratranslate.com\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/translated/lara-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/translated/lara-mcp/issues\"\n  },\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"bin\": {\n    \"lara-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"imports\": {\n    \"#env\": \"./dist/env.js\",\n    \"#exception\": \"./dist/exception.js\",\n    \"#logger\": \"./dist/logger.js\",\n    \"#rest/server\": \"./dist/rest/server.js\",\n    \"#mcp/server\": \"./dist/mcp/server.js\"\n  },\n  \"scripts\": {\n    \"build\": \"rm -rf dist && tsc\",\n    \"dev\": \"nodemon src/index.ts\",\n    \"start\": \"node dist/index.js\",\n    \"test\": \"vitest run\",\n    \"test:watch\": \"vitest\",\n    \"test:coverage\": \"vitest run --coverage\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"mcpserver\",\n    \"laratranslate\",\n    \"lara\",\n    \"translate\",\n    \"translation\",\n    \"ai\",\n    \"translate\",\n    \"translated\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.3\",\n    \"@translated/lara\": \"^1.4.0\",\n    \"cors\": \"^2.8.5\",\n    \"express\": \"^5.1.0\",\n    \"helmet\": \"^8.1.0\",\n    \"pino\": \"^9.7.0\",\n    \"zod\": \"^3.25.0\"\n  },\n  \"devDependencies\": {\n    \"@types/cors\": \"^2.8.19\",\n    \"@types/express\": \"^5.0.3\",\n    \"@types/node\": \"^22.13.14\",\n    \"@types/supertest\": \"^6.0.3\",\n    \"@vitest/coverage-v8\": \"^3.1.1\",\n    \"nodemon\": \"^3.1.10\",\n    \"supertest\": \"^7.1.1\",\n    \"tsx\": \"^4.20.3\",\n    \"typescript\": \"^5.8.2\",\n    \"vitest\": \"^3.1.1\"\n  }\n}\n"
+}

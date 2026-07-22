@@ -1,0 +1,169 @@
+{
+  "name": "areweai__tsgram-mcp",
+  "display_name": "tsgram-mcp",
+  "description": "TSGram - Telegram MCP Server for local Claude Code integration - debug and vibe code on the go!",
+  "author": {
+    "name": "areweai"
+  },
+  "server": {
+    "command": "npm",
+    "args": ["start"],
+    "env": {
+      "TELEGRAM_BOT_TOKEN": "${user_config.telegram_bot_token}",
+      "AUTHORIZED_CHAT_ID": "${user_config.authorized_chat_id}",
+      "OPENROUTER_API_KEY": "${user_config.openrouter_api_key}",
+      "OPENAI_API_KEY": "${user_config.openai_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "telegram_bot_token": {
+      "type": "string",
+      "title": "Telegram Bot Token",
+      "description": "Your bot token obtained from @BotFather.",
+      "sensitive": true,
+      "required": true
+    },
+    "authorized_chat_id": {
+      "type": "string",
+      "title": "Authorized Telegram Chat ID",
+      "description": "Your numeric Telegram user ID from @userinfobot. This is used to authorize access to the bot.",
+      "sensitive": true,
+      "required": true
+    },
+    "openrouter_api_key": {
+      "type": "string",
+      "title": "OpenRouter API Key",
+      "description": "Your API key for OpenRouter.ai, used for AI model access. A $1.00 limit is recommended.",
+      "sensitive": true,
+      "required": false
+    },
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your API key for OpenAI, used for GPT-4 model access.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# TSGram MCP 🚀\n\n**Get Claude Code in your local project talking to Telegram in 3 minutes!**\n\n<img src=\"assets/IMG_3908.PNG\" alt=\"TSGram in action - viewing package.json\" height=\"450\">\n\nTSGram MCP connects Claude Code sessions to Telegram using TS/Node/Docker/cli-utils, enabling AI-powered code assistance directly in your Telegram chats. Ask questions about your codebase, get AI insights, and even edit files - all from Telegram on your phone!\n\n## 🔒 How It Works (All Local)\n- Local Docker container runs the Telegram webhook server\n- TSGram MCP server runs locally \n- Your Claude Code or Claude Desktop runs locally and adds MCP locally\n- Create and delete bots in-app through Telegram, access limited to your telegram user id\n- Modern local web dashboard to manage bots from localhost \n- Local means local! If your computer is offline, so are your bots.\n\n## Quick Start (3 Minutes)\n\n### 🤖 AI Agent Enhanced Setup (Recommended!)\n\nLet Claude handle the entire setup and ask you for the required values.\n\n**From your terminal:**\n0. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and [Node.js 20+](https://nodejs.org/en/download) (npm included)\n1. Clone the repository:\n   ```bash\n   git clone https://github.com/areweai/tsgram-mcp.git\n   cd tsgram-mcp\n   ```\n\n2. From the command line, start Claude:\n   ```bash\n   claude --model sonnet\n   ```\n\n3. Initialize with `/init`\n\n4. Copy and paste this prompt:\n   > First, explain to the human how to register a new Telegram bot with @BotFather and get their bot token (TELEGRAM_BOT_TOKEN), and how to get their Telegram user ID from @userinfobot (for AUTHORIZED_CHAT_ID). They can work on getting these credentials while you set up the system. Then help the user set up tsgram-mcp for claude code. Do everything from installing node modules to creating and deploying the local docker containers. Finally, when everything is deployed, remind the user to configure their bot token and authorized chat ID along wither other required .env variables.\n\nMake sure you replace the `TELEGRAM_BOT_TOKEN` and `AUTHORIZED_CHAT_ID` placeholders with the actual values.\n\nIn order to retrieve those values, you will have to message the following Telegram bots and follow their instructions:\n- [@BotFather](https://t.me/botfather)\n- [@userinfobot](https://t.me/userinfobot)\n\nThe AI will then handle all the setup steps for you, including:\n- Installing dependencies\n- Configuring environment variables\n- Building Docker containers\n- Starting services\n- Guiding you through bot registration\n- Setting up the MCP server (and allow you to extend functionality locally)\n\n**CLI no-AI Alternative If Hitting LLM troubles: Setup Shell Script**\nRun from your project root:\n```bash\n# One-line install (macOS/Linux)\ncurl -sSL https://raw.githubusercontent.com/areweai/tsgram-mcp/main/setup.sh | bash\n\n# Or if you prefer to review first:\ncurl -sSL https://raw.githubusercontent.com/areweai/tsgram-mcp/main/setup.sh > setup.sh\nchmod +x setup.sh\n./setup.sh\n```\n\n**Adding TSGram to an Existing Project:**\n\nIf you already have a project and want to add TSGram as an MCP server:\n\n1. From your existing project root:\n   ```bash\n   git clone https://github.com/areweai/tsgram-mcp.git .tsgram-mcp\n   cd .tsgram-mcp\n   ```\n\n2. Use Claude to set it up:\n   ```bash\n   claude model --sonnet\n   /init\n   ```\n\n3. Paste this prompt:\n   > \"First, explain to the human how to register a new Telegram bot with @BotFather and get their bot token (TELEGRAM_BOT_TOKEN) from @UserBotInfoBot, and how to get their Telegram user ID from @userinfobot (for AUTHORIZED_CHAT_ID). They can work on getting these credentials while you set up the system. Then help me add TSGram MCP to my existing project in the parent directory. Set up the Docker containers and MCP configuration so I can use Telegram to interact with my project files. The project root is one level up from here.\"\n\nThis will configure TSGram to work with your existing project structure (and allow you to extend functionality locally).\n\n### Test Your Bot! 🎉\n**IMPORTANT: You will need to message your bot first before it can message you.**\n\nSend your bot a message and ask it something about your local project!\n\n<img src=\"assets/IMG_3913.PNG\" alt=\"TSGram file permissions and dangerzone mode\" height=\"450\">\n\n\n\n**⚠️ Security Note**: TSGram has basic safeguards to not list, preview, or serve .env files but it is still strongly recommended that you do not use TSGram for anything highly sensitive as third party servers are part of the transport layer.\n\n## 📊 Web Dashboard\n\nMonitor and manage your bots through the beautiful web dashboard at **http://localhost:3000**:\n\n<img src=\"assets/tsgram-dashboard-1.png\" alt=\"TSGram Web Dashboard - Bot management interface\" width=\"600\">\n\nThe dashboard provides:\n- **Real-time bot status** and activity monitoring\n- **System health** indicators (MCP server, AI model, API keys)\n- **Bot management** - create, test, and monitor Telegram bots\n- **Activity logs** - track messages, responses, and system events\n- **Quick actions** - send test messages and manage bot configurations\n- **run from local** - npm run dashboard to view (chrome recommended)\n\n## 📋 You Will Need\n\n- [Docker Desktop](https://www.docker.com/products/docker-desktop/)\n- [Node.js 20+](https://nodejs.org/en/download) (npm included)\n- Telegram on a phone\n- Claude Desktop or Claude Code (CLI)\n- An OpenRouter API key (We recommend creating a new API key with a $1.00 limit. Trust, but limit!)\n- Chrome (Optional but highly recommended for local management UI)\n\n## Manual Setup Steps\n\n### 1. Get Your Bot Token & User ID\n1. **Create Bot**: Message [@BotFather](https://t.me/botfather) on Telegram\n2. Send `/newbot` and follow prompts\n3. Copy your bot token (keep this secret!)\n4. **Get Your User ID** (IMPORTANT): Message [@userinfobot](https://t.me/userinfobot)\n   - This returns your numeric user ID (e.g., `123456789`)\n   - **Use the user ID, NOT your username** for security (usernames can be changed)\n\n### 2. Configure Environment\nEdit `.env` with your values:\n```env\nTELEGRAM_BOT_TOKEN=your_bot_token_here\n# CRITICAL: Use your numeric user ID from @userinfobot, not your username!\nAUTHORIZED_CHAT_ID=123456789  # Your numeric user ID from step 1\n\n# Choose ONE AI provider:\nOPENROUTER_API_KEY=your_openrouter_key  # For Claude (recommended with $1 limit)\n# OR\nOPENAI_API_KEY=your_openai_key         # For GPT-4\n```\n\n**Security Note**: The bot now uses your **numeric user ID** instead of username for authorization. This is more secure because:\n- User IDs never change\n- Usernames can be changed by users\n- User IDs cannot be guessed or easily discovered\n\n### 3. Start TSGram\n```bash\nnpm install\nnpm run docker:build\nnpm run docker:start\n```\n\n## 🎯 Key Features\n\n- **\"Stop\" and \"Start\" commands** in TSGram bot chat provide convenient output control\n- **Select subset of unix commands supported** (`:h ls` or `:h cat $FILE`)\n- **Opt-in edit mode** for vibe coding and debugging on the go (`:dangerzone` to enable)\n- **AI-Powered Responses**: Uses Claude 3.5 Sonnet or GPT-4\n- **Code Understanding**: Reads and analyzes your entire codebase\n- **Web Dashboard**: Monitor bots at http://localhost:3000\n\n## 💬 Bot Commands\n\n- **Regular messages**: Get AI responses about your code\n- **`:h`** - Show help and available commands\n- **`:h ls [path]`** - List files in directory\n- **`:h cat filename`** - View file contents\n- **`:dangerzone`** - Enable file editing (careful!)\n- **`:safetyzone`** - Disable file editing\n- **`stop`** - Pause bot responses\n- **`start`** - Resume bot responses\n\n## 🛠️ Common Commands\n\n```bash\n# View logs\nnpm run docker:logs\n\n# Check health\nnpm run docker:health\n\n# Stop services\nnpm run docker:stop\n\n# Rebuild after changes\nnpm run docker:rebuild\n\n# Access dashboard (Chrome recommended)\nnpm run dashboard\n```\n\n## 📜 Useful Scripts\n\nThe project includes several helper scripts in the `scripts/` directory:\n\n**Setup & Configuration**\n- `setup.sh` - Automated install script (can be run via curl)\n- `configure-mcp.sh` - Configure MCP settings for Claude Desktop/Code\n- `fix-permissions.sh` - Fix file permissions if needed\n\n**Updates & Maintenance**\n- `update-system.sh` - Update TSGram to latest version\n- `update-ai-context.sh` - Update AI context files\n\n**Testing & Debugging**\n- `test-api-keys.sh` - Verify your API keys are working\n- `test-docker-setup.sh` - Test Docker configuration\n\nRun any script with:\n```bash\n./scripts/script-name.sh\n# or\nnpm run script-name  # for npm-wrapped scripts\n```\n\n## 🔧 Advanced Setup\n\n### Using with Claude Code\nAdd to your Claude Code MCP settings:\n```json\n{\n  \"tsgram\": {\n    \"command\": \"docker\",\n    \"args\": [\"exec\", \"-i\", \"tsgram-mcp-workspace\", \"npx\", \"tsx\", \"src/mcp-server.ts\"],\n    \"env\": {\n      \"TELEGRAM_BOT_TOKEN\": \"your_bot_token_here\",\n      \"AUTHORIZED_CHAT_ID\": \"123456789\"\n    }\n  }\n}\n```\n\n**Note**: Replace `123456789` with your actual numeric user ID from [@userinfobot](https://t.me/userinfobot)\n\n### MCP Compatibility\n\nTSGram uses the standard Model Context Protocol (MCP) format and should be compatible with any MCP-supporting IDE or tool. **Tested with:**\n- ✅ Claude Code CLI\n- ✅ Claude Desktop\n\n**Should work with** (standard MCP format):\n- Cursor IDE\n- GitHub Copilot\n- Other MCP-compatible editors\n\nUse the same Docker configuration pattern shown above, adapting the syntax for your specific MCP client.\n\n### CLI-to-Telegram Bridge\nForward Claude Code CLI responses to Telegram:\n```bash\n# Setup global command (may prompt for sudo password to create npm global install /usr/local/bin/claude-tg)\nnpm run setup\n\n# Use instead of 'claude'\nclaude-tg \"analyze this codebase\"\n```\n\n## 🚨 Troubleshooting\n\n**Bot not responding?**\n```bash\n# Check if services are running\nnpm run docker:health\n\n# View logs for errors\nnpm run docker:logs\n```\n\n**Can't connect to bot?**\n1. Verify bot token is correct in `.env`\n2. **Check your user ID**: Make sure `AUTHORIZED_CHAT_ID` is your numeric user ID (not username)\n   - Get it from [@userinfobot](https://t.me/userinfobot) if unsure\n3. Make sure you messaged the bot first\n4. If you get \"authorization not configured\" error, set `AUTHORIZED_CHAT_ID` in your `.env` file\n\n**File edits not working?**\n- Type `:dangerzone` to enable (one-time)\n- Check logs for permission errors\n- Ensure Docker has file access\n\n## 📚 Project Structure\n\n```\ntsgram/\n├── src/\n│   ├── telegram-bot-ai-powered.ts    # Main bot logic\n│   ├── telegram-mcp-webhook-server.ts # MCP integration\n│   └── models/                        # AI providers\n├── docker-compose.tsgram-workspace.yml # Main Docker config\n├── .env.example                       # Environment template\n└── data/                             # Persistent storage\n```\n\n## 🤝 Contributing\n\nPRs welcome! Please:\n1. Fork the repository\n2. Create a feature branch\n3. Add tests if applicable\n4. Submit a pull request\n\n## 📄 License\n\nMIT - Feel free to use in your own projects!\n\n---\n\n**Need help?** Open an issue on GitHub or message your bot with questions!",
+  "category": "Development",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "tsgram-mcp": {
+        "command": "npm",
+        "args": ["run", "docker:start"],
+        "env": {
+          "TELEGRAM_BOT_TOKEN": "your_bot_token_here",
+          "AUTHORIZED_CHAT_ID": "123456789",
+          "OPENROUTER_API_KEY": "your_openrouter_key",
+          "OPENAI_API_KEY": "your_openai_key"
+        }
+      },
+      "tsgram-mcp-dashboard": {
+        "command": "npm",
+        "args": ["run", "dashboard"]
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "areweai",
+    "repo": "tsgram-mcp",
+    "url": "https://github.com/areweai/tsgram-mcp",
+    "name": "areweai__tsgram-mcp",
+    "path": null,
+    "stars": 84,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ff2778737d2b80b9ffeb5f4c5c7ae4555f458f44"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:21.969Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@tanstack/react-router",
+      "importance": 6
+    },
+    {
+      "name": "@tanstack/router-devtools",
+      "importance": 2
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    },
+    {
+      "name": "cors",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 8
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 8
+    },
+    {
+      "name": "qrcode",
+      "importance": 7
+    },
+    {
+      "name": "react",
+      "importance": 7
+    },
+    {
+      "name": "react-dom",
+      "importance": 7
+    },
+    {
+      "name": "telegraf",
+      "importance": 9
+    },
+    {
+      "name": "ws",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"tsgram-mcp\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"description\": \"TSGram MCP - Model Context Protocol server for Telegram integration with Claude Code\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"telegram-mcp\": \"./dist/cli.js\"\n  },\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:mcp\": \"vite build --config vite.mcp.config.ts\",\n    \"build:spa\": \"vite build --config vite.spa.config.ts\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"tsx watch src/index.ts\",\n    \"dev:spa\": \"vite --config vite.spa.config.ts\",\n    \"cli\": \"tsx src/cli.ts\",\n    \"mcp\": \"tsx src/mcp-server.ts\",\n    \"cli-bridge\": \"tsx src/cli-telegram-bridge.ts\",\n    \"tg-claude-bridge\": \"tsx src/telegram-to-claude-bridge.ts\",\n    \"claude-session\": \"tsx src/claude-telegram-session.ts\",\n    \"claude-docker\": \"tsx src/claude-docker-bridge.ts\",\n    \"telegram-queue\": \"tsx src/telegram-claude-queue.ts\",\n    \"claude-monitor\": \"tsx src/claude-queue-monitor.ts\",\n    \"bridges:start\": \"./scripts/start-bridges.sh\",\n    \"bridges:docker\": \"docker-compose -f docker-compose.telegram-bridges.yml up -d\",\n    \"mcp-proxy\": \"tsx src/mcp-docker-proxy.ts\",\n    \"rsync:local\": \"tsx src/local-rsync-server.ts\",\n    \"workspace:start\": \"docker-compose -f docker-compose.workspace.yml up -d\",\n    \"workspace:stop\": \"docker-compose -f docker-compose.workspace.yml down\",\n    \"mcp-workspace\": \"tsx src/mcp-workspace-server.ts\",\n    \"claude-tg\": \"./claude-with-telegram.sh\",\n    \"setup\": \"./setup.sh\",\n    \"setup:interactive\": \"./setup.sh --interactive\",\n    \"health-check\": \"curl -f http://localhost:4040/health && curl -f http://localhost:4041/health\",\n    \"dashboard\": \"vite --config vite.spa.config.ts --port 3000\",\n    \"update\": \"./scripts/update-system.sh\",\n    \"update-context\": \"./scripts/update-ai-context.sh\",\n    \"fix-permissions\": \"./scripts/fix-permissions.sh\",\n    \"mcp:configure\": \"./scripts/configure-mcp.sh\",\n    \"mcp:configure:local\": \"./scripts/configure-mcp.sh apply local\",\n    \"mcp:configure:docker\": \"./scripts/configure-mcp.sh apply docker\",\n    \"mcp:configure:remote\": \"./scripts/configure-mcp.sh apply remote\",\n    \"mcp:configure:interactive\": \"./scripts/configure-mcp.sh interactive\",\n    \"mcp:test\": \"./scripts/configure-mcp.sh test\",\n    \"mcp:status\": \"./scripts/configure-mcp.sh status\",\n    \"qr-setup\": \"tsx src/qr-webhook-setup.ts\",\n    \"qr-generate\": \"curl -s http://localhost:8080/generate-qr | jq -r '.qrCode'\",\n    \"docker:build\": \"docker build -t tsgram:latest -f Dockerfile.tsgram-workspace .\",\n    \"docker:start\": \"docker-compose -f docker-compose.tsgram-workspace.yml up -d\",\n    \"docker:stop\": \"docker-compose -f docker-compose.tsgram-workspace.yml down\",\n    \"docker:logs\": \"docker-compose -f docker-compose.tsgram-workspace.yml logs -f\",\n    \"docker:rebuild\": \"npm run docker:stop && npm run docker:build && npm run docker:start\",\n    \"docker:health\": \"docker ps --filter name=tsgram && curl -f http://localhost:4040/health\",\n    \"telegram-queue:start\": \"tsx src/telegram-claude-queue.ts start\",\n    \"telegram-queue:stop\": \"pkill -f telegram-claude-queue\",\n    \"telegram-queue:status\": \"ps aux | grep telegram-claude-queue\",\n    \"preview\": \"vite preview\",\n    \"test\": \"vitest\",\n    \"test:ui\": \"vitest --ui\",\n    \"lint\": \"eslint src --ext .ts,.tsx\",\n    \"lint:fix\": \"eslint src --ext .ts,.tsx --fix\",\n    \"type-check\": \"tsc --noEmit\",\n    \"clean\": \"rimraf dist\",\n    \"echo-test\": \"cat test2.md\",\n    \"echo-md\": \"cat test.md\"\n  },\n  \"keywords\": [\n    \"telegram\",\n    \"mcp\",\n    \"bot\",\n    \"claude\",\n    \"ai\",\n    \"channels\",\n    \"typescript\",\n    \"vite\",\n    \"react\"\n  ],\n  \"author\": \"Arewe.ai\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.2\",\n    \"@tanstack/react-router\": \"^1.87.3\",\n    \"@tanstack/router-devtools\": \"^1.87.3\",\n    \"axios\": \"^1.7.9\",\n    \"commander\": \"^12.1.0\",\n    \"cors\": \"^2.8.5\",\n    \"dotenv\": \"^16.4.7\",\n    \"express\": \"^4.21.2\",\n    \"openai\": \"^4.58.1\",\n    \"qrcode\": \"^1.5.3\",\n    \"react\": \"^18.3.1\",\n    \"react-dom\": \"^18.3.1\",\n    \"telegraf\": \"^4.16.3\",\n    \"ws\": \"^8.16.0\",\n    \"zod\": \"^3.24.1\"\n  },\n  \"devDependencies\": {\n    \"@testing-library/jest-dom\": \"^6.6.3\",\n    \"@testing-library/react\": \"^16.3.0\",\n    \"@testing-library/user-event\": \"^14.6.1\",\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/express\": \"^4.17.17\",\n    \"@types/node\": \"^20.10.5\",\n    \"@types/qrcode\": \"^1.5.5\",\n    \"@types/react\": \"^18.2.14\",\n    \"@types/react-dom\": \"^18.2.5\",\n    \"@types/ws\": \"^8.5.13\",\n    \"@typescript-eslint/eslint-plugin\": \"^7.1.0\",\n    \"@typescript-eslint/parser\": \"^7.1.0\",\n    \"@vitejs/plugin-react\": \"^4.6.0\",\n    \"autoprefixer\": \"^10.4.16\",\n    \"eslint\": \"^8.57.0\",\n    \"eslint-plugin-react-hooks\": \"^4.6.0\",\n    \"jsdom\": \"^26.1.0\",\n    \"postcss\": \"^8.4.31\",\n    \"rimraf\": \"^5.0.1\",\n    \"tailwindcss\": \"^3.3.0\",\n    \"tsx\": \"^4.7.1\",\n    \"typescript\": \"^5.3.2\",\n    \"vite\": \"^5.1.0\",\n    \"vitest\": \"^1.6.1\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\n"
+}

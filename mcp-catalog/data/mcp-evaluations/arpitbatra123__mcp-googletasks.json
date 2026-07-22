@@ -1,0 +1,117 @@
+{
+  "name": "arpitbatra123__mcp-googletasks",
+  "display_name": "mcp-googletasks",
+  "description": "This Model Context Protocol (MCP) server provides a bridge between Claude and Google Tasks, allowing you to manage your task lists and tasks directly through Claude.",
+  "author": {
+    "name": "arpitbatra123"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "GOOGLE_CLIENT_ID": "${user_config.google_client_id}",
+      "GOOGLE_CLIENT_SECRET": "${user_config.google_client_secret}",
+      "GOOGLE_REDIRECT_URI": "${user_config.google_redirect_uri}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "google_client_id": {
+      "type": "string",
+      "title": "Google Client ID",
+      "description": "Your Google Cloud OAuth Client ID, obtained from the Google Cloud Console.",
+      "sensitive": true,
+      "required": true
+    },
+    "google_client_secret": {
+      "type": "string",
+      "title": "Google Client Secret",
+      "description": "Your Google Cloud OAuth Client Secret, obtained from the Google Cloud Console.",
+      "sensitive": true,
+      "required": true
+    },
+    "google_redirect_uri": {
+      "type": "string",
+      "title": "Google Redirect URI",
+      "description": "The authorized redirect URI configured in your Google Cloud Console for the OAuth client (e.g., http://localhost:3000/oauth2callback).",
+      "sensitive": false,
+      "required": true,
+      "default": "http://localhost:3000/oauth2callback"
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/arpitbatra123-mcp-googletasks-badge.png)](https://mseep.ai/app/arpitbatra123-mcp-googletasks)\n\n# Google Tasks MCP Server\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/arpitbatra123/mcp-googletasks)](https://archestra.ai/mcp-catalog/arpitbatra123__mcp-googletasks)\n\n[![smithery badge](https://smithery.ai/badge/@arpitbatra123/mcp-googletasks)](https://smithery.ai/server/@arpitbatra123/mcp-googletasks)\n\nThis Model Context Protocol (MCP) server provides a bridge between Claude and Google Tasks, allowing you to manage your task lists and tasks directly through Claude.\n\n<a href=\"https://glama.ai/mcp/servers/@arpitbatra123/mcp-googletasks\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@arpitbatra123/mcp-googletasks/badge\" alt=\"Google Tasks Server MCP server\" />\n</a>\n\n**Note:** All ( bar some edits ) code in this project was [\"vibe coded\"](https://en.wikipedia.org/wiki/Vibe_coding) - generated with Claude with instructions from me.\n\n## Features\n\nThis MCP server provides the following functionality:\n\n### Task List Management\n- `list-tasklists` - List all your task lists\n- `get-tasklist` - Get details about a specific task list\n- `create-tasklist` - Create a new task list\n- `update-tasklist` - Update an existing task list\n- `delete-tasklist` - Delete a task list\n\n### Task Management\n- `list-tasks` - List all tasks in a task list\n- `get-task` - Get details about a specific task\n- `create-task` - Create a new task\n- `update-task` - Update an existing task\n- `delete-task` - Delete a task\n- `complete-task` - Mark a task as completed\n- `move-task` - Move a task (reorder or change parent)\n- `clear-completed-tasks` - Clear all completed tasks from a list\n\n## Setup Instructions\n\n### 1. Create Google Cloud Project & Enable API\n\n1. Go to the [Google Cloud Console](https://console.cloud.google.com/)\n2. Create a new project\n3. Navigate to \"APIs & Services\" > \"Library\"\n4. Search for \"Google Tasks API\" and enable it\n5. Go to \"APIs & Services\" > \"Credentials\"\n6. Click \"Create Credentials\" > \"OAuth Client ID\"\n7. Configure the OAuth consent screen (External is fine for personal use)\n8. For Application Type, select \"Web application\"\n9. Add \"http://localhost:3000\" as an authorized redirect URI\n10. Create the client ID and secret\n\n### 2. Configure Claude for Desktop\n\n1. Install [Claude for Desktop](https://claude.ai/download)\n2. Open the Claude configuration file:\n   - MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n3. Add the Google Tasks MCP server configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"google-tasks\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/google-tasks-mcp/build/index.js\"],\n      \"env\": {\n        \"GOOGLE_CLIENT_ID\": \"your_client_id_here\",\n        \"GOOGLE_CLIENT_SECRET\": \"your_client_secret_here\",\n        \"GOOGLE_REDIRECT_URI\": \"http://localhost:3000/oauth2callback\"\n      }\n    }\n  }\n}\n```\n\nReplace the path and credentials with your own values.\n\n### 3. Build and Run the Server\n#### Installing via Smithery\n\nTo install Google Tasks Integration Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@arpitbatra123/mcp-googletasks):\n\n```bash\nnpx -y @smithery/cli install @arpitbatra123/mcp-googletasks --client claude\n```\n\n#### Manual Installation\n\n1. Install dependencies:\n```bash\nnpm install\n```\n\n2. Build the server:\n```bash\nnpm run build\n```\n\n3. Restart Claude for Desktop\n\n## Authentication Flow\n\nWhen you first use the Google Tasks MCP server:\n\n1. Use the `authenticate` tool to get an authorization URL\n2. Visit the URL in your browser and sign in with your Google account\n3. After authorizing, you'll receive a code on the browser page\n4. Use the `set-auth-code` tool with this code to complete authentication\n5. You can now use all other tools to interact with Google Tasks\n\nNote that your authentication is session-based and will be lost when you restart the server. You'll need to re-authenticate each time.\n\n## Requirements\n\n- Node.js 14+\n- Claude for Desktop (latest version)\n- Google Cloud Project with Tasks API enabled\n\n## Screenshot\n![](./screenshot.png)\n\n## License\n\nThis project is for demonstration purposes only. Use at your own risk.",
+  "category": "CLI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "google-tasks": {
+        "command": "node",
+        "args": ["/path/to/google-tasks-mcp/build/index.js"],
+        "env": {
+          "GOOGLE_CLIENT_ID": "your_client_id_here",
+          "GOOGLE_CLIENT_SECRET": "your_client_secret_here",
+          "GOOGLE_REDIRECT_URI": "http://localhost:3000/oauth2callback"
+        }
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "arpitbatra123",
+    "repo": "mcp-googletasks",
+    "url": "https://github.com/arpitbatra123/mcp-googletasks",
+    "name": "arpitbatra123__mcp-googletasks",
+    "path": null,
+    "stars": 20,
+    "contributors": 5,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "dcf56d65dc56f07672430710cd5b5e79f762ea26"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:22.649Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "google-auth-library",
+      "importance": 8
+    },
+    {
+      "name": "googleapis",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-google-tasks\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP server for Google Tasks integration\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\",\n    \"build\": \"tsc && chmod 755 build/index.js\",\n    \"dev\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.7.0\",\n    \"dotenv\": \"^16.4.1\",\n    \"google-auth-library\": \"^9.4.2\",\n    \"googleapis\": \"^131.0.0\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.6\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.3.3\"\n  }\n}"
+}

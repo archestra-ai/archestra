@@ -1,0 +1,221 @@
+{
+  "name": "dbt-labs__dbt-mcp",
+  "display_name": "dbt-mcp",
+  "description": "A MCP (Model Context Protocol) server for interacting with dbt.",
+  "author": {
+    "name": "dbt-labs"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--env-file", "${user_config.env_file_path}", "dbt-mcp"],
+    "env": {
+      "DISABLE_DBT_CLI": "${user_config.disable_dbt_cli}",
+      "DISABLE_SEMANTIC_LAYER": "${user_config.disable_semantic_layer}",
+      "DISABLE_DISCOVERY": "${user_config.disable_discovery}",
+      "DISABLE_SQL": "${user_config.disable_sql}",
+      "DISABLE_TOOLS": "${user_config.disable_tools}",
+      "DBT_HOST": "${user_config.dbt_host}",
+      "MULTICELL_ACCOUNT_PREFIX": "${user_config.multicell_account_prefix}",
+      "DBT_TOKEN": "${user_config.dbt_token}",
+      "DBT_PROD_ENV_ID": "${user_config.dbt_prod_env_id}",
+      "DBT_DEV_ENV_ID": "${user_config.dbt_dev_env_id}",
+      "DBT_USER_ID": "${user_config.dbt_user_id}",
+      "DBT_PROJECT_DIR": "${user_config.dbt_project_dir}",
+      "DBT_PATH": "${user_config.dbt_path}",
+      "DBT_CLI_TIMEOUT": "${user_config.dbt_cli_timeout}",
+      "DBT_WARN_ERROR_OPTIONS": "${user_config.dbt_warn_error_options}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "env_file_path": {
+      "type": "file",
+      "title": "Path to .env file",
+      "description": "The path to the .env file containing dbt MCP server configurations.",
+      "required": true
+    },
+    "disable_dbt_cli": {
+      "type": "boolean",
+      "title": "Disable dbt CLI",
+      "description": "Set this to true to disable dbt Core, dbt Cloud CLI, and dbt Fusion MCP tools",
+      "default": false,
+      "required": false
+    },
+    "disable_semantic_layer": {
+      "type": "boolean",
+      "title": "Disable Semantic Layer",
+      "description": "Set this to true to disable dbt Semantic Layer MCP tools",
+      "default": false,
+      "required": false
+    },
+    "disable_discovery": {
+      "type": "boolean",
+      "title": "Disable Discovery",
+      "description": "Set this to true to disable dbt Discovery API MCP tools",
+      "default": false,
+      "required": false
+    },
+    "disable_sql": {
+      "type": "boolean",
+      "title": "Disable SQL",
+      "description": "Set this to false to enable SQL MCP tools",
+      "default": true,
+      "required": false
+    },
+    "disable_tools": {
+      "type": "string",
+      "title": "Disable Specific Tools",
+      "description": "Set this to a list of tool names delimited by a `,` to disable certain tools",
+      "default": "",
+      "required": false
+    },
+    "dbt_host": {
+      "type": "string",
+      "title": "dbt Cloud Host",
+      "description": "Your dbt Cloud instance hostname. This will look like an `Access URL` found [here](https://docs.getdbt.com/docs/cloud/about-cloud/access-regions-ip-addresses). If you are using Multi-cell, do not include the `ACCOUNT_PREFIX` here",
+      "default": "cloud.getdbt.com",
+      "required": false
+    },
+    "multicell_account_prefix": {
+      "type": "string",
+      "title": "Multi-cell Account Prefix",
+      "description": "If you are using Multi-cell, set this to your `ACCOUNT_PREFIX`. If you are not using Multi-cell, do not set this environment variable. You can learn more [here](https://docs.getdbt.com/docs/cloud/about-cloud/access-regions-ip-addresses)",
+      "required": false
+    },
+    "dbt_token": {
+      "type": "string",
+      "title": "dbt Token",
+      "description": "Your personal access token or service token. Note: a service token is required when using the Semantic Layer and this service token should have at least `Semantic Layer Only`, `Metadata Only`, and `Developer` permissions.",
+      "sensitive": true,
+      "required": false
+    },
+    "dbt_prod_env_id": {
+      "type": "string",
+      "title": "dbt Production Environment ID",
+      "description": "Your dbt Cloud production environment ID",
+      "required": false
+    },
+    "dbt_dev_env_id": {
+      "type": "string",
+      "title": "dbt Development Environment ID",
+      "description": "Your dbt Cloud development environment ID",
+      "required": false
+    },
+    "dbt_user_id": {
+      "type": "string",
+      "title": "dbt User ID",
+      "description": "Your dbt Cloud user ID",
+      "required": false
+    },
+    "dbt_project_dir": {
+      "type": "directory",
+      "title": "dbt Project Directory",
+      "description": "The path to where the repository of your dbt Project is hosted locally. This should look something like `/Users/firstnamelastname/reponame`",
+      "required": false
+    },
+    "dbt_path": {
+      "type": "file",
+      "title": "dbt Executable Path",
+      "description": "The path to your dbt Core, dbt Cloud CLI, or dbt Fusion executable. You can find your dbt executable by running `which dbt`",
+      "required": false
+    },
+    "dbt_cli_timeout": {
+      "type": "number",
+      "title": "dbt CLI Timeout",
+      "description": "Configure the number of seconds before your agent will timeout dbt CLI commands. Defaults to 10 seconds.",
+      "default": 10,
+      "min": 1,
+      "required": false
+    },
+    "dbt_warn_error_options": {
+      "type": "string",
+      "title": "dbt Warn Error Options",
+      "description": "Configure dbt's warn error options. Defaults to '{\"error\": [\"NoNodesForSelectionCriteria\"]}' so that the MCP server knows if no node is selected when running a dbt command. You can overwrite it if needed.",
+      "default": "{\"error\": [\"NoNodesForSelectionCriteria\"]}",
+      "required": false
+    }
+  },
+  "readme": "# dbt MCP Server\n[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/11137/badge)](https://www.bestpractices.dev/projects/11137)\n\nThis MCP (Model Context Protocol) server provides various tools to interact with dbt. You can use this MCP server to provide AI agents with context of your project in dbt Core, dbt Fusion, and dbt Platform.\n\nRead our documentation [here](https://docs.getdbt.com/docs/dbt-ai/about-mcp) to learn more. [This](https://docs.getdbt.com/blog/introducing-dbt-mcp-server) blog post provides more details for what is possible with the dbt MCP server.\n\n## Feedback\n\nIf you have comments or questions, create a GitHub Issue or join us in [the community Slack](https://www.getdbt.com/community/join-the-community) in the `#tools-dbt-mcp` channel.\n\n\n## Architecture\n\nThe dbt MCP server architecture allows for your agent to connect to a variety of tools.\n\n![architecture diagram of the dbt MCP server](https://raw.githubusercontent.com/dbt-labs/dbt-mcp/refs/heads/main/docs/d2.png)\n\n## Examples\n\nCommonly, you will connect the dbt MCP server to an agent product like Claude or Cursor. However, if you are interested in creating your own agent, check out [the examples directory](https://github.com/dbt-labs/dbt-mcp/tree/main/examples) for how to get started.\n\n## Contributing\n\nRead `CONTRIBUTING.md` for instructions on how to get involved!\n",
+  "category": "Data",
+  "quality_score": 73,
+  "archestra_config": {
+    "client_config_permutations": {
+      "dbt-mcp": {
+        "command": "uvx",
+        "args": ["--env-file", "<path-to-.env-file>", "dbt-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "dbt-labs",
+    "repo": "dbt-mcp",
+    "url": "https://github.com/dbt-labs/dbt-mcp",
+    "name": "dbt-labs__dbt-mcp",
+    "path": null,
+    "stars": 369,
+    "contributors": 22,
+    "issues": 53,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4bedba495da4c9bc570bb4cb61fefcda47de5d45"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:33.588Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "dbt-protos",
+      "importance": 8
+    },
+    {
+      "name": "dbt-sl-sdk",
+      "importance": 9
+    },
+    {
+      "name": "dbtlabs-vortex",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pandas",
+      "importance": 7
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 8
+    },
+    {
+      "name": "pyyaml",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"dbt-mcp\"\ndescription = \"A MCP (Model Context Protocol) server for interacting with dbt resources.\"\nauthors = [{ name = \"dbt Labs\" }]\nreadme = \"README.md\"\nlicense = { file = \"LICENSE\" }\nrequires-python = \">=3.12\"\ndynamic = [\"version\"]\nclassifiers = [\n  \"License :: OSI Approved :: Apache Software License\",\n  \"Programming Language :: Python :: 3\",\n  \"Operating System :: OS Independent\",\n  \"Development Status :: 4 - Beta\",\n  \"Intended Audience :: Developers\",\n]\ndependencies = [\n  # Pinning all dependencies because this app is installed with uvx\n  # and we want to have a consistent install as much as possible.\n  \"dbt-protos==1.0.317\",\n  \"dbt-sl-sdk[sync]==0.13.0\",\n  \"dbtlabs-vortex==0.2.0\",\n  \"mcp[cli]==1.10.1\",\n  \"pandas==2.2.3\",\n  \"pydantic-settings==2.10.1\",\n  \"pyyaml==6.0.2\",\n  \"requests==2.32.4\",\n]\n[dependency-groups]\ndev = [\n  \"ruff>=0.11.2\",\n  \"types-requests>=2.32.0.20250328\",\n  \"mypy>=1.12.1\",\n  \"pre-commit>=4.2.0\",\n  \"pytest-asyncio>=0.26.0\",\n  \"pytest>=8.3.5\",\n  \"openai>=1.71.0\",\n  \"pyarrow-stubs>=19.1\",\n  \"types-pyyaml>=6.0.12.20250516\",\n]\n\n[project.urls]\nDocumentation = \"https://github.com/dbt-labs/dbt-mcp#readme\"\nIssues = \"https://github.com/dbt-labs/dbt-mcp/issues\"\nSource = \"https://github.com/dbt-labs/dbt-mcp\"\nChangelog = \"https://github.com/dbt-labs/dbt-mcp/blob/main/CHANGELOG.md\"\n\n[project.scripts]\ndbt-mcp = \"dbt_mcp.main:main\"\n\n[build-system]\nrequires = [\"hatchling\", \"hatch-vcs\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.sdist]\ninclude = [\"src/dbt_mcp/**/*\", \"README.md\", \"LICENSE\"]\n\n[tool.hatch.version]\nsource = \"vcs\"\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\npythonpath = [\".\", \"src\"]\n"
+}

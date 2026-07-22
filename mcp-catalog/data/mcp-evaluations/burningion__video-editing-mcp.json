@@ -1,0 +1,176 @@
+{
+  "name": "burningion__video-editing-mcp",
+  "display_name": "video-editing-mcp",
+  "description": "MCP Interface for Video Jungle",
+  "author": {
+    "name": "burningion"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["video-editor-mcp", "${user_config.api_key}"],
+    "env": {
+      "LOAD_PHOTOS_DB": "${user_config.load_photos_db}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "Video Jungle API Key",
+      "description": "Your API key from Video Jungle settings (https://app.video-jungle.com/profile/settings).",
+      "required": true,
+      "sensitive": true
+    },
+    "load_photos_db": {
+      "type": "boolean",
+      "title": "Enable Local Photos Search (macOS)",
+      "description": "Allow the server to search your local Photos app on macOS for videos. Set to true to enable.",
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "# Video Editor MCP server\n\n[![Video Jungle MCP Server](./assets/create-edit.png)](https://www.video-jungle.com)\n\nSee a demo here: [https://www.youtube.com/watch?v=KG6TMLD8GmA](https://www.youtube.com/watch?v=KG6TMLD8GmA)\n\nUpload, edit, search, and generate videos from everyone's favorite LLM and [Video Jungle](https://www.video-jungle.com/).\n\nYou'll need to sign up for an account at [Video Jungle](https://app.video-jungle.com/register) in order to use this tool, and add your API key.\n\n[![PyPI version](https://badge.fury.io/py/video-editor-mcp.svg)](https://badge.fury.io/py/video-editor-mcp)\n\n## Components\n\n### Resources\n\nThe server implements an interface to upload, generate, and edit videos with:\n- Custom vj:// URI scheme for accessing individual videos and projects\n- Each project resource has a name, description\n- Search results are returned with metadata about what is in the video, and when, allowing for edit generation directly\n\n### Prompts\n\nComing soon.\n\n### Tools\n\nThe server implements a few tools:\n- add-video\n  - Add a Video File for analysis from a URL. Returns an vj:// URI to reference the Video file\n- create-videojungle-project\n  - Creates a Video Jungle project to contain generative scripts, analyzed videos, and images for video edit generation\n- edit-locally\n  - Creates an OpenTimelineIO project and downloads it to your machine to open in a Davinci Resolve Studio instance (Resolve Studio _must_ already be running before calling this tool.) \n- generate-edit-from-videos\n  - Generates a rendered video edit from a set of video files\n- generate-edit-from-single-video\n  - Generate an edit from a single input video file\n- get-project-assets\n  - Get assets within a project for video edit generation.\n- search-videos\n  - Returns video matches based upon embeddings and keywords\n- update-video-edit\n  - Live update a video edit's information. If Video Jungle is open, edit will be updated in real time.\n\n### Using Tools in Practice\n\nIn order to use the tools, you'll need to sign up for Video Jungle and add your API key.\n\n**add-video**\n\nHere's an example prompt to invoke the `add-video` tool:\n\n```\ncan you download the video at https://www.youtube.com/shorts/RumgYaH5XYw and name it fly traps?\n```\n\nThis will download a video from a URL, add it to your library, and analyze it for retrieval later. Analysis is multi-modal, so both audio and visual components can be queried against.\n\n**search-videos**\n\nOnce you've got a video downloaded and analyzed, you can then do queries on it using the `search-videos` tool:\n\n```\ncan you search my videos for fly traps?\n```\n\nSearch results contain relevant metadata for generating a video edit according to details discovered in the initial analysis.\n\n**search-local-videos**\n\nYou must set the environment variable `LOAD_PHOTOS_DB=1` in order to use this tool, as it will make Claude prompt to access your files on your local machine.\n\nOnce that's done, you can search through your Photos app for videos that exist on your phone, using Apple's tags.\n\nIn my case, when I search for \"Skateboard\", I get 1903 video files.\n\n```\ncan you search my local video files for Skateboard?\n```\n\n**generate-edit-from-videos**\n\nFinally, you can use these search results to generate an edit:\n\n```\ncan you create an edit of all the times the video says \"fly trap\"?\n```\n\n(Currently), the video edits tool relies on the context within the current chat. \n\n**generate-edit-from-single-video**\n\nFinally, you can cut down an edit from a single, existing video:\n\n```\ncan you create an edit of all the times this video says the word \"fly trap\"?\n```\n\n## Configuration\n\nYou must login to [Video Jungle settings](https://app.video-jungle.com/profile/settings), and get your [API key](https://app.video-jungle.com/profile/settings). Then, use this to start Video Jungle MCP:\n\n```bash\n$ uv run video-editor-mcp YOURAPIKEY\n```\n\nTo allow this MCP server to search your Photos app on MacOS:\n\n```\n$ LOAD_PHOTOS_DB=1 uv run video-editor-mcp YOURAPIKEY\n```\n## Quickstart\n\n### Install\n\n#### Installing via Smithery\n\nTo install Video Editor for Claude Desktop automatically via [Smithery](https://smithery.ai/server/video-editor-mcp):\n\n```bash\nnpx -y @smithery/cli install video-editor-mcp --client claude\n```\n\n#### Claude Desktop\n\nYou'll need to adjust your `claude_desktop_config.json` manually:\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n<details>\n<details>\n  <summary>Published Server Configuration</summary>\n  \n ```json\n  \"mcpServers\": {\n    \"video-editor-mcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"video-editor-mcp\",\n        \"YOURAPIKEY\"\n      ]\n    }\n  }\n  ```\n</details>\n  <summary>Development/Unpublished Servers Configuration</summary>\n  \n ```json\n  \"mcpServers\": {\n    \"video-editor-mcp\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/Users/YOURDIRECTORY/video-editor-mcp\",\n        \"run\",\n        \"video-editor-mcp\",\n        \"YOURAPIKEY\"\n      ]\n    }\n  }\n  ```\n\n  With local Photos app access enabled (search your Photos app):\n\n  ```json\n    \"video-jungle-mcp\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/Users/<PATH_TO>/video-jungle-mcp\",\n        \"run\",\n        \"video-editor-mcp\",\n        \"<YOURAPIKEY>\"\n      ],\n     \"env\": {\n\t      \"LOAD_PHOTOS_DB\": \"1\"\n      }\n    },\n  ```\n\n</details>\n\nBe sure to replace the directories with the directories you've placed the repository in on **your** computer.\n\n## Development\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n```bash\nuv sync\n```\n\n2. Build package distributions:\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n3. Publish to PyPI:\n```bash\nuv publish\n```\n\nNote: You'll need to set PyPI credentials via environment variables or command flags:\n- Token: `--token` or `UV_PUBLISH_TOKEN`\n- Or username/password: `--username`/`UV_PUBLISH_USERNAME` and `--password`/`UV_PUBLISH_PASSWORD`\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n(Be sure to replace `YOURDIRECTORY` and `YOURAPIKEY` with the directory this repo is in, and your Video Jungle API key, found in the settings page.)\n\n```bash\nnpx @modelcontextprotocol/inspector uv run --directory /Users/YOURDIRECTORY/video-editor-mcp video-editor-mcp YOURAPIKEY\n```\n\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n\nAdditionally, I've added logging to `app.log` in the project directory. You can add logging to diagnose API calls via a:\n\n```\nlogging.info(\"this is a test log\")\n```\n\nA reasonable way to follow along as you're workin on the project is to open a terminal session and do a:\n\n```bash\n$ tail -n 90 -f app.log\n```\n",
+  "category": "AI Tools",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "video-editor-mcp": {
+        "command": "uv",
+        "args": ["run", "video-editor-mcp", "YOURAPIKEY"],
+        "env": {}
+      },
+      "video-editor-mcp-with-photos": {
+        "command": "uv",
+        "args": ["run", "video-editor-mcp", "YOURAPIKEY"],
+        "env": {
+          "LOAD_PHOTOS_DB": "1"
+        }
+      },
+      "video-editor-mcp-published": {
+        "command": "uvx",
+        "args": ["video-editor-mcp", "YOURAPIKEY"],
+        "env": {}
+      },
+      "video-editor-mcp-dev": {
+        "command": "uv",
+        "args": ["--directory", "/Users/YOURDIRECTORY/video-editor-mcp", "run", "video-editor-mcp", "YOURAPIKEY"],
+        "env": {}
+      },
+      "video-editor-mcp-dev-with-photos": {
+        "command": "uv",
+        "args": ["--directory", "/Users/<PATH_TO>/video-jungle-mcp", "run", "video-editor-mcp", "<YOURAPIKEY>"],
+        "env": {
+          "LOAD_PHOTOS_DB": "1"
+        }
+      },
+      "video-editor-mcp-debug": {
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/inspector",
+          "uv",
+          "run",
+          "--directory",
+          "/Users/YOURDIRECTORY/video-editor-mcp",
+          "video-editor-mcp",
+          "YOURAPIKEY"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "burningion",
+    "repo": "video-editing-mcp",
+    "url": "https://github.com/burningion/video-editing-mcp",
+    "name": "burningion__video-editing-mcp",
+    "path": null,
+    "stars": 210,
+    "contributors": 3,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "09b714345b4ed875317349cff5819d212f3f639d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:11.158Z",
+  "evaluation_model": null,
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "videojungle",
+      "importance": 9
+    },
+    {
+      "name": "torch",
+      "importance": 9
+    },
+    {
+      "name": "torchvision",
+      "importance": 9
+    },
+    {
+      "name": "transformers",
+      "importance": 9
+    },
+    {
+      "name": "opentimelineio",
+      "importance": 8
+    },
+    {
+      "name": "timm",
+      "importance": 8
+    },
+    {
+      "name": "numpy",
+      "importance": 8
+    },
+    {
+      "name": "manim",
+      "importance": 7
+    },
+    {
+      "name": "osxphotos",
+      "importance": 7
+    },
+    {
+      "name": "pillow",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "thefuzz",
+      "importance": 6
+    },
+    {
+      "name": "einops",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"video-editor-mcp\"\nversion = \"0.1.53\"\ndescription = \"Video Jungle MCP Server for Adding, Analysing, Searching, and Editing Videos\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n \"einops>=0.8.0\",\n \"manim>=0.18.1\",\n \"mcp>=1.6.0\",\n \"numpy>=2.2.2\",\n \"opentimelineio>=0.17.0\",\n \"osxphotos>=0.69.2\",\n \"pillow>=11.0.0\",\n \"requests>=2.32.3\",\n \"thefuzz>=0.22.1\",\n \"timm>=1.0.12\",\n \"torch==2.5.1\",\n \"torchvision==0.20.1\",\n \"transformers[torch]==4.47.1\",\n \"videojungle>=0.1.78\",\n]\nhomepage = \"https://github.com/burningion/video-editing-mcp\"\n\n[[project.authors]]\nname = \"Kirk Kaiser\"\nemail = \"kirk@zothcorp.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv.workspace]\nmembers = [\"tools\"]\n\n[dependency-groups]\ndev = [\n    \"ipykernel>=6.29.5\",\n    \"mcp[cli]>=1.6.0\",\n    \"pre-commit>=4.0.1\",\n    \"ruff>=0.8.4\",\n]\n\n[project.scripts]\nvideo-editor-mcp = \"video_editor_mcp:main\"\n\n[project.urls]\nHomepage = \"https://github.com/burningion/video-editing-mcp\"\nIssues = \"https://github.com/burningion/video-editing-mcp/issues\"\n\n[tool.uv.sources]\ntorch = [\n    { index = \"pytorch-cpu\" },\n]\ntorchvision = [\n    { index = \"pytorch-cpu\" },\n]\ntorchaudio = [\n    { index = \"pytorch-cpu\" },\n]\n\n[[tool.uv.index]]\nname = \"pytorch-cpu\"\nurl = \"https://download.pytorch.org/whl/cpu\"\nexplicit = true\n\n[tool.uv]\nconstraint-dependencies = [\n    \"pyglet==2.1.6\",\n]\n\n\n=== tools/pyproject.toml ===\n[project]\nname = \"viewer\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = []\n\n[[project.authors]]\nname = \"Kirk Kaiser\"\nemail = \"kirk@zothcorp.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n"
+}

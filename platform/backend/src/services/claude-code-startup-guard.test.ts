@@ -317,17 +317,18 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("every down remote gets the failure copy; ONE prompt then covers them all", () => {
     const script = renderClaudeCodeStartupGuardScript(CTX);
-    expect(script).toContain("✖ Failed to connect to");
+    expect(script).toContain("✗ Failed to connect to");
     expect(script).toContain("'LLM proxy profile-123'");
     expect(script).toContain("'MCP gateway prod-gateway'");
     expect(script).toContain("'Skills marketplace acme-skills'");
-    // a single down remote keeps the singular copy…
+    // a single down remote names its resource type…
     expect(script).toContain(
-      "[d] disconnect it from Claude Code   [s] continue without it (default)",
+      "[d] Disconnect %s   [s] Continue without it (default)",
     );
+    expect(script).toContain("GUARD_TYPE_NAMES=('LLM proxy' 'MCP gateway'");
     // …several down remotes get the disconnect-all-at-once copy
     expect(script).toContain(
-      "[d] disconnect them all from Claude Code   [s] continue without them (default)",
+      "[d] Disconnect all of them   [s] Continue without them (default)",
     );
   });
 
@@ -338,20 +339,27 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("HANG_TIGHT_AFTER_SECONDS=10");
     expect(script).toContain("few more seconds, hang tight...");
     expect(script).toContain("trying to connect...");
-    expect(script).toContain("[s] skip  [d] disconnect");
+    expect(script).toContain("[s] Skip  [d] Disconnect");
     expect(script).toContain("next_delay=$((next_delay * 2))");
     expect(script).toContain("RANDOM % 2");
     // the budget running out downs everything
     expect(script).toContain("HEALTH_STATE='down'");
   });
 
-  test("paces every resource's turn with an animated spinner and a minimum display time", () => {
+  test("paces every resource's turn at ~0.2s with glyph-only spinner ticks, on the alternate screen", () => {
     const script = renderClaudeCodeStartupGuardScript(CTX);
     expect(script).toContain(
       "FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')",
     );
-    expect(script).toContain("MIN_CHECK_FRAMES=7");
-    expect(script).toContain("FRAME_SLEEP=0.08");
+    expect(script).toContain("MIN_CHECK_FRAMES=4");
+    expect(script).toContain("FRAME_SLEEP=0.05");
+    // ticks repaint only the spinner glyph — full-line repaints flicker
+    expect(script).toContain("spin_tick()");
+    expect(script).not.toMatch(/spin_tick\(\) \{[^}]*2K/);
+    // alternate screen in, restored on ANY exit — the terminal stays clean
+    // after claude exits
+    expect(script).toContain("\\033[?1049h");
+    expect(script).toContain(`trap 'printf "\\033[?1049l"' EXIT`);
     expect(script).toContain(
       'if [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then TICK=0.25; fi',
     );
@@ -368,7 +376,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       appName: "Acme AI",
     });
     expect(whiteLabel).not.toContain("▟██▙");
-    expect(whiteLabel).toContain("Pre-loader");
+    expect(whiteLabel).toContain("'Acme AI'");
   });
 
   test("disconnect actions mirror the connect steps for each remote", () => {
@@ -392,7 +400,8 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     }
     expect(script).toContain('"x-archestra-agent-id"');
     expect(script).toContain('"x-archestra-virtual-key"');
-    expect(script.trimEnd().endsWith("exit 0")).toBe(true);
+    // every interactive path funnels through finish_guard (dwell + exit 0)
+    expect(script.trimEnd().endsWith("finish_guard")).toBe(true);
   });
 
   test("bedrock variant strips the bedrock env keys and flags the shell-profile token", () => {
@@ -572,7 +581,10 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       keys: "d",
     });
     expect(output).toContain("Failed to connect to MCP gateway prod-gateway");
-    expect(output).toContain("[d] disconnect it from Claude Code");
+    expect(output).toContain(
+      "[d] Disconnect MCP gateway   [s] Continue without it (default)",
+    );
+    expect(output).toContain("Disconnected MCP gateway (prod_gateway)");
     const log = await readClaudeLog(guardHome);
     expect(log).toContain("mcp remove --scope user prod_gateway");
     expect(log).not.toContain("plugin marketplace remove");
@@ -596,7 +608,9 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     });
     expect(output).toContain("Failed to connect to LLM proxy profile-123");
     expect(output).toContain("Failed to connect to MCP gateway prod-gateway");
-    expect(output).toContain("[d] disconnect them all from Claude Code");
+    expect(output).toContain(
+      "[d] Disconnect all of them   [s] Continue without them (default)",
+    );
     const log = await readClaudeLog(guardHome);
     expect(log).toContain("mcp remove --scope user prod_gateway");
     expect(log).not.toContain("plugin marketplace remove");
@@ -617,7 +631,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       curlBody: '{"mcp":"down","llm":"ok"}',
       keys: "s",
     });
-    expect(output).toContain("skipped");
+    expect(output).toContain("Skipped");
     expect(await readClaudeLog(guardHome)).toBe("");
     expect(existsSync(guardHome.skipFile)).toBe(false);
     expect(existsSync(guardHome.guardFile)).toBe(true);

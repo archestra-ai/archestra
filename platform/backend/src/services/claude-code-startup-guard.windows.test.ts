@@ -49,8 +49,6 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(proxyAt).toBeGreaterThan(-1);
     expect(mcpAt).toBeGreaterThan(proxyAt);
     expect(skillsAt).toBeGreaterThan(mcpAt);
-    expect(script).toContain("Pre-loader");
-    expect(script).toContain("Connecting claude via:");
   });
 
   test("makes ONE health request for the launch; skills has no per-resource marker", () => {
@@ -69,17 +67,18 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
 
   test("every down remote gets the failure copy; ONE prompt then covers them all", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
-    expect(script).toContain("'✖ Failed to connect to ' + $r.FailName");
+    expect(script).toContain("'✗ Failed to connect to ' + $r.FailName");
     expect(script).toContain("FailName = 'LLM proxy profile-123'");
     expect(script).toContain("FailName = 'MCP gateway prod-gateway'");
     expect(script).toContain("FailName = 'Skills marketplace acme-skills'");
-    // a single down remote keeps the singular copy…
+    // a single down remote names its resource type…
     expect(script).toContain(
-      "[d] disconnect it from Claude Code   [s] continue without it (default)",
+      "'  [d] Disconnect ' + $downRemotes[0].TypeName + '   [s] Continue without it (default)'",
     );
+    expect(script).toContain("TypeName = 'MCP gateway'");
     // …several down remotes get the disconnect-all-at-once copy
     expect(script).toContain(
-      "[d] disconnect them all from Claude Code   [s] continue without them (default)",
+      "[d] Disconnect all of them   [s] Continue without them (default)",
     );
     expect(script).toContain("Show-ArchDownSummaryPrompt $DownRemotes");
   });
@@ -112,19 +111,24 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("$HangTightAfterSeconds = 10");
     expect(script).toContain("few more seconds, hang tight...");
     expect(script).toContain("trying to connect...");
-    expect(script).toContain("[s] skip  [d] disconnect");
+    expect(script).toContain("[s] Skip  [d] Disconnect");
     expect(script).toContain("[Math]::Min($delay * 2, 4)");
     expect(script).toContain("Get-Random -Minimum 0 -Maximum 2");
   });
 
-  test("paces every resource's turn with an animated spinner and a minimum display time", () => {
+  test("paces every resource's turn at ~0.2s with glyph-only spinner ticks, on the alternate screen", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
     expect(script).toContain(
       "$Frames = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')",
     );
-    expect(script).toContain("$MinCheckFrames = 7");
-    expect(script).toContain("$FrameSleepMs = 80");
-    expect(script).toContain("Show-ArchSpin");
+    expect(script).toContain("$MinCheckFrames = 4");
+    expect(script).toContain("$FrameSleepMs = 50");
+    // ticks repaint only the spinner glyph — full-line repaints flicker
+    expect(script).toContain("function Show-ArchSpinTick");
+    // alternate screen in/out — the terminal stays clean after claude exits
+    expect(script).toContain("[?1049h");
+    expect(script).toContain("[?1049l");
+    expect(script).toContain("function Exit-ArchGuard");
   });
 
   test("renders the Archestra mark for the default brand, plain title when white-labeled", () => {
@@ -137,7 +141,7 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
       appName: "Acme AI",
     });
     expect(whiteLabel).not.toContain("▟██▙");
-    expect(whiteLabel).toContain("Pre-loader");
+    expect(whiteLabel).toContain("'Acme AI'");
   });
 
   test("never blocks: opt-out env var, non-interactive stderr warnings with the failure copy, exit 0", () => {
@@ -149,7 +153,8 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain(
       "'archestra: failed to connect to ' + $r.FailName",
     );
-    expect(script.trimEnd().endsWith("exit 0")).toBe(true);
+    // every interactive path funnels through Exit-ArchGuard (dwell + restore)
+    expect(script.trimEnd().endsWith("Exit-ArchGuard")).toBe(true);
   });
 
   test("disconnect actions mirror connect and dodge the wrapper function", () => {

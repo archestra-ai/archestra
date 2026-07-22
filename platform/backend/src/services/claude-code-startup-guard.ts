@@ -30,10 +30,12 @@ import type { SetupScriptContext } from "./connection-setup-script";
  *   connect…" line after 3s and a "hang tight" nudge after 10s, with `s`
  *   (skip) / `d` (disconnect) live the whole time. If the budget runs out,
  *   every remote is treated as down;
- * - then plays the pre-loader animation resource by resource (spinner, ~0.5s
- *   minimum each): green for ok, "Failed to connect to <type> <id-or-slug>"
- *   for a down one — and after the whole turn, ONE prompt covers every down
- *   remote: disconnect them all in one keypress, or skip them all;
+ * - then plays the pre-loader animation resource by resource (spinner, ~0.2s
+ *   each, glyph-only ticks so nothing flickers): green for ok, "Failed to
+ *   connect to <type> <id-or-slug>" for a down one — and after the whole
+ *   turn, ONE prompt covers every down remote: disconnect them all in one
+ *   keypress, or skip them all. Everything draws on the alternate screen, so
+ *   the terminal is clean again after claude exits;
  * - disconnecting runs the exact reverse of the connect steps and records the
  *   remote in a skip file so later launches don't re-check it. Once nothing
  *   connected is left to check, the guard uninstalls itself entirely (script,
@@ -184,6 +186,8 @@ GUARD_URLS=(${resources.map((r) => sh(r.url)).join(" ")})
 GUARD_KINDS=(${resources.map((r) => r.kind).join(" ")})
 # What a failure line names: resource type followed by its id or slug.
 GUARD_FAIL_NAMES=(${resources.map((r) => sh(r.failName)).join(" ")})
+# Resource type alone, for the disconnect prompt ("Disconnect MCP gateway").
+GUARD_TYPE_NAMES=(${resources.map((r) => sh(r.typeName)).join(" ")})
 # The health-response marker that means this resource is down ('' = resource
 # has no per-resource status; it follows overall endpoint reachability).
 GUARD_DOWN_MARKERS=(${resources.map((r) => sh(r.downMarker ?? "")).join(" ")})
@@ -196,10 +200,10 @@ RETRY_TOTAL_SECONDS=15
 NOTICE_AFTER_SECONDS=3
 HANG_TIGHT_AFTER_SECONDS=10
 
-# Each resource's turn is padded to a minimum on-screen time so the
-# pre-loader reads as a deliberate step instead of a subliminal flash.
-MIN_CHECK_FRAMES=7
-FRAME_SLEEP=0.08
+# Each resource's turn is padded to ~0.2s of animation — enough to read as a
+# deliberate step, short enough to never feel like waiting.
+MIN_CHECK_FRAMES=4
+FRAME_SLEEP=0.05
 
 # Only drive the terminal (and prompt) when a human is watching: a real tty on
 # both ends and no -p/--print run. Otherwise check once, warn on stderr, and
@@ -317,25 +321,31 @@ if [ "\${BASH_VERSINFO[0]:-3}" -ge 4 ]; then TICK=0.25; fi
 
 line_reset() { printf '\\r\\033[2K'; }
 
-spin() { # redraw the current line with the next spinner frame; $1 label, $2 suffix
-  FRAME=$(( (FRAME + 1) % 10 ))
+# A line is drawn ONCE; each tick then repaints only the spinner glyph at
+# column 0. Repainting the whole line every frame reads as flicker, not
+# motion — the whole row strobes (caught live on Windows Terminal).
+spin_start() { # $1 line text after the spinner glyph
   line_reset
-  printf '%s%s%s %s%s' "$C_DIM" "\${FRAMES[$FRAME]}" "$C_RESET" "$1" "$2"
+  printf '%s%s%s %s' "$C_DIM" "\${FRAMES[$FRAME]}" "$C_RESET" "$1"
+}
+spin_tick() {
+  FRAME=$(( (FRAME + 1) % 10 ))
+  printf '\\r%s%s%s' "$C_DIM" "\${FRAMES[$FRAME]}" "$C_RESET"
 }
 
+# Status glyphs stay in the narrow ranges (● ○ ✓ ✗) so every row's icon and
+# text start in the same column — the heavy ✖/✔ render double-width in
+# common Windows fonts and break the alignment.
 mark_ok()   { line_reset; printf '%s●%s %s\\n' "$C_OK" "$C_RESET" "$1"; }
-mark_down() { line_reset; printf '%s✖ Failed to connect to %s%s\\n' "$C_ERR" "\${GUARD_FAIL_NAMES[$1]}" "$C_RESET"; }
+mark_down() { line_reset; printf '%s✗ Failed to connect to %s%s\\n' "$C_ERR" "\${GUARD_FAIL_NAMES[$1]}" "$C_RESET"; }
 
-disconnect_resource() { # $1 kind, $2 label
-  line_reset
+disconnect_actions() { # $1 kind — the reverse-of-connect commands, silenced
   case "$1" in${
     ctx.mcp
       ? `
     mcp)
       command claude mcp remove --scope user "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
       command claude mcp remove --scope local "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
-      printf '%s✖%s %s %s— disconnected: removed the "%s" MCP server from Claude Code%s\\n' \\
-        "$C_ERR" "$C_RESET" "$2" "$C_DIM" "$MCP_SERVER_NAME" "$C_RESET"
       ;;`
       : ""
   }${
@@ -343,8 +353,6 @@ disconnect_resource() { # $1 kind, $2 label
       ? `
     skills)
       command claude plugin marketplace remove "$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true
-      printf '%s✖%s %s %s— disconnected: removed the "%s" marketplace from Claude Code%s\\n' \\
-        "$C_ERR" "$C_RESET" "$2" "$C_DIM" "$SKILLS_MARKETPLACE_NAME" "$C_RESET"
       ;;`
       : ""
   }${
@@ -352,12 +360,34 @@ disconnect_resource() { # $1 kind, $2 label
       ? `
     proxy)
       disconnect_proxy
-      printf '%s✖%s %s %s— disconnected: claude talks to the provider directly again%s\\n' \\
-        "$C_ERR" "$C_RESET" "$2" "$C_DIM" "$C_RESET"
       ;;`
       : ""
   }
   esac
+}
+
+# Reversing a connect step animates the same way the probes do: the commands
+# run in the background while the spinner plays, then the row lands on a
+# green check.
+disconnect_resource() { # $1 kind, $2 label
+  spin_start "Disconnecting $2"
+  disconnect_actions "$1" >/dev/null 2>&1 &
+  arch_dp=$!
+  pad=0
+  while kill -0 "$arch_dp" 2>/dev/null || [ "$pad" -lt "$MIN_CHECK_FRAMES" ]; do
+    sleep "$FRAME_SLEEP"
+    spin_tick
+    pad=$((pad + 1))
+  done
+  wait "$arch_dp" 2>/dev/null || true
+  line_reset
+  printf '%s✓%s Disconnected %s\\n' "$C_OK" "$C_RESET" "$2"${
+    ctx.proxy
+      ? `
+  [ "$1" = "proxy" ] && proxy_disconnect_notes`
+      : ""
+  }
+  return 0
 }${
     ctx.mcp
       ? `
@@ -385,7 +415,7 @@ disconnect_and_forget() { # $@ = resource indices: reverse connect, then skip on
 }
 
 removed_check_note() {
-  printf '%s● Nothing connected is left to check — removed the %s startup check. Reconnect any time from the %s /connection page.%s\\n' "$C_DIM" "$APP_NAME" "$APP_NAME" "$C_RESET"
+  printf '%s✓%s %sNothing connected is left to check — removed the %s startup check. Reconnect any time from the %s /connection page.%s\\n' "$C_OK" "$C_RESET" "$C_DIM" "$APP_NAME" "$APP_NAME" "$C_RESET"
 }
 
 # Every down remote already got its failure line during the turn; this single
@@ -394,17 +424,21 @@ removed_check_note() {
 # down and the user disconnects, nothing is left to check, so the guard
 # removes itself too.
 prompt_down_all() {
+  printf '\\n'
   if [ "$DOWN_COUNT" -eq 1 ]; then
-    printf '%s  claude is configured to use it and may fail until it is reachable.%s\\n' "$C_DIM" "$C_RESET"
-    printf '  [d] disconnect it from Claude Code   [s] continue without it (default)\\n'
+    set -- $DOWN_IDXS
+    printf '%s  Claude is configured to use it and may fail until it is reachable.%s\\n' "$C_DIM" "$C_RESET"
+    printf '  [d] Disconnect %s   [s] Continue without it (default)\\n' "\${GUARD_TYPE_NAMES[$1]}"
   else
-    printf '%s  claude is configured to use them and may fail until they are reachable.%s\\n' "$C_DIM" "$C_RESET"
-    printf '  [d] disconnect them all from Claude Code   [s] continue without them (default)\\n'
+    printf '%s  Claude is configured to use them and may fail until they are reachable.%s\\n' "$C_DIM" "$C_RESET"
+    printf '  [d] Disconnect all of them   [s] Continue without them (default)\\n'
   fi
   key=''
   read -rs -n 1 key </dev/tty 2>/dev/null || key='s'
+  printf '\\n'
   case "$key" in
     d|D)
+      GUARD_DWELL=1
       disconnect_and_forget $DOWN_IDXS
       if [ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ]; then
         uninstall_guard
@@ -413,9 +447,9 @@ prompt_down_all() {
       ;;
     *)
       if [ "$DOWN_COUNT" -eq 1 ]; then
-        printf '%s○ skipped%s %s— it stays configured; claude may fail to reach it this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
+        printf '%s○%s %sSkipped — still configured; Claude may fail to reach it this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
       else
-        printf '%s○ skipped%s %s— they stay configured; claude may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
+        printf '%s○%s %sSkipped — still configured; Claude may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
       fi
       ;;
   esac
@@ -428,6 +462,7 @@ prompt_down_all() {
 # nothing left to check, remove the startup check itself.
 SKIP_ALL=0
 DISC_ALL=0
+LAST_WAIT_NOTE=''
 wait_for_health() {
   fetch_health && { HEALTH_STATE='ok'; return 0; }
   start=$(date +%s)
@@ -450,34 +485,54 @@ wait_for_health() {
     elapsed=$(( $(date +%s) - start ))
     if [ "$elapsed" -ge "$RETRY_TOTAL_SECONDS" ]; then
       break
-    elif [ "$elapsed" -ge "$HANG_TIGHT_AFTER_SECONDS" ]; then
-      spin "\${GUARD_LABELS[$FIRST_ACTIVE]}" " $C_DIM— trying to connect... \${elapsed}s, few more seconds, hang tight...  [s] skip  [d] disconnect$C_RESET"
+    fi
+    wait_note=''
+    if [ "$elapsed" -ge "$HANG_TIGHT_AFTER_SECONDS" ]; then
+      wait_note=" $C_DIM— trying to connect... \${elapsed}s, few more seconds, hang tight...  [s] Skip  [d] Disconnect$C_RESET"
     elif [ "$elapsed" -ge "$NOTICE_AFTER_SECONDS" ]; then
-      spin "\${GUARD_LABELS[$FIRST_ACTIVE]}" " $C_DIM— trying to connect... \${elapsed}s  [s] skip  [d] disconnect$C_RESET"
+      wait_note=" $C_DIM— trying to connect... \${elapsed}s  [s] Skip  [d] Disconnect$C_RESET"
+    fi
+    # redraw the full line only when its text changed; otherwise just the
+    # spinner glyph moves (see spin_tick)
+    if [ "$wait_note" = "$LAST_WAIT_NOTE" ]; then
+      spin_tick
+    else
+      LAST_WAIT_NOTE="$wait_note"
+      spin_start "\${GUARD_LABELS[$FIRST_ACTIVE]}$wait_note"
     fi
   done
   HEALTH_STATE='down'
   return 1
 }
 
-printf '\\033[2J\\033[H'
+# The whole pre-loader draws on the terminal's alternate screen — the same
+# way claude itself does — so nothing lingers in the scrollback after claude
+# exits. When the launch needed attention, the outcome is held briefly
+# before the alternate screen closes over it.
+printf '\\033[?1049h\\033[H\\033[2J'
+trap 'printf "\\033[?1049l"' EXIT
+GUARD_DWELL=0
+finish_guard() {
+  [ "$GUARD_DWELL" = "1" ] && sleep 1.2
+  exit 0
+}
 ${guardHeader(ctx)}
-printf 'Connecting claude via:\\n'
 if [ -n "$HEALTH_URL" ]; then
-  spin "\${GUARD_LABELS[$FIRST_ACTIVE]}" ''
+  spin_start "\${GUARD_LABELS[$FIRST_ACTIVE]}"
   wait_for_health || true
 fi
 if [ "$DISC_ALL" = "1" ]; then
   line_reset
+  GUARD_DWELL=1
   disconnect_and_forget $ACTIVE_IDXS
   uninstall_guard
   removed_check_note
-  exit 0
+  finish_guard
 fi
 if [ "$SKIP_ALL" = "1" ]; then
   line_reset
-  printf '%s○ skipped%s %s— everything stays configured; claude may fail to reach your %s remotes this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$APP_NAME" "$C_RESET"
-  exit 0
+  printf '%s○%s %sSkipped — remotes stay configured; Claude may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
+  finish_guard
 fi
 DOWN_IDXS=''
 DOWN_COUNT=0
@@ -487,11 +542,11 @@ while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
     i=$((i+1))
     continue
   fi
-  spin "\${GUARD_LABELS[$i]}" ''
+  spin_start "\${GUARD_LABELS[$i]}"
   pad=0
   while [ "$pad" -lt "$MIN_CHECK_FRAMES" ]; do
     sleep "$FRAME_SLEEP"
-    spin "\${GUARD_LABELS[$i]}" ''
+    spin_tick
     pad=$((pad + 1))
   done
   if resource_down "$i"; then
@@ -504,7 +559,7 @@ while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
   i=$((i+1))
 done
 [ "$DOWN_COUNT" -gt 0 ] && prompt_down_all
-exit 0
+finish_guard
 `;
 }
 
@@ -596,11 +651,11 @@ function splitResourceUrl(
  */
 function guardHeader(ctx: ClaudeCodeStartupGuardContext): string {
   if (ctx.appName !== DEFAULT_APP_NAME) {
-    return `printf '%s%s Pre-loader%s\\n\\n' "$C_TITLE" "$APP_NAME" "$C_RESET"`;
+    return `printf '%s%s%s\\n\\n' "$C_TITLE" "$APP_NAME" "$C_RESET"`;
   }
   const [m0, m1, m2, m3, m4] = ARCHESTRA_GUARD_MARK_LINES;
   return `printf '%s${m0}%s\\n' "$C_LOGO" "$C_RESET"
-printf '%s${m1}%s      %s%s Pre-loader%s\\n' "$C_LOGO" "$C_RESET" "$C_TITLE" "$APP_NAME" "$C_RESET"
+printf '%s${m1}%s      %s%s%s\\n' "$C_LOGO" "$C_RESET" "$C_TITLE" "$APP_NAME" "$C_RESET"
 printf '%s${m2}%s       %sSecure access to your AI tools%s\\n' "$C_LOGO" "$C_RESET" "$C_DIM" "$C_RESET"
 printf '%s${m3}%s\\n' "$C_LOGO" "$C_RESET"
 printf '%s${m4}%s\\n\\n' "$C_LOGO" "$C_RESET"`;
@@ -617,6 +672,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
   label: string;
   url: string;
   kind: "proxy" | "mcp" | "skills";
+  typeName: string;
   failName: string;
   downMarker: string | null;
 }> {
@@ -624,6 +680,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
     label: string;
     url: string;
     kind: "proxy" | "mcp" | "skills";
+    typeName: string;
     failName: string;
     downMarker: string | null;
   }> = [];
@@ -632,6 +689,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `LLM proxy (${ctx.proxy.providerLabel})`,
       url: ctx.proxy.url,
       kind: "proxy",
+      typeName: "LLM proxy",
       failName: `LLM proxy ${ctx.proxy.ref ?? ctx.proxy.providerLabel}`,
       downMarker: ctx.proxy.ref ? `"llm":"down"` : null,
     });
@@ -641,6 +699,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `MCP gateway (${ctx.mcp.serverName})`,
       url: ctx.mcp.url,
       kind: "mcp",
+      typeName: "MCP gateway",
       failName: `MCP gateway ${ctx.mcp.ref ?? ctx.mcp.serverName}`,
       downMarker: ctx.mcp.ref ? `"mcp":"down"` : null,
     });
@@ -650,6 +709,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `Skills marketplace (${ctx.skills.marketplaceName})`,
       url: ctx.skills.cloneUrl,
       kind: "skills",
+      typeName: "Skills marketplace",
       failName: `Skills marketplace ${ctx.skills.marketplaceName}`,
       downMarker: null,
     });
@@ -679,8 +739,8 @@ function disconnectProxyFunction(ctx: ClaudeCodeStartupGuardContext): string {
   const strippedKeysList = envKeys.map((key) => `"${key}"`).join(", ");
 
   return `disconnect_proxy() {
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - <<'ARCHESTRA_GUARD_PY'
+  command -v python3 >/dev/null 2>&1 || return 0
+  python3 - <<'ARCHESTRA_GUARD_PY'
 import json, os, pathlib
 path = pathlib.Path(os.path.expanduser("~/.claude/settings.json"))
 if not path.exists():
@@ -712,8 +772,14 @@ if not env:
     settings.pop("env", None)
 path.write_text(json.dumps(settings, indent=2) + "\\n")
 ARCHESTRA_GUARD_PY
-  else
+}
+
+# Printed after the Disconnected line — the strip itself runs silenced in
+# the background while the spinner plays.
+proxy_disconnect_notes() {
+  if ! command -v python3 >/dev/null 2>&1; then
     printf '%s  python3 not found — remove these keys from the env block of ~/.claude/settings.json manually: ${envKeys.join(", ")} (and our lines in ${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}).%s\\n' "$C_WARN" "$C_RESET"
   fi${bedrockNote}
+  return 0
 }`;
 }

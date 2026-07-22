@@ -23,11 +23,13 @@ import {
  *   gateway/proxy, existence via the public connection-health endpoint
  *   (reachability alone cannot catch a remote deleted on the platform — the
  *   data-plane answers uniformly without auth);
- * - checks are paced to a ~0.5s minimum with a spinner; an unreachable
- *   platform gets the 15s capped-backoff retry ladder with jitter, status
- *   line at 3s, "hang tight" at 10s, and `s`/`d` hotkeys live throughout;
- *   after the whole turn, ONE prompt covers every down remote — disconnect
- *   them all in one keypress, or skip them all;
+ * - checks are paced to ~0.2s with a spinner whose ticks repaint only the
+ *   glyph (full-line repaints flicker), all on the alternate screen so the
+ *   terminal is clean after claude exits; an unreachable platform gets the
+ *   15s capped-backoff retry ladder with jitter, status line at 3s, "hang
+ *   tight" at 10s, and `s`/`d` hotkeys live throughout; after the whole
+ *   turn, ONE prompt covers every down remote — disconnect them all in one
+ *   keypress, or skip them all;
  * - disconnect = the exact reverse of connect (mcp remove, settings.json
  *   key strip with a one-time backup, marketplace remove), recorded in a
  *   skip file so later launches don't re-check the remote; once nothing
@@ -56,7 +58,7 @@ export function renderClaudeCodeStartupGuardPowerShell(
   const remoteEntries = resources
     .map(
       (r) =>
-        `  @{ Label = ${psq(r.label)}; Url = ${psq(r.url)}; Kind = ${psq(r.kind)}; FailName = ${psq(r.failName)}; DownMarker = ${psq(r.downMarker ?? "")} }`,
+        `  @{ Label = ${psq(r.label)}; Url = ${psq(r.url)}; Kind = ${psq(r.kind)}; TypeName = ${psq(r.typeName)}; FailName = ${psq(r.failName)}; DownMarker = ${psq(r.downMarker ?? "")} }`,
     )
     .join("\n");
 
@@ -137,10 +139,10 @@ $RetryTotalSeconds = 15
 $NoticeAfterSeconds = 3
 $HangTightAfterSeconds = 10
 
-# Each check is padded to a minimum on-screen time so the pre-loader reads as
-# a deliberate step instead of a subliminal flash.
-$MinCheckFrames = 7
-$FrameSleepMs = 80
+# Each check is padded to ~0.2s of animation — enough to read as a
+# deliberate step, short enough to never feel like waiting.
+$MinCheckFrames = 4
+$FrameSleepMs = 50
 
 # Only drive the terminal (and prompt) when a human is watching: a real
 # console on both ends and no -p/--print run. Otherwise probe once per remote,
@@ -217,12 +219,19 @@ function Clear-ArchLine {
   Write-Host -NoNewline ("\`r" + (' ' * [Math]::Max($w - 1, 1)) + "\`r")
 }
 
-function Show-ArchSpin([string]$Label, [string]$Suffix) {
-  $Script:Frame = ($Script:Frame + 1) % 10
+# A line is drawn ONCE; each tick then repaints only the spinner glyph at
+# column 0. Repainting the whole line every frame reads as flicker, not
+# motion — the whole row strobes (caught live on Windows Terminal).
+function Show-ArchSpinStart([string]$Label, [string]$Suffix) {
   Clear-ArchLine
   Write-Arch $Frames[$Script:Frame] DarkGray -NoNewline
   Write-Host (' ' + $Label) -NoNewline
   if ($Suffix) { Write-Arch (' ' + $Suffix) DarkGray -NoNewline }
+}
+function Show-ArchSpinTick {
+  $Script:Frame = ($Script:Frame + 1) % 10
+  Write-Host -NoNewline "\`r"
+  Write-Arch $Frames[$Script:Frame] DarkGray -NoNewline
 }
 
 function Read-ArchKey { # non-blocking; '' when no key is waiting
@@ -238,9 +247,12 @@ function Show-ArchOk([string]$Label) {
   Write-Host (' ' + $Label)
 }
 
+# Status glyphs stay in the narrow ranges (● ○ ✓ ✗) so every row's icon and
+# text start in the same column — the heavy ✖/✔ render double-width in
+# common Windows fonts and break the alignment.
 function Show-ArchDown($r) {
   Clear-ArchLine
-  Write-Arch ('✖ Failed to connect to ' + $r.FailName) Red
+  Write-Arch ('✗ Failed to connect to ' + $r.FailName) Red
 }
 
 function Get-ArchClaudeExe {
@@ -248,8 +260,11 @@ function Get-ArchClaudeExe {
   Get-Command -Name claude -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 }
 
+# Reversing a connect step animates the same way the probes do: the spinner
+# plays around the commands, and the row lands on a green check.
 function Disconnect-ArchRemote([string]$Kind, [string]$Label) {
-  Clear-ArchLine
+  Show-ArchSpinStart ('Disconnecting ' + $Label) ''
+  for ($pad = 0; $pad -lt 2; $pad++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
   $claudeExe = Get-ArchClaudeExe
   switch ($Kind) {${
     ctx.mcp
@@ -259,9 +274,6 @@ function Disconnect-ArchRemote([string]$Kind, [string]$Label) {
         try { & $claudeExe.Source mcp remove --scope user $McpServerName 2>$null | Out-Null } catch { }
         try { & $claudeExe.Source mcp remove --scope local $McpServerName 2>$null | Out-Null } catch { }
       }
-      Write-Arch '✖' Red -NoNewline
-      Write-Host (' ' + $Label + ' ') -NoNewline
-      Write-Arch ('— disconnected: removed the "' + $McpServerName + '" MCP server from Claude Code') DarkGray
     }`
       : ""
   }${
@@ -271,22 +283,25 @@ function Disconnect-ArchRemote([string]$Kind, [string]$Label) {
       if ($claudeExe) {
         try { & $claudeExe.Source plugin marketplace remove $SkillsMarketplaceName 2>$null | Out-Null } catch { }
       }
-      Write-Arch '✖' Red -NoNewline
-      Write-Host (' ' + $Label + ' ') -NoNewline
-      Write-Arch ('— disconnected: removed the "' + $SkillsMarketplaceName + '" marketplace from Claude Code') DarkGray
     }`
       : ""
   }${
     ctx.proxy
       ? `
-    'proxy' {
-      Disconnect-ArchProxy
-      Write-Arch '✖' Red -NoNewline
-      Write-Host (' ' + $Label + ' ') -NoNewline
-      Write-Arch '— disconnected: claude talks to the provider directly again' DarkGray
-    }`
+    'proxy' { Disconnect-ArchProxy }`
       : ""
   }
+  }
+  for ($pad = 0; $pad -lt 2; $pad++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
+  Clear-ArchLine
+  Write-Arch '✓' Green -NoNewline
+  Write-Host (' Disconnected ' + $Label)${
+    ctx.proxy?.provider === "bedrock"
+      ? `
+  if ($Kind -eq 'proxy') {
+    Write-Arch '  If you set AWS_BEARER_TOKEN_BEDROCK in your environment, remove it there too.' DarkGray
+  }`
+      : ""
   }
 }
 
@@ -301,7 +316,8 @@ function Disconnect-ArchRemotes($remotes) { # reverse connect, then skip on late
 
 function Show-ArchRemovedNote {
   Clear-ArchLine
-  Write-Arch ('● Nothing connected is left to check — removed the ' + $AppName + ' startup check. Reconnect any time from the ' + $AppName + ' /connection page.') DarkGray
+  Write-Arch '✓' Green -NoNewline
+  Write-Arch (' Nothing connected is left to check — removed the ' + $AppName + ' startup check. Reconnect any time from the ' + $AppName + ' /connection page.') DarkGray
 }
 
 # Every down remote already got its failure line during the turn; this single
@@ -310,16 +326,19 @@ function Show-ArchRemovedNote {
 # down and the user disconnects, nothing is left to check, so the guard
 # removes itself too.
 function Show-ArchDownSummaryPrompt($downRemotes) {
+  Write-Host ''
   if ($downRemotes.Count -eq 1) {
-    Write-Arch '  claude is configured to use it and may fail until it is reachable.' DarkGray
-    Write-Host '  [d] disconnect it from Claude Code   [s] continue without it (default)'
+    Write-Arch '  Claude is configured to use it and may fail until it is reachable.' DarkGray
+    Write-Host ('  [d] Disconnect ' + $downRemotes[0].TypeName + '   [s] Continue without it (default)')
   } else {
-    Write-Arch '  claude is configured to use them and may fail until they are reachable.' DarkGray
-    Write-Host '  [d] disconnect them all from Claude Code   [s] continue without them (default)'
+    Write-Arch '  Claude is configured to use them and may fail until they are reachable.' DarkGray
+    Write-Host '  [d] Disconnect all of them   [s] Continue without them (default)'
   }
   $choice = ''
   try { $choice = [string][Console]::ReadKey($true).KeyChar } catch { $choice = 's' }
+  Write-Host ''
   if ($choice -eq 'd' -or $choice -eq 'D') {
+    $Script:Dwell = $true
     Disconnect-ArchRemotes $downRemotes
     if ($downRemotes.Count -ge $ActiveRemotes.Count) {
       Remove-ArchGuard
@@ -327,9 +346,9 @@ function Show-ArchDownSummaryPrompt($downRemotes) {
     }
   } else {
     Clear-ArchLine
-    Write-Arch '○ skipped ' Yellow -NoNewline
-    if ($downRemotes.Count -eq 1) { Write-Arch '— it stays configured; claude may fail to reach it this session' DarkGray }
-    else { Write-Arch '— they stay configured; claude may fail to reach them this session' DarkGray }
+    Write-Arch '○' Yellow -NoNewline
+    if ($downRemotes.Count -eq 1) { Write-Arch ' Skipped — still configured; Claude may fail to reach it this session' DarkGray }
+    else { Write-Arch ' Skipped — still configured; Claude may fail to reach them this session' DarkGray }
   }
 }
 
@@ -339,6 +358,7 @@ function Show-ArchDownSummaryPrompt($downRemotes) {
 # nothing left to check, remove the startup check itself.
 $Script:SkipAll = $false
 $Script:DiscAll = $false
+$Script:LastWaitNote = ''
 function Wait-ArchHealth {
   if (Invoke-ArchHealthFetch) { $Script:HealthState = 'ok'; return }
   $start = [DateTime]::UtcNow
@@ -357,47 +377,70 @@ function Wait-ArchHealth {
     }
     $elapsed = [int]([DateTime]::UtcNow - $start).TotalSeconds
     if ($elapsed -ge $RetryTotalSeconds) { break }
+    $waitNote = ''
     if ($elapsed -ge $HangTightAfterSeconds) {
-      Show-ArchSpin $ActiveRemotes[0].Label ('— trying to connect... ' + $elapsed + 's, few more seconds, hang tight...  [s] skip  [d] disconnect')
+      $waitNote = '— trying to connect... ' + $elapsed + 's, few more seconds, hang tight...  [s] Skip  [d] Disconnect'
     } elseif ($elapsed -ge $NoticeAfterSeconds) {
-      Show-ArchSpin $ActiveRemotes[0].Label ('— trying to connect... ' + $elapsed + 's  [s] skip  [d] disconnect')
+      $waitNote = '— trying to connect... ' + $elapsed + 's  [s] Skip  [d] Disconnect'
+    }
+    # redraw the full line only when its text changed; otherwise just the
+    # spinner glyph moves (see Show-ArchSpinTick)
+    if ($waitNote -eq $Script:LastWaitNote) {
+      Show-ArchSpinTick
+    } else {
+      $Script:LastWaitNote = $waitNote
+      Show-ArchSpinStart $ActiveRemotes[0].Label $waitNote
     }
   }
   $Script:HealthState = 'down'
 }
 
-try { Clear-Host } catch { }
+# The whole pre-loader draws on the terminal's alternate screen — the same
+# way claude itself does — so nothing lingers in the scrollback after claude
+# exits. When the launch needed attention, the outcome is held briefly
+# before the alternate screen closes over it.
+$Esc = [char]27
+$Script:AltScreen = $false
+try { $Script:AltScreen = [bool]$Host.UI.SupportsVirtualTerminal } catch { }
+$Script:Dwell = $false
+function Exit-ArchGuard {
+  if ($Script:Dwell) { Start-Sleep -Milliseconds 1200 }
+  if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049l") }
+  exit 0
+}
+if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049h$Esc[H$Esc[2J") }
+else { try { Clear-Host } catch { } }
 ${guardHeader(ctx)}
-Write-Host 'Connecting claude via:'
 if ($HealthUrl) {
-  Show-ArchSpin $ActiveRemotes[0].Label ''
+  Show-ArchSpinStart $ActiveRemotes[0].Label ''
   Wait-ArchHealth
 }
 if ($Script:DiscAll) {
   Clear-ArchLine
+  $Script:Dwell = $true
   Disconnect-ArchRemotes $ActiveRemotes
   Remove-ArchGuard
   Show-ArchRemovedNote
-  exit 0
+  Exit-ArchGuard
 }
 if ($Script:SkipAll) {
   Clear-ArchLine
-  Write-Arch '○ skipped ' Yellow -NoNewline
-  Write-Arch ('— everything stays configured; claude may fail to reach your ' + $AppName + ' remotes this session') DarkGray
-  exit 0
+  Write-Arch '○' Yellow -NoNewline
+  Write-Arch (' Skipped — remotes stay configured; Claude may fail to reach them this session') DarkGray
+  Exit-ArchGuard
 }
 $DownRemotes = @()
 foreach ($r in $ActiveRemotes) {
-  Show-ArchSpin $r.Label ''
+  Show-ArchSpinStart $r.Label ''
   for ($pad = 0; $pad -lt $MinCheckFrames; $pad++) {
     Start-Sleep -Milliseconds $FrameSleepMs
-    Show-ArchSpin $r.Label ''
+    Show-ArchSpinTick
   }
   if (Test-ArchResourceDown $r) { Show-ArchDown $r; $DownRemotes += $r }
   else { Show-ArchOk $r.Label }
 }
 if ($DownRemotes.Count -gt 0) { Show-ArchDownSummaryPrompt $DownRemotes }
-exit 0
+Exit-ArchGuard
 `;
 }
 
@@ -478,13 +521,13 @@ function psq(value: string): string {
  */
 function guardHeader(ctx: ClaudeCodeStartupGuardContext): string {
   if (ctx.appName !== DEFAULT_APP_NAME) {
-    return `Write-Arch ($AppName + ' Pre-loader') Cyan
+    return `Write-Arch $AppName Cyan
 Write-Host ''`;
   }
   const [m0, m1, m2, m3, m4] = ARCHESTRA_GUARD_MARK_LINES;
   return `Write-Arch ${psq(m0)} White
 Write-Arch ${psq(m1)} White -NoNewline
-Write-Arch ('      ' + $AppName + ' Pre-loader') Cyan
+Write-Arch ('      ' + $AppName) Cyan
 Write-Arch ${psq(m2)} White -NoNewline
 Write-Arch '       Secure access to your AI tools' DarkGray
 Write-Arch ${psq(m3)} White
@@ -502,6 +545,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
   label: string;
   url: string;
   kind: "proxy" | "mcp" | "skills";
+  typeName: string;
   failName: string;
   downMarker: string | null;
 }> {
@@ -509,6 +553,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
     label: string;
     url: string;
     kind: "proxy" | "mcp" | "skills";
+    typeName: string;
     failName: string;
     downMarker: string | null;
   }> = [];
@@ -517,6 +562,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `LLM proxy (${ctx.proxy.providerLabel})`,
       url: ctx.proxy.url,
       kind: "proxy",
+      typeName: "LLM proxy",
       failName: `LLM proxy ${ctx.proxy.ref ?? ctx.proxy.providerLabel}`,
       downMarker: ctx.proxy.ref ? `"llm":"down"` : null,
     });
@@ -526,6 +572,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `MCP gateway (${ctx.mcp.serverName})`,
       url: ctx.mcp.url,
       kind: "mcp",
+      typeName: "MCP gateway",
       failName: `MCP gateway ${ctx.mcp.ref ?? ctx.mcp.serverName}`,
       downMarker: ctx.mcp.ref ? `"mcp":"down"` : null,
     });
@@ -535,6 +582,7 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
       label: `Skills marketplace (${ctx.skills.marketplaceName})`,
       url: ctx.skills.cloneUrl,
       kind: "skills",
+      typeName: "Skills marketplace",
       failName: `Skills marketplace ${ctx.skills.marketplaceName}`,
       downMarker: null,
     });
@@ -555,11 +603,6 @@ function disconnectProxyFunction(ctx: ClaudeCodeStartupGuardContext): string {
   const oursArray = [EXTERNAL_AGENT_ID_HEADER, VIRTUAL_KEY_HEADER]
     .map((name) => psq(name.toLowerCase()))
     .join(", ");
-  const bedrockNote =
-    provider === "bedrock"
-      ? `
-  Write-Arch '  If you set AWS_BEARER_TOKEN_BEDROCK in your environment, remove it there too.' DarkGray`
-      : "";
 
   return `function Disconnect-ArchProxy {
   $path = Join-Path $env:USERPROFILE '.claude/settings.json'
@@ -587,6 +630,6 @@ function disconnectProxyFunction(ctx: ClaudeCodeStartupGuardContext): string {
     $envBlock.PSObject.Properties.Remove('${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}')
   }
   if (@($envBlock.PSObject.Properties).Count -eq 0) { $settings.PSObject.Properties.Remove('env') }
-  $settings | ConvertTo-Json -Depth 32 | Set-Content -Path $path -Encoding utf8${bedrockNote}
+  $settings | ConvertTo-Json -Depth 32 | Set-Content -Path $path -Encoding utf8
 }`;
 }

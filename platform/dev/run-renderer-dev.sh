@@ -64,6 +64,21 @@ while :; do
   waited=$((waited + 1))
 done
 
+# The renderer's output lands in a FILE, with a background tail mirroring it
+# into Tilt's log view — not the other way round. Tilt's capture pipe is the
+# fragile leg here: it has been seen going dark after serve restarts, and a
+# process writing straight into a wedged pipe first loses its logs and then
+# blocks on the write. A file never wedges: the render failure that needs
+# debugging is on disk no matter what Tilt managed to display, and the tail is
+# the disposable leg. One previous run is kept for the crash-then-restart case.
+LOG_FILE="renderer-dev.log"           # cwd is backend/; *.log is gitignored
+mv -f "$LOG_FILE" "renderer-dev.prev.log" 2>/dev/null || true
+: > "$LOG_FILE"
+echo "run-renderer-dev: renderer output → backend/$LOG_FILE (previous run: backend/renderer-dev.prev.log)" >&2
+echo "run-renderer-dev: serving bundle built at $(date -r dist/server.mjs +%Y-%m-%dT%H:%M:%S%z 2>/dev/null || echo '?')" >&2
+tail -f "$LOG_FILE" &
+
 # exec so Tilt's TERM reaches node directly — its graceful shutdown frees the
-# port — with no pnpm/tsdown wrapper in between to orphan it.
-exec node dist/server.mjs
+# port — with no pnpm/tsdown wrapper in between to orphan it. Source maps so a
+# stack from the bundle names real files, not dist offsets.
+exec node --enable-source-maps dist/server.mjs >> "$LOG_FILE" 2>&1

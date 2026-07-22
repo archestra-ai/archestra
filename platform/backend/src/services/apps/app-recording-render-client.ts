@@ -43,6 +43,8 @@ interface RenderJobClient {
     bundle: AppRecordingBundle;
     userId: string;
     title: string;
+    /** Serialized size of the posted bundle, for the job's start log. */
+    bundleBytes?: number;
   }): Promise<string>;
   status(params: { jobId: string; userId: string }): Promise<RenderJobProgress>;
   takeVideo(params: {
@@ -58,6 +60,7 @@ class InProcessRenderJobClient implements RenderJobClient {
     bundle: AppRecordingBundle;
     userId: string;
     title: string;
+    bundleBytes?: number;
   }): Promise<string> {
     return startRenderJob(params);
   }
@@ -86,6 +89,9 @@ class RemoteRenderJobClient implements RenderJobClient {
     bundle: AppRecordingBundle;
     userId: string;
     title: string;
+    // The remote hop doesn't forward this: the service reads the exact size
+    // off its own Content-Length.
+    bundleBytes?: number;
   }): Promise<string> {
     const res = await this.call({
       method: "POST",

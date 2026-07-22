@@ -110,8 +110,21 @@ function createStdoutStream() {
       ignore: "pid,hostname,timeIso,trace_id,span_id,trace_flags,session_id",
     });
   }
-  return pino.destination({ fd: 1, sync: false, minLength: 4096 });
+  const destination = pino.destination({ fd: 1, sync: false, minLength: 4096 });
+  // The buffer trades write latency for never blocking the event loop, and a
+  // chatty process crosses the threshold many times a second anyway. A
+  // near-silent process is the trap: a record under the threshold sits
+  // buffered INDEFINITELY — the dedicated renderer would boot, run a job,
+  // fail it, and show an empty log the whole time, its report surfacing only
+  // at process exit (if the exit is clean enough to flush at all). The
+  // interval bounds that wait; unref'd, it never holds the process open.
+  setInterval(() => destination.flush(), STDOUT_FLUSH_INTERVAL_MS).unref();
+  return destination;
 }
+
+/** Longest a buffered record may wait for the size threshold before being
+ * flushed anyway — the ceiling on "the log looks empty" during quiet spells. */
+const STDOUT_FLUSH_INTERVAL_MS = 2_000;
 
 // --- Internal helpers (trace context injection) ---
 

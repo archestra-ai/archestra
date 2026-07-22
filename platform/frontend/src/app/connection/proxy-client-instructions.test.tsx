@@ -80,18 +80,38 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     availableKeysMock.mockReturnValue({ data: [{ provider: "anthropic" }] });
   });
 
-  it("offers the model router toggle and switches the URL to /model-router/", async () => {
-    const user = userEvent.setup();
+  it("renders the Model Router as the first tile of the provider grid", () => {
     renderInstructions();
 
-    // Per-provider URL by default.
+    // A selected provider keeps its per-provider URL…
     expect(
       screen.getByText("http://localhost:9000/v1/anthropic/profile-123"),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByLabelText(/OpenAI-Compatible Model Router/i));
+    // …while the router is offered as a grid tile, ahead of the providers.
+    const routerTile = screen.getByRole("button", {
+      name: /OpenAI compatible Model Router/i,
+    });
+    const firstProviderTile = screen.getByRole("button", {
+      name: /OpenAI$/,
+    });
+    expect(
+      routerTile.compareDocumentPosition(firstProviderTile) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 
-    // Router on: the unified model-router endpoint replaces the per-provider URL.
+  it("selecting the Model Router tile shows the unified /model-router/ endpoint", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("providerId=model-router") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    provisionMock.mockResolvedValue({ value: "arch_secret", name: "My Key" });
+    renderInstructions();
+
+    // The unified model-router endpoint replaces the per-provider URL.
     expect(
       screen.getByText("http://localhost:9000/v1/model-router/profile-123"),
     ).toBeInTheDocument();
@@ -99,6 +119,13 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
       screen.queryByText("http://localhost:9000/v1/anthropic/profile-123"),
     ).not.toBeInTheDocument();
     expect(screen.getByText("https://api.openai.com/v1/")).toBeInTheDocument();
+
+    // Virtual keys wrap one provider key — the router flow provisions against
+    // the (only) configured provider.
+    await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+    await waitFor(() =>
+      expect(provisionMock).toHaveBeenCalledWith({ provider: "anthropic" }),
+    );
   });
 
   it("auto-provisions a virtual key on tab select (no extra click)", async () => {

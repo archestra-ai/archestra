@@ -148,7 +148,7 @@ test(
     test.setTimeout(120_000);
 
     const PROXY_NAME = makeRandomString(10, "Test LLM Proxy");
-    await goToPage(page, "/llm/proxies");
+    await goToPage(page, "/llm/proxies/manage");
 
     await page.waitForLoadState("domcontentloaded");
 
@@ -186,6 +186,28 @@ test(
     await expect(proxyLocator).not.toBeVisible({ timeout: 10000 });
   },
 );
+
+test("LLM Proxy workspace opens on the default proxy with a switcher", {
+  tag: ["@firefox", "@webkit"],
+}, async ({ page, goToPage }) => {
+  await goToPage(page, "/llm/proxies");
+
+  // The workspace selects the seeded default proxy without any URL params.
+  const workspace = page.getByTestId(E2eTestId.LlmProxyWorkspace);
+  await expect(workspace).toBeVisible({ timeout: 15_000 });
+  const switcher = page.getByTestId(E2eTestId.LlmProxySwitcherTrigger);
+  await expect(switcher).toContainText("Default LLM Proxy");
+  await expect(
+    page.getByTestId(E2eTestId.LlmProxyConnectClientButton),
+  ).toBeVisible();
+
+  // The header switcher opens a searchable proxy list.
+  await switcher.click();
+  await expect(page.getByPlaceholder("Find a proxy...")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "All LLM Proxies" }),
+  ).toBeVisible();
+});
 
 test(
   "can create an MCP gateway and land on the pre-selected connection guide",

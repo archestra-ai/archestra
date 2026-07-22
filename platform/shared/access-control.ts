@@ -1772,6 +1772,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },
+  "/llm/proxies/manage": { llmProxy: ["read"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },

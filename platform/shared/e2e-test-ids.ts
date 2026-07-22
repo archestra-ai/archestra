@@ -1,5 +1,8 @@
 export const E2eTestId = {
   AgentsTable: "agents-table",
+  LlmProxyWorkspace: "llm-proxy-workspace",
+  LlmProxySwitcherTrigger: "llm-proxy-switcher-trigger",
+  LlmProxyConnectClientButton: "llm-proxy-connect-client-button",
   CreateAgentButton: "create-agent-button",
   CreateAgentCloseHowToConnectButton: "create-agent-how-to-connect-button",
   CloneAgentButton: "clone-agent-button",

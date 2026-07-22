@@ -18,7 +18,13 @@ import {
 import { CopyableCode } from "@/components/copyable-code";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -104,6 +110,13 @@ interface ProxyClientInstructionsProps {
 const ALL_PROVIDERS = Object.keys(providerDisplayNames) as SupportedProvider[];
 
 /**
+ * providerId URL value for the Model Router tile. Not a real provider —
+ * isSupportedProvider() rejects it, so every other providerId consumer
+ * (script/config clients, deep links) safely treats it as "none selected".
+ */
+const MODEL_ROUTER_TILE = "model-router";
+
+/**
  * Slugify the LLM proxy name into a TOML-friendly identifier (e.g. used as
  * `[model_providers.<slug>]` in Codex's config).
  */
@@ -164,13 +177,28 @@ export function ProxyClientInstructions({
       ? urlProvider
       : null;
 
-  // Auto-select the first provider when nothing is chosen yet, so the card
-  // opens with that provider's instructions expanded instead of a blank grid.
+  // Generic clients get the Model Router as the first tile of the grid;
+  // custom clients build per-provider instructions and don't offer it.
+  const routerAvailable = client.proxy.kind === "generic";
+  const routerSelected = routerAvailable && urlProvider === MODEL_ROUTER_TILE;
+
+  // Auto-select the first tile when nothing is chosen yet, so the card opens
+  // with instructions expanded instead of a blank grid: the Model Router for
+  // generic clients, the first provider otherwise.
   useEffect(() => {
-    if (!selectedProvider && supportedProviders.length > 0) {
+    if (selectedProvider || routerSelected) return;
+    if (routerAvailable) {
+      updateProviderInUrl(MODEL_ROUTER_TILE);
+    } else if (supportedProviders.length > 0) {
       updateProviderInUrl(supportedProviders[0]);
     }
-  }, [selectedProvider, supportedProviders, updateProviderInUrl]);
+  }, [
+    selectedProvider,
+    routerSelected,
+    routerAvailable,
+    supportedProviders,
+    updateProviderInUrl,
+  ]);
 
   const handleProviderSelect = (p: SupportedProvider) => {
     updateProviderInUrl(p);
@@ -223,9 +251,19 @@ export function ProxyClientInstructions({
         supported={supportedProviders}
         selected={selectedProvider}
         onSelect={handleProviderSelect}
+        modelRouter={
+          routerAvailable
+            ? {
+                selected: routerSelected,
+                onSelect: () => updateProviderInUrl(MODEL_ROUTER_TILE),
+              }
+            : undefined
+        }
       />
 
-      {!selectedProvider ? null : client.proxy.kind === "generic" &&
+      {routerSelected ? (
+        <ModelRouterInstructions baseUrl={baseUrl} profileId={profileId} />
+      ) : !selectedProvider ? null : client.proxy.kind === "generic" &&
         url &&
         providerLabel &&
         originalUrl ? (
@@ -279,12 +317,11 @@ export function ProxyClientInstructions({
 type GenericAuthMethod = "provider-key" | "virtual-key";
 
 /**
- * The "Any client" step 4 body: between picking a provider and copying the
- * proxy URL, the user decides (1) whether to route through the OpenAI-Compatible
- * Model Router (one OpenAI-style endpoint for every provider) and (2) how to
+ * The "Any client" step 4 body for a single provider: the user decides how to
  * authenticate — bring their own provider key (passthrough) or have us
  * auto-provision a personal virtual key (the same provisioning the one-command
- * setup performs, gated by llmVirtualKey:create).
+ * setup performs, gated by llmVirtualKey:create). The Model Router lives in
+ * its own first tile of the grid ({@link ModelRouterInstructions}).
  */
 function GenericProxyInstructions({
   baseUrl,
@@ -299,7 +336,6 @@ function GenericProxyInstructions({
   providerLabel: string;
   originalUrl: string;
 }) {
-  const [useRouter, setUseRouter] = useState(false);
   const [authMethod, setAuthMethod] =
     useState<GenericAuthMethod>("provider-key");
   const { data: canCreateVirtualKey } = useHasPermissions({
@@ -367,45 +403,11 @@ function GenericProxyInstructions({
     provisionAsync,
   ]);
 
-  // The OpenAI-compatible router lives at /v1/model-router (it resolves
-  // provider-qualified model IDs like `openai:gpt-5.4` and fans out to every
-  // provider). /v1/openai is just the OpenAI passthrough proxy, so it must NOT
-  // be used here — it would only ever reach OpenAI.
-  const routerUrl = `${baseUrl}/model-router/${profileId}`;
   const providerUrl = `${baseUrl}/${selectedProvider}/${profileId}`;
-  const effectiveUrl = useRouter ? routerUrl : providerUrl;
-  const effectiveOriginalUrl = useRouter
-    ? "https://api.openai.com/v1/"
-    : originalUrl;
 
   return (
     <div className="space-y-3">
       <div className="space-y-4 rounded-lg border bg-card p-4">
-        <label
-          className="flex cursor-pointer items-start gap-2.5"
-          htmlFor="generic-use-router"
-        >
-          <Checkbox
-            id="generic-use-router"
-            checked={useRouter}
-            onCheckedChange={(checked) => setUseRouter(checked === true)}
-            className="mt-0.5"
-          />
-          <span className="space-y-0.5">
-            <span className="block text-sm font-medium text-foreground">
-              Use the OpenAI-Compatible Model Router
-            </span>
-            <span className="block text-xs text-muted-foreground">
-              Reach every configured provider through one OpenAI-style endpoint.
-              Send provider-qualified model IDs like{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
-                openai:gpt-5.4
-              </code>{" "}
-              instead of switching base URLs per provider.
-            </span>
-          </span>
-        </label>
-
         <div className="space-y-2">
           <div className="text-xs font-medium text-muted-foreground">
             Authentication
@@ -476,7 +478,7 @@ function GenericProxyInstructions({
         </div>
       </div>
 
-      {selectedProvider === "bedrock" && !useRouter ? (
+      {selectedProvider === "bedrock" ? (
         <BedrockGenericInstructions
           baseUrl={baseUrl}
           profileId={profileId}
@@ -484,9 +486,9 @@ function GenericProxyInstructions({
         />
       ) : (
         <ReplaceUrlBlock
-          label={useRouter ? "OpenAI-compatible" : providerLabel}
-          originalUrl={effectiveOriginalUrl}
-          url={effectiveUrl}
+          label={providerLabel}
+          originalUrl={originalUrl}
+          url={providerUrl}
         />
       )}
 
@@ -498,6 +500,189 @@ function GenericProxyInstructions({
         defaultValues={{ provider: selectedProvider }}
         allowedProviders={[selectedProvider]}
         onSuccess={() => setShowAddProviderKey(false)}
+      />
+    </div>
+  );
+}
+
+/**
+ * The Model Router panel behind the first tile of the provider grid (generic
+ * clients). One OpenAI-compatible endpoint that reaches every configured
+ * provider via provider-qualified model IDs (`openai:gpt-5.4`) — /v1/openai is
+ * just the OpenAI passthrough proxy; only /v1/model-router fans out across
+ * providers. A virtual key wraps exactly one stored provider key, so router
+ * setups pick which provider the minted key maps to.
+ */
+function ModelRouterInstructions({
+  baseUrl,
+  profileId,
+}: {
+  baseUrl: string;
+  profileId: string;
+}) {
+  const routerUrl = `${baseUrl}/model-router/${profileId}`;
+  const [authMethod, setAuthMethod] =
+    useState<GenericAuthMethod>("provider-key");
+  const { data: canCreateVirtualKey } = useHasPermissions({
+    llmVirtualKey: ["create"],
+  });
+
+  const { data: availableKeys } = useAvailableLlmProviderApiKeys();
+  const providersWithKeys = useMemo(() => {
+    const configured = new Set((availableKeys ?? []).map((k) => k.provider));
+    return ALL_PROVIDERS.filter((p) => configured.has(p));
+  }, [availableKeys]);
+  const [pickedProvider, setPickedProvider] =
+    useState<SupportedProvider | null>(null);
+  const mappedProvider =
+    pickedProvider && providersWithKeys.includes(pickedProvider)
+      ? pickedProvider
+      : (providersWithKeys[0] ?? null);
+  const offerVirtualKey = canCreateVirtualKey === true && !!mappedProvider;
+
+  const provisionKey = useCreateConnectionVirtualKey();
+  const provisionAsync = provisionKey.mutateAsync;
+  const [virtualKey, setVirtualKey] = useState<{
+    value: string;
+    name: string;
+    creditWarning?: ConnectionCreditWarning | null;
+  } | null>(null);
+
+  // A provisioned key is scoped to the mapped provider; drop it when the
+  // mapping or auth mode changes so a stale key is never shown.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps are the reset triggers, not values read
+  useEffect(() => {
+    setVirtualKey(null);
+  }, [mappedProvider, authMethod]);
+
+  useEffect(() => {
+    if (!offerVirtualKey && authMethod === "virtual-key") {
+      setAuthMethod("provider-key");
+    }
+  }, [offerVirtualKey, authMethod]);
+
+  // Same auto-provision-on-tab-pick behavior as the per-provider flow;
+  // ensureConnectionVirtualKey is idempotent per provider.
+  const provisioningRef = useRef(false);
+  useEffect(() => {
+    if (authMethod !== "virtual-key" || !offerVirtualKey || virtualKey) return;
+    if (!mappedProvider || provisioningRef.current) return;
+    provisioningRef.current = true;
+    let cancelled = false;
+    provisionAsync({ provider: mappedProvider })
+      .then((result) => {
+        if (!cancelled && result) setVirtualKey(result);
+      })
+      .finally(() => {
+        provisioningRef.current = false;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authMethod, offerVirtualKey, mappedProvider, virtualKey, provisionAsync]);
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-4 rounded-lg border bg-card p-4">
+        <p className="text-xs text-muted-foreground">
+          One OpenAI-style endpoint for every configured provider. Send
+          provider-qualified model IDs like{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+            openai:gpt-5.4
+          </code>{" "}
+          or{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+            anthropic:claude-sonnet-5
+          </code>{" "}
+          instead of switching base URLs per provider.
+        </p>
+
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">
+            Authentication
+          </div>
+          <Tabs
+            value={authMethod}
+            onValueChange={(v) => setAuthMethod(v as GenericAuthMethod)}
+          >
+            <TabsList>
+              <TabsTrigger value="provider-key">Your provider key</TabsTrigger>
+              <TabsTrigger value="virtual-key" disabled={!offerVirtualKey}>
+                Virtual key
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {authMethod === "provider-key" ? (
+            <p className="text-xs text-muted-foreground">
+              Passthrough — you keep using your own provider API key. Works when
+              the model's provider prefix matches the key (e.g.{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+                openai:gpt-5.4
+              </code>{" "}
+              with an OpenAI key).
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {providersWithKeys.length > 1 && mappedProvider && (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>Mint the key from the</span>
+                  <Select
+                    value={mappedProvider}
+                    onValueChange={(v) =>
+                      setPickedProvider(v as SupportedProvider)
+                    }
+                  >
+                    <SelectTrigger size="sm" className="h-7 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {providersWithKeys.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          {providerDisplayNames[p]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span>provider key</span>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                A personal virtual key mapped to your
+                {mappedProvider
+                  ? ` ${providerDisplayNames[mappedProvider]}`
+                  : ""}{" "}
+                provider key is created automatically and shown below. Models
+                from other providers need a key mapped to that provider.
+              </p>
+              {virtualKey ? (
+                <div className="space-y-1.5">
+                  <CopyableCode
+                    value={virtualKey.value}
+                    variant="primary"
+                    toastMessage="Virtual key copied"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Use this as your API key. Revoke it any time by deleting the
+                    &quot;{virtualKey.name}&quot; key on the Virtual API Keys
+                    page.
+                  </p>
+                  <CreditWarningNotice warning={virtualKey.creditWarning} />
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Creating your virtual key…
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <ReplaceUrlBlock
+        label="OpenAI-compatible"
+        originalUrl="https://api.openai.com/v1/"
+        url={routerUrl}
       />
     </div>
   );
@@ -959,6 +1144,11 @@ interface ProviderGridProps {
   supported: SupportedProvider[];
   selected: SupportedProvider | null;
   onSelect: (p: SupportedProvider) => void;
+  /**
+   * Render the OpenAI-compatible Model Router as the first tile (generic
+   * clients only — custom clients build per-provider instructions).
+   */
+  modelRouter?: { selected: boolean; onSelect: () => void };
 }
 
 function ProviderGrid({
@@ -966,6 +1156,7 @@ function ProviderGrid({
   supported,
   selected,
   onSelect,
+  modelRouter,
 }: ProviderGridProps) {
   const PRIMARY: SupportedProvider[] = [
     "openai",
@@ -1001,6 +1192,39 @@ function ProviderGrid({
         )}
       </div>
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
+        {modelRouter && (
+          <button
+            type="button"
+            onClick={modelRouter.onSelect}
+            className={cn(
+              "relative flex items-center gap-3 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:border-primary/50",
+              modelRouter.selected && "border-primary ring-4 ring-primary/5",
+            )}
+          >
+            <div
+              className="flex size-9 shrink-0 items-center justify-center rounded-md font-mono text-[13px] font-bold"
+              style={{
+                background: "linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)",
+                color: "#fff",
+              }}
+            >
+              ⇄
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold tracking-tight text-foreground">
+                OpenAI compatible Model Router
+              </div>
+              <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
+                Every provider, one endpoint
+              </div>
+            </div>
+            {modelRouter.selected && (
+              <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <Check className="size-2.5" strokeWidth={3} />
+              </div>
+            )}
+          </button>
+        )}
         {visible.map((p) => {
           const isSupported = supported.includes(p);
           const isSel = selected === p;

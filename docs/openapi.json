@@ -137429,7 +137429,8 @@
                                                 "minimax",
                                                 "azure",
                                                 "github-copilot",
-                                                "microsoft-365-copilot"
+                                                "microsoft-365-copilot",
+                                                "archestra"
                                               ]
                                             },
                                             "providerLabel": {
@@ -137466,7 +137467,8 @@
                                                 "minimax",
                                                 "azure",
                                                 "github-copilot",
-                                                "microsoft-365-copilot"
+                                                "microsoft-365-copilot",
+                                                "archestra"
                                               ]
                                             },
                                             "status": {
@@ -163276,7 +163278,8 @@
                                           "minimax",
                                           "azure",
                                           "github-copilot",
-                                          "microsoft-365-copilot"
+                                          "microsoft-365-copilot",
+                                          "archestra"
                                         ]
                                       },
                                       "providerLabel": {
@@ -163313,7 +163316,8 @@
                                           "minimax",
                                           "azure",
                                           "github-copilot",
-                                          "microsoft-365-copilot"
+                                          "microsoft-365-copilot",
+                                          "archestra"
                                         ]
                                       },
                                       "status": {

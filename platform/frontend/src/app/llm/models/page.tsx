@@ -1239,7 +1239,11 @@ function ollamaDefaultPlaceholder(
 ): string {
   const value = model.defaultParameters?.[name];
   if (value === undefined || value === null) return "inherit";
-  return Array.isArray(value) ? value.join(", ") : String(value);
+  // Newline-joined, matching the delimiter `buildConfiguredParameters` parses.
+  // `/api/show` routinely reports several `stop` sequences, and a comma-joined
+  // placeholder invited admins to copy it back in as one sequence containing a
+  // comma — the exact value the newline switch was made to stop producing.
+  return Array.isArray(value) ? value.join("\n") : String(value);
 }
 
 // --- Internal helpers ---
@@ -1331,7 +1335,13 @@ function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
   const hasOutputModalities =
     model.outputModalities && model.outputModalities.length > 0;
   const hasToolCalling = model.supportsToolCalling !== null;
-  const hasContextLength = model.contextLength !== null;
+  // Effective as well as architectural: a freshly pulled Ollama model is absent
+  // from the public catalog (`contextLength` null) but still reports the window
+  // it actually runs with. Keying on the architectural value alone hid that
+  // number behind an "unknown capabilities" badge — the one figure the chat
+  // context ring is enforcing.
+  const hasContextLength =
+    model.contextLength !== null || model.effectiveContextLength !== null;
   const hasPricing =
     model.pricePerMillionInput !== null || model.pricePerMillionOutput !== null;
   return (

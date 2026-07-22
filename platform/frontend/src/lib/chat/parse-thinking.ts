@@ -89,7 +89,14 @@ function matchOrphanClosingTag(text: string): ParsedThinkingPart[] | null {
   const close = text.search(/<\/think>/i);
   if (close === -1) return null;
 
-  // A properly paired block is handled by the main parser.
+  // A properly paired block anywhere in the text means the model emitted its
+  // own tags, so the main parser owns the whole message. Only the prefilled
+  // shape — a closer with no matching opener at all — is handled here.
+  // Checking just "is there an opener before the first closer" reclassified
+  // everything ahead of a merely-quoted `</think>` as reasoning, and left the
+  // real paired block after it rendering as literal text.
+  if (/<think>[\s\S]*?<\/think>/i.test(text)) return null;
+
   const open = text.search(/<think>/i);
   if (open !== -1 && open < close) return null;
 

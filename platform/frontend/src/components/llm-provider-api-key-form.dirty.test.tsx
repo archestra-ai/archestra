@@ -39,8 +39,10 @@ let form: UseFormReturn<LlmProviderApiKeyFormValues>;
 
 function Harness({
   overrides,
+  allowedProviders,
 }: {
   overrides?: Partial<LlmProviderApiKeyFormValues>;
+  allowedProviders?: LlmProviderApiKeyFormValues["provider"][];
 }) {
   form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: { ...DEFAULTS, ...overrides },
@@ -50,18 +52,26 @@ function Harness({
   return (
     <>
       <div data-testid="is-dirty">{String(form.formState.isDirty)}</div>
-      <LlmProviderApiKeyForm form={form} mode="full" showConsoleLink={false} />
+      <LlmProviderApiKeyForm
+        form={form}
+        mode="full"
+        showConsoleLink={false}
+        allowedProviders={allowedProviders}
+      />
     </>
   );
 }
 
-function renderForm(overrides?: Partial<LlmProviderApiKeyFormValues>) {
+function renderForm(
+  overrides?: Partial<LlmProviderApiKeyFormValues>,
+  allowedProviders?: LlmProviderApiKeyFormValues["provider"][],
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={client}>
-      <Harness overrides={overrides} />
+      <Harness overrides={overrides} allowedProviders={allowedProviders} />
     </QueryClientProvider>,
   );
 }
@@ -136,5 +146,35 @@ describe("LlmProviderApiKeyForm Ollama transport", () => {
     // placeholder showing the correct default for the chosen transport.
     expect(screen.getByLabelText(/base url/i)).toHaveValue("");
     expect(form.getValues("baseUrl")).toBeFalsy();
+  });
+
+  // The two transports collapse to one "Ollama" entry in the provider list.
+  // Callers that restrict the list name only the legacy `ollama` (the clients
+  // that support it), so collapsing to `ollama-native` unconditionally left the
+  // sole Ollama entry permanently disabled — no way to add a key at all.
+  it("selects the caller-allowed transport when only one is permitted", async () => {
+    renderForm({ provider: "ollama" }, ["ollama"]);
+
+    await waitFor(() => {
+      expect(form.getValues("provider")).toBe("ollama");
+    });
+    // With the choice already made by the caller, the transport control has
+    // nothing to offer — and offering it would let the form mint a key the
+    // caller's own setup instructions do not describe.
+    expect(
+      screen.queryByRole("tab", { name: "OpenAI-compatible" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Native" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers both transports when the caller does not restrict the list", async () => {
+    renderForm({ provider: "ollama-native" });
+
+    expect(screen.getByRole("tab", { name: "Native" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "OpenAI-compatible" }),
+    ).toBeInTheDocument();
   });
 });

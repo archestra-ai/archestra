@@ -99,6 +99,32 @@ with several lines
 
     expect(result).toEqual([{ type: "reasoning", text: "Thinking" }]);
   });
+
+  it("should not treat a quoted closing tag as a prefilled reasoning block", () => {
+    // The orphan-closer rule exists for models prefilled with an opening tag.
+    // A message that merely mentions the tag while also using a real paired
+    // block must go to the paired parser, or everything before the quoted
+    // closer gets relabelled as reasoning.
+    const text =
+      "The </think> tag ends reasoning, e.g. <think>hidden</think> works";
+    const result = parseThinkingTags(text);
+
+    expect(result).toEqual([
+      { type: "text", text: "The </think> tag ends reasoning, e.g." },
+      { type: "reasoning", text: "hidden" },
+      { type: "text", text: "works" },
+    ]);
+  });
+
+  it("should still split a genuinely prefilled response with no opening tag", () => {
+    const text = "weighing the options</think>Here is the answer";
+    const result = parseThinkingTags(text);
+
+    expect(result).toEqual([
+      { type: "reasoning", text: "weighing the options" },
+      { type: "text", text: "Here is the answer" },
+    ]);
+  });
 });
 
 describe("hasThinkingTags", () => {

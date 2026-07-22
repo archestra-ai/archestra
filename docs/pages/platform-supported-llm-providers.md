@@ -40,6 +40,8 @@ Use provider-qualified model IDs from `/models` for deterministic routing, for e
 
 The prefix before `:` is the provider. The value after `:` is the provider's native model ID, so provider model IDs can still contain slashes or colons.
 
+Ollama (Native) is not available through the model router. It speaks Ollama's native `/api/chat` format, which the router has no translation for, so `ollama-native:` model IDs are not returned by `/models` and are not routable. Use the `ollama` prefix to reach the same server over its OpenAI-compatible endpoint, or call [Ollama (Native)](#ollama-native) directly at its own base URL.
+
 The `/models` response includes model-router-compatible text models for the providers mapped on the virtual key. Providers that use native request formats, including Anthropic, Bedrock, Gemini, and Cohere, are translated between OpenAI request/response formats and provider-native formats before forwarding.
 
 Model Router translation forwards inline non-text content where the provider's native format supports it: Gemini (base64 data URL images, audio, and files), Anthropic (base64 data URL images and PDF files, plus http(s) image URLs), Cohere (images via base64 data URI or web URL in user messages), and Bedrock (base64 data URL images). Anthropic also forwards images returned inside tool results. Content the provider format cannot represent is dropped — for example http(s) image URLs to Gemini (its `fileData` accepts only Files API or `gs://` URIs), audio to Anthropic, and non-text content in Gemini and Cohere tool results.

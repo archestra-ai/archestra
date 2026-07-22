@@ -426,6 +426,18 @@ class OllamaNativeStreamAdapter
       };
     }
 
+    // Accumulate assistant text/thinking before the tool-call branch returns: a
+    // chunk carrying tool calls can also carry a preamble, and the client sees
+    // that text (it rides inside the replayed raw line) while `state.text` is
+    // what feeds the persisted interaction, the span and text evaluation. The
+    // OpenAI adapter accumulates on tool-call chunks for the same reason.
+    if (message?.thinking) {
+      this.thinking += message.thinking;
+    }
+    if (message?.content) {
+      this.state.text += message.content;
+    }
+
     // Tool calls arrive whole (not incremental). Buffer them for policy eval.
     if (toolCalls.length > 0) {
       for (const toolCall of toolCalls) {
@@ -437,8 +449,19 @@ class OllamaNativeStreamAdapter
           ),
         });
       }
-      this.rawToolCallLines.push(ndjsonLine(chunk));
-      return { sseData: null, isToolCallChunk: true, isFinal: false };
+      // `done` is cleared on the buffered copy: formatEndSSE synthesizes the
+      // terminating frame, so replaying a chunk that carried both tool calls
+      // and `done: true` would emit a second one — ignored or a parse error
+      // depending on the client. The stop reason and usage were already read
+      // off the original above.
+      this.rawToolCallLines.push(
+        ndjsonLine({ ...chunk, done: false, done_reason: undefined }),
+      );
+      return {
+        sseData: null,
+        isToolCallChunk: true,
+        isFinal: chunk.done === true,
+      };
     }
 
     // Final chunk: don't stream it — the synthesized `done: true` line is
@@ -448,16 +471,8 @@ class OllamaNativeStreamAdapter
     }
 
     // Text / thinking delta — stream immediately.
-    let sseData: string | null = null;
-    if (message?.thinking) {
-      this.thinking += message.thinking;
-    }
-    if (message?.content) {
-      this.state.text += message.content;
-    }
-    if (message?.content || message?.thinking) {
-      sseData = ndjsonLine(chunk);
-    }
+    const sseData =
+      message?.content || message?.thinking ? ndjsonLine(chunk) : null;
 
     return { sseData, isToolCallChunk: false, isFinal: false };
   }
@@ -693,8 +708,14 @@ export const ollamaNativeAdapterFactory: LLMProvider<
       body: JSON.stringify({ ...request, stream: true }),
       signal: c.abortSignal,
     });
-    if (!response.ok || !response.body) {
+    if (!response.ok) {
       throw await toUpstreamError(response);
+    }
+    if (!response.body) {
+      // A 2xx with no body is still a failed turn. Reporting the upstream
+      // status here would stamp `status: 200` on the error and surface it as
+      // ApiError(200) — a success status on an error path.
+      throw await toUpstreamError(response, 502);
     }
     return iterateNdjson(response.body);
   },
@@ -733,10 +754,24 @@ function buildUpstreamHeaders(
   return headers;
 }
 
-/** Upstream `/api/chat` URL. `new URL` so a base URL carrying a trailing `?`
- * or `#` cannot silently relocate the request path. */
+/**
+ * Upstream `/api/chat` URL, appended to whatever path prefix the base URL
+ * carries.
+ *
+ * The endpoint is appended to `pathname` rather than resolved as a URL
+ * reference. Resolving an absolute reference (`/api/chat`) would discard the
+ * prefix, sending an Ollama published at `https://gw.example.com/ollama` — and
+ * its bearer token — to `https://gw.example.com/api/chat`; resolving a relative
+ * one leaves a base with a query string (`http://h/a/b?x=1`) dropping its last
+ * segment. Query and fragment are meaningless for the upstream call, so they
+ * are cleared instead of being allowed to relocate the path.
+ */
 function chatUrl(baseUrl: string): string {
-  return new URL("/api/chat", `${baseUrl}/`).toString();
+  const url = new URL(baseUrl);
+  url.search = "";
+  url.hash = "";
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/api/chat`;
+  return url.toString();
 }
 
 /**
@@ -754,8 +789,14 @@ const MAX_UPSTREAM_ERROR_BODY_LENGTH = 500;
  * retryable 503, and Archestra's transient-error classification never engages.
  * `error.message` feeds `extractErrorMessage`.
  */
-async function toUpstreamError(response: Response): Promise<Error> {
-  let message = `Ollama upstream returned HTTP ${response.status}`;
+async function toUpstreamError(
+  response: Response,
+  /** Status to report instead of the upstream one, for failures the upstream
+   * status does not describe (e.g. a 2xx that arrived with no body). */
+  statusOverride?: number,
+): Promise<Error> {
+  const status = statusOverride ?? response.status;
+  let message = `Ollama upstream returned HTTP ${status}`;
   try {
     const body = await response.text();
     if (body) {
@@ -772,9 +813,12 @@ async function toUpstreamError(response: Response): Promise<Error> {
   } catch {
     // keep the default message
   }
-  logger.debug({ status: response.status }, "[OllamaNative] upstream error");
+  logger.debug(
+    { status, upstreamStatus: response.status },
+    "[OllamaNative] upstream error",
+  );
   return Object.assign(new Error(message), {
-    status: response.status,
+    status,
     error: { message },
   });
 }
@@ -812,6 +856,16 @@ async function* iterateNdjson(
       if (parsed) yield parsed;
     }
   } finally {
+    // Cancel, don't just release: the consumer breaks out of this generator as
+    // soon as it sees the final chunk, and a throw mid-loop (a write to a
+    // closed socket, a failed policy lookup) returns it too. Releasing alone
+    // leaves the body neither drained nor aborted, holding the upstream
+    // connection open while Ollama keeps generating.
+    try {
+      await reader.cancel();
+    } catch (err) {
+      logger.debug({ err }, "[OllamaNative] cancelling upstream body failed");
+    }
     reader.releaseLock();
   }
 }
@@ -840,16 +894,35 @@ function parseMaybeJson(value: string): unknown {
   }
 }
 
+/**
+ * Tool arguments as an object for policy evaluation.
+ *
+ * Arguments that do not parse into an object are preserved verbatim under
+ * {@link UNPARSED_TOOL_ARGS_KEY} rather than collapsed to `{}`. The client
+ * receives the original argument text inside the replayed raw line, so
+ * discarding it here would let an argument-inspecting policy evaluate empty
+ * arguments while the client executes the real ones.
+ */
 function toToolArgsObject(
   args: string | Record<string, unknown>,
 ): Record<string, unknown> {
   if (typeof args !== "string") return args;
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(args);
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : {};
+    parsed = JSON.parse(args);
   } catch {
-    return {};
+    logger.warn(
+      { argsPreview: args.slice(0, 120) },
+      "[OllamaNative] tool call arguments are not valid JSON; preserving raw text for policy evaluation",
+    );
+    return { [UNPARSED_TOOL_ARGS_KEY]: args };
   }
+  if (typeof parsed === "object" && parsed !== null) {
+    return parsed as Record<string, unknown>;
+  }
+  // Valid JSON, but a scalar rather than an argument object.
+  return { [UNPARSED_TOOL_ARGS_KEY]: args };
 }
+
+/** Key holding tool-call argument text that could not be read as an object. */
+const UNPARSED_TOOL_ARGS_KEY = "__archestra_unparsed_arguments";

@@ -128,9 +128,17 @@ function isOllamaProvider(provider: string): boolean {
  * be the entry shown. Collapsing to native unconditionally made Ollama
  * unselectable in the embedding dialog.
  */
-function ollamaTransportForContext(forEmbedding: boolean): string {
+function ollamaTransportForContext(
+  forEmbedding: boolean,
+): CreateLlmProviderApiKeyBody["provider"] {
   return forEmbedding ? "ollama" : "ollama-native";
 }
+
+/** Both Ollama transports, in the order the transport control lists them. */
+const OLLAMA_TRANSPORTS = [
+  "ollama-native",
+  "ollama",
+] as const satisfies readonly CreateLlmProviderApiKeyBody["provider"][];
 
 const PROVIDER_CONFIG: Record<
   CreateLlmProviderApiKeyBody["provider"],
@@ -436,10 +444,32 @@ export function LlmProviderApiKeyForm({
     "localhost",
     "host.docker.internal",
   );
-  // Which of the two Ollama transports represents "Ollama" in the provider list.
-  const ollamaListedTransport = ollamaTransportForContext(forEmbedding);
-  // Embeddings only work on the `/v1` transport, so there is nothing to choose.
-  const showOllamaTransport = isOllamaProvider(provider) && !forEmbedding;
+  // The transports a caller-supplied `allowedProviders` leaves open. The pair is
+  // one product with one credential, so a caller naming either one gets the
+  // single collapsed "Ollama" entry — but it must resolve to a transport that
+  // caller actually allows, or the entry renders permanently disabled.
+  const allowedOllamaTransports = useMemo(
+    (): CreateLlmProviderApiKeyBody["provider"][] =>
+      OLLAMA_TRANSPORTS.filter((key) => allowedProviderSet.has(key)),
+    [allowedProviderSet],
+  );
+  // Which of the two Ollama transports represents "Ollama" in the provider list:
+  // the context's preferred transport when it is open, otherwise whichever one
+  // the caller left.
+  const ollamaListedTransport = useMemo(() => {
+    const preferred = ollamaTransportForContext(forEmbedding);
+    return allowedOllamaTransports.includes(preferred)
+      ? preferred
+      : (allowedOllamaTransports[0] ?? preferred);
+  }, [allowedOllamaTransports, forEmbedding]);
+  // Embeddings only work on the `/v1` transport, and a caller that allows just
+  // one transport has already made the choice — in both cases there is nothing
+  // to pick, and offering the control would let the form produce a key the
+  // caller's own setup instructions do not describe.
+  const showOllamaTransport =
+    isOllamaProvider(provider) &&
+    !forEmbedding &&
+    allowedOllamaTransports.length > 1;
   const showConfiguredStyling = isEditMode && !hasApiKeyChanged;
 
   const existingPrimaryKey = useMemo(() => {

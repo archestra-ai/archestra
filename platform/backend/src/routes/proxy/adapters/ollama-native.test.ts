@@ -270,6 +270,73 @@ describe("stream adapter", () => {
     expect(end.eval_count).toBe(3);
   });
 
+  test("every tool call in one chunk is recorded, not just the last", () => {
+    // Ollama delivers parallel calls in a single `tool_calls` array. The proxy
+    // handler decides buffer-vs-stream from the accumulated list, so a call
+    // dropped here would never be policy-checked.
+    const adapter = factory.createStreamAdapter();
+    adapter.processChunk(
+      chunk({
+        message: {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            { id: "c1", function: { name: "dangerous", arguments: { a: 1 } } },
+            { id: "c2", function: { name: "safe", arguments: { b: 2 } } },
+          ],
+        },
+      }),
+    );
+    expect(adapter.state.toolCalls.map((c) => c.name)).toEqual([
+      "dangerous",
+      "safe",
+    ]);
+  });
+
+  test("assistant text alongside a tool call still reaches state.text", () => {
+    // The client sees this text inside the replayed raw line; state.text is
+    // what the persisted interaction and the span record.
+    const adapter = factory.createStreamAdapter();
+    adapter.processChunk(
+      chunk({
+        message: {
+          role: "assistant",
+          content: "let me look that up",
+          tool_calls: [{ id: "c1", function: { name: "t", arguments: {} } }],
+        },
+      }),
+    );
+    expect(adapter.state.text).toBe("let me look that up");
+  });
+
+  test("a chunk carrying both tool calls and done is final and keeps its usage", () => {
+    const adapter = factory.createStreamAdapter();
+    const result = adapter.processChunk(
+      chunk({
+        message: {
+          role: "assistant",
+          content: "",
+          tool_calls: [{ id: "c1", function: { name: "t", arguments: {} } }],
+        },
+        done: true,
+        done_reason: "stop",
+        prompt_eval_count: 7,
+        eval_count: 3,
+      }),
+    );
+    expect(result.isToolCallChunk).toBe(true);
+    expect(result.isFinal).toBe(true);
+    expect(adapter.state.usage?.inputTokens).toBe(7);
+
+    // formatEndSSE synthesizes the terminating frame, so the buffered raw line
+    // must not carry a second `done: true`.
+    const buffered = adapter
+      .getRawToolCallEvents()
+      .map((line) => JSON.parse(String(line)));
+    expect(buffered).toHaveLength(1);
+    expect(buffered[0].done).toBe(false);
+  });
+
   test("toProviderResponse reconstructs the full native response with tool calls", () => {
     const adapter = factory.createStreamAdapter();
     adapter.processChunk(
@@ -436,18 +503,42 @@ describe("execute / executeStream — upstream transport", () => {
     expect(error?.message.endsWith("…")).toBe(true);
   });
 
-  test("a base URL with a trailing query cannot relocate the request path", async () => {
-    let capturedUrl = "";
-    const fetchImpl = (async (url: string) => {
-      capturedUrl = String(url);
-      return new Response(JSON.stringify(response()), { status: 200 });
-    }) as unknown as typeof fetch;
+  describe("upstream URL construction", () => {
+    const captureUrl = async (baseUrl: string): Promise<string> => {
+      let capturedUrl = "";
+      const fetchImpl = (async (url: string) => {
+        capturedUrl = String(url);
+        return new Response(JSON.stringify(response()), { status: 200 });
+      }) as unknown as typeof fetch;
+      await factory.execute(client(fetchImpl, baseUrl), request());
+      return capturedUrl;
+    };
 
-    await factory.execute(
-      client(fetchImpl, "http://ollama.test/base?token=abc"),
-      request(),
-    );
-    expect(capturedUrl).toBe("http://ollama.test/api/chat");
+    test("a base URL with a trailing query cannot relocate the request path", async () => {
+      expect(await captureUrl("http://ollama.test/base?token=abc")).toBe(
+        "http://ollama.test/base/api/chat",
+      );
+    });
+
+    test("a path prefix on the base URL is preserved", async () => {
+      // An Ollama published behind a reverse proxy at a path prefix must not
+      // have the request — and its bearer token — sent to the host root.
+      expect(await captureUrl("https://gw.example.com/ollama")).toBe(
+        "https://gw.example.com/ollama/api/chat",
+      );
+    });
+
+    test("a trailing slash does not double up the path separator", async () => {
+      expect(await captureUrl("https://gw.example.com/ollama/")).toBe(
+        "https://gw.example.com/ollama/api/chat",
+      );
+    });
+
+    test("a bare origin still reaches /api/chat", async () => {
+      expect(await captureUrl("http://localhost:11434")).toBe(
+        "http://localhost:11434/api/chat",
+      );
+    });
   });
 
   test("iterateNdjson reassembles a JSON object split across reads", async () => {

@@ -22,14 +22,6 @@ import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
-const NOT_CONFIGURED_ERROR = {
-  error: {
-    message:
-      "Ollama Native provider is not configured. Set ARCHESTRA_OLLAMA_NATIVE_BASE_URL (or ARCHESTRA_OLLAMA_BASE_URL) to enable.",
-    type: "api_internal_server_error" as const,
-  },
-};
-
 const ollamaNativeProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/ollama-native`;
   const CHAT_SUFFIX = "/api/chat";
@@ -41,29 +33,29 @@ const ollamaNativeProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // the Ollama CLI, n8n's Ollama node and anything else that does discovery
   // 404'd against the provider they most want to use. `/api/chat` itself stays
   // on the instrumented handler below (policies, logging, usage).
-  if (config.llm["ollama-native"].enabled) {
-    const upstream = config.llm["ollama-native"].baseUrl as string;
-    await fastify.register(fastifyHttpProxy, {
+  // `enabled` is a literal `true` and `baseUrl` always resolves (it defaults to
+  // the local Ollama), so there is no not-configured state to guard on.
+  const upstream = config.llm["ollama-native"].baseUrl as string;
+  await fastify.register(fastifyHttpProxy, {
+    upstream,
+    prefix: API_PREFIX,
+    rewritePrefix: "",
+    // No `/v1` rewriting here, unlike the OpenAI-compatible sibling: the
+    // native API is served from the server root, so stripping the agent UUID
+    // is the whole job.
+    preHandler: createProxyPreHandler({
+      apiPrefix: API_PREFIX,
+      endpointSuffix: CHAT_SUFFIX,
       upstream,
-      prefix: API_PREFIX,
-      rewritePrefix: "",
-      // No `/v1` rewriting here, unlike the OpenAI-compatible sibling: the
-      // native API is served from the server root, so stripping the agent UUID
-      // is the whole job.
-      preHandler: createProxyPreHandler({
-        apiPrefix: API_PREFIX,
-        endpointSuffix: CHAT_SUFFIX,
-        upstream,
-        providerName: "Ollama native",
-        skipErrorResponse: {
-          error: {
-            message: "Chat requests should use the dedicated endpoint",
-            type: "invalid_request_error",
-          },
+      providerName: "Ollama native",
+      skipErrorResponse: {
+        error: {
+          message: "Chat requests should use the dedicated endpoint",
+          type: "invalid_request_error",
         },
-      }),
-    });
-  }
+      },
+    }),
+  });
 
   fastify.post(
     `${API_PREFIX}${CHAT_SUFFIX}`,
@@ -80,9 +72,6 @@ const ollamaNativeProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      if (!config.llm["ollama-native"].enabled) {
-        return reply.status(500).send(NOT_CONFIGURED_ERROR);
-      }
       logger.debug(
         { url: request.url },
         "[UnifiedProxy] Handling Ollama native request (default agent)",
@@ -112,9 +101,6 @@ const ollamaNativeProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      if (!config.llm["ollama-native"].enabled) {
-        return reply.status(500).send(NOT_CONFIGURED_ERROR);
-      }
       logger.debug(
         { url: request.url, agentId: request.params.agentId },
         "[UnifiedProxy] Handling Ollama native request (with agent)",

@@ -499,6 +499,16 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
   },
 
+  // Another Archestra instance's OpenAI-compatible LLM proxy. Base URL is always
+  // supplied per key (no global default), so direct calls rely on that override.
+  archestra: {
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: config.llm.archestra.baseUrl,
+    apiKeyRequiredMessage:
+      "Archestra API key is required. Please configure an Archestra API key.",
+  },
+
   kimi: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
       createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),

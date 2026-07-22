@@ -87,6 +87,7 @@ function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
     azure: "azure",
     "github-copilot": "github-copilot",
     "microsoft-365-copilot": "microsoft-365-copilot",
+    archestra: "archestra",
   } as const;
 
   return logoNames[provider];

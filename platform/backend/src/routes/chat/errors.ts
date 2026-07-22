@@ -1379,6 +1379,7 @@ function mapMicrosoft365CopilotErrorToCode(
  */
 const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   openai: openAiCompatibleErrorHandler,
+  archestra: openAiCompatibleErrorHandler,
   anthropic: providerErrorHandler(parseAnthropicError, mapAnthropicErrorToCode),
   gemini: providerErrorHandler(parseGeminiError, mapGeminiErrorToCode),
   bedrock: providerErrorHandler(parseBedrockError, mapBedrockErrorToCode),

@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-07-21
+lastUpdated: 2026-07-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -659,6 +659,40 @@ To connect, use the **Sign in with Microsoft** button when adding a Microsoft 36
 - **Estimated usage**: the Chat API reports no token counts, so usage and cost figures are tokenizer estimates.
 - **Stateless mapping**: each request creates a fresh Copilot conversation; prior turns ride along as context. If a streaming response has no recognizable text, Archestra retries through the synchronous endpoint in a second conversation, so one request can appear as two conversations in Microsoft 365 activity.
 - **Conversation cleanup**: the [Copilot conversation API](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/resources/copilotconversation) currently documents no delete operation. If a chat request fails after its conversation is created, the abandoned conversation may remain visible in Microsoft 365 activity.
+
+## Archestra
+
+Use another Archestra instance as an upstream provider. One Archestra routes its traffic through a second Archestra, which applies its own policies before reaching the real model. The upstream's model router is OpenAI-compatible, so this provider follows the OpenAI chat-completions path and can reach every provider that instance has configured.
+
+### Supported Archestra APIs
+
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+
+### Archestra Connection Details
+
+- **Base URL**: the upstream Archestra's model router, for example `https://your-archestra/v1/model-router/<llm-proxy-id>`.
+- **Authentication**: pass a virtual API key (`arch_...`) minted from that LLM Proxy in the `Authorization` header as `Bearer <key>`.
+
+### Setup
+
+1. On the upstream Archestra, go to **LLM Proxies** and create an LLM Proxy, then create a virtual API key for it.
+2. On this Archestra, go to **Model Providers** and add a new key with provider **Archestra**.
+3. Set the **Base URL** to the upstream proxy's model router (for example `https://your-archestra/v1/model-router/<llm-proxy-id>`).
+4. Paste the virtual API key from the upstream LLM Proxy.
+
+Archestra fetches the model list from the upstream's `{base-url}/models` endpoint, so the picker shows exactly the models that proxy exposes. Model IDs are provider-qualified, for example `openai:gpt-5.4`.
+
+### Environment Variables
+
+| Variable                           | Required | Description                                                                                     |
+| ---------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `ARCHESTRA_ARCHESTRA_BASE_URL`     | No       | Global upstream base URL. Normally set per key in the UI; a global value only enables raw passthrough at the `/v1/archestra` proxy prefix. |
+| `ARCHESTRA_CHAT_ARCHESTRA_API_KEY` | No       | Default virtual API key for the built-in chat feature.                                          |
+
+### Important Notes
+
+- **Base URL is required**: the upstream endpoint has no default, so a per-key base URL is always needed. Without one, the provider cannot resolve an upstream and requests would fall back to the public OpenAI endpoint.
+- **Models come from the upstream**: the model list mirrors whatever the upstream LLM Proxy exposes, so it stays in sync as that instance changes.
 
 ## Amazon Bedrock
 

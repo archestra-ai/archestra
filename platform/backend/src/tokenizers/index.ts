@@ -36,6 +36,7 @@ const getAnthropicTokenizer = (): AnthropicTokenizer =>
  */
 const tokenizerCache: Record<SupportedProvider, () => Tokenizer> = {
   anthropic: getAnthropicTokenizer,
+  archestra: getTiktokenTokenizer,
   azure: getTiktokenTokenizer,
   openai: getTiktokenTokenizer,
   cerebras: getTiktokenTokenizer,

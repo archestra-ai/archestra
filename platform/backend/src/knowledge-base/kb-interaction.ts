@@ -213,6 +213,7 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   SupportedProviderDiscriminator
 > = {
   openai: "openai:chatCompletions",
+  archestra: "archestra:chatCompletions",
   gemini: "gemini:generateContent",
   anthropic: "anthropic:messages",
   bedrock: "bedrock:converse",

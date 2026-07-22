@@ -266,6 +266,11 @@ export const RouteId = {
     "deepseekChatCompletionsWithDefaultAgent",
   DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
 
+  // Proxy Routes - Archestra
+  ArchestraChatCompletionsWithDefaultAgent:
+    "archestraChatCompletionsWithDefaultAgent",
+  ArchestraChatCompletionsWithAgent: "archestraChatCompletionsWithAgent",
+
   // Proxy Routes - Kimi (Moonshot AI)
   KimiChatCompletionsWithDefaultAgent: "kimiChatCompletionsWithDefaultAgent",
   KimiChatCompletionsWithAgent: "kimiChatCompletionsWithAgent",

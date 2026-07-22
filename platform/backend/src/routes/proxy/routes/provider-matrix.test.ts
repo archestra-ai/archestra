@@ -30,6 +30,7 @@ import {
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { anthropicAdapterFactory } from "../adapters/anthropic";
+import { archestraAdapterFactory } from "../adapters/archestra";
 import { azureAdapterFactory } from "../adapters/azure";
 import { azureResponsesAdapterFactory } from "../adapters/azure-responses";
 import { bedrockAdapterFactory } from "../adapters/bedrock";
@@ -52,6 +53,7 @@ import { xaiAdapterFactory } from "../adapters/xai";
 import { zhipuaiAdapterFactory } from "../adapters/zhipuai";
 import * as proxyUtils from "../utils";
 import anthropicProxyRoutes from "./anthropic";
+import archestraProxyRoutes from "./archestra";
 import azureProxyRoutes from "./azure";
 import bedrockProxyRoutes from "./bedrock";
 import cerebrasProxyRoutes from "./cerebras";
@@ -1846,6 +1848,25 @@ const providerConfigsByProvider = {
     requestBuilder: makeOpenAiCompatibleBuilder("deepseek-chat"),
     model: "deepseek-chat",
     optimizedModel: "deepseek-reasoner",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  archestra: makeConfig({
+    providerName: "Archestra",
+    providerSlug: "archestra",
+    provider: "archestra",
+    family: "openai",
+    routePlugin: archestraProxyRoutes,
+    adapterFactory: archestraAdapterFactory,
+    endpoint: (agentId) => `/v1/archestra/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
+    model: "gpt-4o",
+    optimizedModel: "gpt-4o-mini",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,

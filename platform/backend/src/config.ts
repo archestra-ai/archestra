@@ -1595,6 +1595,14 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
     },
+    archestra: {
+      // The "archestra" provider targets another Archestra instance's OpenAI-
+      // compatible LLM proxy. There is no meaningful global default — the
+      // upstream endpoint is supplied per key as a base URL. A global base URL
+      // only enables raw passthrough at the /v1/archestra proxy prefix.
+      enabled: Boolean(process.env.ARCHESTRA_ARCHESTRA_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_ARCHESTRA_BASE_URL,
+    },
     kimi: {
       baseUrl:
         process.env.ARCHESTRA_KIMI_BASE_URL || "https://api.moonshot.ai/v1",
@@ -1729,6 +1737,9 @@ const config = {
     },
     deepseek: {
       apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
+    },
+    archestra: {
+      apiKey: process.env.ARCHESTRA_CHAT_ARCHESTRA_API_KEY || "",
     },
     kimi: {
       apiKey: process.env.ARCHESTRA_CHAT_KIMI_API_KEY || "",

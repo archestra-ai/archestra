@@ -2,6 +2,7 @@ import type { SupportedProvider } from "@archestra/shared";
 import { MINIMAX_MODELS, PERPLEXITY_MODELS } from "@archestra/shared";
 import type { OpenAi } from "@/types";
 import { fetchAnthropicModels } from "./anthropic";
+import { fetchArchestraModels } from "./archestra";
 import { fetchAzureModels } from "./azure";
 import { makeBearerFetcher, makeStaticFetcher } from "./bearer-fetcher";
 import { fetchBedrockModels } from "./bedrock";
@@ -110,6 +111,7 @@ const fetchZhipuaiModels = makeBearerFetcher({
 
 export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   anthropic: fetchAnthropicModels,
+  archestra: fetchArchestraModels,
   azure: fetchAzureModels,
   bedrock: fetchBedrockModels,
   cerebras: fetchCerebrasModels,

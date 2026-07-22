@@ -253,8 +253,12 @@ function LlmProxyAuthSurface({
           <TerminalBlock
             rows={[
               {
-                comment: "keep your provider key, add per-user attribution",
-                code: "Authorization: Bearer <your-provider-key>\nX-Archestra-Virtual-Key: arch_<your-passthrough-key>",
+                comment: "your provider key goes straight upstream",
+                code: "Authorization: Bearer <your-provider-key>",
+              },
+              {
+                comment: "optional — attribute requests to your Archestra user",
+                code: "X-Archestra-Virtual-Key: arch_<your-passthrough-key>",
               },
             ]}
           />

@@ -188,6 +188,40 @@ export function buildConfiguredParameters(
   return Object.keys(result).length > 0 ? result : null;
 }
 
+/** The subset of a model row {@link resolveDisplayContextLength} reads. */
+export type DisplayContextLengthModel = {
+  contextLength?: number | null;
+  effectiveContextLength?: number | null;
+};
+
+/**
+ * Pick the context window to show for a model.
+ *
+ * `contextLength` is the model's architectural window and remains the ceiling
+ * `num_ctx` is validated against, so it is not what to display: an Ollama
+ * Modelfile or a configured `num_ctx` can cap the window far below it, and the
+ * chat context ring already shows that enforced value. Showing the
+ * architectural number here would over-promise and make the two screens
+ * disagree.
+ *
+ * `isCapped` is true only when both numbers are known and the enforced window
+ * is smaller — the case worth explaining to the user.
+ */
+export function resolveDisplayContextLength(model: DisplayContextLengthModel): {
+  display: number | null;
+  architectural: number | null;
+  isCapped: boolean;
+} {
+  const architectural = model.contextLength ?? null;
+  const effective = model.effectiveContextLength ?? null;
+  return {
+    display: effective ?? architectural,
+    architectural,
+    isCapped:
+      effective !== null && architectural !== null && effective < architectural,
+  };
+}
+
 export type ModelsPageAvailableApiKey = {
   readonly id: string;
   readonly provider: string;

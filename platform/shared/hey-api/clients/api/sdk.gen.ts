@@ -4068,7 +4068,7 @@ export const getLlmModels = <ThrowOnError extends boolean = false>(options?: Opt
  *
  * Authorization:
  *
- * `llmModel:update`: Modify LLM model pricing and modality settings
+ * `llmModel:update`: Modify LLM model pricing, modality and generation-parameter settings
  */
 export const syncLlmModels = <ThrowOnError extends boolean = false>(options?: Options<SyncLlmModelsData, ThrowOnError>) => (options?.client ?? client).post<SyncLlmModelsResponses, SyncLlmModelsErrors, ThrowOnError>({ url: '/api/llm-models/sync', ...options });
 
@@ -4094,7 +4094,7 @@ export const getModelsWithApiKeys = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `llmModel:update`: Modify LLM model pricing and modality settings
+ * `llmModel:update`: Modify LLM model pricing, modality and generation-parameter settings
  */
 export const updateModel = <ThrowOnError extends boolean = false>(options: Options<UpdateModelData, ThrowOnError>) => (options.client ?? client).patch<UpdateModelResponses, UpdateModelErrors, ThrowOnError>({
     url: '/api/llm-models/{id}',

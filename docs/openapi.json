@@ -13142,7 +13142,65 @@
           "format": {},
           "options": {
             "type": "object",
-            "additionalProperties": {}
+            "properties": {
+              "temperature": {
+                "type": "number"
+              },
+              "top_k": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "top_p": {
+                "type": "number"
+              },
+              "min_p": {
+                "type": "number"
+              },
+              "typical_p": {
+                "type": "number"
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "repeat_penalty": {
+                "type": "number"
+              },
+              "repeat_last_n": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "presence_penalty": {
+                "type": "number"
+              },
+              "frequency_penalty": {
+                "type": "number"
+              },
+              "stop": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "num_keep": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "num_ctx": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000000
+              },
+              "num_predict": {
+                "type": "integer",
+                "minimum": -2,
+                "maximum": 9007199254740991
+              }
+            }
           },
           "stream": {
             "nullable": true,
@@ -31232,22 +31290,72 @@
           "format": {},
           "options": {
             "type": "object",
-            "additionalProperties": {}
+            "properties": {
+              "temperature": {
+                "type": "number"
+              },
+              "top_k": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "top_p": {
+                "type": "number"
+              },
+              "min_p": {
+                "type": "number"
+              },
+              "typical_p": {
+                "type": "number"
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "repeat_penalty": {
+                "type": "number"
+              },
+              "repeat_last_n": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "presence_penalty": {
+                "type": "number"
+              },
+              "frequency_penalty": {
+                "type": "number"
+              },
+              "stop": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "num_keep": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "num_ctx": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000000
+              },
+              "num_predict": {
+                "type": "integer",
+                "minimum": -2,
+                "maximum": 9007199254740991
+              }
+            },
+            "additionalProperties": false
           },
           "stream": {
             "nullable": true,
             "type": "boolean"
           },
-          "keep_alive": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "number"
-              }
-            ]
-          },
+          "keep_alive": {},
           "think": {
             "anyOf": [
               {
@@ -121476,6 +121584,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -121513,6 +121622,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -144622,6 +144732,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -144659,6 +144770,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -190507,7 +190619,7 @@
         "tags": [
           "LLM Models"
         ],
-        "description": "Sync models from providers for all visible API keys and store them in the database\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Modify LLM model pricing and modality settings",
+        "description": "Sync models from providers for all visible API keys and store them in the database\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Modify LLM model pricing, modality and generation-parameter settings",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -190963,11 +191075,11 @@
                           "num_ctx": {
                             "type": "integer",
                             "minimum": 1,
-                            "maximum": 9007199254740991
+                            "maximum": 10000000
                           },
                           "num_predict": {
                             "type": "integer",
-                            "minimum": -9007199254740991,
+                            "minimum": -2,
                             "maximum": 9007199254740991
                           },
                           "reasoning_effort": {
@@ -191073,6 +191185,10 @@
                       },
                       "isFree": {
                         "type": "boolean"
+                      },
+                      "effectiveContextLength": {
+                        "nullable": true,
+                        "type": "number"
                       }
                     },
                     "required": [
@@ -191111,7 +191227,8 @@
                       "pricePerMillionCacheRead",
                       "pricePerMillionCacheWrite",
                       "cachePriceSource",
-                      "isFree"
+                      "isFree",
+                      "effectiveContextLength"
                     ],
                     "additionalProperties": false
                   }
@@ -191362,7 +191479,7 @@
         "tags": [
           "LLM Models"
         ],
-        "description": "Update LLM model details including custom pricing and modalities.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Modify LLM model pricing and modality settings",
+        "description": "Update LLM model details including custom pricing and modalities.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Modify LLM model pricing, modality and generation-parameter settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -191460,11 +191577,11 @@
                       "num_ctx": {
                         "type": "integer",
                         "minimum": 1,
-                        "maximum": 9007199254740991
+                        "maximum": 10000000
                       },
                       "num_predict": {
                         "type": "integer",
-                        "minimum": -9007199254740991,
+                        "minimum": -2,
                         "maximum": 9007199254740991
                       },
                       "reasoning_effort": {
@@ -191684,11 +191801,11 @@
                         "num_ctx": {
                           "type": "integer",
                           "minimum": 1,
-                          "maximum": 9007199254740991
+                          "maximum": 10000000
                         },
                         "num_predict": {
                           "type": "integer",
-                          "minimum": -9007199254740991,
+                          "minimum": -2,
                           "maximum": 9007199254740991
                         },
                         "reasoning_effort": {

@@ -368,6 +368,105 @@ describe("chat model routes", () => {
     ]);
   });
 
+  describe("GET /api/llm-models — effectiveContextLength", () => {
+    /**
+     * The models table shows the window Ollama will actually enforce, while
+     * `contextLength` stays the architectural ceiling `num_ctx` is validated
+     * against. Both have to travel on the response or the table and the chat
+     * context ring disagree.
+     */
+    async function fetchListedModel(params: {
+      apiKeyId: string;
+      defaultParameters?: Record<string, string | number | string[]> | null;
+      configuredParameters?: Record<string, number> | null;
+    }) {
+      const model = await ModelModel.create({
+        externalId: "ollama/qwen3",
+        provider: "ollama-native",
+        modelId: "qwen3",
+        contextLength: 262144,
+        defaultParameters: params.defaultParameters ?? null,
+        configuredParameters: params.configuredParameters ?? null,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        params.apiKeyId,
+        [{ id: model.id, modelId: model.modelId }],
+        "ollama-native",
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/llm-models",
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json().find((m: { id: string }) => m.id === model.id) as {
+        contextLength: number | null;
+        effectiveContextLength: number | null;
+      };
+    }
+
+    test("equals the architectural window when nothing caps it", async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "ollama" } });
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "ollama-native",
+        scope: "org",
+        name: "Ollama",
+      });
+      const listed = await fetchListedModel({ apiKeyId: key.id });
+
+      expect(listed.contextLength).toBe(262144);
+      expect(listed.effectiveContextLength).toBe(262144);
+    });
+
+    test("reports a Modelfile num_ctx that caps the architectural window", async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "ollama" } });
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "ollama-native",
+        scope: "org",
+        name: "Ollama",
+      });
+      const listed = await fetchListedModel({
+        apiKeyId: key.id,
+        defaultParameters: { num_ctx: "8192" },
+      });
+
+      // The architectural value must survive — it is the `num_ctx` ceiling, so
+      // overwriting it would forbid raising the window past the Modelfile.
+      expect(listed.contextLength).toBe(262144);
+      expect(listed.effectiveContextLength).toBe(8192);
+    });
+
+    test("prefers a configured num_ctx over the Modelfile default", async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "ollama" } });
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "ollama-native",
+        scope: "org",
+        name: "Ollama",
+      });
+      const listed = await fetchListedModel({
+        apiKeyId: key.id,
+        defaultParameters: { num_ctx: "8192" },
+        configuredParameters: { num_ctx: 32768 },
+      });
+
+      expect(listed.contextLength).toBe(262144);
+      expect(listed.effectiveContextLength).toBe(32768);
+    });
+  });
+
   test("syncModelsForVisibleApiKeys syncs visible keys and preserves baseUrl", async ({
     makeSecret,
   }) => {

@@ -452,7 +452,7 @@ Open **LLM → Models**, edit a native Ollama model, and set any parameter under
 | `stop`           | One sequence per line           | Newline-delimited, so a stop sequence may itself contain commas             |
 | Thinking         | Inherit / On / Off              | Thinking-capable models only. **Inherit** uses Ollama's own default          |
 
-A configured `num_ctx` also becomes the context window Archestra displays and enforces — so the context ring matches what Ollama actually allows, instead of the model's architectural maximum. See [Context Window Visualizer](/docs/platform-chat#context-window-visualizer).
+A configured `num_ctx` also becomes the context window Archestra displays and enforces. The **Context** column on the Models page and the chat context ring both show that window, not the model's architectural maximum. See [Context Window Visualizer](/docs/platform-chat#context-window-visualizer).
 
 The operator-wide output ceiling (`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`) is applied on top of `num_predict`; whichever is tighter wins.
 

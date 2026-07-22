@@ -96,6 +96,7 @@ import {
   OBSERVED_MODEL_SOURCE_DESCRIPTION,
   OBSERVED_MODEL_SOURCE_LABEL,
   type OLLAMA_NATIVE_PARAM_RULES,
+  resolveDisplayContextLength,
   validateConfiguredParameter,
 } from "./models-page-utils";
 
@@ -321,17 +322,39 @@ export default function ModelsPage() {
         },
       },
       {
-        accessorKey: "contextLength",
+        id: "contextLength",
+        // Sorting must follow what the cell shows, not the architectural column.
+        accessorFn: (row) => resolveDisplayContextLength(row).display,
         size: 100,
         header: "Context",
         cell: ({ row }) => {
           if (hasUnknownCapabilities(row.original)) {
             return <UnknownCapabilitiesBadge />;
           }
+          const { display, architectural, isCapped } =
+            resolveDisplayContextLength(row.original);
+          if (!isCapped) {
+            return (
+              <span className="text-sm">{formatContextLength(display)}</span>
+            );
+          }
           return (
-            <span className="text-sm">
-              {formatContextLength(row.original.contextLength ?? null)}
-            </span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-sm underline decoration-dotted underline-offset-4">
+                    {formatContextLength(display)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>
+                    This model supports {formatContextLength(architectural)}{" "}
+                    tokens, but is capped at {formatContextLength(display)} by
+                    its Ollama Modelfile or a configured num_ctx.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           );
         },
       },

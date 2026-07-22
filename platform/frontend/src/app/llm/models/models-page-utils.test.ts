@@ -7,6 +7,7 @@ import {
   getConfiguredParameterDefaults,
   type ModelsPageAvailableApiKey,
   type ModelsPageFilterableModel,
+  resolveDisplayContextLength,
   validateConfiguredParameter,
 } from "./models-page-utils";
 
@@ -254,5 +255,54 @@ describe("validateConfiguredParameter", () => {
         contextLength: null,
       }),
     ).toBe(true);
+  });
+});
+
+describe("resolveDisplayContextLength", () => {
+  it("shows the enforced window and flags it as capped", () => {
+    // qwen3-8k: a 262K-capable model whose Modelfile pins num_ctx to 8192.
+    expect(
+      resolveDisplayContextLength({
+        contextLength: 262144,
+        effectiveContextLength: 8192,
+      }),
+    ).toEqual({ display: 8192, architectural: 262144, isCapped: true });
+  });
+
+  it("does not flag a model running at its architectural window", () => {
+    expect(
+      resolveDisplayContextLength({
+        contextLength: 262144,
+        effectiveContextLength: 262144,
+      }),
+    ).toEqual({ display: 262144, architectural: 262144, isCapped: false });
+  });
+
+  it("falls back to the architectural value when none was resolved", () => {
+    // Providers other than Ollama never carry an effective value.
+    expect(
+      resolveDisplayContextLength({
+        contextLength: 200000,
+        effectiveContextLength: null,
+      }),
+    ).toEqual({ display: 200000, architectural: 200000, isCapped: false });
+  });
+
+  it("shows an enforced window even when the architectural one is unknown", () => {
+    // Nothing to compare against, so the gap cannot be claimed.
+    expect(
+      resolveDisplayContextLength({
+        contextLength: null,
+        effectiveContextLength: 8192,
+      }),
+    ).toEqual({ display: 8192, architectural: null, isCapped: false });
+  });
+
+  it("reports nothing when neither value is known", () => {
+    expect(resolveDisplayContextLength({})).toEqual({
+      display: null,
+      architectural: null,
+      isCapped: false,
+    });
   });
 });

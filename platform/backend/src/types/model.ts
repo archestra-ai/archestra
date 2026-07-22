@@ -314,5 +314,15 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   cachePriceSource: PriceSourceSchema.nullable(),
   /** True when the provider charges nothing for this model (both raw prices are zero). */
   isFree: z.boolean(),
+  /**
+   * Context window the model will actually enforce, from
+   * `ModelModel.resolveEffectiveContextLength`. **Use this for display.**
+   *
+   * The inherited `contextLength` is the *architectural* window and stays the
+   * ceiling that `num_ctx` is validated against, so it must not be overwritten
+   * with this value — doing so would cap `num_ctx` at an Ollama Modelfile's
+   * default and make raising the window impossible.
+   */
+  effectiveContextLength: z.number().nullable(),
 });
 export type ModelWithApiKeys = z.infer<typeof ModelWithApiKeysSchema>;

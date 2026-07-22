@@ -429,6 +429,13 @@ export function LlmProviderApiKeyForm({
       ),
     [allowedProviders],
   );
+  // The endpoint to suggest when the app runs in Docker. Derived from the
+  // provider's own default so it matches the transport in play — vLLM has no
+  // default endpoint at all, so it gets the advice without a concrete example.
+  const dockerBaseUrlExample = DEFAULT_PROVIDER_BASE_URLS[provider]?.replace(
+    "localhost",
+    "host.docker.internal",
+  );
   // Which of the two Ollama transports represents "Ollama" in the provider list.
   const ollamaListedTransport = ollamaTransportForContext(forEmbedding);
   // Embeddings only work on the `/v1` transport, so there is nothing to choose.
@@ -604,7 +611,17 @@ export function LlmProviderApiKeyForm({
   const prevProviderRef = useRef(provider);
   useEffect(() => {
     if (isEditMode || prevProviderRef.current === provider) return;
+    const previousProvider = prevProviderRef.current;
     prevProviderRef.current = provider;
+    // Switching between the two Ollama transports is not a change of provider
+    // in any way that invalidates a credential: it is the same server reached
+    // over a different endpoint, so the key and headers still apply. Only the
+    // base URL is transport-specific (`/v1` or not), and clearing it falls back
+    // to a placeholder showing the right default for the chosen transport.
+    if (isOllamaProvider(previousProvider) && isOllamaProvider(provider)) {
+      form.setValue("baseUrl", null);
+      return;
+    }
     form.setValue("apiKey", null);
     form.setValue("baseUrl", null);
     form.setValue("inferenceBaseUrl", null);
@@ -730,42 +747,6 @@ export function LlmProviderApiKeyForm({
             </Select>
           </div>
 
-          {showOllamaTransport && (
-            <div className="space-y-2">
-              <Label htmlFor="llm-provider-api-key-ollama-transport">
-                Transport
-              </Label>
-              <Select
-                value={provider}
-                onValueChange={(value) =>
-                  form.setValue(
-                    "provider",
-                    value as CreateLlmProviderApiKeyBody["provider"],
-                  )
-                }
-                // The transport is baked into the stored provider, so an
-                // existing key cannot switch without being recreated.
-                disabled={isEditMode || isPending || disableProvider}
-              >
-                <SelectTrigger
-                  id="llm-provider-api-key-ollama-transport"
-                  className="w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ollama-native">Native</SelectItem>
-                  <SelectItem value="ollama">OpenAI-compatible</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {provider === "ollama-native"
-                  ? "Ollama's own /api/chat. Supports per-model parameters such as num_ctx and thinking."
-                  : "Ollama's OpenAI-compatible /v1 endpoint. Supports embeddings; per-model parameters are ignored."}
-              </p>
-            </div>
-          )}
-
           {mode === "full" && (
             <div className="space-y-2">
               <Label htmlFor="llm-provider-api-key-name">
@@ -786,6 +767,53 @@ export function LlmProviderApiKeyForm({
             </div>
           )}
         </div>
+
+        {/*
+          Sits outside the `byosEnabled` branch below on purpose: the transport
+          is part of the provider, not a way of supplying credentials, so it
+          must stay visible when keys come from the vault.
+        */}
+        {showOllamaTransport && (
+          <div className="space-y-2">
+            <Label id="llm-provider-api-key-ollama-transport">Transport</Label>
+            <Tabs
+              value={provider}
+              onValueChange={(value) =>
+                form.setValue(
+                  "provider",
+                  value as CreateLlmProviderApiKeyBody["provider"],
+                )
+              }
+            >
+              <TabsList
+                className="grid w-full grid-cols-2"
+                aria-labelledby="llm-provider-api-key-ollama-transport"
+              >
+                {/*
+                  The transport is baked into the stored provider, so an
+                  existing key cannot switch without being recreated.
+                */}
+                <TabsTrigger
+                  value="ollama-native"
+                  disabled={isEditMode || isPending || disableProvider}
+                >
+                  Native
+                </TabsTrigger>
+                <TabsTrigger
+                  value="ollama"
+                  disabled={isEditMode || isPending || disableProvider}
+                >
+                  OpenAI-compatible
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <p className="text-xs text-muted-foreground">
+              {provider === "ollama-native"
+                ? "Ollama's own /api/chat. Supports per-model parameters such as num_ctx and thinking."
+                : "Ollama's OpenAI-compatible /v1 endpoint. Supports embeddings; per-model parameters are ignored."}
+            </p>
+          </div>
+        )}
 
         {byosEnabled ? (
           <Suspense
@@ -1194,8 +1222,14 @@ export function LlmProviderApiKeyForm({
             <p className="text-xs text-muted-foreground">
               If this app runs in Docker, <code>localhost</code> points at the
               container, not your host machine. Use{" "}
-              <code>host.docker.internal</code> instead (e.g.{" "}
-              <code>http://host.docker.internal:11434/v1</code>).
+              <code>host.docker.internal</code> instead
+              {dockerBaseUrlExample && (
+                <>
+                  {" "}
+                  (e.g. <code>{dockerBaseUrlExample}</code>)
+                </>
+              )}
+              .
             </p>
           )}
           <Input

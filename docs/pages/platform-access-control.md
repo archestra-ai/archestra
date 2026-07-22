@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-07-21
+lastUpdated: 2026-07-22
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -195,7 +195,7 @@ The following table lists all available permissions that can be assigned to cust
 | `llmLimit:update` | Modify existing usage limits |
 | `llmLimit:delete` | Remove usage limits |
 | `llmModel:read` | View synced LLM models and capabilities |
-| `llmModel:update` | Modify LLM model pricing and modality settings |
+| `llmModel:update` | Modify LLM model pricing, modality and generation-parameter settings |
 | `llmOauthClient:read` | View LLM OAuth client registrations |
 | `llmOauthClient:create` | Create LLM OAuth client registrations |
 | `llmOauthClient:update` | Modify LLM OAuth client registrations |

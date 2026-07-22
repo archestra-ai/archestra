@@ -674,7 +674,8 @@ async function getPerUserProviderModels(params: {
 
 /**
  * Shape a model row into the models-with-API-keys response, attaching the
- * computed effective pricing (input/output + cache) and price sources.
+ * computed effective pricing (input/output + cache) and price sources, plus the
+ * context window the model actually enforces.
  */
 function toModelWithApiKeysResponse(params: {
   model: Model;
@@ -682,18 +683,22 @@ function toModelWithApiKeysResponse(params: {
   apiKeys: LinkedApiKey[];
 }) {
   const { model, isBest, apiKeys } = params;
-  const pricing = ModelModel.toCapabilities(model);
+  const capabilities = ModelModel.toCapabilities(model);
   return {
     ...model,
     isBest,
     apiKeys,
-    pricePerMillionInput: pricing.pricePerMillionInput,
-    pricePerMillionOutput: pricing.pricePerMillionOutput,
-    isCustomPrice: pricing.isCustomPrice,
-    priceSource: pricing.priceSource,
-    pricePerMillionCacheRead: pricing.pricePerMillionCacheRead,
-    pricePerMillionCacheWrite: pricing.pricePerMillionCacheWrite,
-    cachePriceSource: pricing.cachePriceSource,
+    // The spread above carries the architectural `contextLength`, which stays
+    // the ceiling for `num_ctx` validation. Displaying it would over-promise
+    // when Ollama enforces a smaller window, so the resolved one rides along.
+    effectiveContextLength: capabilities.contextLength,
+    pricePerMillionInput: capabilities.pricePerMillionInput,
+    pricePerMillionOutput: capabilities.pricePerMillionOutput,
+    isCustomPrice: capabilities.isCustomPrice,
+    priceSource: capabilities.priceSource,
+    pricePerMillionCacheRead: capabilities.pricePerMillionCacheRead,
+    pricePerMillionCacheWrite: capabilities.pricePerMillionCacheWrite,
+    cachePriceSource: capabilities.cachePriceSource,
     isFree: isFreeModel(model),
   };
 }

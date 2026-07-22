@@ -8,8 +8,9 @@ import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recordi
  * The backend only relays the GitHub device flow (github.com's OAuth endpoints
  * refuse browser CORS); everything else here talks straight to api.github.com,
  * which allows it. The recording bundle therefore never transits our server on
- * its way to the gallery, and the token GitHub hands back lives in this
- * module's memory for the tab's lifetime — it is never persisted anywhere.
+ * its way to the gallery, and the token GitHub hands back stays in the
+ * browser (localStorage — one sign-in covers the hackathon); our server
+ * never sees it.
  *
  * The submission is the standard fork workflow, so it needs nothing but the
  * `public_repo` scope the device flow asked for: fork the gallery repository,
@@ -51,15 +52,34 @@ export class DuplicateSubmissionError extends Error {
   }
 }
 
-/** The participant's GitHub token, kept for the tab's lifetime only. */
+/**
+ * The participant's GitHub token — persisted in browser storage so ONE
+ * sign-in covers the whole hackathon, not just one page load (re-auth on
+ * every visit read as "why am I signing in again?"). Scope is public_repo
+ * only; GitHub can revoke any time, and a 401 drops it so the dialog
+ * re-runs the sign-in.
+ */
+const GITHUB_TOKEN_STORAGE_KEY = "archestra.appGalleryGithubToken";
+
 let cachedToken: string | null = null;
 
 export function takeCachedGithubToken(): string | null {
+  if (cachedToken) return cachedToken;
+  try {
+    cachedToken = localStorage.getItem(GITHUB_TOKEN_STORAGE_KEY);
+  } catch {
+    // Storage blocked — in-memory only, sign-in returns each page load.
+  }
   return cachedToken;
 }
 
 export function dropCachedGithubToken(): void {
   cachedToken = null;
+  try {
+    localStorage.removeItem(GITHUB_TOKEN_STORAGE_KEY);
+  } catch {
+    // Storage blocked — nothing was persisted.
+  }
 }
 
 /**
@@ -114,7 +134,7 @@ export async function acquireGithubToken(params: {
     }
     failureStreak = 0;
     if (poll.data.status === "complete") {
-      cachedToken = poll.data.accessToken;
+      storeGithubToken(poll.data.accessToken);
       return poll.data.accessToken;
     }
     if (poll.data.status === "slow_down") {
@@ -466,7 +486,9 @@ export async function fetchSubmittedPrState(
         headers: {
           accept: "application/vnd.github+json",
           "x-github-api-version": "2022-11-28",
-          ...(cachedToken ? { authorization: `Bearer ${cachedToken}` } : {}),
+          ...(takeCachedGithubToken()
+            ? { authorization: `Bearer ${takeCachedGithubToken()}` }
+            : {}),
         },
       },
     );
@@ -640,6 +662,15 @@ async function fetchExistingFileSha(params: {
       return null;
     }
     throw error;
+  }
+}
+
+function storeGithubToken(token: string): void {
+  cachedToken = token;
+  try {
+    localStorage.setItem(GITHUB_TOKEN_STORAGE_KEY, token);
+  } catch {
+    // Storage blocked — the tab keeps it in memory.
   }
 }
 

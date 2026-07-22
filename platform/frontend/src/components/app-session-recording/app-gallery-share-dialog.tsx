@@ -23,6 +23,11 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -338,37 +343,64 @@ export function AppGalleryShareButton(props: {
       </Button>
     ) : null;
 
+  const shareButton = (
+    <span className="inline-flex" data-tour="share">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-7 text-muted-foreground hover:text-foreground"
+        aria-label="Submit this session to Archestra for review"
+        disabled={props.disabled || existingPr !== null}
+        onClick={() => setDialogOpen(true)}
+      >
+        {/* The create-a-pull-request glyph, not a generic share icon —
+            what the button does IS filing a PR, and participants know
+            the shape from GitHub itself. */}
+        <GitPullRequestCreateArrow className="size-4" />
+      </Button>
+    </span>
+  );
+
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex" data-tour="share">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-7 text-muted-foreground hover:text-foreground"
-              aria-label="Submit this session to Archestra for review"
-              disabled={props.disabled || existingPr !== null}
-              onClick={() => setDialogOpen(true)}
+      {existingPr ? (
+        // A HoverCard, not a Tooltip, because the explanation links the PR —
+        // a tooltip closes before a link inside it can be clicked (same
+        // reasoning as the recorder pill's hover card).
+        <HoverCard openDelay={200}>
+          <HoverCardTrigger asChild>{shareButton}</HoverCardTrigger>
+          <HoverCardContent side="top" sideOffset={8} className="w-64 text-xs">
+            {existingPr.merged ? (
+              <>Already in the Apps Gallery — this app&apos;s </>
+            ) : (
+              <>Already submitted — this app&apos;s </>
+            )}
+            <a
+              className={LINK_CLASS}
+              href={existingPr.prUrl}
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              {/* The create-a-pull-request glyph, not a generic share icon —
-                  what the button does IS filing a PR, and participants know
-                  the shape from GitHub itself. */}
-              <GitPullRequestCreateArrow className="size-4" />
-            </Button>
-          </span>
-        </TooltipTrigger>
-        <TooltipContent sideOffset={8} className="max-w-[260px] text-xs">
-          {existingPr
-            ? existingPr.merged
-              ? "Already in the Apps Gallery — this app's pull request was merged."
-              : "Already submitted — this app's pull request is waiting for review."
-            : props.disabled && props.disabledReason
+              pull request
+            </a>
+            {existingPr.merged ? (
+              <> was merged.</>
+            ) : (
+              <> is waiting for review.</>
+            )}
+          </HoverCardContent>
+        </HoverCard>
+      ) : (
+        <Tooltip>
+          <TooltipTrigger asChild>{shareButton}</TooltipTrigger>
+          <TooltipContent sideOffset={8} className="max-w-[260px] text-xs">
+            {props.disabled && props.disabledReason
               ? props.disabledReason
               : "Submit to Archestra for review!"}
-        </TooltipContent>
-      </Tooltip>
+          </TooltipContent>
+        </Tooltip>
+      )}
 
       <StandardDialog
         open={open}

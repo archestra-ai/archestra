@@ -139,11 +139,11 @@ export function AppGalleryShareButton(props: {
       const trimmed = pruneTrailingTrimEvents(validation.bundle);
       slug = gallerySubmissionSlug(trimmed);
 
-      let token = takeCachedGithubToken();
+      const token = takeCachedGithubToken();
       if (!token) {
         failedTitle = "Sign-in failed";
         setState({ step: "working", label: CONNECTING_LABEL });
-        token = await acquireGithubToken({
+        await acquireGithubToken({
           signal: cancellation.signal,
           onUserCode: (info) =>
             setState({
@@ -152,6 +152,13 @@ export function AppGalleryShareButton(props: {
               verificationUri: info.verificationUri,
             }),
         });
+        // Authorized — stop and wait for an explicit "Create Pull Request"
+        // click (the token is cached, so the next run submits directly).
+        // Auto-chaining into the submission right as the participant returns
+        // from the GitHub tab made submission errors read as sign-in
+        // failures.
+        setState({ step: "ready" });
+        return;
       }
 
       const { prUrl } = await submitRecordingToAppGallery({
@@ -352,6 +359,7 @@ type ShareState =
   | { step: "idle" }
   | { step: "signin" }
   | { step: "connect"; userCode: string; verificationUri: string }
+  | { step: "ready" }
   | { step: "working"; label: string }
   | { step: "done"; prUrl: string }
   | { step: "already"; prUrl: string; merged: boolean }
@@ -404,6 +412,9 @@ function dialogChrome(
       description:
         "Once authorized, Archestra will create a pull request to the Apps Hackathon repository on GitHub for you.",
     };
+  }
+  if (state.step === "ready") {
+    return { title: "Ready to submit" };
   }
   if (state.step === "working") {
     return { title: "Submitting your demo…" };
@@ -503,6 +514,22 @@ function ShareDialogBody(props: {
         onOpenGithub={props.onOpenGithub}
         onCancel={props.onCancelAuth}
       />
+    );
+  }
+  if (state.step === "ready") {
+    // GitHub is authorized; the submission waits for this explicit click so
+    // its errors can never be mistaken for sign-in ones.
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-fit"
+        onClick={props.onRetry}
+      >
+        <GitPullRequestCreateArrow className="mr-2 h-4 w-4" />
+        Create Pull Request
+      </Button>
     );
   }
   if (state.step === "working") {
@@ -720,14 +747,16 @@ function ManualStep(props: {
   repo: { owner: string; name: string };
 }) {
   const repoUrl = `https://github.com/${props.repo.owner}/${props.repo.name}`;
+  const plural = props.files.length > 1 ? "s" : "";
 
+  // Regular chat-sized text — these are instructions, not fine print.
   return (
-    <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+    <div className="flex flex-col gap-2 text-sm text-muted-foreground">
       <p>
-        1. Download your submission:{" "}
+        1. Download{" "}
         {props.files.map((file, index) => (
           <span key={file.name}>
-            {index > 0 && ", "}
+            {index > 0 && " and "}
             <button
               type="button"
               className={LINK_CLASS}
@@ -737,7 +766,7 @@ function ManualStep(props: {
             </button>
           </span>
         ))}{" "}
-        — the same files we would have uploaded.
+        bundle file{plural}.
       </p>
       <p>
         2.{" "}
@@ -748,17 +777,18 @@ function ManualStep(props: {
           rel="noopener noreferrer"
         >
           Fork the Apps Hackathon repository
-        </a>{" "}
-        — skip this if you already have a fork.
+        </a>
+        .
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
-        <span>3. In your fork, create a new branch:</span>
+        <span>3. Create new branch</span>
         <CopyChip text={gallerySubmissionBranch(props.slug)} />
       </div>
+      {/* The folder is the gallery's one predictable pattern —
+          submissions/<login>/<slug>/ — that the site walks to build its
+          grid, so the manual path must spell it exactly. */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span>
-          4. Upload the downloaded file{props.files.length > 1 ? "s" : ""} to:
-        </span>
+        <span>4. Put bundle file{plural} into folder</span>
         <CopyChip
           text={gallerySubmissionFolder(
             props.login ?? "YOUR-GITHUB-USERNAME",
@@ -767,7 +797,7 @@ function ManualStep(props: {
         />
       </div>
       <p>
-        5. Open <b>Compare &amp; pull request</b> to{" "}
+        5. <b>Compare &amp; pull request</b> to{" "}
         <a
           className={LINK_CLASS}
           href={repoUrl}
@@ -779,8 +809,11 @@ function ManualStep(props: {
         :main.
       </p>
       <div className="flex flex-col gap-1.5">
-        <span>6. Use this pull request title and description:</span>
+        <span>6. Copy PR title</span>
         <CopyChip text={props.pr.title} />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span>7. Copy PR description</span>
         <CopyChip text={props.pr.body} multiline />
       </div>
     </div>
@@ -800,7 +833,7 @@ function CopyChip(props: { text: string; multiline?: boolean }) {
     <button
       type="button"
       className={cn(
-        "flex w-fit max-w-full items-start gap-1 rounded bg-muted px-2 py-1 text-left font-mono text-xs hover:bg-muted/70",
+        "flex w-fit max-w-full items-start gap-1 rounded bg-muted px-2 py-1 text-left font-mono text-sm hover:bg-muted/70",
         props.multiline
           ? "max-h-28 overflow-y-auto whitespace-pre-wrap break-words"
           : "items-center break-all",
@@ -819,9 +852,9 @@ function CopyChip(props: { text: string; multiline?: boolean }) {
     >
       <span className="min-w-0 flex-1">{props.text}</span>
       {copied ? (
-        <Check className="h-3.5 w-3.5 shrink-0 text-green-500" />
+        <Check className="h-4 w-4 shrink-0 text-green-500" />
       ) : (
-        <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <Copy className="h-4 w-4 shrink-0 text-muted-foreground" />
       )}
     </button>
   );

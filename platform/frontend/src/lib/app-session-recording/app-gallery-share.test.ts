@@ -181,7 +181,9 @@ describe("submitRecordingToAppGallery", () => {
     };
     expect(pr.head).toBe("sam:submission/pr_review_queue");
     expect(pr.base).toBe("main");
-    expect(pr.title).toBe("App session: Building a review queue");
+    // The app's NAME, not the recording's default session title — those
+    // carry a timestamp that means nothing in a PR title.
+    expect(pr.title).toBe("App session: PR Review Queue");
     expect(pr.body).toContain("PR Review Queue");
     expect(pr.body).toContain("Category: Development");
     expect(pr.body).toContain("MCP servers: github");

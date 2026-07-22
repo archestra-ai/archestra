@@ -247,7 +247,7 @@ export async function submitRecordingToAppGallery(params: {
     const path = `${forkPath}/contents/${dir}/${file.name}`;
     const priorSha = await fetchExistingFileSha({ gh, path, branch });
     await gh("PUT", path, {
-      message: `Add ${file.name} for: ${bundle.recording.title}`,
+      message: `Add ${file.name} for: ${bundle.app.name}`,
       content: toBase64(file.bytes),
       branch,
       ...(priorSha ? { sha: priorSha } : {}),
@@ -339,7 +339,9 @@ export function buildGallerySubmissionPr(bundle: AppRecordingBundle): {
   body: string;
 } {
   return {
-    title: `App session: ${bundle.recording.title}`,
+    // The app's name, NOT the recording title — the recorder's default
+    // session titles carry a timestamp, which means nothing in a PR title.
+    title: `App session: ${bundle.app.name}`,
     body: prBody(bundle),
   };
 }

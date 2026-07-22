@@ -336,8 +336,14 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     // the persistent [C] entry, present on every launch
     expect(script).toContain("To reconfigure your");
     expect(script).toContain("press [C]");
-    expect(script).toContain("offer_reconfigure");
+    expect(script).toContain("offer_reconfigure_tail");
     expect(script).toContain("reconfigure_menu");
+    // it is drawn BEFORE the first probe (so it shows the whole run), not
+    // just in the closing tail: the hint call sits right after the rows are
+    // printed and immediately before the cursor moves back up to probe
+    expect(script).toContain(
+      `draw_reconfigure_hint\nprintf '\\033[%dA' "$ACTIVE_TOTAL"`,
+    );
     // the healthy pass waits a beat for [C] before launching
     expect(script).toContain("RECONFIG_WAIT=1.5");
     expect(script).toContain('read -rs -n 1 -t "$RECONFIG_WAIT" key');
@@ -355,14 +361,14 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("HANG_TIGHT_AFTER_SECONDS=10");
     expect(script).toContain("few more seconds, hang tight...");
     expect(script).toContain("trying to connect...");
-    // the disconnect offer sits on its own line below the row (after a
-    // blank line), drawn via cursor save/restore so the dots keep
-    // appending to the row above it
+    // the disconnect offer sits two lines below the block — the persistent
+    // [C] hint takes +1, this (Y/n) offer +2 — so both stay visible, drawn
+    // via cursor save/restore so the dots keep appending to the row above
     expect(script).toContain(
       "Disconnect all $ACTIVE_TOTAL unreachable resources from Claude now? (Y/n)",
     );
     expect(script).toContain(
-      "printf '\\033[s\\033[%dB\\r\\033[2K%s \\033[u' \"$((ACTIVE_TOTAL + 1))\"",
+      "printf '\\033[s\\033[%dB\\r\\033[2K%s \\033[u' \"$((ACTIVE_TOTAL + 2))\"",
     );
     expect(script).toContain("next_delay=$((next_delay * 2))");
     expect(script).toContain("RANDOM % 2");
@@ -388,7 +394,12 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     // alternate screen in, restored on ANY exit — the terminal stays clean
     // after claude exits
     expect(script).toContain("\\033[?1049h");
-    expect(script).toContain(`trap 'printf "\\033[?1049l"' EXIT`);
+    expect(script).toContain(
+      `trap 'stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"' EXIT`,
+    );
+    // echo off for the whole interactive run so keys buffered during the
+    // probe animation leave no smudge
+    expect(script).toContain("stty -echo </dev/tty");
     expect(script).toContain(
       'if [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then TICK=0.25; fi',
     );

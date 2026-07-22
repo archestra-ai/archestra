@@ -92,11 +92,16 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     // the persistent [C] entry, shown on every launch, with a ~1.5s window
     // for it on the healthy pass
     expect(script).toContain("function Show-ArchReconfigureOffer");
+    expect(script).toContain("function Show-ArchReconfigureHint");
     expect(script).toContain(
       "To reconfigure your ' + $AppName + ' connection press [C]",
     );
     expect(script).toContain("AddMilliseconds(1500)");
-    expect(script).toContain("else { Show-ArchReconfigureOffer }");
+    expect(script).toContain("Show-ArchReconfigureOffer");
+    // on VT the hint is drawn before the probe loop, so it shows the whole run
+    expect(script).toContain(
+      "Show-ArchReconfigureHint\n  Write-Host -NoNewline (\"$Esc[\" + $ActiveRemotes.Count + 'A')",
+    );
     // the down prompt offers the same menu as an alternative to (Y/n)
     expect(script).toContain(
       "or press [C] to reconfigure your ' + $AppName + ' connection",

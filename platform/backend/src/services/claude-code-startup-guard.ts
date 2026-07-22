@@ -519,14 +519,23 @@ reconfigure_menu() {
   return 0
 }
 
-# The persistent entry under the rows, shown on every launch. On the
-# all-healthy pass the guard waits a beat (RECONFIG_WAIT) for [C] before it
-# lets claude start, so the offer is real without holding the launch up.
-offer_reconfigure() {
-  printf '\\033[s\\n\\r\\033[2K%s  To reconfigure your %s connection press [C]%s\\033[u' "$C_DIM" "$APP_NAME" "$C_RESET"
+# The persistent entry under the rows. It is drawn once BEFORE the first
+# probe and stays on screen the whole run — through every check and the
+# healthy pass's closing beat — so [C] is always offered, never just at the
+# end. Drawn one line below the block via save/restore, so the rows above
+# keep animating without touching it.
+RECONFIG_HINT_TEXT="  To reconfigure your $APP_NAME connection press [C]"
+draw_reconfigure_hint() { printf '\\033[s\\n\\r\\033[2K%s%s%s\\033[u' "$C_DIM" "$RECONFIG_HINT_TEXT" "$C_RESET"; }
+clear_reconfigure_hint() { printf '\\033[s\\n\\r\\033[2K\\033[u'; }
+
+# The healthy pass's closing beat: the hint is already on screen, so just wait
+# RECONFIG_WAIT for the key before letting claude start. A [C] pressed earlier
+# while the probes ran was buffered (echo is off, so it left no smudge) and is
+# read here.
+offer_reconfigure_tail() {
   key=''
   read -rs -n 1 -t "$RECONFIG_WAIT" key </dev/tty 2>/dev/null || key=''
-  printf '\\033[s\\n\\r\\033[2K\\033[u'
+  clear_reconfigure_hint
   case "$key" in
     c|C) reconfigure_menu ;;
   esac
@@ -584,12 +593,12 @@ show_wait_prompt() {
   else
     wait_prompt="Disconnect all $ACTIVE_TOTAL unreachable resources from Claude now? (Y/n)"
   fi
-  # one blank line below the whole row block (the pending rows are already
-  # on screen beneath the probing one)
-  printf '\\033[s\\033[%dB\\r\\033[2K%s \\033[u' "$((ACTIVE_TOTAL + 1))" "$wait_prompt"
+  # two lines below the block: the persistent [C] hint sits at +1, this
+  # (Y/n) offer at +2, so both stay visible during the outage wait
+  printf '\\033[s\\033[%dB\\r\\033[2K%s \\033[u' "$((ACTIVE_TOTAL + 2))" "$wait_prompt"
 }
 clear_wait_prompt() {
-  [ "$WAIT_PROMPT_SHOWN" = "1" ] && printf '\\033[s\\033[%dB\\r\\033[2K\\033[u' "$((ACTIVE_TOTAL + 1))"
+  [ "$WAIT_PROMPT_SHOWN" = "1" ] && printf '\\033[s\\033[%dB\\r\\033[2K\\033[u' "$((ACTIVE_TOTAL + 2))"
   WAIT_PROMPT_SHOWN=0
   return 0
 }
@@ -617,6 +626,7 @@ wait_for_health() {
       case "$key" in
         y|Y) DISC_ALL=1; break ;;
         n|N) SKIP_ALL=1; break ;;
+        c|C) OPEN_MENU=1; break ;;
         '') [ "$WAIT_PROMPT_SHOWN" = "1" ] && { DISC_ALL=1; break; } ;;
       esac
     fi
@@ -665,22 +675,35 @@ wait_for_health() {
 # exits. When the launch needed attention, the outcome is held briefly
 # before the alternate screen closes over it.
 printf '\\033[?1049h\\033[H\\033[2J'
-trap 'printf "\\033[?1049l"' EXIT
+# Echo off for the whole interactive run: keys pressed while the probes animate
+# (before any read) would otherwise smudge the screen. Restored on exit.
+stty -echo </dev/tty 2>/dev/null || true
+trap 'stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"' EXIT
 GUARD_DWELL=0
+OPEN_MENU=0
 finish_guard() {
   [ "$GUARD_DWELL" = "1" ] && sleep 1.2
   exit 0
 }
 ${guardHeader(ctx)}
 # Every row is on screen from the start: probed rows keep their glyph, the
-# probing row is bright, and everything still waiting sits dim below it.
+# probing row is bright, and everything still waiting sits dim below it. The
+# [C] reconfigure entry is drawn right here, before the first probe, so it is
+# on screen the entire run — not just at the end.
 for i in $ACTIVE_IDXS; do
   printf '  %s%s%s\\n' "$C_DIM" "\${GUARD_LABELS[$i]}" "$C_RESET"
 done
+draw_reconfigure_hint
 printf '\\033[%dA' "$ACTIVE_TOTAL"
 if [ -n "$HEALTH_URL" ]; then
   spin_start "\${GUARD_LABELS[$FIRST_ACTIVE]}"
   wait_for_health || true
+fi
+if [ "$OPEN_MENU" = "1" ]; then
+  printf '\\033[%dB\\r' "$ACTIVE_TOTAL"
+  clear_reconfigure_hint
+  reconfigure_menu
+  finish_guard
 fi
 if [ "$DISC_ALL" = "1" ]; then
   line_reset
@@ -720,9 +743,10 @@ while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
   i=$((i+1))
 done
 if [ "$DOWN_COUNT" -gt 0 ]; then
+  clear_reconfigure_hint
   prompt_down_all
 else
-  offer_reconfigure
+  offer_reconfigure_tail
 fi
 finish_guard
 `;

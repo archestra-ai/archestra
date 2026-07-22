@@ -446,21 +446,37 @@ function Invoke-ArchReconfigureMenu {
   }
 }
 
-# The persistent entry under the rows, shown on every launch. On the
-# all-healthy pass the guard waits a beat (~1.5s) for [C] before it lets
-# claude start, so the offer is real without holding the launch up.
-function Show-ArchReconfigureOffer {
-  $baseTop = 0; try { $baseTop = [Console]::CursorTop } catch { }
+# The persistent [C] entry. On VT it is drawn once BEFORE the first probe
+# (cursor at the block's base) and stays on screen the whole run; legacy
+# consoles draw it in the closing tail instead. One line below the block.
+function Show-ArchReconfigureHint {
   $text = '  To reconfigure your ' + $AppName + ' connection press [C]'
   if ($UseVt) {
     Write-Host -NoNewline ("$Esc" + '7' + "$Esc[1B\`r$Esc[2K")
     Write-Arch $text DarkGray -NoNewline
     Write-Host -NoNewline ("$Esc" + '8')
   } else {
+    $baseTop = 0; try { $baseTop = [Console]::CursorTop } catch { }
     try { [Console]::SetCursorPosition(0, $baseTop + 1) } catch { }
     Clear-ArchLine; Write-Arch $text DarkGray -NoNewline
     try { [Console]::SetCursorPosition(0, $baseTop) } catch { }
   }
+}
+function Clear-ArchReconfigureHint {
+  if ($UseVt) { Write-Host -NoNewline ("$Esc" + '7' + "$Esc[1B\`r$Esc[2K$Esc" + '8') }
+  else {
+    $baseTop = 0; try { $baseTop = [Console]::CursorTop } catch { }
+    try { [Console]::SetCursorPosition(0, $baseTop + 1) } catch { }
+    Clear-ArchLine
+    try { [Console]::SetCursorPosition(0, $baseTop) } catch { }
+  }
+}
+
+# The healthy pass's closing beat: on legacy consoles draw the hint now; on VT
+# it is already on screen. Either way wait ~1.5s for [C] (a press from during
+# the probes is buffered and read here), then clear and open the menu on 'c'.
+function Show-ArchReconfigureOffer {
+  if (-not $UseVt) { Show-ArchReconfigureHint }
   $key = ''
   $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
   while ([DateTime]::UtcNow -lt $deadline) {
@@ -468,12 +484,7 @@ function Show-ArchReconfigureOffer {
     if ($key) { break }
     Start-Sleep -Milliseconds 40
   }
-  if ($UseVt) { Write-Host -NoNewline ("$Esc" + '7' + "$Esc[1B\`r$Esc[2K$Esc" + '8') }
-  else {
-    try { [Console]::SetCursorPosition(0, $baseTop + 1) } catch { }
-    Clear-ArchLine
-    try { [Console]::SetCursorPosition(0, $baseTop) } catch { }
-  }
+  Clear-ArchReconfigureHint
   if ($key -eq 'c' -or $key -eq 'C') { Invoke-ArchReconfigureMenu }
 }
 
@@ -544,7 +555,7 @@ function Show-ArchWaitPrompt {
   # already on screen beneath the probing one; without VT rows still draw
   # one at a time, so the prompt sits two lines below the row)
   if ($UseVt) {
-    Write-Host -NoNewline ("$Esc" + '7' + "$Esc[" + ($ActiveRemotes.Count + 1) + 'B' + "\`r" + "$Esc[2K" + (Get-ArchWaitPromptText) + "$Esc" + '8')
+    Write-Host -NoNewline ("$Esc" + '7' + "$Esc[" + ($ActiveRemotes.Count + 2) + 'B' + "\`r" + "$Esc[2K" + (Get-ArchWaitPromptText) + "$Esc" + '8')
   } else {
     try {
       $x = [Console]::CursorLeft; $y = [Console]::CursorTop
@@ -559,7 +570,7 @@ function Clear-ArchWaitPrompt {
   if (-not $Script:WaitPromptShown) { return }
   $Script:WaitPromptShown = $false
   if ($UseVt) {
-    Write-Host -NoNewline ("$Esc" + '7' + "$Esc[" + ($ActiveRemotes.Count + 1) + 'B' + "\`r" + "$Esc[2K" + "$Esc" + '8')
+    Write-Host -NoNewline ("$Esc" + '7' + "$Esc[" + ($ActiveRemotes.Count + 2) + 'B' + "\`r" + "$Esc[2K" + "$Esc" + '8')
   } else {
     try {
       $x = [Console]::CursorLeft; $y = [Console]::CursorTop
@@ -579,6 +590,7 @@ function Clear-ArchWaitPrompt {
 # only once the prompt is actually on screen.
 $Script:SkipAll = $false
 $Script:DiscAll = $false
+$Script:OpenMenu = $false
 $Script:LastWaitNote = ''
 function Wait-ArchHealth {
   if (Invoke-ArchHealthFetch) { $Script:HealthState = 'ok'; return }
@@ -591,6 +603,7 @@ function Wait-ArchHealth {
     $key = Read-ArchKey
     if ($key -eq 'y' -or $key -eq 'Y') { $Script:DiscAll = $true; break }
     if ($key -eq 'n' -or $key -eq 'N') { $Script:SkipAll = $true; break }
+    if ($key -eq 'c' -or $key -eq 'C') { $Script:OpenMenu = $true; break }
     if ($key -eq "\`r" -and $Script:WaitPromptShown) { $Script:DiscAll = $true; break }
     $now = [DateTime]::UtcNow
     if ($now -ge $nextAttempt) {
@@ -643,11 +656,19 @@ ${guardHeader(ctx)}
 # (Legacy consoles without VT keep the one-row-at-a-time rendering.)
 if ($UseVt) {
   foreach ($r in $ActiveRemotes) { Write-Arch ('  ' + $r.Label) DarkGray }
+  # the [C] entry is drawn before the first probe so it shows the whole run
+  Show-ArchReconfigureHint
   Write-Host -NoNewline ("$Esc[" + $ActiveRemotes.Count + 'A')
 }
 if ($HealthUrl) {
   Show-ArchSpinStart $ActiveRemotes[0].Label ''
   Wait-ArchHealth
+}
+if ($Script:OpenMenu) {
+  if ($UseVt) { Write-Host -NoNewline ("$Esc[" + $ActiveRemotes.Count + 'B' + "\`r") }
+  Clear-ArchReconfigureHint
+  Invoke-ArchReconfigureMenu
+  Exit-ArchGuard
 }
 if ($Script:DiscAll) {
   Clear-ArchLine
@@ -673,8 +694,12 @@ foreach ($r in $ActiveRemotes) {
   if (Test-ArchResourceDown $r) { Show-ArchDown $r; $DownRemotes += $r }
   else { Show-ArchOk $r.Label }
 }
-if ($DownRemotes.Count -gt 0) { Show-ArchDownSummaryPrompt $DownRemotes }
-else { Show-ArchReconfigureOffer }
+if ($DownRemotes.Count -gt 0) {
+  if ($UseVt) { Clear-ArchReconfigureHint }
+  Show-ArchDownSummaryPrompt $DownRemotes
+} else {
+  Show-ArchReconfigureOffer
+}
 Exit-ArchGuard
 `;
 }

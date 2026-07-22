@@ -174,12 +174,18 @@ describe("submitRecordingToAppGallery", () => {
     expect(preflight?.url).toContain("head=sam%3Asubmission%2Fpr_review_queue");
     expect(preflight?.url).toContain("state=all");
 
-    // The committed file is the bundle itself, byte for byte — and a fresh
-    // branch uploads without an update sha.
+    // The committed file is the bundle itself, byte for byte, with the
+    // submitter's GitHub identity stamped on (the mocked /user has no
+    // public name, so it lands as null) — and a fresh branch uploads
+    // without an update sha.
     const upload = calls.find((c) => c.method === "PUT") as {
       body: { content: string; branch: string };
     };
-    expect(JSON.parse(atob(upload.body.content))).toEqual(makeBundle());
+    const expected = makeBundle();
+    expect(JSON.parse(atob(upload.body.content))).toEqual({
+      ...expected,
+      meta: { ...expected.meta, github: { login: "sam", name: null } },
+    });
     expect(upload.body).not.toHaveProperty("sha");
 
     // The PR names the participant's branch as head and carries the metadata.
@@ -197,6 +203,33 @@ describe("submitRecordingToAppGallery", () => {
     expect(pr.body).toContain("PR Review Queue");
     expect(pr.body).toContain("Category: Development");
     expect(pr.body).toContain("MCP servers: github");
+  });
+
+  test("the submitter's GitHub identity is stamped as login+name only — an email in the /user response is never uploaded", async () => {
+    stubGithub({
+      respond: (method, url) =>
+        method === "GET" && url.endsWith("/user")
+          ? Response.json({
+              login: "sam",
+              name: "Sam Real Name",
+              email: "sam@example.com",
+            })
+          : null,
+    });
+
+    await submit();
+
+    const upload = calls.find((c) => c.method === "PUT") as {
+      body: { content: string };
+    };
+    const uploaded = JSON.parse(atob(upload.body.content));
+    expect(uploaded.meta.github).toEqual({
+      login: "sam",
+      name: "Sam Real Name",
+    });
+    // Not merely absent from `meta.github` — nowhere in the uploaded bytes.
+    expect(atob(upload.body.content)).not.toContain("sam@example.com");
+    expect(atob(upload.body.content)).not.toContain("@example.com");
   });
 
   test("commits the last canvas frame as the thumbnail when one exists", async () => {
@@ -240,7 +273,15 @@ describe("submitRecordingToAppGallery", () => {
     await submit({ bundle });
 
     const uploads = calls.filter((c) => c.method === "PUT");
-    const files = buildGallerySubmissionFiles(bundle);
+    // The automatic path stamps the submitter's GitHub identity onto the
+    // bundle before serializing it (the dialog does the same for the manual
+    // download) — mirror that here so this compares against what the
+    // upload actually serialized.
+    const stamped: AppRecordingBundle = {
+      ...bundle,
+      meta: { ...bundle.meta, github: { login: "sam", name: null } },
+    };
+    const files = await buildGallerySubmissionFiles(stamped);
     // Same files, same order, same bytes — the manual fallback's downloads
     // must match what the automatic path commits, byte for byte.
     expect(

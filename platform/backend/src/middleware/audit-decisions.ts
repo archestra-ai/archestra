@@ -424,6 +424,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: skill × team; parent (skill) audited",
   },
+  skillEnvironmentsTable: {
+    audited: false,
+    reason:
+      "join: skill × environment; parent (skill) audited, and the skill audit snapshot includes environmentIds",
+  },
   skillFilesTable: {
     audited: false,
     reason: "child of skill; parent (skill) audited",
@@ -607,6 +612,11 @@ export const AUDIT_DECISIONS = {
   chatActiveRunEventsTable: {
     audited: false,
     reason: "chat active run event stream; child of chatActiveRunsTable",
+  },
+  chatToolExecutionClaimsTable: {
+    audited: false,
+    reason:
+      "per-tool-call idempotency ledger; runtime dedup state, mcp_tool_calls audits the execution",
   },
 
   // =========================================================================

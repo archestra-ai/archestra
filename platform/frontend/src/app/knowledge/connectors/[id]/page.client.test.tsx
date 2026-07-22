@@ -22,6 +22,8 @@ const noopMutation = () => ({
   isPending: false,
 });
 
+vi.mock("@/lib/hooks/use-app-name");
+
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnector: (id: string) => mockUseConnector(id),
   useConnectorRun: () => ({ data: null }),

@@ -114,6 +114,16 @@ function CompactCircle({
   icon?: string | null;
   catalogId?: string;
 }) {
+  const stateSuffix =
+    state === "running"
+      ? " (running)"
+      : state === "error"
+        ? " (error)"
+        : state === "denied"
+          ? " (denied)"
+          : "";
+  const accessibleName = `${parseFullToolName(toolName).toolName.replace(/_/g, " ")}${stateSuffix}`;
+
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
@@ -122,6 +132,8 @@ function CompactCircle({
             type="button"
             onClick={onClick}
             disabled={!isExpandable}
+            aria-label={accessibleName}
+            aria-expanded={isExpandable ? isExpanded : undefined}
             className={cn(
               "relative inline-flex items-center justify-center size-8 rounded-full border transition-all",
               isExpandable &&
@@ -257,6 +269,7 @@ function HookCircle({
                 : "bg-background",
             )}
             aria-label="Show hook run details"
+            aria-expanded={isExpandable ? isExpanded : undefined}
           >
             <WebhookIcon className="size-3.5 text-muted-foreground" />
             <span

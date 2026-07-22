@@ -205,7 +205,9 @@ export function ConnectorDocumentsTable({
               onClick: () => setDeletingDoc(row.original),
             },
           ];
-          return <TableRowActions actions={actions} />;
+          return (
+            <TableRowActions actions={actions} itemName={row.original.title} />
+          );
         },
       },
     ],

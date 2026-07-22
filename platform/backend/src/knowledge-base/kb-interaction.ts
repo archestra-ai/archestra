@@ -213,6 +213,7 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   SupportedProviderDiscriminator
 > = {
   openai: "openai:chatCompletions",
+  archestra: "archestra:chatCompletions",
   gemini: "gemini:generateContent",
   anthropic: "anthropic:messages",
   bedrock: "bedrock:converse",
@@ -229,6 +230,7 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   zhipuai: "zhipuai:chatCompletions",
   deepseek: "deepseek:chatCompletions",
   minimax: "minimax:chatCompletions",
+  kimi: "kimi:chatCompletions",
   azure: "azure:chatCompletions",
   "github-copilot": "github-copilot:chatCompletions",
   "microsoft-365-copilot": "microsoft-365-copilot:chatCompletions",

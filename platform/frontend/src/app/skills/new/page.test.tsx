@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation");
+vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/skills/skill.query");
 

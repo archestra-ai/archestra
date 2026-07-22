@@ -264,6 +264,7 @@ export function ConnectorMembersTable({
           );
           return (
             <TableRowActions
+              itemName={member.displayName ?? member.accountId}
               actions={[
                 {
                   icon: <UserCog className="h-4 w-4" />,

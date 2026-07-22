@@ -32,7 +32,9 @@ describe("SystemPromptEditor", () => {
     render(<SystemPromptEditor value="" onChange={vi.fn()} />);
 
     expect(screen.getByText("Handlebars")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "docs" })).toHaveAttribute(
+    expect(
+      screen.getByRole("link", { name: "docs(opens in new tab)" }),
+    ).toHaveAttribute(
       "href",
       "https://archestra.ai/docs/platform-agents#system-prompt-templating",
     );
@@ -45,7 +47,7 @@ describe("SystemPromptEditor", () => {
 
     expect(screen.getByText("Handlebars")).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "docs" }),
+      screen.queryByRole("link", { name: "docs(opens in new tab)" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/templating\./)).toBeInTheDocument();
   });

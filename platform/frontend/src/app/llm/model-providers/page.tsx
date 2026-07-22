@@ -453,6 +453,7 @@ export default function ApiKeysPage() {
           const isInUse = !!keyUsage;
           return (
             <TableRowActions
+              itemName={row.original.name}
               actions={[
                 {
                   icon: <Pencil className="h-4 w-4" />,
@@ -517,7 +518,10 @@ export default function ApiKeysPage() {
               })
             }
           >
-            <SelectTrigger className="w-full sm:w-[240px]">
+            <SelectTrigger
+              aria-label="Filter by provider"
+              className="w-full sm:w-[240px]"
+            >
               <SelectValue placeholder="All providers" />
             </SelectTrigger>
             <SelectContent>

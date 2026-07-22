@@ -25,6 +25,7 @@ import {
   AgentModel,
   MemberModel,
   OrganizationModel,
+  SkillEnvironmentModel,
   SkillFileModel,
   SkillModel,
   SkillTeamModel,
@@ -125,10 +126,14 @@ const GithubSkillSourceSchema = z
 /** A team a skill is assigned to (for `scope = 'team'` skills). */
 const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
 
+/** An environment a skill is restricted to (empty = every environment). */
+const SkillEnvironmentSchema = z.object({ id: z.string(), name: z.string() });
+
 /** A skill row plus its resource-file count, team assignments, and author. */
 const SkillListItemSchema = SelectSkillSchema.extend({
   fileCount: z.number(),
   teams: z.array(SkillTeamSchema),
+  environments: z.array(SkillEnvironmentSchema),
   authorName: z.string().nullable(),
   /**
    * Distinct users the usage-event log attributes activations to. 0 when all
@@ -137,9 +142,10 @@ const SkillListItemSchema = SelectSkillSchema.extend({
   usageUserCount: z.number(),
 });
 
-/** A skill with its resource files and team assignments. */
+/** A skill with its resource files, team, and environment assignments. */
 const SkillDetailSchema = SkillWithFilesSchema.extend({
   teams: z.array(SkillTeamSchema),
+  environments: z.array(SkillEnvironmentSchema),
 });
 
 /** One crawled public-GitHub skill returned by a catalog search. */
@@ -204,12 +210,14 @@ const SkillManifestInputSchema = z
     files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
     scope: ResourceVisibilityScopeSchema.optional(),
     teamIds: z.array(z.string()).optional(),
-    environmentId: UuidIdSchema.nullable()
+    environmentIds: z
+      .array(UuidIdSchema)
       .optional()
       .describe(
-        "Environment the skill belongs to; null (or omitted on create) is " +
-          "the Default environment. Agents only see skills in their own " +
-          "environment.",
+        "Environments the skill is restricted to. Empty (or omitted on " +
+          "create) makes the skill available to agents in every " +
+          "environment; otherwise only agents in one of the listed " +
+          "environments see it.",
       ),
     allowedTools: z
       .array(z.string())
@@ -244,7 +252,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo: z.string().optional(),
           forAgentId: UuidIdSchema.optional().describe(
             "Restrict results to skills visible from this agent's " +
-              "environment (strict match, built-in skills exempt).",
+              "environment (skills with no environment assignments and " +
+              "built-in skills are visible everywhere).",
           ),
         }).merge(createSortingQuerySchema(SkillSortBy)),
         response: constructResponseSchema(
@@ -311,13 +320,19 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .filter((id): id is string => id !== null),
         ),
       ];
-      const [fileCounts, teamsBySkill, authorNames, usageUserCounts] =
-        await Promise.all([
-          SkillFileModel.countBySkillIds(skillIds),
-          SkillTeamModel.getTeamDetailsForSkills(skillIds),
-          UserModel.getNamesByIds(authorIds),
-          SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
-        ]);
+      const [
+        fileCounts,
+        teamsBySkill,
+        environmentsBySkill,
+        authorNames,
+        usageUserCounts,
+      ] = await Promise.all([
+        SkillFileModel.countBySkillIds(skillIds),
+        SkillTeamModel.getTeamDetailsForSkills(skillIds),
+        SkillEnvironmentModel.getEnvironmentDetailsForSkills(skillIds),
+        UserModel.getNamesByIds(authorIds),
+        SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
+      ]);
 
       return reply.send({
         data: skills.map((skill) => ({
@@ -326,6 +341,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SKILL.md (stored in the skills row) so the count matches the catalog.
           fileCount: (fileCounts.get(skill.id) ?? 0) + 1,
           teams: teamsBySkill.get(skill.id) ?? [],
+          environments: environmentsBySkill.get(skill.id) ?? [],
           authorName: skill.authorId
             ? (authorNames.get(skill.authorId) ?? null)
             : null,
@@ -352,6 +368,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const scope = body.scope ?? "personal";
       const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
 
+      const environmentIds = dedupe(body.environmentIds ?? []);
+
       await authorizeSkillCreate({
         userId: user.id,
         organizationId,
@@ -359,12 +377,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds,
       });
 
-      // Always assert on create: a null/omitted environment still lands on the
-      // org default, which may itself be restricted (mirrors the agent path).
-      await assertSkillEnvironmentAssignable({
+      // Always assert on create: an empty list makes the skill available in
+      // every environment including the org default, which may itself be
+      // restricted (mirrors the agent path).
+      await assertSkillEnvironmentsAssignable({
         userId: user.id,
         organizationId,
-        environmentId: body.environmentId ?? null,
+        environmentIds,
       });
 
       const skill = await withTeamFkErrorMapped(() =>
@@ -374,12 +393,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             organizationId,
             authorId: user.id,
             allowedTools: resolveAllowedTools(body, parsed),
-            environmentId: body.environmentId ?? null,
             sourceType: "manual",
             scope,
           },
           files: toSkillFiles(body.files ?? []),
           teamIds,
+          environmentIds,
         }),
       );
       if (!skill) {
@@ -482,15 +501,15 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 ...toSkillInsertFields(draft),
                 organizationId,
                 authorId: user.id,
-                // skills are environment-scoped; inherit the source agent's
-                // environment so the converted skill stays visible where the
-                // agent lived.
-                environmentId: agent.environmentId ?? null,
                 sourceType: "manual",
                 scope: draft.scope,
               },
               files: [],
               teamIds,
+              // inherit the source agent's environment (if any) so the
+              // converted skill stays visible where the agent lived; a
+              // Default-environment agent yields an unrestricted skill.
+              environmentIds: agent.environmentId ? [agent.environmentId] : [],
             },
             tx,
           );
@@ -656,7 +675,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // A GitHub-synced skill's content is owned by its source repo: reject
       // manifest/file changes (Archestra-side settings — scope, teams,
-      // environment — stay editable below). Disconnecting the skill from
+      // environments — stay editable below). Disconnecting the skill from
       // GitHub makes it editable.
       if (existing.githubSyncInterval !== null) {
         assertSyncedSkillContentUnchanged({ existing, parsed, body });
@@ -670,7 +689,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         newScope === "team" ? dedupe(body.teamIds ?? existingTeamIds) : [];
       const scopeChanged = newScope !== existing.scope;
       const teamsChanged =
-        newScope === "team" && !sameTeamSet(newTeamIds, existingTeamIds);
+        newScope === "team" && !sameIdSet(newTeamIds, existingTeamIds);
       if (scopeChanged || teamsChanged) {
         authorizeSkillScope({
           checker,
@@ -687,16 +706,24 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // Moving a skill between environments is gated like assigning one: the
-      // target environment must be assignable by this user.
-      const environmentChanged =
-        body.environmentId !== undefined &&
-        body.environmentId !== existing.environmentId;
-      if (environmentChanged) {
-        await assertSkillEnvironmentAssignable({
+      // Changing a skill's environment assignments is gated like assigning
+      // them: every environment in the new set must be assignable by this user.
+      const existingEnvironmentIds =
+        (
+          await SkillEnvironmentModel.getEnvironmentIdsForSkills([existing.id])
+        ).get(existing.id) ?? [];
+      const newEnvironmentIds =
+        body.environmentIds === undefined
+          ? existingEnvironmentIds
+          : dedupe(body.environmentIds);
+      const environmentsChanged =
+        body.environmentIds !== undefined &&
+        !sameIdSet(newEnvironmentIds, existingEnvironmentIds);
+      if (environmentsChanged) {
+        await assertSkillEnvironmentsAssignable({
           userId: user.id,
           organizationId,
-          environmentId: body.environmentId ?? null,
+          environmentIds: newEnvironmentIds,
         });
       }
 
@@ -714,13 +741,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ...toSkillInsertFields(parsed),
               allowedTools: resolveAllowedTools(body, parsed),
               scope: newScope,
-              ...(environmentChanged
-                ? { environmentId: body.environmentId ?? null }
-                : {}),
             },
             files:
               body.files === undefined ? undefined : toSkillFiles(body.files),
             teamIds: scopeChanged || teamsChanged ? newTeamIds : undefined,
+            environmentIds: environmentsChanged ? newEnvironmentIds : undefined,
           }),
         );
       } catch (error) {
@@ -1271,28 +1296,39 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 // ===== Internal helpers =====
 
 /**
- * Assigning a skill to a restricted environment is gated by
+ * Assigning a skill to restricted environments is gated by
  * skill:deploy-to-restricted, mirroring the per-resource permissions the agent
- * and MCP-catalog assignment paths use. Throws 403/404 if the caller may not
- * assign the environment.
+ * and MCP-catalog assignment paths use. An empty set (skill available in every
+ * environment, including the org default) is gated like assigning the default
+ * environment. Throws 403/404 if the caller may not assign an environment.
  */
-async function assertSkillEnvironmentAssignable(params: {
+async function assertSkillEnvironmentsAssignable(params: {
   userId: string;
   organizationId: string;
-  environmentId: string | null;
+  environmentIds: string[];
 }): Promise<void> {
-  const { userId, organizationId, environmentId } = params;
+  const { userId, organizationId, environmentIds } = params;
   const hasSkillDeploy = await userHasPermission(
     userId,
     organizationId,
     "skill",
     "deploy-to-restricted",
   );
-  await assertCanAssignEnvironment({
-    environmentId,
-    organizationId,
-    canDeployToRestricted: hasSkillDeploy,
-  });
+  if (environmentIds.length === 0) {
+    await assertCanAssignEnvironment({
+      environmentId: null,
+      organizationId,
+      canDeployToRestricted: hasSkillDeploy,
+    });
+    return;
+  }
+  for (const environmentId of environmentIds) {
+    await assertCanAssignEnvironment({
+      environmentId,
+      organizationId,
+      canDeployToRestricted: hasSkillDeploy,
+    });
+  }
 }
 
 /**
@@ -1386,21 +1422,27 @@ async function findSkillOrThrow(id: string, organizationId: string) {
   return skill;
 }
 
-/** A skill with its files and team assignments, for detail responses. */
+/** A skill with its files, team, and environment assignments, for detail responses. */
 async function loadSkillDetail(skill: Skill) {
-  const [files, teamsBySkill] = await Promise.all([
+  const [files, teamsBySkill, environmentsBySkill] = await Promise.all([
     SkillFileModel.findBySkillId(skill.id),
     SkillTeamModel.getTeamDetailsForSkills([skill.id]),
+    SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
   ]);
-  return { ...skill, files, teams: teamsBySkill.get(skill.id) ?? [] };
+  return {
+    ...skill,
+    files,
+    teams: teamsBySkill.get(skill.id) ?? [],
+    environments: environmentsBySkill.get(skill.id) ?? [],
+  };
 }
 
 function dedupe(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-/** Whether two team-id lists contain the same set of ids. */
-function sameTeamSet(a: string[], b: string[]): boolean {
+/** Whether two id lists contain the same set of ids. */
+function sameIdSet(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   const setB = new Set(b);
   return a.every((id) => setB.has(id));

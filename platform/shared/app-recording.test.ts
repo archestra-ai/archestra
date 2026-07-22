@@ -169,6 +169,50 @@ describe("validateRecordingBundle", () => {
     expect(validateRecordingBundle(gallery).ok).toBe(true);
   });
 
+  it("accepts the submission facts — submitter identity, model, prompt count, final-cut duration", () => {
+    const submission = bundle({
+      meta: {
+        authorName: "Tester",
+        createdAt: "2026-01-01T00:01:00.000Z",
+        platform: "archestra",
+        github: { login: "octocat", name: "The Octocat" },
+        model: "Claude Sonnet",
+        userPromptCount: 3,
+        finalCutDurationMs: 12_000,
+      },
+    });
+    expect(validateRecordingBundle(submission).ok).toBe(true);
+  });
+
+  it("accepts a submitter with no public name set, but rejects an email riding along in meta.github", () => {
+    const noPublicName = bundle({
+      meta: {
+        authorName: "Tester",
+        createdAt: "2026-01-01T00:01:00.000Z",
+        platform: "archestra",
+        github: { login: "octocat", name: null },
+      },
+    });
+    expect(validateRecordingBundle(noPublicName).ok).toBe(true);
+
+    // The schema's own backstop: meta.github is .strict(), so even a client
+    // bug that spread the whole GitHub /user response (email included)
+    // instead of picking login/name is rejected here, not silently stored.
+    const leakedEmail = bundle({
+      meta: {
+        authorName: "Tester",
+        createdAt: "2026-01-01T00:01:00.000Z",
+        platform: "archestra",
+        github: {
+          login: "octocat",
+          name: "The Octocat",
+          email: "octocat@example.com",
+        },
+      } as unknown as AppRecordingBundle["meta"],
+    });
+    expect(validateRecordingBundle(leakedEmail).ok).toBe(false);
+  });
+
   it("accepts an enhancement with and without the closing response", () => {
     const withResponse = bundle({
       enhancement: {

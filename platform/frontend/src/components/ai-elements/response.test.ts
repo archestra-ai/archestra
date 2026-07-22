@@ -60,6 +60,58 @@ describe("isSameOriginUrl", () => {
   });
 });
 
+const TABLE_MARKDOWN = "| a | b |\n| --- | --- |\n| 1 | 2 |";
+
+describe("Response markdown tables", () => {
+  // Streamdown paints table-wrapper with an opaque bg-sidebar mat that clashes
+  // with themed chat bubbles (bg-secondary), and ignores its className prop, so
+  // Response must flatten it via descendant overrides on the root. Guards both
+  // sides of that contract: the override classes, and the data-streamdown
+  // attribute + mat class they target (either can drift on a streamdown upgrade).
+  it("flattens streamdown's opaque table-wrapper mat", () => {
+    const { container } = renderResponse(TABLE_MARKDOWN);
+    const wrapper = container.querySelector(
+      '[data-streamdown="table-wrapper"]',
+    );
+    expect(wrapper).not.toBeNull();
+    expect(wrapper?.className).toContain("bg-sidebar");
+
+    const root = container.firstElementChild;
+    expect(root?.className).toContain(
+      "[&_[data-streamdown='table-wrapper']]:bg-transparent",
+    );
+    expect(root?.className).toContain(
+      "[&_[data-streamdown='table-wrapper']]:border-0",
+    );
+    expect(root?.className).toContain(
+      "[&_[data-streamdown='table-wrapper']]:p-0",
+    );
+    // The toolbar loses its mat backdrop, so its buttons must inherit the
+    // bubble's paired text color to stay visible on bg-secondary.
+    expect(root?.className).toContain(
+      "[&_[data-streamdown='table-wrapper']_button]:text-inherit",
+    );
+    // Opaque bg-background surfaces inside the wrapper must re-pair with
+    // text-foreground, not the bubble's inherited secondary-foreground.
+    expect(root?.className).toContain(
+      "[&_[data-streamdown='table-wrapper']_.bg-background]:text-foreground",
+    );
+  });
+
+  it("keeps the table scroll cap and sticky header overrides", () => {
+    const { container } = renderResponse(TABLE_MARKDOWN);
+    expect(container.querySelector('[data-streamdown="table"]')).not.toBeNull();
+
+    const root = container.firstElementChild;
+    expect(root?.className).toContain(
+      "[&_[data-streamdown='table-wrapper']>div:last-child]:max-h-[420px]",
+    );
+    expect(root?.className).toContain(
+      "[&_[data-streamdown='table-header']]:sticky",
+    );
+  });
+});
+
 // Renders through the real Streamdown pipeline (including rehype-harden), so it
 // verifies the repair runs before harden — harden would otherwise drop a
 // slash-less relative link and it would never reach an <a href>.

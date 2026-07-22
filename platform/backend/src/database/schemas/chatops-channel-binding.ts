@@ -40,6 +40,12 @@ const chatopsChannelBindingsTable = pgTable(
     workspaceName: varchar("workspace_name", { length: 256 }),
     /** Whether this binding is for a direct message conversation */
     isDm: boolean("is_dm").notNull().default(false),
+    /**
+     * When true, the bot replies to every message in this channel, not only to
+     * messages that @mention it. Defaults to false (mentions-only). Ignored for
+     * DM bindings, which always reply.
+     */
+    answerAllMessages: boolean("answer_all_messages").notNull().default(false),
     /** Email of the user who owns this DM binding (null for channel bindings) */
     dmOwnerEmail: varchar("dm_owner_email", { length: 256 }),
     /** The internal agent to route messages to */

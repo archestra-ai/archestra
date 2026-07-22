@@ -44,8 +44,12 @@ describe("cascade scenarios — frontend full-outcome sweep", () => {
       affectedServerCount: 1,
     });
 
+    // `frontendBar` is a permanent, by-design divergence from the
+    // backend path; `knownFrontendOverride` is a temporary bug marker.
     const frontendExpected =
-      scenario.knownFrontendOverride?.actual ?? scenario.expected;
+      scenario.frontendBar ??
+      scenario.knownFrontendOverride?.actual ??
+      scenario.expected;
     expect(outcome.mode).toBe(frontendExpected);
     // None of the matrix scenarios rename — the rename decisions have
     // their own describe below.
@@ -118,6 +122,91 @@ describe("computeCascadeOutcome — rename decisions", () => {
         affectedServerCount: 0,
       }),
     ).toEqual({ mode: "skip", renamed: true });
+  });
+});
+
+describe("computeCascadeOutcome — remote auto path saves without a bar", () => {
+  const remote = (over: Partial<CascadeSnapshot> = {}): CascadeSnapshot => ({
+    name: "linear",
+    serverType: "remote",
+    serverUrl: "https://api.example.com/mcp",
+    oauthConfig: { clientId: "abc", scopes: ["read"] },
+    userConfig: {},
+    ...over,
+  });
+
+  test("serverUrl change → 'skip' (backend re-syncs tools in the background; nothing restarts)", () => {
+    expect(
+      computeCascadeOutcome(
+        remote(),
+        remote({ serverUrl: "https://api.example.com/mcp/v2" }),
+        { affectedServerCount: 3 },
+      ),
+    ).toEqual({ mode: "skip", renamed: false });
+  });
+
+  test("oauthConfig content change (OAuth present on both sides) → 'skip'", () => {
+    expect(
+      computeCascadeOutcome(
+        remote(),
+        remote({
+          oauthConfig: {
+            clientId: "abc",
+            scopes: ["read"],
+            protectedResource: "https://api.example.com",
+          },
+        }),
+        { affectedServerCount: 1 },
+      ),
+    ).toEqual({ mode: "skip", renamed: false });
+  });
+
+  test("breaking change + rename → 'rename' (clients must still reload renamed tools)", () => {
+    expect(
+      computeCascadeOutcome(
+        remote(),
+        remote({
+          name: "linear-v2",
+          serverUrl: "https://api.example.com/mcp/v2",
+        }),
+        { affectedServerCount: 2 },
+      ),
+    ).toEqual({ mode: "rename", renamed: true });
+  });
+});
+
+describe("computeCascadeOutcome — remote manual paths survive the no-bar auto rule", () => {
+  const remote = (over: Partial<CascadeSnapshot> = {}): CascadeSnapshot => ({
+    name: "linear",
+    serverType: "remote",
+    serverUrl: "https://api.example.com/mcp",
+    oauthConfig: null,
+    userConfig: {},
+    ...over,
+  });
+
+  test("OAuth added → 'manual' (auth model flips; installs must re-authenticate)", () => {
+    expect(
+      computeCascadeOutcome(
+        remote(),
+        remote({ oauthConfig: { clientId: "abc" } }),
+        { affectedServerCount: 1 },
+      ).mode,
+    ).toBe("manual");
+  });
+
+  test("required userConfig field added → 'manual' (install must supply a value)", () => {
+    expect(
+      computeCascadeOutcome(
+        remote(),
+        remote({
+          userConfig: {
+            api_key: { type: "string", required: true },
+          },
+        }),
+        { affectedServerCount: 1 },
+      ).mode,
+    ).toBe("manual");
   });
 });
 
@@ -640,7 +729,7 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     ).toBe("skip");
   });
 
-  test("serverUrl edit still triggers auto (sanity check the projection isn't too loose)", () => {
+  test("serverUrl edit on this remote catalog → 'skip' (breaking diff detected, but remote saves without a bar)", () => {
     const transformedNext: CascadeSnapshot = {
       name: "Test1",
       description: "old description",
@@ -657,6 +746,44 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     };
     expect(
       computeCascadeOutcome(apiPrev, transformedNext, {
+        affectedServerCount: 3,
+      }).mode,
+    ).toBe("skip");
+  });
+
+  test("envFrom edit on a local catalog still triggers auto (sanity check the projection isn't too loose)", () => {
+    const localPrev = {
+      ...apiPrev,
+      serverType: "local",
+      serverUrl: null,
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        envFrom: [],
+      },
+    } as unknown as CascadeSnapshot;
+    const transformedNext: CascadeSnapshot = {
+      name: "Test1",
+      description: "old description",
+      serverType: "local",
+      multitenant: false,
+      serverUrl: null,
+      authMethod: "none",
+      authHeaderName: "",
+      includeBearerPrefix: false,
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        envFrom: [{ type: "secret", name: "shared-creds" }],
+      },
+      userConfig: {},
+    };
+    expect(
+      computeCascadeOutcome(localPrev, transformedNext, {
         affectedServerCount: 3,
       }).mode,
     ).toBe("auto");

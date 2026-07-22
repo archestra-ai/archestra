@@ -3,7 +3,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { Bedrock, constructResponseSchema, UuidIdSchema } from "@/types";
-import { bedrockAdapterFactory } from "../adapters";
+import {
+  bedrockAdapterFactory,
+  bedrockInvokeAdapterFactory,
+} from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 
@@ -11,6 +14,8 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const BEDROCK_PREFIX = `${PROXY_API_PREFIX}/bedrock`;
   const CONVERSE_SUFFIX = "/converse";
   const CONVERSE_STREAM_SUFFIX = "/converse-stream";
+  const INVOKE_SUFFIX = "/invoke";
+  const INVOKE_STREAM_SUFFIX = "/invoke-with-response-stream";
 
   logger.info("[UnifiedProxy] Registering unified Amazon Bedrock routes");
 
@@ -262,6 +267,182 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     },
   );
+
+  // =============================================================================
+  // Native InvokeModel Routes (Anthropic Messages wire format)
+  // The Anthropic SDK's Bedrock client (and Claude Code with
+  // CLAUDE_CODE_USE_BEDROCK=1) calls POST /model/:modelId/invoke and
+  // POST /model/:modelId/invoke-with-response-stream with an Anthropic
+  // Messages body. These routes inject the model from the URL and run the
+  // request through the bedrock-invoke adapter.
+  // =============================================================================
+
+  /**
+   * Bedrock InvokeModel (default agent)
+   * POST /v1/bedrock/model/:modelId/invoke
+   */
+  fastify.post(
+    `${BEDROCK_PREFIX}/model/:modelId${INVOKE_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.BedrockInvokeWithDefaultAgentAndModel,
+        description:
+          "Invoke an Anthropic model on Amazon Bedrock (Anthropic Messages format, default agent)",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          modelId: z.string(),
+        }),
+        body: Bedrock.API.InvokeRequestSchema,
+        headers: Bedrock.API.ConverseHeadersSchema,
+        response: constructResponseSchema(Bedrock.API.InvokeResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url, modelId: request.params.modelId },
+        "[UnifiedProxy] Handling Bedrock InvokeModel request (default agent)",
+      );
+      return handleLLMProxy(
+        buildInvokeProxyBody(request.body, request.params.modelId, false),
+        request,
+        reply,
+        bedrockInvokeAdapterFactory,
+      );
+    },
+  );
+
+  /**
+   * Bedrock InvokeModel (with agent)
+   * POST /v1/bedrock/:agentId/model/:modelId/invoke
+   */
+  fastify.post(
+    `${BEDROCK_PREFIX}/:agentId/model/:modelId${INVOKE_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.BedrockInvokeWithAgentAndModel,
+        description:
+          "Invoke an Anthropic model on Amazon Bedrock (Anthropic Messages format) for a specific agent",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+          modelId: z.string(),
+        }),
+        body: Bedrock.API.InvokeRequestSchema,
+        headers: Bedrock.API.ConverseHeadersSchema,
+        response: constructResponseSchema(Bedrock.API.InvokeResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        {
+          url: request.url,
+          agentId: request.params.agentId,
+          modelId: request.params.modelId,
+        },
+        "[UnifiedProxy] Handling Bedrock InvokeModel request (with agent)",
+      );
+      return handleLLMProxy(
+        buildInvokeProxyBody(request.body, request.params.modelId, false),
+        request,
+        reply,
+        bedrockInvokeAdapterFactory,
+      );
+    },
+  );
+
+  /**
+   * Bedrock InvokeModelWithResponseStream (default agent)
+   * POST /v1/bedrock/model/:modelId/invoke-with-response-stream
+   */
+  fastify.post(
+    `${BEDROCK_PREFIX}/model/:modelId${INVOKE_STREAM_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.BedrockInvokeStreamWithDefaultAgentAndModel,
+        description:
+          "Stream an Anthropic model response from Amazon Bedrock (Anthropic Messages format, default agent)",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          modelId: z.string(),
+        }),
+        body: Bedrock.API.InvokeRequestSchema,
+        headers: Bedrock.API.ConverseHeadersSchema,
+        // Streaming responses don't have a schema
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url, modelId: request.params.modelId },
+        "[UnifiedProxy] Handling Bedrock InvokeModelWithResponseStream request (default agent)",
+      );
+      return handleLLMProxy(
+        buildInvokeProxyBody(request.body, request.params.modelId, true),
+        request,
+        reply,
+        bedrockInvokeAdapterFactory,
+      );
+    },
+  );
+
+  /**
+   * Bedrock InvokeModelWithResponseStream (with agent)
+   * POST /v1/bedrock/:agentId/model/:modelId/invoke-with-response-stream
+   */
+  fastify.post(
+    `${BEDROCK_PREFIX}/:agentId/model/:modelId${INVOKE_STREAM_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.BedrockInvokeStreamWithAgentAndModel,
+        description:
+          "Stream an Anthropic model response from Amazon Bedrock (Anthropic Messages format) for a specific agent",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+          modelId: z.string(),
+        }),
+        body: Bedrock.API.InvokeRequestSchema,
+        headers: Bedrock.API.ConverseHeadersSchema,
+        // Streaming responses don't have a schema
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        {
+          url: request.url,
+          agentId: request.params.agentId,
+          modelId: request.params.modelId,
+        },
+        "[UnifiedProxy] Handling Bedrock InvokeModelWithResponseStream request (with agent)",
+      );
+      return handleLLMProxy(
+        buildInvokeProxyBody(request.body, request.params.modelId, true),
+        request,
+        reply,
+        bedrockInvokeAdapterFactory,
+      );
+    },
+  );
 };
+
+/**
+ * Inject the model from the URL path (the InvokeModel body has no `model`
+ * field) and the internal streaming flag before handing the Anthropic-format
+ * body to the proxy pipeline.
+ */
+function buildInvokeProxyBody(
+  body: z.infer<typeof Bedrock.API.InvokeRequestSchema>,
+  modelIdParam: string,
+  isStreaming: boolean,
+) {
+  return {
+    ...body,
+    model: body.model || decodeURIComponent(modelIdParam),
+    _isStreaming: isStreaming,
+  };
+}
 
 export default bedrockProxyRoutes;

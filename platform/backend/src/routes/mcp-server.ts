@@ -23,6 +23,7 @@ import {
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  MemberModel,
   TeamModel,
   ToolModel,
 } from "@/models";
@@ -193,9 +194,34 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         serverType: "local",
       };
 
-      // Set owner_id and userId to current user
-      serverData.ownerId = user.id;
-      serverData.userId = user.id;
+      // Personal installs may be pre-provisioned for another user by an
+      // installation admin; everyone else installs for themselves.
+      const requestedUserId = serverData.userId;
+      let targetUserId = user.id;
+      if (requestedUserId && requestedUserId !== user.id) {
+        if (serverData.scope !== "personal") {
+          throw new ApiError(
+            400,
+            "userId can only be provided for personal-scoped installations",
+          );
+        }
+        const { success: canInstallForOthers } = await hasPermission(
+          { mcpServerInstallation: ["admin"] },
+          headers,
+        );
+        if (!canInstallForOthers) {
+          throw new ApiError(
+            403,
+            "You don't have permission to install MCP servers for other users",
+          );
+        }
+        if (!(await MemberModel.getByUserId(requestedUserId, organizationId))) {
+          throw new ApiError(404, "Target user not found in this organization");
+        }
+        targetUserId = requestedUserId;
+      }
+      serverData.ownerId = targetUserId;
+      serverData.userId = targetUserId;
 
       // Track if we created a new secret (for cleanup on failure)
       let createdSecretId: string | undefined;
@@ -300,7 +326,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Return existing server instead of erroring (idempotent behavior)
         if (serverData.scope === "personal") {
           const existingPersonal = existingServers.find(
-            (s) => s.scope === "personal" && s.ownerId === user.id,
+            (s) => s.scope === "personal" && s.ownerId === targetUserId,
           );
           if (existingPersonal) {
             const catalogTools = await ToolModel.findByCatalogId(
@@ -310,7 +336,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (toolIds.length > 0) {
               const personalGateway = await AgentModel.ensurePersonalMcpGateway(
                 {
-                  userId: user.id,
+                  userId: targetUserId,
                   organizationId,
                 },
               );
@@ -858,7 +884,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     if (!mcpServer.teamId) {
                       const personalGateway =
                         await AgentModel.ensurePersonalMcpGateway({
-                          userId: user.id,
+                          userId: targetUserId,
                           organizationId,
                         });
                       targetAgentIds.push(personalGateway.id);
@@ -1020,7 +1046,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (!mcpServer.teamId) {
               const personalGateway = await AgentModel.ensurePersonalMcpGateway(
                 {
-                  userId: user.id,
+                  userId: targetUserId,
                   organizationId,
                 },
               );

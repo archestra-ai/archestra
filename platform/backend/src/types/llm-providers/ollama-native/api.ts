@@ -105,7 +105,12 @@ const KNOWN_CHAT_REQUEST_KEYS = new Set(
 
 export const ChatRequestSchema = z
   .looseObject(CHAT_REQUEST_SHAPE)
-  .transform(dropCaseVariantDuplicates)
+  // `.overwrite`, not `.transform`: dropCaseVariantDuplicates is type-preserving
+  // (T → T), and `.overwrite` keeps the schema representable in JSON Schema. A
+  // plain `.transform` is opaque to the OpenAPI generator, which then widens the
+  // generated output type to `unknown` — poisoning every union that carries an
+  // Ollama-native request (interaction request/processedRequest, the logs view).
+  .overwrite(dropCaseVariantDuplicates)
   .describe("Ollama native /api/chat request");
 
 const ResponseMessageSchema = z.looseObject({

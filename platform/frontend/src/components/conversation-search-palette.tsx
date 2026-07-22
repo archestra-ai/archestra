@@ -458,6 +458,7 @@ export function ConversationSearchPalette({
           {isPending && (
             <Badge
               variant="destructive"
+              role="status"
               className="absolute right-3 top-2.5 text-[10px] shadow-sm animate-in fade-in zoom-in duration-200"
             >
               Press "{SHORTCUT_DELETE.label}" to confirm
@@ -612,7 +613,7 @@ export function ConversationSearchPalette({
                 {SHORTCUT_SEARCH.label}
               </kbd>
             </div>
-            <span className="text-muted-foreground/70">Search</span>
+            <span className="text-muted-foreground">Search</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1">
@@ -623,19 +624,19 @@ export function ConversationSearchPalette({
                 {SHORTCUT_NEW_CHAT.label}
               </kbd>
             </div>
-            <span className="text-muted-foreground/70">New Chat</span>
+            <span className="text-muted-foreground">New Chat</span>
           </div>
           <div className="flex items-center gap-1.5">
             <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
               {SHORTCUT_PIN.label}
             </kbd>
-            <span className="text-muted-foreground/70">Pin / Unpin Chat</span>
+            <span className="text-muted-foreground">Pin / Unpin Chat</span>
           </div>
           <div className="flex items-center gap-1.5">
             <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
               {SHORTCUT_DELETE.label}
             </kbd>
-            <span className="text-muted-foreground/70">Delete Chat</span>
+            <span className="text-muted-foreground">Delete Chat</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1">
@@ -646,7 +647,7 @@ export function ConversationSearchPalette({
                 {SHORTCUT_SIDEBAR.label}
               </kbd>
             </div>
-            <span className="text-muted-foreground/70">Sidebar</span>
+            <span className="text-muted-foreground">Sidebar</span>
           </div>
         </div>
       </div>

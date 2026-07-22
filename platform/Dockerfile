@@ -153,6 +153,7 @@ WORKDIR /app
 # including it made every turbo.json edit bust this stage's ~30s install layer.
 # The builder stage below copies it alongside the source files.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY patches ./patches
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
@@ -204,6 +205,7 @@ COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs
 
 # Copy source files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY patches ./patches
 COPY backend ./backend
 COPY frontend ./frontend
 COPY shared ./shared

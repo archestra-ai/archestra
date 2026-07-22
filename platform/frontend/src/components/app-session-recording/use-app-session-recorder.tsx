@@ -31,6 +31,7 @@ import {
 import { snapshotConversationTranscript } from "@/lib/app-session-recording/app-recording-transcript";
 import { useAppsHackathonAvailable } from "@/lib/app-session-recording/apps-hackathon";
 import { useSession } from "@/lib/auth/auth.query";
+import { resolveModelDisplayName } from "@/lib/llm-models.query";
 
 /**
  * The runtime-facing side of the session recorder: {@link McpAppRuntime}
@@ -543,14 +544,19 @@ export function useOwnAppSessionRecorder(params: {
     core.setFinalize(async (raw, recordedConversationId) => {
       const ctx = finalizeCtxRef.current;
       // The chat transcript is part of every bundle's contract — snapshot it
-      // from the conversation the recording was made in.
-      const transcript = recordedConversationId
+      // from the conversation the recording was made in. The same fetch also
+      // carries the chat's model, resolved to a display name below.
+      const { transcript, modelId } = recordedConversationId
         ? await snapshotConversationTranscript({
             conversationId: recordedConversationId,
             startedAtMs: raw.startedAtMs,
             durationMs: raw.durationMs,
           })
-        : [];
+        : { transcript: [], modelId: null };
+      const model = modelId ? await resolveModelDisplayName(modelId) : null;
+      const userPromptCount = transcript.filter(
+        (message) => message.role === "user",
+      ).length;
       // Draft the AI presentation layer at save time, implicitly over the
       // agent connected to this chat session: the one-sentence description and
       // the consolidated build prompt the replay shows in place of the raw
@@ -577,6 +583,8 @@ export function useOwnAppSessionRecorder(params: {
         },
         transcript,
         enhancement,
+        model,
+        userPromptCount,
       });
       // Sanitize (redact detected sensitive values), then hold the result to
       // the shared bundle contract: a recording that captured no app creation
@@ -700,8 +708,23 @@ function buildBundle(params: {
   raw: RawRecording;
   transcript: AppRecordingBundle["recording"]["transcript"];
   enhancement?: AppRecordingBundle["enhancement"];
+  /** The chat's model at record time, as a display name — null when it
+   * couldn't be resolved. */
+  model: string | null;
+  /** Count of the builder's own messages in `transcript` — how many prompts
+   * it took to build this version of the app. */
+  userPromptCount: number;
 }): AppRecordingBundle {
-  const { appId, appName, authorName, raw, transcript, enhancement } = params;
+  const {
+    appId,
+    appName,
+    authorName,
+    raw,
+    transcript,
+    enhancement,
+    model,
+    userPromptCount,
+  } = params;
   const startedAt = new Date(raw.startedAtMs);
   return {
     formatVersion: 1,
@@ -728,6 +751,8 @@ function buildBundle(params: {
         (max, segment) => Math.max(max, segment.version),
         0,
       ),
+      ...(model ? { model } : {}),
+      userPromptCount,
     },
   };
 }

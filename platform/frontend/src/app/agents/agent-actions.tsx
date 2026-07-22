@@ -51,6 +51,7 @@ export function AgentActions({
   if (isDeleted) {
     return (
       <TableRowActions
+        itemName={agent.name}
         actions={[
           {
             icon: <RotateCcw className="h-4 w-4" />,
@@ -152,6 +153,7 @@ export function AgentActions({
 
   return (
     <TableRowActions
+      itemName={agent.name}
       actions={primaryActions}
       dropdownActions={dropdownActions}
     />

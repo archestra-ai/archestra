@@ -61,7 +61,7 @@ function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
   if (isSorted === "asc") return upArrow;
   if (isSorted === "desc") return downArrow;
   return (
-    <div className="text-muted-foreground/50 flex flex-col items-center">
+    <div className="text-muted-foreground flex flex-col items-center">
       {upArrow}
       <span className="mt-[-4px]">{downArrow}</span>
     </div>

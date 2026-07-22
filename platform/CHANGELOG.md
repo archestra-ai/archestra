@@ -1,5 +1,62 @@
 # Changelog
 
+## [1.3.14](https://github.com/archestra-ai/archestra/compare/platform-v1.3.13...platform-v1.3.14) (2026-07-22)
+
+
+### Features
+
+* add Archestra as an LLM provider ([#6780](https://github.com/archestra-ai/archestra/issues/6780)) ([c3314c5](https://github.com/archestra-ai/archestra/commit/c3314c5e263cbba11dd2e31fe502ff70dd004748))
+* add Moonshot (Kimi) LLM provider ([#6778](https://github.com/archestra-ai/archestra/issues/6778)) ([d78925b](https://github.com/archestra-ai/archestra/commit/d78925b2cff20207f94fd01a903feae2df984bdb))
+* **llm-proxy:** support Bedrock InvokeModel API for Anthropic models ([#6745](https://github.com/archestra-ai/archestra/issues/6745)) ([355b192](https://github.com/archestra-ai/archestra/commit/355b1929e9ecc7dc195b4d7088d1353361bb53ba))
+* **skills:** allow 0, 1, or many environments per skill ([#6777](https://github.com/archestra-ai/archestra/issues/6777)) ([3d39307](https://github.com/archestra-ai/archestra/commit/3d393078e2e598e0774c3da8ffddb51bee1890be))
+* **slack:** per-channel option to answer all messages ([#6783](https://github.com/archestra-ai/archestra/issues/6783)) ([796b62b](https://github.com/archestra-ai/archestra/commit/796b62bdff7a4a03f7eea4c99c8a6c67a4a8219b))
+
+
+### Bug Fixes
+
+* **chat:** at-most-once dispatch for approved MCP tool calls ([#6772](https://github.com/archestra-ai/archestra/issues/6772)) ([cf6dc1c](https://github.com/archestra-ai/archestra/commit/cf6dc1c87645a81b3cb3027f3c7e4cb607cc5267))
+* **chat:** keep markdown tables readable in themed message bubbles ([#6774](https://github.com/archestra-ai/archestra/issues/6774)) ([fceb8d9](https://github.com/archestra-ai/archestra/commit/fceb8d9e0833f0bf8f16d4c7a07a0261d10f15cc))
+* **frontend:** accessibility improvements across the app (WCAG 2.1/2.2 AA) ([#6747](https://github.com/archestra-ai/archestra/issues/6747)) ([dc83cfa](https://github.com/archestra-ai/archestra/commit/dc83cfac2c5db082bcdb978554d0323e0c98e7cf))
+* **hackathon:** gracefully degrade audio codecs ([#6768](https://github.com/archestra-ai/archestra/issues/6768)) ([927d8fe](https://github.com/archestra-ai/archestra/commit/927d8fe9048d0a6501fd899884adbff8ca0daeea))
+* **mcp-catalog:** save remote catalog edits directly instead of showing the restart confirm bar ([#6773](https://github.com/archestra-ai/archestra/issues/6773)) ([8b32c49](https://github.com/archestra-ai/archestra/commit/8b32c4911556eaae20aa296b7759ccb04415ae14))
+* **mcp-registry:** stop re-prompting stored credentials on execution-only reinstalls ([#6776](https://github.com/archestra-ai/archestra/issues/6776)) ([ea58b92](https://github.com/archestra-ai/archestra/commit/ea58b92b99bbce0a88a79a9de4d33dafbfd91dbd))
+* **mcp-server:** honor target userId for personal installs ([#6771](https://github.com/archestra-ai/archestra/issues/6771)) ([00153ef](https://github.com/archestra-ai/archestra/commit/00153efe2df819a4fba89c7a4b2740573be78f72))
+* **onboarding:** make first-login survey scroll so Send stays reachable ([#6779](https://github.com/archestra-ai/archestra/issues/6779)) ([9975e99](https://github.com/archestra-ai/archestra/commit/9975e992eeddfb95fd53912da714b007c600f6e9))
+* **orchestrator:** deploy default-environment MCP servers into the org's default environment namespace ([#6756](https://github.com/archestra-ai/archestra/issues/6756)) ([fde3109](https://github.com/archestra-ai/archestra/commit/fde3109b8ecf5d6f51c8160c8e42a33e30f6b3bd))
+* **sidebar:** gate the apps query behind app:read ([#6769](https://github.com/archestra-ai/archestra/issues/6769)) ([2d8c4fe](https://github.com/archestra-ai/archestra/commit/2d8c4fe06aee1b22314ad815f424881cfb3cd4c1))
+
+## [1.3.13](https://github.com/archestra-ai/archestra/compare/platform-v1.3.12...platform-v1.3.13) (2026-07-22)
+
+
+### Features
+
+* add project admin permissions ([#6742](https://github.com/archestra-ai/archestra/issues/6742)) ([f52765b](https://github.com/archestra-ai/archestra/commit/f52765bca8af93141a8fce8a37b9eef645808cfc))
+* **audit:** org-audit rows for mutating Archestra MCP tools ([#6751](https://github.com/archestra-ai/archestra/issues/6751)) ([0899cc1](https://github.com/archestra-ai/archestra/commit/0899cc19190d66815b42d5d3c8a342e85c41b62c))
+* **connection:** add a Disconnect panel to the connect flow ([#6720](https://github.com/archestra-ai/archestra/issues/6720)) ([397eb3f](https://github.com/archestra-ai/archestra/commit/397eb3f029e885880894262e6f08caf97f6be37e))
+* **frontend:** group built-in Archestra MCP tools by domain in the tool picker ([#6738](https://github.com/archestra-ai/archestra/issues/6738)) ([785ada1](https://github.com/archestra-ai/archestra/commit/785ada110a30a9e900d33da925de24265d4bfd09))
+* **hackathon:** capture and replay app audio in session recordings ([#6761](https://github.com/archestra-ai/archestra/issues/6761)) ([4eeac8d](https://github.com/archestra-ai/archestra/commit/4eeac8d07b2d27f995e49d7cb506ad160e1695e4))
+* **kb:** native Bedrock embeddings, provider gating, and diagnosable KB failures ([#6671](https://github.com/archestra-ai/archestra/issues/6671)) ([b059b1e](https://github.com/archestra-ai/archestra/commit/b059b1e88c98a7fab4fad1af161db692745bc6f2))
+* per-skill usage analytics on the Skills page ([#6740](https://github.com/archestra-ai/archestra/issues/6740)) ([ddca27b](https://github.com/archestra-ai/archestra/commit/ddca27b3ad431fa57e4adc4febb7a61180f91d0e))
+* telegram conversation memory, group bindings, GA ([#6749](https://github.com/archestra-ai/archestra/issues/6749)) ([917bb7e](https://github.com/archestra-ai/archestra/commit/917bb7eccf7146960cd3e7af1016dde30ac645cb))
+* **ui:** cards/table view toggle for Projects, Apps, and MCP Registry ([#6753](https://github.com/archestra-ai/archestra/issues/6753)) ([82531f0](https://github.com/archestra-ai/archestra/commit/82531f09da6cb564e26b865555510e1afaf26b82))
+
+
+### Bug Fixes
+
+* bump fast-uri override to 3.1.4 (CVE-2026-16221, CVE-2026-13676) ([#6760](https://github.com/archestra-ai/archestra/issues/6760)) ([a9af6d2](https://github.com/archestra-ai/archestra/commit/a9af6d2348da210331b70523ee8c3ceb3bd56cb8))
+* GPT-5.6 support across OpenAI API and ChatGPT-subscription chat ([#6750](https://github.com/archestra-ai/archestra/issues/6750)) ([2fac946](https://github.com/archestra-ai/archestra/commit/2fac94656393802613b7a70ac27f2c28613ddc20))
+* **hackathon:** share app sessions bugs ([#6748](https://github.com/archestra-ai/archestra/issues/6748)) ([0c45968](https://github.com/archestra-ai/archestra/commit/0c45968827bb5a8b1d0648197387c7951c6b92b0))
+* **hackathon:** stop the app-session player blacking out transparent … ([#6759](https://github.com/archestra-ai/archestra/issues/6759)) ([ffa29f4](https://github.com/archestra-ai/archestra/commit/ffa29f43df287aa28181015737cfa57eb64f56a5))
+* highlight links in skill sync panel, rename Chat button ([#6734](https://github.com/archestra-ai/archestra/issues/6734)) ([7555826](https://github.com/archestra-ai/archestra/commit/75558260f948cb652d5ed4107b66750418f0134f))
+* **knowledge:** show connection result on the test button, align footer layout ([#6763](https://github.com/archestra-ai/archestra/issues/6763)) ([55ca578](https://github.com/archestra-ai/archestra/commit/55ca578c5d62f3af3c023c8955ee7f703d138091))
+* **llm-proxy:** make reject-mode 400 self-diagnosing for misconfigured base URLs ([#6755](https://github.com/archestra-ai/archestra/issues/6755)) ([553557d](https://github.com/archestra-ai/archestra/commit/553557d94bbe4572d0c52363e2fa703c4ae10788))
+* **projects:** hide Schedules section for roles without scheduledTask:read ([#6762](https://github.com/archestra-ai/archestra/issues/6762)) ([9f6cc9b](https://github.com/archestra-ai/archestra/commit/9f6cc9ba67803df33fb9d5cebf8ca4a9873590de))
+
+
+### Miscellaneous Chores
+
+* **chat:** show chat support links in the mobile header bar ([#6743](https://github.com/archestra-ai/archestra/issues/6743)) ([6b55505](https://github.com/archestra-ai/archestra/commit/6b55505e92b3fc1b3464819ee5b9fea17ea5dbc7))
+
 ## [1.3.12](https://github.com/archestra-ai/archestra/compare/platform-v1.3.11...platform-v1.3.12) (2026-07-21)
 
 

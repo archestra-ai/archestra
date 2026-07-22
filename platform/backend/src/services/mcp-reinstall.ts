@@ -2,11 +2,16 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
-import type { InternalMcpCatalog, LocalConfig, McpServer } from "@/types";
+import type {
+  InternalMcpCatalog,
+  LocalConfig,
+  McpServer,
+  McpServerReinstallReason,
+} from "@/types";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 /**
- * Checks if a catalog edit requires new user input for reinstallation.
+ * Checks if a catalog edit requires a manual reinstall.
  *
  * Returns true (manual reinstall required) when:
  * - Local execution config changed (command/args/docker/transport) - restart should be explicit
@@ -27,9 +32,22 @@ export function requiresNewUserInputForReinstall(
   oldCatalogItem: InternalMcpCatalog,
   newCatalogItem: InternalMcpCatalog,
 ): boolean {
-  // Local servers: check if prompted env vars changed
+  return manualReinstallReason(oldCatalogItem, newCatalogItem) !== null;
+}
+
+/**
+ * Classifies WHY a catalog edit needs a manual reinstall, or null when it
+ * doesn't. "new-input": the prompted schema changed — installs owe values
+ * they don't have, so the UI must collect them. "restart": stored values
+ * stay valid (single-tenant execution-config drift); an explicit restart
+ * reusing the stored secret bag suffices. "new-input" wins when one edit
+ * carries both kinds of change.
+ */
+export function manualReinstallReason(
+  oldCatalogItem: InternalMcpCatalog,
+  newCatalogItem: InternalMcpCatalog,
+): McpServerReinstallReason | null {
   if (newCatalogItem.serverType === "local") {
-    // Check if prompted env vars changed
     const oldPromptedEnvVars = getPromptedEnvVars(oldCatalogItem);
     const newPromptedEnvVars = getPromptedEnvVars(newCatalogItem);
 
@@ -38,24 +56,7 @@ export function requiresNewUserInputForReinstall(
         { catalogId: newCatalogItem.id },
         "Prompted env vars changed - manual reinstall required",
       );
-      return true;
-    }
-
-    // Multi-tenant catalogs handle execution-config drift via the
-    // catalog-level `catalogReinstallRequired` flag (one shared pod across
-    // all installs; the catalog-reinstall endpoint applies the change for
-    // everyone in one shot). Single-tenant: each install owns its own pod,
-    // so a silent auto-restart of others' pods would surprise them; mark
-    // every install reinstall-required and let owners reinstall explicitly.
-    if (
-      !newCatalogItem.multitenant &&
-      localExecutionConfigChanged(oldCatalogItem, newCatalogItem)
-    ) {
-      logger.info(
-        { catalogId: newCatalogItem.id },
-        "Local execution config changed - manual reinstall required",
-      );
-      return true;
+      return "new-input";
     }
 
     // Check if required userConfig fields changed (e.g. header-backed fields
@@ -72,11 +73,29 @@ export function requiresNewUserInputForReinstall(
         { catalogId: newCatalogItem.id },
         "Required userConfig fields changed - manual reinstall required",
       );
-      return true;
+      return "new-input";
+    }
+
+    // Multi-tenant catalogs handle execution-config drift via the
+    // catalog-level `catalogReinstallRequired` flag (one shared pod across
+    // all installs; the catalog-reinstall endpoint applies the change for
+    // everyone in one shot). Single-tenant: each install owns its own pod,
+    // so a silent auto-restart of others' pods would surprise them; mark
+    // every install reinstall-required and let owners reinstall explicitly.
+    // Stored credentials stay valid — no re-prompt, just a restart.
+    if (
+      !newCatalogItem.multitenant &&
+      localExecutionConfigChanged(oldCatalogItem, newCatalogItem)
+    ) {
+      logger.info(
+        { catalogId: newCatalogItem.id },
+        "Local execution config changed - manual reinstall required",
+      );
+      return "restart";
     }
 
     // No relevant changes - auto-reinstall can proceed with existing secrets
-    return false;
+    return null;
   }
 
   // Remote servers: check if OAuth or required userConfig changed
@@ -89,7 +108,7 @@ export function requiresNewUserInputForReinstall(
         { catalogId: newCatalogItem.id },
         "OAuth config changed - manual reinstall required",
       );
-      return true;
+      return "new-input";
     }
 
     // Check if required userConfig fields changed
@@ -101,15 +120,15 @@ export function requiresNewUserInputForReinstall(
         { catalogId: newCatalogItem.id },
         "Required userConfig fields changed - manual reinstall required",
       );
-      return true;
+      return "new-input";
     }
 
     // No auth-related changes - auto-reinstall can proceed
-    return false;
+    return null;
   }
 
   // Builtin servers don't need reinstall
-  return false;
+  return null;
 }
 
 /**
@@ -555,8 +574,14 @@ export async function reinstallMultitenantCatalog(
         // the tenant is stuck: the catalog Reinstall button is gone and
         // the per-install Reinstall button is gated on
         // `reinstallRequired` (see mcp-server-card.tsx userFlaggedInstalls).
+        // The retry needs no new user input — stored credentials are valid —
+        // unless the install already owed input from an earlier edit.
         await McpServerModel.update(install.id, {
           reinstallRequired: true,
+          reinstallReason:
+            install.reinstallRequired && install.reinstallReason === "new-input"
+              ? "new-input"
+              : "restart",
           localInstallationStatus: "error",
           localInstallationError: errorMessage,
         });

@@ -21,12 +21,15 @@ const STOP_PAD_MS = 2_000;
  * are relative to recording start; negatives are the history that predates the
  * recording. Best-effort: any failure yields an empty transcript rather than
  * blocking the recording from being saved.
+ *
+ * Also returns the conversation's `modelId` — fetched as part of the same
+ * request, so the bundle's "LLM model used" gallery fact costs no extra call.
  */
 export async function snapshotConversationTranscript(params: {
   conversationId: string;
   startedAtMs: number;
   durationMs: number;
-}): Promise<TranscriptMessage[]> {
+}): Promise<{ transcript: TranscriptMessage[]; modelId: string | null }> {
   try {
     const { data } = await archestraApiSdk.getChatConversation({
       path: { id: params.conversationId },
@@ -57,9 +60,13 @@ export async function snapshotConversationTranscript(params: {
         parts,
       });
     }
-    return transcript;
+    const modelId =
+      data && typeof (data as { modelId?: unknown }).modelId === "string"
+        ? (data as { modelId: string }).modelId
+        : null;
+    return { transcript, modelId };
   } catch {
-    return [];
+    return { transcript: [], modelId: null };
   }
 }
 

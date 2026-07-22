@@ -405,7 +405,11 @@ export function ConnectCommandPanel({
         value={platform}
         onValueChange={(v) => setPlatform(v as ConnectPlatformOption)}
       >
-        <SelectTrigger className="w-full" data-testid="connect-platform-select">
+        <SelectTrigger
+          aria-label="Select a client"
+          className="w-full"
+          data-testid="connect-platform-select"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -1049,7 +1053,7 @@ function BaseUrlSelect({
   const metaByUrl = new Map((metadata ?? []).map((m) => [m.url, m] as const));
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-full">
+      <SelectTrigger aria-label="Select an endpoint" className="w-full">
         <SelectValue />
       </SelectTrigger>
       <SelectContent className="min-w-[var(--radix-select-trigger-width)]">

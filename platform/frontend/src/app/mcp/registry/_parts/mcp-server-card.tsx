@@ -509,6 +509,7 @@ export function McpServerCard({
       size="sm"
       className="flex-1"
       disabled={isChatCreating}
+      aria-label={`Chat using ${item.name}`}
       onClick={() => startChat(item)}
     >
       <MessageSquare className="h-4 w-4" />
@@ -523,7 +524,7 @@ export function McpServerCard({
       className="h-8 w-8"
       data-testid={`${E2eTestId.McpServerSettingsButton}-${item.name}`}
       onClick={() => goToItemPage()}
-      aria-label="Server settings"
+      aria-label={`Server settings for ${item.name}`}
     >
       <Pencil className="h-4 w-4" />
     </Button>
@@ -686,10 +687,11 @@ export function McpServerCard({
             <button
               type="button"
               onClick={() => goToItemPage("logs")}
+              aria-label={`${deploymentSummary.running} of ${deploymentSummary.total} deployments running for ${item.name}, view logs`}
               className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
             >
               <DeploymentStatusDot state={deploymentSummary.overallState} />
-              <span>
+              <span aria-hidden>
                 {deploymentSummary.running}/{deploymentSummary.total}
               </span>
             </button>
@@ -710,14 +712,17 @@ export function McpServerCard({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Avatar
-                        className="size-6 border-2 border-background cursor-pointer"
+                      <button
+                        type="button"
+                        aria-label={`Installed organization-wide, manage credentials for ${item.name}`}
                         onClick={() => goToItemPage("credentials")}
                       >
-                        <AvatarFallback className="bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                          <Globe className="h-3 w-3" />
-                        </AvatarFallback>
-                      </Avatar>
+                        <Avatar className="size-6 border-2 border-background cursor-pointer">
+                          <AvatarFallback className="bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                            <Globe className="h-3 w-3" />
+                          </AvatarFallback>
+                        </Avatar>
+                      </button>
                     </TooltipTrigger>
                     <TooltipContent>
                       Installed organization-wide. Manage credentials to review.
@@ -767,15 +772,18 @@ export function McpServerCard({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Avatar
-                      className="size-6 border-2 border-background cursor-pointer hover:opacity-80 transition-opacity"
+                    <button
+                      type="button"
+                      aria-label={`Manage credentials for ${item.name}`}
                       onClick={() => goToItemPage("credentials")}
                       data-testid={getManageCredentialsButtonTestId(item.name)}
                     >
-                      <AvatarFallback className="text-muted-foreground bg-muted">
-                        <Plus className="h-3 w-3" />
-                      </AvatarFallback>
-                    </Avatar>
+                      <Avatar className="size-6 border-2 border-background cursor-pointer hover:opacity-80 transition-opacity">
+                        <AvatarFallback className="text-muted-foreground bg-muted">
+                          <Plus className="h-3 w-3" />
+                        </AvatarFallback>
+                      </Avatar>
+                    </button>
                   </TooltipTrigger>
                   <TooltipContent>Manage credentials</TooltipContent>
                 </Tooltip>
@@ -794,6 +802,7 @@ export function McpServerCard({
       size="sm"
       variant="outline"
       className="flex-1"
+      aria-label={`Install ${item.name}`}
     >
       <User className="h-4 w-4" />
       Install

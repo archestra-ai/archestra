@@ -48,10 +48,19 @@ export function useChatOpsBindings(
 export function useUpdateChatOpsBinding() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { id: string; agentId: string | null }) => {
+    mutationFn: async (params: {
+      id: string;
+      agentId?: string | null;
+      answerAllMessages?: boolean;
+    }) => {
       const { data, error } = await archestraApiSdk.updateChatOpsBinding({
         path: { id: params.id },
-        body: { agentId: params.agentId },
+        body: {
+          ...(params.agentId !== undefined && { agentId: params.agentId }),
+          ...(params.answerAllMessages !== undefined && {
+            answerAllMessages: params.answerAllMessages,
+          }),
+        },
       });
       if (error) {
         handleApiError(error);

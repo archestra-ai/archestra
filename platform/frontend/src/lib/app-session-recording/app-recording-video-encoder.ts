@@ -2,6 +2,7 @@ import {
   AudioSample,
   AudioSampleSource,
   BufferTarget,
+  canEncodeAudio,
   Mp4OutputFormat,
   Output,
   VideoSample,
@@ -57,39 +58,38 @@ class VideoEncoderSession {
     if (this.active) {
       throw new Error("A video is already being encoded on this page.");
     }
-    const output = new Output({
-      format: new Mp4OutputFormat(),
-      target: new BufferTarget(),
-    });
-    const source = new VideoSampleSource({
-      codec: "avc",
-      bitrate: exportBitrate(params),
-    });
-    output.addVideoTrack(source, { frameRate: params.fps });
     // AAC for MP4 (the same compatibility reason as H.264 above — Slides,
-    // Keynote, QuickTime). All tracks must be added before start(); a codec the
-    // render browser can't encode just drops the audio rather than the whole
-    // export.
-    let audioSource: AudioSampleSource | null = null;
-    if (params.audio && params.audio.channelData.length > 0) {
+    // Keynote, QuickTime). Prefer the browser's native encoder; Chromium builds
+    // without it lazily load Mediabunny's WASM AAC encoder instead. The source
+    // only initializes its encoder when the first sample is added, so if even
+    // the fallback fails at runtime, discard this untouched output and restart
+    // it video-only rather than losing the whole export.
+    let prepared: ReturnType<typeof createEncodingOutput> | null = null;
+    if (
+      params.audio &&
+      params.audio.channelData.length > 0 &&
+      (await supportsAudioExport(params.audio))
+    ) {
       try {
-        audioSource = new AudioSampleSource({
-          codec: "aac",
-          bitrate: AUDIO_EXPORT_BITRATE,
-        });
-        output.addAudioTrack(audioSource);
+        prepared = createEncodingOutput(params, true);
+        await prepared.output.start();
+        if (!prepared.audioSource) {
+          throw new Error("The AAC track was not created.");
+        }
+        await feedAudioTrack(prepared.audioSource, params.audio);
       } catch {
-        audioSource = null;
+        await prepared?.output.cancel().catch(() => {});
+        prepared = null;
       }
     }
-    await output.start();
-    if (audioSource && params.audio) {
-      await feedAudioTrack(audioSource, params.audio);
+    if (!prepared) {
+      prepared = createEncodingOutput(params, false);
+      await prepared.output.start();
     }
     this.active = {
-      output,
-      source,
-      audioSource,
+      output: prepared.output,
+      source: prepared.source,
+      audioSource: prepared.audioSource,
       fps: params.fps,
       crop: params.crop ?? null,
       chain: Promise.resolve(),
@@ -234,6 +234,67 @@ const AUDIO_EXPORT_BITRATE = 128_000;
 /** One second of PCM per muxed AudioSample: coarse enough to be cheap, fine
  *  enough that the encoder starts emitting early. */
 const AUDIO_EXPORT_CHUNK_SEC = 1;
+
+/**
+ * Prepare an MP4 output before any frames are fed. Kept as a factory because
+ * an audio encoder can pass capability detection but still fail to initialize;
+ * at that point a fresh video-only output is the lossless recovery path.
+ */
+function createEncodingOutput(
+  params: { width: number; height: number; fps: number },
+  withAudio: boolean,
+) {
+  const output = new Output({
+    format: new Mp4OutputFormat(),
+    target: new BufferTarget(),
+  });
+  const source = new VideoSampleSource({
+    codec: "avc",
+    bitrate: exportBitrate(params),
+  });
+  output.addVideoTrack(source, { frameRate: params.fps });
+  const audioSource = withAudio
+    ? new AudioSampleSource({
+        codec: "aac",
+        bitrate: AUDIO_EXPORT_BITRATE,
+      })
+    : null;
+  if (audioSource) output.addAudioTrack(audioSource);
+  return { output, source, audioSource };
+}
+
+/** Whether native or fallback AAC can encode the exact exported layout. */
+async function supportsAudioExport(audio: PlaybackAudio): Promise<boolean> {
+  const options = {
+    bitrate: AUDIO_EXPORT_BITRATE,
+    numberOfChannels: audio.numberOfChannels,
+    sampleRate: audio.sampleRate,
+  };
+  if (await canEncodeAudioSafely(options)) return true;
+
+  // The Alpine/system Chromium used by the renderer commonly omits AAC from
+  // WebCodecs. Load the ~1 MB FFmpeg/WASM encoder only on that path; registering
+  // it clears Mediabunny's negative capability cache before the second check.
+  try {
+    const { registerAacEncoder } = await import("@mediabunny/aac-encoder");
+    registerAacEncoder();
+  } catch {
+    return false;
+  }
+  return canEncodeAudioSafely(options);
+}
+
+async function canEncodeAudioSafely(options: {
+  bitrate: number;
+  numberOfChannels: number;
+  sampleRate: number;
+}): Promise<boolean> {
+  try {
+    return await canEncodeAudio("aac", options);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Feed the whole decoded audio track into the muxer as one-second AudioSamples

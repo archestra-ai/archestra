@@ -5,6 +5,8 @@ let mockIsKnowledgeBaseConfigured = false;
 
 let mockConfigStatus = { embedding: false, reranker: false };
 
+vi.mock("@/lib/hooks/use-app-name");
+
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useIsKnowledgeBaseConfigured: () => mockIsKnowledgeBaseConfigured,
   useKnowledgeBaseConfigStatus: () => mockConfigStatus,

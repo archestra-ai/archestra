@@ -72,6 +72,12 @@ export const CacheKey = {
   TeamsThreadMuteMarker: "teams-thread-mute-marker",
   /** Latest mute token per Slack channel thread (cross-pod in-flight reply suppression) */
   SlackThreadMuteMarker: "slack-thread-mute-marker",
+  /** MS Teams channel threads muted while the channel answers all messages */
+  TeamsThreadMuted: "teams-thread-muted",
+  /** Slack channel threads muted while the channel answers all messages */
+  SlackThreadMuted: "slack-thread-muted",
+  /** Per-channel "answer all messages" flag, briefly cached to spare the gate a DB read per message */
+  ChatOpsChannelAnswerAll: "chatops-channel-answer-all",
   /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */

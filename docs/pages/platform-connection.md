@@ -67,7 +67,7 @@ Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot
 
 ### Claude Code
 
-For a full walkthrough, see [Using Claude Code Max Subscription](/docs/platform-claude-code-example).
+For a full walkthrough, see [Using Claude Code with a Pro or Max Subscription](/docs/platform-claude-code-example).
 
 The `claude` CLI must be on your `PATH`.
 

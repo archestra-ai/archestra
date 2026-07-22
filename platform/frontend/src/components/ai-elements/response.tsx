@@ -101,6 +101,20 @@ export const Response = memo(
           "[&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded [&_pre]:my-2 [&_pre]:overflow-x-auto",
           // Fix streamdown code blocks - remove padding from code elements inside them
           "[&_[data-streamdown='code-block']_code]:p-0 [&_[data-streamdown='code-block']_code]:bg-transparent",
+          // Streamdown mats tables in an opaque bg-sidebar card (and ignores its
+          // className prop), which clashes with themed message bubbles
+          // (bg-secondary); flatten the mat so the bubble shows through and only
+          // the inner bg-background table card stays.
+          "[&_[data-streamdown='table-wrapper']]:bg-transparent [&_[data-streamdown='table-wrapper']]:border-0 [&_[data-streamdown='table-wrapper']]:p-0",
+          // With the mat gone the toolbar sits on the bubble itself, where
+          // text-muted-foreground can vanish (theme-twitter's secondary equals
+          // muted-foreground); inherit the bubble's paired text color instead.
+          "[&_[data-streamdown='table-wrapper']_button]:text-inherit",
+          // Text inside the wrapper otherwise inherits the bubble's
+          // secondary-foreground, which is unreadable on the opaque
+          // bg-background surfaces (table card, copy-menu panel) in themes with
+          // a dark secondary; re-pair those surfaces with text-foreground.
+          "[&_[data-streamdown='table-wrapper']_.bg-background]:text-foreground",
           // Keep large markdown tables readable without letting them dominate the chat scroll.
           "[&_[data-streamdown='table-wrapper']>div:last-child]:max-h-[420px]",
           "[&_[data-streamdown='table-header']]:sticky [&_[data-streamdown='table-header']]:top-0 [&_[data-streamdown='table-header']]:z-10",

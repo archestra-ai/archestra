@@ -215,14 +215,17 @@ class SkillModel {
    * visibility namespace (personal names per author, team/org names per org).
    * The insert is atomic (`ON CONFLICT DO NOTHING`, matching whichever partial
    * unique index applies), so this is race-free against concurrent creates.
-   * When `teamIds` is supplied the team rows are inserted in the same
-   * transaction, so a failed assignment cannot leave a scoped skill orphaned.
+   * When `teamIds` / `environmentIds` are supplied the junction rows are
+   * inserted in the same transaction, so a failed assignment cannot leave a
+   * scoped skill orphaned.
    */
   static async createWithFiles(
     params: {
       skill: InsertSkill;
       files: Omit<InsertSkillFile, "skillId">[];
       teamIds?: string[];
+      /** Environments the skill is restricted to; empty/omitted = every environment. */
+      environmentIds?: string[];
     },
     tx?: Transaction,
   ): Promise<Skill | null> {
@@ -247,6 +250,15 @@ class SkillModel {
           .values(
             params.teamIds.map((teamId) => ({ skillId: skill.id, teamId })),
           );
+      }
+
+      if (params.environmentIds && params.environmentIds.length > 0) {
+        await tx.insert(schema.skillEnvironmentsTable).values(
+          params.environmentIds.map((environmentId) => ({
+            skillId: skill.id,
+            environmentId,
+          })),
+        );
       }
 
       // every skill starts at immutable version 1.
@@ -274,11 +286,12 @@ class SkillModel {
    * Update a skill's metadata, resource files, and team assignments atomically.
    *
    * Passing `files` replaces the full set; omitting it leaves files untouched.
-   * Passing `teamIds` replaces the team assignments (an empty array clears
-   * them); omitting it leaves them untouched. Doing the metadata, file, and
-   * team writes in one transaction means a failed team sync (e.g. a team
-   * deleted mid-request) rolls the whole update back, so a scope change can
-   * never be committed with a team set that leaves the skill orphaned.
+   * Passing `teamIds` / `environmentIds` replaces those assignments (an empty
+   * array clears them); omitting them leaves them untouched. Doing the
+   * metadata, file, and junction writes in one transaction means a failed sync
+   * (e.g. a team deleted mid-request) rolls the whole update back, so a scope
+   * change can never be committed with a team set that leaves the skill
+   * orphaned.
    *
    * When `expectedLatestVersion` is set, the update is a compare-and-set: it
    * throws `ApiError(409)` (rolling back) if the skill's head has already moved
@@ -291,6 +304,8 @@ class SkillModel {
     skill: UpdateSkill;
     files?: Omit<InsertSkillFile, "skillId">[];
     teamIds?: string[];
+    /** Replaces the environment assignments; [] clears them (every environment). */
+    environmentIds?: string[];
     expectedLatestVersion?: number;
   }): Promise<Skill | null> {
     return await withDbTransaction(async (tx) => {
@@ -340,6 +355,21 @@ class SkillModel {
             .values(
               params.teamIds.map((teamId) => ({ skillId: params.id, teamId })),
             );
+        }
+      }
+
+      if (params.environmentIds !== undefined) {
+        await tx
+          .delete(schema.skillEnvironmentsTable)
+          .where(eq(schema.skillEnvironmentsTable.skillId, params.id));
+
+        if (params.environmentIds.length > 0) {
+          await tx.insert(schema.skillEnvironmentsTable).values(
+            params.environmentIds.map((environmentId) => ({
+              skillId: params.id,
+              environmentId,
+            })),
+          );
         }
       }
 
@@ -545,8 +575,20 @@ class SkillModel {
         ),
       )
       .limit(1);
+    if (!row) return null;
 
-    return row ?? null;
+    // environment assignments live in a junction table; include them (sorted
+    // for a stable diff) so an environment change shows up in the audit record.
+    const environmentIds = await db
+      .select({
+        environmentId: schema.skillEnvironmentsTable.environmentId,
+      })
+      .from(schema.skillEnvironmentsTable)
+      .where(eq(schema.skillEnvironmentsTable.skillId, id));
+    return {
+      ...row,
+      environmentIds: environmentIds.map((r) => r.environmentId).sort(),
+    };
   }
 }
 

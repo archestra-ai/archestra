@@ -121,6 +121,8 @@ export function PlatformTokenManagerDialog({
               variant="outline"
               size="icon"
               onClick={handleShowToken}
+              aria-label={showValue ? "Hide token" : "Show token"}
+              aria-pressed={showValue}
               title={showValue ? "Hide token" : "Show token"}
             >
               <Key className="h-4 w-4" />
@@ -130,6 +132,7 @@ export function PlatformTokenManagerDialog({
                 variant="outline"
                 size="icon"
                 onClick={handleCopy}
+                aria-label="Copy token"
                 title="Copy token"
               >
                 {copied ? (

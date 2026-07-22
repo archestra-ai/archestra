@@ -2,8 +2,8 @@ import {
   CLAUDE_CODE_CLIENT_ID,
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
-  DEFAULT_APP_NAME,
   EXTERNAL_AGENT_ID_HEADER,
+  isDefaultBrandedAppName,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
@@ -145,9 +145,8 @@ function banner(ctx: SetupScriptContext): string {
   // echoing logo-icon.svg. The built-in Windows PowerShell 5.1 console can
   // render block/quadrant Unicode glyphs as mojibake (legacy codepage), so this
   // mirrors the macOS/Linux block-mark's composition with portable ASCII only.
-  const logo =
-    ctx.appName === DEFAULT_APP_NAME
-      ? `   .------------------.
+  const logo = isDefaultBrandedAppName(ctx.appName)
+    ? `   .------------------.
    |                  |
    |        ,##.      |
    |        ####      |     ${ctx.appName}
@@ -156,7 +155,7 @@ function banner(ctx: SetupScriptContext): string {
    |       \`##' \`'    |
    |                  |
    '------------------'`
-      : `   ${ctx.appName}
+    : `   ${ctx.appName}
    Secure access to your AI tools`;
 
   const details = [
@@ -214,11 +213,6 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
     case "claude-code":
       if (ctx.mcp) {
         steps.push(claudeCodeOAuthNextStep(ctx.mcp.serverName));
-      }
-      if (ctx.proxy?.provider === "bedrock" && ctx.proxy.virtualKey) {
-        steps.push(
-          "Set the AWS_BEARER_TOKEN_BEDROCK environment variable shown above (setx or System settings to persist).",
-        );
       }
       if (ctx.skills) {
         steps.push(
@@ -391,8 +385,12 @@ const CLAUDE_SETTINGS_PATH =
 // disconnect surface write/strip identical settings.json keys.
 const [ANTHROPIC_BASE_URL_KEY, ANTHROPIC_AUTH_TOKEN_KEY] =
   CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
-const [CLAUDE_USE_BEDROCK_KEY, AWS_REGION_KEY, BEDROCK_BASE_URL_KEY] =
-  CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
+const [
+  CLAUDE_USE_BEDROCK_KEY,
+  AWS_REGION_KEY,
+  BEDROCK_BASE_URL_KEY,
+  AWS_BEARER_TOKEN_KEY,
+] = CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
 
 /**
  * Custom headers Claude Code sends on every proxied request (Anthropic and
@@ -464,30 +462,30 @@ Write-Host ('Updated ' + $arch_hpath)`;
 }
 
 function claudeBedrockProxySection(proxy: SetupScriptProxySection): string {
+  const values: Record<string, string> = {
+    [CLAUDE_USE_BEDROCK_KEY]: "1",
+    [AWS_REGION_KEY]: "us-east-1",
+    [BEDROCK_BASE_URL_KEY]: proxy.url,
+  };
+  if (proxy.virtualKey) {
+    // The virtual key authenticates against the proxy as a Bedrock bearer
+    // token. Merged into settings.json env exactly like ANTHROPIC_AUTH_TOKEN
+    // on the Anthropic path, so the setup needs no manual step.
+    values[AWS_BEARER_TOKEN_KEY] = proxy.virtualKey;
+  }
   return `Say ${psq("Routing Claude Code through the Bedrock proxy")}
 ${mergeJsonFileSnippet({
   pathExpr: CLAUDE_SETTINGS_PATH,
   nestedKey: "env",
-  values: {
-    [CLAUDE_USE_BEDROCK_KEY]: "1",
-    [AWS_REGION_KEY]: "us-east-1",
-    [BEDROCK_BASE_URL_KEY]: proxy.url,
-  },
+  values,
 })}
 ${claudeCustomHeaderAppendSnippet(claudeCustomHeaderLines(proxy))}
-Write-Host 'Update AWS_REGION in the settings.json env block if you use a different region.'
-${
-  proxy.virtualKey
-    ? // Printed inside a single-quoted here-string (literal — $env: is not
-      // expanded). virtual-key values are url-safe base64, so they can never
-      // contain a newline that would break out of the here-string.
-      `Write-Host @'
-
-Set this environment variable (kept out of files claude reads; use setx or System settings to persist):
-  $env:AWS_BEARER_TOKEN_BEDROCK = "${proxy.virtualKey}"
-'@`
-    : `Write-Host 'Your existing AWS credentials keep working — only the base URL changed.'`
-}`;
+Write-Host 'Update AWS_REGION in the settings.json env block if you use a different region.'${
+    proxy.virtualKey
+      ? ""
+      : `
+Write-Host 'Your existing AWS credentials keep working — only the base URL changed.'`
+  }`;
 }
 
 // ===================================================================

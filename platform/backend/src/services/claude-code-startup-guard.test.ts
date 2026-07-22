@@ -406,10 +406,19 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain('read -rs -n 1 -t "$TICK" key');
   });
 
-  test("renders the Archestra mark for the default brand, plain title when white-labeled", () => {
+  test("renders the Archestra mark for the default brand and its own variants, plain title when genuinely white-labeled", () => {
     const branded = renderClaudeCodeStartupGuardScript(CTX);
     expect(branded).toContain("▟██▙");
     expect(branded).toContain("Secure access to your AI tools");
+
+    // an org named "Archestra Staging" is still Archestra's own brand — the
+    // mark must not disappear just because the name isn't an exact match
+    const variant = renderClaudeCodeStartupGuardScript({
+      ...CTX,
+      appName: "Archestra Staging",
+    });
+    expect(variant).toContain("▟██▙");
+    expect(variant).toContain("'Archestra Staging'");
 
     const whiteLabel = renderClaudeCodeStartupGuardScript({
       ...CTX,

@@ -157,6 +157,7 @@ export default function ServiceAccountsSettingsPage() {
         header: "Actions",
         cell: ({ row }) => (
           <TableRowActions
+            itemName={row.original.name}
             actions={[
               ...(canUpdateServiceAccounts
                 ? [

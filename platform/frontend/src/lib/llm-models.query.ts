@@ -65,6 +65,25 @@ export function useLlmModels(params?: LlmModelsParams) {
 }
 
 /**
+ * The display name (e.g. "Claude Sonnet") for a chat model's database id, or
+ * null when it can't be resolved (deleted model, network failure). A plain
+ * one-off fetch rather than the `useLlmModels` hook — for callers outside a
+ * component render, like stamping the model onto a recording bundle at save
+ * time.
+ */
+export async function resolveModelDisplayName(
+  modelId: string,
+): Promise<string | null> {
+  try {
+    const { data, error } = await getLlmModels({});
+    if (error || !data) return null;
+    return data.find((model) => model.dbId === modelId)?.displayName ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetch embedding models for a specific API key.
  * Returns only models with configured embedding dimensions for the given API key.
  */

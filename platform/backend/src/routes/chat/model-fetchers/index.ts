@@ -2,6 +2,7 @@ import type { SupportedProvider } from "@archestra/shared";
 import { MINIMAX_MODELS, PERPLEXITY_MODELS } from "@archestra/shared";
 import type { OpenAi } from "@/types";
 import { fetchAnthropicModels } from "./anthropic";
+import { fetchArchestraModels } from "./archestra";
 import { fetchAzureModels } from "./azure";
 import { makeBearerFetcher, makeStaticFetcher } from "./bearer-fetcher";
 import { fetchBedrockModels } from "./bedrock";
@@ -79,6 +80,12 @@ const fetchGroqModels = makeBearerFetcher({
   errorLabel: "Groq models",
 });
 
+const fetchKimiModels = makeBearerFetcher({
+  provider: "kimi",
+  configKey: "kimi",
+  errorLabel: "Kimi models",
+});
+
 const fetchMistralModels = makeBearerFetcher({
   provider: "mistral",
   configKey: "mistral",
@@ -104,6 +111,7 @@ const fetchZhipuaiModels = makeBearerFetcher({
 
 export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   anthropic: fetchAnthropicModels,
+  archestra: fetchArchestraModels,
   azure: fetchAzureModels,
   bedrock: fetchBedrockModels,
   cerebras: fetchCerebrasModels,
@@ -112,6 +120,7 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   gemini: fetchGeminiModels,
   "github-copilot": fetchGithubCopilotModels,
   groq: fetchGroqModels,
+  kimi: fetchKimiModels,
   "microsoft-365-copilot": fetchMicrosoft365CopilotModels,
   minimax: makeStaticFetcher("minimax", MINIMAX_MODELS),
   mistral: fetchMistralModels,

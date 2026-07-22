@@ -5,6 +5,17 @@ export const DEFAULT_APP_DESCRIPTION =
   "Enterprise MCP-native Secure AI Platform";
 
 /**
+ * True for the default brand or one of its own variants (e.g. "Archestra
+ * Staging", "Archestra Dev") — never true for a genuinely different
+ * white-labeled name. Used to gate Archestra-only visuals, like the mark the
+ * Claude Code startup guard draws, that must never appear under someone
+ * else's brand.
+ */
+export function isDefaultBrandedAppName(appName: string): boolean {
+  return appName.startsWith(DEFAULT_APP_NAME);
+}
+
+/**
  * Prefix used for newly generated platform-managed tokens (team tokens, user
  * tokens, virtual API keys, API keys). Keep this branding-neutral.
  */
@@ -142,6 +153,9 @@ export const CLAUDE_CODE_PROXY_ENV_KEYS = {
     "CLAUDE_CODE_USE_BEDROCK",
     "AWS_REGION",
     "ANTHROPIC_BEDROCK_BASE_URL",
+    // Virtual-key mode only: the proxy virtual key, sent as a Bedrock bearer
+    // token (the Anthropic path's ANTHROPIC_AUTH_TOKEN equivalent).
+    "AWS_BEARER_TOKEN_BEDROCK",
   ],
 } as const;
 

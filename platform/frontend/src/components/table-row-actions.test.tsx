@@ -202,6 +202,33 @@ describe("TableRowActions", () => {
     expect(screen.getByLabelText(/more actions/i)).toBeInTheDocument();
   });
 
+  it("appends itemName to each action's accessible name so identical row buttons are distinguishable", () => {
+    render(
+      <TooltipProvider>
+        <TableRowActions
+          actions={primaryActions}
+          dropdownActions={dropdownActions}
+          itemName="My Agent"
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Edit My Agent" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("More actions My Agent")).toBeInTheDocument();
+  });
+
+  it("keeps the bare action label as the accessible name when itemName is not provided", () => {
+    render(
+      <TooltipProvider>
+        <TableRowActions actions={primaryActions} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+  });
+
   it("calls stopPropagation on primary action click", () => {
     const stopPropagation = vi.fn();
     render(

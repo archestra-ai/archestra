@@ -1063,7 +1063,15 @@ class McpServerModel {
     server: Partial<UpdateMcpServer>,
     tx?: Transaction,
   ): Promise<McpServer | null> {
-    const serverData = server;
+    // Invariant: `reinstallReason` is null iff `reinstallRequired` is false.
+    // Clearing the flag drops the reason; flagging without one defaults to
+    // "new-input" so the UI errs toward collecting values.
+    const serverData: Partial<UpdateMcpServer> =
+      server.reinstallRequired === false
+        ? { ...server, reinstallReason: null }
+        : server.reinstallRequired === true && server.reinstallReason == null
+          ? { ...server, reinstallReason: "new-input" }
+          : server;
 
     let updatedServer: McpServer | undefined;
 

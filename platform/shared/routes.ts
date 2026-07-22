@@ -269,6 +269,15 @@ export const RouteId = {
     "deepseekChatCompletionsWithDefaultAgent",
   DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
 
+  // Proxy Routes - Archestra
+  ArchestraChatCompletionsWithDefaultAgent:
+    "archestraChatCompletionsWithDefaultAgent",
+  ArchestraChatCompletionsWithAgent: "archestraChatCompletionsWithAgent",
+
+  // Proxy Routes - Kimi (Moonshot AI)
+  KimiChatCompletionsWithDefaultAgent: "kimiChatCompletionsWithDefaultAgent",
+  KimiChatCompletionsWithAgent: "kimiChatCompletionsWithAgent",
+
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",
   BedrockConverseWithAgent: "bedrockConverseWithAgent",
@@ -279,6 +288,13 @@ export const RouteId = {
   BedrockConverseWithAgentAndModel: "bedrockConverseWithAgentAndModel",
   BedrockConverseStreamWithAgentAndModel:
     "bedrockConverseStreamWithAgentAndModel",
+  // Native InvokeModel routes (Anthropic Messages wire format, model ID in URL)
+  BedrockInvokeWithDefaultAgentAndModel:
+    "bedrockInvokeWithDefaultAgentAndModel",
+  BedrockInvokeWithAgentAndModel: "bedrockInvokeWithAgentAndModel",
+  BedrockInvokeStreamWithDefaultAgentAndModel:
+    "bedrockInvokeStreamWithDefaultAgentAndModel",
+  BedrockInvokeStreamWithAgentAndModel: "bedrockInvokeStreamWithAgentAndModel",
   // OpenAI-compatible routes (translate OpenAI chat/completions ↔ Converse)
   BedrockOpenaiChatCompletionsWithDefaultAgent:
     "bedrockOpenaiChatCompletionsWithDefaultAgent",

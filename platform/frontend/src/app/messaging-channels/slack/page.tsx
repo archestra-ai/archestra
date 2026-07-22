@@ -35,6 +35,7 @@ function useSlackProviderConfig(): ProviderConfig {
     providerLabel: "Slack",
     providerIcon: "/icons/slack.png",
     webhookPath: "/api/webhooks/chatops/slack",
+    supportsAnswerAll: true,
     docsUrl: getFrontendDocsUrl("platform-slack"),
     slashCommand: buildSlackSlashCommands(appName).SELECT_AGENT,
     buildDeepLink: (binding) => {

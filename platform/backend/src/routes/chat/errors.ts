@@ -1379,6 +1379,7 @@ function mapMicrosoft365CopilotErrorToCode(
  */
 const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   openai: openAiCompatibleErrorHandler,
+  archestra: openAiCompatibleErrorHandler,
   anthropic: providerErrorHandler(parseAnthropicError, mapAnthropicErrorToCode),
   gemini: providerErrorHandler(parseGeminiError, mapGeminiErrorToCode),
   bedrock: providerErrorHandler(parseBedrockError, mapBedrockErrorToCode),
@@ -1394,6 +1395,7 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   "ollama-native": providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
+  kimi: openAiCompatibleErrorHandler,
   "github-copilot": openAiCompatibleErrorHandler,
   "microsoft-365-copilot": providerErrorHandler(
     parseOpenAIError,

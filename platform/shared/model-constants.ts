@@ -21,9 +21,11 @@ export const SupportedProvidersSchema = z.enum([
   "zhipuai",
   "deepseek",
   "minimax",
+  "kimi",
   "azure",
   "github-copilot",
   "microsoft-365-copilot",
+  "archestra",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -34,6 +36,10 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "gemini:embeddings",
   "anthropic:messages",
   "bedrock:converse",
+  // Bedrock InvokeModel with an Anthropic model: the wire format is the
+  // Anthropic Messages API (what the Anthropic SDK's Bedrock client and
+  // Claude Code send), transported over Bedrock.
+  "bedrock:invoke",
   "bedrock:embeddings",
   "cohere:chat",
   "cerebras:chatCompletions",
@@ -48,10 +54,12 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "zhipuai:chatCompletions",
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
+  "kimi:chatCompletions",
   "azure:chatCompletions",
   "azure:responses",
   "github-copilot:chatCompletions",
   "microsoft-365-copilot:chatCompletions",
+  "archestra:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -88,9 +96,11 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   zhipuai: "Zhipu AI",
   deepseek: "DeepSeek",
   minimax: "MiniMax",
+  kimi: "Moonshot (Kimi)",
   azure: "Azure AI Foundry",
   "github-copilot": "GitHub Copilot",
   "microsoft-365-copilot": "Microsoft 365 Copilot",
+  archestra: "Archestra",
 };
 
 /**
@@ -115,6 +125,10 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
 export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
   "azure",
   "vllm",
+  // Archestra-as-provider points at another Archestra instance's OpenAI-compatible
+  // proxy endpoint (e.g. https://other/v1/proxy/openai/<agentId>); there is no
+  // default, so a key without a base URL would silently route to api.openai.com.
+  "archestra",
 ]);
 
 /**
@@ -281,9 +295,13 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   zhipuai: "https://api.z.ai/api/paas/v4",
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
+  kimi: "https://api.moonshot.ai/v1",
   azure: "https://<resource>.openai.azure.com/openai",
   "github-copilot": "https://api.githubcopilot.com",
   "microsoft-365-copilot": "https://graph.microsoft.com/beta",
+  // No default: the upstream is another Archestra instance's proxy endpoint,
+  // supplied per key (e.g. https://your-archestra/v1/proxy/openai/<agentId>).
+  archestra: "",
 };
 
 /**
@@ -373,6 +391,14 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
   deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
   minimax: ["minimax-m3", "minimax-m2.7"],
+  kimi: [
+    "kimi-k2-thinking",
+    "kimi-k2-turbo",
+    "kimi-k2",
+    "kimi-latest",
+    "moonshot-v1-128k",
+    "kimi",
+  ],
   azure: [
     "gpt-5.5-pro",
     "gpt-5.5",
@@ -397,6 +423,9 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "gpt-4o",
   ],
   "microsoft-365-copilot": [MICROSOFT_365_COPILOT_MODELS[0].id],
+  // The upstream Archestra can front any provider, so match common flagship
+  // families across vendors (most- to least-preferred).
+  archestra: ["opus", "sonnet", "gpt-5", "gemini-3", "grok-4"],
 };
 
 /**
@@ -421,9 +450,12 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   deepseek: "deepseek-v4-pro",
   bedrock: "anthropic.claude-opus-4-8",
   minimax: "MiniMax-M3",
+  kimi: "kimi-k2-0711-preview",
   azure: "gpt-5.5",
   "github-copilot": "gpt-4o",
   "microsoft-365-copilot": MICROSOFT_365_COPILOT_MODELS[0].id,
+  // Fallback only; users pick from the upstream's fetched model list.
+  archestra: "gpt-4o",
 };
 
 /**
@@ -492,6 +524,7 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     // These providers use OpenAI-compatible API in Archestra
     llama: "openai",
     deepseek: "deepseek",
+    moonshotai: "kimi",
     groq: "groq",
     "fireworks-ai": "openai",
     togetherai: "openai",

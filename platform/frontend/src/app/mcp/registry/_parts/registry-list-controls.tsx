@@ -120,9 +120,12 @@ export function RegistryFilterDropdown({
           {count > 0 && (
             <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
               {count}
+              <span className="sr-only">
+                {count === 1 ? "filter applied" : "filters applied"}
+              </span>
             </span>
           )}
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          <ChevronDown aria-hidden className="h-4 w-4 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-1.5">

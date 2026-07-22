@@ -83,6 +83,7 @@ import {
   AudioPlaybackController,
   buildPlaybackAudio,
   type PlaybackAudio,
+  preparePlaybackAudio,
   recordingHasAudio,
 } from "@/lib/app-session-recording/app-recording-audio";
 import {
@@ -116,6 +117,11 @@ type RecordingEnhancement = NonNullable<AppRecordingBundle["enhancement"]>;
 type TimelineEvent = PlaybackRecording["events"][number];
 type McpTimelineEvent = Extract<TimelineEvent, { kind: "mcp" }>;
 type TranscriptMessage = PlaybackRecording["transcript"][number];
+type PlayerAudioStatus =
+  | { status: "loading" }
+  | { status: "ready" }
+  | { status: "unsupported" }
+  | { status: "failed" };
 
 const REPLAY_CONTROL_TYPE = "mcp-apps:replay-control";
 /** How often the (rAF-driven) internal clock is mirrored into React state. */
@@ -932,6 +938,9 @@ function PlayerSurface({
     [filming, recording.events],
   );
   const [muted, setMuted] = useState(false);
+  const [audioStatus, setAudioStatus] = useState<PlayerAudioStatus>({
+    status: "loading",
+  });
   const audioRef = useRef<AudioPlaybackController | null>(null);
   /** Cached export-audio build, used only while filming (see the replay bridge). */
   const renderAudioRef = useRef<Promise<PlaybackAudio | null> | null>(null);
@@ -1421,27 +1430,41 @@ function PlayerSurface({
   // Decode the captured audio onto the current playback timeline (idle
   // compression + cuts baked in) and hold a controller. Rebuilt whenever the
   // playback identity changes — an edit retimes where audio lands — and torn
-  // down on unmount/filming. Best-effort: a browser that can't decode just
-  // plays silent.
+  // down on unmount/filming. Unsupported codecs, decode errors, and audio-output
+  // failures all become an explicit muted-video state; visuals remain usable.
   useEffect(() => {
     if (!hasAudio) return;
+    setAudioStatus({ status: "loading" });
     let cancelled = false;
     let controller: AudioPlaybackController | null = null;
-    void buildPlaybackAudio({
+    void preparePlaybackAudio({
       events: recording.events,
       cuts: recording.edits?.cuts ?? [],
       durationMs: playback.duration,
       toPlaybackMs: playback.toPlaybackMs,
-    }).then((audio) => {
-      if (cancelled || !audio) return;
-      controller = new AudioPlaybackController(audio);
-      controller.setMuted(mutedRef.current);
-      audioRef.current = controller;
-      controller.sync(
-        clockRef.current,
-        playStateRef.current === "playing" && frameReadyRef.current,
-      );
-    });
+    })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.status !== "ready") {
+          setAudioStatus({
+            status: result.status === "unsupported" ? "unsupported" : "failed",
+          });
+          return;
+        }
+        controller = new AudioPlaybackController(result.audio, () => {
+          if (!cancelled) setAudioStatus({ status: "failed" });
+        });
+        controller.setMuted(mutedRef.current);
+        audioRef.current = controller;
+        setAudioStatus({ status: "ready" });
+        controller.sync(
+          clockRef.current,
+          playStateRef.current === "playing" && frameReadyRef.current,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setAudioStatus({ status: "failed" });
+      });
     return () => {
       cancelled = true;
       controller?.dispose();
@@ -2361,33 +2384,58 @@ function PlayerSurface({
               playButton
             );
           })()}
-          {/* Mute toggle — only when the recording captured sound. Sound is on
-              by default so the demo replays as it happened; this is the way to
-              silence it. */}
-          {hasAudio && (
-            <Tooltip>
-              <TooltipTrigger asChild>
+          {/* Mute toggle — only when the recording captured sound. If this
+              browser cannot prepare or output it, keep video playback enabled
+              while showing an explicit, disabled silent state. */}
+          {hasAudio &&
+            (() => {
+              const audioReady = audioStatus.status === "ready";
+              const audioMuted = muted || !audioReady;
+              const label =
+                audioStatus.status === "loading"
+                  ? "Preparing audio"
+                  : audioStatus.status === "unsupported"
+                    ? "This browser can't play the recording's audio — video will play silently"
+                    : audioStatus.status === "failed"
+                      ? "Audio unavailable — video will play silently"
+                      : muted
+                        ? "Unmute"
+                        : "Mute";
+              const button = (
                 <Button
                   type="button"
                   size="icon"
                   variant="ghost"
                   className="-mb-0.5 size-9 rounded-md text-muted-foreground hover:text-foreground"
-                  aria-label={muted ? "Unmute" : "Mute"}
-                  aria-pressed={muted}
+                  aria-label={label}
+                  aria-pressed={audioMuted}
+                  disabled={!audioReady}
                   onClick={() => setMuted((value) => !value)}
                 >
-                  {muted ? (
+                  {audioStatus.status === "loading" ? (
+                    <Loader size={16} />
+                  ) : audioMuted ? (
                     <VolumeX className="h-4 w-4" />
                   ) : (
                     <Volume2 className="h-4 w-4" />
                   )}
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">
-                {muted ? "Unmute" : "Mute"}
-              </TooltipContent>
-            </Tooltip>
-          )}
+              );
+              return (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {audioReady ? (
+                      button
+                    ) : (
+                      <span className="-mb-0.5 inline-flex">{button}</span>
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-64 text-xs">
+                    {label}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })()}
           {/* No fixed-width reserve: tabular-nums keeps the readout stable,
               and a sized box would pad one side and break the row's even
               gap rhythm. */}

@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  APP_GALLERY_CATEGORIES,
+  type AppRecordingBundle,
   pruneTrailingTrimEvents,
   validateRecordingBundle,
 } from "@archestra/shared";
@@ -27,6 +29,14 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -37,7 +47,7 @@ import {
   buildGallerySubmissionFiles,
   buildGallerySubmissionPr,
   DuplicateSubmissionError,
-  fetchGithubLogin,
+  fetchGithubIdentity,
   fetchSubmittedPrState,
   forgetGallerySubmission,
   type GallerySubmissionFile,
@@ -51,10 +61,12 @@ import {
   submitRecordingToAppGallery,
   takeCachedGithubToken,
 } from "@/lib/app-session-recording/app-gallery-share";
+import { reviveRecordingEvents } from "@/lib/app-session-recording/app-recording-binary";
 import { recordingStore } from "@/lib/app-session-recording/app-recording-store";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 import { cn } from "@/lib/utils";
+import { buildPlayback, presentedTranscript } from "./app-session-player";
 
 /**
  * The player's "Submit to Archestra for review" action: one click runs GitHub
@@ -83,6 +95,11 @@ export function AppGalleryShareButton(props: {
     prUrl: string;
     merged: boolean;
   } | null>(null);
+  // The gallery category, chosen on the "category" screen — the last step
+  // before the pull request opens. Null until the participant confirms one
+  // (even when the AI draft already suggested a value); cleared whenever the
+  // dialog closes so a later share starts the choice fresh.
+  const [category, setCategory] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const githubTabRef = useRef<Window | null>(null);
 
@@ -129,109 +146,157 @@ export function AppGalleryShareButton(props: {
     };
   }, [verifyRememberedSubmission]);
 
-  const run = useCallback(async () => {
-    if (!galleryRepo) return;
-    abortRef.current?.abort();
-    const cancellation = new AbortController();
-    abortRef.current = cancellation;
-    // The error screen is titled after the step that was underway ("Upload
-    // failed"), so the run tracks which one that is as it goes.
-    let failedTitle = "Submission failed";
-    const fail = (message: string) => {
-      releaseGithubTab(githubTabRef);
-      setState({ step: "error", title: failedTitle, message });
-    };
-    let slug: string | null = null;
+  const run = useCallback(
+    async (categoryOverride?: string) => {
+      if (!galleryRepo) return;
+      abortRef.current?.abort();
+      const cancellation = new AbortController();
+      abortRef.current = cancellation;
+      // The error screen is titled after the step that was underway ("Upload
+      // failed"), so the run tracks which one that is as it goes.
+      let failedTitle = "Submission failed";
+      const fail = (message: string) => {
+        releaseGithubTab(githubTabRef);
+        setState({ step: "error", title: failedTitle, message });
+      };
+      let slug: string | null = null;
 
-    try {
-      const bundle = await recordingStore.get(props.conversationId);
-      if (!bundle) {
-        fail("No recording to share for this session.");
-        return;
-      }
-      const validation = validateRecordingBundle(bundle);
-      if (!validation.ok) {
-        fail(`This recording can't be shared. ${validation.reason}`);
-        return;
-      }
-      // Same size trim the video export ships (renders identically).
-      const trimmed = pruneTrailingTrimEvents(validation.bundle);
-      slug = gallerySubmissionSlug(trimmed);
-
-      // GitHub's file-size ceiling is checked right here, at the click —
-      // nobody should authorize GitHub only to then learn the recording
-      // can't be uploaded.
-      const oversize = oversizedGallerySubmissionFile(trimmed);
-      if (oversize) {
-        failedTitle = "Recording too large";
-        fail(oversize);
-        return;
-      }
-
-      const token = takeCachedGithubToken();
-      if (!token) {
-        failedTitle = "Sign-in failed";
-        setState({ step: "working", label: CONNECTING_LABEL });
-        await acquireGithubToken({
-          signal: cancellation.signal,
-          onUserCode: (info) =>
-            setState({
-              step: "connect",
-              userCode: info.userCode,
-              verificationUri: info.verificationUri,
-            }),
-        });
-        // Authorized — stop and wait for an explicit "Create Pull Request"
-        // click (the token is cached, so the next run submits directly).
-        // Auto-chaining into the submission right as the participant returns
-        // from the GitHub tab made submission errors read as sign-in
-        // failures.
-        setState({ step: "ready" });
-        return;
-      }
-
-      const { prUrl } = await submitRecordingToAppGallery({
-        token,
-        repo: galleryRepo,
-        bundle: trimmed,
-        signal: cancellation.signal,
-        // The engine narrates each wire step with the repository, branch, or
-        // file it is touching — and names the step for failure titling.
-        onProgress: ({ stage, label }) => {
-          failedTitle = FAILED_STEP_TITLES[stage];
-          setState({ step: "working", label });
-        },
-      });
-      // Remembered so the button stays disabled on the next visit — with the
-      // engine's pre-flight check backing this up server-side regardless.
-      rememberGallerySubmission({ repo: galleryRepo, slug, prUrl });
-      setExistingPr({ prUrl, merged: false });
-      setState({ step: "done", prUrl });
-      showPrInGithubTab(githubTabRef, prUrl);
-    } catch (error) {
-      if (cancellation.signal.aborted) return;
-      if (error instanceof DuplicateSubmissionError) {
-        // Not a failure — point every affordance (dialog, button tooltip,
-        // and the claimed tab) at the submission that already exists.
-        if (slug) {
-          rememberGallerySubmission({
-            repo: galleryRepo,
-            slug,
-            prUrl: error.prUrl,
-          });
+      try {
+        const bundle = await recordingStore.get(props.conversationId);
+        if (!bundle) {
+          fail("No recording to share for this session.");
+          return;
         }
-        setExistingPr({ prUrl: error.prUrl, merged: error.merged });
-        setState({ step: "already", prUrl: error.prUrl, merged: error.merged });
-        showPrInGithubTab(githubTabRef, error.prUrl);
-        return;
+        const validation = validateRecordingBundle(bundle);
+        if (!validation.ok) {
+          fail(`This recording can't be shared. ${validation.reason}`);
+          return;
+        }
+        // Same size trim the video export ships (renders identically).
+        const trimmed = pruneTrailingTrimEvents(validation.bundle);
+        slug = gallerySubmissionSlug(trimmed);
+
+        // The gallery needs a description and a build prompt to show anything
+        // useful — checked here, at the click, rather than bouncing at the
+        // repository's own validation after a sign-in and a fork.
+        const enhancement = trimmed.enhancement;
+        if (!enhancement?.description.trim() || !enhancement?.prompt.trim()) {
+          failedTitle = "Recording incomplete";
+          fail(
+            "This recording has no description or build prompt yet — add them from the player before sharing.",
+          );
+          return;
+        }
+
+        // GitHub's file-size ceiling is checked right here, at the click —
+        // nobody should authorize GitHub only to then learn the recording
+        // can't be uploaded.
+        const oversize = oversizedGallerySubmissionFile(trimmed);
+        if (oversize) {
+          failedTitle = "Recording too large";
+          fail(oversize);
+          return;
+        }
+
+        const token = takeCachedGithubToken();
+        if (!token) {
+          failedTitle = "Sign-in failed";
+          setState({ step: "working", label: CONNECTING_LABEL });
+          await acquireGithubToken({
+            signal: cancellation.signal,
+            onUserCode: (info) =>
+              setState({
+                step: "connect",
+                userCode: info.userCode,
+                verificationUri: info.verificationUri,
+              }),
+          });
+          // Authorized — stop and wait for an explicit "Create Pull Request"
+          // click (the token is cached, so the next run proceeds to the
+          // category screen, then submission). Auto-chaining right as the
+          // participant returns from the GitHub tab made submission errors
+          // read as sign-in failures.
+          setState({ step: "ready" });
+          return;
+        }
+
+        // The category is the last thing confirmed before the pull request
+        // opens — stop here on every run until it's set, even one whose
+        // enhancement already carries an AI-drafted value the participant
+        // hasn't explicitly confirmed. `categoryOverride` is the value the
+        // category screen's Continue just chose, passed straight through
+        // rather than read back from state — a `setCategory` this same
+        // handler just called hasn't committed yet, so `category` itself
+        // would still read stale here.
+        const chosenCategory = categoryOverride ?? category;
+        if (chosenCategory === null) {
+          setState({
+            step: "category",
+            suggested: enhancement.category ?? null,
+          });
+          return;
+        }
+
+        // The bundle that's actually submitted: the chosen category, and the
+        // duration as the editor's final cut showed it (cuts applied, idle
+        // time-lapsed) rather than the raw capture length.
+        const withCategory: AppRecordingBundle = {
+          ...trimmed,
+          enhancement: { ...enhancement, category: chosenCategory },
+          meta: {
+            ...trimmed.meta,
+            finalCutDurationMs: finalCutDurationMs(trimmed),
+          },
+        };
+
+        const { prUrl } = await submitRecordingToAppGallery({
+          token,
+          repo: galleryRepo,
+          bundle: withCategory,
+          signal: cancellation.signal,
+          // The engine narrates each wire step with the repository, branch, or
+          // file it is touching — and names the step for failure titling.
+          onProgress: ({ stage, label }) => {
+            failedTitle = FAILED_STEP_TITLES[stage];
+            setState({ step: "working", label });
+          },
+        });
+        // Remembered so the button stays disabled on the next visit — with the
+        // engine's pre-flight check backing this up server-side regardless.
+        rememberGallerySubmission({ repo: galleryRepo, slug, prUrl });
+        setExistingPr({ prUrl, merged: false });
+        setState({ step: "done", prUrl });
+        showPrInGithubTab(githubTabRef, prUrl);
+      } catch (error) {
+        if (cancellation.signal.aborted) return;
+        if (error instanceof DuplicateSubmissionError) {
+          // Not a failure — point every affordance (dialog, button tooltip,
+          // and the claimed tab) at the submission that already exists.
+          if (slug) {
+            rememberGallerySubmission({
+              repo: galleryRepo,
+              slug,
+              prUrl: error.prUrl,
+            });
+          }
+          setExistingPr({ prUrl: error.prUrl, merged: error.merged });
+          setState({
+            step: "already",
+            prUrl: error.prUrl,
+            merged: error.merged,
+          });
+          showPrInGithubTab(githubTabRef, error.prUrl);
+          return;
+        }
+        fail(
+          error instanceof Error && error.message
+            ? error.message
+            : "Something went wrong — try again.",
+        );
       }
-      fail(
-        error instanceof Error && error.message
-          ? error.message
-          : "Something went wrong — try again.",
-      );
-    }
-  }, [galleryRepo, props.conversationId]);
+    },
+    [galleryRepo, props.conversationId, category],
+  );
 
   // The fallback when the automatic flow fails: hand the participant the
   // exact files the PR would have carried, plus the browser-only steps to
@@ -255,18 +320,35 @@ export function AppGalleryShareButton(props: {
     }
     const trimmed = pruneTrailingTrimEvents(validation.bundle);
     const token = takeCachedGithubToken();
-    const login = token
-      ? await fetchGithubLogin(token, cancellation.signal)
+    const identity = token
+      ? await fetchGithubIdentity(token, cancellation.signal)
       : null;
     if (cancellation.signal.aborted) return;
+    // Best-effort parity with the automatic path: stamp whatever this run
+    // already knows (GitHub identity, the confirmed category, the final-cut
+    // duration) onto the downloaded bundle too. A category chosen on an
+    // earlier, later-failed run carries over; one never reached keeps
+    // whatever enhancement.category the recording already had.
+    const withStamps: AppRecordingBundle = {
+      ...trimmed,
+      enhancement:
+        trimmed.enhancement && category
+          ? { ...trimmed.enhancement, category }
+          : trimmed.enhancement,
+      meta: {
+        ...trimmed.meta,
+        ...(identity ? { github: identity } : {}),
+        finalCutDurationMs: finalCutDurationMs(trimmed),
+      },
+    };
     setState({
       step: "manual",
-      files: buildGallerySubmissionFiles(trimmed),
-      slug: gallerySubmissionSlug(trimmed),
-      pr: buildGallerySubmissionPr(trimmed),
-      login,
+      files: await buildGallerySubmissionFiles(withStamps),
+      slug: gallerySubmissionSlug(withStamps),
+      pr: buildGallerySubmissionPr(withStamps),
+      login: identity?.login ?? null,
     });
-  }, [props.conversationId]);
+  }, [category, props.conversationId]);
 
   // The flow runs while the dialog is up; closing it is the cancel. A first
   // open with no cached token lands on the sign-in gate and TOUCHES NOTHING —
@@ -284,8 +366,27 @@ export function AppGalleryShareButton(props: {
       abortRef.current?.abort();
       releaseGithubTab(githubTabRef);
       setState({ step: "idle" });
+      // A closed dialog is a clean slate — the next share (even of the same
+      // recording, re-edited) asks for the category again rather than
+      // silently reusing a choice made for a different cut.
+      setCategory(null);
     }
   };
+
+  // The category screen's Continue: record the choice, then resume the same
+  // re-entrant flow `run()` already is — it will find `category` set this
+  // time and proceed straight to submission.
+  const chooseCategory = useCallback(
+    (value: string) => {
+      setCategory(value);
+      // Passed directly rather than left for `run` to read back from state:
+      // `setCategory` above hasn't committed by the time this synchronous
+      // handler calls `run`, so `run`'s own `category` closure would still
+      // see the old value.
+      void run(value);
+    },
+    [run],
+  );
 
   useEffect(
     () => () => {
@@ -454,6 +555,7 @@ export function AppGalleryShareButton(props: {
               message: "No pull request was opened.",
             });
           }}
+          onChooseCategory={chooseCategory}
         />
       </StandardDialog>
     </>
@@ -469,6 +571,10 @@ type ShareState =
   | { step: "signin" }
   | { step: "connect"; userCode: string; verificationUri: string }
   | { step: "ready" }
+  /** The last screen before the pull request opens: pick a gallery category.
+   * `suggested` is the AI draft's category when it drafted one — offered as
+   * the preselected value, never auto-applied without this screen. */
+  | { step: "category"; suggested: string | null }
   | { step: "working"; label: string }
   | { step: "done"; prUrl: string }
   | { step: "already"; prUrl: string; merged: boolean }
@@ -495,6 +601,53 @@ const FAILED_STEP_TITLES: Record<GallerySubmissionStage, string> = {
   upload: "Upload failed",
   pr: "Pull request failed",
 };
+
+/** The "pick a category" option that reveals the free-text field below it. */
+const OTHER_CATEGORY = "Other";
+
+/**
+ * The category screen's initial pick: the AI draft when it's one of the
+ * canonical categories (a real choice to confirm), otherwise the "Other"
+ * slot with the draft as its starting text (so a stray AI category like the
+ * old "Games"/"Weird" vocabulary isn't silently discarded).
+ */
+export function initialCategoryPick(suggested: string | null): {
+  select: string;
+  otherText: string;
+} {
+  if (
+    suggested &&
+    (APP_GALLERY_CATEGORIES as readonly string[]).includes(suggested)
+  ) {
+    return { select: suggested, otherText: "" };
+  }
+  return { select: OTHER_CATEGORY, otherText: suggested ?? "" };
+}
+
+/**
+ * The final-cut duration a gallery viewer should see: cuts applied, idle
+ * stretches time-lapsed — the same computation the player and the offline
+ * renderer show the author, reused read-only here rather than duplicated, so
+ * a submitted duration can never disagree with what the author actually saw.
+ * Revives event payloads and applies the chat-editor's presentation only to
+ * feed this calculation; the submitted bundle keeps the original transcript.
+ */
+export function finalCutDurationMs(bundle: AppRecordingBundle): number {
+  const playback = buildPlayback({
+    ...bundle.recording,
+    events: reviveRecordingEvents(bundle.recording.events),
+    transcript: presentedTranscript(
+      bundle.recording.transcript,
+      bundle.enhancement,
+      bundle.edits?.chat,
+    ),
+    originalTranscript: bundle.recording.transcript,
+    appName: bundle.app.name,
+    edits: bundle.edits,
+    enhancement: bundle.enhancement,
+  });
+  return Math.round(playback.duration);
+}
 
 /** Sign-in gate through GitHub authorization — the "connect your account" stretch. */
 function authPhase(state: ShareState): boolean {
@@ -524,6 +677,9 @@ function dialogChrome(
   }
   if (state.step === "ready") {
     return { title: "Ready to submit" };
+  }
+  if (state.step === "category") {
+    return { title: "Choose a category" };
   }
   if (state.step === "working") {
     return { title: "Submitting your demo…" };
@@ -588,6 +744,7 @@ function ShareDialogBody(props: {
   onOpenGithub: (verificationUri: string) => void;
   onCancelAuth: () => void;
   onCancelWork: () => void;
+  onChooseCategory: (category: string) => void;
 }) {
   const { state } = props;
 
@@ -595,6 +752,14 @@ function ShareDialogBody(props: {
   // title) says it all, and their single action lives in the footer. The
   // sign-in gate stays deliberately inert — no device-code request leaves
   // until the footer button is clicked.
+  if (state.step === "category") {
+    return (
+      <CategoryStep
+        suggested={state.suggested}
+        onChoose={props.onChooseCategory}
+      />
+    );
+  }
   if (state.step === "connect") {
     return (
       <ConnectStep
@@ -645,6 +810,61 @@ function ShareDialogBody(props: {
   // "done" needs no body: the title carries the checkmark and the
   // description links both the gallery and the pull request itself.
   return null;
+}
+
+/**
+ * The category picker — the six canonical gallery categories plus a
+ * free-text "Other" for anything that doesn't fit. Manages its own pending
+ * selection so Continue can validate ("Other" needs real text) before
+ * handing the final value up; nothing is written to the bundle until then.
+ */
+function CategoryStep(props: {
+  suggested: string | null;
+  onChoose: (category: string) => void;
+}) {
+  const initial = initialCategoryPick(props.suggested);
+  const [selected, setSelected] = useState(initial.select);
+  const [otherText, setOtherText] = useState(initial.otherText);
+
+  const isOther = selected === OTHER_CATEGORY;
+  const finalValue = isOther ? otherText.trim() : selected;
+  const canContinue = finalValue.length > 0;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Select value={selected} onValueChange={setSelected}>
+        <SelectTrigger className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {APP_GALLERY_CATEGORIES.map((option) => (
+            <SelectItem key={option} value={option}>
+              {option}
+            </SelectItem>
+          ))}
+          <SelectItem value={OTHER_CATEGORY}>Other…</SelectItem>
+        </SelectContent>
+      </Select>
+      {isOther && (
+        <Input
+          value={otherText}
+          onChange={(event) => setOtherText(event.target.value)}
+          placeholder="Name your own category"
+          maxLength={60}
+          autoFocus
+        />
+      )}
+      <Button
+        type="button"
+        className="w-full"
+        disabled={!canContinue}
+        onClick={() => props.onChoose(finalValue)}
+      >
+        <GitPullRequestCreateArrow />
+        Create Pull Request
+      </Button>
+    </div>
+  );
 }
 
 /**

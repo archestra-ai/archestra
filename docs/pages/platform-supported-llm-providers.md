@@ -70,6 +70,8 @@ First turn on device code authorization for the account, in ChatGPT → Settings
 
 These keys are per-user and personal-only: each person connects their own ChatGPT account. Requests are billed to the subscription. An agent set up with a subscription key always runs on the chatting user's own subscription — never someone else's. Users without a connected account get a sign-in prompt in chat.
 
+Admins see everyone's subscription connections in the Model Providers list — name and provider only, never the credential. This applies to all subscription types, GitHub Copilot and Microsoft 365 Copilot included.
+
 ## Anthropic
 
 ### Supported Anthropic APIs

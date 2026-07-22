@@ -571,6 +571,70 @@ describe("LlmProviderApiKeyModel", () => {
       expect(visible.map((k) => k.name)).not.toContain("User Personal Key");
     });
 
+    test("admin sees other users' personal subscription keys but not their plain keys", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const admin = await makeUser({ email: "admin@test.com" });
+      const user = await makeUser({ email: "user@test.com" });
+
+      // Another user's per-user provider key (GitHub Copilot).
+      await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "User Copilot",
+        provider: "github-copilot",
+        scope: "personal",
+        userId: user.id,
+      });
+      // Another user's ChatGPT-subscription (Codex) key on `openai` — only
+      // recognizable via the marker on the decrypted secret.
+      const codexSecret = await makeSecret({
+        secret: {
+          apiKey: encodeOpenAiCodexCredential({
+            refreshToken: "rt-abc",
+            accountId: "acct-123",
+          }),
+        },
+      });
+      await makeLlmProviderApiKey(org.id, codexSecret.id, {
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        name: "User ChatGPT Subscription",
+      });
+      // Another user's plain personal openai key stays private.
+      const plainSecret = await makeSecret({ secret: { apiKey: "sk-plain" } });
+      await makeLlmProviderApiKey(org.id, plainSecret.id, {
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        name: "User Plain OpenAI Key",
+      });
+
+      const visibleToAdmin = await LlmProviderApiKeyModel.getVisibleKeys(
+        org.id,
+        admin.id,
+        [],
+        true, // isAgentAdmin
+      );
+      const adminNames = visibleToAdmin.map((k) => k.name);
+      expect(adminNames).toContain("User Copilot");
+      expect(adminNames).toContain("User ChatGPT Subscription");
+      expect(adminNames).not.toContain("User Plain OpenAI Key");
+
+      // Non-admins never see another user's keys, subscriptions included.
+      const visibleToNonAdmin = await LlmProviderApiKeyModel.getVisibleKeys(
+        org.id,
+        admin.id,
+        [],
+        false,
+      );
+      expect(visibleToNonAdmin).toHaveLength(0);
+    });
+
     test("supports filtering visible keys by search and provider", async ({
       makeOrganization,
       makeUser,

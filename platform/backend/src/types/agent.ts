@@ -231,25 +231,29 @@ export const SelectAgentSchema = AgentRowSchema.extend({
     .max(MAX_SUGGESTED_PROMPTS)
     .default([]),
   /**
-   * The provider of the agent's configured default LLM, resolved server-side
-   * from `llmApiKeyId` (or `modelId` when only a model is pinned) so every
-   * viewer sees the agent's true provider — even one who can't access the
-   * owner's per-user key. Null when the agent has no LLM configured. Populated
-   * on read paths (list/get); absent on mutation responses (clients re-fetch).
+   * The provider of the agent's effective default LLM, resolved server-side.
+   * Mirrors the send-time chain: the agent's own (model, key) pair when both
+   * are pinned, else the organization's default pair when that one is complete
+   * — a half-configured level (model with no key, or key with no model) is
+   * skipped, exactly as `resolveModelSelection` skips it. So every viewer sees
+   * the provider the agent will actually run on, even one who can't access the
+   * owner's per-user key. Null when no level is complete. Populated on read
+   * paths (list/get); absent on mutation responses (clients re-fetch).
    */
   resolvedLlmProvider: SupportedProvidersSchema.nullable().optional(),
   /**
-   * The human-facing name of the agent's configured model (e.g. "gpt-4"),
-   * resolved server-side from `modelId` so a viewer who can't access the
-   * configured key still sees the model name rather than its UUID. Null when no
-   * model is configured.
+   * The human-facing name of the agent's effective model (e.g. "gpt-4") —
+   * from the same complete-level resolution as `resolvedLlmProvider` — so a
+   * viewer who can't access the configured key still sees the model name
+   * rather than its UUID. Null when no level is complete.
    */
   resolvedLlmModelName: z.string().nullable().optional(),
   /**
-   * Whether the agent's configured provider requires a per-user credential
-   * (e.g. GitHub Copilot). Lets the chat/dialog show a read-only model and
-   * prompt the viewer to connect their own account instead of silently
-   * substituting another model.
+   * Whether the agent's effective LLM (same complete-level resolution as
+   * `resolvedLlmProvider`) resolves per-user: a per-user provider (e.g.
+   * GitHub Copilot) or a ChatGPT-subscription credential on `openai`. Lets
+   * the chat/dialog show a read-only model and prompt the viewer to connect
+   * their own account instead of silently substituting another model or key.
    */
   llmProviderRequiresPerUserCredential: z.boolean().optional(),
   /**

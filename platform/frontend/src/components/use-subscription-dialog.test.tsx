@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { UseSubscriptionDialog } from "./use-subscription-dialog";
 
@@ -20,7 +21,6 @@ vi.mock("@/components/openai-codex-sign-in", () => ({
 }));
 
 vi.mock("@/components/llm-provider-api-key-form", () => ({
-  CHATGPT_SUBSCRIPTION_LABEL: "ChatGPT subscription",
   PROVIDER_CONFIG: {
     openai: { icon: "/openai.svg", name: "OpenAI" },
     "github-copilot": { icon: "/github-copilot.svg", name: "GitHub Copilot" },
@@ -60,10 +60,14 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 }));
 
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/auth/auth.query");
 
 describe("UseSubscriptionDialog", () => {
   beforeEach(() => {
     vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1" } },
+    } as ReturnType<typeof useSession>);
   });
 
   it("explains the missing Microsoft 365 sign-in when it isn't configured", () => {

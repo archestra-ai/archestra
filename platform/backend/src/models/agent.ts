@@ -64,6 +64,7 @@ import AgentLabelModel from "./agent-label";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
@@ -283,26 +284,72 @@ class AgentModel {
   /**
    * Resolve each agent's configured LLM provider server-side so every viewer
    * sees the agent's true provider — even one who can't access the owner's
-   * per-user key. Provider comes from the attached key, falling back to the
-   * pinned model's provider when only a model is set.
+   * per-user key. Mirrors the send-time chain: the agent's own (model, key)
+   * pair when both are pinned, else the organization's default pair when that
+   * one is complete. Half-configured levels are skipped, exactly as
+   * `resolveModelSelection` skips them at send time, so the metadata reflects
+   * what the agent will actually run on.
    */
   private static async populateResolvedLlm(agents: Agent[]): Promise<void> {
     if (agents.length === 0) return;
 
+    const organizationIds = [
+      ...new Set(
+        agents
+          .map((a) => a.organizationId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const organizationRows =
+      organizationIds.length > 0
+        ? await db
+            .select({
+              id: schema.organizationsTable.id,
+              defaultModelId: schema.organizationsTable.defaultModelId,
+              defaultLlmApiKeyId: schema.organizationsTable.defaultLlmApiKeyId,
+            })
+            .from(schema.organizationsTable)
+            .where(inArray(schema.organizationsTable.id, organizationIds))
+        : [];
+    const organizationDefaultsMap = new Map(
+      organizationRows.map((row) => [row.id, row]),
+    );
+
+    const effectiveLlm = (
+      agent: Agent,
+    ): { apiKeyId: string | null; modelId: string | null } => {
+      // Mirrors resolveModelSelection: a level provides the default only when
+      // it pins BOTH a model and a key. A half-configured level (model with no
+      // key, or key with no model) is skipped at send time, so it must not
+      // mask the organization default here either.
+      if (agent.llmApiKeyId !== null && agent.modelId !== null) {
+        return { apiKeyId: agent.llmApiKeyId, modelId: agent.modelId };
+      }
+      const organization = organizationDefaultsMap.get(agent.organizationId);
+      const orgApiKeyId = organization?.defaultLlmApiKeyId ?? null;
+      const orgModelId = organization?.defaultModelId ?? null;
+      if (orgApiKeyId !== null && orgModelId !== null) {
+        return { apiKeyId: orgApiKeyId, modelId: orgModelId };
+      }
+      return { apiKeyId: null, modelId: null };
+    };
+
     const apiKeyIds = [
       ...new Set(
         agents
-          .map((a) => a.llmApiKeyId)
+          .map((a) => effectiveLlm(a).apiKeyId)
           .filter((id): id is string => id !== null),
       ),
     ];
     const modelIds = [
       ...new Set(
-        agents.map((a) => a.modelId).filter((id): id is string => id !== null),
+        agents
+          .map((a) => effectiveLlm(a).modelId)
+          .filter((id): id is string => id !== null),
       ),
     ];
 
-    const [keyRows, modelRows] = await Promise.all([
+    const [keyRows, modelRows, chatgptSubscriptionKeyIds] = await Promise.all([
       apiKeyIds.length > 0
         ? db
             .select({
@@ -324,6 +371,7 @@ class AgentModel {
             .from(schema.modelsTable)
             .where(inArray(schema.modelsTable.id, modelIds))
         : Promise.resolve([]),
+      LlmProviderApiKeyModel.getChatgptSubscriptionKeyIds(apiKeyIds),
     ]);
 
     const keyProviderMap = new Map(keyRows.map((r) => [r.id, r.provider]));
@@ -331,18 +379,25 @@ class AgentModel {
     const modelNameMap = new Map(modelRows.map((r) => [r.id, r.modelName]));
 
     for (const agent of agents) {
+      const { apiKeyId, modelId } = effectiveLlm(agent);
       const provider: SupportedProvider | null =
-        (agent.llmApiKeyId ? keyProviderMap.get(agent.llmApiKeyId) : null) ??
-        (agent.modelId ? modelProviderMap.get(agent.modelId) : null) ??
+        (apiKeyId ? keyProviderMap.get(apiKeyId) : null) ??
+        (modelId ? modelProviderMap.get(modelId) : null) ??
         null;
       agent.resolvedLlmProvider = provider;
+      // Per-user at the provider level (GitHub / Microsoft Copilot) or at the
+      // key level (a ChatGPT-subscription credential on `openai`): either way
+      // the agent's LLM resolves to the acting user's own account, so clients
+      // must not silently substitute another key for a viewer who hasn't
+      // connected theirs.
       agent.llmProviderRequiresPerUserCredential = provider
-        ? providerRequiresPerUserCredential(provider)
+        ? providerRequiresPerUserCredential(provider) ||
+          (apiKeyId !== null && chatgptSubscriptionKeyIds.has(apiKeyId))
         : false;
       // The model's human name, so a viewer who can't access the configured
       // key still sees "gpt-4" rather than the model row's UUID.
-      agent.resolvedLlmModelName = agent.modelId
-        ? (modelNameMap.get(agent.modelId) ?? null)
+      agent.resolvedLlmModelName = modelId
+        ? (modelNameMap.get(modelId) ?? null)
         : null;
     }
   }

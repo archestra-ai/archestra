@@ -12,6 +12,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { SubscriptionSignInCta } from "@/components/subscription-sign-in-cta";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -35,6 +36,7 @@ import {
   useUpdateAgentSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
+import { isSubscriptionKey, useSubscriptions } from "@/lib/subscriptions";
 import {
   type AgentSettingsState,
   buildSavePayload,
@@ -92,6 +94,20 @@ export default function AgentSettingsPage() {
   const modelsPending = modelsLoading || isPlaceholderData;
 
   const isLoadError = isApiKeysLoadError || isModelsLoadError;
+
+  // Choosing a subscription as the org default means every user runs on their
+  // own plan, so the admin setting it needs their own connection too.
+  const availableKeysForSubscriptions = useMemo(() => apiKeys ?? [], [apiKeys]);
+  const subscriptions = useSubscriptions(availableKeysForSubscriptions);
+  const selectedSubscription = useMemo(() => {
+    const key = availableKeysForSubscriptions.find(
+      (candidate) => candidate.id === selectedApiKeyId,
+    );
+    if (!key || !isSubscriptionKey(key)) return null;
+    return (
+      subscriptions.find((entry) => entry.provider === key.provider) ?? null
+    );
+  }, [availableKeysForSubscriptions, selectedApiKeyId, subscriptions]);
 
   const updateAgentMutation = useUpdateAgentSettings(
     "Chat settings updated",
@@ -254,10 +270,19 @@ export default function AgentSettingsPage() {
                       setApiKeySelectorOpen(false);
                     }}
                     triggerVariant="select"
+                    showSubscriptions
                     triggerClassName="w-80"
                     popoverClassName="w-80"
                     emptyTriggerLabel="Select provider key..."
                   />
+                  {/* Help text directly under the selector it explains, so
+                      the per-user semantics are read at the selection point. */}
+                  {selectedSubscription && (
+                    <p className="text-sm text-muted-foreground">
+                      Every user runs this default on their own{" "}
+                      {selectedSubscription.title} plan.
+                    </p>
+                  )}
                   <LlmModelSearchableSelect
                     value={defaultModel}
                     onValueChange={setDefaultModel}
@@ -278,6 +303,12 @@ export default function AgentSettingsPage() {
                       !selectedApiKeyId
                     }
                   />
+                  {selectedSubscription && !selectedSubscription.connected && (
+                    <SubscriptionSignInCta
+                      entry={selectedSubscription}
+                      onConnected={setSelectedApiKeyId}
+                    />
+                  )}
                   <Button
                     type="button"
                     variant="outline"

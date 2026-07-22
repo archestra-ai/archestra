@@ -295,15 +295,20 @@ describe("resolveAutoSelectedModel", () => {
 describe("agentRequiresPerUserConnect", () => {
   const perUserAgent = {
     modelId: "uuid-copilot",
+    llmApiKeyId: "uuid-copilot-key",
     llmProviderRequiresPerUserCredential: true,
   };
 
   test("true when the per-user agent model is selected but unavailable", () => {
+    // Even a connected viewer holds while the model hasn't reached their list
+    // (e.g. right after sign-in) — auto-select must not swap and re-persist a
+    // member default in that window.
     expect(
       agentRequiresPerUserConnect({
         agent: perUserAgent,
         selectedModelId: "uuid-copilot",
         isModelAvailable: false,
+        subscriptionConnected: true,
       }),
     ).toBe(true);
   });
@@ -314,8 +319,25 @@ describe("agentRequiresPerUserConnect", () => {
         agent: perUserAgent,
         selectedModelId: "uuid-copilot",
         isModelAvailable: true,
+        subscriptionConnected: true,
       }),
     ).toBe(false);
+  });
+
+  // The pinned subscription model can ALSO be reachable through an unrelated
+  // same-provider key (e.g. a plain org OpenAI key serving the same model
+  // row). Availability must not read as "connected" then — otherwise the key
+  // auto-select silently swaps the subscription for that key and the send
+  // dies at the provider (or bills the wrong credential).
+  test("true when the model is reachable via another key but the subscription is unconnected", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: perUserAgent,
+        selectedModelId: "uuid-copilot",
+        isModelAvailable: true,
+        subscriptionConnected: false,
+      }),
+    ).toBe(true);
   });
 
   test("false when the selection is not the agent's pinned model (user override)", () => {
@@ -324,6 +346,7 @@ describe("agentRequiresPerUserConnect", () => {
         agent: perUserAgent,
         selectedModelId: "uuid-other",
         isModelAvailable: false,
+        subscriptionConnected: false,
       }),
     ).toBe(false);
   });
@@ -333,10 +356,12 @@ describe("agentRequiresPerUserConnect", () => {
       agentRequiresPerUserConnect({
         agent: {
           modelId: "uuid-anthropic",
+          llmApiKeyId: "uuid-anthropic-key",
           llmProviderRequiresPerUserCredential: false,
         },
         selectedModelId: "uuid-anthropic",
         isModelAvailable: false,
+        subscriptionConnected: true,
       }),
     ).toBe(false);
   });
@@ -347,6 +372,64 @@ describe("agentRequiresPerUserConnect", () => {
         agent: undefined,
         selectedModelId: "uuid-copilot",
         isModelAvailable: false,
+        subscriptionConnected: false,
+      }),
+    ).toBe(false);
+  });
+
+  // The subscription can be pinned at the org-default level: the agent has no
+  // model of its own, yet its resolved flag is true and the selection is the
+  // org default model. The hold must apply there too.
+  test("true when the pinned model comes from the org default", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: {
+          modelId: null,
+          llmApiKeyId: null,
+          llmProviderRequiresPerUserCredential: true,
+        },
+        orgDefaultModelId: "uuid-org-model",
+        selectedModelId: "uuid-org-model",
+        isModelAvailable: false,
+        subscriptionConnected: false,
+      }),
+    ).toBe(true);
+  });
+
+  // A half-configured agent pin (model, no key) is skipped at send time — the
+  // agent actually runs on the org default — so the hold keys off the org
+  // default model, not the agent's dead pin. This exact state let a message
+  // send into an unconnected subscription and die at the provider.
+  test("true when the agent pins a model without a key and the org default is selected", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: {
+          modelId: "uuid-dead-pin",
+          llmApiKeyId: null,
+          llmProviderRequiresPerUserCredential: true,
+        },
+        orgDefaultModelId: "uuid-org-model",
+        selectedModelId: "uuid-org-model",
+        isModelAvailable: false,
+        subscriptionConnected: false,
+      }),
+    ).toBe(true);
+  });
+
+  test("false when the agent's dead half-pin itself is selected", () => {
+    // The half pin never wins at send time, so holding it would block a
+    // selection that auto-select is free to (and should) replace.
+    expect(
+      agentRequiresPerUserConnect({
+        agent: {
+          modelId: "uuid-dead-pin",
+          llmApiKeyId: null,
+          llmProviderRequiresPerUserCredential: true,
+        },
+        orgDefaultModelId: "uuid-org-model",
+        selectedModelId: "uuid-dead-pin",
+        isModelAvailable: false,
+        subscriptionConnected: false,
       }),
     ).toBe(false);
   });

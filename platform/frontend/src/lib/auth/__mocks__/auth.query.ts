@@ -11,7 +11,12 @@ const actual = await vi.importActual<typeof import("@/lib/auth/auth.query")>(
 );
 
 export const authQueryKeys = actual.authQueryKeys;
-export const useSession = vi.fn();
+/**
+ * Defaults to a signed-out query result rather than `undefined`: every caller
+ * destructures `{ data }`, so a bare `vi.fn()` throws in any test that renders
+ * a session-aware component without opting into configuring it.
+ */
+export const useSession = vi.fn(() => ({ data: undefined }));
 export const useCurrentOrgMembers = vi.fn();
 export const useHasPermissions = vi.fn();
 export const useMissingPermissions = vi.fn();

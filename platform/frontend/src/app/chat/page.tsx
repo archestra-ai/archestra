@@ -74,6 +74,7 @@ import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
 import { StandardDialog } from "@/components/standard-dialog";
+import { SubscriptionSignInCta } from "@/components/subscription-sign-in-cta";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -90,6 +91,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { UseSubscriptionDialog } from "@/components/use-subscription-dialog";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { trackEvent } from "@/lib/analytics";
@@ -167,6 +169,7 @@ import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   type SupportedProvider,
+  useAvailableLlmProviderApiKeys,
   useLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -174,6 +177,11 @@ import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from
 import { useProjectFiles } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
+import {
+  asSubscriptionProvider,
+  subscriptionBlockingSend,
+  useSubscriptions,
+} from "@/lib/subscriptions";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { ViewTransition } from "@/lib/view-transition";
@@ -766,36 +774,121 @@ export function ChatPageContent({
   // Returns whether the per-user connect prompt applies and, if so, the agent's
   // resolved model name — so the read-only chip can show "gpt-4" instead of the
   // model's UUID (which the viewer can't resolve without access to the key).
+  // The viewer's own subscription connections (available-keys endpoint — the
+  // same source the model selector uses). Connection state, NOT model
+  // availability, decides whether the pinned subscription is usable by this
+  // viewer: the same model row can be reachable through an unrelated
+  // same-provider key, which must not read as "connected".
+  const { data: availableKeysForSubscriptions = [] } =
+    useAvailableLlmProviderApiKeys({ enabled: hasChatAccess });
+  const chatSubscriptions = useSubscriptions(availableKeysForSubscriptions);
+  const isSubscriptionConnectedForProvider = useCallback(
+    (provider: SupportedProvider | null | undefined): boolean => {
+      const subscriptionProvider = asSubscriptionProvider(provider);
+      // A non-subscription provider has nothing to connect: never hold on it.
+      if (!subscriptionProvider) return true;
+      return (
+        chatSubscriptions.find(
+          (entry) => entry.provider === subscriptionProvider,
+        )?.connected ?? false
+      );
+    },
+    [chatSubscriptions],
+  );
+
   const initialPerUserConnect = useMemo(() => {
     const agent = internalAgents.find((a) => a.id === initialAgentId);
     return {
       needsConnect: agentRequiresPerUserConnect({
         agent,
+        orgDefaultModelId: organization?.defaultModelId,
         selectedModelId: initialModel,
         isModelAvailable: chatModels.some((m) => m.dbId === initialModel),
+        subscriptionConnected: isSubscriptionConnectedForProvider(
+          agent?.resolvedLlmProvider,
+        ),
       }),
       modelName: agent?.resolvedLlmModelName ?? undefined,
+      provider: agent?.resolvedLlmProvider ?? undefined,
     };
-  }, [internalAgents, initialAgentId, initialModel, chatModels]);
+  }, [
+    internalAgents,
+    initialAgentId,
+    initialModel,
+    chatModels,
+    organization?.defaultModelId,
+    isSubscriptionConnectedForProvider,
+  ]);
 
   const conversationPerUserConnect = useMemo(() => {
     const agent = internalAgents.find((a) => a.id === conversation?.agentId);
     return {
       needsConnect: agentRequiresPerUserConnect({
         agent,
+        orgDefaultModelId: organization?.defaultModelId,
         selectedModelId: conversation?.modelId,
         isModelAvailable: chatModels.some(
           (m) => m.dbId === conversation?.modelId,
         ),
+        subscriptionConnected: isSubscriptionConnectedForProvider(
+          agent?.resolvedLlmProvider,
+        ),
       }),
       modelName: agent?.resolvedLlmModelName ?? undefined,
+      provider: agent?.resolvedLlmProvider ?? undefined,
     };
   }, [
     internalAgents,
     conversation?.agentId,
     conversation?.modelId,
     chatModels,
+    organization?.defaultModelId,
+    isSubscriptionConnectedForProvider,
   ]);
+
+  // The composer's model rides a subscription the viewer hasn't connected —
+  // pinned by the agent/org (needsConnect) or picked outright. A send would
+  // only die at the provider with an opaque "no reply" error, so the composer
+  // shows a sign-in CTA instead and Enter opens the sign-in rather than
+  // sending (the guards in the submit handlers below).
+  const blockedSubscriptionProvider = useMemo(() => {
+    const perUserConnect = conversationId
+      ? conversationPerUserConnect
+      : initialPerUserConnect;
+    const selectedModelId = conversationId
+      ? conversation?.modelId
+      : initialModel;
+    return subscriptionBlockingSend({
+      needsConnect: perUserConnect.needsConnect,
+      needsConnectProvider: perUserConnect.provider,
+      selectedModel: chatModels.find((m) => m.dbId === selectedModelId) ?? null,
+    });
+  }, [
+    conversationId,
+    conversationPerUserConnect,
+    initialPerUserConnect,
+    conversation?.modelId,
+    initialModel,
+    chatModels,
+  ]);
+  // The unconnected entry backing the block: a viewer who IS signed in must
+  // never be send-blocked, even while the pinned model is still syncing into
+  // their list — needsConnect can hold the selection in that window, but only
+  // a missing connection blocks the send.
+  const blockedSubscriptionEntry = useMemo(
+    () =>
+      blockedSubscriptionProvider
+        ? (chatSubscriptions.find(
+            (entry) =>
+              entry.provider === blockedSubscriptionProvider &&
+              !entry.connected,
+          ) ?? null)
+        : null,
+    [blockedSubscriptionProvider, chatSubscriptions],
+  );
+  // Enter on a blocked composer opens the sign-in dialog (the visible CTA's
+  // twin), keeping the draft intact.
+  const [subscriptionSignInOpen, setSubscriptionSignInOpen] = useState(false);
 
   // A no-tools model (e.g. Microsoft 365 Copilot) paired with a tooled agent
   // runs tool-less — the backend omits the tools — so an up-front notice
@@ -1758,6 +1851,13 @@ export function ChatPageContent({
       return;
     }
 
+    // The selected model needs a subscription sign-in first — surface it
+    // instead of sending. Throw to keep the typed message (onSubmit contract).
+    if (blockedSubscriptionEntry) {
+      setSubscriptionSignInOpen(true);
+      throw new Error("subscription-connect-not-submit");
+    }
+
     // Auto-deny any pending tool approvals before sending new message
     // to avoid "No tool output found for function call" error
     if (setMessages) {
@@ -2119,6 +2219,13 @@ export function ChatPageContent({
         return;
       }
 
+      // Suggested prompts call this directly (not via the form submit), so the
+      // subscription sign-in guard has to live here too.
+      if (blockedSubscriptionEntry) {
+        setSubscriptionSignInOpen(true);
+        return;
+      }
+
       // Store the message (text, files, submit options) to send after the
       // conversation is created
       pendingPromptRef.current = message.text || "";
@@ -2216,6 +2323,7 @@ export function ChatPageContent({
       selectConversation,
       queryClient,
       createConversationMutation.isPending,
+      blockedSubscriptionEntry,
     ],
   );
 
@@ -2230,9 +2338,15 @@ export function ChatPageContent({
           // Throw to keep the textarea and draft intact (onSubmit contract).
           throw new Error("offline-not-submit");
         }
+        // The selected model needs a subscription sign-in first — surface it
+        // instead of sending, keeping the draft (onSubmit contract).
+        if (blockedSubscriptionEntry) {
+          setSubscriptionSignInOpen(true);
+          throw new Error("subscription-connect-not-submit");
+        }
         submitInitialMessage(message, options);
       },
-      [submitInitialMessage, connectivity.state],
+      [submitInitialMessage, connectivity.state, blockedSubscriptionEntry],
     );
 
   // A chat started from a project page keeps the Files panel open when the
@@ -2798,6 +2912,11 @@ export function ChatPageContent({
                           default="none"
                         >
                           <div className="max-w-4xl mx-auto space-y-3">
+                            {blockedSubscriptionEntry && (
+                              <SubscriptionSignInCta
+                                entry={blockedSubscriptionEntry}
+                              />
+                            )}
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
                               toolsUnavailable={conversationToolsUnavailable}
@@ -2844,6 +2963,11 @@ export function ChatPageContent({
                               agentModelDisplayName={
                                 conversationPerUserConnect.needsConnect
                                   ? conversationPerUserConnect.modelName
+                                  : undefined
+                              }
+                              agentModelProvider={
+                                conversationPerUserConnect.needsConnect
+                                  ? conversationPerUserConnect.provider
                                   : undefined
                               }
                               prefillText={composerPrefill}
@@ -2954,7 +3078,12 @@ export function ChatPageContent({
                           share="chat-composer-morph"
                           default="none"
                         >
-                          <div className="w-full max-w-4xl">
+                          <div className="w-full max-w-4xl space-y-3">
+                            {blockedSubscriptionEntry && (
+                              <SubscriptionSignInCta
+                                entry={blockedSubscriptionEntry}
+                              />
+                            )}
                             <ArchestraPromptInput
                               onSubmit={handleInitialSubmit}
                               toolsUnavailable={initialToolsUnavailable}
@@ -2997,6 +3126,11 @@ export function ChatPageContent({
                               agentModelDisplayName={
                                 initialPerUserConnect.needsConnect
                                   ? initialPerUserConnect.modelName
+                                  : undefined
+                              }
+                              agentModelProvider={
+                                initialPerUserConnect.needsConnect
+                                  ? initialPerUserConnect.provider
                                   : undefined
                               }
                               prefillText={composerPrefill}
@@ -3043,6 +3177,20 @@ export function ChatPageContent({
           isOpen={isDialogOpened("custom-request")}
           onClose={() => closeDialog("custom-request")}
         />
+
+        {/* Enter on a subscription-blocked composer lands here — the same
+            sign-in the CTA banner above the composer offers. */}
+        {blockedSubscriptionEntry && (
+          <UseSubscriptionDialog
+            open={subscriptionSignInOpen}
+            onOpenChange={setSubscriptionSignInOpen}
+            providers={[blockedSubscriptionEntry.provider]}
+            title="Sign in to your subscription"
+            description="This model runs on a subscription you haven't connected yet. Sign in to send your message."
+            onConnected={() => setSubscriptionSignInOpen(false)}
+          />
+        )}
+
         <AgentDialog
           open={isDialogOpened("edit-agent")}
           onOpenChange={(open) => {

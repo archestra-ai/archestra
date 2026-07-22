@@ -44,10 +44,12 @@ function Harness({
   existingKeys,
   existingKey,
   defaults,
+  variant,
 }: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
   defaults?: Partial<LlmProviderApiKeyFormValues>;
+  variant?: "default" | "onboarding";
 }) {
   form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: { ...DEFAULTS, ...defaults },
@@ -56,6 +58,7 @@ function Harness({
     <LlmProviderApiKeyForm
       form={form}
       mode="full"
+      variant={variant}
       showConsoleLink={false}
       existingKeys={existingKeys}
       existingKey={existingKey}
@@ -67,6 +70,7 @@ function renderForm(options?: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
   defaults?: Partial<LlmProviderApiKeyFormValues>;
+  variant?: "default" | "onboarding";
 }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -77,6 +81,7 @@ function renderForm(options?: {
         existingKeys={options?.existingKeys}
         existingKey={options?.existingKey}
         defaults={options?.defaults}
+        variant={options?.variant}
       />
     </QueryClientProvider>,
   );
@@ -276,6 +281,45 @@ describe("LlmProviderApiKeyForm", () => {
     });
     expect(
       screen.queryByText("ChatGPT account connected"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("edits a key with the onboarding layout: Name field, no auth-mode tabs", async () => {
+    // The edit dialog reuses the Add API Key (onboarding) layout. Unlike
+    // create, it must offer the Name field, and it must not resurrect the old
+    // API Key / ChatGPT Subscription switcher or the create-flow
+    // "use a subscription instead" hint — subscriptions get their own
+    // rename-only dialog.
+    const existingKey = {
+      id: "key-3",
+      organizationId: "org-1",
+      name: "OpenAI",
+      provider: "openai",
+      secretId: "secret-3",
+      scope: "personal",
+      userId: "user-1",
+      teamId: null,
+      baseUrl: null,
+      inferenceBaseUrl: null,
+      extraHeaders: null,
+      isSystem: false,
+      isPrimary: false,
+      createdAt: "2026-07-16T00:00:00.000Z",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+      isChatgptSubscription: false,
+    } as LlmProviderApiKeyResponse;
+
+    renderForm({
+      existingKey,
+      variant: "onboarding",
+      defaults: { name: "OpenAI" },
+    });
+
+    expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/API Key/)).toBeInTheDocument();
+    expect(screen.queryByText("ChatGPT Subscription")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Use a subscription instead/),
     ).not.toBeInTheDocument();
   });
 

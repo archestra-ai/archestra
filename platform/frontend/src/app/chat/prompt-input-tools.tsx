@@ -104,6 +104,12 @@ export interface ChatPromptInputToolsProps {
    * per-user model isn't in the viewer's available models (avoids a raw UUID).
    */
   agentModelDisplayName?: string;
+  /**
+   * Server-resolved provider of the agent's per-user model, alongside
+   * `agentModelDisplayName`. Lets the model selector show the provider logo
+   * and offer the matching subscription sign-in for the held selection.
+   */
+  agentModelProvider?: SupportedProvider;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   /**
    * Whether the toolbar should collapse its inline controls into a three-dots
@@ -144,6 +150,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onResetModelOverride,
   agentRequiresPerUserConnect = false,
   agentModelDisplayName,
+  agentModelProvider,
   textareaRef,
   isNarrow,
   toolbarRef,
@@ -291,6 +298,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                           onProviderChange={onProviderChange}
                           isModelsLoading={isModelsLoading}
                           agentLlmApiKeyId={agentLlmApiKeyId}
+                          suppressAutoSelect={agentRequiresPerUserConnect}
                         />
                       </div>
                     )}
@@ -308,6 +316,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                         }
                         suppressAutoSelect={agentRequiresPerUserConnect}
                         fallbackModelName={agentModelDisplayName}
+                        fallbackModelProvider={agentModelProvider}
                       />
                     </div>
                   </>
@@ -440,6 +449,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   onProviderChange={onProviderChange}
                   isModelsLoading={isModelsLoading}
                   agentLlmApiKeyId={agentLlmApiKeyId}
+                  suppressAutoSelect={agentRequiresPerUserConnect}
                   onOpenChange={(open) => {
                     if (!open) {
                       setTimeout(() => {
@@ -460,6 +470,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 }
                 suppressAutoSelect={agentRequiresPerUserConnect}
                 fallbackModelName={agentModelDisplayName}
+                fallbackModelProvider={agentModelProvider}
+                onSubscriptionConnected={({ provider, apiKeyId }) =>
+                  onProviderChange?.(provider, apiKeyId)
+                }
               />
               {modelSource && (
                 <ComposerBadge className="ml-1 mr-2">

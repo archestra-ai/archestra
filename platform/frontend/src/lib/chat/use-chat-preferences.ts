@@ -245,23 +245,57 @@ export function resolveModelForAgent(params: {
 // ===== Per-user-credential agent gating =====
 
 /**
- * True when a (shared) agent pins a model from a per-user-credential provider
- * (e.g. GitHub Copilot) that the viewer hasn't connected: the agent's model is
- * the current selection but isn't in the viewer's available models. In that
- * case the chat keeps the agent's model selected instead of auto-swapping to a
- * fallback, so sending it surfaces an inline "connect your account" prompt.
+ * True when the agent's effective default LLM resolves per-user — a per-user
+ * provider (e.g. GitHub Copilot) or a ChatGPT-subscription key on `openai`,
+ * pinned on the agent itself or inherited from the organization default (the
+ * backend flag covers all of these) — the pinned model is the current
+ * selection, and the viewer can't actually run it on that subscription yet.
+ * In that case the chat holds the pinned selection (no key/model auto-swap)
+ * and surfaces a "connect your account" prompt instead of sending.
+ *
+ * Two independent reasons to hold:
+ * - `!subscriptionConnected`: the viewer has no credential of their own for
+ *   the pinned subscription. Model availability is deliberately NOT a proxy
+ *   for this — the same model row can be reachable through an unrelated
+ *   same-provider key (e.g. a plain org OpenAI key), and swapping the pinned
+ *   subscription for that key silently changes who pays and how it can fail.
+ * - `!isModelAvailable`: the viewer connected but the model hasn't reached
+ *   their list yet (e.g. right after sign-in) — holding prevents auto-select
+ *   from swapping and re-persisting a member default. Sending is fine in this
+ *   state; only the unconnected case blocks the send.
  */
 export function agentRequiresPerUserConnect(params: {
   agent:
-    | Pick<AgentLlmConfig, "modelId" | "llmProviderRequiresPerUserCredential">
+    | Pick<
+        AgentLlmConfig,
+        "modelId" | "llmApiKeyId" | "llmProviderRequiresPerUserCredential"
+      >
     | undefined;
+  /** The organization default model — the pinned model when the agent pins none. */
+  orgDefaultModelId?: string | null;
   selectedModelId: string | null | undefined;
   isModelAvailable: boolean;
+  /** Whether the viewer has their own connection for the pinned subscription. */
+  subscriptionConnected: boolean;
 }): boolean {
-  const { agent, selectedModelId, isModelAvailable } = params;
+  const {
+    agent,
+    orgDefaultModelId,
+    selectedModelId,
+    isModelAvailable,
+    subscriptionConnected,
+  } = params;
   if (!agent?.llmProviderRequiresPerUserCredential) return false;
-  if (!selectedModelId || selectedModelId !== agent.modelId) return false;
-  return !isModelAvailable;
+  // The pinned model is the one of the level that actually wins at send time.
+  // A level needs BOTH a model and a key (resolveModelSelection), so an
+  // agent's half-configured pin — a model with no key — is skipped and the
+  // organization default is what the agent runs on.
+  const pinnedModelId =
+    agent.modelId != null && agent.llmApiKeyId != null
+      ? agent.modelId
+      : (orgDefaultModelId ?? null);
+  if (!selectedModelId || selectedModelId !== pinnedModelId) return false;
+  return !isModelAvailable || !subscriptionConnected;
 }
 
 /**

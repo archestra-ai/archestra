@@ -370,10 +370,11 @@ interface LlmProviderApiKeyFormProps {
   /** When true, providers without embedding support are disabled in the picker. */
   forEmbedding?: boolean;
   /**
-   * "onboarding" strips the create flow to the essentials: a searchable provider
+   * "onboarding" strips the form to the essentials: a searchable provider
    * catalog, no subscription auth tabs, and scope/primary/base-URL/headers folded
-   * into an "Advanced" accordion. "default" keeps the full field layout (used by
-   * the edit dialog and the embedding/knowledge flows).
+   * into an "Advanced" accordion. Used by the create dialog and (with the Name
+   * field added and the subscription hint dropped) the edit-key dialog.
+   * "default" keeps the full field layout (embedding/knowledge flows).
    */
   variant?: "default" | "onboarding";
   /**
@@ -725,7 +726,15 @@ export function LlmProviderApiKeyForm({
       <div className="space-y-4">
         <div
           className={
-            mode === "full" && !isOnboarding ? "grid grid-cols-2 gap-4" : ""
+            mode !== "full"
+              ? ""
+              : isOnboarding
+                ? // Onboarding stacks its fields; the edit flow adds Name below
+                  // the (locked) provider, so give the stack vertical rhythm.
+                  isEditMode
+                  ? "space-y-4"
+                  : ""
+                : "grid grid-cols-2 gap-4"
           }
         >
           <div
@@ -808,7 +817,7 @@ export function LlmProviderApiKeyForm({
             )}
           </div>
 
-          {mode === "full" && !isOnboarding && (
+          {mode === "full" && (!isOnboarding || isEditMode) && (
             <div className="space-y-2">
               <Label htmlFor="llm-provider-api-key-name">
                 Name{" "}
@@ -915,37 +924,11 @@ export function LlmProviderApiKeyForm({
               </div>
             )}
 
-            {provider === "openai" && !isOnboarding && (
-              <Tabs
-                value={openaiAuthMethod}
-                onValueChange={(value) => {
-                  form.setValue(
-                    "openaiAuthMethod",
-                    value as "api-key" | "chatgpt-subscription",
-                    { shouldDirty: true },
-                  );
-                  // Clear any credential carried over from the other auth mode:
-                  // a typed sk- key must not leak into ChatGPT-subscription mode
-                  // (false "connected" card / submit-before-sign-in), and an
-                  // OAuth credential must not surface in the visible API Key
-                  // field when switching back. Fires only on user interaction,
-                  // so it never wipes prefilled defaults.
-                  form.setValue("apiKey", null, { shouldDirty: true });
-                }}
-              >
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="api-key" disabled={isPending}>
-                    API Key
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="chatgpt-subscription"
-                    disabled={isPending}
-                  >
-                    {CHATGPT_SUBSCRIPTION_LABEL}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            )}
+            {/* No API Key / ChatGPT Subscription switcher here: subscriptions
+                connect through the "Use a subscription" sign-in dialogs, so
+                this form only ever collects pasted keys. `openaiAuthMethod`
+                stays in the form values for parents that seed the
+                subscription state directly. */}
 
             {!isBedrockSigV4 &&
               bedrockAuthMethod !== "iam" &&
@@ -1156,7 +1139,7 @@ export function LlmProviderApiKeyForm({
           </div>
         )}
 
-        {isOnboarding && provider === "openai" && (
+        {isOnboarding && !isEditMode && provider === "openai" && (
           <div className="flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <div className="space-y-1">

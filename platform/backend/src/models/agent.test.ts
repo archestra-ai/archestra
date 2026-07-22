@@ -12,6 +12,7 @@ import {
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
@@ -78,9 +79,83 @@ describe("AgentModel", () => {
       expect(listed?.llmProviderRequiresPerUserCredential).toBe(true);
     });
 
-    test("falls back to the pinned model's provider with the flag false", async ({
+    test("flags a ChatGPT-subscription (Codex) key as per-user on the openai provider", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const codexSecret = await makeSecret({
+        secret: {
+          apiKey: encodeOpenAiCodexCredential({
+            refreshToken: "rt-abc",
+            accountId: "acct-123",
+          }),
+        },
+      });
+      const codexKey = await makeLlmProviderApiKey(org.id, codexSecret.id, {
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        name: "ChatGPT Subscription",
+      });
+      const plainSecret = await makeSecret({ secret: { apiKey: "sk-plain" } });
+      const plainKey = await makeLlmProviderApiKey(org.id, plainSecret.id, {
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        name: "Plain OpenAI Key",
+      });
+      const openaiModel = await ModelModel.create({
+        externalId: "openai/gpt-4",
+        provider: "openai",
+        modelId: "gpt-4",
+        inputModalities: null,
+        outputModalities: null,
+      });
+
+      const subscriptionAgent = await AgentModel.create({
+        name: "Subscription Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+        llmApiKeyId: codexKey.id,
+        modelId: openaiModel.id,
+      });
+      const plainKeyAgent = await AgentModel.create({
+        name: "Plain Key Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+        llmApiKeyId: plainKey.id,
+        modelId: openaiModel.id,
+      });
+
+      // Same provider, different credential kind: only the subscription-backed
+      // agent resolves per-user, so clients hold its selection and prompt the
+      // viewer to sign in instead of auto-switching to an available key.
+      const subscriptionFetched = await AgentModel.findById(
+        subscriptionAgent.id,
+      );
+      expect(subscriptionFetched?.resolvedLlmProvider).toBe("openai");
+      expect(subscriptionFetched?.llmProviderRequiresPerUserCredential).toBe(
+        true,
+      );
+
+      const plainFetched = await AgentModel.findById(plainKeyAgent.id);
+      expect(plainFetched?.llmProviderRequiresPerUserCredential).toBe(false);
+    });
+
+    test("resolves a model-only pin as unconfigured when no org default exists", async ({
       makeOrganization,
     }) => {
+      // A model pinned without a key never wins at send time
+      // (resolveModelSelection needs both ids), so with no org default the
+      // agent effectively runs on the best-available fallback — reporting the
+      // dead pin's provider here would describe a model that never runs.
       const org = await makeOrganization();
       const anthropicModel = await ModelModel.create({
         externalId: "anthropic/claude-3-5-sonnet",
@@ -98,7 +173,7 @@ describe("AgentModel", () => {
       });
 
       const fetched = await AgentModel.findById(agent.id);
-      expect(fetched?.resolvedLlmProvider).toBe("anthropic");
+      expect(fetched?.resolvedLlmProvider ?? null).toBeNull();
       expect(fetched?.llmProviderRequiresPerUserCredential).toBe(false);
     });
 
@@ -118,6 +193,104 @@ describe("AgentModel", () => {
       expect(fetched?.llmProviderRequiresPerUserCredential ?? false).toBe(
         false,
       );
+    });
+
+    test("resolves through the organization default when the agent pins no LLM", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const codexSecret = await makeSecret({
+        secret: {
+          apiKey: encodeOpenAiCodexCredential({
+            refreshToken: "rt-org-default",
+            accountId: "acct-org",
+          }),
+        },
+      });
+      const codexKey = await makeLlmProviderApiKey(org.id, codexSecret.id, {
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        name: "ChatGPT Subscription",
+      });
+      const openaiModel = await ModelModel.create({
+        externalId: "openai/gpt-5",
+        provider: "openai",
+        modelId: "gpt-5",
+        inputModalities: null,
+        outputModalities: null,
+      });
+      await db
+        .update(schema.organizationsTable)
+        .set({
+          defaultModelId: openaiModel.id,
+          defaultLlmApiKeyId: codexKey.id,
+        })
+        .where(eq(schema.organizationsTable.id, org.id));
+
+      // No LLM of its own: the org default (a ChatGPT-subscription key) is
+      // what this agent actually runs on, so it must resolve per-user.
+      const unpinnedAgent = await AgentModel.create({
+        name: "Org Default Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+      });
+      const unpinned = await AgentModel.findById(unpinnedAgent.id);
+      expect(unpinned?.resolvedLlmProvider).toBe("openai");
+      expect(unpinned?.llmProviderRequiresPerUserCredential).toBe(true);
+      expect(unpinned?.resolvedLlmModelName).toBe("gpt-5");
+
+      // An agent pinning a complete (model, key) pair of its own never falls
+      // through to the org default, even a subscription-backed one.
+      const anthropicModel = await ModelModel.create({
+        externalId: "anthropic/claude-3-5-sonnet",
+        provider: "anthropic",
+        modelId: "claude-3-5-sonnet",
+        inputModalities: null,
+        outputModalities: null,
+      });
+      const anthropicSecret = await makeSecret({
+        secret: { apiKey: "sk-ant-test" },
+      });
+      const anthropicKey = await makeLlmProviderApiKey(
+        org.id,
+        anthropicSecret.id,
+        { provider: "anthropic", name: "Anthropic" },
+      );
+      const pinnedAgent = await AgentModel.create({
+        name: "Pinned Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+        modelId: anthropicModel.id,
+        llmApiKeyId: anthropicKey.id,
+      });
+      const pinned = await AgentModel.findById(pinnedAgent.id);
+      expect(pinned?.resolvedLlmProvider).toBe("anthropic");
+      expect(pinned?.llmProviderRequiresPerUserCredential).toBe(false);
+      expect(pinned?.resolvedLlmModelName).toBe("claude-3-5-sonnet");
+
+      // A half-configured pin (model with no key) is skipped at send time —
+      // resolveModelSelection only lets a level win with BOTH ids — so the
+      // agent actually runs on the org default and must resolve as such.
+      // (This exact state let a send through to an unconnected subscription.)
+      const halfPinnedAgent = await AgentModel.create({
+        name: "Half-Pinned Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+        modelId: anthropicModel.id,
+      });
+      const halfPinned = await AgentModel.findById(halfPinnedAgent.id);
+      expect(halfPinned?.resolvedLlmProvider).toBe("openai");
+      expect(halfPinned?.llmProviderRequiresPerUserCredential).toBe(true);
+      expect(halfPinned?.resolvedLlmModelName).toBe("gpt-5");
     });
   });
 

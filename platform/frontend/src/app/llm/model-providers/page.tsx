@@ -44,6 +44,7 @@ import {
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
+import { SubscriptionsPanel } from "@/components/subscriptions-panel";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +56,8 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { InlineTag } from "@/components/ui/inline-tag";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -77,6 +80,7 @@ import {
   useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
+import { isSubscriptionKey } from "@/lib/subscriptions";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import { isEditApiKeyFormValid } from "./edit-key-form.utils";
@@ -158,6 +162,14 @@ export default function ApiKeysPage() {
     entityFromUrl: editingApiKeyFromUrl ?? null,
   });
 
+  // A subscription's credential is never edited in place — signing in again
+  // re-mints it — so its edit dialog is rename-only, and removing it reads as
+  // "disconnect", not "delete".
+  const editingIsSubscription =
+    !!editingApiKey && isSubscriptionKey(editingApiKey);
+  const selectedIsSubscription =
+    !!selectedApiKey && isSubscriptionKey(selectedApiKey);
+
   const selectedApiKeyId = selectedApiKey?.id ?? null;
   const { data: blockingVirtualKeys, isPending: isLoadingVirtualKeys } =
     useAllVirtualApiKeys({
@@ -210,8 +222,8 @@ export default function ApiKeysPage() {
         awsAccessKeyId: null,
         awsSecretAccessKey: null,
         awsSessionToken: null,
-        // Open on the auth-mode tab that matches the stored credential: ChatGPT
-        // Subscription keys land on the subscription tab, plain keys on API Key.
+        // Reflect the stored credential type. Subscription keys open the
+        // rename-only dialog, so this only keeps the form state consistent.
         openaiAuthMethod: editingApiKey.isChatgptSubscription
           ? "chatgpt-subscription"
           : "api-key",
@@ -331,7 +343,28 @@ export default function ApiKeysPage() {
     </div>
   );
 
-  const apiKeys = queriedApiKeys;
+  // The Subscriptions panel renders the VIEWER'S OWN connections, so only
+  // those move out of the table — one credential, one place. Another user's
+  // personal subscription key (visible to llmProviderApiKey admins as
+  // connection inventory) stays in the table: the panel never represents it,
+  // so filtering it too would hide it entirely.
+  const isOwnPersonalSubscription = useCallback(
+    (key: LlmProviderApiKeyResponse) =>
+      isSubscriptionKey(key) &&
+      key.scope === "personal" &&
+      (!currentUserId || key.userId === currentUserId),
+    [currentUserId],
+  );
+  const apiKeys = useMemo(
+    () => queriedApiKeys.filter((key) => !isOwnPersonalSubscription(key)),
+    [queriedApiKeys, isOwnPersonalSubscription],
+  );
+  // Whether the credential inventory has anything beyond the viewer's own
+  // subscriptions — used to decide which section leads the page below.
+  const hasTableKeys = useMemo(
+    () => allApiKeys.some((key) => !isOwnPersonalSubscription(key)),
+    [allApiKeys, isOwnPersonalSubscription],
+  );
 
   const providerOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -427,7 +460,11 @@ export default function ApiKeysPage() {
                 : row.original.scope === "team"
                   ? row.original.teamName
                   : row.original.scope === "personal"
-                    ? "Personal"
+                    ? // Admins see other users' subscription keys; name whose
+                      // connection each row is instead of a bare "Personal".
+                      row.original.userId === currentUserId
+                      ? "Personal"
+                      : (row.original.userName ?? "Personal")
                     : "Whole Organization"}
             </span>
           </Badge>
@@ -562,9 +599,20 @@ export default function ApiKeysPage() {
           />
         ) : (
           <>
+            {/* Once the org runs on API keys, the key inventory leads and
+                subscriptions demote to a quieter section below the table —
+                "Add API Key" stays the primary path. Subscriptions only lead
+                while they are the org's sole way of connecting a model. */}
+            {!hasTableKeys && (
+              <SubscriptionsPanel
+                keys={allApiKeys}
+                onDisconnect={openDeleteDialog}
+              />
+            )}
+
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <SearchInput
-                objectNamePlural="API keys"
+                objectNamePlural="Model Providers"
                 searchFields={["name"]}
                 paramName="search"
               />
@@ -621,6 +669,13 @@ export default function ApiKeysPage() {
                 }
               />
             </div>
+
+            {hasTableKeys && (
+              <SubscriptionsPanel
+                keys={allApiKeys}
+                onDisconnect={openDeleteDialog}
+              />
+            )}
           </>
         )}
 
@@ -639,14 +694,20 @@ export default function ApiKeysPage() {
           onOpenChange={setIsSubscriptionDialogOpen}
         />
 
-        {/* Edit Dialog */}
+        {/* Edit Dialog — subscriptions are rename-only (the credential is
+            re-minted by signing in again, never edited); API keys reuse the
+            onboarding layout of the Add API Key dialog. */}
         <FormDialog
           open={!!editingApiKey}
           onOpenChange={(open) => {
             if (!open) closeEditDialog();
           }}
-          title="Edit API Key"
-          description="Update the name, API key value, or scope"
+          title={editingIsSubscription ? "Edit Subscription" : "Edit API Key"}
+          description={
+            editingIsSubscription
+              ? "Rename this subscription connection"
+              : "Update the name, API key value, or scope"
+          }
           size="small"
           className="sm:max-w-xl"
           isDirty={editForm.formState.isDirty}
@@ -656,16 +717,30 @@ export default function ApiKeysPage() {
             className="flex min-h-0 flex-1 flex-col"
           >
             <DialogBody>
-              {editingApiKey && (
-                <LlmProviderApiKeyForm
-                  mode="full"
-                  showConsoleLink={false}
-                  existingKey={editingApiKey}
-                  existingKeys={apiKeys}
-                  form={editForm}
-                  isPending={updateMutation.isPending}
-                />
-              )}
+              {editingApiKey &&
+                (editingIsSubscription ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-subscription-name">Name</Label>
+                    <Input
+                      id="edit-subscription-name"
+                      disabled={updateMutation.isPending}
+                      autoComplete="off"
+                      data-1p-ignore
+                      data-lpignore="true"
+                      {...editForm.register("name")}
+                    />
+                  </div>
+                ) : (
+                  <LlmProviderApiKeyForm
+                    mode="full"
+                    variant="onboarding"
+                    showConsoleLink={false}
+                    existingKey={editingApiKey}
+                    existingKeys={apiKeys}
+                    form={editForm}
+                    isPending={updateMutation.isPending}
+                  />
+                ))}
             </DialogBody>
             <DialogStickyFooter className="mt-0">
               <DialogCancelButton>Cancel</DialogCancelButton>
@@ -676,20 +751,26 @@ export default function ApiKeysPage() {
                 {updateMutation.isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
-                Test & Save
+                {editingIsSubscription ? "Save" : "Test & Save"}
               </Button>
             </DialogStickyFooter>
           </DialogForm>
         </FormDialog>
 
-        {/* Delete Confirmation Dialog */}
+        {/* Delete Confirmation Dialog — for a subscription the same removal
+            reads as disconnecting the account, so it is labeled that way. */}
         <DeleteConfirmDialog
           open={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}
-          title="Delete API Key"
+          title={
+            selectedIsSubscription
+              ? "Disconnect Subscription"
+              : "Delete API Key"
+          }
           description={
             <DeleteApiKeyDescription
               apiKey={selectedApiKey}
+              isSubscription={selectedIsSubscription}
               virtualKeys={blockingVirtualKeys?.data ?? []}
               totalVirtualKeys={blockingVirtualKeys?.pagination.total ?? 0}
               oauthClients={blockingOauthClients}
@@ -704,8 +785,14 @@ export default function ApiKeysPage() {
             (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
             blockingOauthClients.length > 0
           }
-          confirmLabel="Delete API Key"
-          pendingLabel="Deleting..."
+          confirmLabel={
+            selectedIsSubscription
+              ? "Disconnect Subscription"
+              : "Delete API Key"
+          }
+          pendingLabel={
+            selectedIsSubscription ? "Disconnecting..." : "Deleting..."
+          }
         />
       </div>
     </PageLayout>
@@ -714,12 +801,14 @@ export default function ApiKeysPage() {
 
 function DeleteApiKeyDescription({
   apiKey,
+  isSubscription,
   virtualKeys,
   totalVirtualKeys,
   oauthClients,
   isLoading,
 }: {
   apiKey: LlmProviderApiKeyResponse | null;
+  isSubscription: boolean;
   virtualKeys: archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"];
   totalVirtualKeys: number;
   oauthClients: archestraApiTypes.GetLlmOauthClientsResponses["200"];
@@ -734,7 +823,12 @@ function DeleteApiKeyDescription({
   const encodedApiKeyId = encodeURIComponent(apiKey.id);
 
   if (!hasBlockingAssociations) {
-    return (
+    return isSubscription ? (
+      <span>
+        Are you sure you want to disconnect "{apiKey.name}"? Its models stop
+        being available to you; you can sign in again at any time.
+      </span>
+    ) : (
       <span>
         Are you sure you want to delete "{apiKey.name}"? This action cannot be
         undone.
@@ -745,8 +839,8 @@ function DeleteApiKeyDescription({
   return (
     <div className="space-y-4 text-sm">
       <p>
-        "{apiKey.name}" cannot be deleted until it is removed from the
-        credentials below.
+        "{apiKey.name}" cannot be {isSubscription ? "disconnected" : "deleted"}{" "}
+        until it is removed from the credentials below.
       </p>
 
       {isLoading && (

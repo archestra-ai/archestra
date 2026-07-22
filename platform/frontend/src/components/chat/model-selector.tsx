@@ -3,6 +3,7 @@
 import {
   compareModelsForDisplay,
   E2eTestId,
+  getSubscriptionPickerOptionTestId,
   isLegacyGeminiModel,
   isOpenRouterLatestAlias,
   type ModelInputModality,
@@ -43,6 +44,7 @@ import {
   OldModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogClose } from "@/components/ui/dialog";
 import { Toggle } from "@/components/ui/toggle";
@@ -52,6 +54,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UseSubscriptionDialog } from "@/components/use-subscription-dialog";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
@@ -59,6 +62,12 @@ import {
   type ModelCapabilities,
   useLlmModelsByProvider,
 } from "@/lib/llm-models.query";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import {
+  type SubscriptionEntry,
+  type SubscriptionProvider,
+  useSubscriptions,
+} from "@/lib/subscriptions";
 import { cn, formatContextLength } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
@@ -115,6 +124,22 @@ interface ModelSelectorProps {
    * would fall back to the raw model UUID.
    */
   fallbackModelName?: string;
+  /**
+   * Provider of the unavailable `selectedModel`, alongside `fallbackModelName`.
+   * Keeps the provider logo on the trigger and, when the provider is a
+   * subscription the viewer hasn't connected, turns the dialog's current-model
+   * row into a sign-in call to action instead of an "API key missing" marker.
+   */
+  fallbackModelProvider?: SupportedProvider | null;
+  /**
+   * Fired after an in-place subscription sign-in, with the credential it
+   * created. Chat uses it to switch the conversation onto that subscription;
+   * without it the models simply become selectable.
+   */
+  onSubscriptionConnected?: (params: {
+    provider: SubscriptionProvider;
+    apiKeyId: string;
+  }) => void;
 }
 
 /** Map our provider names to logo provider names
@@ -144,6 +169,37 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   "microsoft-365-copilot": "microsoft-365-copilot",
   archestra: "archestra",
 };
+
+/**
+ * The inline "clear selection" X inside the selector trigger. Deliberately not
+ * a `<button>`: the trigger itself is one, and HTML forbids nesting buttons
+ * (React logs a hydration error for it). A focusable span keeps the affordance
+ * and its keyboard access without the invalid markup.
+ */
+function ClearSelectionAffordance({ onClear }: { onClear: () => void }) {
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: a real <button> here would nest inside the trigger button — invalid HTML
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label="Clear model"
+      className="ml-1 shrink-0 cursor-pointer rounded-sm opacity-50 hover:opacity-100"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClear();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          onClear();
+        }
+      }}
+    >
+      <XIcon className="size-3" />
+    </span>
+  );
+}
 
 /**
  * Creates a unique value for a model that includes the provider.
@@ -546,13 +602,39 @@ export const ModelSelector = memo(function ModelSelector({
   enabled = true,
   suppressAutoSelect = false,
   fallbackModelName,
+  fallbackModelProvider,
+  onSubscriptionConnected,
 }: ModelSelectorProps) {
   const { modelsByProvider, isLoading, isPlaceholderData } =
     useLlmModelsByProvider({
       apiKeyId: apiKeyId ?? undefined,
       enabled,
     });
+  const { data: availableKeys = [] } = useAvailableLlmProviderApiKeys({
+    enabled,
+  });
+  const subscriptions = useSubscriptions(availableKeys);
+  const [signInProvider, setSignInProvider] =
+    useState<SubscriptionProvider | null>(null);
   const [open, setOpen] = useState(false);
+
+  /**
+   * Providers whose models belong under "Subscriptions" rather than in a plain
+   * provider group. Copilot and M365 are always subscription-only. `openai` is
+   * ambiguous — it carries both pasted `sk-` keys and the ChatGPT subscription —
+   * so it counts only while the selected credential IS the ChatGPT subscription.
+   */
+  const subscriptionModelProviders = useMemo(() => {
+    const providers = new Set<SupportedProvider>([
+      "github-copilot",
+      "microsoft-365-copilot",
+    ]);
+    const chatgpt = subscriptions.find((entry) => entry.provider === "openai");
+    if (chatgpt?.apiKeyId && chatgpt.apiKeyId === apiKeyId) {
+      providers.add("openai");
+    }
+    return providers;
+  }, [subscriptions, apiKeyId]);
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
@@ -574,8 +656,11 @@ export const ModelSelector = memo(function ModelSelector({
     return null;
   };
 
-  // Get selected model's provider for logo
-  const selectedModelProvider = getProviderForModel(selectedModel);
+  // Get selected model's provider for logo. A model outside the viewer's
+  // available list (e.g. held per-user selection) uses the server-resolved
+  // provider hint so the trigger keeps its logo.
+  const selectedModelProvider =
+    getProviderForModel(selectedModel) ?? fallbackModelProvider ?? null;
   const selectedModelLogo = selectedModelProvider
     ? providerToLogoProvider[selectedModelProvider]
     : null;
@@ -621,6 +706,20 @@ export const ModelSelector = memo(function ModelSelector({
     [allAvailableModels],
   );
   const isModelAvailable = allAvailableModelIds.includes(selectedModel);
+
+  // When the held (unavailable) model is backed by a subscription the viewer
+  // hasn't connected, the dialog's current-model row becomes the sign-in call
+  // to action rather than a dead "API key missing" marker.
+  const currentModelSignInEntry = useMemo(() => {
+    if (isModelAvailable || !selectedModel || !fallbackModelProvider) {
+      return null;
+    }
+    return (
+      subscriptions.find(
+        (entry) => entry.provider === fallbackModelProvider && !entry.connected,
+      ) ?? null
+    );
+  }, [isModelAvailable, selectedModel, fallbackModelProvider, subscriptions]);
 
   // Auto-select the "best" model (or first) when the selected model is not
   // in the available list (e.g. after switching API keys or on initial load).
@@ -703,17 +802,7 @@ export const ModelSelector = memo(function ModelSelector({
                 </span>
               )}
               {onClear && selectedModel && (
-                <button
-                  type="button"
-                  aria-label="Clear model"
-                  className="ml-1 shrink-0 rounded-sm opacity-50 hover:opacity-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClear();
-                  }}
-                >
-                  <XIcon className="size-3" />
-                </button>
+                <ClearSelectionAffordance onClear={onClear} />
               )}
             </Button>
           ) : (
@@ -732,17 +821,7 @@ export const ModelSelector = memo(function ModelSelector({
                 {selectedModelDisplayName || "Select model"}
               </ModelSelectorName>
               {onClear && selectedModel && (
-                <button
-                  type="button"
-                  aria-label="Clear model"
-                  className="ml-1 shrink-0 rounded-sm opacity-50 hover:opacity-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClear();
-                  }}
-                >
-                  <XIcon className="size-3" />
-                </button>
+                <ClearSelectionAffordance onClear={onClear} />
               )}
             </PromptInputButton>
           )}
@@ -761,15 +840,43 @@ export const ModelSelector = memo(function ModelSelector({
               modelsByProvider={modelsByProvider}
               availableProviders={availableProviders}
               selectedModel={selectedModel}
+              selectedModelDisplayName={selectedModelDisplayName}
               selectedModelLogo={selectedModelLogo}
               isModelAvailable={isModelAvailable}
+              currentModelSignInEntry={currentModelSignInEntry}
               onClear={onClear}
               onSelectModel={handleSelectModel}
               onClose={() => handleOpenChange(false)}
+              subscriptions={subscriptions}
+              subscriptionModelProviders={subscriptionModelProviders}
+              onSignInToSubscription={(provider) => {
+                // Sign-in happens in place; close the picker so the device-flow
+                // dialog isn't trapped under it.
+                handleOpenChange(false);
+                setSignInProvider(provider);
+              }}
             />
           </ModelSelectorContent>
         )}
       </ModelSelectorRoot>
+      {signInProvider && (
+        <UseSubscriptionDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setSignInProvider(null);
+          }}
+          providers={[signInProvider]}
+          title="Sign in to your subscription"
+          description="Connect your own account. Everyone using this model signs in with their own plan."
+          onConnected={(newApiKeyId) => {
+            onSubscriptionConnected?.({
+              provider: signInProvider,
+              apiKeyId: newApiKeyId,
+            });
+            setSignInProvider(null);
+          }}
+        />
+      )}
     </div>
   );
 });
@@ -784,20 +891,35 @@ function ModelSelectorDialogBody({
   modelsByProvider,
   availableProviders,
   selectedModel,
+  selectedModelDisplayName,
   selectedModelLogo,
   isModelAvailable,
+  currentModelSignInEntry,
   onClear,
   onSelectModel,
   onClose,
+  subscriptions,
+  subscriptionModelProviders,
+  onSignInToSubscription,
 }: {
   modelsByProvider: Record<SupportedProvider, LlmModel[]>;
   availableProviders: SupportedProvider[];
   selectedModel: string;
+  /** Human-facing name for the current model (falls back to its id). */
+  selectedModelDisplayName: string;
   selectedModelLogo: string | null;
   isModelAvailable: boolean;
+  /**
+   * The unconnected subscription backing the current (unavailable) model, if
+   * any — its row then offers sign-in instead of "API key missing".
+   */
+  currentModelSignInEntry: SubscriptionEntry | null;
   onClear?: () => void;
   onSelectModel: (modelValue: string) => void;
   onClose: () => void;
+  subscriptions: SubscriptionEntry[];
+  subscriptionModelProviders: Set<SupportedProvider>;
+  onSignInToSubscription: (provider: SubscriptionProvider) => void;
 }) {
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 
@@ -855,6 +977,26 @@ function ModelSelectorDialogBody({
     return sorted;
   }, [filteredModelsByProvider, filteredProviders]);
 
+  // Subscriptions lead the list as their own section; everything else keeps its
+  // per-provider grouping below.
+  const subscriptionProviders = filteredProviders.filter((provider) =>
+    subscriptionModelProviders.has(provider),
+  );
+  const apiKeyProviders = filteredProviders.filter(
+    (provider) => !subscriptionModelProviders.has(provider),
+  );
+  const notConnected = subscriptions.filter((entry) => !entry.connected);
+
+  const renderModelOption = (provider: SupportedProvider, model: LlmModel) => (
+    <ModelOption
+      key={createModelValue(provider, model.dbId)}
+      provider={provider}
+      model={model}
+      selected={selectedModel === model.dbId}
+      onSelect={onSelectModel}
+    />
+  );
+
   return (
     <>
       <ModelFiltersBar
@@ -888,91 +1030,191 @@ function ModelSelectorDialogBody({
           </ModelSelectorGroup>
         )}
 
-        {/* Show current model if not in available list */}
-        {!isModelAvailable && selectedModel && (
-          <ModelSelectorGroup heading="Current (API key missing)">
-            <ModelSelectorItem
-              disabled
-              value={selectedModel}
-              className="text-yellow-600"
-            >
-              {selectedModelLogo && (
-                <ModelSelectorLogo provider={selectedModelLogo} />
-              )}
-              <ModelSelectorName>{selectedModel}</ModelSelectorName>
-              <CheckIcon className="ml-auto size-4" />
-            </ModelSelectorItem>
+        {/* The current model when it is not in the available list. Backed by
+            an unconnected subscription, the row is the sign-in call to action;
+            otherwise it stays a disabled "key missing" marker. */}
+        {!isModelAvailable &&
+          selectedModel &&
+          (currentModelSignInEntry ? (
+            <ModelSelectorGroup heading="Current (sign in to use)">
+              <ModelSelectorItem
+                value={selectedModel}
+                keywords={[selectedModelDisplayName, "current"]}
+                disabled={currentModelSignInEntry.signInUnavailable}
+                onSelect={() =>
+                  onSignInToSubscription(currentModelSignInEntry.provider)
+                }
+              >
+                {selectedModelLogo && (
+                  <ModelSelectorLogo provider={selectedModelLogo} />
+                )}
+                <ModelSelectorName>
+                  {selectedModelDisplayName}{" "}
+                  <span className="text-xs text-muted-foreground">
+                    {currentModelSignInEntry.subtitle}
+                  </span>
+                </ModelSelectorName>
+                <div className="ml-auto flex items-center gap-2">
+                  {currentModelSignInEntry.signInUnavailable ? (
+                    <span className="text-xs text-muted-foreground">
+                      Not enabled
+                    </span>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="px-1.5 py-0 text-[10px]"
+                    >
+                      Sign in
+                    </Badge>
+                  )}
+                  <CheckIcon className="size-4" />
+                </div>
+              </ModelSelectorItem>
+            </ModelSelectorGroup>
+          ) : (
+            <ModelSelectorGroup heading="Current (API key missing)">
+              <ModelSelectorItem
+                disabled
+                value={selectedModel}
+                className="text-yellow-600"
+              >
+                {selectedModelLogo && (
+                  <ModelSelectorLogo provider={selectedModelLogo} />
+                )}
+                <ModelSelectorName>
+                  {selectedModelDisplayName}
+                </ModelSelectorName>
+                <CheckIcon className="ml-auto size-4" />
+              </ModelSelectorItem>
+            </ModelSelectorGroup>
+          ))}
+
+        {/* Subscriptions first, as their own entities: a plan the viewer signs
+            into with their own account, never a shared credential. */}
+        {(notConnected.length > 0 || subscriptionProviders.length > 0) && (
+          <ModelSelectorGroup heading="Subscriptions">
+            {notConnected.map((entry) => (
+              <SubscriptionSignInOption
+                key={entry.provider}
+                entry={entry}
+                onSignIn={onSignInToSubscription}
+              />
+            ))}
+            {subscriptionProviders.flatMap((provider) =>
+              (sortedModelsByProvider[provider] ?? []).map((model) =>
+                renderModelOption(provider, model),
+              ),
+            )}
           </ModelSelectorGroup>
         )}
 
-        {filteredProviders.map((provider) => (
+        {apiKeyProviders.map((provider) => (
           <ModelSelectorGroup
             key={provider}
             heading={providerDisplayNames[provider]}
           >
-            {(sortedModelsByProvider[provider] ?? []).map((model) => {
-              // Use provider:modelId format for unique keys/values
-              // This prevents issues when different providers have models with the same ID
-              const modelValue = createModelValue(provider, model.dbId);
-              return (
-                <ModelSelectorItem
-                  key={modelValue}
-                  value={modelValue}
-                  // value is provider:dbId (a UUID) for stable selection,
-                  // so search must match human-readable terms via keywords
-                  keywords={[
-                    model.displayName,
-                    model.id,
-                    providerDisplayNames[provider],
-                  ]}
-                  onSelect={() => onSelectModel(modelValue)}
-                  className="group"
-                >
-                  <ModelSelectorLogo
-                    provider={providerToLogoProvider[provider]}
-                  />
-                  <ModelSelectorName>
-                    {model.displayName}{" "}
-                    <span className="text-xs text-muted-foreground font-mono">
-                      ({model.id})
-                    </span>
-                    <CopyModelIdButton modelId={model.id} />
-                  </ModelSelectorName>
-                  {model.isFree && <FreeModelBadge />}
-                  {model.requiresUserConnection && !model.isConnected && (
-                    <ConnectAccountBadge />
-                  )}
-                  {isOpenRouterLatestAlias(provider, model.id) && (
-                    <LatestModelBadge />
-                  )}
-                  {provider === "gemini" && isLegacyGeminiModel(model.id) && (
-                    <OldModelBadge />
-                  )}
-                  <div className="ml-auto flex items-center gap-2">
-                    <ModelCapabilityBadges capabilities={model.capabilities} />
-                    <ContextLengthIndicator
-                      contextLength={model.capabilities?.contextLength}
-                    />
-                    <PricingIndicator
-                      pricePerMillionInput={
-                        model.capabilities?.pricePerMillionInput
-                      }
-                      pricePerMillionOutput={
-                        model.capabilities?.pricePerMillionOutput
-                      }
-                    />
-                    {selectedModel === model.dbId ? (
-                      <CheckIcon className="size-4" />
-                    ) : (
-                      <div className="size-4" />
-                    )}
-                  </div>
-                </ModelSelectorItem>
-              );
-            })}
+            {(sortedModelsByProvider[provider] ?? []).map((model) =>
+              renderModelOption(provider, model),
+            )}
           </ModelSelectorGroup>
         ))}
       </ModelSelectorList>
     </>
+  );
+}
+
+/**
+ * A subscription the viewer has not signed into. It has no models to offer yet,
+ * so the row is the call to action rather than a disabled placeholder.
+ */
+function SubscriptionSignInOption({
+  entry,
+  onSignIn,
+}: {
+  entry: SubscriptionEntry;
+  onSignIn: (provider: SubscriptionProvider) => void;
+}) {
+  return (
+    <ModelSelectorItem
+      data-testid={getSubscriptionPickerOptionTestId(entry.provider)}
+      value={`subscription-${entry.provider}`}
+      keywords={[entry.title, "subscription"]}
+      disabled={entry.signInUnavailable}
+      onSelect={() => onSignIn(entry.provider)}
+    >
+      <ModelSelectorLogo provider={providerToLogoProvider[entry.provider]} />
+      <ModelSelectorName>
+        {entry.title}{" "}
+        <span className="text-xs text-muted-foreground">{entry.subtitle}</span>
+      </ModelSelectorName>
+      <div className="ml-auto">
+        {entry.signInUnavailable ? (
+          <span className="text-xs text-muted-foreground">Not enabled</span>
+        ) : (
+          <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+            Sign in
+          </Badge>
+        )}
+      </div>
+    </ModelSelectorItem>
+  );
+}
+
+function ModelOption({
+  provider,
+  model,
+  selected,
+  onSelect,
+}: {
+  provider: SupportedProvider;
+  model: LlmModel;
+  selected: boolean;
+  onSelect: (modelValue: string) => void;
+}) {
+  // Use provider:modelId format for unique keys/values. This prevents issues
+  // when different providers have models with the same ID.
+  const modelValue = createModelValue(provider, model.dbId);
+
+  return (
+    <ModelSelectorItem
+      value={modelValue}
+      // value is provider:dbId (a UUID) for stable selection, so search must
+      // match human-readable terms via keywords
+      keywords={[model.displayName, model.id, providerDisplayNames[provider]]}
+      onSelect={() => onSelect(modelValue)}
+      className="group"
+    >
+      <ModelSelectorLogo provider={providerToLogoProvider[provider]} />
+      <ModelSelectorName>
+        {model.displayName}{" "}
+        <span className="text-xs text-muted-foreground font-mono">
+          ({model.id})
+        </span>
+        <CopyModelIdButton modelId={model.id} />
+      </ModelSelectorName>
+      {model.isFree && <FreeModelBadge />}
+      {model.requiresUserConnection && !model.isConnected && (
+        <ConnectAccountBadge />
+      )}
+      {isOpenRouterLatestAlias(provider, model.id) && <LatestModelBadge />}
+      {provider === "gemini" && isLegacyGeminiModel(model.id) && (
+        <OldModelBadge />
+      )}
+      <div className="ml-auto flex items-center gap-2">
+        <ModelCapabilityBadges capabilities={model.capabilities} />
+        <ContextLengthIndicator
+          contextLength={model.capabilities?.contextLength}
+        />
+        <PricingIndicator
+          pricePerMillionInput={model.capabilities?.pricePerMillionInput}
+          pricePerMillionOutput={model.capabilities?.pricePerMillionOutput}
+        />
+        {selected ? (
+          <CheckIcon className="size-4" />
+        ) : (
+          <div className="size-4" />
+        )}
+      </div>
+    </ModelSelectorItem>
   );
 }

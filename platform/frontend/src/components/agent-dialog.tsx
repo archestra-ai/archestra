@@ -71,6 +71,7 @@ import {
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
 import { SharePersonalCredentialsDialog } from "@/components/share-personal-credentials-dialog";
+import { SubscriptionSignInCta } from "@/components/subscription-sign-in-cta";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -165,6 +166,7 @@ import {
 } from "@/lib/knowledge/knowledge-base.query";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { isSubscriptionKey, useSubscriptions } from "@/lib/subscriptions";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
@@ -992,6 +994,19 @@ export function AgentDialog({
     () => availableApiKeys.find((k) => k.id === llmApiKeyId),
     [availableApiKeys, llmApiKeyId],
   );
+
+  // The agent pins a subscription rather than a shared key: it resolves to
+  // whoever is running the agent, so the viewer's own connection is what
+  // matters here — not the fact that a key row exists.
+  const subscriptions = useSubscriptions(availableApiKeys);
+  const pinnedSubscription = useMemo(() => {
+    if (!selectedApiKey || !isSubscriptionKey(selectedApiKey)) return null;
+    return (
+      subscriptions.find(
+        (entry) => entry.provider === selectedApiKey.provider,
+      ) ?? null
+    );
+  }, [selectedApiKey, subscriptions]);
 
   // The selected model's row: source of the derived provider (like prompt
   // input's initialProvider/currentProvider) and of the capability gating
@@ -2400,11 +2415,6 @@ export function AgentDialog({
                           </Alert>
                         ) : (
                           <>
-                            <p className="text-sm text-muted-foreground">
-                              {selectedApiKey && selectedApiKey.scope !== "org"
-                                ? "Selected key will be available to everyone who has access to this agent."
-                                : null}
-                            </p>
                             <div className="flex flex-wrap items-center gap-2">
                               <LlmProviderApiKeyDropdown
                                 availableKeys={availableApiKeys}
@@ -2419,10 +2429,10 @@ export function AgentDialog({
                                   currentLlmProvider ?? undefined
                                 }
                                 triggerVariant="button"
+                                showSubscriptions
                                 triggerClassName="h-8 max-w-[250px] text-xs"
                                 popoverClassName="w-96"
                                 popoverPortal={false}
-                                searchPlaceholder="Search API keys..."
                                 allowOrganizationDefault
                                 organizationDefaultSelected={!llmApiKeyId}
                                 onSelectOrganizationDefault={() => {
@@ -2471,6 +2481,30 @@ export function AgentDialog({
                                 />
                               )}
                             </div>
+                            {/* Help text directly under the selection it
+                                explains — the semantics of the choice must sit
+                                next to the control, not above the section. */}
+                            {selectedApiKey &&
+                              selectedApiKey.scope !== "org" &&
+                              !pinnedSubscription && (
+                                <p className="text-sm text-muted-foreground">
+                                  Selected key will be available to everyone who
+                                  has access to this agent.
+                                </p>
+                              )}
+                            {pinnedSubscription && (
+                              <p className="text-sm text-muted-foreground">
+                                Everyone using this agent runs on their own{" "}
+                                {pinnedSubscription.title} plan.
+                              </p>
+                            )}
+                            {pinnedSubscription &&
+                              !pinnedSubscription.connected && (
+                                <SubscriptionSignInCta
+                                  entry={pinnedSubscription}
+                                  onConnected={handleLlmApiKeyChange}
+                                />
+                              )}
                             {showNoToolsModelNotice && (
                               <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                                 <InfoIcon

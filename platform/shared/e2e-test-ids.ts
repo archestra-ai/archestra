@@ -172,6 +172,11 @@ export function getSubscriptionSignInRowTestId(provider: string): string {
   return `subscription-sign-in-row-${provider}`;
 }
 
+/** Per-provider option in the "Subscriptions" group of a credential or model picker. */
+export function getSubscriptionPickerOptionTestId(provider: string): string {
+  return `subscription-picker-option-${provider}`;
+}
+
 export function getIdentityProviderDialogNavButtonTestId(
   section: string,
 ): string {

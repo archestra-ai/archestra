@@ -1,6 +1,7 @@
 import {
   getProvidersWithOptionalApiKey,
   isVaultReference,
+  PROVIDERS_REQUIRING_PER_USER_CREDENTIAL,
   parseVaultReference,
   providerRequiresPerUserCredential,
   type SupportedProvider,
@@ -81,6 +82,46 @@ class LlmProviderApiKeyModel {
   }
 
   /**
+   * Of the given key ids, the ones whose stored credential is a
+   * ChatGPT-subscription (Codex) secret on the `openai` provider — the
+   * key-level per-user case that, unlike the per-user PROVIDERS (GitHub /
+   * Microsoft Copilot), is only detectable on the decrypted secret. The
+   * decrypted value never leaves this method.
+   */
+  static async getChatgptSubscriptionKeyIds(
+    keyIds: string[],
+  ): Promise<Set<string>> {
+    if (keyIds.length === 0) {
+      return new Set();
+    }
+
+    const rows = await db
+      .select({
+        id: schema.llmProviderApiKeysTable.id,
+        secret: schema.secretsTable.secret,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .innerJoin(
+        schema.secretsTable,
+        eq(schema.llmProviderApiKeysTable.secretId, schema.secretsTable.id),
+      )
+      .where(
+        and(
+          inArray(schema.llmProviderApiKeysTable.id, keyIds),
+          eq(schema.llmProviderApiKeysTable.provider, "openai"),
+        ),
+      );
+
+    return new Set(
+      rows
+        .filter((row) =>
+          isOpenAiCodexCredential(decryptApiKeyValue(row.secret) ?? undefined),
+        )
+        .map((row) => row.id),
+    );
+  }
+
+  /**
    * Find all LLM provider API keys for an organization.
    */
   static async findByOrganizationId(
@@ -100,7 +141,13 @@ class LlmProviderApiKeyModel {
    *
    * Visibility rules:
    * - Users see: their personal keys + team keys for their teams + org-wide keys
-   * - Users with agent:admin: see all keys EXCEPT personal keys of other users
+   * - Users with llmProviderApiKey:admin: see all keys EXCEPT personal keys of
+   *   other users — with one carve-out: other users' personal SUBSCRIPTION
+   *   credentials (per-user providers like GitHub/Microsoft Copilot, and
+   *   ChatGPT-subscription keys on `openai`) stay visible. Subscriptions are
+   *   always personal-scope, so without the carve-out admins would have no
+   *   inventory of who has connected what. Only metadata is exposed — never
+   *   the secret.
    */
   static async getVisibleKeys(
     organizationId: string,
@@ -118,12 +165,23 @@ class LlmProviderApiKeyModel {
     ];
 
     if (isAgentAdmin) {
-      // Admins see all keys except other users' personal keys
+      // Admins see all keys except other users' personal keys — apart from
+      // subscription credentials (see the doc comment). `openai` is fetched
+      // broadly here because the ChatGPT-subscription marker only exists on
+      // the decrypted secret; non-subscription openai keys of other users are
+      // dropped after mapping, below.
       const adminConditions = [
-        // Own personal keys
         and(
           eq(schema.llmProviderApiKeysTable.scope, "personal"),
-          eq(schema.llmProviderApiKeysTable.userId, userId),
+          or(
+            // Own personal keys
+            eq(schema.llmProviderApiKeysTable.userId, userId),
+            // Other users' per-user subscription credentials
+            inArray(schema.llmProviderApiKeysTable.provider, [
+              ...PROVIDERS_REQUIRING_PER_USER_CREDENTIAL,
+            ]),
+            eq(schema.llmProviderApiKeysTable.provider, "openai"),
+          ),
         ),
         // All team keys
         eq(schema.llmProviderApiKeysTable.scope, "team"),
@@ -219,7 +277,22 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    return apiKeys.map(toApiKeyWithScopeInfo);
+    const mapped = apiKeys.map(toApiKeyWithScopeInfo);
+    if (!isAgentAdmin) {
+      return mapped;
+    }
+    // The admin query fetched every personal openai key to inspect the
+    // subscription marker; keep only the subscription-backed ones from other
+    // users (plain sk- personal keys stay private to their owner).
+    return mapped.filter(
+      (key) =>
+        !(
+          key.scope === "personal" &&
+          key.userId !== userId &&
+          key.provider === "openai" &&
+          !key.isChatgptSubscription
+        ),
+    );
   }
 
   /**

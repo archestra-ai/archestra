@@ -1,10 +1,17 @@
-import { E2eTestId } from "@archestra/shared";
+import {
+  E2eTestId,
+  getSubscriptionPickerOptionTestId,
+} from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useSession } from "@/lib/auth/auth.query";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { LlmProviderApiKeyDropdown } from "./llm-provider-api-key-dropdown";
+
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 
 global.ResizeObserver = class ResizeObserver {
   observe = vi.fn();
@@ -14,6 +21,12 @@ global.ResizeObserver = class ResizeObserver {
 Element.prototype.scrollIntoView = vi.fn();
 
 describe("LlmProviderApiKeyDropdown", () => {
+  beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1" } },
+    } as ReturnType<typeof useSession>);
+  });
+
   it("renders chat selector test ids and provider groups", async () => {
     const user = userEvent.setup();
 
@@ -114,6 +127,119 @@ describe("LlmProviderApiKeyDropdown", () => {
     const options = screen.getAllByRole("option");
     expect(options).toHaveLength(1);
     expect(options[0]).toHaveTextContent("Staging key");
+  });
+
+  describe("subscriptions group", () => {
+    it("lists all three subscriptions above the API keys, with sign-in when unconnected", async () => {
+      const user = userEvent.setup();
+
+      renderDropdown({
+        availableKeys: [
+          {
+            id: "key-1",
+            name: "Prod key",
+            provider: "anthropic",
+            scope: "org",
+            teamName: null,
+          },
+        ] as LlmProviderApiKey[],
+        selectedApiKeyId: null,
+        onSelectKey: () => {},
+        triggerVariant: "button",
+        showSubscriptions: true,
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: /select provider key/i }),
+      );
+
+      for (const provider of [
+        "github-copilot",
+        "microsoft-365-copilot",
+        "openai",
+      ]) {
+        expect(
+          screen.getByTestId(getSubscriptionPickerOptionTestId(provider)),
+        ).toHaveTextContent("Sign in");
+      }
+
+      // Subscriptions lead the list; the pasted key follows.
+      const options = screen.getAllByRole("option");
+      expect(options).toHaveLength(4);
+      expect(options[3]).toHaveTextContent("Prod key");
+
+      // Both credential types explain their semantics at the selection point:
+      // subscriptions resolve per user, API keys are one shared credential.
+      expect(
+        screen.getByText(/each person signs in with their own plan/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/everyone it's shared with uses the same credential/i),
+      ).toBeInTheDocument();
+    });
+
+    it("selects the backing key instead of signing in when already connected", async () => {
+      const user = userEvent.setup();
+      const onSelectKey = vi.fn();
+
+      renderDropdown({
+        availableKeys: [
+          {
+            id: "copilot-key",
+            name: "GitHub Copilot",
+            provider: "github-copilot",
+            scope: "personal",
+            userId: "user-1",
+            teamName: null,
+          },
+        ] as LlmProviderApiKey[],
+        selectedApiKeyId: null,
+        onSelectKey,
+        triggerVariant: "button",
+        showSubscriptions: true,
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: /select provider key/i }),
+      );
+
+      const row = screen.getByTestId(
+        getSubscriptionPickerOptionTestId("github-copilot"),
+      );
+      expect(row).toHaveTextContent("Your account");
+      expect(row).not.toHaveTextContent("Sign in");
+
+      await user.click(row);
+      expect(onSelectKey).toHaveBeenCalledWith("copilot-key");
+    });
+
+    it("does not repeat a connected subscription in the provider groups", async () => {
+      const user = userEvent.setup();
+
+      renderDropdown({
+        availableKeys: [
+          {
+            id: "copilot-key",
+            name: "GitHub Copilot",
+            provider: "github-copilot",
+            scope: "personal",
+            userId: "user-1",
+            teamName: null,
+          },
+        ] as LlmProviderApiKey[],
+        selectedApiKeyId: null,
+        onSelectKey: () => {},
+        triggerVariant: "button",
+        showSubscriptions: true,
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: /select provider key/i }),
+      );
+
+      // Three subscription rows and nothing else — the key backs one of them.
+      expect(screen.getAllByRole("option")).toHaveLength(3);
+    });
   });
 
   it("supports selecting organization default", async () => {

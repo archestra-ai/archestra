@@ -19,6 +19,15 @@ vi.mock("@/lib/llm-models.query", () => ({
   useLlmModelsByProvider: useLlmModelsByProviderMock,
 }));
 
+// The selector derives its Subscriptions group from the viewer's own keys.
+// These tests cover model grouping and gating, so no key and no session is the
+// right baseline: all three subscriptions read as "not connected".
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useAvailableLlmProviderApiKeys: () => ({ data: [] }),
+}));
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
+
 // The dropdown internals are Radix-based and irrelevant to the branches under
 // test. The root mock exposes a toggle button wired to onOpenChange so tests
 // can flip the component's open state, and structural wrappers render their
@@ -52,8 +61,17 @@ vi.mock("@/components/ai-elements/model-selector", () => ({
     <div>{children}</div>
   ),
   ModelSelectorEmpty: () => null,
-  ModelSelectorGroup: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
+  ModelSelectorGroup: ({
+    children,
+    heading,
+  }: {
+    children: ReactNode;
+    heading?: ReactNode;
+  }) => (
+    <div>
+      {heading}
+      {children}
+    </div>
   ),
   ModelSelectorItem: ({ children }: { children: ReactNode }) => (
     <div data-testid="model-option">{children}</div>
@@ -231,6 +249,19 @@ describe("ModelSelector coverage matrix", () => {
     expect(screen.queryByTestId("dialog-content")).not.toBeInTheDocument();
   });
 
+  it("clears the selection without nesting a button inside the trigger button", () => {
+    setQuery({ modelsByProvider: { openai: [model()] } });
+    const onClear = vi.fn();
+    renderSelector({ selectedModel: "m1", variant: "default", onClear });
+
+    const clear = screen.getByLabelText("Clear model");
+    // The trigger itself is a <button>; a nested real <button> is invalid HTML
+    // and logs a hydration error (seen on Agents → Edit).
+    expect(clear.tagName).not.toBe("BUTTON");
+    fireEvent.click(clear);
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the pinned model and shows the fallback name when auto-select is suppressed", () => {
     setQuery({ modelsByProvider: { openai: [model()] } });
     const { onModelChange } = renderSelector({
@@ -241,5 +272,47 @@ describe("ModelSelector coverage matrix", () => {
     });
     expect(screen.getByText("Pinned Model")).toBeInTheDocument();
     expect(onModelChange).not.toHaveBeenCalled();
+  });
+
+  describe("current model outside the available list", () => {
+    it("offers sign-in when the held model is backed by an unconnected subscription", () => {
+      setQuery({ modelsByProvider: { openai: [model()] } });
+      renderSelector({
+        selectedModel: "pinned-id",
+        suppressAutoSelect: true,
+        fallbackModelName: "GPT-5 Codex",
+        fallbackModelProvider: "openai",
+        variant: "default",
+      });
+
+      fireEvent.click(screen.getByTestId("dialog-toggle"));
+
+      expect(screen.getByText("Current (sign in to use)")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Current (API key missing)"),
+      ).not.toBeInTheDocument();
+      // Trigger and dialog row both show the resolved name, never the model UUID.
+      expect(screen.getAllByText("GPT-5 Codex")).toHaveLength(2);
+      expect(screen.queryByText("pinned-id")).not.toBeInTheDocument();
+    });
+
+    it("keeps the key-missing marker when the held model is not subscription-backed", () => {
+      setQuery({ modelsByProvider: { openai: [model()] } });
+      renderSelector({
+        selectedModel: "pinned-id",
+        suppressAutoSelect: true,
+        fallbackModelName: "Claude Opus",
+        fallbackModelProvider: "anthropic",
+        variant: "default",
+      });
+
+      fireEvent.click(screen.getByTestId("dialog-toggle"));
+
+      expect(screen.getByText("Current (API key missing)")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Current (sign in to use)"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("pinned-id")).not.toBeInTheDocument();
+    });
   });
 });

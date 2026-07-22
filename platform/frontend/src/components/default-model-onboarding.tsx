@@ -174,6 +174,7 @@ function SetDefaultModelDialog({
             setApiKeySelectorOpen(false);
           }}
           triggerVariant="select"
+          showSubscriptions
           emptyTriggerLabel="Select provider key..."
         />
         <LlmModelSearchableSelect

@@ -31,6 +31,13 @@ interface LlmProviderApiKeySelectorProps {
   isModelsLoading?: boolean;
   /** Agent's configured LLM API key ID - included in available keys even if user lacks direct access */
   agentLlmApiKeyId?: string | null;
+  /**
+   * Keep the current selection instead of auto-selecting an available key.
+   * Used when the agent's default resolves per-user (a subscription the viewer
+   * hasn't connected): silently switching the conversation onto some other key
+   * would bypass the "sign in to your subscription" prompt on send.
+   */
+  suppressAutoSelect?: boolean;
 }
 
 /**
@@ -47,6 +54,7 @@ export function LlmProviderApiKeySelector({
   onOpenChange,
   isModelsLoading = false,
   agentLlmApiKeyId,
+  suppressAutoSelect = false,
 }: LlmProviderApiKeySelectorProps) {
   // Fetch ALL API keys (not filtered by provider) so user can switch providers
   // Include agent's configured key even if user doesn't have direct access
@@ -110,6 +118,11 @@ export function LlmProviderApiKeySelector({
     // Skip if loading or no keys available
     if (isLoading || availableKeys.length === 0) return;
 
+    // The agent's default resolves per-user and the viewer hasn't connected:
+    // hold the selection so send surfaces the sign-in prompt instead of the
+    // conversation silently switching onto whatever key happens to exist.
+    if (suppressAutoSelect) return;
+
     const providerKey = currentProvider ?? null;
 
     // Skip if we already handled this exact provider
@@ -168,6 +181,7 @@ export function LlmProviderApiKeySelector({
     providerKeys,
     keysByScope,
     onApiKeyChange,
+    suppressAutoSelect,
   ]);
 
   const handleSelectKey = (keyId: string) => {
@@ -227,6 +241,7 @@ export function LlmProviderApiKeySelector({
       onSelectKey={handleSelectKey}
       currentProvider={currentProvider}
       showChatTestIds
+      showSubscriptions
     />
   );
 }

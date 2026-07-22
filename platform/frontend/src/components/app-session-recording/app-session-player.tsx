@@ -26,6 +26,8 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import {
@@ -77,6 +79,12 @@ import {
   useIsRenderingAppRecordingVideo,
   useRenderAppRecordingVideo,
 } from "@/lib/app-session-recording/app-recording.query";
+import {
+  AudioPlaybackController,
+  buildPlaybackAudio,
+  type PlaybackAudio,
+  recordingHasAudio,
+} from "@/lib/app-session-recording/app-recording-audio";
 import {
   type RuntimeRecordingEvent,
   reviveRecordingEvents,
@@ -914,6 +922,24 @@ function PlayerSurface({
   const frameReadyRef = useRef(frameReady);
   frameReadyRef.current = frameReady;
 
+  // ── Captured audio (host-side). The recording's app sound is decoded once and
+  // scheduled against the same clock as the visuals; the offline renderer muxes
+  // it separately, so live audio is never driven while filming. Muting is the
+  // viewer's, defaulting to on (sound present) — hidden entirely when the
+  // recording captured no audio.
+  const hasAudio = useMemo(
+    () => !filming && recordingHasAudio(recording.events),
+    [filming, recording.events],
+  );
+  const [muted, setMuted] = useState(false);
+  const audioRef = useRef<AudioPlaybackController | null>(null);
+  /** Cached export-audio build, used only while filming (see the replay bridge). */
+  const renderAudioRef = useRef<Promise<PlaybackAudio | null> | null>(null);
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+  const playStateRef = useRef(playState);
+  playStateRef.current = playState;
+
   // A remount (version switch, restart, or seek) makes the frame not-ready
   // until its SDK reconnects. The deps ARE the remount triggers even though the
   // body only resets the flag.
@@ -1392,6 +1418,49 @@ function PlayerSurface({
     );
   }, [playState, frameReady]);
 
+  // Decode the captured audio onto the current playback timeline (idle
+  // compression + cuts baked in) and hold a controller. Rebuilt whenever the
+  // playback identity changes — an edit retimes where audio lands — and torn
+  // down on unmount/filming. Best-effort: a browser that can't decode just
+  // plays silent.
+  useEffect(() => {
+    if (!hasAudio) return;
+    let cancelled = false;
+    let controller: AudioPlaybackController | null = null;
+    void buildPlaybackAudio({
+      events: recording.events,
+      cuts: recording.edits?.cuts ?? [],
+      durationMs: playback.duration,
+      toPlaybackMs: playback.toPlaybackMs,
+    }).then((audio) => {
+      if (cancelled || !audio) return;
+      controller = new AudioPlaybackController(audio);
+      controller.setMuted(mutedRef.current);
+      audioRef.current = controller;
+      controller.sync(
+        clockRef.current,
+        playStateRef.current === "playing" && frameReadyRef.current,
+      );
+    });
+    return () => {
+      cancelled = true;
+      controller?.dispose();
+      audioRef.current = null;
+    };
+  }, [hasAudio, recording, playback]);
+
+  // Keep the audio reconciled with the clock: one call handles play, pause, and
+  // seek (a large jump restarts; smooth advance is left to free-run in step).
+  // Driven by displayClock — the throttled mirror updates each tick and jumps on
+  // a seek, both well inside the controller's drift tolerance.
+  useEffect(() => {
+    audioRef.current?.sync(displayClock, playState === "playing" && frameReady);
+  }, [displayClock, playState, frameReady]);
+
+  useEffect(() => {
+    audioRef.current?.setMuted(muted);
+  }, [muted]);
+
   useEffect(() => {
     // Hold the clock until the current app frame's SDK has connected, so events
     // aren't posted into a frame that can't yet receive them.
@@ -1597,11 +1666,27 @@ function PlayerSurface({
         seekTo(ms);
         await settled();
       },
+      // The renderer can't hear the sandboxed frame, so the captured audio is
+      // decoded onto the export timeline here and muxed into the MP4 separately
+      // (the video is filmed frame by frame with playback paused). Built once,
+      // then reused if the renderer asks again.
+      audio: () => {
+        if (!renderAudioRef.current) {
+          renderAudioRef.current = buildPlaybackAudio({
+            events: recording.events,
+            cuts: recording.edits?.cuts ?? [],
+            durationMs: playback.duration,
+            toPlaybackMs: playback.toPlaybackMs,
+          }).catch(() => null);
+        }
+        return renderAudioRef.current;
+      },
     };
     return () => {
       window.__archestraReplay = undefined;
+      renderAudioRef.current = null;
     };
-  }, [filming, duration, seekTo, events]);
+  }, [filming, duration, seekTo, events, recording, playback]);
 
   // The single timeline runs on the FULL (uncut) session; a click there seeks
   // the cut playback to the same moment (a click inside a removed stretch
@@ -2276,6 +2361,33 @@ function PlayerSurface({
               playButton
             );
           })()}
+          {/* Mute toggle — only when the recording captured sound. Sound is on
+              by default so the demo replays as it happened; this is the way to
+              silence it. */}
+          {hasAudio && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="-mb-0.5 size-9 rounded-md text-muted-foreground hover:text-foreground"
+                  aria-label={muted ? "Unmute" : "Mute"}
+                  aria-pressed={muted}
+                  onClick={() => setMuted((value) => !value)}
+                >
+                  {muted ? (
+                    <VolumeX className="h-4 w-4" />
+                  ) : (
+                    <Volume2 className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                {muted ? "Unmute" : "Mute"}
+              </TooltipContent>
+            </Tooltip>
+          )}
           {/* No fixed-width reserve: tabular-nums keeps the readout stable,
               and a sized box would pad one side and break the row's even
               gap rhythm. */}

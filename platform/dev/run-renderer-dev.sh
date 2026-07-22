@@ -17,18 +17,48 @@ cd "$(dirname "$0")/../backend"
 
 export ARCHESTRA_PROCESS_TYPE=renderer
 
-# Wait for the backend's watch build to produce the bundle on a cold start,
-# rather than crash-looping until it appears. Non-fatal (a compile error is
-# transient in watch mode — the file lands once the build goes green), but not
-# silent: say what it is waiting on, and nag every 30s so a stuck build reads as
-# a stuck build rather than a hung resource.
+# Wait for the backend's watch build to produce a COMPLETE bundle before booting,
+# rather than crash-looping until it settles. Two things have to be true, not one:
+#
+#   1. dist/server.mjs exists. On a cold start (or right after tsdown's watch-mode
+#      dist wipe) it briefly does not — waiting beats crash-looping.
+#   2. The bundle is fully written. tsdown code-splits into hash-named chunks, and
+#      dist/server.mjs pulls some of them in with `await import("./sentry-<hash>.mjs")`
+#      — a *dynamic* import Node resolves only when it reaches that line at runtime.
+#      Tilt restarts this resource the instant dist/server.mjs changes (its `deps`),
+#      which during a rebuild is mid-write-burst: the entry chunk lands before every
+#      chunk it imports does. Booting then sails past the static imports, reaches the
+#      dynamic one and dies with ERR_MODULE_NOT_FOUND on a chunk that simply is not
+#      on disk yet — the "fails on the first restart, succeeds on the next" symptom.
+#      Waiting for the emitted dist/*.mjs set to stop changing closes the race: once
+#      the write burst settles, every chunk (static and dynamically imported) exists.
+#
+# Non-fatal (a compile error is transient in watch mode — the files land once the
+# build goes green) but not silent: say what it is waiting on, and nag every 30s so
+# a stuck build reads as a stuck build rather than a hung resource.
 if [ ! -f dist/server.mjs ]; then
   echo "run-renderer-dev: waiting for the backend watch build to produce dist/server.mjs..." >&2
 fi
+
+# A fingerprint of every emitted JS chunk's size (the .map sidecars are unused at
+# runtime, so they're excluded). It shifts while rolldown is still writing and holds
+# steady once the burst completes; two identical samples a second apart mean done.
+bundle_fingerprint() {
+  find dist -type f -name '*.mjs' -exec wc -c {} + 2>/dev/null | sort
+}
+
 waited=0
-while [ ! -f dist/server.mjs ]; do
+prev=""
+while :; do
+  if [ -f dist/server.mjs ]; then
+    cur="$(bundle_fingerprint)"
+    if [ -n "$cur" ] && [ "$cur" = "$prev" ]; then
+      break
+    fi
+    prev="$cur"
+  fi
   if [ "$waited" -gt 0 ] && [ "$((waited % 30))" -eq 0 ]; then
-    echo "run-renderer-dev: still no dist/server.mjs after ${waited}s — check the backend resource for a failing build." >&2
+    echo "run-renderer-dev: still waiting on a complete dist bundle after ${waited}s — check the backend resource for a failing build." >&2
   fi
   sleep 1
   waited=$((waited + 1))

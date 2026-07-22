@@ -472,6 +472,38 @@
   };
 
   /**
+   * The opaque colour a transparent canvas region flattens onto before it is
+   * encoded. VP9 (profile 0) carries no alpha and the encoder discards it, so a
+   * transparent canvas pixel — whose RGB under the transparency is (0,0,0) —
+   * would otherwise encode as opaque BLACK and, on replay, black out whatever
+   * showed through the real canvas (its own CSS background, the page behind
+   * it). The faithful backdrop is the first solid background up the canvas's
+   * ancestor chain — exactly what the browser composites the canvas over on
+   * screen — and white when none resolves. A non-flat background (an image, a
+   * gradient) can't be sampled and also falls back to white: still far closer
+   * than black.
+   */
+  const resolveVideoBackdrop = (canvas) => {
+    try {
+      let el = canvas;
+      while (el && el.nodeType === 1) {
+        const match = /^rgba?\(([^)]+)\)/.exec(
+          getComputedStyle(el).backgroundColor,
+        );
+        if (match) {
+          const parts = match[1].split(",").map((n) => parseFloat(n));
+          const alpha = parts.length >= 4 ? parts[3] : 1;
+          if (parts.length >= 3 && alpha >= 1) {
+            return "rgb(" + parts[0] + "," + parts[1] + "," + parts[2] + ")";
+          }
+        }
+        el = el.parentElement;
+      }
+    } catch {}
+    return "#ffffff";
+  };
+
+  /**
    * Feed one canvas frame into its encoder stream, creating or reopening the
    * stream as needed (first frame, canvas resize, encoder closed by a prior
    * stop). VideoFrame reads the canvas GPU-side — no toDataURL readback, no
@@ -516,6 +548,9 @@
         height,
       );
       if (!stream) return;
+      // The backdrop this canvas's transparent regions flatten onto (see
+      // resolveVideoBackdrop) — resolved once per stream, not per frame.
+      stream.backdrop = resolveVideoBackdrop(canvas);
       videoStreams.set(canvas, stream);
     }
     // Queue pressure: in quantizer mode the first response is a cheaper —
@@ -533,23 +568,33 @@
     }
     if (queue > VIDEO_MAX_QUEUE) return;
 
-    let source = canvas;
-    if (width !== canvas.width || height !== canvas.height) {
-      if (!scratchCanvas) scratchCanvas = document.createElement("canvas");
-      if (scratchCanvas.width !== width) scratchCanvas.width = width;
-      if (scratchCanvas.height !== height) scratchCanvas.height = height;
-      const ctx = scratchCanvas.getContext("2d");
-      if (!ctx) return;
-      // The one place capture resamples — use the good filter for it.
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      try {
-        ctx.drawImage(canvas, 0, 0, width, height);
-      } catch {
-        return; // tainted canvas — nothing to record
-      }
-      source = scratchCanvas;
+    // Always composite onto an opaque backdrop before encoding. VP9 carries no
+    // alpha and the encoder discards it, so a transparent canvas region would
+    // encode as opaque BLACK and, on replay, black out whatever showed through
+    // the real canvas. Filling the stream's backdrop first — then drawing the
+    // canvas over it — makes a transparent region replay as that background
+    // instead. This is the source-over composite the browser already does to
+    // display the canvas, so an opaque canvas is unchanged (the backdrop never
+    // shows) and only genuinely-transparent pixels differ. It stays GPU-side (a
+    // blit, no toDataURL/getImageData readback) and doubles as the resample
+    // step when the frame is downscaled.
+    if (!scratchCanvas) scratchCanvas = document.createElement("canvas");
+    if (scratchCanvas.width !== width) scratchCanvas.width = width;
+    if (scratchCanvas.height !== height) scratchCanvas.height = height;
+    const ctx = scratchCanvas.getContext("2d");
+    if (!ctx) return;
+    // High-quality filter for the one place capture resamples (downscale).
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = stream.backdrop || "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    try {
+      ctx.drawImage(canvas, 0, 0, width, height);
+    } catch {
+      return; // tainted canvas — nothing to record
     }
+    const source = scratchCanvas;
     const atMs = nowMs();
     const keyDue = atMs - stream.lastKeyMs >= VIDEO_KEYFRAME_MS;
     // The byte-hard backstop. Once the recording's rolling rate — including

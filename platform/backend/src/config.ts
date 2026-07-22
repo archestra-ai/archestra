@@ -1595,6 +1595,10 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
     },
+    kimi: {
+      baseUrl:
+        process.env.ARCHESTRA_KIMI_BASE_URL || "https://api.moonshot.ai/v1",
+    },
     "github-copilot": {
       baseUrl:
         process.env.ARCHESTRA_GITHUB_COPILOT_BASE_URL ||
@@ -1725,6 +1729,9 @@ const config = {
     },
     deepseek: {
       apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
+    },
+    kimi: {
+      apiKey: process.env.ARCHESTRA_CHAT_KIMI_API_KEY || "",
     },
     "github-copilot": {
       apiKey: process.env.ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY || "",

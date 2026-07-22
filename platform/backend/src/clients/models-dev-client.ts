@@ -487,6 +487,7 @@ export class ModelsDevClient {
       zhipuai: ["zhipuai/"],
       deepseek: ["deepseek/"],
       minimax: ["minimax/"],
+      kimi: ["moonshotai/"],
       azure: ["azure/"],
       // Not synced via models.dev (subscription-dependent /models endpoint)
       "github-copilot": [],

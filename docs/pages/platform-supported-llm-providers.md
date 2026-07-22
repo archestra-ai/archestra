@@ -529,6 +529,42 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 - **No /models endpoint**: MiniMax does not provide a models listing API. Available models are hardcoded in the platform configuration
 - **Chinese and English support**: MiniMax models excel at both Chinese and English language tasks
 
+## Kimi (Moonshot AI)
+
+[Kimi](https://www.moonshot.ai/) is Moonshot AI's family of large language models, including the Kimi K2 series and the `moonshot-v1` long-context models, with strong reasoning, tool use, and long-context capabilities.
+
+### Supported Kimi APIs
+
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+
+### Kimi Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/kimi/{profile-id}`
+- **Authentication**: Pass your Kimi API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                       | Required | Description                                                                |
+| ------------------------------ | -------- | ------------------------------------------------------------------------- |
+| `ARCHESTRA_CHAT_KIMI_API_KEY`  | No       | Default API key for Kimi (can be overridden per conversation/team/org)    |
+| `ARCHESTRA_KIMI_BASE_URL`      | No       | Kimi API base URL (default: `https://api.moonshot.ai/v1`)                 |
+
+### Getting an API Key
+
+Obtain your API key from the [Moonshot AI Platform](https://platform.moonshot.ai/console/api-keys).
+
+### Popular Models
+
+- `kimi-k2-0711-preview` - Kimi K2 flagship model with strong reasoning and tool use
+- `kimi-latest` - Rolling alias tracking the newest Kimi model
+- `moonshot-v1-128k` - Long-context (128K) model
+
+### Important Notes
+
+- **OpenAI-compatible API**: Kimi's API follows the OpenAI Chat Completions format, making it easy to switch between providers
+- **/models endpoint**: Kimi exposes a models listing API, so available models are synced automatically from your account
+- **International endpoint**: The default base URL uses Moonshot's international endpoint (`api.moonshot.ai`); the China endpoint (`api.moonshot.cn`) can be set via `ARCHESTRA_KIMI_BASE_URL`
+
 ## GitHub Copilot
 
 [GitHub Copilot](https://github.com/features/copilot) exposes the models included with a user's Copilot subscription (GPT, Claude, Gemini, and others, depending on plan) through an OpenAI-compatible API. Unlike other providers, Copilot has no static API keys: access is tied to an individual GitHub account.

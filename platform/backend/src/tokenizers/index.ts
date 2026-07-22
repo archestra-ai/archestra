@@ -49,6 +49,7 @@ const tokenizerCache: Record<SupportedProvider, () => Tokenizer> = {
   ollama: getTiktokenTokenizer,
   zhipuai: getTiktokenTokenizer,
   deepseek: getTiktokenTokenizer,
+  kimi: getTiktokenTokenizer,
   "github-copilot": getTiktokenTokenizer,
   "microsoft-365-copilot": getTiktokenTokenizer,
   gemini: getTiktokenTokenizer,

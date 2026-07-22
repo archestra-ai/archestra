@@ -181,6 +181,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           zhipuai: config.llm.zhipuai.baseUrl || null,
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
+          kimi: config.llm.kimi.baseUrl || null,
           "github-copilot": config.llm["github-copilot"].baseUrl || null,
           "microsoft-365-copilot":
             config.llm["microsoft-365-copilot"].baseUrl || null,

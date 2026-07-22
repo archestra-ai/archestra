@@ -97,6 +97,7 @@ export const EMBEDDING_ADAPTERS: Record<
   perplexity: null,
   xai: null,
   minimax: null,
+  kimi: null,
   "github-copilot": null,
   "microsoft-365-copilot": null,
 };

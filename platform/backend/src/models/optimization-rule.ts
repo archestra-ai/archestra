@@ -392,6 +392,7 @@ class OptimizationRuleModel {
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
         zhipuai: [],
         deepseek: [],
+        kimi: [],
         "github-copilot": [], // Copilot model availability is subscription-specific, no defaults
         "microsoft-365-copilot": [], // single pseudo-model, nothing to optimize between
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults

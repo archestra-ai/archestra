@@ -60,6 +60,7 @@ export { default as deepseekProxyRoutes } from "./proxy/routes/deepseek";
 export { default as geminiProxyRoutes } from "./proxy/routes/gemini";
 export { default as githubCopilotProxyRoutes } from "./proxy/routes/github-copilot";
 export { default as groqProxyRoutes } from "./proxy/routes/groq";
+export { default as kimiProxyRoutes } from "./proxy/routes/kimi";
 export { default as microsoft365CopilotProxyRoutes } from "./proxy/routes/microsoft-365-copilot";
 export { default as minimaxProxyRoutes } from "./proxy/routes/minimax";
 export { default as mistralProxyRoutes } from "./proxy/routes/mistral";

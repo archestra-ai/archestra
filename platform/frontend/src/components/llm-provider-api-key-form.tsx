@@ -240,6 +240,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://platform.deepseek.com/api_keys",
     consoleName: "DeepSeek Platform",
   },
+  kimi: {
+    name: "Moonshot (Kimi)",
+    icon: "/icons/kimi.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://platform.moonshot.ai/console/api-keys",
+    consoleName: "Moonshot AI Platform",
+  },
   bedrock: {
     name: "AWS Bedrock",
     icon: "/icons/bedrock.png",

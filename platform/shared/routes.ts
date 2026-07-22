@@ -266,6 +266,10 @@ export const RouteId = {
     "deepseekChatCompletionsWithDefaultAgent",
   DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
 
+  // Proxy Routes - Kimi (Moonshot AI)
+  KimiChatCompletionsWithDefaultAgent: "kimiChatCompletionsWithDefaultAgent",
+  KimiChatCompletionsWithAgent: "kimiChatCompletionsWithAgent",
+
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",
   BedrockConverseWithAgent: "bedrockConverseWithAgent",

@@ -483,6 +483,9 @@ export async function fetchSubmittedPrState(
       `https://api.github.com/repos/${match[1]}/${match[2]}/pulls/${match[3]}`,
       {
         signal,
+        // GitHub's API answers are cacheable for a minute — a PR closed
+        // seconds ago must not come back as still open.
+        cache: "no-store",
         headers: {
           accept: "application/vnd.github+json",
           "x-github-api-version": "2022-11-28",

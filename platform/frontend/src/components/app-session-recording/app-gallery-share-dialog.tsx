@@ -83,23 +83,19 @@ export function AppGalleryShareButton(props: {
 
   // The button-level duplicate guard: a submission remembered in this browser
   // is verified against GitHub — still open or merged disables the button; a
-  // rejected (closed-unmerged) PR clears the memory so the participant can
-  // resubmit; unverifiable leaves the button alone and defers to the
-  // submission's own pre-flight check.
-  useEffect(() => {
-    if (!galleryRepo) return;
-    const verification = new AbortController();
-    void (async () => {
+  // rejected (closed-unmerged) PR clears the memory AND re-enables the
+  // button; unverifiable changes nothing and defers to the submission's own
+  // pre-flight check.
+  const verifyRememberedSubmission = useCallback(
+    async (signal: AbortSignal) => {
+      if (!galleryRepo) return;
       const bundle = await recordingStore.get(props.conversationId);
-      if (!bundle || verification.signal.aborted) return;
+      if (!bundle || signal.aborted) return;
       const slug = gallerySubmissionSlug(bundle);
       const remembered = recallGallerySubmission({ repo: galleryRepo, slug });
       if (!remembered) return;
-      const prState = await fetchSubmittedPrState(
-        remembered.prUrl,
-        verification.signal,
-      );
-      if (verification.signal.aborted) return;
+      const prState = await fetchSubmittedPrState(remembered.prUrl, signal);
+      if (signal.aborted) return;
       if (prState === "closed") {
         forgetGallerySubmission({ repo: galleryRepo, slug });
         setExistingPr(null);
@@ -109,9 +105,24 @@ export function AppGalleryShareButton(props: {
           merged: prState === "merged",
         });
       }
-    })();
-    return () => verification.abort();
-  }, [galleryRepo, props.conversationId]);
+    },
+    [galleryRepo, props.conversationId],
+  );
+
+  // Verify on mount AND whenever the window regains focus: closing or
+  // merging the pull request happens over on GitHub in another tab, and the
+  // button must notice the moment the participant comes back — a one-shot
+  // mount check left it insisting on a PR that was already closed.
+  useEffect(() => {
+    const verification = new AbortController();
+    void verifyRememberedSubmission(verification.signal);
+    const onFocus = () => void verifyRememberedSubmission(verification.signal);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      verification.abort();
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [verifyRememberedSubmission]);
 
   const run = useCallback(async () => {
     if (!galleryRepo) return;

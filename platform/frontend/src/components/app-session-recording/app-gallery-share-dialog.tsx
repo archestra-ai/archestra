@@ -13,7 +13,13 @@ import {
   GitPullRequestCreateArrow,
   Loader2,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,10 +30,15 @@ import {
 import {
   acquireGithubToken,
   buildGallerySubmissionFiles,
+  DuplicateSubmissionError,
   fetchGithubLogin,
+  fetchSubmittedPrState,
+  forgetGallerySubmission,
   type GallerySubmissionFile,
   GithubAuthError,
   gallerySubmissionSlug,
+  recallGallerySubmission,
+  rememberGallerySubmission,
   submitRecordingToAppGallery,
   takeCachedGithubToken,
 } from "@/lib/app-session-recording/app-gallery-share";
@@ -38,7 +49,11 @@ import { useFeature } from "@/lib/config/config.query";
 /**
  * The player's "Submit to Archestra for review" action: one click runs GitHub
  * sign-in (device flow, first share only), files the pull request from the
- * participant's own account, and opens it in a new tab. Renders nothing on
+ * participant's own account, and lands the finished PR in a browser tab
+ * claimed while a click was still in hand (see "The pull-request tab" below —
+ * popup blockers eat anything later). One app gets ONE submission: a
+ * remembered or discovered open/merged PR disables the button and every rerun
+ * stops at the existing PR instead of filing a duplicate. Renders nothing on
  * deployments that don't offer the gallery.
  */
 export function AppGalleryShareButton(props: {
@@ -50,35 +65,76 @@ export function AppGalleryShareButton(props: {
   const galleryRepo = useFeature("hackathonGalleryRepo");
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<ShareState>({ step: "idle" });
+  // The pull request this app already has (submitted now or remembered from
+  // before) — what disables the button against duplicate submissions.
+  const [existingPr, setExistingPr] = useState<{
+    prUrl: string;
+    merged: boolean;
+  } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const githubTabRef = useRef<Window | null>(null);
+
+  // The button-level duplicate guard: a submission remembered in this browser
+  // is verified against GitHub — still open or merged disables the button; a
+  // rejected (closed-unmerged) PR clears the memory so the participant can
+  // resubmit; unverifiable leaves the button alone and defers to the
+  // submission's own pre-flight check.
+  useEffect(() => {
+    if (!galleryRepo) return;
+    const verification = new AbortController();
+    void (async () => {
+      const bundle = await recordingStore.get(props.conversationId);
+      if (!bundle || verification.signal.aborted) return;
+      const slug = gallerySubmissionSlug(bundle);
+      const remembered = recallGallerySubmission({ repo: galleryRepo, slug });
+      if (!remembered) return;
+      const prState = await fetchSubmittedPrState(
+        remembered.prUrl,
+        verification.signal,
+      );
+      if (verification.signal.aborted) return;
+      if (prState === "closed") {
+        forgetGallerySubmission({ repo: galleryRepo, slug });
+        setExistingPr(null);
+      } else if (prState === "open" || prState === "merged") {
+        setExistingPr({
+          prUrl: remembered.prUrl,
+          merged: prState === "merged",
+        });
+      }
+    })();
+    return () => verification.abort();
+  }, [galleryRepo, props.conversationId]);
 
   const run = useCallback(async () => {
     if (!galleryRepo) return;
     abortRef.current?.abort();
     const cancellation = new AbortController();
     abortRef.current = cancellation;
+    const fail = (message: string) => {
+      releaseGithubTab(githubTabRef);
+      setState({ step: "error", message });
+    };
+    let slug: string | null = null;
 
     try {
       const bundle = await recordingStore.get(props.conversationId);
       if (!bundle) {
-        setState({
-          step: "error",
-          message: "No recording to share for this session.",
-        });
+        fail("No recording to share for this session.");
         return;
       }
       const validation = validateRecordingBundle(bundle);
       if (!validation.ok) {
-        setState({
-          step: "error",
-          message: `This recording can't be shared. ${validation.reason}`,
-        });
+        fail(`This recording can't be shared. ${validation.reason}`);
         return;
       }
+      // Same size trim the video export ships (renders identically).
+      const trimmed = pruneTrailingTrimEvents(validation.bundle);
+      slug = gallerySubmissionSlug(trimmed);
 
       let token = takeCachedGithubToken();
       if (!token) {
-        setState({ step: "working", label: "Connecting to GitHub…" });
+        setState({ step: "working", label: CONNECTING_LABEL });
         token = await acquireGithubToken({
           signal: cancellation.signal,
           onUserCode: (info) =>
@@ -93,30 +149,53 @@ export function AppGalleryShareButton(props: {
       const { prUrl } = await submitRecordingToAppGallery({
         token,
         repo: galleryRepo,
-        // Same size trim the video export ships (renders identically).
-        bundle: pruneTrailingTrimEvents(validation.bundle),
+        bundle: trimmed,
         signal: cancellation.signal,
         // The engine narrates each wire step with the repository, branch, or
         // file it is touching.
         onProgress: (label) => setState({ step: "working", label }),
       });
+      // Remembered so the button stays disabled on the next visit — with the
+      // engine's pre-flight check backing this up server-side regardless.
+      rememberGallerySubmission({ repo: galleryRepo, slug, prUrl });
+      setExistingPr({ prUrl, merged: false });
       setState({ step: "done", prUrl });
-      // Best effort — this open comes long after the click, so a popup
-      // blocker may eat it; the dialog keeps the explicit link either way.
-      window.open(prUrl, "_blank", "noopener");
+      showPrInGithubTab(githubTabRef, prUrl);
     } catch (error) {
       if (cancellation.signal.aborted) return;
-      setState({
-        step: "error",
-        message:
-          error instanceof GithubAuthError
-            ? `${error.message} Retry to sign in again.`
-            : error instanceof Error
-              ? error.message
-              : "Sharing failed.",
-      });
+      if (error instanceof DuplicateSubmissionError) {
+        // Not a failure — point every affordance (dialog, button tooltip,
+        // and the claimed tab) at the submission that already exists.
+        if (slug) {
+          rememberGallerySubmission({
+            repo: galleryRepo,
+            slug,
+            prUrl: error.prUrl,
+          });
+        }
+        setExistingPr({ prUrl: error.prUrl, merged: error.merged });
+        setState({ step: "already", prUrl: error.prUrl, merged: error.merged });
+        showPrInGithubTab(githubTabRef, error.prUrl);
+        return;
+      }
+      fail(
+        error instanceof GithubAuthError
+          ? `${error.message} Retry to sign in again.`
+          : error instanceof Error
+            ? error.message
+            : "Sharing failed.",
+      );
     }
   }, [galleryRepo, props.conversationId]);
+
+  // Popup blockers only honor window.open during a click. With a token
+  // already cached this click goes straight to submission, so the tab that
+  // will hold the pull request is claimed NOW, as a placeholder. (First-time
+  // runs claim the GitHub sign-in tab from its own click in ConnectStep.)
+  const startRun = useCallback(() => {
+    if (takeCachedGithubToken()) claimPlaceholderTab(githubTabRef);
+    void run();
+  }, [run]);
 
   // The fallback when the automatic flow fails: hand the participant the
   // exact files the PR would have carried, plus the browser-only steps to
@@ -124,6 +203,7 @@ export function AppGalleryShareButton(props: {
   // spell their real GitHub login in the target path.
   const openManual = useCallback(async () => {
     abortRef.current?.abort();
+    releaseGithubTab(githubTabRef);
     const cancellation = new AbortController();
     abortRef.current = cancellation;
 
@@ -158,19 +238,28 @@ export function AppGalleryShareButton(props: {
     setOpen(next);
     if (next) {
       if (takeCachedGithubToken()) {
-        void run();
+        startRun();
       } else {
         setState({ step: "signin" });
       }
     } else {
       abortRef.current?.abort();
+      releaseGithubTab(githubTabRef);
       setState({ step: "idle" });
     }
   };
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      releaseGithubTab(githubTabRef);
+    },
+    [],
+  );
 
   if (!galleryRepo) return null;
+
+  const chrome = dialogChrome(state, galleryRepo);
 
   return (
     <>
@@ -183,7 +272,7 @@ export function AppGalleryShareButton(props: {
               size="icon"
               className="size-7 text-muted-foreground hover:text-foreground"
               aria-label="Submit this session to Archestra for review"
-              disabled={props.disabled}
+              disabled={props.disabled || existingPr !== null}
               onClick={() => setDialogOpen(true)}
             >
               {/* The create-a-pull-request glyph, not a generic share icon —
@@ -194,9 +283,13 @@ export function AppGalleryShareButton(props: {
           </span>
         </TooltipTrigger>
         <TooltipContent sideOffset={8} className="max-w-[260px] text-xs">
-          {props.disabled && props.disabledReason
-            ? props.disabledReason
-            : "Submit to Archestra for review!"}
+          {existingPr
+            ? existingPr.merged
+              ? "Already in the Apps Gallery — this app's pull request was merged."
+              : "Already submitted — this app's pull request is waiting for review."
+            : props.disabled && props.disabledReason
+              ? props.disabledReason
+              : "Submit to Archestra for review!"}
         </TooltipContent>
       </Tooltip>
 
@@ -204,49 +297,34 @@ export function AppGalleryShareButton(props: {
         open={open}
         onOpenChange={setDialogOpen}
         size="small"
-        // The auth phase is its own conversation — the header talks about
-        // authorizing, not submitting, until GitHub is connected.
-        title={
-          authPhase(state)
-            ? "Authorize Archestra to GitHub"
-            : "Submit to Archestra for review!"
-        }
+        title={chrome.title}
         // No rule under the header — these are short single-purpose screens,
         // and the line just chops them in half.
         headerClassName="border-b-0"
-        description={
-          authPhase(state) ? (
-            "Once authorized, Archestra will create a pull request to the Apps Hackathon repository on GitHub for you."
-          ) : (
-            <>
-              Your App demo will be showcased in the{" "}
-              <a
-                className="text-foreground underline underline-offset-2"
-                href={`https://github.com/${galleryRepo.owner}/${galleryRepo.name}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Apps Gallery
-              </a>{" "}
-              once Archestra team approves the Pull Request.
-            </>
-          )
-        }
+        description={chrome.description}
+        // "done" has no body at all — collapse its padding so the dialog ends
+        // cleanly under the description.
+        bodyClassName={state.step === "done" ? "py-0" : undefined}
       >
         <ShareDialogBody
           state={state}
           repo={galleryRepo}
-          onRetry={run}
+          onRetry={startRun}
           onManual={openManual}
+          onOpenGithub={(verificationUri) =>
+            claimGithubTab(githubTabRef, verificationUri)
+          }
           // Backing out of a slow sign-in returns to the inert gate; stopping
           // a slow submission lands on the error card (Retry starts a fresh
           // branch, so a half-made submission is never resumed).
           onCancelAuth={() => {
             abortRef.current?.abort();
+            releaseGithubTab(githubTabRef);
             setState({ step: "signin" });
           }}
           onCancelWork={() => {
             abortRef.current?.abort();
+            releaseGithubTab(githubTabRef);
             setState({
               step: "error",
               message: "Stopped — no pull request was opened.",
@@ -268,6 +346,7 @@ type ShareState =
   | { step: "connect"; userCode: string; verificationUri: string }
   | { step: "working"; label: string }
   | { step: "done"; prUrl: string }
+  | { step: "already"; prUrl: string; merged: boolean }
   | { step: "error"; message: string }
   | {
       step: "manual";
@@ -279,6 +358,9 @@ type ShareState =
 /** The one working label of the auth stretch (before the engine narrates). */
 const CONNECTING_LABEL = "Connecting to GitHub…";
 
+/** The inline-link look every textual link in this flow shares. */
+const LINK_CLASS = "text-foreground underline underline-offset-2";
+
 /** Sign-in gate through GitHub authorization — the "connect your account" stretch. */
 function authPhase(state: ShareState): boolean {
   return (
@@ -288,11 +370,82 @@ function authPhase(state: ShareState): boolean {
   );
 }
 
+/**
+ * Each screen's header speaks for itself: the auth stretch talks about
+ * authorizing, the submission stretch is a bare "Submitting…" over the
+ * narrated progress line (the pitch would be redundant there), done carries
+ * the checkmark and links the results, and everything else pitches the
+ * gallery.
+ */
+function dialogChrome(
+  state: ShareState,
+  repo: { owner: string; name: string },
+): { title: ReactNode; description?: ReactNode } {
+  if (authPhase(state)) {
+    return {
+      title: "Authorize Archestra to GitHub",
+      description:
+        "Once authorized, Archestra will create a pull request to the Apps Hackathon repository on GitHub for you.",
+    };
+  }
+  if (state.step === "working") {
+    return { title: "Submitting your demo…" };
+  }
+  if (state.step === "done") {
+    return {
+      title: (
+        <span className="flex items-center gap-2">
+          <Check className="h-5 w-5 text-green-500" aria-hidden="true" />
+          Done.
+        </span>
+      ),
+      description: (
+        <>
+          Your App demo will be showcased in the <GalleryLink repo={repo} />{" "}
+          once Archestra team approves your{" "}
+          <a
+            className={LINK_CLASS}
+            href={state.prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Pull Request
+          </a>
+          .
+        </>
+      ),
+    };
+  }
+  return {
+    title: "Submit to Archestra for review!",
+    description: (
+      <>
+        Your App demo will be showcased in the <GalleryLink repo={repo} /> once
+        Archestra team approves the Pull Request.
+      </>
+    ),
+  };
+}
+
+function GalleryLink(props: { repo: { owner: string; name: string } }) {
+  return (
+    <a
+      className={LINK_CLASS}
+      href={`https://github.com/${props.repo.owner}/${props.repo.name}`}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Apps Gallery
+    </a>
+  );
+}
+
 function ShareDialogBody(props: {
   state: ShareState;
   repo: { owner: string; name: string };
   onRetry: () => void;
   onManual: () => void;
+  onOpenGithub: (verificationUri: string) => void;
   onCancelAuth: () => void;
   onCancelWork: () => void;
 }) {
@@ -315,32 +468,37 @@ function ShareDialogBody(props: {
     );
   }
   if (state.step === "connect") {
-    return <ConnectStep {...state} onCancel={props.onCancelAuth} />;
+    return (
+      <ConnectStep
+        {...state}
+        onOpenGithub={props.onOpenGithub}
+        onCancel={props.onCancelAuth}
+      />
+    );
   }
   if (state.step === "working") {
     return <WorkingStep label={state.label} onCancel={props.onCancelWork} />;
   }
-  if (state.step === "done") {
+  if (state.step === "already") {
+    // The duplicate guard tripped: explain and link the PR this app already
+    // has instead of pretending anything failed.
     return (
-      <p className="flex items-start gap-2 text-sm">
-        <Check
-          className="mt-0.5 h-4 w-4 shrink-0 text-green-500"
-          aria-hidden="true"
-        />
-        <span>
-          If your pull request didn&apos;t open in a new tab automatically, go
-          to{" "}
-          <a
-            className="text-foreground underline underline-offset-2"
-            href={state.prUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            your pull request
-            <ExternalLink className="ml-1 inline h-3 w-3" aria-hidden="true" />
-          </a>
-          .
-        </span>
+      <p className="text-sm">
+        {state.merged ? (
+          <>This app is already in the Apps Gallery — its </>
+        ) : (
+          <>This app was already submitted — its </>
+        )}
+        <a
+          className={LINK_CLASS}
+          href={state.prUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          pull request
+          <ExternalLink className="ml-1 inline h-3 w-3" aria-hidden="true" />
+        </a>
+        {state.merged ? <> was merged.</> : <> is waiting for review.</>}
       </p>
     );
   }
@@ -366,6 +524,8 @@ function ShareDialogBody(props: {
   if (state.step === "manual") {
     return <ManualStep {...state} repo={props.repo} />;
   }
+  // "done" needs no body: the title carries the checkmark and the
+  // description links both the gallery and the pull request itself.
   return null;
 }
 
@@ -377,11 +537,14 @@ function ShareDialogBody(props: {
  * or the Clipboard API refuses the write; GitHub can't pre-fill the field (it
  * omits RFC 8628's verification_uri_complete). The visible code doubles as a
  * click-to-copy fallback. The flow continues on its own the moment GitHub
- * reports the authorization.
+ * reports the authorization. The GitHub tab opens through the parent, which
+ * keeps its handle — after approval that same tab is pointed at the finished
+ * pull request.
  */
 function ConnectStep(props: {
   userCode: string;
   verificationUri: string;
+  onOpenGithub: (verificationUri: string) => void;
   onCancel: () => void;
 }) {
   const [codeCopied, setCodeCopied] = useState(false);
@@ -424,7 +587,7 @@ function ConnectStep(props: {
           size="sm"
           onClick={async () => {
             await copyCode();
-            window.open(props.verificationUri, "_blank", "noopener,noreferrer");
+            props.onOpenGithub(props.verificationUri);
           }}
         >
           <Github className="mr-2 h-4 w-4" />
@@ -559,7 +722,7 @@ function ManualStep(props: {
         <p>
           2.{" "}
           <a
-            className="text-foreground underline underline-offset-2"
+            className={LINK_CLASS}
             href={`${repoUrl}/fork`}
             target="_blank"
             rel="noopener noreferrer"
@@ -608,7 +771,7 @@ function ManualStep(props: {
           5. GitHub then offers <b>Compare &amp; pull request</b> — open it
           against{" "}
           <a
-            className="text-foreground underline underline-offset-2"
+            className={LINK_CLASS}
             href={repoUrl}
             target="_blank"
             rel="noopener noreferrer"
@@ -642,4 +805,76 @@ function downloadSubmissionFile(file: GallerySubmissionFile) {
     anchor.remove();
     URL.revokeObjectURL(url);
   }, 60_000);
+}
+
+// =============================================================================
+// The pull-request tab
+// =============================================================================
+//
+// Popup blockers only honor window.open during a user gesture, and the PR URL
+// exists long after the last click — a plain open at completion is silently
+// eaten. So the flow claims a tab while it still HAS a gesture and navigates
+// it later (navigating a window this page opened needs no popup permission):
+// sign-in runs claim the GitHub device-code tab the participant approves in;
+// cached-token runs claim a placeholder at the Share/Retry click itself. One
+// shared window name keeps repeat clicks reusing a single tab.
+
+const GITHUB_TAB_NAME = "archestra-app-gallery-github";
+
+type GithubTabRef = { current: Window | null };
+
+/**
+ * Open (or re-point) the named helper tab and keep its handle. Deliberately
+ * NO "noopener" — that would return null, and the handle is the whole point;
+ * the tab only ever holds github.com or this page's own placeholder.
+ */
+function claimGithubTab(ref: GithubTabRef, url: string): Window | null {
+  const tab = window.open(url, GITHUB_TAB_NAME);
+  if (tab) ref.current = tab;
+  return tab;
+}
+
+/** Claim a blank tab now (during the click) for a PR that doesn't exist yet. */
+function claimPlaceholderTab(ref: GithubTabRef): void {
+  const tab = claimGithubTab(ref, "about:blank");
+  if (!tab) return;
+  try {
+    tab.document.title = "Opening pull request…";
+    tab.document.body.textContent = "Preparing your pull request on GitHub…";
+    tab.document.body.style.cssText =
+      "font-family:system-ui,sans-serif;padding:2rem;color:#555";
+  } catch {
+    // A reused tab can still be on github.com from an earlier run — cosmetic
+    // only, it gets the real PR URL either way.
+  }
+}
+
+/** Land the finished (or already-existing) pull request in the claimed tab. */
+function showPrInGithubTab(ref: GithubTabRef, prUrl: string): void {
+  const tab = ref.current;
+  ref.current = null;
+  if (tab && !tab.closed) {
+    try {
+      tab.location.href = prUrl;
+      tab.focus();
+      return;
+    } catch {
+      // fall through to a fresh open
+    }
+  }
+  // No claimed tab (or the participant closed it). This far from a click a
+  // popup blocker usually eats the open — the dialog links the PR regardless.
+  window.open(prUrl, "_blank", "noopener");
+}
+
+/** Forget the claimed tab, closing it only while it is still our placeholder. */
+function releaseGithubTab(ref: GithubTabRef): void {
+  const tab = ref.current;
+  ref.current = null;
+  if (!tab || tab.closed) return;
+  try {
+    if (tab.location.href === "about:blank") tab.close();
+  } catch {
+    // Cross-origin means the participant's GitHub page — leave it to them.
+  }
 }

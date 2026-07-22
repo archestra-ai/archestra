@@ -481,9 +481,13 @@ describe("PUT /api/internal_mcp_catalog/:id — metadata-only edit cascade", () 
       ([id]) => id === installedServer.id,
     );
     // Exactly one update — the reinstallRequired flag. No "pending" /
-    // "success" transitions from the auto-restart branch.
+    // "success" transitions from the auto-restart branch. The re-prompt
+    // edit is what forced the manual path, so the install owes new input.
     expect(updateCalls).toHaveLength(1);
-    expect(updateCalls[0][1]).toEqual({ reinstallRequired: true });
+    expect(updateCalls[0][1]).toEqual({
+      reinstallRequired: true,
+      reinstallReason: "new-input",
+    });
   });
 
   test("userConfig-only PUT on a local catalog with a localConfigSecretId does not falsely trigger forceAutoRestart", async ({

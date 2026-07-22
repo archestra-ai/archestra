@@ -55294,6 +55294,7 @@ export type GetMcpServersResponses = {
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
@@ -55440,6 +55441,7 @@ export type InstallMcpServerResponses = {
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
@@ -55652,6 +55654,7 @@ export type GetMcpServerResponses = {
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
@@ -55789,6 +55792,7 @@ export type ReauthenticateMcpServerResponses = {
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
@@ -56199,6 +56203,7 @@ export type ReinstallMcpServerResponses = {
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';

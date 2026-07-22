@@ -1,10 +1,13 @@
 import {
+  AudioSample,
+  AudioSampleSource,
   BufferTarget,
   Mp4OutputFormat,
   Output,
   VideoSample,
   VideoSampleSource,
 } from "mediabunny";
+import type { PlaybackAudio } from "./app-recording-audio";
 
 /**
  * Encodes rendered frames into an MP4, inside the browser that rendered them.
@@ -43,6 +46,10 @@ class VideoEncoderSession {
     /** Region to crop out of each JPEG. Absent when frames arrive pre-cropped
      * (the legacy capture path clips at the compositor). */
     crop?: { x: number; y: number; width: number; height: number };
+    /** The recording's captured sound, decoded onto the export timeline. Muxed
+     * as an AAC track so the video carries the original audio. Absent/null when
+     * the recording was silent. */
+    audio?: PlaybackAudio | null;
   }): Promise<void> {
     // One page renders one video. Silently replacing a live session would
     // finalize the newcomer and abandon the first render's output and source,
@@ -59,10 +66,30 @@ class VideoEncoderSession {
       bitrate: exportBitrate(params),
     });
     output.addVideoTrack(source, { frameRate: params.fps });
+    // AAC for MP4 (the same compatibility reason as H.264 above — Slides,
+    // Keynote, QuickTime). All tracks must be added before start(); a codec the
+    // render browser can't encode just drops the audio rather than the whole
+    // export.
+    let audioSource: AudioSampleSource | null = null;
+    if (params.audio && params.audio.channelData.length > 0) {
+      try {
+        audioSource = new AudioSampleSource({
+          codec: "aac",
+          bitrate: AUDIO_EXPORT_BITRATE,
+        });
+        output.addAudioTrack(audioSource);
+      } catch {
+        audioSource = null;
+      }
+    }
     await output.start();
+    if (audioSource && params.audio) {
+      await feedAudioTrack(audioSource, params.audio);
+    }
     this.active = {
       output,
       source,
+      audioSource,
       fps: params.fps,
       crop: params.crop ?? null,
       chain: Promise.resolve(),
@@ -125,6 +152,7 @@ class VideoEncoderSession {
     active.lastBitmap = null;
     if (active.failure) throw active.failure;
     active.source.close();
+    active.audioSource?.close();
     await active.output.finalize();
     const buffer = (active.output.target as BufferTarget).buffer;
     if (!buffer) throw new Error("The encoder produced no video.");
@@ -156,6 +184,7 @@ export const startEncoder = (
         height: number;
         fps: number;
         crop?: { x: number; y: number; width: number; height: number };
+        audio?: PlaybackAudio | null;
       }
     | number,
   height?: number,
@@ -200,6 +229,48 @@ export const finishEncoder = (): Promise<string> => encoder.finish();
 /** Where a legacy renderer's never-drained queue is absorbed instead. */
 const LEGACY_SELF_DRAIN_DEPTH = 24;
 
+/** AAC bitrate for the exported audio track — transparent for demo sound. */
+const AUDIO_EXPORT_BITRATE = 128_000;
+/** One second of PCM per muxed AudioSample: coarse enough to be cheap, fine
+ *  enough that the encoder starts emitting early. */
+const AUDIO_EXPORT_CHUNK_SEC = 1;
+
+/**
+ * Feed the whole decoded audio track into the muxer as one-second AudioSamples
+ * on the shared 0-based seconds timeline (the same clock the video's index/fps
+ * timestamps sit on), so audio and video line up without any fps conversion.
+ * The PCM is planar Float32; each sample carries all channels for its slice.
+ */
+async function feedAudioTrack(
+  source: AudioSampleSource,
+  audio: PlaybackAudio,
+): Promise<void> {
+  const { channelData, numberOfChannels, sampleRate, length } = audio;
+  const framesPerChunk = Math.max(
+    1,
+    Math.round(sampleRate * AUDIO_EXPORT_CHUNK_SEC),
+  );
+  for (let start = 0; start < length; start += framesPerChunk) {
+    const frames = Math.min(framesPerChunk, length - start);
+    const planar = new Float32Array(frames * numberOfChannels);
+    for (let c = 0; c < numberOfChannels; c++) {
+      planar.set(channelData[c].subarray(start, start + frames), c * frames);
+    }
+    const sample = new AudioSample({
+      data: planar,
+      format: "f32-planar",
+      numberOfChannels,
+      sampleRate,
+      timestamp: start / sampleRate,
+    });
+    try {
+      await source.add(sample);
+    } finally {
+      sample.close();
+    }
+  }
+}
+
 /**
  * Export bits scale with the region. mediabunny's QUALITY_HIGH preset
  * resolved to ~1.3 Mbps for a ~1.5MP frame — fine for the mostly-static chat
@@ -228,6 +299,8 @@ function exportBitrate(params: {
 interface EncoderSession {
   output: Output;
   source: VideoSampleSource;
+  /** The muxed audio track's source, or null when the recording was silent. */
+  audioSource: AudioSampleSource | null;
   fps: number;
   crop: { x: number; y: number; width: number; height: number } | null;
   /** Serializes decode+encode in index order (the muxer needs monotonic

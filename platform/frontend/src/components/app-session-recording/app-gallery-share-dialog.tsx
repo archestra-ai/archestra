@@ -7,8 +7,6 @@ import {
 import {
   Check,
   Copy,
-  Download,
-  ExternalLink,
   Github,
   GitPullRequestCreateArrow,
   Loader2,
@@ -30,12 +28,15 @@ import {
 import {
   acquireGithubToken,
   buildGallerySubmissionFiles,
+  buildGallerySubmissionPr,
   DuplicateSubmissionError,
   fetchGithubLogin,
   fetchSubmittedPrState,
   forgetGallerySubmission,
   type GallerySubmissionFile,
-  GithubAuthError,
+  type GallerySubmissionStage,
+  gallerySubmissionBranch,
+  gallerySubmissionFolder,
   gallerySubmissionSlug,
   recallGallerySubmission,
   rememberGallerySubmission,
@@ -45,6 +46,7 @@ import {
 import { recordingStore } from "@/lib/app-session-recording/app-recording-store";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
+import { cn } from "@/lib/utils";
 
 /**
  * The player's "Submit to Archestra for review" action: one click runs GitHub
@@ -113,9 +115,12 @@ export function AppGalleryShareButton(props: {
     abortRef.current?.abort();
     const cancellation = new AbortController();
     abortRef.current = cancellation;
+    // The error screen is titled after the step that was underway ("Upload
+    // failed"), so the run tracks which one that is as it goes.
+    let failedTitle = "Submission failed";
     const fail = (message: string) => {
       releaseGithubTab(githubTabRef);
-      setState({ step: "error", message });
+      setState({ step: "error", title: failedTitle, message });
     };
     let slug: string | null = null;
 
@@ -136,6 +141,7 @@ export function AppGalleryShareButton(props: {
 
       let token = takeCachedGithubToken();
       if (!token) {
+        failedTitle = "Sign-in failed";
         setState({ step: "working", label: CONNECTING_LABEL });
         token = await acquireGithubToken({
           signal: cancellation.signal,
@@ -154,8 +160,11 @@ export function AppGalleryShareButton(props: {
         bundle: trimmed,
         signal: cancellation.signal,
         // The engine narrates each wire step with the repository, branch, or
-        // file it is touching.
-        onProgress: (label) => setState({ step: "working", label }),
+        // file it is touching — and names the step for failure titling.
+        onProgress: ({ stage, label }) => {
+          failedTitle = FAILED_STEP_TITLES[stage];
+          setState({ step: "working", label });
+        },
       });
       // Remembered so the button stays disabled on the next visit — with the
       // engine's pre-flight check backing this up server-side regardless.
@@ -181,11 +190,9 @@ export function AppGalleryShareButton(props: {
         return;
       }
       fail(
-        error instanceof GithubAuthError
-          ? `${error.message} Retry to sign in again.`
-          : error instanceof Error
-            ? error.message
-            : "Sharing failed.",
+        error instanceof Error && error.message
+          ? error.message
+          : "Something went wrong — try again.",
       );
     }
   }, [galleryRepo, props.conversationId]);
@@ -214,6 +221,7 @@ export function AppGalleryShareButton(props: {
     if (!validation?.ok) {
       setState({
         step: "error",
+        title: "Submission failed",
         message: "No shareable recording found for this session.",
       });
       return;
@@ -228,6 +236,7 @@ export function AppGalleryShareButton(props: {
       step: "manual",
       files: buildGallerySubmissionFiles(trimmed),
       slug: gallerySubmissionSlug(trimmed),
+      pr: buildGallerySubmissionPr(trimmed),
       login,
     });
   }, [props.conversationId]);
@@ -329,9 +338,11 @@ export function AppGalleryShareButton(props: {
             releaseGithubTab(githubTabRef);
             setState({
               step: "error",
-              message: "Stopped — no pull request was opened.",
+              title: "Submission stopped",
+              message: "No pull request was opened.",
             });
           }}
+          onClose={() => setDialogOpen(false)}
         />
       </StandardDialog>
     </>
@@ -349,11 +360,12 @@ type ShareState =
   | { step: "working"; label: string }
   | { step: "done"; prUrl: string }
   | { step: "already"; prUrl: string; merged: boolean }
-  | { step: "error"; message: string }
+  | { step: "error"; title: string; message: string }
   | {
       step: "manual";
       files: GallerySubmissionFile[];
       slug: string;
+      pr: { title: string; body: string };
       login: string | null;
     };
 
@@ -362,6 +374,15 @@ const CONNECTING_LABEL = "Connecting to GitHub…";
 
 /** The inline-link look every textual link in this flow shares. */
 const LINK_CLASS = "text-foreground underline underline-offset-2";
+
+/** Error-screen titles, named after the step that was underway. */
+const FAILED_STEP_TITLES: Record<GallerySubmissionStage, string> = {
+  check: "Submission check failed",
+  fork: "Fork failed",
+  branch: "Branch creation failed",
+  upload: "Upload failed",
+  pr: "Pull request failed",
+};
 
 /** Sign-in gate through GitHub authorization — the "connect your account" stretch. */
 function authPhase(state: ShareState): boolean {
@@ -373,11 +394,10 @@ function authPhase(state: ShareState): boolean {
 }
 
 /**
- * Each screen's header speaks for itself: the auth stretch talks about
- * authorizing, the submission stretch is a bare "Submitting…" over the
- * narrated progress line (the pitch would be redundant there), done carries
- * the checkmark and links the results, and everything else pitches the
- * gallery.
+ * Every screen's title states its goal or outcome — authorizing, submitting,
+ * "<step> failed", done — and only screens whose body doesn't already say it
+ * all get a description. The gallery pitch lives in the button tooltip and
+ * the done screen, not repeated over every state.
  */
 function dialogChrome(
   state: ShareState,
@@ -392,6 +412,17 @@ function dialogChrome(
   }
   if (state.step === "working") {
     return { title: "Submitting your demo…" };
+  }
+  if (state.step === "error") {
+    return { title: state.title };
+  }
+  if (state.step === "already") {
+    return {
+      title: state.merged ? "Already in the Apps Gallery" : "Already submitted",
+    };
+  }
+  if (state.step === "manual") {
+    return { title: "Submit your demo manually" };
   }
   if (state.step === "done") {
     return {
@@ -450,6 +481,7 @@ function ShareDialogBody(props: {
   onOpenGithub: (verificationUri: string) => void;
   onCancelAuth: () => void;
   onCancelWork: () => void;
+  onClose: () => void;
 }) {
   const { state } = props;
 
@@ -498,28 +530,32 @@ function ShareDialogBody(props: {
           rel="noopener noreferrer"
         >
           pull request
-          <ExternalLink className="ml-1 inline h-3 w-3" aria-hidden="true" />
         </a>
         {state.merged ? <> was merged.</> : <> is waiting for review.</>}
       </p>
     );
   }
   if (state.step === "error") {
+    // The title already blames the step; the body carries only the curated
+    // human message, the two actions, and the quieter manual workaround.
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
         <p className="text-sm text-destructive">{state.message}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={props.onRetry}>
-            Retry
+          <Button variant="outline" size="sm" onClick={props.onClose}>
+            Cancel
           </Button>
-          <Button variant="outline" size="sm" onClick={props.onManual}>
-            Submit the pull request yourself
+          <Button variant="outline" size="sm" onClick={props.onRetry}>
+            Try again
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          "Submit yourself" gives you the exact files we would have uploaded,
-          with step-by-step instructions — all in the browser.
-        </p>
+        <button
+          type="button"
+          className="w-fit text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          onClick={props.onManual}
+        >
+          Learn how to submit your demo manually.
+        </button>
       </div>
     );
   }
@@ -675,116 +711,124 @@ function useSlowHint(ms: number): boolean {
 }
 
 /**
- * The do-it-yourself fallback: the exact submission files (same builder the
- * automatic path commits from, so byte-identical) plus the browser-only GitHub
- * steps to file the pull request by hand. `login` personalizes the target
+ * The do-it-yourself fallback, kept to the facts: the exact files (same
+ * builder the automatic path commits from, so byte-identical), the branch
+ * and folder the submission lives on, and the PR title/body the automatic
+ * path would have filed — each click-to-copy. `login` personalizes the
  * folder when sign-in got far enough to know it; otherwise a placeholder.
  */
 function ManualStep(props: {
   files: GallerySubmissionFile[];
   slug: string;
+  pr: { title: string; body: string };
   login: string | null;
   repo: { owner: string; name: string };
 }) {
-  const [pathCopied, setPathCopied] = useState(false);
-  const copyResetTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(copyResetTimeout.current), []);
-
   const repoUrl = `https://github.com/${props.repo.owner}/${props.repo.name}`;
-  // The exact string to paste into GitHub's new-file name box in step 3:
-  // typing `/` there creates each folder, and the .gitkeep gives the commit a
-  // file so the folder exists to upload into.
-  const keepPath = `submissions/${props.login ?? "YOUR-GITHUB-USERNAME"}/${props.slug}/.gitkeep`;
 
-  // Same compact language as the connect card: xs muted copy, small outline
-  // actions that hug their label instead of stretching into slabs.
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2">
-        <p className="text-xs text-muted-foreground">
-          1. Download your submission — the same files we would have uploaded.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {props.files.map((file) => (
-            <Button
-              key={file.name}
+    <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+      <p>
+        1. Download your submission:{" "}
+        {props.files.map((file, index) => (
+          <span key={file.name}>
+            {index > 0 && ", "}
+            <button
               type="button"
-              variant="outline"
-              size="sm"
+              className={LINK_CLASS}
               onClick={() => downloadSubmissionFile(file)}
             >
-              <Download className="mr-2 h-4 w-4" />
-              Download {file.name}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-        <p>
-          2.{" "}
-          <a
-            className={LINK_CLASS}
-            href={`${repoUrl}/fork`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Fork the Apps Hackathon repository
-            <ExternalLink className="ml-1 inline h-3 w-3" aria-hidden="true" />
-          </a>{" "}
-          — skip this if you already have a fork.
-        </p>
-        <p>
-          3. In your fork, choose <b>Add file → Create new file</b> and paste
-          this as the file name (typing <code>/</code> creates the folders),
-          then <b>Commit changes</b> and pick <b>Create a new branch</b>:
-        </p>
-        <button
-          type="button"
-          className="flex w-fit max-w-full items-center gap-1 rounded bg-muted px-2 py-1 text-left font-mono text-xs break-all hover:bg-muted/70"
-          aria-label="Copy file path"
-          onClick={async () => {
-            try {
-              await copyToClipboard(keepPath);
-              setPathCopied(true);
-              clearTimeout(copyResetTimeout.current);
-              copyResetTimeout.current = setTimeout(
-                () => setPathCopied(false),
-                2000,
-              );
-            } catch {
-              // clipboard blocked — the path stays visible to copy manually
-            }
-          }}
+              {file.name}
+            </button>
+          </span>
+        ))}{" "}
+        — the same files we would have uploaded.
+      </p>
+      <p>
+        2.{" "}
+        <a
+          className={LINK_CLASS}
+          href={`${repoUrl}/fork`}
+          target="_blank"
+          rel="noopener noreferrer"
         >
-          {keepPath}
-          {pathCopied ? (
-            <Check className="h-3.5 w-3.5 shrink-0 text-green-500" />
-          ) : (
-            <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          Fork the Apps Hackathon repository
+        </a>{" "}
+        — skip this if you already have a fork.
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span>3. In your fork, create a new branch:</span>
+        <CopyChip text={gallerySubmissionBranch(props.slug)} />
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span>
+          4. Upload the downloaded file{props.files.length > 1 ? "s" : ""} to:
+        </span>
+        <CopyChip
+          text={gallerySubmissionFolder(
+            props.login ?? "YOUR-GITHUB-USERNAME",
+            props.slug,
           )}
-        </button>
-        <p>
-          4. Open the new folder and choose <b>Add file → Upload files</b>, drop
-          the downloaded file{props.files.length > 1 ? "s" : ""}, and commit to
-          the same branch.
-        </p>
-        <p>
-          5. GitHub then offers <b>Compare &amp; pull request</b> — open it
-          against{" "}
-          <a
-            className={LINK_CLASS}
-            href={repoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {props.repo.owner}/{props.repo.name}
-            <ExternalLink className="ml-1 inline h-3 w-3" aria-hidden="true" />
-          </a>
-          . Done!
-        </p>
+        />
+      </div>
+      <p>
+        5. Open <b>Compare &amp; pull request</b> to{" "}
+        <a
+          className={LINK_CLASS}
+          href={repoUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {props.repo.owner}/{props.repo.name}
+        </a>
+        :main.
+      </p>
+      <div className="flex flex-col gap-1.5">
+        <span>6. Use this pull request title and description:</span>
+        <CopyChip text={props.pr.title} />
+        <CopyChip text={props.pr.body} multiline />
       </div>
     </div>
+  );
+}
+
+/**
+ * A click-to-copy chip: the exact string to use, mono, with a copied check.
+ * `multiline` renders a scrollable block for content like the PR body.
+ */
+function CopyChip(props: { text: string; multiline?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const resetTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(resetTimeout.current), []);
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "flex w-fit max-w-full items-start gap-1 rounded bg-muted px-2 py-1 text-left font-mono text-xs hover:bg-muted/70",
+        props.multiline
+          ? "max-h-28 overflow-y-auto whitespace-pre-wrap break-words"
+          : "items-center break-all",
+      )}
+      aria-label="Copy"
+      onClick={async () => {
+        try {
+          await copyToClipboard(props.text);
+          setCopied(true);
+          clearTimeout(resetTimeout.current);
+          resetTimeout.current = setTimeout(() => setCopied(false), 2000);
+        } catch {
+          // clipboard blocked — the text stays visible to copy manually
+        }
+      }}
+    >
+      <span className="min-w-0 flex-1">{props.text}</span>
+      {copied ? (
+        <Check className="h-3.5 w-3.5 shrink-0 text-green-500" />
+      ) : (
+        <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      )}
+    </button>
   );
 }
 

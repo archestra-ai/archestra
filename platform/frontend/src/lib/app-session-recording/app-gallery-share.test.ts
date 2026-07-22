@@ -127,20 +127,23 @@ describe("submitRecordingToAppGallery", () => {
   });
 
   test("runs the fork workflow in order and returns the PR url", async () => {
-    const labels: string[] = [];
-    const result = await submit({ onProgress: (label) => labels.push(label) });
+    const progress: string[] = [];
+    const result = await submit({
+      onProgress: ({ stage, label }) => progress.push(`${stage}: ${label}`),
+    });
 
     expect(result.prUrl).toBe(
       "https://github.com/archestra-ai/app-gallery/pull/7",
     );
-    // Progress narrates the real repositories, branch, and files by name.
-    expect(labels).toEqual([
-      "Checking github.com/archestra-ai/app-gallery for an existing submission…",
-      "Forking github.com/archestra-ai/app-gallery to your GitHub account…",
-      "Waiting for your fork github.com/sam/app-gallery to be ready…",
-      "Creating branch submission/pr_review_queue in github.com/sam/app-gallery…",
-      "Uploading recording.json to github.com/sam/app-gallery…",
-      "Opening the pull request on github.com/archestra-ai/app-gallery…",
+    // Progress names the step (for failure titling) and narrates the real
+    // repositories, branch, and files.
+    expect(progress).toEqual([
+      "check: Checking github.com/archestra-ai/app-gallery for an existing submission…",
+      "fork: Forking github.com/archestra-ai/app-gallery to your GitHub account…",
+      "fork: Waiting for your fork github.com/sam/app-gallery to be ready…",
+      "branch: Creating branch submission/pr_review_queue in github.com/sam/app-gallery…",
+      "upload: Uploading recording.json to github.com/sam/app-gallery…",
+      "pr: Opening the pull request on github.com/archestra-ai/app-gallery…",
     ]);
     expect(calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual([
       "GET /user",
@@ -238,6 +241,22 @@ describe("submitRecordingToAppGallery", () => {
       ).join("");
       expect(uploadedBinary).toBe(fileBinary);
     }
+  });
+
+  test("a bundle over GitHub's file limit is refused before anything touches the network", async () => {
+    // Pad one event so the serialized bundle crosses the ceiling — GitHub's
+    // contents API would refuse it as unreadable 5xx weather mid-flow.
+    const bundle = makeBundle([
+      { kind: "padding", data: "x".repeat(101 * 1024 * 1024) },
+    ] as unknown as AppRecordingBundle["recording"]["events"]);
+
+    const failure = await submit({ bundle }).catch((error) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(String(failure)).toMatch(
+      /over the 100MB limit for gallery submissions/,
+    );
+    // Not even the duplicate pre-flight ran — no request left the browser.
+    expect(calls).toHaveLength(0);
   });
 
   test("an existing open pull request blocks resubmission before anything is written", async () => {
@@ -440,7 +459,7 @@ describe("submitRecordingToAppGallery", () => {
     });
 
     await expect(submit()).rejects.toThrow(
-      "GitHub is rate-limiting requests — wait a moment and retry.",
+      "GitHub is rate-limiting requests — wait a moment and try again.",
     );
   });
 
@@ -456,7 +475,11 @@ describe("submitRecordingToAppGallery", () => {
     });
 
     const started = Date.now();
-    await expect(submit()).rejects.toThrow(/403.*Repository access blocked/);
+    // GitHub's verdict verbatim, but never a status code — those mean
+    // nothing to a participant.
+    await expect(submit()).rejects.toThrow(
+      "GitHub refused the request. Repository access blocked",
+    );
     // Only 404/409 mean "fork still materializing" — a verdict must not sit
     // through the 40-second readiness loop before reaching the participant.
     expect(Date.now() - started).toBeLessThan(1500);
@@ -470,7 +493,9 @@ describe("submitRecordingToAppGallery", () => {
           : null,
     });
 
-    await expect(submit()).rejects.toThrow(/422.*Validation Failed/);
+    await expect(submit()).rejects.toThrow(
+      "GitHub refused the request. Validation Failed",
+    );
   });
 });
 

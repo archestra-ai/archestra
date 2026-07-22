@@ -126,6 +126,14 @@ export async function acquireGithubToken(params: {
   );
 }
 
+/** The wire step a submission is on — what an error screen names as failed. */
+export type GallerySubmissionStage =
+  | "check"
+  | "fork"
+  | "branch"
+  | "upload"
+  | "pr";
+
 /**
  * The whole submission, token to pull-request URL. Throws
  * `DuplicateSubmissionError` when this app already has an open or merged PR
@@ -139,11 +147,16 @@ export async function submitRecordingToAppGallery(params: {
   bundle: AppRecordingBundle;
   signal: AbortSignal;
   /**
-   * Called with a short human sentence as each wire step starts — naming the
-   * actual repository, branch, or file it touches, so the dialog narrates
-   * what is really happening rather than a generic stage word.
+   * Called as each wire step starts: `stage` identifies the step (the error
+   * screen titles a failure after it), `label` is a short human sentence
+   * naming the actual repository, branch, or file being touched, so the
+   * dialog narrates what is really happening rather than a generic stage
+   * word.
    */
-  onProgress: (label: string) => void;
+  onProgress: (progress: {
+    stage: GallerySubmissionStage;
+    label: string;
+  }) => void;
 }): Promise<{ prUrl: string }> {
   const { token, repo, bundle, signal, onProgress } = params;
   const gh = makeGithubClient(token, signal);
@@ -155,9 +168,12 @@ export async function submitRecordingToAppGallery(params: {
   // refuses a second branch or second PR under the same name if two runs
   // race past the check.
   const appSlug = gallerySubmissionSlug(bundle);
-  const branch = `submission/${appSlug}`;
+  const branch = gallerySubmissionBranch(appSlug);
 
-  onProgress(`Checking ${galleryName} for an existing submission…`);
+  onProgress({
+    stage: "check",
+    label: `Checking ${galleryName} for an existing submission…`,
+  });
   const viewer = await gh<{ login: string }>("GET", "/user");
   const existing = await findBlockingPullRequest({
     gh,
@@ -167,7 +183,10 @@ export async function submitRecordingToAppGallery(params: {
   });
   if (existing) throw new DuplicateSubmissionError(existing);
 
-  onProgress(`Forking ${galleryName} to your GitHub account…`);
+  onProgress({
+    stage: "fork",
+    label: `Forking ${galleryName} to your GitHub account…`,
+  });
   // 202: fork creation is asynchronous. The response still carries the fork's
   // name (GitHub renames on collision with an unrelated same-named repo) and
   // its default branch; an existing fork returns the same shape immediately.
@@ -180,7 +199,10 @@ export async function submitRecordingToAppGallery(params: {
   });
   const forkName = `github.com/${fork.owner.login}/${fork.name}`;
   const forkPath = `/repos/${fork.owner.login}/${fork.name}`;
-  onProgress(`Waiting for your fork ${forkName} to be ready…`);
+  onProgress({
+    stage: "fork",
+    label: `Waiting for your fork ${forkName} to be ready…`,
+  });
   const baseRef = await waitForForkRef({
     gh,
     forkPath,
@@ -188,7 +210,10 @@ export async function submitRecordingToAppGallery(params: {
     signal,
   });
 
-  onProgress(`Creating branch ${branch} in ${forkName}…`);
+  onProgress({
+    stage: "branch",
+    label: `Creating branch ${branch} in ${forkName}…`,
+  });
   try {
     await gh("POST", `${forkPath}/git/refs`, {
       ref: `refs/heads/${branch}`,
@@ -211,9 +236,12 @@ export async function submitRecordingToAppGallery(params: {
 
   // The same builder backs the manual-submission download, so what a
   // participant hand-uploads is byte-identical to what this commits.
-  const dir = `submissions/${viewer.login}/${appSlug}`;
+  const dir = gallerySubmissionFolder(viewer.login, appSlug);
   for (const file of buildGallerySubmissionFiles(bundle)) {
-    onProgress(`Uploading ${file.name} to ${forkName}…`);
+    onProgress({
+      stage: "upload",
+      label: `Uploading ${file.name} to ${forkName}…`,
+    });
     // Updating a file left by an earlier (rejected) submission needs its
     // blob sha; on a fresh branch the lookup 404s and the PUT creates it.
     const path = `${forkPath}/contents/${dir}/${file.name}`;
@@ -226,17 +254,19 @@ export async function submitRecordingToAppGallery(params: {
     });
   }
 
-  onProgress(`Opening the pull request on ${galleryName}…`);
+  onProgress({
+    stage: "pr",
+    label: `Opening the pull request on ${galleryName}…`,
+  });
   let pr: { html_url: string };
   try {
     pr = await gh<{ html_url: string }>(
       "POST",
       `/repos/${repo.owner}/${repo.name}/pulls`,
       {
-        title: `App session: ${bundle.recording.title}`,
+        ...buildGallerySubmissionPr(bundle),
         head: `${viewer.login}:${branch}`,
         base: fork.default_branch,
-        body: prBody(bundle),
         maintainer_can_modify: true,
       },
     );
@@ -287,6 +317,31 @@ export interface GallerySubmissionFile {
 /** The folder-name slug a submission files under (`submissions/<login>/<slug>`). */
 export function gallerySubmissionSlug(bundle: AppRecordingBundle): string {
   return slugify(bundle.app.name) || "app-session";
+}
+
+/** The stable branch a participant's submission of this app lives on. */
+export function gallerySubmissionBranch(slug: string): string {
+  return `submission/${slug}`;
+}
+
+/** The gallery folder a submission's files live under. */
+export function gallerySubmissionFolder(login: string, slug: string): string {
+  return `submissions/${login}/${slug}`;
+}
+
+/**
+ * The pull request title and body the automatic path files — also handed to
+ * the manual fallback as click-to-copy content, so a hand-made PR reads
+ * identically to an automatic one.
+ */
+export function buildGallerySubmissionPr(bundle: AppRecordingBundle): {
+  title: string;
+  body: string;
+} {
+  return {
+    title: `App session: ${bundle.recording.title}`,
+    body: prBody(bundle),
+  };
 }
 
 /**
@@ -430,7 +485,7 @@ function makeGithubClient(token: string, signal: AbortSignal): GithubCall {
       // Cancellation must stay a cancellation, not become an error card.
       if (signal.aborted) throw error;
       throw new Error(
-        "Couldn't reach GitHub — check your connection and retry.",
+        "Couldn't reach GitHub — check your connection and try again.",
       );
     }
     if (response.status === 401) {
@@ -450,7 +505,9 @@ function makeGithubClient(token: string, signal: AbortSignal): GithubCall {
  * One HTTP refusal, phrased for the error card: retriable conditions (rate
  * limits, GitHub 5xx weather) get a short plain-language line, and only a
  * genuine verdict (403/404/422 …) quotes GitHub's own message — that one is
- * the useful, specific explanation.
+ * the useful, specific explanation. NO status codes in the text — they mean
+ * nothing to a participant; the status rides on the error object for retry
+ * logic instead.
  */
 async function toGithubRequestError(
   response: Response,
@@ -477,18 +534,18 @@ async function toGithubRequestError(
   const { status } = response;
   if (status === 429 || (status === 403 && /rate limit/i.test(detail))) {
     return new GithubRequestError(
-      "GitHub is rate-limiting requests — wait a moment and retry.",
+      "GitHub is rate-limiting requests — wait a moment and try again.",
       status,
     );
   }
   if (status >= 500) {
     return new GithubRequestError(
-      `GitHub had a hiccup (${status}) — retry in a moment.`,
+      "GitHub is having trouble right now — wait a moment and try again.",
       status,
     );
   }
   return new GithubRequestError(
-    `GitHub refused the request (${status}).${detail ? ` ${detail}` : ""}`,
+    `GitHub refused the request.${detail ? ` ${detail}` : ""}`,
     status,
   );
 }
@@ -592,7 +649,7 @@ async function waitForForkRef(params: {
       if (!stillMaterializing) throw error;
       if (attempt >= attempts) {
         throw new Error(
-          "GitHub is taking too long to prepare your fork — retry in a moment.",
+          "GitHub is taking too long to prepare your fork — try again in a moment.",
         );
       }
       await sleep(2000, params.signal);

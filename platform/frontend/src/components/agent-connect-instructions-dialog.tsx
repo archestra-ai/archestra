@@ -8,7 +8,7 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Copy, Eye, EyeOff, Trash2 } from "lucide-react";
+import { Copy, Eye, EyeOff, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -45,6 +45,7 @@ import {
   useCreateLlmOauthClient,
   useDeleteLlmOauthClient,
   useLlmOauthClients,
+  useRotateLlmOauthClientSecret,
 } from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useCreateMcpOauthClient } from "@/lib/mcp-oauth-clients.query";
@@ -126,17 +127,21 @@ export function McpGatewayConnectInstructionsDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { baseUrl } = useConnectionBaseUrl();
+  // Callers that only carry {id, name} (e.g. right after creation) don't know
+  // the slug — resolve it so the endpoint URL is never the raw id.
+  const { data: detail } = useProfile(
+    gateway && gateway.slug == null ? gateway.id : undefined,
+  );
 
   if (!gateway) return null;
+  const slug = gateway.slug ?? detail?.slug ?? gateway.id;
 
   return (
     <ConnectDialog agent={gateway} open onOpenChange={onOpenChange}>
       <div className="space-y-4">
         <div className="space-y-2">
           <div className="text-xs text-muted-foreground">Endpoint</div>
-          <TerminalBlock
-            code={`${baseUrl}/mcp/${gateway.slug ?? gateway.id}`}
-          />
+          <TerminalBlock code={`${baseUrl}/mcp/${slug}`} />
         </div>
         <McpGatewayAuthSurface
           gateway={gateway}
@@ -763,9 +768,17 @@ function OauthClientTable({
   const { data: canDelete } = useHasPermissions({
     llmOauthClient: ["delete"],
   });
+  const { data: canUpdate } = useHasPermissions({
+    llmOauthClient: ["update"],
+  });
   const deleteMutation = useDeleteLlmOauthClient();
+  const rotateMutation = useRotateLlmOauthClientSecret();
   const [deletingClient, setDeletingClient] =
     useState<LlmOauthClientRow | null>(null);
+  const [rotatingClient, setRotatingClient] =
+    useState<LlmOauthClientRow | null>(null);
+  const [rotatedCredentials, setRotatedCredentials] =
+    useState<CreatedCredentials | null>(null);
 
   if (!clients) return null;
   const relevant = clients.filter(
@@ -831,21 +844,68 @@ function OauthClientTable({
               </td>
               {canDelete && (
                 <td className="px-2 py-1.5">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Delete ${client.name}`}
-                    onClick={() => setDeletingClient(client)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                  </Button>
+                  <div className="flex items-center">
+                    {canUpdate && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Rotate secret for ${client.name}`}
+                        onClick={() => setRotatingClient(client)}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Delete ${client.name}`}
+                      onClick={() => setDeletingClient(client)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
                 </td>
               )}
             </tr>
           ))}
         </tbody>
       </table>
+
+      <DeleteConfirmDialog
+        open={!!rotatingClient}
+        onOpenChange={(open) => {
+          if (!open) setRotatingClient(null);
+        }}
+        title="Rotate Client Secret"
+        description={`Rotate the secret for "${rotatingClient?.name}"? The current secret stops working immediately; the new one is shown once.`}
+        confirmLabel="Rotate"
+        isPending={rotateMutation.isPending}
+        onConfirm={async () => {
+          if (!rotatingClient) return;
+          const result = await rotateMutation.mutateAsync({
+            id: rotatingClient.id,
+          });
+          if (result) {
+            setRotatedCredentials({
+              clientId: result.clientId,
+              clientSecret: result.clientSecret,
+              grantType: result.grantType,
+              oauthScope: LLM_PROXY_OAUTH_SCOPE,
+            });
+          }
+          setRotatingClient(null);
+        }}
+      />
+      <OAuthClientCreatedDialog
+        open={!!rotatedCredentials}
+        onOpenChange={(open) => {
+          if (!open) setRotatedCredentials(null);
+        }}
+        title="Client Secret Rotated"
+        credentials={rotatedCredentials}
+      />
 
       <DeleteConfirmDialog
         open={!!deletingClient}

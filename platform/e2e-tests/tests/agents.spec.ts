@@ -154,16 +154,13 @@ test(
 
     await createViaDialog(page, /Create LLM Proxy/i, PROXY_NAME);
 
-    // Creation hands off to the post-create connect dialog.
-    const postCreateDialog = page.getByTestId(
-      E2eTestId.PostCreateConnectDialog,
-    );
-    await expect(postCreateDialog).toBeVisible({ timeout: 15_000 });
-    await expect(
-      page.getByTestId(E2eTestId.PostCreateOpenConnectionGuideButton),
-    ).toBeVisible();
-    await page.getByTestId(E2eTestId.PostCreateConnectDoneButton).click();
-    await expect(postCreateDialog).not.toBeVisible({ timeout: 10_000 });
+    // Creation hands off to the proxy connect dialog (endpoint + auth).
+    const connectDialog = page.getByRole("dialog", {
+      name: new RegExp(`Connect via "${PROXY_NAME}"`, "i"),
+    });
+    await expect(connectDialog).toBeVisible({ timeout: 15_000 });
+    await connectDialog.getByRole("button", { name: "Close" }).click();
+    await expect(connectDialog).not.toBeVisible({ timeout: 10_000 });
 
     // Poll for the LLM proxy to appear in the table
     const proxyLocator = page

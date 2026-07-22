@@ -1,0 +1,188 @@
+{
+  "name": "ekkyarmandi__ticktick-mcp",
+  "display_name": "ticktick-mcp",
+  "description": "TickTick MCP for managing your To-Do using AI",
+  "author": {
+    "name": "ekkyarmandi"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {
+      "TICKTICK_API_KEY": "${user_config.ticktick_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ticktick_api_key": {
+      "type": "string",
+      "title": "TickTick API Key",
+      "description": "Your access token for the TickTick API, obtained via OAuth.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# TickTick MCP\n\nA Model Context Protocol (MCP) server that provides tools for integrating TickTick task management tools. Using Python and the MCP SDK.\n\n## Overview\n\nThis repository contains a Model Context Protocol (MCP) server implementation for TickTick. It provides a standardized way for AI assistants and applications to interact with TickTick's task management functionality, allowing operations like:\n\n- Retrieving projects and tasks\n- Creating new projects and tasks\n- Updating task details\n- Completing and deleting tasks\n\nWith this MCP, AI systems can act as task masters to help manage your to-do lists and tasks in TickTick with natural language.\n\n## Requirements\n\n- Python 3.8+\n- TickTick account\n- TickTick API key (via OAuth) # COMMENT: I will add a tool to generate an API key from the TickTick developer portal\n\n## Installation\n\n1. Clone this repository\n\n   ```bash\n   git clone https://github.com/ekkyarmandi/ticktick-mcp.git\n   cd ticktick-mcp\n   ```\n\n2. Install dependencies\n\n   ```bash\n   pip install -r requirements.txt\n   ```\n\n## Obtaining a TickTick API Key\n\nThis MCP uses TickTick's OpenAPI scheme, which requires registering an app through TickTick's developer portal:\n\n1. Go to the [TickTick Developer Documentation](https://developer.ticktick.com/docs)\n2. Click on `Manage Apps` in the top right corner and login with your TickTick credentials\n3. Register a new app by clicking the `+App Name` button\n4. Enter a name for your app (only required field)\n5. Once created, you'll be able to see your `Client ID` and `Client Secret`\n6. For the `OAuth Redirect URL`, enter a URL where you'll be redirected after authorization (e.g., `http://127.0.0.1:8080`)\n\n### Authorizing Your App\n\nAfter registering your app, use the [ticktick-py](https://github.com/lazeroffmichael/ticktick-py) library to get your access token:\n\n```python\nfrom ticktick.oauth2 import OAuth2\n\n# Replace with your details from the developer portal\nclient_id = \"YOUR_CLIENT_ID\"\nclient_secret = \"YOUR_CLIENT_SECRET\"\nredirect_uri = \"YOUR_REDIRECT_URI\"  # e.g., http://127.0.0.1:8080\n\nauth_client = OAuth2(client_id=client_id,\n                    client_secret=client_secret,\n                    redirect_uri=redirect_uri)\n\n# This will open a web browser for authorization\n# Follow the instructions in the terminal to authorize\nauth_client.get_access_token()\n```\n\nAfter authorizing, the access token will be saved to a `.token-oauth` file by default. You can extract the token from this file or use:\n\n```python\nprint(auth_client.token_info[\"access_token\"])\n```\n\n## Configuration\n\n1. Create a `.env` file in the root directory with your TickTick API key:\n   ```\n   TICKTICK_API_KEY=your_access_token_here\n   ```\n\n## Usage\n\nRun the MCP server:\n\n```bash\npython main.py\n```\n\nThis will start the MCP server on port 8000. You can now connect to it using any MCP client.\n\n### Available Tools\n\nThe server provides the following tools:\n\n- `get_projects`: Get a list of all projects\n- `project_details`: Get details of a specific project\n- `get_task_details`: Get details of a specific task\n- `create_project`: Create a new project\n- `create_task`: Create a new task in a project\n- `update_task`: Update an existing task\n- `complete_task`: Mark a task as complete\n- `delete_task`: Delete a task\n\n### Example Interactions\n\nOnce your MCP server is running, AI systems can help manage your tasks with natural language commands like:\n\n- \"Show me all my projects\"\n- \"Create a new project called 'Home Renovation'\"\n- \"Add a task to buy groceries tomorrow\"\n- \"Mark my 'Pay bills' task as complete\"\n- \"What tasks do I have due this week?\"\n- \"Delete the task about the canceled meeting\"\n\n## Using with MCP Clients\n\nThis server can be used with any MCP-compatible client, such as:\n\n- Claude Desktop\n- Cursor IDE\n- Custom AI applications using MCP SDKs\n\n## Development\n\nTo extend or modify this MCP server:\n\n1. Add new tools in `tools.py`\n2. Register them in `main.py` using `mcp.add_tool()`\n\n## License\n\nMIT\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n",
+  "category": "Development",
+  "quality_score": 24,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ticktick-mcp": {
+        "command": "python",
+        "args": ["main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ekkyarmandi",
+    "repo": "ticktick-mcp",
+    "url": "https://github.com/ekkyarmandi/ticktick-mcp",
+    "name": "ticktick-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "15f25174092095a49d04c8f94395d5c77020d5de"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:46.658Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "annotated-types",
+      "importance": 3
+    },
+    {
+      "name": "anyio",
+      "importance": 6
+    },
+    {
+      "name": "certifi",
+      "importance": 3
+    },
+    {
+      "name": "charset-normalizer",
+      "importance": 3
+    },
+    {
+      "name": "click",
+      "importance": 2
+    },
+    {
+      "name": "exceptiongroup",
+      "importance": 5
+    },
+    {
+      "name": "h11",
+      "importance": 5
+    },
+    {
+      "name": "httpcore",
+      "importance": 6
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "httpx-sse",
+      "importance": 6
+    },
+    {
+      "name": "idna",
+      "importance": 3
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 9
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 8
+    },
+    {
+      "name": "pydantic_core",
+      "importance": 9
+    },
+    {
+      "name": "python-decouple",
+      "importance": 7
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "pytz",
+      "importance": 3
+    },
+    {
+      "name": "regex",
+      "importance": 3
+    },
+    {
+      "name": "requests",
+      "importance": 5
+    },
+    {
+      "name": "sniffio",
+      "importance": 5
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 7
+    },
+    {
+      "name": "starlette",
+      "importance": 10
+    },
+    {
+      "name": "ticktick-py",
+      "importance": 9
+    },
+    {
+      "name": "typing-inspection",
+      "importance": 3
+    },
+    {
+      "name": "typing_extensions",
+      "importance": 3
+    },
+    {
+      "name": "urllib3",
+      "importance": 4
+    },
+    {
+      "name": "uvicorn",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nannotated-types==0.7.0\nanyio==4.9.0\ncertifi==2025.1.31\ncharset-normalizer==2.0.12\nclick==8.1.8\nexceptiongroup==1.2.2\nh11==0.14.0\nhttpcore==1.0.8\nhttpx==0.28.1\nhttpx-sse==0.4.0\nidna==3.10\nmcp==1.6.0\npydantic==2.11.3\npydantic-settings==2.8.1\npydantic_core==2.33.1\npython-decouple==3.8\npython-dotenv==1.1.0\npytz==2021.1\nregex==2021.4.4\nrequests==2.26.0\nsniffio==1.3.1\nsse-starlette==2.2.1\nstarlette==0.46.2\nticktick-py==2.0.3\ntyping-inspection==0.4.0\ntyping_extensions==4.13.2\nurllib3==1.26.7\nuvicorn==0.34.1\n"
+}

@@ -1,0 +1,70 @@
+{
+  "name": "pratyay__mac-monitor-mcp",
+  "display_name": "mac-monitor-mcp",
+  "description": "MCP server from Pratyay/mac-monitor-mcp",
+  "author": {
+    "name": "Pratyay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/src/monitor.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MacOS Resource Monitor MCP Server\n\nA Model Context Protocol (MCP) server that identifies resource-intensive processes on macOS across CPU, memory, and network usage.\n\n## Overview\n\nMacOS Resource Monitor is a lightweight MCP server that exposes an MCP endpoint for monitoring system resources. It analyzes CPU, memory, and network usage, and identifies the most resource-intensive processes on your Mac, returning data in a structured JSON format.\n\n## Requirements\n\n- macOS operating system\n- Python 3.10+\n- MCP server library\n\n## Installation\n\n### Option 1: Global Installation (Recommended)\n\nInstall the MCP server globally using uv for system-wide access:\n\n```bash\ngit clone https://github.com/Pratyay/mac-monitor-mcp.git\ncd mac-monitor-mcp\nuv tool install .\n```\n\nNow you can run the server from anywhere:\n```bash\nmac-monitor\n```\n\n### Option 2: Development Installation\n\n1. Clone this repository:\n   ```bash\n   git clone https://github.com/Pratyay/mac-monitor-mcp.git\n   cd mac-monitor-mcp\n   ```\n\n2. Create a virtual environment (recommended):\n   ```bash\n   python -m venv venv\n   source venv/bin/activate  \n   ```\n\n3. Install the required dependencies:\n   ```bash\n   pip install mcp\n   ```\n\n## Usage\n\n### Global Installation\nIf you installed globally with uv:\n```bash\nmac-monitor\n```\n\n### Development Installation\nIf you're running from the project directory:\n```bash\npython src/mac_monitor/monitor.py\n```\n\nOr using uv run (from project directory):\n```bash\nuv run mac-monitor\n```\n\nYou should see the message:\n```\nSimple MacOS Resource Monitor MCP server starting...\nMonitoring CPU, Memory, and Network resource usage...\n```\n\nThe server will start and expose the MCP endpoint, which can be accessed by an LLM or other client.\n\n### Available Tools\n\nThe server exposes three tools:\n\n#### 1. `get_resource_intensive_processes()`\nReturns information about the top 5 most resource-intensive processes in each category (CPU, memory, and network).\n\n#### 2. `get_processes_by_category(process_type, page=1, page_size=10, sort_by=\"auto\", sort_order=\"desc\")`\nReturns all processes in a specific category with advanced filtering, pagination, and sorting options.\n\n**Parameters:**\n- `process_type`: `\"cpu\"`, `\"memory\"`, or `\"network\"`\n- `page`: Page number (starting from 1, default: 1)\n- `page_size`: Number of processes per page (default: 10, max: 100)\n- `sort_by`: Sort field - `\"auto\"` (default metric), `\"pid\"`, `\"command\"`, or category-specific fields:\n  - **CPU**: `\"cpu_percent\"`, `\"pid\"`, `\"command\"`\n  - **Memory**: `\"memory_percent\"`, `\"resident_memory_kb\"`, `\"pid\"`, `\"command\"`\n  - **Network**: `\"network_connections\"`, `\"pid\"`, `\"command\"`\n- `sort_order`: `\"desc\"` (default) or `\"asc\"`\n\n**Example Usage:**\n```python\n# Get first page of CPU processes (default: sorted by CPU% descending)\nget_processes_by_category(\"cpu\")\n\n# Get memory processes sorted by resident memory, highest first\nget_processes_by_category(\"memory\", sort_by=\"resident_memory_kb\", sort_order=\"desc\")\n\n# Get network processes sorted by command name A-Z, page 2\nget_processes_by_category(\"network\", page=2, sort_by=\"command\", sort_order=\"asc\")\n\n# Get 20 CPU processes per page, sorted by PID ascending\nget_processes_by_category(\"cpu\", page_size=20, sort_by=\"pid\", sort_order=\"asc\")\n```\n\n#### 3. `get_system_overview()`\nReturns comprehensive system overview with aggregate statistics similar to Activity Monitor. Provides CPU, memory, disk, network statistics, and intelligent performance analysis to help identify bottlenecks and optimization opportunities.\n\n**Features:**\n - **CPU Metrics**: Usage percentages, load averages, core count\n - **Memory Analysis**: Total/used/free memory with percentages\n - **Disk Statistics**: Storage usage across all filesystems\n - **Network Overview**: Active connections, interface statistics\n - **Performance Analysis**: Intelligent bottleneck detection and recommendations\n - **System Information**: macOS version, uptime, process count\n\n**Example Usage:**\n```python\n get_system_overview()  # Get comprehensive system overview\n```\n\n**Use Cases:** \n- System performance monitoring and analysis\n- Identifying performance bottlenecks and slowdowns\n- Resource usage trending and capacity planning\n- Troubleshooting system performance issues\n- Getting quick system health overview\n\n## Sample Output   \n\n#### `get_resource_intensive_processes()` Output\n\n```json\n{\n  \"cpu_intensive_processes\": [\n    {\n      \"pid\": \"1234\",\n      \"cpu_percent\": 45.2,\n      \"command\": \"firefox\"\n    },\n    {\n      \"pid\": \"5678\",\n      \"cpu_percent\": 32.1,\n      \"command\": \"Chrome\"\n    }\n  ],\n  \"memory_intensive_processes\": [\n    {\n      \"pid\": \"1234\",\n      \"memory_percent\": 8.5,\n      \"resident_memory_kb\": 1048576,\n      \"command\": \"firefox\"\n    },\n    {\n      \"pid\": \"8901\",\n      \"memory_percent\": 6.2,\n      \"resident_memory_kb\": 768432,\n      \"command\": \"Docker\"\n    }\n  ],\n  \"network_intensive_processes\": [\n    {\n      \"command\": \"Dropbox\",\n      \"network_connections\": 12\n    },\n    {\n      \"command\": \"Spotify\",\n      \"network_connections\": 8\n    }\n  ]\n}\n```\n\n#### `get_processes_by_category()` Output\n\n```json\n{\n  \"process_type\": \"cpu\",\n  \"processes\": [\n    {\n      \"pid\": \"1234\",\n      \"cpu_percent\": 45.2,\n      \"command\": \"firefox\"\n    },\n    {\n      \"pid\": \"5678\",\n      \"cpu_percent\": 32.1,\n      \"command\": \"Chrome\"\n    }\n  ],\n  \"sorting\": {\n    \"sort_by\": \"cpu_percent\",\n    \"sort_order\": \"desc\",\n    \"requested_sort_by\": \"auto\"\n  },\n  \"pagination\": {\n    \"current_page\": 1,\n    \"page_size\": 10,\n    \"total_processes\": 156,\n    \"total_pages\": 16,\n    \"has_next_page\": true,\n    \"has_previous_page\": false\n  }\n}\n```\n\n## How It Works\n\nThe MacOS Resource Monitor uses built-in macOS command-line utilities:\n\n- `ps`: To identify top CPU and memory consuming processes\n- `lsof`: To monitor network connections and identify network-intensive processes\n\nData is collected when the tool is invoked, providing a real-time snapshot of system resource usage.\n\n## Integration with LLMs\n\nThis MCP server is designed to work with Large Language Models (LLMs) that support the Model Context Protocol. The LLM can use the `get_resource_intensive_processes` tool to access system resource information and provide intelligent analysis.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## Management Commands\n\nIf you installed the server globally with uv:\n\n- **List installed tools:** `uv tool list`\n- **Uninstall:** `uv tool uninstall mac-monitor`\n- **Upgrade:** `uv tool install --force .` (from project directory)\n- **Install from Git:** `uv tool install git+https://github.com/Pratyay/mac-monitor-mcp.git`\n\n## Recent Updates\n\n### Version 0.2.0 (Latest)\n- ✅ Added `get_processes_by_category()` tool with pagination and sorting\n- ✅ Added comprehensive sorting options (CPU%, memory, PID, command name)\n- ✅ Added proper Python packaging with `pyproject.toml`\n- ✅ Added global installation support via `uv tool install`\n- ✅ Enhanced error handling and input validation\n- ✅ Added pagination metadata with navigation information\n\n## Potential Improvements\n\nHere are some ways you could enhance this monitor:\n\n- Add disk I/O monitoring\n- Improve network usage monitoring to include bandwidth\n- Add visualization capabilities  \n- Extend compatibility to other operating systems\n- Add process filtering by resource thresholds\n- Add historical data tracking and trends\n",
+  "category": "Monitoring",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mac-monitor-mcp": {
+        "command": "python",
+        "args": ["src/monitor.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Pratyay",
+    "repo": "mac-monitor-mcp",
+    "url": "https://github.com/Pratyay/mac-monitor-mcp",
+    "name": "pratyay__mac-monitor-mcp",
+    "path": null,
+    "stars": 13,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ba4e4506251918653db9f0487b6a681863a9adb4"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:40.983Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"mac-monitor\"\nversion = \"0.2.0\"\ndescription = \"A Model Context Protocol (MCP) server for monitoring macOS system resources\"\nreadme = \"README.md\"\nlicense = {text = \"MIT\"}\nauthors = [\n    {name = \"Mac Monitor MCP\", email = \"contact@example.com\"},\n]\nkeywords = [\"mcp\", \"macos\", \"monitoring\", \"system\", \"resources\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: MacOS\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n]\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp>=1.0.0\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/Pratyay/mac-monitor-mcp\"\nRepository = \"https://github.com/Pratyay/mac-monitor-mcp.git\"\nIssues = \"https://github.com/Pratyay/mac-monitor-mcp/issues\"\n\n[project.scripts]\nmac-monitor = \"mac_monitor.monitor:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/mac_monitor\"]\n\n[tool.hatch.build.targets.sdist]\ninclude = [\n    \"/src\",\n    \"/README.md\",\n]"
+}

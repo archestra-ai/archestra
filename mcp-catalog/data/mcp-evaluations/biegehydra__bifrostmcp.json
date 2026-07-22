@@ -1,0 +1,83 @@
+{
+  "name": "biegehydra__bifrostmcp",
+  "display_name": "BifrostMCP",
+  "description": "VSCode Extension with an MCP server that exposes semantic tools like Find Usages and Rename to LLMs",
+  "author": {
+    "name": "biegehydra"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/extension.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Bifrost - VSCode Dev Tools MCP Server\n<a href=\"https://marketplace.visualstudio.com/items?itemName=ConnorHallman.bifrost-mcp\">\n  <img src=\"https://img.shields.io/visual-studio-marketplace/d/ConnorHallman.bifrost-mcp?label=VSCode%20Extension%20Downloads&cacheSeconds=3600\" \n       alt=\"VSCode Extension Downloads\" \n       width=\"250\">\n</a>\n\nThis VS Code extension provides a Model Context Protocol (MCP) server that exposes VSCode's powerful development tools and language features to AI tools. It enables advanced code navigation, analysis, and manipulation capabilities when using AI coding assistants that support the MCP protocol.\n\n![image](https://raw.githubusercontent.com/biegehydra/BifrostMCP/refs/heads/master/src/images/cursor.png)\n\n## Table of Contents\n- [Features](#features)\n- [Installation/Usage](#usage)\n- [Multi-Project Support](#multiple-project-support)\n- [Available Tools](#available-tools)\n- [Available Commands](#available-commands)\n- [Troubleshooting](#troubleshooting)\n- [Contributing](#contributing)\n- [Debugging](#debugging)\n- [License](#license)\n\n## Features\n\n- **Language Server Integration**: Access VSCode's language server capabilities for any supported language\n- **Code Navigation**: Find references, definitions, implementations, and more\n- **Symbol Search**: Search for symbols across your workspace\n- **Code Analysis**: Get semantic tokens, document symbols, and type information\n- **Smart Selection**: Use semantic selection ranges for intelligent code selection\n- **Code Actions**: Access refactoring suggestions and quick fixes\n- **HTTP/SSE Server**: Exposes language features over an MCP-compatible HTTP server\n- **AI Assistant Integration**: Ready to work with AI assistants that support the MCP protocol\n\n## Usage\n\n### Installation\n\n1. Install [the extension](https://marketplace.visualstudio.com/items?itemName=ConnorHallman.bifrost-mcp) from the VS Code marketplace\n2. Install any language-specific extensions you need for your development\n3. Open your project in VS Code\n\n### Configuration\n\nThe extension will automatically start an MCP server when activated. To configure an AI assistant to use this server:\n\n1. The server runs on port 8008 by default (configurable with `bifrost.config.json`)\n2. Configure your MCP-compatible AI assistant to connect to:\n   - SSE endpoint: `http://localhost:8008/sse`\n   - Message endpoint: `http://localhost:8008/message`\n\n### LLM Rules\nI have also provided sample rules that can be used in .cursorrules files for better results.\n\n[Example Cursor Rules](https://github.com/biegehydra/BifrostMCP/blob/master/ExampleCursorRules.md)\n\n[Example MDC Rules](https://github.com/biegehydra/BifrostMCP/blob/master/example.mdc)\n\n### Cline Installation\n- Step 1. Install [Supergateway](https://github.com/supercorp-ai/supergateway)\n- Step 2. Add config to cline\n- Step 3. It will show up red but seems to work fine\n\n#### Windows Config\n```json\n{\n  \"mcpServers\": {\n    \"Bifrost\": {\n      \"command\": \"cmd\",\n      \"args\": [\n        \"/c\",\n        \"npx\",\n        \"-y\",\n        \"supergateway\",\n        \"--sse\",\n        \"http://localhost:8008/sse\"\n      ],\n      \"disabled\": false,\n      \"autoApprove\": [],\n      \"timeout\": 600\n    }\n  }\n}\n```\n\n#### Mac/Linux Config\n```json\n{\n  \"mcpServers\": {\n    \"Bifrost\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"supergateway\",\n        \"--sse\",\n        \"http://localhost:8008/sse\"\n      ],\n      \"disabled\": false,\n      \"autoApprove\": [],\n      \"timeout\": 600\n    }\n  }\n}\n```\n\n### Roo Code Installation\n- Step 1: Add the SSE config to your global or project-based MCP configuration\n```json\n{\n  \"mcpServers\": {\n    \"Bifrost\": {\n      \"url\": \"http://localhost:8008/sse\"\n    }\n  }\n}\n```\n\n![Screenshot_78](https://github.com/user-attachments/assets/55588c9e-7f88-4830-b87f-184018873ca1)\n\nFollow this video to install and use with cursor\n\n#### FOR NEW VERSIONS OF CURSOR, USE THIS CODE\n```json\n{\n  \"mcpServers\": {\n    \"Bifrost\": {\n      \"url\": \"http://localhost:8008/sse\"\n    }\n  }\n}\n```\n\n## Multiple Project Support\n\nWhen working with multiple projects, each project can have its own dedicated MCP server endpoint and port. This is useful when you have multiple VS Code windows open or are working with multiple projects that need language server capabilities.\n\n### Project Configuration\n\nCreate a `bifrost.config.json` file in your project root:\n\n```json\n{\n    \"projectName\": \"MyProject\",\n    \"description\": \"Description of your project\",\n    \"path\": \"/my-project\",\n    \"port\": 5642\n}\n```\n\nThe server will use this configuration to:\n- Create project-specific endpoints (e.g., `http://localhost:5642/my-project/sse`)\n- Provide project information to AI assistants\n- Use a dedicated port for each project\n- Isolate project services from other running instances\n\n### Example Configurations\n\n1. Backend API Project:\n```json\n{\n    \"projectName\": \"BackendAPI\",\n    \"description\": \"Node.js REST API with TypeScript\",\n    \"path\": \"/backend-api\",\n    \"port\": 5643\n}\n```\n\n2. Frontend Web App:\n```json\n{\n    \"projectName\": \"FrontendApp\",\n    \"description\": \"React frontend application\",\n    \"path\": \"/frontend-app\",\n    \"port\": 5644\n}\n```\n\n### Port Configuration\n\nEach project should specify its own unique port to avoid conflicts when multiple VS Code instances are running:\n\n- The `port` field in `bifrost.config.json` determines which port the server will use\n- If no port is specified, it defaults to 8008 for backwards compatibility\n- Choose different ports for different projects to ensure they can run simultaneously\n- The server will fail to start if the configured port is already in use, requiring you to either:\n  - Free up the port\n  - Change the port in the config\n  - Close the other VS Code instance using that port\n\n### Connecting to Project-Specific Endpoints\n\nUpdate your AI assistant configuration to use the project-specific endpoint and port:\n\n```json\n{\n  \"mcpServers\": {\n    \"BackendAPI\": {\n      \"url\": \"http://localhost:5643/backend-api/sse\"\n    },\n    \"FrontendApp\": {\n      \"url\": \"http://localhost:5644/frontend-app/sse\"\n    }\n  }\n}\n```\n\n### Backwards Compatibility\n\nIf no `bifrost.config.json` is present, the server will use the default configuration:\n- Port: 8008\n- SSE endpoint: `http://localhost:8008/sse`\n- Message endpoint: `http://localhost:8008/message`\n\nThis maintains compatibility with existing configurations and tools.\n\n## Available Tools\n\nThe extension provides access to many VSCode language features including:\n\n* **find\\_usages**: Locate all symbol references.\n* **go\\_to\\_definition**: Jump to symbol definitions instantly.\n* **find\\_implementations**: Discover implementations of interfaces/abstract methods.\n* **get\\_hover\\_info**: Get rich symbol docs on hover.\n* **get\\_document\\_symbols**: Outline all symbols in a file.\n* **get\\_completions**: Context-aware auto-completions.\n* **get\\_signature\\_help**: Function parameter hints and overloads.\n* **get\\_rename\\_locations**: Safely get location of places to perform a rename across the project.\n* **rename**: Perform rename on a symbol\n* **get\\_code\\_actions**: Quick fixes, refactors, and improvements.\n* **get\\_semantic\\_tokens**: Enhanced highlighting data.\n* **get\\_call\\_hierarchy**: See incoming/outgoing call relationships.\n* **get\\_type\\_hierarchy**: Visualize class and interface inheritance.\n* **get\\_code\\_lens**: Inline insights (references, tests, etc.).\n* **get\\_selection\\_range**: Smart selection expansion for code blocks.\n* **get\\_type\\_definition**: Jump to underlying type definitions.\n* **get\\_declaration**: Navigate to symbol declarations.\n* **get\\_document\\_highlights**: Highlight all occurrences of a symbol.\n* **get\\_workspace\\_symbols**: Search symbols across your entire workspace.\n\n## Requirements\n\n- Visual Studio Code version 1.93.0 or higher\n- Appropriate language extensions for the languages you want to work with (e.g., C# extension for C# files)\n\n### Available Commands\n\n- `Bifrost MCP: Start Server` - Manually start the MCP server on port 8008\n- `Bifrost MCP: Start Server on port` - Manually start the MCP server on specified port\n- `Bifrost MCP: Stop Server` - Stop the running MCP server\n- `Bifrost MCP: Open Debug Panel` - Open the debug panel to test available tools\n\n![image](https://raw.githubusercontent.com/biegehydra/BifrostMCP/refs/heads/master/src/images/commands.png)\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=biegehydra/BifrostMCP&type=Date)](https://star-history.com/#biegehydra/BifrostMCP&Date)\n\n## Example Tool Usage\n\n### Find References\n```json\n{\n  \"name\": \"find_usages\",\n  \"arguments\": {\n    \"textDocument\": {\n      \"uri\": \"file:///path/to/your/file\"\n    },\n    \"position\": {\n      \"line\": 10,\n      \"character\": 15\n    },\n    \"context\": {\n      \"includeDeclaration\": true\n    }\n  }\n}\n```\n\n### Workspace Symbol Search\n```json\n{\n  \"name\": \"get_workspace_symbols\",\n  \"arguments\": {\n    \"query\": \"MyClass\"\n  }\n}\n```\n\n## Troubleshooting\n\nIf you encounter issues:\n\n1. Ensure you have the appropriate language extensions installed for your project\n2. Check that your project has loaded correctly in VSCode\n3. Verify that port 8008 is available on your system\n4. Check the VSCode output panel for any error messages\n\n## Contributing\nHere are [Vscodes commands](https://github.com/microsoft/vscode-docs/blob/main/api/references/commands.md?plain=1) if you want to add additional functionality go ahead. I think we still need rename and a few others.\nPlease feel free to submit issues or pull requests to the [GitHub repository](https://github.com/biegehydra/csharplangmcpserver).\n\n`vsce package`\n\n## Debugging\nUse the `MCP: Open Debug Panel` command\n![image](https://raw.githubusercontent.com/biegehydra/BifrostMCP/refs/heads/master/src/images/debug_panel.png)\n\n## License\n\nThis extension is licensed under the APGL-3.0 License.\n",
+  "category": "Development",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "supergateway-configured-windows": {
+        "command": "cmd",
+        "args": ["/c", "npx", "-y", "supergateway", "--sse", "http://localhost:8008/sse"],
+        "env": {}
+      },
+      "supergateway-configured-mac-linux": {
+        "command": "npx",
+        "args": ["-y", "supergateway", "--sse", "http://localhost:8008/sse"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "biegehydra",
+    "repo": "BifrostMCP",
+    "url": "https://github.com/biegehydra/BifrostMCP",
+    "name": "biegehydra__bifrostmcp",
+    "path": null,
+    "stars": 175,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "43b467d7d50e56764c57fc3969f6625759fc18a8"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:44.302Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"bifrost-mcp\",\n  \"displayName\": \"Bifrost - VSCode Dev Tools MCP Server\",\n  \"description\": \"An MCP server that exposes features of VSCode dev tools to the MCP clients\",\n  \"version\": \"0.0.14\",\n  \"publisher\": \"ConnorHallman\",\n  \"icon\": \"icon.png\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/biegehydra/csharplangmcpserver\"\n  },\n  \"engines\": {\n    \"vscode\": \"^1.93.0\"\n  },\n  \"categories\": [\n    \"Other\",\n    \"Programming Languages\",\n    \"Language Packs\"\n  ],\n  \"keywords\": [\n    \"C#\",\n    \"MCP\",\n    \"dotnet\",\n    \"AI\",\n    \"find references\"\n  ],\n  \"activationEvents\": [\n    \"onStartupFinished\"\n  ],\n  \"main\": \"./dist/extension.js\",\n  \"contributes\": {\n    \"commands\": [\n      {\n        \"command\": \"bifrost-mcp.startServer\",\n        \"title\": \"Bifrost MCP: Start Server\"\n      },\n      {\n        \"command\": \"bifrost-mcp.startServerOnPort\",\n        \"title\": \"Bifrost MCP: Start Server on Port\"\n      },\n      {\n        \"command\": \"bifrost-mcp.stopServer\",\n        \"title\": \"Bifrost MCP: Stop Server\"\n      },\n      {\n        \"command\": \"bifrost-mcp.openDebugPanel\",\n        \"title\": \"Bifrost MCP: Open Debug Panel\"\n      }\n    ]\n  },\n  \"scripts\": {\n    \"vscode:prepublish\": \"npm run package\",\n    \"compile\": \"webpack\",\n    \"watch\": \"webpack --watch\",\n    \"package\": \"webpack --mode production --devtool hidden-source-map\",\n    \"compile-tests\": \"tsc -p . --outDir out\",\n    \"watch-tests\": \"tsc -p . -w --outDir out\",\n    \"pretest\": \"npm run compile-tests && npm run compile && npm run lint\",\n    \"lint\": \"eslint src\",\n    \"test\": \"vscode-test\"\n  },\n  \"devDependencies\": {\n    \"@types/mocha\": \"^10.0.10\",\n    \"@types/node\": \"20.x\",\n    \"@types/vscode\": \"^1.93.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.25.0\",\n    \"@typescript-eslint/parser\": \"^8.25.0\",\n    \"@vscode/test-cli\": \"^0.0.10\",\n    \"@vscode/test-electron\": \"^2.4.1\",\n    \"eslint\": \"^9.21.0\",\n    \"ts-loader\": \"^9.5.2\",\n    \"typescript\": \"^5.7.3\",\n    \"vscode-languageclient\": \"^9.0.1\",\n    \"webpack\": \"^5.98.0\",\n    \"webpack-cli\": \"^6.0.1\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.6.1\",\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/express\": \"^5.0.0\",\n    \"cors\": \"^2.8.5\",\n    \"express\": \"^5.0.1\"\n  }\n}\n"
+}

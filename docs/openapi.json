@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.11"
+    "version": "1.3.13"
   },
   "components": {
     "schemas": {
@@ -54964,6 +54964,610 @@
         }
       }
     },
+    "/api/app-gallery/device/start": {
+      "post": {
+        "operationId": "appGalleryDeviceAuthStart",
+        "tags": [
+          "App Gallery"
+        ],
+        "description": "Start the GitHub device flow used to share a recorded app session to the public App Gallery\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deviceCode": {
+                      "type": "string"
+                    },
+                    "userCode": {
+                      "type": "string"
+                    },
+                    "verificationUri": {
+                      "type": "string"
+                    },
+                    "interval": {
+                      "type": "number"
+                    },
+                    "expiresIn": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "deviceCode",
+                    "userCode",
+                    "verificationUri",
+                    "interval",
+                    "expiresIn"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:update"
+          ]
+        }
+      }
+    },
+    "/api/app-gallery/device/poll": {
+      "post": {
+        "operationId": "appGalleryDeviceAuthPoll",
+        "tags": [
+          "App Gallery"
+        ],
+        "description": "Poll the GitHub device flow once; returns the GitHub OAuth token when the participant has authorized\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "deviceCode": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "deviceCode"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "slow_down"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "complete"
+                          ]
+                        },
+                        "accessToken": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "accessToken"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:update"
+          ]
+        }
+      }
+    },
     "/api/app-recordings/enhance": {
       "post": {
         "operationId": "enhanceAppRecording",
@@ -63994,6 +64598,7 @@
                 "agentTool.updated",
                 "agentTool.deleted",
                 "agentTool.bulk_assigned",
+                "agentTool.bulk_removed",
                 "apiKey.created",
                 "apiKey.deleted",
                 "app.created",
@@ -64259,6 +64864,7 @@
                               "agentTool.updated",
                               "agentTool.deleted",
                               "agentTool.bulk_assigned",
+                              "agentTool.bulk_removed",
                               "apiKey.created",
                               "apiKey.deleted",
                               "app.created",
@@ -64820,6 +65426,7 @@
                         "agentTool.updated",
                         "agentTool.deleted",
                         "agentTool.bulk_assigned",
+                        "agentTool.bulk_removed",
                         "apiKey.created",
                         "apiKey.deleted",
                         "app.created",
@@ -100134,6 +100741,10 @@
                     "enterpriseCoreActive": {
                       "type": "boolean"
                     },
+                    "mcpSandboxDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "analytics": {
                       "type": "object",
                       "properties": {
@@ -100178,6 +100789,7 @@
                     "maintenanceMode",
                     "siteNotificationMessage",
                     "enterpriseCoreActive",
+                    "mcpSandboxDomain",
                     "analytics"
                   ],
                   "additionalProperties": false
@@ -100364,6 +100976,23 @@
                         },
                         "hackathonRecorderOverrideActive": {
                           "type": "boolean"
+                        },
+                        "hackathonGalleryRepo": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "owner": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "owner",
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -100391,7 +101020,8 @@
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
                         "hackathonRecorderEnabled",
-                        "hackathonRecorderOverrideActive"
+                        "hackathonRecorderOverrideActive",
+                        "hackathonGalleryRepo"
                       ],
                       "additionalProperties": false
                     },
@@ -100440,6 +101070,294 @@
           "kind": "none",
           "note": "None (no additional RBAC permission required)",
           "permissions": []
+        }
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "operationId": "getConnectionHealth",
+        "tags": [
+          "Connection Setups"
+        ],
+        "description": "Health of the remotes a connected client is wired to, one request for all of them. Public: used by the Claude Code startup guard before every launch, from machines with no session. Reports only ok/down per requested remote.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "in": "query",
+            "name": "mcp",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "in": "query",
+            "name": "llm",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mcp": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "down"
+                      ]
+                    },
+                    "llm": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "down"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -117467,6 +118385,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -118022,6 +118941,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -118998,6 +119918,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -119160,6 +120081,9 @@
                                               }
                                             },
                                             "index": {
+                                              "type": "number"
+                                            },
+                                            "truncatedFrom": {
                                               "type": "number"
                                             }
                                           },
@@ -119671,6 +120595,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -119833,6 +120758,9 @@
                                               }
                                             },
                                             "index": {
+                                              "type": "number"
+                                            },
+                                            "truncatedFrom": {
                                               "type": "number"
                                             }
                                           },
@@ -120344,6 +121272,684 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
+                                  "chat:title_generation",
+                                  "chat:tool_call_repair",
+                                  "skill:description_generation",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "chatops:telegram",
+                                  "email",
+                                  "schedule-trigger",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
+                                ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "passthrough_virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "billingMode": {
+                                "type": "string",
+                                "enum": [
+                                  "metered",
+                                  "subscription"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "request": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "model": {
+                                        "type": "string"
+                                      },
+                                      "input": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string"
+                                            }
+                                          }
+                                        ]
+                                      },
+                                      "dimensions": {
+                                        "type": "number"
+                                      },
+                                      "encoding_format": {
+                                        "type": "string",
+                                        "enum": [
+                                          "float",
+                                          "base64"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "model",
+                                      "input"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              },
+                              "processedRequest": {
+                                "nullable": true,
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "model": {
+                                        "type": "string"
+                                      },
+                                      "input": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string"
+                                            }
+                                          }
+                                        ]
+                                      },
+                                      "dimensions": {
+                                        "type": "number"
+                                      },
+                                      "encoding_format": {
+                                        "type": "string",
+                                        "enum": [
+                                          "float",
+                                          "base64"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "model",
+                                      "input"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              },
+                              "response": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "object": {
+                                        "type": "string",
+                                        "enum": [
+                                          "list"
+                                        ]
+                                      },
+                                      "data": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "object": {
+                                              "type": "string",
+                                              "enum": [
+                                                "embedding"
+                                              ]
+                                            },
+                                            "embedding": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "index": {
+                                              "type": "number"
+                                            },
+                                            "truncatedFrom": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "object",
+                                            "embedding",
+                                            "index"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "model": {
+                                        "type": "string"
+                                      },
+                                      "usage": {
+                                        "type": "object",
+                                        "properties": {
+                                          "prompt_tokens": {
+                                            "type": "number"
+                                          },
+                                          "total_tokens": {
+                                            "type": "number"
+                                          }
+                                        },
+                                        "required": [
+                                          "prompt_tokens",
+                                          "total_tokens"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "object",
+                                      "data",
+                                      "model",
+                                      "usage"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "error": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "error"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "bedrock:embeddings"
+                                ]
+                              },
+                              "model": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
+                              "outputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "baselineCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonTokensBefore": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonTokensAfter": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonCostSavings": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "chatErrors": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "conversationId": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "error": {
+                                      "type": "object",
+                                      "properties": {
+                                        "code": {
+                                          "type": "string",
+                                          "enum": [
+                                            "rate_limit",
+                                            "usage_limit_exceeded",
+                                            "authentication",
+                                            "permission_denied",
+                                            "invalid_request",
+                                            "provider_insufficient_balance",
+                                            "not_found",
+                                            "context_too_long",
+                                            "request_too_large",
+                                            "content_filtered",
+                                            "server_error",
+                                            "network_error",
+                                            "empty_response",
+                                            "incomplete_tool_call",
+                                            "tool_call_output_truncated",
+                                            "provider_auth_required",
+                                            "tools_unsupported",
+                                            "unknown"
+                                          ]
+                                        },
+                                        "message": {
+                                          "type": "string"
+                                        },
+                                        "isRetryable": {
+                                          "type": "boolean"
+                                        },
+                                        "sessionId": {
+                                          "type": "string"
+                                        },
+                                        "traceId": {
+                                          "type": "string"
+                                        },
+                                        "spanId": {
+                                          "type": "string"
+                                        },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
+                                        "authAction": {
+                                          "type": "object",
+                                          "properties": {
+                                            "provider": {
+                                              "type": "string",
+                                              "enum": [
+                                                "openai",
+                                                "gemini",
+                                                "anthropic",
+                                                "bedrock",
+                                                "cohere",
+                                                "cerebras",
+                                                "mistral",
+                                                "perplexity",
+                                                "groq",
+                                                "xai",
+                                                "openrouter",
+                                                "vllm",
+                                                "ollama",
+                                                "zhipuai",
+                                                "deepseek",
+                                                "minimax",
+                                                "azure",
+                                                "github-copilot",
+                                                "microsoft-365-copilot"
+                                              ]
+                                            },
+                                            "providerLabel": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "provider",
+                                            "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "originalError": {
+                                          "type": "object",
+                                          "properties": {
+                                            "provider": {
+                                              "type": "string",
+                                              "enum": [
+                                                "openai",
+                                                "gemini",
+                                                "anthropic",
+                                                "bedrock",
+                                                "cohere",
+                                                "cerebras",
+                                                "mistral",
+                                                "perplexity",
+                                                "groq",
+                                                "xai",
+                                                "openrouter",
+                                                "vllm",
+                                                "ollama",
+                                                "zhipuai",
+                                                "deepseek",
+                                                "minimax",
+                                                "azure",
+                                                "github-copilot",
+                                                "microsoft-365-copilot"
+                                              ]
+                                            },
+                                            "status": {
+                                              "type": "number"
+                                            },
+                                            "message": {
+                                              "type": "string"
+                                            },
+                                            "type": {
+                                              "type": "string"
+                                            },
+                                            "raw": {}
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "code",
+                                        "message",
+                                        "isRetryable"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "createdAt": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "conversationId",
+                                    "error",
+                                    "createdAt"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "profileId",
+                              "externalAgentId",
+                              "executionId",
+                              "userId",
+                              "virtualKeyId",
+                              "passthroughVirtualKeyId",
+                              "environmentId",
+                              "sessionId",
+                              "sessionSource",
+                              "billingMode",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
+                              "request",
+                              "response",
+                              "type",
+                              "model",
+                              "baselineModel",
+                              "inputTokens",
+                              "inputTokensEstimated",
+                              "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
+                              "cacheWrite1hTokens",
+                              "baselineCost",
+                              "cost",
+                              "cacheCost",
+                              "cacheSavings",
+                              "toonTokensBefore",
+                              "toonTokensAfter",
+                              "toonCostSavings",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "profileId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "externalAgentId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "executionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "userId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "model_router",
+                                  "chat",
+                                  "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -120899,6 +122505,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -121454,6 +123061,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -123960,6 +125568,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -124515,6 +126124,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -125070,6 +126680,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -125625,6 +127236,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -126180,6 +127792,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -126735,6 +128348,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -127290,6 +128904,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -127834,6 +129449,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -128378,6 +129994,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -128933,6 +130550,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -129488,6 +131106,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -130043,6 +131662,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -132769,6 +134389,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -135500,6 +137121,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -136055,6 +137677,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -136844,6 +138467,7 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
+                                  "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
                                   "skill:description_generation",
@@ -138086,6 +139710,7 @@
                 "model_router",
                 "chat",
                 "chat:compaction",
+                "a2a:compaction",
                 "chat:title_generation",
                 "chat:tool_call_repair",
                 "skill:description_generation",
@@ -138202,6 +139827,7 @@
                               "model_router",
                               "chat",
                               "chat:compaction",
+                              "a2a:compaction",
                               "chat:title_generation",
                               "chat:tool_call_repair",
                               "skill:description_generation",
@@ -138226,6 +139852,7 @@
                                 "model_router",
                                 "chat",
                                 "chat:compaction",
+                                "a2a:compaction",
                                 "chat:title_generation",
                                 "chat:tool_call_repair",
                                 "skill:description_generation",
@@ -139339,6 +140966,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -139894,6 +141522,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -140870,6 +142499,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -141032,6 +142662,9 @@
                                         }
                                       },
                                       "index": {
+                                        "type": "number"
+                                      },
+                                      "truncatedFrom": {
                                         "type": "number"
                                       }
                                     },
@@ -141543,6 +143176,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -141705,6 +143339,9 @@
                                         }
                                       },
                                       "index": {
+                                        "type": "number"
+                                      },
+                                      "truncatedFrom": {
                                         "type": "number"
                                       }
                                     },
@@ -142216,6 +143853,684 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
+                            "chat:title_generation",
+                            "chat:tool_call_repair",
+                            "skill:description_generation",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "chatops:telegram",
+                            "email",
+                            "schedule-trigger",
+                            "knowledge:embedding",
+                            "knowledge:reranker",
+                            "knowledge:query-expansion",
+                            "app:llm_complete",
+                            "app:recording_enhancement"
+                          ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "passthrough_virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "billingMode": {
+                          "type": "string",
+                          "enum": [
+                            "metered",
+                            "subscription"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "request": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "model": {
+                                  "type": "string"
+                                },
+                                "input": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  ]
+                                },
+                                "dimensions": {
+                                  "type": "number"
+                                },
+                                "encoding_format": {
+                                  "type": "string",
+                                  "enum": [
+                                    "float",
+                                    "base64"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "model",
+                                "input"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        },
+                        "processedRequest": {
+                          "nullable": true,
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "model": {
+                                  "type": "string"
+                                },
+                                "input": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  ]
+                                },
+                                "dimensions": {
+                                  "type": "number"
+                                },
+                                "encoding_format": {
+                                  "type": "string",
+                                  "enum": [
+                                    "float",
+                                    "base64"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "model",
+                                "input"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        },
+                        "response": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "object": {
+                                  "type": "string",
+                                  "enum": [
+                                    "list"
+                                  ]
+                                },
+                                "data": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "object": {
+                                        "type": "string",
+                                        "enum": [
+                                          "embedding"
+                                        ]
+                                      },
+                                      "embedding": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "index": {
+                                        "type": "number"
+                                      },
+                                      "truncatedFrom": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "object",
+                                      "embedding",
+                                      "index"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "model": {
+                                  "type": "string"
+                                },
+                                "usage": {
+                                  "type": "object",
+                                  "properties": {
+                                    "prompt_tokens": {
+                                      "type": "number"
+                                    },
+                                    "total_tokens": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "prompt_tokens",
+                                    "total_tokens"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "object",
+                                "data",
+                                "model",
+                                "usage"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "error": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "error"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "bedrock:embeddings"
+                          ]
+                        },
+                        "model": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "inputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
+                        "outputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "baselineCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonTokensBefore": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonTokensAfter": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonCostSavings": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "chatErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "conversationId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "error": {
+                                "type": "object",
+                                "properties": {
+                                  "code": {
+                                    "type": "string",
+                                    "enum": [
+                                      "rate_limit",
+                                      "usage_limit_exceeded",
+                                      "authentication",
+                                      "permission_denied",
+                                      "invalid_request",
+                                      "provider_insufficient_balance",
+                                      "not_found",
+                                      "context_too_long",
+                                      "request_too_large",
+                                      "content_filtered",
+                                      "server_error",
+                                      "network_error",
+                                      "empty_response",
+                                      "incomplete_tool_call",
+                                      "tool_call_output_truncated",
+                                      "provider_auth_required",
+                                      "tools_unsupported",
+                                      "unknown"
+                                    ]
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "isRetryable": {
+                                    "type": "boolean"
+                                  },
+                                  "sessionId": {
+                                    "type": "string"
+                                  },
+                                  "traceId": {
+                                    "type": "string"
+                                  },
+                                  "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
+                                  "authAction": {
+                                    "type": "object",
+                                    "properties": {
+                                      "provider": {
+                                        "type": "string",
+                                        "enum": [
+                                          "openai",
+                                          "gemini",
+                                          "anthropic",
+                                          "bedrock",
+                                          "cohere",
+                                          "cerebras",
+                                          "mistral",
+                                          "perplexity",
+                                          "groq",
+                                          "xai",
+                                          "openrouter",
+                                          "vllm",
+                                          "ollama",
+                                          "zhipuai",
+                                          "deepseek",
+                                          "minimax",
+                                          "azure",
+                                          "github-copilot",
+                                          "microsoft-365-copilot"
+                                        ]
+                                      },
+                                      "providerLabel": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "provider",
+                                      "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "originalError": {
+                                    "type": "object",
+                                    "properties": {
+                                      "provider": {
+                                        "type": "string",
+                                        "enum": [
+                                          "openai",
+                                          "gemini",
+                                          "anthropic",
+                                          "bedrock",
+                                          "cohere",
+                                          "cerebras",
+                                          "mistral",
+                                          "perplexity",
+                                          "groq",
+                                          "xai",
+                                          "openrouter",
+                                          "vllm",
+                                          "ollama",
+                                          "zhipuai",
+                                          "deepseek",
+                                          "minimax",
+                                          "azure",
+                                          "github-copilot",
+                                          "microsoft-365-copilot"
+                                        ]
+                                      },
+                                      "status": {
+                                        "type": "number"
+                                      },
+                                      "message": {
+                                        "type": "string"
+                                      },
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "raw": {}
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "code",
+                                  "message",
+                                  "isRetryable"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "conversationId",
+                              "error",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "profileId",
+                        "externalAgentId",
+                        "executionId",
+                        "userId",
+                        "virtualKeyId",
+                        "passthroughVirtualKeyId",
+                        "environmentId",
+                        "sessionId",
+                        "sessionSource",
+                        "billingMode",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
+                        "request",
+                        "response",
+                        "type",
+                        "model",
+                        "baselineModel",
+                        "inputTokens",
+                        "inputTokensEstimated",
+                        "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
+                        "cacheWrite1hTokens",
+                        "baselineCost",
+                        "cost",
+                        "cacheCost",
+                        "cacheSavings",
+                        "toonTokensBefore",
+                        "toonTokensAfter",
+                        "toonCostSavings",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "profileId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "externalAgentId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "executionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "userId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "model_router",
+                            "chat",
+                            "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -142771,6 +145086,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -143326,6 +145642,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -145832,6 +148149,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -146387,6 +148705,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -146942,6 +149261,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -147497,6 +149817,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -148052,6 +150373,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -148607,6 +150929,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -149162,6 +151485,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -149706,6 +152030,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -150250,6 +152575,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -150805,6 +153131,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -151360,6 +153687,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -151915,6 +154243,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -154641,6 +156970,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -157372,6 +159702,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -157927,6 +160258,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -158716,6 +161048,7 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
+                            "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
                             "skill:description_generation",
@@ -165035,6 +167368,10 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "group": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "assignedAgentCount": {
                         "type": "number"
                       },
@@ -165064,6 +167401,7 @@
                       "description",
                       "parameters",
                       "createdAt",
+                      "group",
                       "assignedAgentCount",
                       "assignedAgents"
                     ],
@@ -204303,6 +206641,10 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "group": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "assignedAgentCount": {
                         "type": "number"
                       },
@@ -204332,6 +206674,7 @@
                       "description",
                       "parameters",
                       "createdAt",
+                      "group",
                       "assignedAgentCount",
                       "assignedAgents"
                     ],
@@ -225798,7 +228141,8 @@
                                   "query",
                                   "execute",
                                   "deploy-to-restricted",
-                                  "manage"
+                                  "manage",
+                                  "read-all"
                                 ]
                               }
                             }
@@ -226156,7 +228500,8 @@
                           "query",
                           "execute",
                           "deploy-to-restricted",
-                          "manage"
+                          "manage",
+                          "read-all"
                         ]
                       }
                     }
@@ -226212,7 +228557,8 @@
                             "query",
                             "execute",
                             "deploy-to-restricted",
-                            "manage"
+                            "manage",
+                            "read-all"
                           ]
                         }
                       }
@@ -226557,7 +228903,8 @@
                             "query",
                             "execute",
                             "deploy-to-restricted",
-                            "manage"
+                            "manage",
+                            "read-all"
                           ]
                         }
                       }
@@ -226867,7 +229214,8 @@
                           "query",
                           "execute",
                           "deploy-to-restricted",
-                          "manage"
+                          "manage",
+                          "read-all"
                         ]
                       }
                     }
@@ -226944,7 +229292,8 @@
                             "query",
                             "execute",
                             "deploy-to-restricted",
-                            "manage"
+                            "manage",
+                            "read-all"
                           ]
                         }
                       }
@@ -238361,6 +240710,298 @@
         }
       }
     },
+    "/api/organization/knowledge-settings/test-reranker": {
+      "post": {
+        "operationId": "testRerankerConnection",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Test the reranker connection with a sample structured-output call\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSettings:update`: Modify knowledge settings (embedding and reranking models)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rerankerChatApiKeyId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "rerankerModel": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "rerankerChatApiKeyId",
+                  "rerankerModel"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeSettings:update"
+          ]
+        }
+      }
+    },
     "/api/organization/complete-onboarding": {
       "post": {
         "operationId": "completeOnboarding",
@@ -241521,7 +244162,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -242274,7 +244915,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Project detail. Share team ids are included for the owner only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "Project detail. Share team ids are included for the owner only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -243521,7 +246162,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and the chats inside them",
+        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -243841,7 +246482,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and the chats inside them",
+        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`file:manage`: List, read, write, and delete files in chats and projects\n`project:read`: View projects and your own chats inside them",
         "requestBody": {
           "required": true,
           "content": {
@@ -244156,7 +246797,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "The project's instructions (markdown). Readable by anyone with project access; empty until the owner first saves it. The content is injected into the system prompt of every chat in the project.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "The project's instructions (markdown). Readable by anyone with project access; empty until the owner first saves it. The content is injected into the system prompt of every chat in the project.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -244728,7 +247369,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All chats in a project the caller can read. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "All chats in a project the caller can read. Chats authored by others require `project:read-all`; without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -245061,7 +247702,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Pin a project to the current user's sidebar. Personal — does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "Pin a project to the current user's sidebar. Personal — does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -245338,7 +247979,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Remove the current user's pin on a project. Idempotent; allowed even if the project was since unshared from the user.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "Remove the current user's pin on a project. Idempotent; allowed even if the project was since unshared from the user.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -255417,6 +258058,9 @@
                           "authorName": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "usageUserCount": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -255450,7 +258094,8 @@
                           "updatedAt",
                           "fileCount",
                           "teams",
-                          "authorName"
+                          "authorName",
+                          "usageUserCount"
                         ],
                         "additionalProperties": false
                       }
@@ -258577,6 +261222,331 @@
           "kind": "static",
           "permissions": [
             "skill:delete"
+          ]
+        }
+      }
+    },
+    "/api/skills/{id}/usage-statistics": {
+      "get": {
+        "operationId": "getSkillUsageStatistics",
+        "tags": [
+          "Skills"
+        ],
+        "description": "Per-user activation counts for a skill over the last 30 days\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "since": {
+                      "type": "string"
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "name": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "name",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "daily": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string"
+                          },
+                          "userId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "date",
+                          "userId",
+                          "count"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "since",
+                    "users",
+                    "daily"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "skill:read"
           ]
         }
       }
@@ -273024,7 +275994,8 @@
                         "query",
                         "execute",
                         "deploy-to-restricted",
-                        "manage"
+                        "manage",
+                        "read-all"
                       ]
                     }
                   }

@@ -1,0 +1,107 @@
+{
+  "name": "modelcontextprotocol__servers-archived__src__gitlab",
+  "display_name": "gitlab",
+  "description": "Reference MCP servers that are no longer maintained",
+  "author": {
+    "name": "modelcontextprotocol"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# GitLab MCP Server\n\nMCP Server for the GitLab API, enabling project management, file operations, and more.\n\n### Features\n\n- **Automatic Branch Creation**: When creating/updating files or pushing changes, branches are automatically created if they don't exist\n- **Comprehensive Error Handling**: Clear error messages for common issues\n- **Git History Preservation**: Operations maintain proper Git history without force pushing\n- **Batch Operations**: Support for both single-file and multi-file operations\n\n\n## Tools\n\n1. `create_or_update_file`\n   - Create or update a single file in a project\n   - Inputs:\n     - `project_id` (string): Project ID or URL-encoded path\n     - `file_path` (string): Path where to create/update the file\n     - `content` (string): Content of the file\n     - `commit_message` (string): Commit message\n     - `branch` (string): Branch to create/update the file in\n     - `previous_path` (optional string): Path of the file to move/rename\n   - Returns: File content and commit details\n\n2. `push_files`\n   - Push multiple files in a single commit\n   - Inputs:\n     - `project_id` (string): Project ID or URL-encoded path\n     - `branch` (string): Branch to push to\n     - `files` (array): Files to push, each with `file_path` and `content`\n     - `commit_message` (string): Commit message\n   - Returns: Updated branch reference\n\n3. `search_repositories`\n   - Search for GitLab projects\n   - Inputs:\n     - `search` (string): Search query\n     - `page` (optional number): Page number for pagination\n     - `per_page` (optional number): Results per page (default 20)\n   - Returns: Project search results\n\n4. `create_repository`\n   - Create a new GitLab project\n   - Inputs:\n     - `name` (string): Project name\n     - `description` (optional string): Project description\n     - `visibility` (optional string): 'private', 'internal', or 'public'\n     - `initialize_with_readme` (optional boolean): Initialize with README\n   - Returns: Created project details\n\n5. `get_file_contents`\n   - Get contents of a file or directory\n   - Inputs:\n     - `project_id` (string): Project ID or URL-encoded path\n     - `file_path` (string): Path to file/directory\n     - `ref` (optional string): Branch/tag/commit to get contents from\n   - Returns: File/directory contents\n\n6. `create_issue`\n   - Create a new issue\n   - Inputs:\n     - `project_id` (string): Project ID or URL-encoded path\n     - `title` (string): Issue title\n     - `description` (optional string): Issue description\n     - `assignee_ids` (optional number[]): User IDs to assign\n     - `labels` (optional string[]): Labels to add\n     - `milestone_id` (optional number): Milestone ID\n   - Returns: Created issue details\n\n7. `create_merge_request`\n   - Create a new merge request\n   - Inputs:\n     - `project_id` (string): Project ID or URL-encoded path\n     - `title` (string): MR title\n     - `description` (optional string): MR description\n     - `source_branch` (string): Branch containing changes\n     - `target_branch` (string): Branch to merge into\n     - `draft` (optional boolean): Create as draft MR\n     - `allow_collaboration` (optional boolean): Allow commits from upstream members\n   - Returns: Created merge request details\n\n8. `fork_repository`\n   - Fork a project\n   - Inputs:\n     - `project_id` (string): Project ID or URL-encoded path\n     - `namespace` (optional string): Namespace to fork to\n   - Returns: Forked project details\n\n9. `create_branch`\n   - Create a new branch\n   - Inputs:\n     - `project_id` (string): Project ID or URL-encoded path\n     - `branch` (string): Name for new branch\n     - `ref` (optional string): Source branch/commit for new branch\n   - Returns: Created branch reference\n\n## Setup\n\n### Personal Access Token\n[Create a GitLab Personal Access Token](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html) with appropriate permissions:\n   - Go to User Settings > Access Tokens in GitLab\n   - Select the required scopes:\n     - `api` for full API access\n     - `read_api` for read-only access\n     - `read_repository` and `write_repository` for repository operations\n   - Create the token and save it securely\n\n### Usage with Claude Desktop\nAdd the following to your `claude_desktop_config.json`:\n\n#### Docker\n```json\n{\n  \"mcpServers\": { \n    \"gitlab\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"-e\",\n        \"GITLAB_PERSONAL_ACCESS_TOKEN\",\n        \"-e\",\n        \"GITLAB_API_URL\",\n        \"mcp/gitlab\"\n      ],\n      \"env\": {\n        \"GITLAB_PERSONAL_ACCESS_TOKEN\": \"<YOUR_TOKEN>\",\n        \"GITLAB_API_URL\": \"https://gitlab.com/api/v4\" // Optional, for self-hosted instances\n      }\n    }\n  }\n}\n```\n\n#### NPX\n\n```json\n{\n  \"mcpServers\": {\n    \"gitlab\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-gitlab\"\n      ],\n      \"env\": {\n        \"GITLAB_PERSONAL_ACCESS_TOKEN\": \"<YOUR_TOKEN>\",\n        \"GITLAB_API_URL\": \"https://gitlab.com/api/v4\" // Optional, for self-hosted instances\n      }\n    }\n  }\n}\n```\n\n### Usage with VS Code\n\nFor quick installation, use one of the one-click installation buttons below...\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=gitlab&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22gitlab_token%22%2C%22description%22%3A%22GitLab%20Personal%20Access%20Token%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22gitlab_url%22%2C%22description%22%3A%22GitLab%20API%20URL%20(optional%2C%20default%3A%20https%3A%2F%2Fgitlab.com%2Fapi%2Fv4)%22%2C%22default%22%3A%22https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%22%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-gitlab%22%5D%2C%22env%22%3A%7B%22GITLAB_PERSONAL_ACCESS_TOKEN%22%3A%22%24%7Binput%3Agitlab_token%7D%22%2C%22GITLAB_API_URL%22%3A%22%24%7Binput%3Agitlab_url%7D%22%7D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=gitlab&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22gitlab_token%22%2C%22description%22%3A%22GitLab%20Personal%20Access%20Token%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22gitlab_url%22%2C%22description%22%3A%22GitLab%20API%20URL%20(optional%2C%20default%3A%20https%3A%2F%2Fgitlab.com%2Fapi%2Fv4)%22%2C%22default%22%3A%22https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%22%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-gitlab%22%5D%2C%22env%22%3A%7B%22GITLAB_PERSONAL_ACCESS_TOKEN%22%3A%22%24%7Binput%3Agitlab_token%7D%22%2C%22GITLAB_API_URL%22%3A%22%24%7Binput%3Agitlab_url%7D%22%7D%7D&quality=insiders)\n\n[![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Docker-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=gitlab&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22gitlab_token%22%2C%22description%22%3A%22GitLab%20Personal%20Access%20Token%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22gitlab_url%22%2C%22description%22%3A%22GitLab%20API%20URL%20(optional%2C%20default%3A%20https%3A%2F%2Fgitlab.com%2Fapi%2Fv4)%22%2C%22default%22%3A%22https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%22%7D%5D&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22--rm%22%2C%22-i%22%2C%22mcp%2Fgitlab%22%5D%2C%22env%22%3A%7B%22GITLAB_PERSONAL_ACCESS_TOKEN%22%3A%22%24%7Binput%3Agitlab_token%7D%22%2C%22GITLAB_API_URL%22%3A%22%24%7Binput%3Agitlab_url%7D%22%7D%7D) [![Install with Docker in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Docker-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=gitlab&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22gitlab_token%22%2C%22description%22%3A%22GitLab%20Personal%20Access%20Token%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22gitlab_url%22%2C%22description%22%3A%22GitLab%20API%20URL%20(optional%2C%20default%3A%20https%3A%2F%2Fgitlab.com%2Fapi%2Fv4)%22%2C%22default%22%3A%22https%3A%2F%2Fgitlab.com%2Fapi%2Fv4%22%7D%5D&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22--rm%22%2C%22-i%22%2C%22mcp%2Fgitlab%22%5D%2C%22env%22%3A%7B%22GITLAB_PERSONAL_ACCESS_TOKEN%22%3A%22%24%7Binput%3Agitlab_token%7D%22%2C%22GITLAB_API_URL%22%3A%22%24%7Binput%3Agitlab_url%7D%22%7D%7D&quality=insiders)\n\nFor manual installation, add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n> Note that the `mcp` key is not needed in the `.vscode/mcp.json` file.\n\n#### Docker\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"gitlab_token\",\n        \"description\": \"GitLab Personal Access Token\",\n        \"password\": true\n      },\n      {\n        \"type\": \"promptString\",\n        \"id\": \"gitlab_url\",\n        \"description\": \"GitLab API URL (optional)\",\n        \"default\": \"https://gitlab.com/api/v4\"\n      }\n    ],\n    \"servers\": {\n      \"gitlab\": {\n        \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"--rm\",\n          \"-i\",\n          \"mcp/gitlab\"\n        ],\n        \"env\": {\n          \"GITLAB_PERSONAL_ACCESS_TOKEN\": \"${input:gitlab_token}\",\n          \"GITLAB_API_URL\": \"${input:gitlab_url}\"\n        }\n      }\n    }\n  }\n}\n```\n\n#### NPX\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"gitlab_token\",\n        \"description\": \"GitLab Personal Access Token\",\n        \"password\": true\n      },\n      {\n        \"type\": \"promptString\",\n        \"id\": \"gitlab_url\",\n        \"description\": \"GitLab API URL (optional)\",\n        \"default\": \"https://gitlab.com/api/v4\"\n      }\n    ],\n    \"servers\": {\n      \"gitlab\": {\n        \"command\": \"npx\",\n        \"args\": [\n          \"-y\",\n          \"@modelcontextprotocol/server-gitlab\"\n        ],\n        \"env\": {\n          \"GITLAB_PERSONAL_ACCESS_TOKEN\": \"${input:gitlab_token}\",\n          \"GITLAB_API_URL\": \"${input:gitlab_url}\"\n        }\n      }\n    }\n  }\n}\n```\n\n## Build\n\nDocker build:\n\n```bash\ndocker build -t vonwig/gitlab:mcp -f src/gitlab/Dockerfile .\n```\n\n## Environment Variables\n\n- `GITLAB_PERSONAL_ACCESS_TOKEN`: Your GitLab personal access token (required)\n- `GITLAB_API_URL`: Base URL for GitLab API (optional, defaults to `https://gitlab.com/api/v4`)\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "Development",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-gitlab-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "-e", "GITLAB_PERSONAL_ACCESS_TOKEN", "-e", "GITLAB_API_URL", "mcp/gitlab"],
+        "env": {
+          "GITLAB_PERSONAL_ACCESS_TOKEN": "<YOUR_TOKEN>",
+          "GITLAB_API_URL": "https://gitlab.com/api/v4"
+        },
+        "docker_image": "mcp/gitlab"
+      },
+      "modelcontextprotocol-server-gitlab": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-gitlab"],
+        "env": {
+          "GITLAB_PERSONAL_ACCESS_TOKEN": "<YOUR_TOKEN>",
+          "GITLAB_API_URL": "https://gitlab.com/api/v4"
+        }
+      },
+      "modelcontextprotocol-server-gitlab-configured": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-gitlab"],
+        "env": {
+          "GITLAB_PERSONAL_ACCESS_TOKEN": "${input:gitlab_token}",
+          "GITLAB_API_URL": "${input:gitlab_url}"
+        }
+      },
+      "mcp-gitlab-docker-configured": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "mcp/gitlab"],
+        "env": {
+          "GITLAB_PERSONAL_ACCESS_TOKEN": "${input:gitlab_token}",
+          "GITLAB_API_URL": "${input:gitlab_url}"
+        },
+        "docker_image": "mcp/gitlab"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "modelcontextprotocol",
+    "repo": "servers-archived",
+    "url": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/gitlab",
+    "name": "servers-archived",
+    "path": "src/gitlab",
+    "stars": 123,
+    "contributors": 595,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "9be4674d1ddf8c469e6461a27a337eeb65f76c2e"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:54:54.060Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@modelcontextprotocol/server-gitlab\",\n  \"version\": \"0.6.2\",\n  \"description\": \"MCP server for using the GitLab API\",\n  \"license\": \"MIT\",\n  \"author\": \"GitLab, PBC (https://gitlab.com)\",\n  \"homepage\": \"https://modelcontextprotocol.io\",\n  \"bugs\": \"https://github.com/modelcontextprotocol/servers/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-gitlab\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.1\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"node-fetch\": \"^3.3.2\",\n    \"zod-to-json-schema\": \"^3.23.5\"\n  },\n  \"devDependencies\": {\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}"
+}

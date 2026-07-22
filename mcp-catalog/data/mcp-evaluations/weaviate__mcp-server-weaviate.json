@@ -1,0 +1,72 @@
+{
+  "name": "weaviate__mcp-server-weaviate",
+  "display_name": "mcp-server-weaviate",
+  "description": "MCP (Model Context Protocol) server for Weaviate",
+  "author": {
+    "name": "weaviate"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Weaviate MCP Server\n\n## Instructions\n\nBuild the server:\n```\nmake build\n```\n\nRun the test client\n```\nmake run-client\n```\n\n## Tools\n\n### Insert One\nInsert an object into weaviate.\n\n**Request body:**\n```json\n{}\n```\n\n**Response body**\n```json\n{}\n```\n\n### Query\nRetrieve objects from weaviate with hybrid search.\n\n**Request body:**\n```json\n{}\n```\n\n**Response body**\n```json\n{}\n```\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "weaviate",
+    "repo": "mcp-server-weaviate",
+    "url": "https://github.com/weaviate/mcp-server-weaviate",
+    "name": "weaviate__mcp-server-weaviate",
+    "path": null,
+    "stars": 150,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4db6a8f0aacfbca38b44510c60dc5f8afed0439b"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:32.876Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 9
+    },
+    {
+      "name": "weaviate/weaviate-go-client/v4",
+      "importance": 8
+    },
+    {
+      "name": "golang.org/x/net",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/weaviate/mcpviate\n\ngo 1.23.1\n\nrequire (\n\tgithub.com/mark3labs/mcp-go v0.28.0\n\tgithub.com/weaviate/weaviate-go-client/v4 v4.16.1\n\tgolang.org/x/net v0.40.0\n)\n\nrequire (\n\tgithub.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect\n\tgithub.com/go-openapi/analysis v0.21.2 // indirect\n\tgithub.com/go-openapi/errors v0.22.0 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.19.5 // indirect\n\tgithub.com/go-openapi/jsonreference v0.20.0 // indirect\n\tgithub.com/go-openapi/loads v0.21.1 // indirect\n\tgithub.com/go-openapi/spec v0.20.4 // indirect\n\tgithub.com/go-openapi/strfmt v0.23.0 // indirect\n\tgithub.com/go-openapi/swag v0.22.3 // indirect\n\tgithub.com/go-openapi/validate v0.21.0 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mitchellh/mapstructure v1.5.0 // indirect\n\tgithub.com/oklog/ulid v1.3.1 // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/weaviate/weaviate v1.27.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.mongodb.org/mongo-driver v1.14.0 // indirect\n\tgolang.org/x/oauth2 v0.23.0 // indirect\n\tgolang.org/x/sys v0.33.0 // indirect\n\tgolang.org/x/text v0.25.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect\n\tgoogle.golang.org/grpc v1.66.2 // indirect\n\tgoogle.golang.org/protobuf v1.34.2 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

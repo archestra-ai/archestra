@@ -224,7 +224,9 @@ describe("GET /api/connection-setups/script/:token", () => {
     // the client-app agent-id header always rides along, so the header block is
     // still emitted (carrying only the agent id).
     expect(script).not.toMatch(/arch_[0-9a-f]{64}/);
-    expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
+    // no auth token injected into the settings merge (the key name itself
+    // still appears in the startup guard's disconnect strip list)
+    expect(script).not.toContain("ARCHESTRA_SET_ENV_ANTHROPIC_AUTH_TOKEN");
     expect(script).toContain(
       "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
     );
@@ -258,7 +260,7 @@ describe("GET /api/connection-setups/script/:token", () => {
       "export ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS",
     );
     expect(script).toMatch(/X-Archestra-Virtual-Key: arch_[0-9a-f]{64}/);
-    expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
+    expect(script).not.toContain("ARCHESTRA_SET_ENV_ANTHROPIC_AUTH_TOKEN");
   });
 
   test("codex openai passthrough writes the X-Archestra-Virtual-Key header into config.toml by default", async ({
@@ -322,7 +324,9 @@ describe("GET /api/connection-setups/script/:token", () => {
     );
     expect(script).toContain(AGENT_ID_HEADER_LINE);
     expect(script).toMatch(/X-Archestra-Virtual-Key: arch_[0-9a-f]{64}/);
-    expect(script).not.toContain("AWS_BEARER_TOKEN_BEDROCK");
+    // no bearer token export printed (the guard's disconnect note may still
+    // mention the variable name)
+    expect(script).not.toContain("export AWS_BEARER_TOKEN_BEDROCK");
   });
 
   test("a revoked attribution key degrades gracefully: script drops the virtual-key header but keeps the agent-id, no 410", async ({

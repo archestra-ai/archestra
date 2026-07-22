@@ -1,0 +1,132 @@
+{
+  "name": "gbrigandi__mcp-server-wazuh",
+  "display_name": "mcp-server-wazuh",
+  "description": "MCP Server for Wazuh SIEM",
+  "author": {
+    "name": "gbrigandi"
+  },
+  "server": {
+    "command": "./mcp-server-wazuh",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Wazuh MCP Server - Talk to your SIEM\n\nA Rust-based server designed to bridge the gap between a Wazuh Security Information and Event Management (SIEM) system and applications requiring contextual security data, specifically tailored for the Claude Desktop Integration using the Model Context Protocol (MCP).\n\n## Overview\n\nModern AI assistants like Claude can benefit significantly from real-time context about the user's security environment. The Wazuh MCP Server bridges this gap by providing comprehensive access to Wazuh SIEM data through natural language interactions.\n\nThis server transforms complex Wazuh API responses into MCP-compatible format, enabling AI assistants to access:\n\n- **Security Alerts & Events** from the Wazuh Indexer for threat detection and incident response\n- **Agent Management & Monitoring** including health status, system processes, and network ports\n- **Vulnerability Assessment** data for risk management and patch prioritization  \n- **Security Rules & Configuration** for detection optimization and compliance validation\n- **System Statistics & Performance** metrics for operational monitoring and audit trails\n- **Log Analysis & Forensics** capabilities for incident investigation and compliance reporting\n- **Cluster Health & Management** for infrastructure reliability and availability requirements\n- **Compliance Monitoring & Gap Analysis** for regulatory frameworks like PCI-DSS, HIPAA, SOX, and GDPR\n\nRather than requiring manual API calls or complex queries, security teams can now ask natural language questions like \"Show me critical vulnerabilities on web servers,\" \"What processes are running on agent 001?\" or \"Are we meeting PCI-DSS logging requirements?\" and receive structured, actionable data from their Wazuh deployment.\n\nThis approach is particularly valuable for compliance teams who need to quickly assess security posture, identify gaps in monitoring coverage, validate rule effectiveness, and generate evidence for audit requirements across distributed infrastructure.\n\n![](media/wazuh-alerts-1.png)\n\n## Example Use Cases\n\nThe Wazuh MCP Server provides direct access to Wazuh security data through natural language interactions, enabling several practical use cases:\n\n### Security Alert Analysis\n*   **Alert Triage and Investigation:** Query recent security alerts with `get_wazuh_alert_summary` to quickly identify and prioritize threats requiring immediate attention.\n*   **Alert Pattern Recognition:** Analyze alert trends and patterns to identify recurring security issues or potential attack campaigns.\n\n### Vulnerability Management\n*   **Agent Vulnerability Assessment:** Use `get_wazuh_vulnerability_summary` and `get_wazuh_critical_vulnerabilities` to assess security posture of specific agents and prioritize patching efforts.\n*   **Risk-Based Vulnerability Prioritization:** Correlate vulnerability data with agent criticality and exposure to focus remediation efforts.\n\n### System Monitoring and Forensics\n*   **Process Analysis:** Investigate running processes on agents using `get_wazuh_agent_processes` for threat hunting and system analysis.\n*   **Network Security Assessment:** Monitor open ports and network services with `get_wazuh_agent_ports` to identify potential attack vectors.\n*   **Agent Health Monitoring:** Track agent status and connectivity using `get_wazuh_running_agents` to ensure comprehensive security coverage.\n\n### Security Operations Intelligence\n*   **Rule Effectiveness Analysis:** Review and analyze security detection rules with `get_wazuh_rules_summary` to optimize detection capabilities.\n*   **Manager Performance Monitoring:** Track system performance and statistics using tools like `get_wazuh_weekly_stats`, `get_wazuh_remoted_stats`, and `get_wazuh_log_collector_stats`.\n*   **Cluster Health Management:** Monitor Wazuh cluster status with `get_wazuh_cluster_health` and `get_wazuh_cluster_nodes` for operational reliability.\n\n### Incident Response and Forensics\n*   **Log Analysis:** Search and analyze manager logs using `search_wazuh_manager_logs` and `get_wazuh_manager_error_logs` for incident investigation.\n*   **Agent-Specific Investigation:** Combine multiple tools to build comprehensive profiles of specific agents during security incidents.\n*   **Natural Language Security Queries:** Ask complex security questions in natural language and receive structured data from multiple Wazuh components.\n\n### Operational Efficiency\n*   **Automated Reporting:** Generate security reports and summaries through conversational interfaces without manual API calls.\n*   **Cross-Component Analysis:** Correlate data from both Wazuh Indexer (alerts) and Wazuh Manager (agents, rules, vulnerabilities) for comprehensive security insights.\n*   **Multilingual Security Operations:** Access Wazuh data and receive insights in multiple languages for global security teams.\n\n### Threat Intelligence Gathering and Response\n\nFor enhanced threat intelligence capabilities, the Wazuh MCP Server can be combined with the **[Cortex MCP Server](https://github.com/gbrigandi/mcp-server-cortex/)** to create a powerful security analysis ecosystem.\n\n**Enhanced Capabilities with Cortex Integration:**\n*   **Artifact Analysis:** Automatically analyze suspicious files, URLs, domains, and IP addresses found in Wazuh alerts using Cortex's 140+ analyzers\n*   **IOC Enrichment:** Enrich indicators of compromise (IOCs) from Wazuh alerts with threat intelligence from multiple sources including VirusTotal, Shodan, MISP, and more\n*   **Automated Threat Hunting:** Combine Wazuh's detection capabilities with Cortex's analysis engines to automatically investigate and classify threats\n*   **Multi-Source Intelligence:** Leverage analyzers for reputation checks, malware analysis, domain analysis, and behavioral analysis\n*   **Response Orchestration:** Use analysis results to inform automated response actions and alert prioritization\n\n**Example Workflow:**\n1. Wazuh detects a suspicious file hash or network connection in an alert\n2. The AI assistant automatically queries the Cortex MCP Server to analyze the artifact using multiple analyzers\n3. Results from VirusTotal, hybrid analysis, domain reputation, and other sources are correlated\n4. The combined intelligence provides context for incident response decisions\n5. Findings can be used to update Wazuh rules or trigger additional monitoring\n\n## Requirements\n\n-   An MCP (Model Context Protocol) compatible LLM client (e.g., Claude Desktop)\n-   A running Wazuh server (v4.12 recommended) with the API enabled and accessible.\n-   Network connectivity between this server and the Wazuh API (if API interaction is used).\n\n## Installation\n\n### Option 1: Download Pre-built Binary (Recommended)\n\n1.  **Download the Binary:**\n    *   Go to the [Releases page](https://github.com/gbrigandi/mcp-server-wazuh/releases) of the `mcp-server-wazuh` GitHub repository.\n    *   Download the appropriate binary for your operating system (e.g., `mcp-server-wazuh-linux-amd64`, `mcp-server-wazuh-macos-amd64`, `mcp-server-wazuh-windows-amd64.exe`).\n    *   Make the downloaded binary executable (e.g., `chmod +x mcp-server-wazuh-linux-amd64`).\n    *   (Optional) Rename it to something simpler like `mcp-server-wazuh` and move it to a directory in your system's `PATH` for easier access.\n\n### Option 2: Docker \n\n1.  **Pull the Docker Image:**\n    ```bash\n    docker pull ghcr.io/gbrigandi/mcp-server-wazuh:latest\n    ```\n\n### Option 3: Build from Source\n\n1.  **Prerequisites:**\n    *   Install Rust: [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)\n\n2.  **Build:**\n    ```bash\n    git clone https://github.com/gbrigandi/mcp-server-wazuh.git\n    cd mcp-server-wazuh\n    cargo build --release\n    ```\n    The binary will be available at `target/release/mcp-server-wazuh`.\n\n### Configure Your LLM Client\n\nThe method for configuring your LLM client will vary depending on the client itself. For clients that support MCP (Model Context Protocol), you will typically need to point the client to the path of the `mcp-server-wazuh` executable.\n\n**Example for Claude Desktop:**\n\nConfigure your `claude_desktop_config.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"wazuh\": {\n      \"command\": \"/path/to/mcp-server-wazuh\",\n      \"args\": [],\n      \"env\": {\n        \"WAZUH_API_HOST\": \"your_wazuh_manager_api_host\",\n        \"WAZUH_API_PORT\": \"55000\",\n        \"WAZUH_API_USERNAME\": \"your_wazuh_api_user\",\n        \"WAZUH_API_PASSWORD\": \"your_wazuh_api_password\",\n        \"WAZUH_INDEXER_HOST\": \"your_wazuh_indexer_host\",\n        \"WAZUH_INDEXER_PORT\": \"9200\",\n        \"WAZUH_INDEXER_USERNAME\": \"your_wazuh_indexer_user\",\n        \"WAZUH_INDEXER_PASSWORD\": \"your_wazuh_indexer_password\",\n        \"WAZUH_VERIFY_SSL\": \"false\",\n        \"WAZUH_TEST_PROTOCOL\": \"https\",\n        \"RUST_LOG\": \"info\"\n      }\n    }\n  }\n}\n```\n\nReplace `/path/to/mcp-server-wazuh` with the actual path to your binary and configure the environment variables as detailed in the [Configuration](#configuration) section.\n\nOnce configured, your LLM client should be able to launch and communicate with the `mcp-server-wazuh` to access Wazuh security data.\n\nIf using Docker, create a `.env` file with your Wazuh configuration:\n    \n```bash\nWAZUH_API_HOST=your_wazuh_manager_api_host\nWAZUH_API_PORT=55000\nWAZUH_API_USERNAME=your_wazuh_api_user\nWAZUH_API_PASSWORD=your_wazuh_api_password\nWAZUH_INDEXER_HOST=your_wazuh_indexer_host\nWAZUH_INDEXER_PORT=9200\nWAZUH_INDEXER_USERNAME=your_wazuh_indexer_user\nWAZUH_INDEXER_PASSWORD=your_wazuh_indexer_password\nWAZUH_VERIFY_SSL=false\nWAZUH_TEST_PROTOCOL=https\nRUST_LOG=info\n```\n\nConfigure your `claude_desktop_config.json` file:\n\n```\n{\n  \"mcpServers\": {\n    \"wazuh\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"--rm\", \"-i\",\n        \"--env-file\", \"/path/to/your/.env\",\n        \"ghcr.io/gbrigandi/mcp-server-wazuh:latest\"\n      ]\n    }\n  }\n}\n```\n\n## Configuration\n\nConfiguration is managed through environment variables. A `.env` file can be placed in the project root for local development.\n\n| Variable                 | Description                                                                    | Default     | Required |\n| ------------------------ | ------------------------------------------------------------------------------ | ----------- | -------- |\n| `WAZUH_API_HOST`         | Hostname or IP address of the Wazuh Manager API server.                        | `localhost` | Yes      |\n| `WAZUH_API_PORT`         | Port number for the Wazuh Manager API.                                         | `55000`     | Yes      |\n| `WAZUH_API_USERNAME`     | Username for Wazuh Manager API authentication.                                 | `wazuh`     | Yes      |\n| `WAZUH_API_PASSWORD`     | Password for Wazuh Manager API authentication.                                 | `wazuh`     | Yes      |\n| `WAZUH_INDEXER_HOST`     | Hostname or IP address of the Wazuh Indexer API server.                        | `localhost` | Yes      |\n| `WAZUH_INDEXER_PORT`     | Port number for the Wazuh Indexer API.                                         | `9200`      | Yes      |\n| `WAZUH_INDEXER_USERNAME` | Username for Wazuh Indexer API authentication.                                 | `admin`     | Yes      |\n| `WAZUH_INDEXER_PASSWORD` | Password for Wazuh Indexer API authentication.                                 | `admin`     | Yes      |\n| `WAZUH_VERIFY_SSL`       | Set to `true` to verify SSL certificates for Wazuh API and Indexer connections.  | `false`     | No       |\n| `WAZUH_TEST_PROTOCOL`    | Protocol for Wazuh connections (e.g., \"http\", \"https\"). Overrides client default. | `https`     | No       |\n| `RUST_LOG`               | Log level (e.g., `info`, `debug`, `trace`).                                    | `info`      | No       |\n\n**Note on `WAZUH_VERIFY_SSL`:** For production environments, it is strongly recommended to set `WAZUH_VERIFY_SSL=true` and ensure proper certificate validation for both Wazuh Manager API and Wazuh Indexer connections. Setting it to `false` disables certificate checks, which is insecure.\nThe \"Required: Yes\" indicates that these variables are essential for the server to connect to the respective Wazuh components. While defaults are provided, they are unlikely to match a production or non-local setup.\n\n## Building\n\n### Prerequisites\n\n-   Install Rust: [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)\n-   Install Docker and Docker Compose (optional, for containerized deployment): [https://docs.docker.com/get-docker/](https://docs.docker.com/get-docker/)\n\n### Local Development\n\n1.  **Clone the repository:**\n    ```bash\n    git clone https://github.com/gbrigandi/mcp-server-wazuh.git \n    cd mcp-server-wazuh\n    ```\n2.  **Configure (if using Wazuh API):**\n    -   Copy the example environment file: `cp .env.example .env`\n    -   Edit the `.env` file with your specific Wazuh API details (e.g. `WAZUH_API_HOST`, `WAZUH_API_PORT`).\n3.  **Build:**\n    ```bash\n    cargo build\n    ```\n4.  **Run:**\n    ```bash\n    cargo run\n    # Or use the run script (which might set up stdio mode):\n    # ./run.sh\n    ```\n\n## Architecture\n\nThe server is built using the [rmcp](https://crates.io/crates/rmcp) framework and facilitates communication between MCP clients (e.g., Claude Desktop, IDE extensions) and the Wazuh MCP Server via stdio transport. The server interacts with the Wazuh Indexer and Wazuh Manager APIs to fetch security alerts and other data.\n\n```mermaid\nsequenceDiagram\n    participant ClientApp as Client Application (e.g., IDE Extension / Claude Desktop)\n    participant WazuhMCPServer as Wazuh MCP Server (this application)\n    participant WazuhAPI as Wazuh API\n\n    ClientApp->>+WazuhMCPServer: (stdio) MCP Initialize\n    WazuhMCPServer-->>-ClientApp: (stdout) MCP Initialized\n    \n    ClientApp->>+WazuhMCPServer: (stdio) MCP Request (tools/list)\n    WazuhMCPServer->>WazuhMCPServer: Parse MCP Request\n    WazuhMCPServer->>WazuhMCPServer: Process internally\n    WazuhMCPServer-->>-ClientApp: (stdout) MCP Response (available tools)\n    \n    ClientApp->>+WazuhMCPServer: (stdio) MCP Request (tools/call for wazuhAlerts)\n    WazuhMCPServer->>WazuhMCPServer: Parse MCP Request\n    WazuhMCPServer->>+WazuhAPI: Request Wazuh Alerts (with WAZUH_USER, WAZUH_PASS)\n    WazuhAPI-->>-WazuhMCPServer: Wazuh Alert Data (JSON)\n    WazuhMCPServer->>WazuhMCPServer: Transform Wazuh Alerts to MCP Format\n    WazuhMCPServer-->>-ClientApp: (stdout) MCP Response (alerts)\n```\n\n**Data Flow (stdio focus):**\n\n1.  An application (e.g., an IDE extension, a CLI tool) launches the Wazuh MCP Server as a child process.\n2.  The application sends MCP-formatted requests (commands) to the server's `stdin`.\n3.  The Wazuh MCP Server reads the command from `stdin`.\n4.  **Processing:**\n    *   The server parses the MCP command.\n    *   If the command requires fetching data from Wazuh (e.g., \"get latest alerts\"):\n        *   The server connects to the Wazuh API (authenticating if necessary using configured credentials like `WAZUH_USER`, `WAZUH_PASS`).\n        *   It fetches the required data (e.g., security alerts).\n        *   The server's transformation logic (`src/mcp/transform.rs`) processes each alert, mapping Wazuh fields to MCP fields.\n    *   If the command is internal (e.g., a status check specific to the MCP server), it processes it directly.\n5.  The server sends an MCP-formatted JSON response (e.g., transformed alerts, command acknowledgment, or error messages) to the application via its `stdout`.\n6.  The application reads and processes the MCP response from the server's `stdout`.\n\nThis stdio interaction allows for tight integration with local development tools or other applications that can manage child processes. An optional HTTP endpoint (`/mcp`) may also be available for clients that prefer polling.\n\n\nThe server communicates via `stdin` and `stdout` using JSON-RPC 2.0 messages, adhering to the Model Context Protocol (MCP).\n\nExample interaction flow:\n\n1.  **Client Application (e.g., IDE extension) starts the `mcp-server-wazuh` process.**\n\n2.  **Client sends `initialize` request to server's `stdin`:**\n    ```json\n    {\n      \"jsonrpc\": \"2.0\",\n      \"id\": 0,\n      \"method\": \"initialize\",\n      \"params\": {\n        \"protocolVersion\": \"2024-11-05\",\n        \"capabilities\": {\n          \"sampling\": {},\n          \"roots\": { \"listChanged\": true }\n        },\n        \"clientInfo\": {\n          \"name\": \"mcp-inspector\",\n          \"version\": \"0.11.0\"\n        }\n      }\n    }\n    ```\n\n3.  **Server sends `initialize` response to client via `stdout`:**\n    ```json\n    {\n      \"jsonrpc\": \"2.0\",\n      \"id\": 1,\n      \"result\": {\n        \"protocolVersion\": \"2024-11-05\",\n        \"capabilities\": {\n          \"prompts\": {},\n          \"resources\": {},\n          \"tools\": {}\n        },\n        \"serverInfo\": {\n          \"name\": \"rmcp\",\n          \"version\": \"0.1.5\"\n        },\n        \"instructions\": \"This server provides tools to interact with a Wazuh SIEM instance for security monitoring and analysis.\\nAvailable tools:\\n- 'get_wazuh_alert_summary': Retrieves a summary of Wazuh security alerts. Optionally takes 'limit' parameter to control the number of alerts returned (defaults to 100).\"\n      }\n    }\n    ```\n\n4.  **Client sends `notifications/initialized` to server's `stdin`:**\n    (This is a notification, so `id` is omitted by the client.)\n    ```json\n    {\n      \"jsonrpc\": \"2.0\",\n      \"method\": \"notifications/initialized\"\n    }\n    ```\n\n5.  **Client requests available tools by sending `tools/list` to server's `stdin`:**\n    ```json\n    {\n      \"jsonrpc\": \"2.0\",\n      \"id\": 1,\n      \"method\": \"tools/list\",\n      \"params\": {}\n    }\n    ```\n\n6.  **Server responds with the list of tools to client via `stdout`:**\n    ```json\n    {\n      \"jsonrpc\": \"2.0\",\n      \"id\": 2,\n      \"result\": {\n        \"tools\": [\n          {\n            \"name\": \"get_wazuh_alert_summary\",\n            \"description\": \"Retrieves a summary of Wazuh security alerts. Returns formatted alert information including ID, timestamp, and description.\",\n            \"inputSchema\": {\n              \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n              \"properties\": {\n                \"limit\": {\n                  \"description\": \"Maximum number of alerts to retrieve (default: 100)\",\n                  \"format\": \"uint32\",\n                  \"minimum\": 0.0,\n                  \"type\": [\"integer\", \"null\"]\n                }\n              },\n              \"title\": \"GetAlertSummaryParams\",\n              \"type\": \"object\"\n            }\n          }\n        ]\n      }\n    }\n    ```\n\n7.  **Client calls the `get_wazuh_alert_summary` tool by sending `tools/call` to server's `stdin`:**\n    ```json\n    {\n      \"jsonrpc\": \"2.0\",\n      \"id\": 3,\n      \"method\": \"tools/call\",\n      \"params\": {\n        \"name\": \"get_wazuh_alert_summary\",\n        \"arguments\": {\n          \"limit\": 5\n        }\n      }\n    }\n    ```\n\n8.  **Server receives on `stdin`, processes the `get_wazuh_alert_summary` call (which involves querying the Wazuh Indexer API and transforming the data).**\n\n9.  **Server sends `tools/call` response with formatted alerts to client via `stdout`:**\n    ```json\n    {\n      \"jsonrpc\": \"2.0\",\n      \"id\": 3,\n      \"result\": {\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Alert ID: 1747091815.1212763\\nTime: 2024-01-15T10:30:45.123Z\\nAgent: web-server-01\\nLevel: 7\\nDescription: Attached USB Storage\"\n          },\n          {\n            \"type\": \"text\", \n            \"text\": \"Alert ID: 1747066333.1207112\\nTime: 2024-01-15T10:25:12.456Z\\nAgent: database-server\\nLevel: 5\\nDescription: New dpkg (Debian Package) installed.\"\n          }\n        ],\n        \"isError\": false\n      }\n    }\n    ```\n\n    **Or, if no alerts are found:**\n    ```json\n    {\n      \"jsonrpc\": \"2.0\",\n      \"id\": 3,\n      \"result\": {\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"No Wazuh alerts found.\"\n          }\n        ],\n        \"isError\": false\n      }\n    }\n    ```\n\n    **Or, if there's an error connecting to Wazuh:**\n    ```json\n    {\n      \"jsonrpc\": \"2.0\",\n      \"id\": 3,\n      \"result\": {\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Error retrieving alerts from Wazuh: HTTP request error: connection refused\"\n          }\n        ],\n        \"isError\": true\n      }\n    }\n    ```\n\n## Development & Testing\n\n-   **Code Style:** Uses standard Rust formatting (`cargo fmt`).\n-   **Linting:** Uses Clippy (`cargo clippy`).\n-   **Testing:** Contains unit tests for transformation logic and integration tests. For stdio, tests might involve piping input/output to a test harness. For HTTP, tests use a mock Wazuh API server (`httpmock`) and a test MCP client.\n    ```bash\n    # Run all tests\n    cargo test\n\n    # Run specific integration test (example for HTTP tests)\n    # cargo test --test integration_test\n\n    # Run tests with detailed logging\n    RUST_LOG=debug cargo test\n    ```\n-   See `tests/README.md` for more details on running tests and using the test client CLI.\n\n## License\n\nThis project is licensed under the [MIT License](LICENSE).\n\n",
+  "category": "Security",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-wazuh": {
+        "command": "./mcp-server-wazuh",
+        "args": [],
+        "env": {}
+      },
+      "ghcr.io-gbrigandi-mcp-server-wazuh-docker": {
+        "command": "docker",
+        "args": ["run", "ghcr.io/gbrigandi/mcp-server-wazuh:latest"],
+        "env": {},
+        "docker_image": "ghcr.io/gbrigandi/mcp-server-wazuh:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gbrigandi",
+    "repo": "mcp-server-wazuh",
+    "url": "https://github.com/gbrigandi/mcp-server-wazuh",
+    "name": "mcp-server-wazuh",
+    "path": null,
+    "stars": 86,
+    "contributors": 1,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "5f452bac9d58820aac563d3c0c7611861ded08f2"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:33.610Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "wazuh-client",
+      "importance": 9
+    },
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 8
+    },
+    {
+      "name": "reqwest",
+      "importance": 8
+    },
+    {
+      "name": "serde",
+      "importance": 7
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "anyhow",
+      "importance": 6
+    },
+    {
+      "name": "tracing",
+      "importance": 6
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 6
+    },
+    {
+      "name": "schemars",
+      "importance": 7
+    },
+    {
+      "name": "clap",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "thiserror",
+      "importance": 6
+    },
+    {
+      "name": "chrono",
+      "importance": 4
+    },
+    {
+      "name": "openssl-sys",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"mcp-server-wazuh\"\nversion = \"0.2.4\"\nedition = \"2021\"\ndescription = \"Wazuh SIEM MCP Server\"\nauthors = [\"Gianluca Brigandi <gbrigand@gmail.com>\"]\nlicense = \"MIT\"\nrepository = \"https://github.com/gbrigandi/mcp-server-wazuh\"\nreadme = \"README.md\"\n\n[dependencies]\nwazuh-client = \"0.1.7\" \nrmcp = { version = \"0.1.5\", features = [\"server\", \"transport-io\"] }\ntokio = { version = \"1\", features = [\"full\"] }\nreqwest = { version = \"0.12\", features = [\"json\", \"rustls-tls\"], default-features = false }\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\nanyhow = \"1.0\"\ntracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\"env-filter\", \"fmt\"] }\nschemars = \"0.8\"\nclap = { version = \"4.5\", features = [\"derive\"] }\ndotenv = \"0.15\"\nthiserror = \"2.0\"\nchrono = \"0.4.41\"\nopenssl-sys = { version = \"0.9\", features = [\"vendored\"] }\n\n[dev-dependencies]\nmockito = \"1.7\"\nanyhow = \"1.0\"\nhttpmock = \"0.7\"\nuuid = { version = \"1.16\", features = [\"v4\"] }\nonce_cell = \"1.21\"\nasync-trait = \"0.1\"\nregex = \"1.11\"\ntokio-test = \"0.4\"\nserde_json = \"1.0\"\ntempfile = \"3.0\"\n\n"
+}

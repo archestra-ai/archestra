@@ -1,0 +1,87 @@
+{
+  "name": "quantgeekdev__mongo-mcp",
+  "display_name": "mongo-mcp",
+  "description": "A mongo db server for the model context protocol (MCP)",
+  "author": {
+    "name": "QuantGeekDev"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["mongo-mcp", "${user_config.mongodb_connection_url}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mongodb_connection_url": {
+      "type": "string",
+      "title": "MongoDB Connection URL",
+      "description": "Your MongoDB connection string, including username, password, host, port, and database.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# 🗄️ MongoDB MCP Server for LLMS\n\n[![Node.js 18+](https://img.shields.io/badge/node-18%2B-blue.svg)](https://nodejs.org/en/)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![smithery badge](https://smithery.ai/badge/mongo-mcp)](https://smithery.ai/server/mongo-mcp)\n\nA Model Context Protocol (MCP) server that enables LLMs to interact directly with MongoDB databases. Query collections, inspect schemas, and manage data seamlessly through natural language.\n\n## ✨ Features\n\n- 🔍 Collection schema inspection\n- 📊 Document querying and filtering\n- 📈 Index management\n- 📝 Document operations (insert, update, delete)\n\n## Demo Video\n\n\nhttps://github.com/user-attachments/assets/2389bf23-a10d-49f9-bca9-2b39a1ebe654\n\n\n\n\n## 🚀 Quick Start\n\nTo get started, find your mongodb connection url and add this configuration to your Claude Desktop config file:\n\n**MacOS**: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`  \n**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"mongodb\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"mongo-mcp\",\n        \"mongodb://<username>:<password>@<host>:<port>/<database>?authSource=admin\"\n      ]\n    }\n  }\n}\n```\n\n### Installing via Smithery\n\nTo install MongoDB MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mongo-mcp):\n\n```bash\nnpx -y @smithery/cli install mongo-mcp --client claude\n```\n\n### Prerequisites\n\n- Node.js 18+\n- npx\n- Docker and Docker Compose (for local sandbox testing only)\n- MCP Client (Claude Desktop App for example)\n\n### Test Sandbox Setup\n\nIf you don't have a mongo db server to connect to and want to create a sample sandbox, follow these steps\n\n1. Start MongoDB using Docker Compose:\n\n```bash\ndocker-compose up -d\n```\n\n2. Seed the database with test data:\n\n```bash\nnpm run seed\n```\n\n### Configure Claude Desktop\n\nAdd this configuration to your Claude Desktop config file:\n\n**MacOS**: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`  \n**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`\n\n#### Local Development Mode:\n\n```json\n{\n  \"mcpServers\": {\n    \"mongodb\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"dist/index.js\",\n        \"mongodb://root:example@localhost:27017/test?authSource=admin\"\n      ]\n    }\n  }\n}\n```\n\n### Test Sandbox Data Structure\n\nThe seed script creates three collections with sample data:\n\n#### Users\n\n- Personal info (name, email, age)\n- Nested address with coordinates\n- Arrays of interests\n- Membership dates\n\n#### Products\n\n- Product details (name, SKU, category)\n- Nested specifications\n- Price and inventory info\n- Tags and ratings\n\n#### Orders\n\n- Order details with items\n- User references\n- Shipping and payment info\n- Status tracking\n\n## 🎯 Example Prompts\n\nTry these prompts with Claude to explore the functionality:\n\n### Basic Operations\n\n```plaintext\n\"What collections are available in the database?\"\n\"Show me the schema for the users collection\"\n\"Find all users in San Francisco\"\n```\n\n### Advanced Queries\n\n```plaintext\n\"Find all electronics products that are in stock and cost less than $1000\"\n\"Show me all orders from the user john@example.com\"\n\"List the products with ratings above 4.5\"\n```\n\n### Index Management\n\n```plaintext\n\"What indexes exist on the users collection?\"\n\"Create an index on the products collection for the 'category' field\"\n\"List all indexes across all collections\"\n```\n\n### Document Operations\n\n```plaintext\n\"Insert a new product with name 'Gaming Laptop' in the products collection\"\n\"Update the status of order with ID X to 'shipped'\"\n\"Find and delete all products that are out of stock\"\n```\n\n## 📝 Available Tools\n\nThe server provides these tools for database interaction:\n\n### Query Tools\n\n- `find`: Query documents with filtering and projection\n- `listCollections`: List available collections\n- `insertOne`: Insert a single document\n- `updateOne`: Update a single document\n- `deleteOne`: Delete a single document\n\n### Index Tools\n\n- `createIndex`: Create a new index\n- `dropIndex`: Remove an index\n- `indexes`: List indexes for a collection\n\n## 📜 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mongo-mcp": {
+        "command": "npx",
+        "args": ["mongo-mcp", "mongodb://<username>:<password>@<host>:<port>/<database>?authSource=admin"],
+        "env": {}
+      },
+      "mongo-mcp-local-dev": {
+        "command": "node",
+        "args": ["dist/index.js", "mongodb://root:example@localhost:27017/test?authSource=admin"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "QuantGeekDev",
+    "repo": "mongo-mcp",
+    "url": "https://github.com/QuantGeekDev/mongo-mcp",
+    "name": "quantgeekdev__mongo-mcp",
+    "path": null,
+    "stars": 167,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "8bf10970b878be089d417c545c01f5be88b1ded5"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.096Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "mongodb",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mongo-mcp\",\n  \"version\": \"0.2.0\",\n  \"author\": {\n    \"name\": \"Alex Andru\",\n    \"email\": \"alex007d@gmail.com\"\n  },\n  \"description\": \"MCP server for interacting with MongoDB databases\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mongodb-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"seed\": \"tsx src/seed.ts\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"claude\",\n    \"mongodb\",\n    \"anthropic\",\n    \"ai\",\n    \"database\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"mongodb\": \"^6.3.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.10.5\",\n    \"shx\": \"^0.3.4\",\n    \"tsx\": \"^4.19.2\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/QuantGeekDev/mongo-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/QuantGeekDev/mongo-mcp/issues\"\n  }\n}\n"
+}

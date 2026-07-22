@@ -1,0 +1,157 @@
+{
+  "name": "mahdin75__geoserver-mcp",
+  "display_name": "geoserver-mcp",
+  "description": "A Model Context Protocol (MCP) server implementation that connects LLMs to the GeoServer REST API",
+  "author": {
+    "name": "mahdin75"
+  },
+  "server": {
+    "command": "${__dirname}/.venv/bin/geoserver-mcp",
+    "args": [],
+    "env": {
+      "GEOSERVER_URL": "${user_config.geoserver_url}",
+      "GEOSERVER_USER": "${user_config.geoserver_user}",
+      "GEOSERVER_PASSWORD": "${user_config.geoserver_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "geoserver_url": {
+      "type": "string",
+      "title": "GeoServer URL",
+      "description": "The base URL for your GeoServer instance (e.g., http://localhost:8080/geoserver)",
+      "required": true,
+      "default": "http://localhost:8080/geoserver"
+    },
+    "geoserver_user": {
+      "type": "string",
+      "title": "GeoServer Username",
+      "description": "Username for GeoServer authentication",
+      "required": true,
+      "default": "admin"
+    },
+    "geoserver_password": {
+      "type": "string",
+      "title": "GeoServer Password",
+      "description": "Password for GeoServer authentication",
+      "sensitive": true,
+      "required": true,
+      "default": "geoserver"
+    }
+  },
+  "readme": "# GeoServer MCP Server\n\n<p align=\"center\">\n  <img src=\"https://badge.mcpx.dev?type=server\" title=\"MCP Server\"/>\nA Model Context Protocol (MCP) server implementation that connects Large Language Models (LLMs) to the GeoServer REST API, enabling AI assistants to interact with geospatial data and services.\n\n</p>\n\n<div align=\"center\">\n  <img src=\"docs/geoserver-mcp.png\" alt=\"GeoServer MCP Server Logo\" width=\"400\"/>\n</div>\n\n> ![Alpha](https://img.shields.io/badge/Version-0.3.0--Alpha-green)\n>\n> Version 0.4.0 (Alpha) is under active development and will be released shortly. We are open to contributions and welcome developers to join us in building this project.\n\n## 🎥 Demo\n\n<div align=\"center\">\n  <img src=\"docs/demo/list_workspaces.png\" alt=\"GeoServer MCP Server Demo\" width=\"400\"/>\n</div>\n\n## 📋 Table of Contents\n\n- [Features](#-features)\n- [Prerequisites](#-prerequisites)\n- [Installation](#️-installation)\n  - [Docker Installation](#️-installation-docker)\n  - [pip Installation](#️-installation-pip)\n  - [Development Installation](#️-development-installation)\n- [Available Tools](#️-available-tools)\n  - [Workspace and Layer Management](#️-workspace-and-layer-management)\n  - [Data Operations](#️-data-operations)\n  - [Visualization](#️-visualization)\n- [Client Development](#️-client-development)\n  - [List Workspaces](#list-workspaces)\n  - [Get Layer Information](#get-layer-information)\n  - [Query Features](#query-features)\n  - [Generate Map](#generate-map)\n- [Planned Features](#-planned-features)\n- [Contributing](#-contributing)\n- [License](#-license)\n- [Related Projects](#-related-projects)\n- [Support](#-support)\n- [Badges](#-badges)\n\n## 🚀 Features\n\n- 🔍 Query and manipulate GeoServer workspaces, layers, and styles\n- 🗺️ Execute spatial queries on vector data\n- 🎨 Generate map visualizations\n- 🌐 Access OGC-compliant web services (WMS, WFS)\n- 🛠️ Easy integration with MCP-compatible clients\n\n## 📋 Prerequisites\n\n- Python 3.10 or higher\n- Running GeoServer instance with REST API enabled\n- MCP-compatible client (like Claude Desktop or Cursor)\n- Internet connection for package installation\n\n## 🛠️ Installation\n\nChoose the installation method that best suits your needs:\n\n### Installing via Smithery\n\nTo install GeoServer MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@mahdin75/geoserver-mcp):\n\n```bash\nnpx -y @smithery/cli install @mahdin75/geoserver-mcp --client claude\n```\n\n### 🛠️ Installation (Docker)\n\nThe Docker installation is the quickest and most isolated way to run the GeoServer MCP server. It's ideal for:\n\n- Quick testing and evaluation\n- Production deployments\n- Environments where you want to avoid Python dependencies\n- Consistent deployment across different systems\n\n1. Run geoserver-mcp:\n\n```bash\ndocker pull mahdin75/geoserver-mcp\ndocker run -d mahdin75/geoserver-mcp\n```\n\n2. Configure the clients:\n\nIf you are using Claude Desktop, edit `claude_desktop_config.json`\nIf you are using Cursor, Create `.cursor/mcp.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"geoserver-mcp\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"GEOSERVER_URL=http://localhost:8080/geoserver\",\n        \"-e\",\n        \"GEOSERVER_USER=admin\",\n        \"-e\",\n        \"GEOSERVER_PASSWORD=geoserver\",\n        \"-p\",\n        \"8080:8080\",\n        \"mahdin75/geoserver-mcp\"\n      ]\n    }\n  }\n}\n```\n\n### 🛠️ Installation (pip)\n\nThe pip installation is recommended for most users who want to run the server directly on their system. This method is best for:\n\n- Regular users who want to run the server locally\n- Systems where you have Python 3.10+ installed\n- Users who want to customize the server configuration\n- Development and testing purposes\n\n1. Install uv package manager.\n\n```bash\npip install uv\n```\n\n2. Create the Virtual Environment (Python 3.10+):\n\n**Linux/Mac:**\n\n```bash\nuv venv --python=3.10\n```\n\n**Windows PowerShell:**\n\n```bash\nuv venv --python=3.10\n```\n\n3. Install the package using pip:\n\n```bash\nuv pip install geoserver-mcp\n```\n\n4. Configure GeoServer connection:\n\n**Linux/Mac:**\n\n```bash\nexport GEOSERVER_URL=\"http://localhost:8080/geoserver\"\nexport GEOSERVER_USER=\"admin\"\nexport GEOSERVER_PASSWORD=\"geoserver\"\n```\n\n**Windows PowerShell:**\n\n```powershell\n$env:GEOSERVER_URL=\"http://localhost:8080/geoserver\"\n$env:GEOSERVER_USER=\"admin\"\n$env:GEOSERVER_PASSWORD=\"geoserver\"\n```\n\n5. Start the server:\n\nIf you are going to use Claude desktop you don't need this step. For cursor or your own custom client you should run the following code.\n\n**Linux:**\n\n```bash\nsource .venv/bin/activate\n\ngeoserver-mcp\n```\n\nor\n\n```bash\nsource .venv/bin/activate\n\ngeoserver-mcp --url http://localhost:8080/geoserver --user admin --password geoserver --debug\n```\n\n**Windows PowerShell:**\n\n```bash\n.\\.venv\\Scripts\\activate\ngeoserver-mcp\n```\n\nor\n\n```bash\n.\\.venv\\Scripts\\activate\ngeoserver-mcp --url http://localhost:8080/geoserver --user admin --password geoserver --debug\n```\n\n6. Configure Clients:\n\nIf you are using Claude Desktop, edit `claude_desktop_config.json`\nIf you are using Cursor, Create `.cursor/mcp.json`\n\n**Windows:**\n\n```json\n{\n  \"mcpServers\": {\n    \"geoserver-mcp\": {\n      \"command\": \"C:\\\\path\\\\to\\\\geoserver-mcp\\\\.venv\\\\Scripts\\\\geoserver-mcp\",\n      \"args\": [\n        \"--url\",\n        \"http://localhost:8080/geoserver\",\n        \"--user\",\n        \"admin\",\n        \"--password\",\n        \"geoserver\"\n      ]\n    }\n  }\n}\n```\n\n**Linux:**\n\n```json\n{\n  \"mcpServers\": {\n    \"geoserver-mcp\": {\n      \"command\": \"/path/to/geoserver-mcp/.venv/bin/geoserver-mcp\",\n      \"args\": [\n        \"--url\",\n        \"http://localhost:8080/geoserver\",\n        \"--user\",\n        \"admin\",\n        \"--password\",\n        \"geoserver\"\n      ]\n    }\n  }\n}\n```\n\n### 🛠️ Development installation\n\nThe development installation is designed for contributors and developers who want to modify the codebase. This method is suitable for:\n\n- Developers contributing to the project\n- Users who need to modify the source code\n- Testing new features\n- Debugging and development purposes\n\n1. Install uv package manager.\n\n```bash\npip install uv\n```\n\n2. Create the Virtual Environment (Python 3.10+):\n\n```bash\nuv venv --python=3.10\n```\n\n3. Install the package using pip:\n\n```bash\nuv pip install -e .\n```\n\n4. Configure GeoServer connection:\n\n**Linux/Mac:**\n\n```bash\nexport GEOSERVER_URL=\"http://localhost:8080/geoserver\"\nexport GEOSERVER_USER=\"admin\"\nexport GEOSERVER_PASSWORD=\"geoserver\"\n```\n\n**Windows PowerShell:**\n\n```powershell\n$env:GEOSERVER_URL=\"http://localhost:8080/geoserver\"\n$env:GEOSERVER_USER=\"admin\"\n$env:GEOSERVER_PASSWORD=\"geoserver\"\n```\n\n5. Start the server:\n\nIf you are going to use Claude desktop you don't need this step. For cursor or your own custom client you should run the following code.\n\n**Linux:**\n\n```bash\nsource .venv/bin/activate\n\ngeoserver-mcp\n```\n\nor\n\n```bash\nsource .venv/bin/activate\n\ngeoserver-mcp --url http://localhost:8080/geoserver --user admin --password geoserver --debug\n```\n\n**Windows PowerShell:**\n\n```bash\n.\\.venv\\Scripts\\activate\ngeoserver-mcp\n```\n\nor\n\n```bash\n.\\.venv\\Scripts\\activate\ngeoserver-mcp --url http://localhost:8080/geoserver --user admin --password geoserver --debug\n```\n\n6. Configure Clients:\n\nIf you are using Claude Desktop, edit `claude_desktop_config.json`\nIf you are using Cursor, Create `.cursor/mcp.json`\n\n**Windows:**\n\n```json\n{\n  \"mcpServers\": {\n    \"geoserver-mcp\": {\n      \"command\": \"C:\\\\path\\\\to\\\\geoserver-mcp\\\\.venv\\\\Scripts\\\\geoserver-mcp\",\n      \"args\": [\n        \"--url\",\n        \"http://localhost:8080/geoserver\",\n        \"--user\",\n        \"admin\",\n        \"--password\",\n        \"geoserver\"\n      ]\n    }\n  }\n}\n```\n\n**Linux:**\n\n```json\n{\n  \"mcpServers\": {\n    \"geoserver-mcp\": {\n      \"command\": \"/path/to/geoserver-mcp/.venv/bin/geoserver-mcp\",\n      \"args\": [\n        \"--url\",\n        \"http://localhost:8080/geoserver\",\n        \"--user\",\n        \"admin\",\n        \"--password\",\n        \"geoserver\"\n      ]\n    }\n  }\n}\n```\n\n## 🛠️ Available Tools\n\n### 🛠️ Workspace and Layer Management\n\n| Tool               | Description                 |\n| ------------------ | --------------------------- |\n| `list_workspaces`  | Get available workspaces    |\n| `create_workspace` | Create a new workspace      |\n| `get_layer_info`   | Get detailed layer metadata |\n| `list_layers`      | List layers in a workspace  |\n| `create_layer`     | Create a new layer          |\n| `delete_resource`  | Remove resources            |\n\n### 🛠️ Data Operations\n\n| Tool              | Description                        |\n| ----------------- | ---------------------------------- |\n| `query_features`  | Execute CQL queries on vector data |\n| `update_features` | Modify feature attributes          |\n| `delete_features` | Remove features based on criteria  |\n\n### 🛠️ Visualization\n\n| Tool           | Description                     |\n| -------------- | ------------------------------- |\n| `generate_map` | Create styled map images        |\n| `create_style` | Define new SLD styles           |\n| `apply_style`  | Apply existing styles to layers |\n\n## 🛠️ Client Development\n\nIf you're planning to develop your own client to interact with the GeoServer MCP server, you can find inspiration in the example client implementation at `examples/client.py`. This example demonstrates:\n\n- How to establish a connection with the MCP server\n- How to send requests and handle responses\n- Basic error handling and connection management\n- Example usage of various tools and operations\n\nThe example client serves as a good starting point for understanding the protocol and implementing your own client applications.\n\nAlso, here is the example usgage:\n\n### List Workspaces\n\n```\n\nTool: list_workspaces\nParameters: {}\nResponse: [\"default\", \"demo\", \"topp\", \"tiger\", \"sf\"]\n\n```\n\n### Get Layer Information\n\n```\n\nTool: get_layer_info\nParameters: {\n\"workspace\": \"topp\",\n\"layer\": \"states\"\n}\n\n```\n\n### Query Features\n\n```\n\nTool: query_features\nParameters: {\n\"workspace\": \"topp\",\n\"layer\": \"states\",\n\"filter\": \"PERSONS > 10000000\",\n\"properties\": [\"STATE_NAME\", \"PERSONS\"]\n}\n\n```\n\n### Generate Map\n\n```\n\nTool: generate_map\nParameters: {\n\"layers\": [\"topp:states\"],\n\"styles\": [\"population\"],\n\"bbox\": [-124.73, 24.96, -66.97, 49.37],\n\"width\": 800,\n\"height\": 600,\n\"format\": \"png\"\n}\n\n```\n\n## 🔮 Planned Features\n\n- [ ] Coverage and raster data management\n- [ ] Security and access control\n- [ ] Advanced styling capabilities\n- [ ] WPS processing operations\n- [ ] GeoWebCache integration\n\n## 🤝 Contributing\n\nWe welcome contributions! Here's how you can help:\n\n1. Fork the repository\n2. Create a feature branch (`git checkout -b feature/AmazingFeature`)\n3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)\n4. Push to the branch (`git push origin feature/AmazingFeature`)\n5. Open a Pull Request\n\nPlease ensure your PR description clearly describes the problem and solution. Include the relevant issue number if applicable.\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## 🔗 Related Projects\n\n- [Model Context Protocol](https://github.com/modelcontextprotocol/python-sdk) - The core MCP implementation\n- [GeoServer REST API](https://docs.geoserver.org/latest/en/user/rest/index.html) - Official GeoServer REST documentation\n- [GeoServer REST Python Client](https://github.com/gicait/geoserver-rest) - Python client for GeoServer REST API\n\n## 📞 Support\n\nFor support, please Open an [issue](https://github.com/mahdin75/geoserver-mcp/issues)\n\n## 🏆 Badges\n\n<div align=\"center\">\n  <a href=\"https://glama.ai/mcp/servers/@mahdin75/geoserver-mcp\">\n    <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@mahdin75/geoserver-mcp/badge\" alt=\"GeoServer Server MCP server\" />\n  </a>\n  <br/><br/><br/>\n  <a href=\"https://mcp.so/server/Geoserver%20MCP%20Server/mahdin75\">\n    <img src=\"https://mcp.so/logo.png\" alt=\"MCP.so Badge\" width=\"150\"/>\n  </a>\n  <br/><br/><br/>\n\n  [![MseeP.ai Security Assessment Badge](https://mseep.net/pr/mahdin75-geoserver-mcp-badge.png)](https://mseep.ai/app/mahdin75-geoserver-mcp)\n</div>\n\n\n",
+  "category": "AI Tools",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mahdin75-geoserver-mcp-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "GEOSERVER_URL=http://localhost:8080/geoserver",
+          "-e",
+          "GEOSERVER_USER=admin",
+          "-e",
+          "GEOSERVER_PASSWORD=geoserver",
+          "-p",
+          "8080:8080",
+          "mahdin75/geoserver-mcp"
+        ],
+        "env": {
+          "GEOSERVER_URL": "http://localhost:8080/geoserver",
+          "GEOSERVER_USER": "admin",
+          "GEOSERVER_PASSWORD": "geoserver"
+        },
+        "docker_image": "mahdin75/geoserver-mcp"
+      },
+      "geoserver-mcp-linux": {
+        "command": "/path/to/geoserver-mcp/.venv/bin/geoserver-mcp",
+        "args": ["--url", "http://localhost:8080/geoserver", "--user", "admin", "--password", "geoserver"],
+        "env": {}
+      },
+      "geoserver-mcp-linux-debug": {
+        "command": "/path/to/geoserver-mcp/.venv/bin/geoserver-mcp",
+        "args": ["--url", "http://localhost:8080/geoserver", "--user", "admin", "--password", "geoserver", "--debug"],
+        "env": {}
+      },
+      "geoserver-mcp-linux-env": {
+        "command": "/path/to/geoserver-mcp/.venv/bin/geoserver-mcp",
+        "args": [],
+        "env": {
+          "GEOSERVER_URL": "http://localhost:8080/geoserver",
+          "GEOSERVER_USER": "admin",
+          "GEOSERVER_PASSWORD": "geoserver"
+        }
+      },
+      "geoserver-mcp-windows": {
+        "command": "C:\\path\\to\\geoserver-mcp\\.venv\\Scripts\\geoserver-mcp",
+        "args": ["--url", "http://localhost:8080/geoserver", "--user", "admin", "--password", "geoserver"],
+        "env": {}
+      },
+      "geoserver-mcp-windows-debug": {
+        "command": "C:\\path\\to\\geoserver-mcp\\.venv\\Scripts\\geoserver-mcp",
+        "args": ["--url", "http://localhost:8080/geoserver", "--user", "admin", "--password", "geoserver", "--debug"],
+        "env": {}
+      },
+      "geoserver-mcp-windows-env": {
+        "command": "C:\\path\\to\\geoserver-mcp\\.venv\\Scripts\\geoserver-mcp",
+        "args": [],
+        "env": {
+          "GEOSERVER_URL": "http://localhost:8080/geoserver",
+          "GEOSERVER_USER": "admin",
+          "GEOSERVER_PASSWORD": "geoserver"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mahdin75",
+    "repo": "geoserver-mcp",
+    "url": "https://github.com/mahdin75/geoserver-mcp",
+    "name": "geoserver-mcp",
+    "path": null,
+    "stars": 33,
+    "contributors": 4,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "0dcdffdb482c49fe052deb2e6d1fd6438b478d46"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.025Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "geoserver-rest",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"geoserver-mcp\"\nversion = \"0.3.0\"\ndescription = \"A GeoServer MCP server implementation that enhances LLM capabilities with geospatial data and mapping services via GeoServer REST API\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = {file = \"LICENSE\"}\nauthors = [\n    {name = \"Mahdi Nazari Ashani\"},\n    {name = \"GeoServer MCP Contributors\"},\n]\nkeywords = [\"mcp\", \"geoserver\", \"llm\", \"geospatial\", \"ogc\", \"wfs\", \"wms\"]\nclassifiers = [\n    \"Development Status :: 3 - Alpha\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n]\ndependencies = [\n    \"mcp==1.6.0\",\n    \"geoserver-rest==2.9.1\",\n]\n\n[project.scripts]\ngeoserver-mcp = \"geoserver_mcp.main:main\"\n\n[tool.hatch.metadata]\nallow-direct-references = true"
+}

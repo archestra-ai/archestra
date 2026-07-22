@@ -199,6 +199,39 @@ describe("validateRecordingBundle", () => {
     expect(validateRecordingBundle(edited).ok).toBe(true);
   });
 
+  it("accepts captured audio events (config + chunk)", () => {
+    const withAudio = bundle();
+    withAudio.recording = {
+      ...withAudio.recording,
+      events: [
+        ...withAudio.recording.events,
+        {
+          kind: "audio-config",
+          t: 0,
+          codec: "opus",
+          sampleRate: 48_000,
+          numberOfChannels: 2,
+          description: "AQE4AQA=",
+        },
+        { kind: "audio-chunk", t: 100, tsUs: 100_000, data: "AAECAwQ=" },
+      ],
+    };
+    expect(validateRecordingBundle(withAudio).ok).toBe(true);
+  });
+
+  it("rejects a malformed audio event", () => {
+    const badAudio = bundle();
+    badAudio.recording = {
+      ...badAudio.recording,
+      events: [
+        ...badAudio.recording.events,
+        // Missing the required sampleRate/numberOfChannels.
+        { kind: "audio-config", t: 0, codec: "opus" } as never,
+      ],
+    };
+    expect(validateRecordingBundle(badAudio).ok).toBe(false);
+  });
+
   it("rejects unknown chat-edit keys", () => {
     const smuggled = bundle({
       edits: {

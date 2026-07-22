@@ -28,6 +28,7 @@ import {
   SkillFileModel,
   SkillModel,
   SkillTeamModel,
+  SkillUsageEventModel,
   TaskModel,
   TeamModel,
   ToolModel,
@@ -76,6 +77,7 @@ import {
   SkillFileEncodingSchema,
   SkillGithubSyncIntervalSchema,
   SkillSortBy,
+  SkillUsageStatisticsSchema,
   SkillWithFilesSchema,
   UuidIdSchema,
 } from "@/types";
@@ -107,6 +109,9 @@ function hasSingleGithubAuth(source: {
   );
 }
 
+/** Usage analytics look back this far ("the last month"). */
+const USAGE_STATISTICS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
 const singleGithubAuthError = {
   message:
     "Provide at most one of githubToken, githubPatId, or githubAppConfigId",
@@ -125,6 +130,11 @@ const SkillListItemSchema = SelectSkillSchema.extend({
   fileCount: z.number(),
   teams: z.array(SkillTeamSchema),
   authorName: z.string().nullable(),
+  /**
+   * Distinct users the usage-event log attributes activations to. 0 when all
+   * recorded uses are unattributed or predate per-event tracking.
+   */
+  usageUserCount: z.number(),
 });
 
 /** A skill with its resource files and team assignments. */
@@ -301,11 +311,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .filter((id): id is string => id !== null),
         ),
       ];
-      const [fileCounts, teamsBySkill, authorNames] = await Promise.all([
-        SkillFileModel.countBySkillIds(skillIds),
-        SkillTeamModel.getTeamDetailsForSkills(skillIds),
-        UserModel.getNamesByIds(authorIds),
-      ]);
+      const [fileCounts, teamsBySkill, authorNames, usageUserCounts] =
+        await Promise.all([
+          SkillFileModel.countBySkillIds(skillIds),
+          SkillTeamModel.getTeamDetailsForSkills(skillIds),
+          UserModel.getNamesByIds(authorIds),
+          SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
+        ]);
 
       return reply.send({
         data: skills.map((skill) => ({
@@ -317,6 +329,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorName: skill.authorId
             ? (authorNames.get(skill.authorId) ?? null)
             : null,
+          usageUserCount: usageUserCounts.get(skill.id) ?? 0,
         })),
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
@@ -574,6 +587,44 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Skill not found");
       }
       return reply.send(await loadSkillDetail(skill));
+    },
+  );
+
+  fastify.get(
+    "/api/skills/:id/usage-statistics",
+    {
+      schema: {
+        operationId: RouteId.GetSkillUsageStatistics,
+        description:
+          "Per-user activation counts for a skill over the last 30 days",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(SkillUsageStatisticsSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const skill = await findSkillOrThrow(id, organizationId);
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
+      const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
+        userId: user.id,
+        skill,
+        isSkillAdmin: checker.isAdmin,
+      });
+      if (!hasAccess) {
+        throw new ApiError(404, "Skill not found");
+      }
+      const since = new Date(Date.now() - USAGE_STATISTICS_WINDOW_MS);
+      return reply.send(
+        await SkillUsageEventModel.getUsageStatistics({
+          skillId: skill.id,
+          since,
+        }),
+      );
     },
   );
 

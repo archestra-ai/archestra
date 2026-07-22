@@ -295,14 +295,31 @@ class ConnectorRunModel {
     return !!result;
   }
 
-  static async completeBatch(runId: string): Promise<ConnectorRun | null> {
+  static async completeBatch(
+    runId: string,
+    /**
+     * An embedding batch failure to record on the run, atomically with the batch
+     * completion. `failedItems` is added to `itemErrors` (which drives the
+     * completed_with_errors status); `error` is recorded as the run error, keeping
+     * any earlier error. Recording via a separate read-then-write would race with
+     * concurrent batch handlers, so it happens in this single UPDATE.
+     */
+    failure?: { failedItems: number; error: string },
+  ): Promise<ConnectorRun | null> {
     const t = schema.connectorRunsTable;
+    const failedItems = failure?.failedItems ?? 0;
     const [result] = await db
       .update(t)
       .set({
         completedBatches: sql`${t.completedBatches} + 1`,
+        itemErrors: sql`${t.itemErrors} + ${failedItems}`,
+        ...(failure?.error
+          ? { error: sql`COALESCE(${t.error}, ${failure.error})` }
+          : {}),
+        // Include this batch's failures in the terminal-status decision — SET
+        // expressions all see the pre-update row, so add `failedItems` explicitly.
         status: sql`CASE
-          WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} AND ${t.itemErrors} > 0 THEN 'completed_with_errors'
+          WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} AND ${t.itemErrors} + ${failedItems} > 0 THEN 'completed_with_errors'
           WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} THEN 'success'
           ELSE ${t.status}
         END`,

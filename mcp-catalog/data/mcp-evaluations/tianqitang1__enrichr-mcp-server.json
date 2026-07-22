@@ -1,0 +1,128 @@
+{
+  "name": "tianqitang1__enrichr-mcp-server",
+  "display_name": "enrichr-mcp-server",
+  "description": "MCP server from tianqitang1/enrichr-mcp-server",
+  "author": {
+    "name": "tianqitang1"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "enrichr-mcp-server"],
+    "env": {
+      "ENRICHR_LIBRARIES": "${user_config.enrichr_libraries}",
+      "ENRICHR_MAX_TERMS": "${user_config.enrichr_max_terms}",
+      "ENRICHR_FORMAT": "${user_config.enrichr_format}",
+      "ENRICHR_OUTPUT_FILE": "${user_config.enrichr_output_file}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "enrichr_libraries": {
+      "type": "string",
+      "title": "Enrichr Libraries",
+      "description": "Comma-separated list of Enrichr libraries to query",
+      "required": false,
+      "default": "pop"
+    },
+    "enrichr_max_terms": {
+      "type": "number",
+      "title": "Maximum Terms Per Library",
+      "description": "Maximum terms to show per library",
+      "required": false,
+      "default": 50
+    },
+    "enrichr_format": {
+      "type": "string",
+      "title": "Output Format",
+      "description": "Output format: detailed, compact, minimal",
+      "required": false,
+      "default": "detailed"
+    },
+    "enrichr_output_file": {
+      "type": "file",
+      "title": "TSV Output File Path",
+      "description": "Save complete results to TSV file",
+      "required": false,
+      "default": ""
+    }
+  },
+  "readme": "<!--\n * @Author: tianqitang1 Tianqi.Tang@ucsf.edu\n * @Date: 2025-06-03 14:18:58\n * @LastEditors: tianqitang1 Tianqi.Tang@ucsf.edu\n * @LastEditTime: 2025-06-29 06:46:59\n * @FilePath: /enrichr-mcp-server/README.md\n-->\n# Enrichr MCP Server\n\n<div align=\"center\">\n  <img src=\"icon.svg\" alt=\"Enrichr MCP Server Icon\" width=\"128\" height=\"128\">\n</div>\n\nA Model Context Protocol (MCP) server that provides gene set enrichment analysis using the [Enrichr](https://maayanlab.cloud/Enrichr/) API. This server supports all available gene set libraries from Enrichr and returns only statistically significant results (corrected-$p$ < 0.05) for LLM tools to interpret.\n\n## Installation\n\nFor Claude Desktop, please download the [Desktop Extension](https://github.com/tianqitang1/enrichr-mcp-server/releases/latest) and install it by clicking `☰ (top left) -> File -> Settings` and drag and drop the downloaded file into the `Settings` window.\n\nUse the button below to install the MCP server to Cursor, VS Code, or VS Code Insiders with default settings.\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=enrichr-mcp-server&config=eyJjb21tYW5kIjoibnB4IC15IGVucmljaHItbWNwLXNlcnZlciAtLWNvbXBhY3QgLS1tYXgtdGVybXMgMTAwIn0%3D)\n[![Add to VS Code](https://img.shields.io/badge/Add_to_VS_Code-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect?url=vscode%3Amcp/install%3F%257B%2522name%2522%253A%2522enrichr-mcp-server%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522enrichr-mcp-server%2522%252C%2522--compact%2522%252C%2522--max-terms%2522%252C%2522100%2522%255D%257D)\n[![Add to VS Code Insiders](https://img.shields.io/badge/Add_to_VS_Code_Insiders-24bfa5?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect?url=vscode-insiders%3Amcp/install%3F%257B%2522name%2522%253A%2522enrichr-mcp-server%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522enrichr-mcp-server%2522%252C%2522--compact%2522%252C%2522--max-terms%2522%252C%2522100%2522%255D%257D)\n\n\nFor Claude Code, use the following command:\n```bash\nclaude mcp add enrichr-mcp-server -- npx -y enrichr-mcp-server\n```\n\n## Features\n\n- **Multi-Library Enrichment Analysis**: Query multiple Enrichr libraries simultaneously (GO, pathways, diseases, tissues, drugs, etc.)\n- **Comprehensive Library Support**: Access to hundreds of gene set libraries from Enrichr including:\n  - Gene Ontology (Biological Process, Molecular Function, Cellular Component)\n  - Pathway databases (KEGG, Reactome, WikiPathways, BioCarta, MSigDB)\n  - Disease/Phenotype databases (Human Phenotype Ontology, GWAS Catalog)\n  - Tissue/Cell type libraries (GTEx, Human Cell Atlas, ARCHS4)\n  - Drug/Chemical libraries (DrugMatrix, L1000, TG-GATEs)\n  - Transcription Factor targets (ChEA, ENCODE)\n  - MicroRNA targets (TargetScan, miRTarBase)\n- **GO Enrichment Analysis**: Specialized tool for GO Biological Process enrichment analysis (I use this a lot, so I made it a tool)\n\n\n## Configuration\n\n### MCP Client Configuration\n\nAdd this server to your MCP client configuration (e.g., `.cursor/mcp.json`):\n\n#### Basic Configuration (Popular Libraries by Default)\nWith the default configuration the server will query a curated list of popular libraries.\n```json\n{\n  \"mcpServers\": {\n    \"enrichr-server\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"enrichr-mcp-server\"]\n    }\n  }\n}\n```\n\n#### Custom Available Libraries Configuration\n\nYou can configure libraries that are available for the LLM to use using CLI arguments in your MCP configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"enrichr-popular\": {\n      \"command\": \"npx\", \n      \"args\": [\"-y\", \"enrichr-mcp-server\", \"--libraries\", \"pop\"]\n    }, // This will make the most popular libraries available to the LLM, namely GO_Biological_Process_2025, KEGG_2021_Human, Reactome_2022, MSigDB_Hallmark_2020, ChEA_2022, GWAS_Catalog_2023, Human_Phenotype_Ontology, STRING_Interactions_2023, DrugBank_2022, CellMarker_2024\n    \"enrichr-pathways\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"enrichr-mcp-server\", \"-l\", \"GO_Biological_Process_2025,KEGG_2021_Human,Reactome_2022\"]\n    },\n    \"enrichr-disease\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"enrichr-mcp-server\", \"--libraries\", \"Human_Phenotype_Ontology,OMIM_Disease,ClinVar_2019\"]\n    }\n  }\n}\n```\n\n### Command Line Options\n\nAdjust the CLI options to your needs, unreasonable settings might exceed the context window of the LLM and confuse it, so choose wisely:\n\n| Option | Short | Description | Default |\n|--------|-------|-------------|---------|\n| `--libraries <libs>` | `-l` | Comma-separated list of Enrichr libraries to query | `pop` |\n| `--max-terms <num>` | `-m` | Maximum terms to show per library | `50` |\n| `--format <format>` | `-f` | Output format: `detailed`, `compact`, `minimal` | `detailed` |\n| `--output <file>` | `-o` | Save complete results to TSV file | _(none)_ |\n| `--compact` | `-c` | Use compact format (same as `--format compact`) | _(flag)_ |\n| `--minimal` | | Use minimal format (same as `--format minimal`) | _(flag)_ |\n| `--help` | `-h` | Show help message | _(flag)_ |\n\n#### Format Options\n- **`detailed`**: Full details including p-values, odds ratios, and gene lists (default)\n- **`compact`**: Term name + p-value + gene count (saves ~50% tokens)\n- **`minimal`**: Just term name + p-value (saves ~80% tokens)\n\n#### Examples\n\nFor a full list of commands, options, and usage examples, run the server with the `--help` flag. This is the most up-to-date source of information.\n\n```bash\n# Show the help message\nnpx enrichr-mcp-server --help\n```\n\n### Environment Variables\n\nYou can also configure the server via environment variables:\n\n| Variable | Description | Example |\n|----------|-------------|---------|\n| `ENRICHR_LIBRARIES` | Comma-separated list of libraries to query | `GO_Biological_Process_2025,KEGG_2021_Human` |\n| `ENRICHR_MAX_TERMS` | Maximum terms per library | `20` |\n| `ENRICHR_FORMAT` | Output format (`detailed`/`compact`/`minimal`) | `compact` |\n| `ENRICHR_OUTPUT_FILE` | TSV output file path | `/tmp/enrichr_results.tsv` |\n\n**Note**: CLI arguments take precedence over environment variables when both are specified.\n\n\n### Popular Libraries\n\nThis table lists the libraries included when using the `-l pop` flag.\n\n| Library | Description |\n|---------|-------------|\n| `GO_Biological_Process_2025` | Gene Ontology terms describing biological objectives accomplished by gene products. |\n| `KEGG_2021_Human` | Metabolic and signaling pathways from Kyoto Encyclopedia of Genes and Genomes for human. |\n| `Reactome_2022` | Curated and peer-reviewed pathways from Reactome covering signaling, metabolism, gene expression, and disease. |\n| `MSigDB_Hallmark_2020` | Hallmark gene sets representing well-defined biological states and processes from MSigDB. |\n| `ChEA_2022` | ChIP-seq experiments from GEO, ENCODE, and publications identifying transcription factor-gene interactions from human and mouse. |\n| `GWAS_Catalog_2023` | Genome-wide association study results from NHGRI-EBI GWAS Catalog linking genes to traits. |\n| `Human_Phenotype_Ontology` | Standardized vocabulary of phenotypic abnormalities associated with human diseases. |\n| `STRING_Interactions_2023` | Protein interactions from STRING database including experimental and predicted. |\n| `DrugBank_2022` | Drug targets from DrugBank including approved drugs and experimental compounds. |\n| `CellMarker_2024` | Manually curated cell type markers from CellMarker database for human and mouse. |\n\nFor a complete list of available libraries, visit the [Enrichr Libraries page](https://maayanlab.cloud/Enrichr/#libraries).\n\n### Benefits of Library Configuration\n\n1. **Simplified Tool Calls**: When libraries aren't specified in tool calls, your configured libraries are used\n2. **Consistent Results**: Ensures consistent library usage across different queries  \n3. **Multiple Configurations**: Set up different MCP server instances for different research contexts\n4. **Override Capability**: Individual tool calls can still specify different libraries when needed\n\n## Usage\n\nThe server provides two tools:\n\n### `enrichr_analysis` (Recommended for multi-library analysis)\n\nPerforms enrichment analysis across multiple specified Enrichr libraries.\n\n**Parameters:**\n- `genes` (required): Array of gene symbols (e.g., [\"TP53\", \"BRCA1\", \"EGFR\"])\n- `libraries` (optional): Array of Enrichr library names to query (defaults to configured libraries)\n- `description` (optional): Description for the gene list (default: \"Gene list for enrichment analysis\")\n- `maxTerms` (optional): Maximum number of terms to show per library (default: 50)\n- `format` (optional): Output format: `detailed`, `compact`, `minimal` (default: `detailed`)\n- `outputFile` (optional): Path to save complete results as TSV file\n\n### `go_bp_enrichment` \n\nPerforms Gene Ontology (GO) Biological Process enrichment analysis to understand biological functions and processes overrepresented in your gene list. Perfect for interpreting gene expression data, identifying significant biological processes, and uncovering functional implications of genes from RNA-seq, microarray, or other high-throughput experiments.\n\n**Parameters:**\n- `genes` (required): Array of gene symbols (e.g., [\"TP53\", \"BRCA1\", \"EGFR\"])\n- `description` (optional): Description for the gene list (default: \"Gene list for GO BP enrichment\")\n- `outputFile` (optional): Path to save complete results as TSV file\n\n**Returns:**\nAll tools return formatted text with significant terms including:\n- Library name and summary statistics\n- Term name and identifier\n- Adjusted P-value and raw P-value (scientific notation)\n- Odds ratio and combined score\n- Overlapping genes with counts\n\n## Available Library Categories\n\nEnrichr contains hundreds of gene set libraries organized into categories:\n\n- **Gene Ontology**: Biological processes, molecular functions, cellular components\n- **Pathways**: KEGG, Reactome, WikiPathways, BioCarta, NCI, HumanCyc, Panther\n- **Disease/Phenotype**: HPO, OMIM, ClinVar, GWAS Catalog, DisGeNET\n- **Tissues/Cell Types**: GTEx, Human Cell Atlas, ARCHS4, Mouse Gene Atlas\n- **Transcription Factors**: ChEA, ENCODE, TRANSFAC, JASPAR\n- **MicroRNA Targets**: TargetScan, miRTarBase, microRNA.org\n- **Drug/Chemical**: DrugMatrix, L1000, TG-GATEs, CTD\n- **Protein Interactions**: BioGRID, STRING, hu.MAP\n- **Literature Mining**: PubMed, Geneshot, Co-expression\n- **Evolutionary**: Cross-species homologs, phylogenetic profiles\n\nFor a complete list of available libraries, visit the [Enrichr Libraries page](https://maayanlab.cloud/Enrichr/#libraries).\n\n## API Details\n\nThis server uses the Enrichr API:\n- **Add List Endpoint**: `https://maayanlab.cloud/Enrichr/addList`\n- **Enrichment Endpoint**: `https://maayanlab.cloud/Enrichr/enrich`\n- **Supported Libraries**: All libraries available through Enrichr web interface\n\n## Development\n\n- **Build**: `npm run build`\n- **Watch**: `npm run watch` (rebuilds on file changes)\n- **Inspector**: `npm run inspector` (debug with MCP inspector)\n\n## Requirements\n\n- Node.js 18+\n- TypeScript 5.3+\n- Internet connection for Enrichr API access\n\n## License\n\nThis project follows the same license as the MCP TypeScript SDK.\n\n## References\n\n- Chen EY, Tan CM, Kou Y, Duan Q, Wang Z, Meirelles GV, Clark NR, Ma'ayan A. Enrichr: interactive and collaborative HTML5 gene list enrichment analysis tool. BMC Bioinformatics. 2013; 128(14).\n\n- Kuleshov MV, Jones MR, Rouillard AD, Fernandez NF, Duan Q, Wang Z, Koplev S, Jenkins SL, Jagodnik KM, Lachmann A, McDermott MG, Monteiro CD, Gundersen GW, Ma'ayan A. Enrichr: a comprehensive gene set enrichment analysis web server 2016 update. Nucleic Acids Research. 2016; gkw377.\n\n- Xie Z, Bailey A, Kuleshov MV, Clarke DJB., Evangelista JE, Jenkins SL, Lachmann A, Wojciechowicz ML, Kropiwnicki E, Jagodnik KM, Jeon M, & Ma'ayan A. Gene set knowledge discovery with Enrichr. Current Protocols, 1, e90. 2021. doi: 10.1002/cpz1.90\n\n- [Enrichr](https://maayanlab.cloud/Enrichr/)\n- [Model Context Protocol](https://modelcontextprotocol.io/)\n- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)\n",
+  "category": "Healthcare",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "enrichr-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "enrichr-mcp-server"],
+        "env": {}
+      },
+      "enrichr-mcp-server-compact-100terms": {
+        "command": "npx",
+        "args": ["-y", "enrichr-mcp-server", "--compact", "--max-terms", "100"],
+        "env": {}
+      },
+      "enrichr-mcp-server-popular": {
+        "command": "npx",
+        "args": ["-y", "enrichr-mcp-server", "--libraries", "pop"],
+        "env": {}
+      },
+      "enrichr-mcp-server-pathways": {
+        "command": "npx",
+        "args": ["-y", "enrichr-mcp-server", "-l", "GO_Biological_Process_2025,KEGG_2021_Human,Reactome_2022"],
+        "env": {}
+      },
+      "enrichr-mcp-server-disease": {
+        "command": "npx",
+        "args": ["-y", "enrichr-mcp-server", "--libraries", "Human_Phenotype_Ontology,OMIM_Disease,ClinVar_2019"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tianqitang1",
+    "repo": "enrichr-mcp-server",
+    "url": "https://github.com/tianqitang1/enrichr-mcp-server",
+    "name": "enrichr-mcp-server",
+    "path": null,
+    "stars": 6,
+    "contributors": 1,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "b0e46bcc130689ba95a71868134f1bed383dc748"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:30.962Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"enrichr-mcp-server\",\n  \"version\": \"0.2.1\",\n  \"description\": \"MCP Server for Enrichr gene set enrichment analysis with multi-library support\",\n  \"type\": \"module\",\n  \"main\": \"./build/index.js\",\n  \"bin\": {\n    \"enrichr-mcp-server\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build\",\n    \"README.md\",\n    \"icon.svg\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"enrichr\",\n    \"gene-ontology\",\n    \"go\",\n    \"bioinformatics\",\n    \"enrichment-analysis\"\n  ],\n  \"author\": \"Tianqi Tang <tianqi.tang@ucsf.edu>\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/tianqitang1/enrichr-mcp-server.git\"\n  },\n  \"homepage\": \"https://github.com/tianqitang1/enrichr-mcp-server#readme\",\n  \"bugs\": {\n    \"url\": \"https://github.com/tianqitang1/enrichr-mcp-server/issues\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"node-fetch\": \"^3.3.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

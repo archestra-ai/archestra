@@ -7,6 +7,7 @@ import {
   BUILT_IN_AGENT_IDS,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  getArchestraToolGroupId,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
@@ -2345,6 +2346,12 @@ class ToolModel {
       description: string | null;
       parameters: Record<string, unknown>;
       createdAt: Date;
+      /**
+       * Domain group id for built-in Archestra tools (drives the grouped
+       * tool-picker UI); null for external MCP tools. Resolved branding-aware
+       * so white-labeled tool prefixes still map to a group.
+       */
+      group: string | null;
       assignedAgentCount: number;
       assignedAgents: Array<{ id: string; name: string }>;
     }>
@@ -2431,6 +2438,9 @@ class ToolModel {
       return {
         ...tool,
         parameters: tool.parameters ?? {},
+        group: getArchestraToolGroupId(
+          archestraMcpBranding.getToolShortName(tool.name),
+        ),
         assignedAgentCount: assignedAgents.length,
         assignedAgents,
       };

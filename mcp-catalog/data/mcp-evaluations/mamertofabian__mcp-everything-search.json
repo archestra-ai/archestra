@@ -1,0 +1,125 @@
+{
+  "name": "mamertofabian__mcp-everything-search",
+  "display_name": "mcp-everything-search",
+  "description": "MCP server from mamertofabian/mcp-everything-search",
+  "author": {
+    "name": "mamertofabian"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-everything-search"],
+    "env": {
+      "EVERYTHING_SDK_PATH": "${user_config.everything_sdk_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "everything_sdk_path": {
+      "type": "file",
+      "title": "Everything SDK DLL Path",
+      "description": "Path to the Everything SDK DLL (e.g., Everything64.dll) required for Windows. Leave empty on macOS/Linux.",
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "readme": "# Everything Search MCP Server\n\n[![smithery badge](https://smithery.ai/badge/mcp-server-everything-search)](https://smithery.ai/server/mcp-server-everything-search)\n\nAn MCP server that provides fast file searching capabilities across Windows, macOS, and Linux. On Windows, it uses the [Everything](https://www.voidtools.com/) SDK. On macOS, it uses the built-in `mdfind` command. On Linux, it uses the `locate`/`plocate` command.\n\n## Tools\n\n### search\n\nSearch for files and folders across your system. The search capabilities and syntax support vary by platform:\n\n- Windows: Full Everything SDK features (see syntax guide below)\n- macOS: Basic filename and content search using Spotlight database\n- Linux: Basic filename search using locate database\n\nParameters:\n\n- `query` (required): Search query string. See platform-specific notes below.\n- `max_results` (optional): Maximum number of results to return (default: 100, max: 1000)\n- `match_path` (optional): Match against full path instead of filename only (default: false)\n- `match_case` (optional): Enable case-sensitive search (default: false)\n- `match_whole_word` (optional): Match whole words only (default: false)\n- `match_regex` (optional): Enable regex search (default: false)\n- `sort_by` (optional): Sort order for results (default: 1). Available options:\n\n```\n  - 1: Sort by filename (A to Z)\n  - 2: Sort by filename (Z to A)\n  - 3: Sort by path (A to Z)\n  - 4: Sort by path (Z to A)\n  - 5: Sort by size (smallest first)\n  - 6: Sort by size (largest first)\n  - 7: Sort by extension (A to Z)\n  - 8: Sort by extension (Z to A)\n  - 11: Sort by creation date (oldest first)\n  - 12: Sort by creation date (newest first)\n  - 13: Sort by modification date (oldest first)\n  - 14: Sort by modification date (newest first)\n```\n\nExamples:\n\n```json\n{\n  \"query\": \"*.py\",\n  \"max_results\": 50,\n  \"sort_by\": 6\n}\n```\n\n```json\n{\n  \"query\": \"ext:py datemodified:today\",\n  \"max_results\": 10\n}\n```\n\nResponse includes:\n\n- File/folder path\n- File size in bytes\n- Last modified date\n\n### Search Syntax Guide\n\nFor detailed information about the search syntax supported on each platform (Windows, macOS, and Linux), please see [SEARCH_SYNTAX.md](SEARCH_SYNTAX.md).\n\n## Prerequisites\n\n### Windows\n\n1. [Everything](https://www.voidtools.com/) search utility:\n   - Download and install from https://www.voidtools.com/\n   - **Make sure the Everything service is running**\n2. Everything SDK:\n   - Download from https://www.voidtools.com/support/everything/sdk/\n   - Extract the SDK files to a location on your system\n\n### Linux\n\n1. Install and initialize the `locate` or `plocate` command:\n   - Ubuntu/Debian: `sudo apt-get install plocate` or `sudo apt-get install mlocate`\n   - Fedora: `sudo dnf install mlocate`\n2. After installation, update the database:\n   - For plocate: `sudo updatedb`\n   - For mlocate: `sudo /etc/cron.daily/mlocate`\n\n### macOS\n\nNo additional setup required. The server uses the built-in `mdfind` command.\n\n## Installation\n\n### Installing via Smithery\n\nTo install Everything Search for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-server-everything-search):\n\n```bash\nnpx -y @smithery/cli install mcp-server-everything-search --client claude\n```\n\n### Using uv (recommended)\n\nWhen using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will\nuse [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run _mcp-server-everything-search_.\n\n### Using PIP\n\nAlternatively you can install `mcp-server-everything-search` via pip:\n\n```\npip install mcp-server-everything-search\n```\n\nAfter installation, you can run it as a script using:\n\n```\npython -m mcp_server_everything_search\n```\n\n## Configuration\n\n### Windows\n\nThe server requires the Everything SDK DLL to be available:\n\nEnvironment variable:\n\n```\nEVERYTHING_SDK_PATH=path\\to\\Everything-SDK\\dll\\Everything64.dll\n```\n\n### Linux and macOS\n\nNo additional configuration required.\n\n### Usage with Claude Desktop\n\nAdd one of these configurations to your `claude_desktop_config.json` based on your platform:\n\n<details>\n<summary>Windows (using uvx)</summary>\n\n```json\n\"mcpServers\": {\n  \"everything-search\": {\n    \"command\": \"uvx\",\n    \"args\": [\"mcp-server-everything-search\"],\n    \"env\": {\n      \"EVERYTHING_SDK_PATH\": \"path/to/Everything-SDK/dll/Everything64.dll\"\n    }\n  }\n}\n```\n\n</details>\n\n<details>\n<summary>Windows (using pip installation)</summary>\n\n```json\n\"mcpServers\": {\n  \"everything-search\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"mcp_server_everything_search\"],\n    \"env\": {\n      \"EVERYTHING_SDK_PATH\": \"path/to/Everything-SDK/dll/Everything64.dll\"\n    }\n  }\n}\n```\n\n</details>\n\n<details>\n<summary>Linux and macOS</summary>\n\n```json\n\"mcpServers\": {\n  \"everything-search\": {\n    \"command\": \"uvx\",\n    \"args\": [\"mcp-server-everything-search\"]\n  }\n}\n```\n\nOr if using pip installation:\n\n```json\n\"mcpServers\": {\n  \"everything-search\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"mcp_server_everything_search\"]\n  }\n}\n```\n\n</details>\n\n## Debugging\n\nYou can use the MCP inspector to debug the server. For uvx installations:\n\n```\nnpx @modelcontextprotocol/inspector uvx mcp-server-everything-search\n```\n\nOr if you've installed the package in a specific directory or are developing on it:\n\n```\ngit clone https://github.com/mamertofabian/mcp-everything-search.git\ncd mcp-everything-search/src/mcp_server_everything_search\nnpx @modelcontextprotocol/inspector uv run mcp-server-everything-search\n```\n\nTo view server logs:\n\nLinux/macOS:\n\n```bash\ntail -f ~/.config/Claude/logs/mcp*.log\n```\n\nWindows (PowerShell):\n\n```powershell\nGet-Content -Path \"$env:APPDATA\\Claude\\logs\\mcp*.log\" -Tail 20 -Wait\n```\n\n## Development\n\nIf you are doing local development, there are two ways to test your changes:\n\n1. Run the MCP inspector to test your changes. See [Debugging](#debugging) for run instructions.\n\n2. Test using the Claude desktop app. Add the following to your `claude_desktop_config.json`:\n\n```json\n\"everything-search\": {\n  \"command\": \"uv\",\n  \"args\": [\n    \"--directory\",\n    \"/path/to/mcp-everything-search/src/mcp_server_everything_search\",\n    \"run\",\n    \"mcp-server-everything-search\"\n  ],\n  \"env\": {\n    \"EVERYTHING_SDK_PATH\": \"path/to/Everything-SDK/dll/Everything64.dll\"\n  }\n}\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n\n## Disclaimer\n\nThis project is not affiliated with, endorsed by, or sponsored by voidtools (the creators of Everything search utility). This is an independent project that utilizes the publicly available Everything SDK.\n",
+  "category": "Search",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-everything-search-pip-module": {
+        "command": "python",
+        "args": ["-m", "mcp_server_everything_search"],
+        "env": {}
+      },
+      "mcp-server-everything-search-windows-uvx-configured": {
+        "command": "uvx",
+        "args": ["mcp-server-everything-search"],
+        "env": {
+          "EVERYTHING_SDK_PATH": "path/to/Everything-SDK/dll/Everything64.dll"
+        }
+      },
+      "mcp-server-everything-search-windows-pip-configured": {
+        "command": "python",
+        "args": ["-m", "mcp_server_everything_search"],
+        "env": {
+          "EVERYTHING_SDK_PATH": "path/to/Everything-SDK/dll/Everything64.dll"
+        }
+      },
+      "mcp-server-everything-search-linux-macos-uvx": {
+        "command": "uvx",
+        "args": ["mcp-server-everything-search"],
+        "env": {}
+      },
+      "mcp-server-everything-search-linux-macos-pip": {
+        "command": "python",
+        "args": ["-m", "mcp_server_everything_search"],
+        "env": {}
+      },
+      "mcp-server-everything-search-uv-run": {
+        "command": "uv",
+        "args": ["run", "mcp-server-everything-search"],
+        "env": {}
+      },
+      "mcp-server-everything-search-dev-uv-configured": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "/path/to/mcp-everything-search/src/mcp_server_everything_search",
+          "run",
+          "mcp-server-everything-search"
+        ],
+        "env": {
+          "EVERYTHING_SDK_PATH": "path/to/Everything-SDK/dll/Everything64.dll"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mamertofabian",
+    "repo": "mcp-everything-search",
+    "url": "https://github.com/mamertofabian/mcp-everything-search",
+    "name": "mamertofabian__mcp-everything-search",
+    "path": null,
+    "stars": 237,
+    "contributors": 2,
+    "issues": 9,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "ec1e81d5c7048f38554bcf2f3ceed7908fb0d1c5"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:07.368Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-everything-search\"\nversion = \"0.2.1\"\ndescription = \"A Model Context Protocol server providing fast file searching using Everything SDK\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nauthors = [\n    { name = \"Mamerto Fabian\", email = \"aidrivencoder@gmail.com\" },\n]\nkeywords = [\"everything\", \"search\", \"mcp\", \"llm\"]\nlicense = { file = \"LICENSE\" }\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n]\ndependencies = [\n    \"mcp>=1.0.0\",\n    \"pydantic>=2.0.0\",\n]\n\n[project.scripts]\nmcp-server-everything-search = \"mcp_server_everything_search:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\n    \"pyright>=1.1.389\",\n    \"pytest>=8.3.3\",\n    \"ruff>=0.8.1\",\n]\n"
+}

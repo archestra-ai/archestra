@@ -1,0 +1,145 @@
+{
+  "name": "jinzcdev__leetcode-mcp-server",
+  "display_name": "leetcode-mcp-server",
+  "description": "An MCP server enabling automated access to LeetCode's problems, solutions, and public data with optional authentication for user-specific features, supporting leetcode.com & leetcode.cn sites.",
+  "author": {
+    "name": "jinzcdev"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@jinzcdev/leetcode-mcp-server"],
+    "env": {
+      "LEETCODE_SITE": "${user_config.leetcode_site}",
+      "LEETCODE_SESSION": "${user_config.leetcode_session}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "leetcode_site": {
+      "type": "string",
+      "title": "LeetCode Site",
+      "description": "LeetCode API endpoint ('global' or 'cn')",
+      "required": false,
+      "default": "global"
+    },
+    "leetcode_session": {
+      "type": "string",
+      "title": "LeetCode Session Cookie",
+      "description": "LeetCode session cookie for authenticated API access",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# LeetCode MCP Server\n\n[![NPM Version](https://img.shields.io/npm/v/@jinzcdev/leetcode-mcp-server.svg)](https://www.npmjs.com/package/@jinzcdev/leetcode-mcp-server)\n[![GitHub License](https://img.shields.io/github/license/jinzcdev/leetcode-mcp-server.svg)](https://img.shields.io/github/license/jinzcdev/leetcode-mcp-server.svg)\n[![smithery badge](https://smithery.ai/badge/@jinzcdev/leetcode-mcp-server)](https://smithery.ai/server/@jinzcdev/leetcode-mcp-server)\n[![Chinese Doc](https://img.shields.io/badge/简体中文-点击查看-orange)](README_zh-CN.md)\n[![Stars](https://img.shields.io/github/stars/jinzcdev/leetcode-mcp-server)](https://github.com/jinzcdev/leetcode-mcp-server)\n\nThe LeetCode MCP Server is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server that provides seamless integration with LeetCode APIs, enabling advanced automation and intelligent interaction with LeetCode's programming problems, contests, solutions, and user data.\n\n<a href=\"https://glama.ai/mcp/servers/@jinzcdev/leetcode-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@jinzcdev/leetcode-mcp-server/badge\" alt=\"LeetCode Server MCP server\" />\n</a>\n\n## Features\n\n- 🌐 **Multi-site Support**: Support​ both leetcode.com (Global) and leetcode.cn (China) platforms\n- 📊 **Problem Data Retrieval**: Obtain detailed problem descriptions, constraints, examples, official editorials, and ​user-submitted solutions\n- 👤 **User Data Access**: Retrieve user profiles, submission history, and contest performance\n- 🔒 **​Private Data Access**: Create and query user notes, track problem-solving progress, and analyze submission details (AC/WA analysis)\n- 🔍 **Advanced Search Capabilities**: Filter problems by tags, difficulty levels, categories, and keywords\n- 📅 **Daily Challenge Access**: Easily access daily challenge problems\n\n## Prerequisites\n\n1. Node.js (v20.x or above)\n2. (Optional) LeetCode session cookie for authenticated API access\n\n## Installation\n\n### Installing via Smithery\n\nTo install leetcode-mcp-server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@jinzcdev/leetcode-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @jinzcdev/leetcode-mcp-server --client claude\n```\n\n### Manual Installation\n\n```bash\n# Install from npm\nnpm install @jinzcdev/leetcode-mcp-server -g\n\n# Or run with Global site configuration\nnpx -y @jinzcdev/leetcode-mcp-server --site global\n\n# Run with authentication (for accessing private data)\nnpx -y @jinzcdev/leetcode-mcp-server --site global --session <YOUR_LEETCODE_SESSION_COOKIE>\n```\n\nAlternatively, you can clone the repository and run it locally:\n\n```bash\n# Clone the repository\ngit clone https://github.com/jinzcdev/leetcode-mcp-server.git\n\n# Navigate to the project directory\ncd leetcode-mcp-server\n\n# Build the project\nnpm install && npm run build\n\n# Run the server\nnode build/index.js --site global\n```\n\n## Usage\n\n### Visual Studio Code Integration\n\nAdd the following JSON configuration to your User Settings (JSON) file. Access this by pressing `Ctrl/Cmd + Shift + P` and searching for `Preferences: Open User Settings (JSON)`.\n\n#### Option 1: Using Environment Variables\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"leetcode\": {\n        \"type\": \"stdio\",\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"@jinzcdev/leetcode-mcp-server\"],\n        \"env\": {\n          \"LEETCODE_SITE\": \"global\",\n          \"LEETCODE_SESSION\": \"<YOUR_LEETCODE_SESSION_COOKIE>\"\n        }\n      }\n    }\n  }\n}\n```\n\n#### Option 2: Using Command Line Arguments\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"leetcode\": {\n        \"type\": \"stdio\",\n        \"command\": \"npx\",\n        \"args\": [\n          \"-y\",\n          \"@jinzcdev/leetcode-mcp-server\",\n          \"--site\",\n          \"global\",\n          \"--session\",\n          \"<YOUR_LEETCODE_SESSION_COOKIE>\"\n        ]\n      }\n    }\n  }\n}\n```\n\nFor LeetCode China site, modify the `--site` parameter to `cn`.\n\n> [!TIP]\n>\n> The server supports the following optional environment variables:\n>\n> - `LEETCODE_SITE`: LeetCode API endpoint ('global' or 'cn', default: 'global')\n> - `LEETCODE_SESSION`: LeetCode session cookie for authenticated API access (default: empty)\n>\n> **Priority Note**:\n> Command-line arguments take precedence over environment variables when both are specified. For example:\n>\n> - If `LEETCODE_SITE=cn` is set but you run `leetcode-mcp-server --site global`, the server will use `global`.\n> - If `LEETCODE_SESSION` exists but you provide `--session \"new_cookie\"`, the command-line session value will be used.\n\n## Available Tools\n\n### Problems\n\n| Tool                    | Global | CN  | Auth Required | Description                                                  |\n| ----------------------- | :----: | :-: | :-----------: | ------------------------------------------------------------ |\n| **get_daily_challenge** |   ✅   | ✅  |      ❌       | Retrieves today's LeetCode Daily Challenge problem           |\n| **get_problem**         |   ✅   | ✅  |      ❌       | Retrieves details for a specific LeetCode problem            |\n| **search_problems**     |   ✅   | ✅  |      ❌       | Searches for LeetCode problems with multiple filter criteria |\n\n### Users\n\n| Tool                              | Global | CN  | Auth Required | Description                                                  |\n| --------------------------------- | :----: | :-: | :-----------: | ------------------------------------------------------------ |\n| **get_user_profile**              |   ✅   | ✅  |      ❌       | Retrieves profile information for a LeetCode user            |\n| **get_user_contest_ranking**      |   ✅   | ✅  |      ❌       | Obtains contest ranking statistics for a user                |\n| **get_recent_ac_submissions**     |   ✅   | ✅  |      ❌       | Retrieves a user's recent accepted submissions               |\n| **get_recent_submissions**        |   ✅   | ❌  |      ❌       | Retrieves a user's recent submissions history                |\n| **get_user_status**               |   ✅   | ✅  |      ✅       | Retrieves current user's current status                      |\n| **get_problem_submission_report** |   ✅   | ✅  |      ✅       | Provides detailed submission analysis for a specific problem |\n| **get_problem_progress**          |   ✅   | ✅  |      ✅       | Retrieves current user's problem-solving progress            |\n| **get_all_submissions**           |   ✅   | ✅  |      ✅       | Retrieves current user's submission history                  |\n\n### Notes\n\n| Tool             | Global | CN  | Auth Required | Description                                           |\n| ---------------- | :----: | :-: | :-----------: | ----------------------------------------------------- |\n| **search_notes** |   ❌   | ✅  |      ✅       | Searches for user notes with filtering options        |\n| **get_note**     |   ❌   | ✅  |      ✅       | Retrieves notes for a specific problem by question ID |\n| **create_note**  |   ❌   | ✅  |      ✅       | Creates a new note for a specific problem             |\n| **update_note**  |   ❌   | ✅  |      ✅       | Updates an existing note with new content             |\n\n### Solutions\n\n| Tool                       | Global | CN  | Auth Required | Description                                                    |\n| -------------------------- | :----: | :-: | :-----------: | -------------------------------------------------------------- |\n| **list_problem_solutions** |   ✅   | ✅  |      ❌       | Retrieves a list of community solutions for a specific problem |\n| **get_problem_solution**   |   ✅   | ✅  |      ❌       | Retrieves the complete content of a specific solution          |\n\n## Tool Parameters\n\n### Problems\n\n- **get_daily_challenge** - Retrieves today's LeetCode Daily Challenge problem with complete details\n\n  - No parameters required\n\n- **get_problem** - Retrieves details about a specific LeetCode problem\n\n  - `titleSlug`: The URL slug/identifier of the problem (string, required)\n\n- **search_problems** - Searches for LeetCode problems based on multiple filter criteria\n  - `category`: Problem category filter (string, optional, default: \"all-code-essentials\")\n  - `tags`: List of topic tags to filter problems by (string[], optional)\n  - `difficulty`: Problem difficulty level filter (enum: \"EASY\", \"MEDIUM\", \"HARD\", optional)\n  - `searchKeywords`: Keywords to search in problem titles and descriptions (string, optional)\n  - `limit`: Maximum number of problems to return (number, optional, default: 10)\n  - `offset`: Number of problems to skip (number, optional)\n\n### Users\n\n- **get_user_profile** - Retrieves profile information about a LeetCode user\n\n  - `username`: LeetCode username (string, required)\n\n- **get_user_contest_ranking** - Retrieves a user's contest ranking information\n\n  - `username`: LeetCode username (string, required)\n  - `attended`: Whether to include only the contests the user has participated in (boolean, optional, default: true)\n\n- **get_recent_submissions** - Retrieves a user's recent submissions on LeetCode Global\n\n  - `username`: LeetCode username (string, required)\n  - `limit`: Maximum number of submissions to return (number, optional, default: 10)\n\n- **get_recent_ac_submissions** - Retrieves a user's recent accepted submissions\n\n  - `username`: LeetCode username (string, required)\n  - `limit`: Maximum number of submissions to return (number, optional, default: 10)\n\n- **get_user_status** - Retrieves the current user's status\n\n  - No parameters required\n\n- **get_problem_submission_report** - Retrieves detailed information about a specific submission\n\n  - `id`: The numerical submission ID (number, required)\n\n- **get_problem_progress** - Retrieves the current user's problem-solving progress\n\n  - `offset`: Number of questions to skip (number, optional, default: 0)\n  - `limit`: Maximum number of questions to return (number, optional, default: 100)\n  - `questionStatus`: Filter by question status (enum: \"ATTEMPTED\", \"SOLVED\", optional)\n  - `difficulty`: Filter by difficulty levels (string[], optional)\n\n- **get_all_submissions** - Retrieves paginated list of user's submissions\n  - `limit`: Maximum number of submissions to return (number, default: 20)\n  - `offset`: Number of submissions to skip (number, default: 0)\n  - `questionSlug`: Optional problem identifier (string, optional)\n  - `lang`: Programming language filter (string, optional, CN only)\n  - `status`: Submission status filter (enum: \"AC\", \"WA\", optional, CN only)\n  - `lastKey`: Pagination token for retrieving next page (string, optional, CN only)\n\n### Notes\n\n- **search_notes** - Searches for user notes on LeetCode China\n\n  - `keyword`: Search term to filter notes (string, optional)\n  - `limit`: Maximum number of notes to return (number, optional, default: 10)\n  - `skip`: Number of notes to skip (number, optional, default: 0)\n  - `orderBy`: Sort order for returned notes (enum: \"ASCENDING\", \"DESCENDING\", optional, default: \"DESCENDING\")\n\n- **get_note** - Retrieves user notes for a specific LeetCode problem\n  - `questionId`: The question ID of the LeetCode problem (string, required)\n  - `limit`: Maximum number of notes to return (number, optional, default: 10)\n  - `skip`: Number of notes to skip (number, optional, default: 0)\n- **create_note** - Creates a new note for a specific LeetCode problem\n\n  - `questionId`: The question ID of the LeetCode problem (string, required)\n  - `content`: The content of the note, supports markdown format (string, required)\n  - `summary`: An optional short summary or title for the note (string, optional)\n\n- **update_note** - Updates an existing note with new content or summary\n  - `noteId`: The ID of the note to update (string, required)\n  - `content`: The new content for the note, supports markdown format (string, required)\n  - `summary`: An optional new short summary or title for the note (string, optional)\n\n### Solutions\n\n- **list_problem_solutions** - Retrieves a list of community solutions for a specific problem\n\n  - `questionSlug`: The URL slug/identifier of the problem (string, required)\n  - `limit`: Maximum number of solutions to return (number, optional, default: 10)\n  - `skip`: Number of solutions to skip (number, optional)\n  - `userInput`: Search term to filter solutions (string, optional)\n  - `tagSlugs`: Array of tag identifiers to filter solutions (string[], optional, default: [])\n  - `orderBy`: Sorting criteria for the returned solutions\n    - Global: enum: \"HOT\", \"MOST_RECENT\", \"MOST_VOTES\", optional, default: \"HOT\"\n    - CN: enum: \"DEFAULT\", \"MOST_UPVOTE\", \"HOT\", \"NEWEST_TO_OLDEST\", \"OLDEST_TO_NEWEST\", optional, default: \"DEFAULT\"\n\n- **get_problem_solution** - Retrieves the complete content of a specific solution\n  - `topicId`: Unique topic ID of the solution (string, required, Global only)\n  - `slug`: Unique slug/identifier of the solution (string, required, CN only)\n\n## Available Resources\n\n| Resource Name          | Global | CN  | Auth Required | Description                                                  |\n| ---------------------- | :----: | :-: | :-----------: | ------------------------------------------------------------ |\n| **problem-categories** |   ✅   | ✅  |      ❌       | A list of all problem classification categories              |\n| **problem-tags**       |   ✅   | ✅  |      ❌       | A detailed collection of algorithmic and data structure tags |\n| **problem-langs**      |   ✅   | ✅  |      ❌       | A complete list of all supported programming languages       |\n| **problem-detail**     |   ✅   | ✅  |      ❌       | Provides details about a specific problem                    |\n| **problem-solution**   |   ✅   | ✅  |      ❌       | Provides the complete content of a specific solution         |\n\n## Resource URIs\n\n- **problem-categories** - A list of all problem classification categories\n\n  - URI: `categories://problems/all`\n\n- **problem-tags** - A detailed collection of algorithmic and data structure tags\n\n  - URI: `tags://problems/all`\n\n- **problem-langs** - A complete list of all programming languages supported by LeetCode\n\n  - URI: `langs://problems/all`\n\n- **problem-detail** - Provides details about a specific LeetCode problem\n\n  - URI: `problem://{titleSlug}`\n  - Parameters:\n    - `titleSlug`: Problem identifier as it appears in the LeetCode URL\n\n- **problem-solution** - Provides the complete content of a specific solution\n  - Global URI: `solution://{topicId}`\n    - Parameters:\n      - `topicId`: Unique topic ID of the solution\n  - CN URI: `solution://{slug}`\n    - Parameters:\n      - `slug`: Unique slug/identifier of the solution\n\n## Authentication\n\nUser-specific data access requires LeetCode session authentication:\n\n1. Log in to LeetCode ([Global](https://leetcode.com) or [China](https://leetcode.cn) site)\n2. Extract `LEETCODE_SESSION` cookie from browser developer tools\n3. Configure server with `--session` flag or `LEETCODE_SESSION` environment variable\n\n## Response Format\n\nAll tools return JSON-formatted responses with the following structure:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"JSON_DATA_STRING\"\n    }\n  ]\n}\n```\n\nThe `JSON_DATA_STRING` contains either the requested data or an error message for failed requests.\n\n## License\n\nThis project is licensed under the MIT License.\n",
+  "category": "Development",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "jinzcdev-leetcode-mcp-server-npx-global": {
+        "command": "npx",
+        "args": ["-y", "@jinzcdev/leetcode-mcp-server", "--site", "global"],
+        "env": {}
+      },
+      "jinzcdev-leetcode-mcp-server-npx-authenticated": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@jinzcdev/leetcode-mcp-server",
+          "--site",
+          "global",
+          "--session",
+          "<YOUR_LEETCODE_SESSION_COOKIE>"
+        ],
+        "env": {}
+      },
+      "jinzcdev-leetcode-mcp-server-node-build": {
+        "command": "node",
+        "args": ["build/index.js", "--site", "global"],
+        "env": {}
+      },
+      "jinzcdev-leetcode-mcp-server-stdio-env-config": {
+        "command": "npx",
+        "args": ["-y", "@jinzcdev/leetcode-mcp-server"],
+        "env": {
+          "LEETCODE_SITE": "global",
+          "LEETCODE_SESSION": "<YOUR_LEETCODE_SESSION_COOKIE>"
+        }
+      },
+      "jinzcdev-leetcode-mcp-server-stdio-args-config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@jinzcdev/leetcode-mcp-server",
+          "--site",
+          "global",
+          "--session",
+          "<YOUR_LEETCODE_SESSION_COOKIE>"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jinzcdev",
+    "repo": "leetcode-mcp-server",
+    "url": "https://github.com/jinzcdev/leetcode-mcp-server",
+    "name": "jinzcdev__leetcode-mcp-server",
+    "path": null,
+    "stars": 49,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e5f27259542f95bc26abd5c881234aeeae4853d6"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:19.703Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "leetcode-query",
+      "importance": 9
+    },
+    {
+      "name": "minimist",
+      "importance": 7
+    },
+    {
+      "name": "pino",
+      "importance": 8
+    },
+    {
+      "name": "ts-node",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"@jinzcdev/leetcode-mcp-server\",\n    \"description\": \"MCP Server for LeetCode API (supports leetcode.com and leetcode.cn)\",\n    \"version\": \"1.2.0\",\n    \"author\": \"jinzcdev\",\n    \"main\": \"./build/index.js\",\n    \"keywords\": [\n        \"leetcode\",\n        \"lc\",\n        \"mcp\",\n        \"programming\",\n        \"algorithm\"\n    ],\n    \"scripts\": {\n        \"test\": \"vitest run | pino-pretty\",\n        \"test:watch\": \"vitest watch\",\n        \"build\": \"tsc && chmod u+x build/index.js\",\n        \"start\": \"node build/index.js\",\n        \"dev\": \"tsc-watch --onSuccess \\\"node build/index.js\\\"\",\n        \"format\": \"prettier --write .\",\n        \"prepare\": \"husky\"\n    },\n    \"bin\": {\n        \"leetcode-mcp-server\": \"build/index.js\"\n    },\n    \"type\": \"module\",\n    \"files\": [\n        \"build\"\n    ],\n    \"license\": \"MIT\",\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"git+https://github.com/jinzcdev/leetcode-mcp-server.git\"\n    },\n    \"lint-staged\": {\n        \"*.{js,ts,jsx,tsx}\": [\n            \"prettier --write\",\n            \"eslint --fix\"\n        ],\n        \"*.{md,json,yml,yaml,html,css}\": [\n            \"prettier --write\"\n        ]\n    },\n    \"dependencies\": {\n        \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n        \"leetcode-query\": \"^2.0.0\",\n        \"minimist\": \"^1.2.8\",\n        \"pino\": \"^9.6.0\",\n        \"ts-node\": \"^10.9.2\",\n        \"zod\": \"^3.24.2\"\n    },\n    \"devDependencies\": {\n        \"@eslint/js\": \"^9.24.0\",\n        \"@types/minimist\": \"^1.2.5\",\n        \"@types/node\": \"^22.14.0\",\n        \"esbuild\": \"^0.25.2\",\n        \"eslint\": \"^9.24.0\",\n        \"eslint-config-prettier\": \"^10.1.2\",\n        \"eslint-plugin-prettier\": \"^5.2.6\",\n        \"globals\": \"^16.0.0\",\n        \"husky\": \"^9.1.7\",\n        \"lint-staged\": \"^15.5.1\",\n        \"prettier\": \"^3.5.3\",\n        \"prettier-plugin-organize-imports\": \"^4.1.0\",\n        \"tsc-watch\": \"6.2.1\",\n        \"typescript\": \"^5.8.3\",\n        \"typescript-eslint\": \"^8.29.1\",\n        \"vitest\": \"^3.1.3\",\n        \"vite\": \"^6.3.5\",\n        \"pino-pretty\": \"^13.0.0\"\n    },\n    \"optionalDependencies\": {\n        \"@rollup/rollup-linux-x64-gnu\": \"^4.40.1\"\n    }\n}\n"
+}

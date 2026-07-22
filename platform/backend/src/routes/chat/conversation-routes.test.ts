@@ -1328,13 +1328,19 @@ describe("project chats: read-only access for project members", () => {
     return { project, conversation };
   }
 
-  test("a member of a shared project can read the chat but not mutate it", async ({
+  test("a project:read-all holder can read a shared project's chat but not mutate it", async ({
     makeUser,
     makeMember,
+    makeCustomRole,
   }) => {
     const { conversation } = await seedProjectChat({ shared: true });
+    // Reading a chat the caller did not author is gated by `project:read-all`,
+    // even inside a shared project — so the reader holds a role that grants it.
+    const readAllRole = await makeCustomRole(organizationId, {
+      permission: { project: ["read-all"] },
+    });
     const member = await makeUser({ email: "ro-member@test.com" });
-    await makeMember(member.id, organizationId, {});
+    await makeMember(member.id, organizationId, { role: readAllRole.role });
     actingUser = member;
 
     const read = await app.inject({
@@ -1351,7 +1357,7 @@ describe("project chats: read-only access for project members", () => {
     });
     expect([403, 404]).toContain(rename.statusCode);
 
-    // the delete model call is owner-scoped, so a member's DELETE is a no-op
+    // the delete model call is owner-scoped, so a reader's DELETE is a no-op
     // (the route's 200 is pre-existing "idempotent delete" semantics).
     await app.inject({
       method: "DELETE",
@@ -1363,6 +1369,24 @@ describe("project chats: read-only access for project members", () => {
       organizationId,
     });
     expect(stillThere).not.toBeNull();
+  });
+
+  test("a shared project's member without project:read-all cannot read another's chat", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const { conversation } = await seedProjectChat({ shared: true });
+    // A plain member can reach the shared project but lacks `project:read-all`,
+    // so a chat they did not author stays invisible (the route returns 404).
+    const member = await makeUser({ email: "ro-plain-member@test.com" });
+    await makeMember(member.id, organizationId, {});
+    actingUser = member;
+
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(read.statusCode).toBe(404);
   });
 
   test("chats in unshared projects stay invisible to others", async ({

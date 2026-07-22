@@ -1,0 +1,156 @@
+{
+  "name": "ragieai__ragie-mcp-server",
+  "display_name": "ragie-mcp-server",
+  "description": "Ragie Model Context Protocol Server",
+  "author": {
+    "name": "ragieai"
+  },
+  "server": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "@ragieai/mcp-server",
+      "--description",
+      "${user_config.description}",
+      "--partition",
+      "${user_config.partition}"
+    ],
+    "env": {
+      "RAGIE_API_KEY": "${user_config.ragie_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ragie_api_key": {
+      "type": "string",
+      "title": "RAGIE API Key",
+      "description": "Your Ragie API authentication key",
+      "sensitive": true,
+      "required": true
+    },
+    "description": {
+      "type": "string",
+      "title": "Tool Description",
+      "description": "Override the default tool description with custom text",
+      "sensitive": false,
+      "required": false
+    },
+    "partition": {
+      "type": "string",
+      "title": "RAGIE Partition ID",
+      "description": "Specify the Ragie partition ID to query",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "![image](https://github.com/user-attachments/assets/75e80f87-f39e-4f10-8c97-bbc848bbed82)\n\n\n# Ragie Model Context Protocol Server\n\nA Model Context Protocol (MCP) server that provides access to Ragie's knowledge base retrieval capabilities.\n\n## Description\n\nThis server implements the Model Context Protocol to enable AI models to retrieve information from a Ragie knowledge base. It provides a single tool called \"retrieve\" that allows querying the knowledge base for relevant information.\n\n## Prerequisites\n\n- Node.js >= 18\n- A Ragie API key\n\n## Installation\n\nThe server requires the following environment variable:\n\n- `RAGIE_API_KEY` (required): Your Ragie API authentication key\n\nThe server will start and listen on stdio for MCP protocol messages.\n\nInstall and run the server with npx:\n\n```bash\nRAGIE_API_KEY=your_api_key npx @ragieai/mcp-server\n```\n\n### Command Line Options\n\nThe server supports the following command line options:\n\n- `--description, -d <text>`: Override the default tool description with custom text\n- `--partition, -p <id>`: Specify the Ragie partition ID to query\n\nExamples:\n\n```bash\n# With custom description\nRAGIE_API_KEY=your_api_key npx @ragieai/mcp-server --description \"Search the company knowledge base for information\"\n\n# With partition specified\nRAGIE_API_KEY=your_api_key npx @ragieai/mcp-server --partition your_partition_id\n\n# Using both options\nRAGIE_API_KEY=your_api_key npx @ragieai/mcp-server --description \"Search the company knowledge base\" --partition your_partition_id\n```\n\n## Cursor Configuration\n\nTo use this MCP server with Cursor:\n\n### Option 1: Create an MCP configuration file\n\n1. Save a file called `mcp.json`\n\n* **For tools specific to a project**, create a `.cursor/mcp.json` file in your project directory. This allows you to define MCP servers that are only available within that specific project.\n* **For tools that you want to use across all projects**, create a `~/.cursor/mcp.json` file in your home directory. This makes MCP servers available in all your Cursor workspaces.\n\nExample `mcp.json`:\n```json\n{\n  \"mcpServers\": {\n    \"ragie\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@ragieai/mcp-server\",\n        \"--partition\",\n        \"optional_partition_id\"\n      ],\n      \"env\": {\n        \"RAGIE_API_KEY\": \"your_api_key\"\n      }\n    }\n  }\n}\n```\n\n### Option 2: Use a shell script\n\n1. Save a file called `ragie-mcp.sh` on your system:\n```bash\n#!/usr/bin/env bash\n\nexport RAGIE_API_KEY=\"your_api_key\"\n\nnpx -y @ragieai/mcp-server --partition optional_partition_id\n```\n\n2. Give the file execute permissions: `chmod +x ragie-mcp.sh`\n\n3. Add the MCP server script by going to **Settings** -> **Cursor Settings** -> **MCP Servers** in the Cursor UI.\n\nReplace `your_api_key` with your actual Ragie API key and optionally set the partition ID if needed.\n\n\n## Claude Desktop Configuration\n\nTo use this MCP server with Claude desktop:\n\n1. Create the MCP config file `claude_desktop_config.json`:\n\n* For MacOS: Use `~/Library/Application Support/Claude/claude_desktop_config.json`\n* For Windows: Use `%APPDATA%/Claude/claude_desktop_config.json`\n\nExample `claude_desktop_config.json`:\n```json\n{\n  \"mcpServers\": {\n    \"ragie\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@ragieai/mcp-server\",\n        \"--partition\",\n        \"optional_partition_id\"\n      ],\n      \"env\": {\n        \"RAGIE_API_KEY\": \"your_api_key\"\n      }\n    }\n  }\n}\n```\n\nReplace `your_api_key` with your actual Ragie API key and optionally set the partition ID if needed.\n\n2. Restart Claude desktop for the changes to take effect.\n\nThe Ragie retrieval tool will now be available in your Claude desktop conversations.\n\n## Features\n\n### Retrieve Tool\n\nThe server provides a `retrieve` tool that can be used to search the knowledge base. It accepts the following parameters:\n\n- `query` (string): The search query to find relevant information\n- `topK` (number, optional, default: 8): The maximum number of results to return\n- `rerank` (boolean, optional, default: true): Whether to try and find only the most relevant information\n- `recencyBias` (boolean, optional, default: false): Whether to favor results towards more recent information\n\nThe tool returns:\n- An array of content chunks containing matching text from the knowledge base\n\n## Development\n\nThis project is written in TypeScript and uses the following main dependencies:\n- `@modelcontextprotocol/sdk`: For implementing the MCP server\n- `ragie`: For interacting with the Ragie API\n- `zod`: For runtime type validation\n\n### Development setup\n\nRunning the server in dev mode:\n\n```bash\nRAGIE_API_KEY=your_api_key npm run dev -- --partition optional_partition_id\n```\n\nBuilding the project:\n\n```bash\nnpm run build\n```\n\n## License\n\nMIT License - See LICENSE.txt for details.\n",
+  "category": "AI Tools",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ragieai-mcp-server-basic": {
+        "command": "npx",
+        "args": ["@ragieai/mcp-server"],
+        "env": {
+          "RAGIE_API_KEY": "your_api_key"
+        }
+      },
+      "ragieai-mcp-server-with-description": {
+        "command": "npx",
+        "args": ["@ragieai/mcp-server", "--description", "Search the company knowledge base for information"],
+        "env": {
+          "RAGIE_API_KEY": "your_api_key"
+        }
+      },
+      "ragieai-mcp-server-with-partition": {
+        "command": "npx",
+        "args": ["@ragieai/mcp-server", "--partition", "your_partition_id"],
+        "env": {
+          "RAGIE_API_KEY": "your_api_key"
+        }
+      },
+      "ragieai-mcp-server-with-description-and-partition": {
+        "command": "npx",
+        "args": [
+          "@ragieai/mcp-server",
+          "--description",
+          "Search the company knowledge base",
+          "--partition",
+          "your_partition_id"
+        ],
+        "env": {
+          "RAGIE_API_KEY": "your_api_key"
+        }
+      },
+      "ragieai-mcp-server-configured": {
+        "command": "npx",
+        "args": ["-y", "@ragieai/mcp-server", "--partition", "optional_partition_id"],
+        "env": {
+          "RAGIE_API_KEY": "your_api_key"
+        }
+      },
+      "ragieai-mcp-server-dev": {
+        "command": "npm",
+        "args": ["run", "dev", "--", "--partition", "optional_partition_id"],
+        "env": {
+          "RAGIE_API_KEY": "your_api_key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ragieai",
+    "repo": "ragie-mcp-server",
+    "url": "https://github.com/ragieai/ragie-mcp-server",
+    "name": "ragie-mcp-server",
+    "path": null,
+    "stars": 61,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "0d46beed6c174f3e334699e8c100bb80d6597681"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:20.853Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    },
+    {
+      "name": "ragie",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@ragieai/mcp-server\",\n  \"version\": \"1.0.0\",\n  \"description\": \"A Model Context Protocol (MCP) server for Ragie\",\n  \"license\": \"MIT\",\n  \"author\": \"Ragie Corp\",\n  \"homepage\": \"https://github.com/ragieai/ragie-mcp-server\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/ragieai/ragie-mcp-server.git\"\n  },\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"ragie-mcp-server\": \"build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"dev\": \"tsx src/index.ts\",\n    \"prepare\": \"npm run build\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.6.0\",\n    \"commander\": \"^12.0.0\",\n    \"ragie\": \"^1.5.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.5\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"^5.7.3\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"ragie\",\n    \"knowledge-base\",\n    \"retrieval\",\n    \"ai\",\n    \"claude\",\n    \"anthropic\"\n  ]\n}\n"
+}

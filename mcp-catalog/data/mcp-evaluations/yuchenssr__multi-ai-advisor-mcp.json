@@ -1,0 +1,148 @@
+{
+  "name": "yuchenssr__multi-ai-advisor-mcp",
+  "display_name": "multi-ai-advisor-mcp",
+  "description": "council of models for decision",
+  "author": {
+    "name": "YuChenSSR"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "SERVER_NAME": "${user_config.server_name}",
+      "SERVER_VERSION": "${user_config.server_version}",
+      "DEBUG": "${user_config.debug}",
+      "OLLAMA_API_URL": "${user_config.ollama_api_url}",
+      "DEFAULT_MODELS": "${user_config.default_models}",
+      "GEMMA_SYSTEM_PROMPT": "${user_config.gemma_system_prompt}",
+      "LLAMA_SYSTEM_PROMPT": "${user_config.llama_system_prompt}",
+      "DEEPSEEK_SYSTEM_PROMPT": "${user_config.deepseek_system_prompt}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "server_name": {
+      "type": "string",
+      "title": "Server Name",
+      "description": "Name of the MCP server.",
+      "default": "multi-model-advisor",
+      "required": false
+    },
+    "server_version": {
+      "type": "string",
+      "title": "Server Version",
+      "description": "Version of the MCP server.",
+      "default": "1.0.0",
+      "required": false
+    },
+    "debug": {
+      "type": "boolean",
+      "title": "Debug Mode",
+      "description": "Enable debug logging for the server.",
+      "default": true,
+      "required": false
+    },
+    "ollama_api_url": {
+      "type": "string",
+      "title": "Ollama API URL",
+      "description": "The URL for the Ollama API server.",
+      "default": "http://localhost:11434",
+      "required": false
+    },
+    "default_models": {
+      "type": "string",
+      "title": "Default Ollama Models",
+      "description": "Comma-separated list of default Ollama models to query.",
+      "default": "gemma3:1b,llama3.2:1b,deepseek-r1:1.5b",
+      "required": false
+    },
+    "gemma_system_prompt": {
+      "type": "string",
+      "title": "Gemma System Prompt",
+      "description": "System prompt for the Gemma model.",
+      "default": "You are a creative and innovative AI assistant. Think outside the box and offer novel perspectives.",
+      "required": false
+    },
+    "llama_system_prompt": {
+      "type": "string",
+      "title": "Llama System Prompt",
+      "description": "System prompt for the Llama model.",
+      "default": "You are a supportive and empathetic AI assistant focused on human well-being. Provide considerate and balanced advice.",
+      "required": false
+    },
+    "deepseek_system_prompt": {
+      "type": "string",
+      "title": "Deepseek System Prompt",
+      "description": "System prompt for the Deepseek model.",
+      "default": "You are a logical and analytical AI assistant. Think step-by-step and explain your reasoning clearly.",
+      "required": false
+    }
+  },
+  "readme": "# Multi-Model Advisor\n## (锵锵四人行)\n\n[![smithery badge](https://smithery.ai/badge/@YuChenSSR/multi-ai-advisor-mcp)](https://smithery.ai/server/@YuChenSSR/multi-ai-advisor-mcp)\n\nA Model Context Protocol (MCP) server that queries multiple Ollama models and combines their responses, providing diverse AI perspectives on a single question. This creates a \"council of advisors\" approach where Claude can synthesize multiple viewpoints alongside its own to provide more comprehensive answers.\n\n<a href=\"https://glama.ai/mcp/servers/@YuChenSSR/multi-ai-advisor-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@YuChenSSR/multi-ai-advisor-mcp/badge\" alt=\"Multi-Model Advisor MCP server\" />\n</a>\n\n```mermaid\ngraph TD\n    A[Start] --> B[Worker Local AI 1 Opinion]\n    A --> C[Worker Local AI 2 Opinion]\n    A --> D[Worker Local AI 3 Opinion]\n    B --> E[Manager AI]\n    C --> E\n    D --> E\n    E --> F[Decision Made]\n```\n\n## Features\n\n- Query multiple Ollama models with a single question\n- Assign different roles/personas to each model\n- View all available Ollama models on your system\n- Customize system prompts for each model\n- Configure via environment variables\n- Integrate seamlessly with Claude for Desktop\n\n## Prerequisites\n\n- Node.js 16.x or higher\n- Ollama installed and running (see [Ollama installation](https://github.com/ollama/ollama#installation))\n- Claude for Desktop (for the complete advisory experience)\n\n## Installation\n\n### Installing via Smithery\n\nTo install multi-ai-advisor-mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@YuChenSSR/multi-ai-advisor-mcp):\n\n```bash\nnpx -y @smithery/cli install @YuChenSSR/multi-ai-advisor-mcp --client claude\n```\n\n### Manual Installation\n1. Clone this repository:\n   ```bash\n   git clone https://github.com/YuChenSSR/multi-ai-advisor-mcp.git \n   cd multi-ai-advisor-mcp\n   ```\n\n2. Install dependencies:\n   ```bash\n   npm install\n   ```\n\n3. Build the project:\n   ```bash\n   npm run build\n   ```\n\n4. Install required Ollama models:\n   ```bash\n   ollama pull gemma3:1b\n   ollama pull llama3.2:1b\n   ollama pull deepseek-r1:1.5b\n   ```\n\n## Configuration\n\nCreate a `.env` file in the project root with your desired configuration:\n\n```\n# Server configuration\nSERVER_NAME=multi-model-advisor\nSERVER_VERSION=1.0.0\nDEBUG=true\n\n# Ollama configuration\nOLLAMA_API_URL=http://localhost:11434\nDEFAULT_MODELS=gemma3:1b,llama3.2:1b,deepseek-r1:1.5b\n\n# System prompts for each model\nGEMMA_SYSTEM_PROMPT=You are a creative and innovative AI assistant. Think outside the box and offer novel perspectives.\nLLAMA_SYSTEM_PROMPT=You are a supportive and empathetic AI assistant focused on human well-being. Provide considerate and balanced advice.\nDEEPSEEK_SYSTEM_PROMPT=You are a logical and analytical AI assistant. Think step-by-step and explain your reasoning clearly.\n```\n\n## Connect to Claude for Desktop\n\n1. Locate your Claude for Desktop configuration file:\n   - MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n2. Edit the file to add the Multi-Model Advisor MCP server:\n\n```json\n{\n  \"mcpServers\": {\n    \"multi-model-advisor\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/multi-ai-advisor-mcp/build/index.js\"]\n    }\n  }\n}\n```\n\n3. Replace `/absolute/path/to/` with the actual path to your project directory\n\n4. Restart Claude for Desktop\n\n## Usage\n\nOnce connected to Claude for Desktop, you can use the Multi-Model Advisor in several ways:\n\n### List Available Models\n\nYou can see all available models on your system:\n\n```\nShow me which Ollama models are available on my system\n```\n\nThis will display all installed Ollama models and indicate which ones are configured as defaults.\n\n### Basic Usage\n\nSimply ask Claude to use the multi-model advisor:\n\n```\nwhat are the most important skills for success in today's job market, \nyou can use gemma3:1b, llama3.2:1b, deepseek-r1:1.5b to help you \n```\n\nClaude will query all default models and provide a synthesized response based on their different perspectives.\n\n![example](https://raw.githubusercontent.com/YuChenSSR/pics/master/imgs/2025-03-24/Q53YEwdTaeTuL6a7.png)\n\n\n\n## How It Works\n\n1. The MCP server exposes two tools:\n   - `list-available-models`: Shows all Ollama models on your system\n   - `query-models`: Queries multiple models with a question\n\n2. When you ask Claude a question referring to the multi-model advisor:\n   - Claude decides to use the `query-models` tool\n   - The server sends your question to multiple Ollama models\n   - Each model responds with its perspective\n   - Claude receives all responses and synthesizes a comprehensive answer\n\n3. Each model can have a different \"persona\" or role assigned, encouraging diverse perspectives.\n\n## Troubleshooting\n\n### Ollama Connection Issues\n\nIf the server can't connect to Ollama:\n- Ensure Ollama is running (`ollama serve`)\n- Check that the OLLAMA_API_URL is correct in your .env file\n- Try accessing http://localhost:11434 in your browser to verify Ollama is responding\n\n### Model Not Found\n\nIf a model is reported as unavailable:\n- Check that you've pulled the model using `ollama pull <model-name>`\n- Verify the exact model name using `ollama list`\n- Use the `list-available-models` tool to see all available models\n\n### Claude Not Showing MCP Tools\n\nIf the tools don't appear in Claude:\n- Ensure you've restarted Claude after updating the configuration\n- Check the absolute path in claude_desktop_config.json is correct\n- Look at Claude's logs for error messages\n\n### RAM is not enough\n\nSome managers' AI models may have chosen larger models, but there is not enough memory to run them. You can try specifying a smaller model (see the [Basic Usage](#basic-usage)) or upgrading the memory.\n\n## License\n\nMIT License\n\nFor more details, please see the LICENSE file in [this project repository](https://github.com/YuChenSSR/multi-ai-advisor-mcp)\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.",
+  "category": "AI Tools",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "YuChenSSR-multi-ai-advisor-mcp": {
+        "command": "node",
+        "args": ["/absolute/path/to/multi-ai-advisor-mcp/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "YuChenSSR",
+    "repo": "multi-ai-advisor-mcp",
+    "url": "https://github.com/YuChenSSR/multi-ai-advisor-mcp",
+    "name": "yuchenssr__multi-ai-advisor-mcp",
+    "path": null,
+    "stars": 62,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "5ac94979b0fe7b6f0b81e3eb88a88cf8b9326ccb"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:45.069Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"multi-model-advisor\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP server that queries multiple Ollama models\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\",\n    \"start\": \"node build/index.js\",\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"ollama\",\n    \"ai\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"dotenv\": \"^16.4.7\",\n    \"node-fetch\": \"^3.3.2\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.13\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

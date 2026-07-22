@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 
 const mockProcessDocuments = vi.hoisted(() =>
-  vi.fn().mockResolvedValue(undefined),
+  vi.fn().mockResolvedValue({ failedDocumentCount: 0, errorMessage: null }),
 );
 const mockEnqueuePermissionSync = vi.hoisted(() =>
   vi.fn().mockResolvedValue(undefined),
@@ -21,7 +21,10 @@ describe("handleBatchEmbedding", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProcessDocuments.mockResolvedValue(undefined);
+    mockProcessDocuments.mockResolvedValue({
+      failedDocumentCount: 0,
+      errorMessage: null,
+    });
   });
 
   test("processes documents and completes a non-final batch", async ({
@@ -93,6 +96,41 @@ describe("handleBatchEmbedding", () => {
     expect(updatedConnector?.lastSyncAt?.getTime()).toBeGreaterThan(
       OLD_DATE.getTime(),
     );
+  });
+
+  test("records the embedding failure cause on the connector run", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    mockProcessDocuments.mockResolvedValueOnce({
+      failedDocumentCount: 2,
+      errorMessage: "The embedding provider could not be reached.",
+    });
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const run = await ConnectorRunModel.create({
+      connectorId: connector.id,
+      status: "running",
+      startedAt: RUN_STARTED_AT,
+      totalBatches: 1,
+      completedBatches: 0,
+    });
+
+    await handleBatchEmbedding({
+      documentIds: ["doc-1", "doc-2"],
+      connectorRunId: run.id,
+    });
+
+    // The failure count and cause are recorded on the run, and the terminal
+    // status reflects the errors from this (final) batch.
+    const updatedRun = await ConnectorRunModel.findById(run.id);
+    expect(updatedRun?.itemErrors).toBe(2);
+    expect(updatedRun?.error).toBe(
+      "The embedding provider could not be reached.",
+    );
+    expect(updatedRun?.status).toBe("completed_with_errors");
   });
 
   test("skips connector update when a newer run has started", async ({

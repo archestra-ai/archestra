@@ -1,0 +1,89 @@
+{
+  "name": "thelunarcompany__lunar__mcpx",
+  "display_name": "mcpx",
+  "description": "lunar.dev: Ground Control for 3rd Party APIs",
+  "author": {
+    "name": "TheLunarCompany"
+  },
+  "server": {
+    "command": "docker",
+    "args": ["run", "lunar/mcpx"],
+    "env": {},
+    "type": "local",
+    "docker_image": "lunar/mcpx"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<img src=\"./logo.png\" width=150>\n\n<a href=\"https://opensource.org/licenses/MIT\">![License](https://img.shields.io/badge/License-MIT-blue.svg)</a>\n![Version](https://img.shields.io/badge/version-v0.2.12--ec2b806-blue.svg)\n\n## Introduction\n\nLunar MCPX is an MCP server which serves as an aggregator for other MCP servers. Its primary goal is to simplify the integration and management of multiple MCP servers dynamically. By using MCPX, developers can easily manage connections to various MCP-compatible services through simple configuration changes, enabling rapid integration with no coding involved.\n\nMCPX provides:\n\n- Dynamic MCP servers dispatch\n- Zero-code integration with MCP services via JSON configuration\n- Unified API interface to multiple MCP services\n- A remote-first approach\n\n<div align=\"center\">\n<img src=\"mcpx-light.svg#gh-light-mode-only\" />\n<img src=\"mcpx-dark.svg#gh-dark-mode-only\"  />\n\n</div>\n\n## Check our MCPX Demo video \n<div align=\"center\">\n\n[![MCPX Demo Video](https://img.youtube.com/vi/5I23SiOflaM/0.jpg)](https://www.youtube.com/watch?v=5I23SiOflaM)\n</div>\n\n## Tip\nThis repository helps you get up and running quickly. For detailed feature guides, architecture, and advanced options, head to the [official docs](https://docs.lunar.dev/next/mcpx/get_started).\n\n\n## Getting Started\n\nYou can run Lunar MCPX locally or via Docker.\n\nBefore you start: it's assumed you already have an MCP-compatible client. If not, [Claude Desktop](https://modelcontextprotocol.io/quickstart/user) is a good place to start.\n\n- **Run with Docker:**  \n  Use the [Official Docker Image Guide](https://docs.lunar.dev/mcpx/get_started)\n\n\n## MCPX Control Plane\n\n<div align=\"center\">\n<img src=\"control-plane.png\" width=700 />\n</div>\n \n\nThe Control Plane helps you inspect live traffic and manage your MCPX instance.\nSetup instructions are available [here](https://docs.lunar.dev/mcpx/control_plane/).\n\n\n## Connecting to MCPX\n \nOnce MCPX is running, you can connect a client using one of the following methods:\n\n1. [Use your own client](https://docs.lunar.dev/mcpx/connect_with_your_client)\n2. [Connect with Claude Desktop](https://docs.lunar.dev/mcpx/connect_with_claude)\n3. [Connect with Cursor](https://docs.lunar.dev/mcpx/connect_with_cursor)",
+  "category": "AI Tools",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "TheLunarCompany",
+    "repo": "lunar",
+    "url": "https://github.com/TheLunarCompany/lunar/tree/main/mcpx",
+    "name": "thelunarcompany__lunar__mcpx",
+    "path": "mcpx",
+    "stars": 278,
+    "contributors": 30,
+    "issues": 14,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "8d225ce6caf0489aca4e5c0030ae590e46a96818"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:11.613Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@playwright/mcp",
+      "importance": 7
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "@anthropic-ai/sdk",
+      "importance": 5
+    },
+    {
+      "name": "@google/genai",
+      "importance": 5
+    },
+    {
+      "name": "winston",
+      "importance": 4
+    },
+    {
+      "name": "dotenv",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcpx-monorepo\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"workspaces\": [\n    \"packages/**\"\n  ],\n  \"scripts\": {\n    \"test\": \"npm run test --workspaces\",\n    \"test-script\": \"npm run test --workspaces\",\n    \"lint\": \"eslint \\\"packages/**/*.{ts,tsx,js}\\\"\",\n    \"typecheck\": \"tsc -b packages/*\",\n    \"check:all\": \"node ../scripts/check-all.js\",\n    \"build:deps\": \"npm run build --workspace=packages/shared-model && npm run build --workspace=packages/toolkit-core\",\n    \"dev:ui\": \"npm run dev --workspace=packages/ui\",\n    \"start:ui\": \"npm run dev --workspace=packages/ui\",\n    \"build:ui\": \"npm run build --workspace=packages/ui\",\n    \"install:ui\": \"npm i --workspace=packages/ui\",\n    \"dev:webserver\": \"npm run dev --workspace=packages/webserver\",\n    \"start:webserver\": \"npm run serve --workspace=packages/webserver\",\n    \"install:webserver\": \"npm i --workspace=packages/webserver\",\n    \"build:webserver\": \"npm run build --workspace=packages/webserver\",\n    \"dev:mcpx-server\": \"npm run dev --workspace=packages/mcpx-server\",\n    \"start:mcpx-server\": \"npm run serve --workspace=packages/mcpx-server\",\n    \"install:mcpx-server\": \"npm i --workspace=packages/mcpx-server\",\n    \"build:mcpx-server\": \"npm run build --workspace=packages/mcpx-server\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5.8.3\",\n    \"eslint\": \"^9.26.0\",\n    \"prettier\": \"3.5.3\",\n    \"@eslint/js\": \"^9.26.0\",\n    \"globals\": \"^16.0.0\",\n    \"typescript-eslint\": \"^8.31.1\"\n  },\n  \"overrides\": {\n    \"zod\": \"3.25.76\"\n  }\n}\n\n\n=== demo-client/package.json ===\n{\n  \"name\": \"demo-client\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"start:claude\": \"node --import ./loader.mjs src/mcp-client-claude.ts\",\n    \"start:gemini\": \"node --import ./loader.mjs src/mcp-client-gemini.ts\",\n    \"play\": \"node --import ./loader.mjs src/playground.ts\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"@anthropic-ai/sdk\": \"^0.39.0\",\n    \"@google/genai\": \"^0.10.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"dotenv\": \"^16.5.0\",\n    \"winston\": \"^3.17.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.1\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n\n\n=== mcpx-e2e-tests/package.json ===\n{\n  \"name\": \"mcpx-e2e-tests\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"smoke:docker\": \"ts-node --project tsconfig.json local-tests/dockerTest.ts\",\n    \"smoke:docker-dependent\": \"ts-node --project tsconfig.json local-tests/dependentTest.ts\",\n    \"smoke:network\": \"ts-node --project tsconfig.json local-tests/networkTest.ts\",\n    \"test-scenario\": \"ts-node --project tsconfig.json src/testRunner.ts\",\n    \"test-all-scenarios\": \"node run-all-scenarios.js\",\n    \"test-all-with-image\": \"node run-all-with-image.cjs\",\n    \"test:unit\": \"jest\",\n    \"test-all\": \"ts-node --project tsconfig.json src/testAll.ts\",\n    \"lint\": \"eslint . --ext .ts\",\n    \"format\": \"prettier --write .\",\n    \"prepare\": \"npx playwright install\",\n    \"prettier\": \"prettier --check \\\"./**/*.{ts,tsx,js,json,jsx,css,scss,md}\\\"\",\n    \"prettier:fix\": \"prettier --write \\\"./**/*.{ts,tsx,js,json,jsx,css,scss,md}\\\"\"\n  },\n  \"devDependencies\": {\n    \"@playwright/test\": \"^1.54.1\",\n    \"@types/dockerode\": \"^3.3.42\",\n    \"@types/jest\": \"^30.0.0\",\n    \"@types/js-yaml\": \"^4.0.9\",\n    \"@typescript-eslint/eslint-plugin\": \"^5.59.0\",\n    \"@typescript-eslint/parser\": \"^5.59.0\",\n    \"ajv\": \"^8.12.0\",\n    \"dockerode\": \"^3.3.0\",\n    \"eslint\": \"^8.8.0\",\n    \"jest\": \"^30.0.5\",\n    \"js-yaml\": \"^4.1.0\",\n    \"playwright\": \"^1.35.0\",\n    \"prettier\": \"^2.8.0\",\n    \"ts-jest\": \"^29.4.0\",\n    \"ts-node\": \"^10.9.1\",\n    \"typescript\": \"^4.9.5\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.17.0\",\n    \"@playwright/mcp\": \"^0.0.32\",\n    \"axios\": \"^1.11.0\"\n  }\n}\n\n\n=== testkit-mcp-server/package.json ===\n{\n  \"name\": \"@mcpx/testkit-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"scripts\": {\n    \"typecheck\": \"tsc --noEmit\",\n    \"build\": \"npm install -d; tsc -p tsconfig.json\",\n    \"dev\": \"tsx watch src/index.ts\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.13.1\",\n    \"zod\": \"^3.25.76\",\n    \"winston\": \"^3.17.0\",\n    \"express\": \"^4.21.1\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5.8.3\",\n    \"@types/express\": \"^5.0.1\"\n  }\n}\n"
+}

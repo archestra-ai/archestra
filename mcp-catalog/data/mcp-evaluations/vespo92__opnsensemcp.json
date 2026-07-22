@@ -1,0 +1,187 @@
+{
+  "name": "vespo92__opnsensemcp",
+  "display_name": "OPNSenseMCP",
+  "description": "MCP Server for OPNSense to act as IaC proxy",
+  "author": {
+    "name": "vespo92"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {
+      "OPNSENSE_HOST": "${user_config.opnsense_host}",
+      "OPNSENSE_API_KEY": "${user_config.opnsense_api_key}",
+      "OPNSENSE_API_SECRET": "${user_config.opnsense_api_secret}",
+      "IAC_ENABLED": "${user_config.iac_enabled}",
+      "ENABLE_CACHE": "${user_config.enable_cache}",
+      "REDIS_HOST": "${user_config.redis_host}",
+      "POSTGRES_HOST": "${user_config.postgres_host}",
+      "OPNSENSE_VERIFY_SSL": "${user_config.opnsense_verify_ssl}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "opnsense_host": {
+      "type": "string",
+      "title": "OPNsense Host",
+      "description": "The hostname or IP address of your OPNsense firewall (e.g., https://192.168.1.1:55443)",
+      "required": true
+    },
+    "opnsense_api_key": {
+      "type": "string",
+      "title": "OPNsense API Key",
+      "description": "Your OPNsense API key for authentication",
+      "sensitive": true,
+      "required": true
+    },
+    "opnsense_api_secret": {
+      "type": "string",
+      "title": "OPNsense API Secret",
+      "description": "Your OPNsense API secret for authentication",
+      "sensitive": true,
+      "required": true
+    },
+    "iac_enabled": {
+      "type": "boolean",
+      "title": "Enable Infrastructure as Code",
+      "description": "Enable Infrastructure as Code capabilities for declarative management",
+      "default": true,
+      "required": false
+    },
+    "enable_cache": {
+      "type": "boolean",
+      "title": "Enable Caching",
+      "description": "Enable caching support (requires Redis or PostgreSQL)",
+      "default": false,
+      "required": false
+    },
+    "redis_host": {
+      "type": "string",
+      "title": "Redis Host",
+      "description": "Hostname or IP address of the Redis server for caching",
+      "default": "localhost",
+      "required": false
+    },
+    "postgres_host": {
+      "type": "string",
+      "title": "PostgreSQL Host",
+      "description": "Hostname or IP address of the PostgreSQL server for persistent cache",
+      "default": "localhost",
+      "required": false
+    },
+    "opnsense_verify_ssl": {
+      "type": "boolean",
+      "title": "Verify SSL Certificate",
+      "description": "Verify the OPNsense firewall's SSL certificate when connecting",
+      "default": true,
+      "required": false
+    }
+  },
+  "readme": "# OPNsense MCP Server\n\n[![npm version](https://badge.fury.io/js/opnsense-mcp-server.svg)](https://www.npmjs.com/package/opnsense-mcp-server)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\nA Model Context Protocol (MCP) server for comprehensive OPNsense firewall management. This server enables AI assistants like Claude to directly manage firewall configurations, diagnose network issues, and automate complex networking tasks.\n\n## Features\n\n### 🔥 Firewall Management\n- Complete CRUD operations for firewall rules\n- Proper handling of API-created \"automation rules\"\n- Inter-VLAN routing configuration\n- Batch rule creation and management\n- Enhanced persistence with multiple fallback methods\n\n### 🌐 NAT Configuration (SSH-based)\n- Outbound NAT rule management\n- NAT mode control (automatic/hybrid/manual/disabled)\n- No-NAT exception rules for inter-VLAN traffic\n- Automated DMZ NAT issue resolution\n- Direct XML configuration manipulation\n\n### 🔍 Network Diagnostics\n- Comprehensive routing analysis\n- ARP table inspection with vendor identification\n- Interface configuration management\n- Network connectivity troubleshooting\n- Auto-fix capabilities for common issues\n\n### 🖥️ SSH/CLI Execution\n- Direct command execution on OPNsense\n- Configuration file manipulation\n- System-level operations not available via API\n- Service management and restarts\n\n### 📊 Additional Capabilities\n- VLAN management\n- DHCP lease viewing and management\n- DNS blocklist configuration\n- HAProxy load balancer support\n- Configuration backup and restore\n- Infrastructure as Code support\n\n## Installation\n\n### Prerequisites\n- Node.js 18+ and npm\n- OPNsense firewall (v24.7+ recommended)\n- API credentials for OPNsense\n- SSH access (optional, for advanced features)\n\n### Quick Start\n\n1. Install the package:\n```bash\nnpm install -g opnsense-mcp-server\n```\n\n2. Create a `.env` file with your credentials:\n```bash\n# Required\nOPNSENSE_HOST=https://your-opnsense-host:port\nOPNSENSE_API_KEY=your-api-key\nOPNSENSE_API_SECRET=your-api-secret\nOPNSENSE_VERIFY_SSL=false\n\n# Optional - for SSH features\nOPNSENSE_SSH_HOST=your-opnsense-host\nOPNSENSE_SSH_USERNAME=root\nOPNSENSE_SSH_PASSWORD=your-password\n# Or use SSH key\n# OPNSENSE_SSH_KEY_PATH=~/.ssh/id_rsa\n```\n\n3. Start the MCP server:\n```bash\nopnsense-mcp-server\n```\n\n## Usage with Claude Desktop\n\nAdd to your Claude Desktop configuration (`claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"opnsense\": {\n      \"command\": \"npx\",\n      \"args\": [\"opnsense-mcp-server\"],\n      \"env\": {\n        \"OPNSENSE_HOST\": \"https://your-opnsense:port\",\n        \"OPNSENSE_API_KEY\": \"your-key\",\n        \"OPNSENSE_API_SECRET\": \"your-secret\",\n        \"OPNSENSE_VERIFY_SSL\": \"false\"\n      }\n    }\n  }\n}\n```\n\n## Common Use Cases\n\n### Fix DMZ NAT Issues\n```javascript\n// Automatically fix DMZ to LAN routing\nawait mcp.call('nat_fix_dmz', {\n  dmzNetwork: '10.0.6.0/24',\n  lanNetwork: '10.0.0.0/24'\n});\n```\n\n### Create Firewall Rules\n```javascript\n// Allow NFS from DMZ to NAS\nawait mcp.call('firewall_create_rule', {\n  action: 'pass',\n  interface: 'opt8',\n  source: '10.0.6.0/24',\n  destination: '10.0.0.14/32',\n  protocol: 'tcp',\n  destination_port: '2049',\n  description: 'Allow NFS from DMZ'\n});\n```\n\n### Diagnose Routing Issues\n```javascript\n// Run comprehensive routing diagnostics\nawait mcp.call('routing_diagnostics', {\n  sourceNetwork: '10.0.6.0/24',\n  destNetwork: '10.0.0.0/24'\n});\n```\n\n### Execute CLI Commands\n```javascript\n// Run any OPNsense CLI command\nawait mcp.call('system_execute_command', {\n  command: 'pfctl -s state | grep 10.0.6'\n});\n```\n\n## MCP Tools Reference\n\nThe server provides 50+ MCP tools organized by category:\n\n### Firewall Tools\n- `firewall_list_rules` - List all firewall rules\n- `firewall_create_rule` - Create a new rule\n- `firewall_update_rule` - Update existing rule\n- `firewall_delete_rule` - Delete a rule\n- `firewall_apply_changes` - Apply pending changes\n\n### NAT Tools\n- `nat_list_outbound` - List outbound NAT rules\n- `nat_set_mode` - Set NAT mode\n- `nat_create_outbound_rule` - Create NAT rule\n- `nat_fix_dmz` - Fix DMZ NAT issues\n- `nat_analyze_config` - Analyze NAT configuration\n\n### Network Tools\n- `arp_list` - List ARP table entries\n- `routing_diagnostics` - Diagnose routing issues\n- `routing_fix_all` - Auto-fix routing problems\n- `interface_list` - List network interfaces\n- `vlan_create` - Create VLAN\n\n### System Tools\n- `system_execute_command` - Execute CLI command\n- `backup_create` - Create configuration backup\n- `service_restart` - Restart a service\n\nFor a complete list, see [docs/api/mcp-tools.md](docs/api/mcp-tools.md).\n\n## Documentation\n\n- [Quick Start Guide](docs/guides/quick-start.md)\n- [Configuration Guide](docs/guides/configuration.md)\n- [NAT Management](docs/features/nat.md)\n- [SSH/CLI Execution](docs/features/ssh.md)\n- [Firewall Rules](docs/features/firewall.md)\n- [Troubleshooting](docs/guides/troubleshooting.md)\n\n## Testing\n\nThe repository includes comprehensive testing utilities:\n\n```bash\n# Test NAT functionality\nnpx tsx scripts/test/test-nat-ssh.ts\n\n# Test firewall rules\nnpx tsx scripts/test/test-rules.ts\n\n# Test routing diagnostics\nnpx tsx scripts/test/test-routing.ts\n\n# Run all tests\nnpm test\n```\n\n## Development\n\n### Building from Source\n```bash\ngit clone https://github.com/vespo92/OPNSenseMCP.git\ncd OPNSenseMCP\nnpm install\nnpm run build\n```\n\n### Project Structure\n```\nOPNSenseMCP/\n├── src/                 # Source code\n│   ├── api/            # API client\n│   ├── resources/      # Resource implementations\n│   └── index.ts        # MCP server entry\n├── docs/               # Documentation\n├── scripts/            # Utility scripts\n│   ├── test/          # Test scripts\n│   ├── debug/         # Debug utilities\n│   └── fixes/         # Fix scripts\n└── dist/               # Build output\n```\n\n## Troubleshooting\n\n### API Authentication Failed\n- Verify API key and secret are correct\n- Ensure API access is enabled in OPNsense\n- Check firewall rules allow API access\n\n### SSH Connection Failed\n- Verify SSH credentials in `.env`\n- Ensure SSH is enabled on OPNsense\n- Check user has appropriate privileges\n\n### NAT Features Not Working\n- NAT management requires SSH access\n- Add SSH credentials to environment variables\n- Test with: `npx tsx scripts/test/test-nat-ssh.ts`\n\n## Contributing\n\nContributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## Support\n\n- **Issues**: [GitHub Issues](https://github.com/vespo92/OPNSenseMCP/issues)\n- **Discussions**: [GitHub Discussions](https://github.com/vespo92/OPNSenseMCP/discussions)\n- **Documentation**: [Full Documentation](docs/)\n\n## Acknowledgments\n\n- Built for use with [Anthropic's Claude](https://claude.ai)\n- Implements the [Model Context Protocol](https://modelcontextprotocol.io)\n- Designed for [OPNsense](https://opnsense.org) firewall\n\n---\n\n**Version**: 0.8.2 | **Status**: Production Ready | **Last Updated**: August 2025\n",
+  "category": "Security",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "opnsense-mcp-stdio": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "opnsense-mcp-sse": {
+        "command": "npm",
+        "args": ["run", "start:sse"],
+        "env": {}
+      },
+      "opnsense-mcp-sse-port-8080": {
+        "command": "npm",
+        "args": ["run", "start:sse", "--", "--port", "8080"],
+        "env": {}
+      },
+      "opnsense-mcp-claude-desktop-configured": {
+        "command": "node",
+        "args": ["dist/index.js"],
+        "env": {
+          "OPNSENSE_HOST": "https://192.168.1.1:55443",
+          "OPNSENSE_API_KEY": "your_api_key",
+          "OPNSENSE_API_SECRET": "your_api_secret",
+          "OPNSENSE_VERIFY_SSL": "true"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "vespo92",
+    "repo": "OPNSenseMCP",
+    "url": "https://github.com/vespo92/OPNSenseMCP",
+    "name": "OPNSenseMCP",
+    "path": null,
+    "stars": 11,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "28678adab0c2d79c3794f7dca3aedbfc664ba77d"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.871Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@types/uuid",
+      "importance": 3
+    },
+    {
+      "name": "axios",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "drizzle-orm",
+      "importance": 8
+    },
+    {
+      "name": "ioredis",
+      "importance": 7
+    },
+    {
+      "name": "pg",
+      "importance": 8
+    },
+    {
+      "name": "uuid",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"opnsense-mcp-server\",\n  \"version\": \"0.7.0\",\n  \"description\": \"Model Context Protocol server for OPNSense firewall management with ARP table, DNS filtering and HAProxy support via Claude Desktop\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/VinSpo/opnsense-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/VinSpo/opnsense-mcp/issues\"\n  },\n  \"homepage\": \"https://github.com/VinSpo/opnsense-mcp#readme\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\",\n    \"start:stdio\": \"node dist/index.js --transport stdio\",\n    \"start:sse\": \"node dist/index.js --transport sse --port 3000\",\n    \"dev\": \"tsx src/index.ts\",\n    \"dev:stdio\": \"tsx src/index.ts --transport stdio\",\n    \"dev:sse\": \"tsx src/index.ts --transport sse --port 3000\",\n    \"test\": \"tsx src/test-resources.ts\",\n    \"test:api\": \"node test-simple.js\",\n    \"test:vlan\": \"node test-vlan-comprehensive.js\",\n    \"test:minecraft\": \"node create-minecraft-vlan.js\",\n    \"prepare\": \"npm run build\",\n    \"db:generate\": \"drizzle-kit generate:pg\",\n    \"db:migrate\": \"tsx src/db/migrate.ts\",\n    \"db:push\": \"drizzle-kit push:pg\",\n    \"db:studio\": \"drizzle-kit studio\",\n    \"setup:cache\": \"node setup-enhanced-cache.js\",\n    \"test:network-query\": \"node test-network-query.js\",\n    \"test:dhcp\": \"node test-dhcp-fix.js\",\n    \"debug:dhcp\": \"node debug-dhcp-comprehensive.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"opnsense\",\n    \"firewall\",\n    \"api\"\n  ],\n  \"author\": \"VinSpo\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.5.0\",\n    \"@types/uuid\": \"^10.0.0\",\n    \"axios\": \"^1.6.0\",\n    \"dotenv\": \"^16.3.1\",\n    \"drizzle-orm\": \"^0.29.0\",\n    \"ioredis\": \"^5.6.1\",\n    \"pg\": \"^8.16.0\",\n    \"uuid\": \"^11.1.0\",\n    \"zod\": \"^3.25.62\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/node\": \"^20.0.0\",\n    \"@types/pg\": \"^8.11.0\",\n    \"drizzle-kit\": \"^0.20.0\",\n    \"eslint\": \"^9.28.0\",\n    \"jest\": \"^30.0.0\",\n    \"prettier\": \"^3.5.3\",\n    \"rimraf\": \"^6.0.1\",\n    \"tsx\": \"^4.20.1\",\n    \"typescript\": \"^5.0.0\"\n  }\n}\n"
+}

@@ -1,0 +1,170 @@
+{
+  "name": "ivo-toby__contentful-mcp",
+  "display_name": "contentful-mcp",
+  "description": "MCP (Model Context Protocol) server for the Contentful Management API",
+  "author": {
+    "name": "ivo-toby"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {
+      "CONTENTFUL_HOST": "${user_config.contentful_host}",
+      "CONTENTFUL_MANAGEMENT_ACCESS_TOKEN": "${user_config.contentful_management_access_token}",
+      "ENABLE_HTTP_SERVER": "${user_config.enable_http_server}",
+      "HTTP_PORT": "${user_config.http_port}",
+      "HTTP_HOST": "${user_config.http_host}",
+      "SPACE_ID": "${user_config.space_id}",
+      "ENVIRONMENT_ID": "${user_config.environment_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "contentful_host": {
+      "type": "string",
+      "title": "Contentful Management API Host",
+      "description": "Contentful Management API Endpoint",
+      "default": "https://api.contentful.com",
+      "required": false,
+      "sensitive": false
+    },
+    "contentful_management_access_token": {
+      "type": "string",
+      "title": "Contentful Management Access Token",
+      "description": "Your Content Management API token",
+      "sensitive": true,
+      "required": true
+    },
+    "enable_http_server": {
+      "type": "boolean",
+      "title": "Enable HTTP Server",
+      "description": "Set to true to enable HTTP/SSE mode for the MCP server",
+      "default": false,
+      "required": false,
+      "sensitive": false
+    },
+    "http_port": {
+      "type": "number",
+      "title": "HTTP Server Port",
+      "description": "Port for HTTP server",
+      "default": 3000,
+      "required": false,
+      "sensitive": false
+    },
+    "http_host": {
+      "type": "string",
+      "title": "HTTP Server Host",
+      "description": "Host for HTTP server",
+      "default": "localhost",
+      "required": false,
+      "sensitive": false
+    },
+    "space_id": {
+      "type": "string",
+      "title": "Contentful Space ID",
+      "description": "Optional: Scope operations to a specific Contentful Space ID",
+      "required": false,
+      "sensitive": false
+    },
+    "environment_id": {
+      "type": "string",
+      "title": "Contentful Environment ID",
+      "description": "Optional: Scope operations to a specific Contentful Environment ID within the Space ID",
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "readme": "<img width=\"700\" src=\"https://images.ctfassets.net/jtqsy5pye0zd/6wNuQ2xMvbw134rccObi0q/bf61badc6d6d9780609e541713f0bba6/Contentful_Logo_2.5_Dark.svg?w=700&q=100\" alt=\"Contentful MCP server\"/>\n\n# Contentful MCP Server\n\n## Notice\n\nThis is a community driven server! Contentful has released an official server which you can find [here](https://github.com/contentful/contentful-mcp-server)\n\n[![smithery badge](https://smithery.ai/badge/@ivotoby/contentful-management-mcp-server)](https://smithery.ai/server/@ivotoby/contentful-management-mcp-server)\n\nAn MCP server implementation that integrates with Contentful's Content Management API, providing comprehensive content management capabilities.\n\n- Please note \\*; if you are not interested in the code, and just want to use this MCP in\n  Claude Desktop (or any other tool that is able to use MCP servers) you don't have to\n  clone this repo, you can just set it up in Claude desktop, refer to the section\n  \"Usage with Claude Desktop\" for instructions on how to install it.\n\n<a href=\"https://glama.ai/mcp/servers/l2fxeaot4p\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/l2fxeaot4p/badge\" alt=\"contentful-mcp MCP server\" /></a>\n\n## Features\n\n- **Content Management**: Full CRUD operations for entries and assets\n- **Comment Management**: Create, retrieve, and manage comments on entries with support for both plain-text and rich-text formats, including threaded conversations\n- **Space Management**: Create, update, and manage spaces and environments\n- **Content Types**: Manage content type definitions\n- **Localization**: Support for multiple locales\n- **Publishing**: Control content publishing workflow\n- **Bulk Operations**: Execute bulk publishing, unpublishing, and validation across multiple entries and assets\n- **Smart Pagination**: List operations return maximum 3 items per request to prevent context window overflow, with built-in pagination support\n\n## Pagination\n\nTo prevent context window overflow in LLMs, list operations (like search_entries and list_assets) are limited to 3 items per request. Each response includes:\n\n- Total number of available items\n- Current page of items (max 3)\n- Number of remaining items\n- Skip value for the next page\n- Message prompting the LLM to offer retrieving more items\n\nThis pagination system allows the LLM to efficiently handle large datasets while maintaining context window limits.\n\n## Bulk Operations\n\nThe bulk operations feature provides efficient management of multiple content items simultaneously:\n\n- **Asynchronous Processing**: Operations run asynchronously and provide status updates\n- **Efficient Content Management**: Process multiple entries or assets in a single API call\n- **Status Tracking**: Monitor progress with success and failure counts\n- **Resource Optimization**: Reduce API calls and improve performance for batch operations\n\nThese bulk operation tools are ideal for content migrations, mass updates, or batch publishing workflows.\n\n## Tools\n\n### Entry Management\n\n- **search_entries**: Search for entries using query parameters\n- **create_entry**: Create new entries\n- **get_entry**: Retrieve existing entries\n- **update_entry**: Update entry fields\n- **delete_entry**: Remove entries\n- **publish_entry**: Publish entries\n- **unpublish_entry**: Unpublish entries\n\n### Comment Management\n\n- **get_comments**: Retrieve comments for an entry with filtering by status (active, resolved, all)\n- **create_comment**: Create new comments on entries with support for both plain-text and rich-text formats. Supports threaded conversations by providing a parent comment ID to reply to existing comments\n- **get_single_comment**: Retrieve a specific comment by its ID for an entry\n- **delete_comment**: Delete a specific comment from an entry\n- **update_comment**: Update existing comments with new body content or status changes\n\n#### Threaded Comments\n\nComments support threading functionality to enable structured conversations and work around the 512-character limit:\n\n- **Reply to Comments**: Use the `parent` parameter in `create_comment` to reply to an existing comment\n- **Threaded Conversations**: Build conversation trees by replying to specific comments\n- **Extended Discussions**: Work around the 512-character limit by creating threaded replies to continue longer messages\n- **Conversation Context**: Maintain context in discussions by organizing related comments in threads\n\nExample usage:\n\n1. Create a main comment: `create_comment` with `entryId`, `body`, and `status`\n2. Reply to that comment: `create_comment` with `entryId`, `body`, `status`, and `parent` (the ID of the comment you're replying to)\n3. Continue the thread: Reply to any comment in the thread by using its ID as the `parent`\n\n### Bulk Operations\n\n- **bulk_publish**: Publish multiple entries and assets in a single operation. Accepts an array of entities (entries and assets) and processes their publication as a batch.\n- **bulk_unpublish**: Unpublish multiple entries and assets in a single operation. Similar to bulk_publish but removes content from the delivery API.\n- **bulk_validate**: Validate multiple entries for content consistency, references, and required fields. Returns validation results without modifying content.\n\n### Asset Management\n\n- **list_assets**: List assets with pagination (3 items per page)\n- **upload_asset**: Upload new assets with metadata\n- **get_asset**: Retrieve asset details and information\n- **update_asset**: Update asset metadata and files\n- **delete_asset**: Remove assets from space\n- **publish_asset**: Publish assets to delivery API\n- **unpublish_asset**: Unpublish assets from delivery API\n\n### Space & Environment Management\n\n- **list_spaces**: List available spaces\n- **get_space**: Get space details\n- **list_environments**: List environments in a space\n- **create_environment**: Create new environment\n- **delete_environment**: Remove environment\n\n### Content Type Management\n\n- **list_content_types**: List available content types\n- **get_content_type**: Get content type details\n- **create_content_type**: Create new content type\n- **update_content_type**: Update content type\n- **delete_content_type**: Remove content type\n- **publish_content_type**: Publish a content type\n\n## Development Tools\n\n### MCP Inspector\n\nThe project includes an MCP Inspector tool that helps with development and debugging:\n\n- **Inspect Mode**: Run `npm run inspect` to start the inspector, you can open the inspector by going to http://localhost:5173\n- **Watch Mode**: Use `npm run inspect:watch` to automatically restart the inspector when files change\n- **Visual Interface**: The inspector provides a web interface to test and debug MCP tools\n- **Real-time Testing**: Try out tools and see their responses immediately\n- **Bulk Operations Testing**: Test and monitor bulk operations with visual feedback on progress and results\n\nThe project also contains a `npm run dev` command which rebuilds and reloads the MCP server on every change.\n\n## Configuration\n\n### Prerequisites\n\n1. Create a Contentful account at [Contentful](https://www.contentful.com/)\n2. Generate a Content Management API token from your account settings\n\n### Environment Variables\n\nThese variables can also be set as arguments\n\n- `CONTENTFUL_HOST` / `--host`: Contentful Management API Endpoint (defaults to https://api.contentful.com)\n- `CONTENTFUL_MANAGEMENT_ACCESS_TOKEN` / `--management-token`: Your Content Management API token\n- `ENABLE_HTTP_SERVER` / `--http`: Set to \"true\" to enable HTTP/SSE mode\n- `HTTP_PORT` / `--port`: Port for HTTP server (default: 3000)\n- `HTTP_HOST` / `--http-host`: Host for HTTP server (default: localhost)\n\n### Space and Environment Scoping\n\nYou can scope the spaceId and EnvironmentId to ensure the LLM will only do operations on the defined space/env ID's.\nThis is mainly to support agents that are to operate within specific spaces. If both `SPACE_ID` and `ENVIRONMENT_ID` env-vars are set\nthe tools will not report needing these values and the handlers will use the environment vars to do CMA operations.\nYou will also loose access to the tools in the space-handler, since these tools are across spaces.\nYou can also add the `SPACE_ID` and `ENVIRONMENT_ID` by using arguments `--space-id` and `--environment-id`\n\n#### Using App Identity\n\nInstead of providing a Management token you can also leverage [App Identity](https://www.contentful.com/developers/docs/extensibility/app-framework/app-identity/)\nfor handling authentication. You would have to setup and install a Contentful App and set the following parameters when calling the MCP-server:\n\n- `--app-id` = the app Id which is providing the Apptoken\n- `--private-key` = the private key you created in the user-interface with your app, tied to `app_id`\n- `--space-id` = the spaceId in which the app is installed\n- `--environment-id` = the environmentId (within the space) in which the app is installed.\n\nWith these values the MCP server will request a temporary AppToken to do content operation in the defined space/environment-id. This especially useful when using this MCP server in backend systems that act as MCP-client (like chat-agents)\n\n### Usage with Claude Desktop\n\nYou do not need to clone this repo to use this MCP, you can simply add it to\nyour `claude_desktop_config.json`:\n\nAdd or edit `~/Library/Application Support/Claude/claude_desktop_config.json`\nand add the following lines:\n\n```json\n{\n  \"mcpServers\": {\n    \"contentful\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@ivotoby/contentful-management-mcp-server\"],\n      \"env\": {\n        \"CONTENTFUL_MANAGEMENT_ACCESS_TOKEN\": \"<Your CMA token>\"\n      }\n    }\n  }\n}\n```\n\nIf your MCPClient does not support setting environment variables you can also set the management token using an argument like this:\n\n```json\n{\n  \"mcpServers\": {\n    \"contentful\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@ivotoby/contentful-management-mcp-server\",\n        \"--management-token\",\n        \"<your token>\",\n        \"--host\",\n        \"http://api.contentful.com\"\n      ]\n    }\n  }\n}\n```\n\n### Installing via Smithery\n\nTo install Contentful Management Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@ivotoby/contentful-management-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @ivotoby/contentful-management-mcp-server --client claude\n```\n\n### Developing and using Claude desktop\n\nIf you want to contribute and test what Claude does with your contributions;\n\n- run `npm run dev`, this will start the watcher that rebuilds the MCP server on every change\n- update `claude_desktop_config.json` to reference the project directly, ie;\n\n```\n{\n  \"mcpServers\": {\n    \"contentful\": {\n      \"command\": \"node\",\n      \"args\": [\"/Users/ivo/workspace/contentful-mcp/bin/mcp-server.js\"],\n      \"env\": {\n        \"CONTENTFUL_MANAGEMENT_ACCESS_TOKEN\": \"<Your CMA Token>\"\n      }\n    }\n  }\n}\n```\n\nThis will allow you to test any modification in the MCP server with Claude directly, however; if you add new tools/resources you will need to restart Claude Desktop\n\n## Transport Modes\n\nThe MCP server supports two transport modes:\n\n### stdio Transport\n\nThe default transport mode uses standard input/output streams for communication. This is ideal for integration with MCP clients that support stdio transport, like Claude Desktop.\n\nTo use stdio mode, simply run the server without the `--http` flag:\n\n```bash\nnpx -y contentful-mcp --management-token YOUR_TOKEN\n# or alternatively\nnpx -y @ivotoby/contentful-management-mcp-server --management-token YOUR_TOKEN\n```\n\n### StreamableHTTP Transport\n\nThe server also supports the StreamableHTTP transport as defined in the MCP protocol. This mode is useful for web-based integrations or when running the server as a standalone service.\n\nTo use StreamableHTTP mode, run with the `--http` flag:\n\n```bash\nnpx -y contentful-mcp --management-token YOUR_TOKEN --http --port 3000\n# or alternatively\nnpx -y @ivotoby/contentful-management-mcp-server --management-token YOUR_TOKEN --http --port 3000\n```\n\n#### StreamableHTTP Details\n\n- Uses the official MCP StreamableHTTP transport\n- Supports standard MCP protocol operations\n- Includes session management for maintaining state\n- Properly handles initialize/notify patterns\n- Compatible with standard MCP clients\n- Replaces the deprecated SSE transport with the modern approach\n\nThe implementation follows the standard MCP protocol specification, allowing any MCP client to connect to the server without special handling.\n\n## Error Handling\n\nThe server implements comprehensive error handling for:\n\n- Authentication failures\n- Rate limiting\n- Invalid requests\n- Network issues\n- API-specific errors\n\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/146d4235-bdb1-492e-b594-82fd27b77388)\n\n## License\n\nMIT License\n\n## Fine print\n\nThis MCP Server enables Claude (or other agents that can consume MCP resources) to update, delete content, spaces and content-models. So be sure what you allow Claude to do with your Contentful spaces!\n\nThis MCP-server is not officially supported by Contentful (yet)\n",
+  "category": "Development",
+  "quality_score": 68,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ivotoby-contentful-management-mcp-server-dev": {
+        "command": "npm",
+        "args": ["run", "dev"],
+        "env": {}
+      },
+      "ivotoby-contentful-management-mcp-server-inspect": {
+        "command": "npm",
+        "args": ["run", "inspect"],
+        "env": {}
+      },
+      "ivotoby-contentful-management-mcp-server-inspect-watch": {
+        "command": "npm",
+        "args": ["run", "inspect:watch"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ivo-toby",
+    "repo": "contentful-mcp",
+    "url": "https://github.com/ivo-toby/contentful-mcp",
+    "name": "contentful-mcp",
+    "path": null,
+    "stars": 59,
+    "contributors": 6,
+    "issues": 9,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4393efafd53d0c12eb95a0f05b5cd9ece70fac4e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.931Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@contentful/node-apps-toolkit",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "contentful-management",
+      "importance": 9
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@ivotoby/contentful-management-mcp-server\",\n  \"version\": \"1.14.0\",\n  \"description\": \"MCP server for Contentful Content Management API integration\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"main\": \"./dist/bundle.js\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/ivo-toby/contentful-mcp.git\"\n  },\n  \"bin\": {\n    \"mcp-server-contentful\": \"./bin/mcp-server.js\",\n    \"contentful-mcp\": \"./bin/mcp-server.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"node build.js && chmod +x bin/mcp-server.js\",\n    \"clean\": \"rm -rf dist\",\n    \"lint\": \"eslint src/**/*.ts\",\n    \"watch\": \"tsc --watch\",\n    \"dev\": \"nodemon --watch src -e ts --exec 'npm run build'\",\n    \"typecheck\": \"tsc --noEmit\",\n    \"prepare\": \"npm run build\",\n    \"inspect\": \"node -r dotenv/config ./scripts/inspect.js\",\n    \"inspect-watch\": \"node ./scripts/inspect-watch.js\",\n    \"test\": \"vitest run --config vitest.config.ts\",\n    \"test:watch\": \"vitest watch --config vitest.config.ts\"\n  },\n  \"dependencies\": {\n    \"@contentful/node-apps-toolkit\": \"^3.13.0\",\n    \"@modelcontextprotocol/sdk\": \"1.11.1\",\n    \"contentful-management\": \"^11.52.2\",\n    \"cors\": \"^2.8.5\",\n    \"dotenv\": \"^16.5.0\",\n    \"express\": \"^4.18.3\",\n    \"zod\": \"^3.24.4\",\n    \"zod-to-json-schema\": \"^3.24.5\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.19.0\",\n    \"@semantic-release/commit-analyzer\": \"^11.1.0\",\n    \"@semantic-release/github\": \"^9.2.6\",\n    \"@semantic-release/npm\": \"^11.0.3\",\n    \"@semantic-release/release-notes-generator\": \"^12.1.0\",\n    \"@types/chai\": \"^4.3.11\",\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/express\": \"^4.17.21\",\n    \"@types/mocha\": \"^10.0.6\",\n    \"@types/node\": \"^20.10.0\",\n    \"@types/sinon\": \"^17.0.3\",\n    \"@types/supertest\": \"^6.0.2\",\n    \"@typescript-eslint/eslint-plugin\": \"^6.12.0\",\n    \"@typescript-eslint/parser\": \"^6.12.0\",\n    \"chai\": \"^5.0.0\",\n    \"esbuild\": \"^0.19.9\",\n    \"eslint\": \"^8.57.1\",\n    \"eslint-plugin-perfectionist\": \"^4.7.0\",\n    \"mocha\": \"^10.2.0\",\n    \"msw\": \"^2.7.0\",\n    \"nodemon\": \"^3.1.9\",\n    \"prettier\": \"^3.4.2\",\n    \"semantic-release\": \"^22.0.12\",\n    \"sinon\": \"^17.0.1\",\n    \"supertest\": \"^6.3.3\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.6.2\",\n    \"typescript-eslint\": \"^8.22.0\",\n    \"vitest\": \"^3.1.3\"\n  }\n}\n"
+}

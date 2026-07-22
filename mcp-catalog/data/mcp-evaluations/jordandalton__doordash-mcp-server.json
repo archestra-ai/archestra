@@ -1,0 +1,94 @@
+{
+  "name": "jordandalton__doordash-mcp-server",
+  "display_name": "DoorDash-MCP-Server",
+  "description": "MCP server from JordanDalton/DoorDash-MCP-Server",
+  "author": {
+    "name": "JordanDalton"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "DOORDASH_API_KEY": "${user_config.doordash_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "doordash_api_key": {
+      "type": "string",
+      "title": "DoorDash API Key",
+      "description": "Your API key for DoorDash authentication",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# MCP Server Guide\n\nTo build the MCP server, run:\n\n```\nnpm install && npm run build\n```\n\nThis will compile the typescript files and produce a build directory plus it will output the json you can copy/paste into your MCP client (Claude Desktop, Windsurf, Cursor, etc.)\n\nIf all things go well, this will produce an output similar to this:\n\n```json\n{\n  \"mcpServers\": {\n    \"doordash\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"<thePathToYour>/build/index.js\"\n      ],\n      \"env\": [\n        {\n          \"DOORDASH_API_KEY\": \"<REPLACE>\"\n        }\n      ]\n    }\n  }\n}\n```\n\n## Support & Feedback\nIf things do not compile, or you have more advanced needs, please reach out to me at, jordan@daltonsolutions.com.\n\n## Sharing\n\nIf you have found value in this service please share it on social media. You can tag me [@jordandalton](https://x.com/jordankdalton) on X, or [jdcarnivore](https://www.reddit.com/user/jdcarnivore) on Reddit.",
+  "category": "Development",
+  "quality_score": 32,
+  "archestra_config": {
+    "client_config_permutations": {
+      "doordash": {
+        "command": "node",
+        "args": ["<thePathToYour>/build/index.js"],
+        "env": {
+          "DOORDASH_API_KEY": "<REPLACE>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "JordanDalton",
+    "repo": "DoorDash-MCP-Server",
+    "url": "https://github.com/JordanDalton/DoorDash-MCP-Server",
+    "name": "jordandalton__doordash-mcp-server",
+    "path": null,
+    "stars": 11,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "3343c732ea7a2b5e958cb88ab657a69f18d9f324"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:45.144Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "jsonwebtoken",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"doordash-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js && node showSettings\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"axios\": \"^1.8.4\",\n    \"jsonwebtoken\": \"^9.0.2\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.0\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

@@ -1,0 +1,149 @@
+{
+  "name": "sergehuber__inoyu-mcp-unomi-server",
+  "display_name": "inoyu-mcp-unomi-server",
+  "description": "An implementation of Anthropic's Model Context Protocol for the Apache Unomi CDP",
+  "author": {
+    "name": "sergehuber"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["@inoyu/mcp-unomi-server"],
+    "env": {
+      "UNOMI_BASE_URL": "${user_config.unomi_base_url}",
+      "UNOMI_USERNAME": "${user_config.unomi_username}",
+      "UNOMI_PASSWORD": "${user_config.unomi_password}",
+      "UNOMI_PROFILE_ID": "${user_config.unomi_profile_id}",
+      "UNOMI_KEY": "${user_config.unomi_key}",
+      "UNOMI_EMAIL": "${user_config.unomi_email}",
+      "UNOMI_SOURCE_ID": "${user_config.unomi_source_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "unomi_base_url": {
+      "type": "string",
+      "title": "Unomi Base URL",
+      "description": "The base URL for your Apache Unomi server.",
+      "required": true,
+      "default": "http://your-unomi-server:8181",
+      "sensitive": false
+    },
+    "unomi_username": {
+      "type": "string",
+      "title": "Unomi Username",
+      "description": "Username for authenticating with Apache Unomi (default: karaf).",
+      "required": true,
+      "default": "karaf",
+      "sensitive": false
+    },
+    "unomi_password": {
+      "type": "string",
+      "title": "Unomi Password",
+      "description": "Password for authenticating with Apache Unomi (default: karaf).",
+      "required": true,
+      "default": "karaf",
+      "sensitive": true
+    },
+    "unomi_profile_id": {
+      "type": "string",
+      "title": "Unomi Profile ID",
+      "description": "Optional: A specific profile ID to use. If not set or email lookup fails, a new profile might be created or a default used.",
+      "required": false,
+      "sensitive": false
+    },
+    "unomi_key": {
+      "type": "string",
+      "title": "Unomi Authorization Key",
+      "description": "The authorization key for protected Unomi events. Must match server configuration (default: 670c26d1cc413346c3b2fd9ce65dab41).",
+      "required": true,
+      "default": "670c26d1cc413346c3b2fd9ce65dab41",
+      "sensitive": true
+    },
+    "unomi_email": {
+      "type": "string",
+      "title": "User Email",
+      "description": "The email address to use for profile lookup and creation. If set, it takes precedence over Profile ID.",
+      "required": false,
+      "sensitive": false
+    },
+    "unomi_source_id": {
+      "type": "string",
+      "title": "Unomi Source ID",
+      "description": "Identifier for the source of profile interactions (e.g., claude-desktop).",
+      "required": true,
+      "default": "claude-desktop",
+      "sensitive": false
+    }
+  },
+  "readme": "# Inoyu Apache Unomi MCP Server\n\nA Model Context Protocol server enabling Claude to maintain user context through Apache Unomi profile management.\n\n> ⚠️ **Early Implementation Notice**\n>\n> This is an early implementation intended for demonstration purposes:\n> - Not validated for production use\n> - Subject to changes\n> - Not (yet) officially supported\n> - For learning and experimentation only\n\n## Current Scope\n\nThis implementation provides:\n- Profile lookup and creation using email\n- Profile property management\n- Basic session handling\n- Scope management for context isolation\n\nOther Unomi features (events, segments, session properties, etc.) are not currently implemented. Community feedback welcome on future development priorities.\n\n## Demo\n\nWatch how the MCP server enables Claude to maintain context and manage user profiles:\n\n[![Apache Unomi MCP Server Demo](https://img.youtube.com/vi/YqPkUhBlcrs/0.jpg)](https://www.youtube.com/watch?v=YqPkUhBlcrs)\n\n## Installation\n\nTo use with Claude Desktop, add the server config and environment variables:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"unomi-server\": {\n      \"command\": \"npx\",\n      \"args\": [\"@inoyu/mcp-unomi-server\"],\n      \"env\": {\n        \"UNOMI_BASE_URL\": \"http://your-unomi-server:8181\",\n        \"UNOMI_USERNAME\": \"your-username\", // by default Apache Unomi uses karaf  \n        \"UNOMI_PASSWORD\": \"your-password\", // by default Apache Unomi uses karaf\n        \"UNOMI_PROFILE_ID\": \"your-profile-id\",\n        \"UNOMI_KEY\": \"your-unomi-key\", // by default Apache Unomi uses 670c26d1cc413346c3b2fd9ce65dab41\n        \"UNOMI_EMAIL\": \"your-email@example.com\",\n        \"UNOMI_SOURCE_ID\": \"claude-desktop\"\n      }\n    }\n  }\n}\n```\n\nThe `env` section in the configuration allows you to set the required environment variables for the server. Replace the values with your actual Unomi server details.\n\nMake sure to restart Claude Desktop after updating the configuration. You can then click on the tools icon on the lower right of the chat window to make sure it has found all the tools provided by this server.\n\n## Features\n\n### Profile Access\n- Email-based profile lookup with automatic creation\n- Profile properties, segments, and scores access\n- JSON format for all data exchange\n- Automatic session management with date-based IDs\n\n### Tools\n- `get_my_profile` - Get your profile using environment variables\n  - Uses UNOMI_PROFILE_ID from environment or email lookup\n  - Automatically generates a session ID based on the current date\n  - Optional parameters:\n    - requireSegments: Include segment information\n    - requireScores: Include scoring information\n- `update_my_profile` - Update properties of your profile\n  - Uses UNOMI_PROFILE_ID from environment or email lookup\n  - Takes a properties object with key-value pairs to update\n  - Supports string, number, boolean, and null values\n  - Example:\n    ```json\n    {\n      \"properties\": {\n        \"firstName\": \"John\",\n        \"age\": 30,\n        \"isSubscribed\": true,\n        \"oldProperty\": null\n      }\n    }\n    ```\n- `get_profile` - Retrieve a specific profile by ID\n  - Takes profileId as required parameter\n  - Returns full profile data from Unomi\n- `search_profiles` - Search for profiles\n  - Takes query string and optional limit/offset parameters\n  - Searches across firstName, lastName, and email fields\n- `create_scope` - Create a new Unomi scope\n  - Takes scope identifier and optional name/description\n  - Required for event tracking and profile updates\n  - Example:\n    ```json\n    {\n      \"scope\": \"my-app\",\n      \"name\": \"My Application\",\n      \"description\": \"Scope for my application events\"\n    }\n    ```\n\n### Scope Management\nThe server automatically manages scopes for you:\n\n1. Default Scope:\n   - A default scope `claude-desktop` is used for all operations\n   - Created automatically when needed\n   - Used for profile updates and event tracking\n\n2. Custom Scopes:\n   - Can be created using the `create_scope` tool\n   - Useful for separating different applications or contexts\n   - Must exist before using in profile operations\n\n3. Automatic Scope Creation:\n   - The server checks if required scopes exist\n   - Creates them automatically if missing\n   - Uses meaningful defaults for scope metadata\n\n> **Note**: While scopes are created automatically when needed, you can still create them manually with custom names and descriptions using the `create_scope` tool.\n\n## Overview\n\nThis MCP server enables Claude to maintain context about users through Apache Unomi's profile management system. Here's what you can achieve with it:\n\n### Key Capabilities\n1. **User Recognition**:\n   - Identify users across conversations using email or profile ID\n   - Maintain consistent user context between sessions\n   - Automatically create and manage user profiles\n\n2. **Context Management**:\n   - Store and retrieve user preferences\n\n3. **Integration Features**:\n   - Seamless Claude Desktop integration\n   - Automatic session management\n   - Scope-based context isolation\n\n### What You Can Do\n- Have Claude remember user preferences across conversations\n- Store and retrieve user-specific information\n- Maintain consistent user context\n- Manage multiple users through email identification\n\n### Prerequisites\n- Running Apache Unomi server\n- Claude Desktop installation\n- Network access to Unomi server\n- Proper security configuration\n- Required environment variables\n\n## Configuration\n\n### Environment Variables\n\nThe server requires the following environment variables:\n\n```bash\nUNOMI_BASE_URL=http://your-unomi-server:8181\nUNOMI_USERNAME=your-username\nUNOMI_PASSWORD=your-password\nUNOMI_PROFILE_ID=your-profile-id\nUNOMI_SOURCE_ID=your-source-id\nUNOMI_KEY=your-unomi-key\nUNOMI_EMAIL=your-email\n```\n\n### Profile Resolution\n\nThe server uses a two-step process to resolve the profile ID:\n\n1. Email Lookup (if `UNOMI_EMAIL` is set):\n   - Searches for a profile with matching email\n   - If found, uses that profile's ID\n   - Useful for maintaining consistent profile across sessions\n\n2. Fallback Profile ID:\n   - If email lookup fails or `UNOMI_EMAIL` is not set\n   - Uses the `UNOMI_PROFILE_ID` from environment\n   - Ensures a profile is always available\n\nThe response will indicate which method was used via the `source` field:\n- `\"email_lookup\"`: Profile found via email\n- `\"environment\"`: Using fallback profile ID\n\n### Unomi Server Configuration\n\n1. Configure protected events in `etc/org.apache.unomi.cluster.cfg`:\n   ```properties\n   # Required for protected events like property updates\n   org.apache.unomi.cluster.authorization.key=your-unomi-key\n   \n   # Required to allow Claude Desktop to access Unomi\n   # Replace your-claude-desktop-ip with your actual IP\n   org.apache.unomi.ip.ranges=127.0.0.1,::1,your-claude-desktop-ip\n   ```\n\n2. Ensure your Unomi server has CORS properly configured in `etc/org.apache.unomi.cors.cfg`:\n   ```properties\n   # Add your Claude Desktop origin if needed\n   org.apache.unomi.cors.allowed.origins=http://localhost:*\n   ```\n\n3. Restart Unomi server to apply changes\n\n> **Important**: The Unomi key must match exactly between your server configuration and the UNOMI_KEY environment variable in Claude Desktop.\n\n## Configuration\n\n### Environment Variables\n\nThe server requires the following environment variables:\n\n```bash\nUNOMI_BASE_URL=http://your-unomi-server:8181\nUNOMI_USERNAME=your-username\nUNOMI_PASSWORD=your-password\nUNOMI_PROFILE_ID=your-profile-id\nUNOMI_SOURCE_ID=your-source-id\nUNOMI_KEY=your-unomi-key\nUNOMI_EMAIL=your-email\n```\n\n### Profile Resolution\n\nThe server uses a two-step process to resolve the profile ID:\n\n1. Email Lookup (if `UNOMI_EMAIL` is set):\n   - Searches for a profile with matching email\n   - If found, uses that profile's ID\n   - Useful for maintaining consistent profile across sessions\n\n2. Fallback Profile ID:\n   - If email lookup fails or `UNOMI_EMAIL` is not set\n   - Uses the `UNOMI_PROFILE_ID` from environment\n   - Ensures a profile is always available\n\nThe response will indicate which method was used via the `source` field:\n- `\"email_lookup\"`: Profile found via email\n- `\"environment\"`: Using fallback profile ID\n\n### Unomi Server Configuration\n\n1. Configure protected events in `etc/org.apache.unomi.cluster.cfg`:\n   ```properties\n   # Required for protected events like property updates\n   org.apache.unomi.cluster.authorization.key=your-unomi-key\n   \n   # Required to allow Claude Desktop to access Unomi\n   # Replace your-claude-desktop-ip with your actual IP\n   org.apache.unomi.ip.ranges=127.0.0.1,::1,your-claude-desktop-ip\n   ```\n\n2. Ensure your Unomi server has CORS properly configured in `etc/org.apache.unomi.cors.cfg`:\n   ```properties\n   # Add your Claude Desktop origin if needed\n   org.apache.unomi.cors.allowed.origins=http://localhost:*\n   ```\n\n3. Restart Unomi server to apply changes\n\n> **Important**: The Unomi key must match exactly between your server configuration and the UNOMI_KEY environment variable in Claude Desktop.\n\n## Development\n\nInstall dependencies:\n```bash\nnpm install\n```\n\nBuild the server:\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n```bash\nnpm run watch\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nnpm run inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n\nYou can also tail the Claude Desktop logs to see MCP requests and responses:\n\n```bash\n# Follow logs in real-time\ntail -n 20 -f ~/Library/Logs/Claude/mcp*.log\n```\n\n### Session ID Format\nWhen using `get_my_profile`, the session ID is automatically generated using the format:\n```\n[profileId]-YYYYMMDD\n```\nFor example, if your profile ID is \"user123\" and today is March 15, 2024, the session ID would be:\n```\nuser123-20240315\n```\n\n## Troubleshooting\n\n### Common Issues\n\n1. **Protected Events Failing**\n   - Verify Unomi key matches exactly in both configurations\n   - Check IP address is correctly whitelisted\n   - Ensure scope exists before updating properties\n   - Verify CORS configuration if needed\n\n2. **Profile Not Found**\n   - Check if UNOMI_EMAIL is correctly set\n   - Verify email format is valid\n   - Ensure profile exists in Unomi\n   - Check if fallback UNOMI_PROFILE_ID is valid\n\n3. **Session Issues**\n   - Remember sessions are date-based\n   - Only one session per profile per day\n   - Check session ID format matches `profileId-YYYYMMDD`\n   - Verify scope exists for session\n\n4. **Connection Problems**\n   - Verify Unomi server is running\n   - Check network connectivity\n   - Ensure UNOMI_BASE_URL is correct\n   - Verify authentication credentials\n\n### Logs to Check\n\n1. **Claude Desktop Logs**:\n   ```bash\n   # MacOS\n   ~/Library/Logs/Claude/mcp*.log\n   \n   # Windows\n   %APPDATA%\\Claude\\mcp*.log\n   ```\n\n2. **Unomi Server Logs**:\n   ```bash\n   # Usually in\n   $UNOMI_HOME/logs/karaf.log\n   ```\n\n### Quick Fixes\n\n1. **Reset State**:\n   ```bash\n   # Stop Claude Desktop\n   # Clear logs\n   rm ~/Library/Logs/Claude/mcp*.log\n   # Restart Claude Desktop\n   ```\n\n2. **Verify Configuration**:\n   ```bash\n   # Check Unomi connection\n   curl -u username:password http://your-unomi-server:8181/cxs/cluster\n   \n   # Test scope exists\n   curl -u username:password http://your-unomi-server:8181/cxs/scopes/claude-desktop\n   ```\n\n### Claude Desktop Configuration options\n\n1. Create or edit your Claude Desktop configuration:\n   - MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n2. Add the server configuration using NPX:\n   ```json\n   {\n     \"mcpServers\": {\n       \"unomi-server\": {\n         \"command\": \"npx\",\n         \"args\": [\"@inoyu/mcp-unomi-server\"],\n         \"env\": {\n           \"UNOMI_BASE_URL\": \"http://your-unomi-server:8181\",\n           \"UNOMI_USERNAME\": \"your-username\",\n           \"UNOMI_PASSWORD\": \"your-password\",\n           \"UNOMI_PROFILE_ID\": \"your-profile-id\",\n           \"UNOMI_KEY\": \"your-unomi-key\",\n           \"UNOMI_EMAIL\": \"your-email@example.com\",\n           \"UNOMI_SOURCE_ID\": \"claude-desktop\"\n         }\n       }\n     }\n   }\n   ```\n\n> **Note**: Using NPX ensures you're always running the latest published version of the server.\n\nAlternatively, if you want to use a specific version:\n```json\n{\n  \"mcpServers\": {\n    \"unomi-server\": {\n      \"command\": \"npx\",\n      \"args\": [\"@inoyu/mcp-unomi-server@0.1.0\"],\n      \"env\": {\n        // ... environment variables ...\n      }\n    }\n  }\n}\n```\n\nFor development or local installations:\n```json\n{\n  \"mcpServers\": {\n    \"unomi-server\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/local/mcp-unomi-server/build/index.js\"],\n      \"env\": {\n        // ... environment variables ...\n      }\n    }\n  }\n}\n```\n\n",
+  "category": "CRM",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "inoyu-mcp-unomi-server": {
+        "command": "npx",
+        "args": ["@inoyu/mcp-unomi-server"],
+        "env": {
+          "UNOMI_BASE_URL": "http://your-unomi-server:8181",
+          "UNOMI_USERNAME": "your-username",
+          "UNOMI_PASSWORD": "your-password",
+          "UNOMI_PROFILE_ID": "your-profile-id",
+          "UNOMI_KEY": "your-unomi-key",
+          "UNOMI_EMAIL": "your-email@example.com",
+          "UNOMI_SOURCE_ID": "claude-desktop"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sergehuber",
+    "repo": "inoyu-mcp-unomi-server",
+    "url": "https://github.com/sergehuber/inoyu-mcp-unomi-server",
+    "name": "sergehuber__inoyu-mcp-unomi-server",
+    "path": null,
+    "stars": 6,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "8030d9ebc368a6a460f9662b525add2fcd0efe0a"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:26.659Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@inoyu/mcp-unomi-server\",\n  \"version\": \"0.1.0\",\n  \"description\": \"A Model Context Protocol server to access Apache Unomi data\",\n  \"private\": false,\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-unomi-server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\",\n    \"README.md\",\n    \"LICENSE\",\n    \"NOTICE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"axios\": \"^1.7.8\",\n    \"dotenv\": \"^16.4.5\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"unomi\",\n    \"claude\",\n    \"anthropic\",\n    \"cdp\",\n    \"profile\"\n  ],\n  \"author\": \"Inoyu\",\n  \"license\": \"Apache-2.0\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/inoyu/mcp-unomi-server.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/inoyu/mcp-unomi-server/issues\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\n"
+}

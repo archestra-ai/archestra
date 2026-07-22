@@ -1,0 +1,90 @@
+{
+  "name": "currents-dev__currents-mcp",
+  "display_name": "currents-mcp",
+  "description": "Currents MCP Server",
+  "author": {
+    "name": "currents-dev"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@currents/mcp"],
+    "env": {
+      "CURRENTS_API_KEY": "${user_config.currents_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "currents_api_key": {
+      "type": "string",
+      "title": "Currents API Key",
+      "description": "Your API key for authentication with Currents.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Currents MCP Server\n\nThis is a MCP server that allows you to provide test results context to your AI agents by connecting them to Currents. Useful for asking AI to fix or optimize tests failing in CI.\n\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=currents&config=eyJjb21tYW5kIjoibnB4IC15IEBjdXJyZW50cy9tY3AiLCJlbnYiOnsiQ1VSUkVOVFNfQVBJX0tFWSI6InlvdXItYXBpLWtleSJ9fQ%3D%3D)\n\n## Tools\n\n1. `get-api-config`\n\n- Get the API key and URL used to make requests to Currents API\n\n2. `get-run`\n\n- Get the run information by its ID\n\n3. `get-spec-file-attempts-and-errors`\n\n- Get the instance information about attempts and errors by its ID \n\n## Setup\n\n### API Key\n\nGet a Currents API key by following the [instructions here](https://docs.currents.dev/resources/api/api-keys).\n\n### Usage with Cursor Editor\n\n1. Go to Cursor Settings > MCP > Enable\n2. Add the following to your `mcp.json`.\n\n### NPX\n```\n{\n  \"mcpServers\": {\n    \"currents\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@currents/mcp\"\n      ],\n      \"env\": {\n        \"CURRENTS_API_KEY\": \"your-api-key\"\n      }\n    }\n  }\n}\n```\n\n### Usage with Claude Desktop\n\n#### Installing via Smithery\n\nTo install Currents Test Results Context Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@currents-dev/currents-mcp):\n\n```bash\nnpx -y @smithery/cli install @currents-dev/currents-mcp --client claude\n```\n\nAdd the following to your `claude_desktop_config.json`:\n\n#### NPX\n```\n{\n  \"mcpServers\": {\n    \"currents\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@currents/mcp\"\n      ],\n      \"env\": {\n        \"CURRENTS_API_KEY\": \"your-api-key\"\n      }\n    }\n  }\n}\n```\n\n\n### ⚠️ Notice\nBy connecting AI tools (e.g., via MCP) to Currents, you are granting them access to your API key, test results and CI metadata. It is your responsibility to vet any AI agents or services you use, and to ensure they handle your data securely.\n\n\n## How to Contribute\n\nWe welcome contributions of all kinds—bug fixes, features, and documentation updates!\n\n### Quick Start\n\n1. Fork this repository and clone your fork:\n   ```bash\n   git clone https://github.com/<your-username>/currents-mcp.git\n   cd currents-mcp\n   ```\n2. Install dependencies:\n   ```bash\n   cd mcp-server\n   npm install\n   ```\n3. Build the project:\n   ```bash\n   npm run build\n   ```\n4. Run locally (stdio):\n   ```bash\n   npm start\n   ```\n   You should see: `Currents MCP Server running on stdio`.\n\n### Local Development with a Client (optional)\n\nTo test with a local MCP client (e.g., Cursor or Claude Desktop), point the client to your built server:\n\n- Command: `node`\n- Args: `./mcp-server/build/index.js`\n- Env: set `CURRENTS_API_KEY` to a valid key\n\nExample snippet for a client config:\n```json\n{\n  \"mcpServers\": {\n    \"currents\": {\n      \"command\": \"node\",\n      \"args\": [\"./mcp-server/build/index.js\"],\n      \"env\": {\n        \"CURRENTS_API_KEY\": \"your-api-key\"\n      }\n    }\n  }\n}\n```\n\n### Making Changes\n\n- Create a feature branch:\n  ```bash\n  git checkout -b feat/short-description\n  ```\n- Make changes under `mcp-server/src/`, then rebuild and re-run:\n  ```bash\n  npm run build && npm start\n  ```\n- Keep changes focused and documented (add comments/types where helpful).\n\n### Commit and PR Guidelines\n\n- Write clear commit messages (e.g., “fix: handle missing env vars” or “feat: add get-run tool filters”).\n- Push your branch and open a Pull Request:\n  ```bash\n  git push origin feat/short-description\n  ```\n- In your PR, describe the motivation, approach, and any trade-offs. Link related issues if applicable.\n\n### Reporting Issues\n\n- Before creating a new issue, please search existing issues to avoid duplicates.\n- When filing a bug report, include steps to reproduce, expected vs. actual behavior, and environment details (OS, Node.js version).\n\n### License\n\nBy contributing, you agree that your contributions will be licensed under the ISC license (as specified in the package metadata).\n",
+  "category": "Development",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "currents-mcp": {
+        "command": "npx",
+        "args": ["-y", "@currents/mcp"],
+        "env": {
+          "CURRENTS_API_KEY": "your-api-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "currents-dev",
+    "repo": "currents-mcp",
+    "url": "https://github.com/currents-dev/currents-mcp",
+    "name": "currents-dev__currents-mcp",
+    "path": null,
+    "stars": 11,
+    "contributors": 9,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "5f771732319e95f811c6ad458ca0d64ad32b7bd1"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.334Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    },
+    {
+      "name": "commander",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== mcp-server/package.json ===\n{\n  \"name\": \"@currents/mcp\",\n  \"type\": \"module\",\n  \"files\": [\n    \"build\"\n  ],\n  \"bin\": \"./build/index.js\",\n  \"version\": \"1.0.3\",\n  \"description\": \"Currents MCP server\",\n  \"main\": \"index.js\",\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\",\n    \"publish:mcp\": \"npm run publish:npm\",\n    \"publish:npm\": \"npm run rm  && npm run build && ./publish.cjs\",\n    \"start\": \"node build/index.js\",\n    \"rm\": \"rimraf dist\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"zod\": \"^3.24.2\",\n    \"commander\": \"^12.1.0\"\n  },\n  \"release-it\": {\n    \"git\": {\n      \"requireCleanWorkingDir\": false\n    }\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.17\",\n    \"typescript\": \"^5.8.2\",\n    \"release-it\": \"^18.1.2\",\n    \"rimraf\": \"^6.0.1\"\n  }\n}\n"
+}

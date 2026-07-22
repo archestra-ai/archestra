@@ -61,6 +61,7 @@ import {
   useDropEmbeddingConfig,
   useOrganization,
   useTestEmbeddingConnection,
+  useTestRerankerConnection,
   useUpdateKnowledgeSettings,
 } from "@/lib/organization.query";
 
@@ -204,6 +205,11 @@ beforeEach(() => {
     mutate: vi.fn(),
     isPending: false,
   } as unknown as ReturnType<typeof useTestEmbeddingConnection>);
+  vi.mocked(useTestRerankerConnection).mockReturnValue({
+    mutateAsync: vi.fn(),
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useTestRerankerConnection>);
   vi.mocked(useDropEmbeddingConfig).mockReturnValue({
     mutateAsync: vi.fn(),
     isPending: false,

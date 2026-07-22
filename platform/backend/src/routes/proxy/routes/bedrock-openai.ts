@@ -235,12 +235,16 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     const createdUnix = Math.floor(Date.now() / 1000);
     return {
       object: "list" as const,
-      data: models.map((m) => ({
-        id: m.id,
-        object: "model" as const,
-        created: createdUnix,
-        owned_by: "bedrock",
-      })),
+      // Exclude embedding models (e.g. Titan) — this is a chat model list, and an
+      // embedding model can't serve chat completions.
+      data: models
+        .filter((m) => m.capabilities?.embeddingDimensions == null)
+        .map((m) => ({
+          id: m.id,
+          object: "model" as const,
+          created: createdUnix,
+          owned_by: "bedrock",
+        })),
     };
   }
 

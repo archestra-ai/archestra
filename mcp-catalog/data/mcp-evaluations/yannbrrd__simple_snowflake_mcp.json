@@ -1,0 +1,165 @@
+{
+  "name": "yannbrrd__simple_snowflake_mcp",
+  "display_name": "simple_snowflake_mcp",
+  "description": "MCP server from YannBrrd/simple_snowflake_mcp",
+  "author": {
+    "name": "YannBrrd"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "simple_snowflake_mcp"],
+    "env": {
+      "SNOWFLAKE_USER": "${user_config.snowflake_user}",
+      "SNOWFLAKE_PASSWORD": "${user_config.snowflake_password}",
+      "SNOWFLAKE_ACCOUNT": "${user_config.snowflake_account}",
+      "SNOWFLAKE_WAREHOUSE": "${user_config.snowflake_warehouse}",
+      "SNOWFLAKE_DATABASE": "${user_config.snowflake_database}",
+      "SNOWFLAKE_SCHEMA": "${user_config.snowflake_schema}",
+      "MCP_READ_ONLY": "${user_config.mcp_read_only}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "snowflake_user": {
+      "type": "string",
+      "title": "Snowflake User",
+      "description": "Your Snowflake username",
+      "sensitive": true,
+      "required": true
+    },
+    "snowflake_password": {
+      "type": "string",
+      "title": "Snowflake Password",
+      "description": "Your Snowflake password",
+      "sensitive": true,
+      "required": true
+    },
+    "snowflake_account": {
+      "type": "string",
+      "title": "Snowflake Account Identifier",
+      "description": "Your Snowflake account identifier",
+      "sensitive": false,
+      "required": true
+    },
+    "snowflake_warehouse": {
+      "type": "string",
+      "title": "Snowflake Warehouse",
+      "description": "Optional: Snowflake warehouse name",
+      "sensitive": false,
+      "required": false
+    },
+    "snowflake_database": {
+      "type": "string",
+      "title": "Snowflake Default Database",
+      "description": "Optional: Default database name",
+      "sensitive": false,
+      "required": false
+    },
+    "snowflake_schema": {
+      "type": "string",
+      "title": "Snowflake Default Schema",
+      "description": "Optional: Default schema name",
+      "sensitive": false,
+      "required": false
+    },
+    "mcp_read_only": {
+      "type": "boolean",
+      "title": "Read-Only Mode",
+      "description": "Set to true for read-only mode (default: true)",
+      "default": true,
+      "required": false
+    }
+  },
+  "readme": "# Simple Snowflake MCP server\n\nSimple Snowflake MCP Server to work behind a corporate proxy (because I could not get that in a few minutes with existing servers, but my own server, yup). Still don't know if it's good or not. But it's good enough for now.\n\n### Tools\n\nThe server exposes the following MCP tools to interact with Snowflake:\n\n- **execute-snowflake-sql**: Executes a SQL query on Snowflake and returns the result (list of dictionaries)\n- **list-snowflake-warehouses**: Lists available Data Warehouses (DWH) on Snowflake\n- **list-databases**: Lists all accessible Snowflake databases\n- **list-views**: Lists all views in a database and schema\n- **describe-view**: Gives details of a view (columns, SQL)\n- **query-view**: Queries a view with an optional row limit (markdown result)\n- **execute-query**: Executes a SQL query in read-only mode (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH) or not (if `read_only` is false), result in markdown format\n\n## Quickstart\n\n### Install\n\n#### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n<details>\n  <summary>Development/Unpublished Servers Configuration</summary>\n\n\n  ```\n  \"mcpServers\": {\n    \"simple_snowflake_mcp\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \".\", // Use current directory for GitHub\n        \"run\",\n        \"simple_snowflake_mcp\"\n      ]\n    }\n  }\n  ```\n</details>\n\n<details>\n  <summary>Published Servers Configuration</summary>\n\n  ```\n  \"mcpServers\": {\n    \"simple_snowflake_mcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"simple_snowflake_mcp\"\n      ]\n    }\n  }\n  ```\n</details>\n\n## Docker Setup\n\n### Prerequisites\n\n- Docker and Docker Compose installed on your system\n- Your Snowflake credentials\n\n### Quick Start with Docker\n\n1. **Clone the repository**\n   ```bash\n   git clone <your-repo>\n   cd simple_snowflake_mcp\n   ```\n\n2. **Set up environment variables**\n   ```bash\n   cp .env.example .env\n   # Edit .env with your Snowflake credentials\n   ```\n\n3. **Build and run with Docker Compose**\n   ```bash\n   # Build the Docker image\n   docker-compose build\n   \n   # Start the service\n   docker-compose up -d\n   \n   # View logs\n   docker-compose logs -f\n   ```\n\n### Docker Commands\n\nUsing Docker Compose directly:\n```bash\n# Build the image\ndocker-compose build\n\n# Start in production mode\ndocker-compose up -d\n\n# Start in development mode (with volume mounts for live code changes)\ndocker-compose --profile dev up simple-snowflake-mcp-dev -d\n\n# View logs\ndocker-compose logs -f\n\n# Stop the service\ndocker-compose down\n\n# Clean up (remove containers, images, and volumes)\ndocker-compose down --rmi all --volumes --remove-orphans\n```\n\nUsing the provided Makefile (Windows users can use `make` with WSL or install make for Windows):\n```bash\n# See all available commands\nmake help\n\n# Build and start\nmake build\nmake up\n\n# Development mode\nmake dev-up\n\n# View logs\nmake logs\n\n# Clean up\nmake clean\n```\n\n### Docker Configuration\n\nThe Docker setup includes:\n\n- **Dockerfile**: Multi-stage build with Python 3.11 slim base image\n- **docker-compose.yml**: Service definition with environment variable support\n- **.dockerignore**: Optimized build context\n- **Makefile**: Convenient commands for Docker operations\n\n#### Environment Variables\n\nAll Snowflake configuration can be set via environment variables:\n\n- `SNOWFLAKE_USER`: Your Snowflake username (required)\n- `SNOWFLAKE_PASSWORD`: Your Snowflake password (required)\n- `SNOWFLAKE_ACCOUNT`: Your Snowflake account identifier (required)\n- `SNOWFLAKE_WAREHOUSE`: Warehouse name (optional)\n- `SNOWFLAKE_DATABASE`: Default database (optional)\n- `SNOWFLAKE_SCHEMA`: Default schema (optional)\n- `MCP_READ_ONLY`: Set to \"TRUE\" for read-only mode (default: TRUE)\n\n#### Development Mode\n\nFor development, use the development profile which mounts your source code:\n\n```bash\ndocker-compose --profile dev up simple-snowflake-mcp-dev -d\n```\n\nThis allows you to make changes to the code without rebuilding the Docker image.\n\n## Development\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n```bash\nuv sync\n```\n\n2. Build package distributions:\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n3. Publish to PyPI:\n```bash\nuv publish\n```\n\nNote: You'll need to set PyPI credentials via environment variables or command flags:\n- Token: `--token` or `UV_PUBLISH_TOKEN`\n- Or username/password: `--username`/`UV_PUBLISH_USERNAME` and `--password`/`UV_PUBLISH_PASSWORD`\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory . run simple-snowflake-mcp\n```\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n\n## New Feature: Snowflake SQL Execution\n\nThe server exposes an MCP tool `execute-snowflake-sql` to execute a SQL query on Snowflake and return the result.\n\n### Usage\n\nCall the MCP tool `execute-snowflake-sql` with a `sql` argument containing the SQL query to execute. The result will be returned as a list of dictionaries (one per row).\n\nExample:\n```json\n{\n  \"name\": \"execute-snowflake-sql\",\n  \"arguments\": { \"sql\": \"SELECT CURRENT_TIMESTAMP;\" }\n}\n```\n\nThe result will be returned in the MCP response.\n\n## Installation and configuration in VS Code\n\n1. **Clone the project and install dependencies**\n   ```sh\n   git clone <your-repo>\n   cd simple_snowflake_mcp\n   python -m venv .venv\n   .venv/Scripts/activate  # Windows\n   pip install -r requirements.txt  # or `uv sync --dev --all-extras` if available\n   ```\n\n2. **Configure Snowflake access**\n   - Copy `.env.example` to `.env` (or create `.env` at the root) and fill in your credentials:\n     ```env\n     SNOWFLAKE_USER=...\n     SNOWFLAKE_PASSWORD=...\n     SNOWFLAKE_ACCOUNT=...\n     # SNOWFLAKE_WAREHOUSE   Optional: Snowflake warehouse name\n     # SNOWFLAKE_DATABASE    Optional: default database name\n     # SNOWFLAKE_SCHEMA      Optional: default schema name\n     # MCP_READ_ONLY=true|false   Optional: true/false to force read-only mode\n     ```\n\n3. **Configure VS Code for MCP debugging**\n   - The `.vscode/mcp.json` file is already present:\n     ```json\n     {\n       \"servers\": {\n         \"simple-snowflake-mcp\": {\n           \"type\": \"stdio\",\n           \"command\": \".venv/Scripts/python.exe\",\n           \"args\": [\"-m\", \"simple_snowflake_mcp\"]\n         }\n       }\n     }\n     ```\n   - Open the command palette (Ctrl+Shift+P), type `MCP: Start Server` and select `simple-snowflake-mcp`.\n\n4. **Usage**\n   - The exposed MCP tools allow you to query Snowflake (list-databases, list-views, describe-view, query-view, execute-query, etc.).\n   - For more examples, see the MCP protocol documentation: https://github.com/modelcontextprotocol/create-python-server\n\n## Supported MCP Functions\n\nThe server exposes the following MCP tools to interact with Snowflake:\n\n- **execute-snowflake-sql**: Executes a SQL query on Snowflake and returns the result (list of dictionaries)\n- **list-snowflake-warehouses**: Lists available Data Warehouses (DWH) on Snowflake\n- **list-databases**: Lists all accessible Snowflake databases\n- **list-views**: Lists all views in a database and schema\n- **describe-view**: Gives details of a view (columns, SQL)\n- **query-view**: Queries a view with an optional row limit (markdown result)\n- **execute-query**: Executes a SQL query in read-only mode (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH) or not (if `read_only` is false), result in markdown format\n\nFor each tool, see the Usage section or the MCP documentation for the call format.\n",
+  "category": "Data",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "simple_snowflake_mcp": {
+        "command": "uv",
+        "args": ["--directory", ".", "run", "simple_snowflake_mcp"],
+        "env": {}
+      },
+      "simple_snowflake_mcp-published": {
+        "command": "uvx",
+        "args": ["simple_snowflake_mcp"],
+        "env": {}
+      },
+      "simple-snowflake-mcp-docker": {
+        "command": "docker-compose",
+        "args": ["up", "-d"],
+        "env": {}
+      },
+      "simple-snowflake-mcp-dev-docker": {
+        "command": "docker-compose",
+        "args": ["--profile", "dev", "up", "simple-snowflake-mcp-dev", "-d"],
+        "env": {}
+      },
+      "simple-snowflake-mcp-inspector": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/inspector", "uv", "--directory", ".", "run", "simple-snowflake-mcp"],
+        "env": {}
+      },
+      "simple-snowflake-mcp-stdio": {
+        "command": ".venv/Scripts/python.exe",
+        "args": ["-m", "simple_snowflake_mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "YannBrrd",
+    "repo": "simple_snowflake_mcp",
+    "url": "https://github.com/YannBrrd/simple_snowflake_mcp",
+    "name": "yannbrrd__simple_snowflake_mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "a87eaafeff6ea7c87d0b71d12c658a345fbaf3f8"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:28.994Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "snowflake-connector-python",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"simple-snowflake-mcp\"\nversion = \"0.1.0\"\ndescription = \"Simple Snowflake MCP Server to work behind a corporate proxy\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp>=1.10.1\",\n    \"snowflake-connector-python\",\n    \"python-dotenv\",\n    \"pydantic\"\n]\nauthors = [\n    { name = \"Yann Barraud\", email = \"yann@barraud.io\" }\n]\nlicense = { file = \"LICENSE\" }\nkeywords = [\"snowflake\", \"mcp\", \"server\", \"proxy\"]\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n]\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nsimple-snowflake-mcp = \"simple_snowflake_mcp:main\"\n\n\n=== requirements.txt ===\nsnowflake-connector-python\npython-dotenv\npydantic\n\n\n=== setup.py ===\nfrom setuptools import setup, find_packages\n\nsetup(\n    name=\"simple-snowflake-mcp\",\n    version=\"0.1.0\",\n    description=\"Simple Snowflake MCP Server to work behind a corporate proxy\",\n    long_description=open(\"README.md\").read(),\n    long_description_content_type=\"text/markdown\",\n    author=\"Yann Barraud\",\n    author_email=\"yann@barraud.io\",\n    url=\"https://github.com/YannBrrd/simple_snowflake_mcp\",\n    license=\"MIT\",\n    packages=find_packages(where=\"src\"),\n    package_dir={\"\": \"src\"},\n    python_requires=\">=3.9\",\n    install_requires=[\n        \"mcp>=1.10.1\",\n        \"snowflake-connector-python\",\n        \"python-dotenv\",\n        \"pydantic\"\n    ],\n    keywords=[\"snowflake\", \"mcp\", \"server\", \"proxy\"],\n    classifiers=[\n        \"Programming Language :: Python :: 3\",\n        \"License :: OSI Approved :: MIT License\",\n        \"Operating System :: OS Independent\",\n    ],\n    entry_points={\n        \"console_scripts\": [\n            \"simple-snowflake-mcp=simple_snowflake_mcp:main\"\n        ]\n    },\n)\n"
+}

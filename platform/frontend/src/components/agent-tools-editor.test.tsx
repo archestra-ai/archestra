@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -19,6 +19,7 @@ function createMockTools(count: number) {
     description: `Description for tool ${i + 1}`,
     parameters: {},
     createdAt: new Date().toISOString(),
+    group: null,
     assignedAgentCount: 0,
     assignedAgents: [],
   }));
@@ -35,6 +36,7 @@ function createMockTool(
     description,
     parameters: {},
     createdAt: new Date().toISOString(),
+    group: null,
     assignedAgentCount: 0,
     assignedAgents: [],
   };
@@ -424,6 +426,128 @@ describe("ToolChecklist", () => {
       for (let i = 1; i < checkboxes.length; i++) {
         expect(checkboxes[i]).not.toBeChecked();
       }
+    });
+  });
+
+  describe("grouped built-in tools", () => {
+    function createArchestraTool(
+      id: string,
+      shortName: string,
+      group: string,
+    ): ToolChecklistProps["tools"][number] {
+      return {
+        id,
+        name: `archestra__${shortName}`,
+        description: `Description for ${shortName}`,
+        parameters: {},
+        createdAt: new Date().toISOString(),
+        group,
+        assignedAgentCount: 0,
+        assignedAgents: [],
+      };
+    }
+
+    const groupedTools = () => [
+      createArchestraTool("t-list-skills", "list_skills", "skills"),
+      createArchestraTool("t-create-skill", "create_skill", "skills"),
+      createArchestraTool("t-scaffold-app", "scaffold_app", "apps"),
+      createArchestraTool("t-edit-app", "edit_app", "apps"),
+      createArchestraTool("t-list-apps", "list_apps", "apps"),
+      createArchestraTool("t-get-servers", "get_mcp_servers", "mcp_servers"),
+    ];
+
+    it("renders a section header per domain group", () => {
+      render(<ToolChecklistWrapper tools={groupedTools()} />);
+
+      expect(screen.getByText("Skills")).toBeInTheDocument();
+      expect(screen.getByText("Apps")).toBeInTheDocument();
+      expect(screen.getByText("MCP Servers")).toBeInTheDocument();
+    });
+
+    it("collapses sections by default so tool rows are hidden", () => {
+      render(<ToolChecklistWrapper tools={groupedTools()} />);
+
+      expect(screen.queryByText("list_skills")).not.toBeInTheDocument();
+      expect(screen.queryByText("scaffold_app")).not.toBeInTheDocument();
+    });
+
+    it("expands a section when its header is clicked", async () => {
+      const user = userEvent.setup();
+      render(<ToolChecklistWrapper tools={groupedTools()} />);
+
+      // The header toggle's accessible name is "Skills0/2" (label + count);
+      // anchor to the start so it doesn't also match the per-group
+      // "Select all Skills tools" / "Clear Skills tools" buttons.
+      await user.click(screen.getByRole("button", { name: /^Skills/ }));
+
+      expect(screen.getByText("list_skills")).toBeInTheDocument();
+      expect(screen.getByText("create_skill")).toBeInTheDocument();
+      // Sibling section stays collapsed.
+      expect(screen.queryByText("scaffold_app")).not.toBeInTheDocument();
+    });
+
+    it("selects only that group's tools via its per-group Select all", async () => {
+      const user = userEvent.setup();
+      render(<ToolChecklistWrapper tools={groupedTools()} />);
+
+      // Skills header before selecting: 0 of 2.
+      expect(screen.getByText("0/2")).toBeInTheDocument();
+
+      const skillsSection = screen
+        .getByText("Skills")
+        .closest("div.rounded-md") as HTMLElement;
+      await user.click(
+        within(skillsSection).getByRole("button", {
+          name: "Select all Skills tools",
+        }),
+      );
+
+      // Only the two skill tools are now selected — global count reflects that,
+      // the Skills header count fills, and Apps stays untouched.
+      expect(screen.getByText("2 of 6 selected")).toBeInTheDocument();
+      expect(within(skillsSection).getByText("2/2")).toBeInTheDocument();
+      expect(screen.getByText("0/3")).toBeInTheDocument();
+    });
+
+    it("keeps sections while searching and hides non-matching groups", async () => {
+      const user = userEvent.setup();
+      render(<ToolChecklistWrapper tools={groupedTools()} />);
+
+      await user.type(screen.getByPlaceholderText("Search tools..."), "skill");
+
+      // Skills section stays and auto-expands to show its match.
+      expect(screen.getByText("Skills")).toBeInTheDocument();
+      expect(screen.getByText("list_skills")).toBeInTheDocument();
+      // Non-matching groups drop out entirely.
+      expect(screen.queryByText("Apps")).not.toBeInTheDocument();
+      expect(screen.queryByText("MCP Servers")).not.toBeInTheDocument();
+    });
+
+    it("falls back to a flat list when no tool carries a group", () => {
+      render(<ToolChecklistWrapper tools={createMockTools(4)} />);
+
+      // Flat list shows rows immediately with no group headers.
+      expect(screen.getByText("tool_1")).toBeInTheDocument();
+      expect(screen.queryByText("Skills")).not.toBeInTheDocument();
+    });
+
+    it("routes an unrecognized group into the Other section (never dropped)", async () => {
+      const user = userEvent.setup();
+      const tools = [
+        createArchestraTool("t-list-skills", "list_skills", "skills"),
+        // A group id this build doesn't know (e.g. server version skew).
+        createArchestraTool("t-future", "future_tool", "brand_new_group"),
+      ];
+      render(<ToolChecklistWrapper tools={tools} />);
+
+      // The unknown-group tool is bucketed under "Other", not silently lost,
+      // and its header count reflects it (body and count keyed identically).
+      const otherSection = screen
+        .getByText("Other")
+        .closest("div.rounded-md") as HTMLElement;
+      expect(within(otherSection).getByText("0/1")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /^Other/ }));
+      expect(screen.getByText("future_tool")).toBeInTheDocument();
     });
   });
 });

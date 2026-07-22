@@ -1,0 +1,119 @@
+{
+  "name": "r-huijts__firstcycling-mcp",
+  "display_name": "firstcycling-mcp",
+  "description": "This is a Model Context Protocol (MCP) server that provides professional cycling data from FirstCycling. It allows you to retrieve information about professional cyclists, race results, and more.",
+  "author": {
+    "name": "r-huijts"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "firstcycling.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/r-huijts-firstcycling-mcp-badge.png)](https://mseep.ai/app/r-huijts-firstcycling-mcp)\n\n# FirstCycling MCP Server\n\nThis is a Model Context Protocol (MCP) server that provides professional cycling data from FirstCycling. It allows you to retrieve comprehensive information about professional cyclists, race results, race details, and historical cycling data.\n\n## Features\n\nThis MCP server offers rich access to professional cycling data, providing tools for:\n\n- Finding information about professional cyclists\n- Retrieving race results and details\n- Exploring historical race data\n- Analyzing rider performance and career progression\n- Accessing information about cycling teams and competitions\n\n## Real-World Use Cases\n\nWith this MCP server, you can use Claude to:\n\n### Rider Analysis\n\n- **Performance Tracking**: \"How has Tadej Pogačar performed in the Tour de France over the years?\"\n- **Career Progression**: \"Show me the team history and career progression of Wout van Aert.\"\n- **Specialization Analysis**: \"What are Mathieu van der Poel's results in Monument classics?\"\n- **Victory Analysis**: \"List all WorldTour victories for Jonas Vingegaard.\"\n- **Historical Comparison**: \"Compare the Grand Tour results of Primož Roglič and Jonas Vingegaard.\"\n\n### Race Research\n\n- **Recent Results**: \"Show me the results of the 2023 Paris-Roubaix.\"\n- **Historical Context**: \"Who are the youngest and oldest winners of the Tour of Flanders?\"\n- **Team Analysis**: \"Get the startlist for the 2023 Tour de France with detailed team information.\"\n- **Race Statistics**: \"Show me the victory table for Liège-Bastogne-Liège. Who has won it the most times?\"\n- **Stage Information**: \"Can you show me the stage profiles for the 2023 Giro d'Italia?\"\n\n### Sports Journalism\n\n- \"Create a detailed profile of Remco Evenepoel for a cycling magazine article.\"\n- \"Write a preview for the upcoming Tour de France based on the recent results of top contenders like Tadej Pogačar and Jonas Vingegaard.\"\n- \"Analyze the evolution of Tom Pidcock's career based on his race results and team history.\"\n\n### Cycling Education\n\n- \"Explain what makes the Monument classics special using data about their history and winners.\"\n- \"Create an educational summary about Grand Tours and their significance in professional cycling.\"\n- \"Describe the typical career progression of a professional cyclist using examples from the data.\"\n\n## Requirements\n\n- Python 3.10 or higher\n- `uv` package manager (recommended)\n- Dependencies as listed in `pyproject.toml`, including:\n  - mcp\n  - beautifulsoup4\n  - lxml\n  - pandas\n  - slumber\n  - and other packages for web scraping and data processing\n\n## Setup\n\n1. Clone this repository\n2. Create and activate a virtual environment:\n   ```\n   uv venv\n   source .venv/bin/activate  # On macOS/Linux\n   # or\n   .venv\\Scripts\\activate  # On Windows\n   ```\n3. Install dependencies:\n   ```\n   uv pip install -e .\n   ```\n\n## FirstCycling API\n\nThis server uses the [FirstCycling API](https://github.com/baronet2/FirstCyclingAPI), which has been integrated directly into the project. The API provides methods to fetch data from the FirstCycling website through web scraping.\n\n## MCP Tools\n\nThe server exposes the following tools through the Model Context Protocol:\n\n### Rider Information\n\n| Tool | Description |\n|------|-------------|\n| `get_rider_info` | Get basic biographical information about a rider including nationality, birthdate, weight, height, and current team |\n| `get_rider_best_results` | Retrieve a rider's best career results, sorted by importance |\n| `get_rider_grand_tour_results` | Get a rider's results in Grand Tours (Tour de France, Giro d'Italia, Vuelta a España) |\n| `get_rider_monument_results` | Retrieve a rider's results in cycling's Monument classics |\n| `get_rider_team_and_ranking` | Get a rider's team history and UCI ranking evolution over time |\n| `get_rider_race_history` | Retrieve a rider's complete race participation history, optionally filtered by year |\n| `get_rider_one_day_races` | Get a rider's results in one-day races, optionally filtered by year |\n| `get_rider_stage_races` | Get a rider's results in multi-day stage races, optionally filtered by year |\n| `get_rider_teams` | Retrieve the complete team history of a rider throughout their career |\n| `get_rider_victories` | Get a list of a rider's career victories, with optional filters for WorldTour or UCI races |\n\n### Race Information\n\n| Tool | Description |\n|------|-------------|\n| `get_race_results` | Retrieve results for a specific race edition by race ID and year |\n| `get_race_overview` | Get general information about a race including history, records, and past winners |\n| `get_race_stage_profiles` | Retrieve stage profiles and details for multi-stage races |\n| `get_race_startlist` | Get the startlist for a specific race edition with detailed or basic team information |\n| `get_race_victory_table` | Retrieve the all-time victory table for a race showing riders with most wins |\n| `get_race_year_by_year` | Get year-by-year results for a race with optional classification filter |\n| `get_race_youngest_oldest_winners` | Retrieve information about the youngest and oldest winners of a race |\n| `get_race_stage_victories` | Get information about stage victories in multi-stage races |\n\n### Search Tools\n\n| Tool | Description |\n|------|-------------|\n| `search_rider` | Search for riders by name, returning their IDs and basic information |\n| `search_race` | Search for races by name, returning their IDs and basic information |\n\n## Usage\n\n### Development Mode\n\nYou can test the server with MCP Inspector by running:\n\n```\nuv run mcp dev firstcycling.py\n```\n\nThis will start the server and open the MCP Inspector in your browser, allowing you to test the available tools.\n\n### Integration with Claude for Desktop\n\nTo integrate this server with Claude for Desktop:\n\n1. Edit the Claude for Desktop config file, located at:\n   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n2. Add the server to your configuration:\n   ```json\n   {\n     \"mcpServers\": {\n       \"firstcycling\": {\n         \"command\": \"uv\",\n         \"args\": [\"--directory\", \"/path/to/server/directory\", \"run\", \"firstcycling.py\"]\n       }\n     }\n   }\n   ```\n\n3. Restart Claude for Desktop\n\n## License\n\nMIT\n",
+  "category": "Sports",
+  "quality_score": 32,
+  "archestra_config": {
+    "client_config_permutations": {
+      "firstcycling": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/server/directory", "run", "firstcycling.py"],
+        "env": {}
+      },
+      "firstcycling-dev": {
+        "command": "uv",
+        "args": ["run", "mcp", "dev", "firstcycling.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "r-huijts",
+    "repo": "firstcycling-mcp",
+    "url": "https://github.com/r-huijts/firstcycling-mcp",
+    "name": "firstcycling-mcp",
+    "path": null,
+    "stars": 14,
+    "contributors": 0,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "02717f16a6003896996e3528d1d2b6faba1dd8e5"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:36.731Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "beautifulsoup4",
+      "importance": 9
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "lxml",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "numpy",
+      "importance": 8
+    },
+    {
+      "name": "pandas",
+      "importance": 8
+    },
+    {
+      "name": "python-dateutil",
+      "importance": 7
+    },
+    {
+      "name": "pytz",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "slumber",
+      "importance": 8
+    },
+    {
+      "name": "soupsieve",
+      "importance": 9
+    },
+    {
+      "name": "urllib3",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"firstcycling\"\nversion = \"0.1.0\"\ndescription = \"FirstCycling MCP server for accessing professional cycling data\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.5.0\",\n    \"beautifulsoup4\",\n    \"lxml\",\n    \"numpy\",\n    \"pandas\",\n    \"python-dateutil\",\n    \"pytz\",\n    \"requests\",\n    \"slumber\",\n    \"soupsieve\",\n]\n\n\n=== FirstCyclingAPI/requirements.txt ===\nbeautifulsoup4\nlxml\nnumpy\npandas\npython-dateutil\npytz\nrequests\nsetuptools\nslumber\nsoupsieve\nurllib3"
+}

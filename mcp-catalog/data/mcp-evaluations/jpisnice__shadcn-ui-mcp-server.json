@@ -1,0 +1,153 @@
+{
+  "name": "jpisnice__shadcn-ui-mcp-server",
+  "display_name": "shadcn-ui-mcp-server",
+  "description": "A mcp server to allow LLMS gain context about shadcn ui component structure,usage and installation,compaitable with react,svelte 5,and vue",
+  "author": {
+    "name": "Jpisnice"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@jpisnice/shadcn-ui-mcp-server"],
+    "env": {
+      "GITHUB_PERSONAL_ACCESS_TOKEN": "${user_config.github_personal_access_token}",
+      "FRAMEWORK": "${user_config.framework}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "github_personal_access_token": {
+      "type": "string",
+      "title": "GitHub Personal Access Token",
+      "description": "Your GitHub Personal Access Token for increased API rate limits (5000 requests/hour). No scopes needed.",
+      "sensitive": true,
+      "required": false
+    },
+    "framework": {
+      "type": "string",
+      "title": "Framework",
+      "description": "Framework to use: 'react' or 'svelte'.",
+      "default": "react",
+      "required": false
+    }
+  },
+  "readme": "# Shadcn UI v4 MCP Server\n\n[![npm version](https://badge.fury.io/js/@jpisnice%2Fshadcn-ui-mcp-server.svg)](https://badge.fury.io/js/@jpisnice%2Fshadcn-ui-mcp-server)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/Jpisnice/shadcn-ui-mcp-server)](https://archestra.ai/mcp-catalog/jpisnice__shadcn-ui-mcp-server)\n\n> **🚀 The fastest way to integrate shadcn/ui components into your AI workflow**\n\nA Model Context Protocol (MCP) server that provides AI assistants with comprehensive access to [shadcn/ui v4](https://ui.shadcn.com/) components, blocks, demos, and metadata. Seamlessly retrieve React, Svelte, and Vue implementations for your AI-powered development workflow.\n\n## ✨ Key Features\n\n- **🎯 Multi-Framework Support** - React, Svelte, and Vue implementations\n- **📦 Component Source Code** - Latest shadcn/ui v4 TypeScript source\n- **🎨 Component Demos** - Example implementations and usage patterns  \n- **🏗️ Blocks Support** - Complete block implementations (dashboards, calendars, forms)\n- **📋 Metadata Access** - Dependencies, descriptions, and configuration details\n- **🔍 Directory Browsing** - Explore repository structures\n- **⚡ Smart Caching** - Efficient GitHub API integration with rate limit handling\n\n## 🚀 Quick Start\n\n```bash\n# Basic usage (60 requests/hour)\nnpx @jpisnice/shadcn-ui-mcp-server\n\n# With GitHub token (5000 requests/hour) - Recommended\nnpx @jpisnice/shadcn-ui-mcp-server --github-api-key ghp_your_token_here\n\n# Switch frameworks\nnpx @jpisnice/shadcn-ui-mcp-server --framework svelte\nnpx @jpisnice/shadcn-ui-mcp-server --framework vue\n```\n\n**🎯 Get your GitHub token in 2 minutes**: [docs/getting-started/github-token.md](docs/getting-started/github-token.md)\n\n## 📚 Documentation\n\n| Section | Description |\n|---------|-------------|\n| [🚀 Getting Started](docs/getting-started/) | Installation, setup, and first steps |\n| [⚙️ Configuration](docs/configuration/) | Framework selection, tokens, and options |\n| [🔌 Integration](docs/integration/) | Editor and tool integrations |\n| [📖 Usage](docs/usage/) | Examples, tutorials, and use cases |\n| [🎨 Frameworks](docs/frameworks/) | Framework-specific documentation |\n| [🐛 Troubleshooting](docs/troubleshooting/) | Common issues and solutions |\n| [🔧 API Reference](docs/api/) | Tool reference and technical details |\n\n## 🎨 Framework Support\n\nThis MCP server supports three popular shadcn implementations:\n\n| Framework | Repository | Maintainer | Description |\n|-----------|------------|------------|-------------|\n| **React** (default) | [shadcn/ui](https://ui.shadcn.com/) | [shadcn](https://github.com/shadcn) | React components from shadcn/ui v4 |\n| **Svelte** | [shadcn-svelte](https://www.shadcn-svelte.com/) | [huntabyte](https://github.com/huntabyte) | Svelte components from shadcn-svelte |\n| **Vue** | [shadcn-vue](https://www.shadcn-vue.com/) | [unovue](https://github.com/unovue) | Vue components from shadcn-vue |\n\n## 🛠️ Essential Setup\n\n### 1. Get GitHub Token (Recommended)\n```bash\n# Visit: https://github.com/settings/tokens\n# Generate token with no scopes needed\nexport GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_token_here\n```\n\n### 2. Run Server\n```bash\n# React (default)\nnpx @jpisnice/shadcn-ui-mcp-server\n\n# Svelte\nnpx @jpisnice/shadcn-ui-mcp-server --framework svelte\n\n# Vue  \nnpx @jpisnice/shadcn-ui-mcp-server --framework vue\n```\n\n### 3. Integrate with Your Editor\n- **VS Code**: [docs/integration/vscode.md](docs/integration/vscode.md)\n- **Cursor**: [docs/integration/cursor.md](docs/integration/cursor.md)\n- **Claude Desktop**: [docs/integration/claude-desktop.md](docs/integration/claude-desktop.md)\n- **Continue.dev**: [docs/integration/continue.md](docs/integration/continue.md)\n\n## 🎯 Use Cases\n\n- **AI-Powered Development** - Let AI assistants build UIs with shadcn/ui\n- **Component Discovery** - Explore available components and their usage\n- **Multi-Framework Learning** - Compare React, Svelte, and Vue implementations\n- **Rapid Prototyping** - Get complete block implementations for dashboards, forms, etc.\n- **Code Generation** - Generate component code with proper dependencies\n\n## 📦 Installation\n\n```bash\n# Global installation (optional)\nnpm install -g @jpisnice/shadcn-ui-mcp-server\n\n# Or use npx (recommended)\nnpx @jpisnice/shadcn-ui-mcp-server\n```\n\n## 🔗 Quick Links\n\n- 📖 [Full Documentation](docs/)\n- 🚀 [Getting Started Guide](docs/getting-started/)\n- 🎨 [Framework Comparison](docs/frameworks/)\n- 🔧 [API Reference](docs/api/)\n- 🐛 [Troubleshooting](docs/troubleshooting/)\n- 💬 [Issues & Discussions](https://github.com/Jpisnice/shadcn-ui-mcp-server)\n\n## 📄 License\n\nMIT License - see [LICENSE](LICENSE) for details.\n\n## 🙏 Acknowledgments\n\n- **[shadcn](https://github.com/shadcn)** - For the amazing React UI component library\n- **[huntabyte](https://github.com/huntabyte)** - For the excellent Svelte implementation\n- **[unovue](https://github.com/unovue)** - For the comprehensive Vue implementation\n- **[Anthropic](https://anthropic.com)** - For the Model Context Protocol specification\n\n---\n\n**Made with ❤️ by [Janardhan Polle](https://github.com/Jpisnice)**\n\n**Star ⭐ this repo if you find it helpful!**\n",
+  "category": "AI Tools",
+  "quality_score": 82,
+  "archestra_config": {
+    "client_config_permutations": {
+      "jpisnice-shadcn-ui-mcp-server": {
+        "command": "npx",
+        "args": ["@jpisnice/shadcn-ui-mcp-server"],
+        "env": {}
+      },
+      "jpisnice-shadcn-ui-mcp-server-github-token": {
+        "command": "npx",
+        "args": ["@jpisnice/shadcn-ui-mcp-server", "--github-api-key", "ghp_your_token_here"],
+        "env": {}
+      },
+      "jpisnice-shadcn-ui-mcp-server-env-github-token": {
+        "command": "npx",
+        "args": ["@jpisnice/shadcn-ui-mcp-server"],
+        "env": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_your_token_here"
+        }
+      },
+      "jpisnice-shadcn-ui-mcp-server-svelte": {
+        "command": "npx",
+        "args": ["@jpisnice/shadcn-ui-mcp-server", "--framework", "svelte"],
+        "env": {}
+      },
+      "jpisnice-shadcn-ui-mcp-server-svelte-github-token": {
+        "command": "npx",
+        "args": ["@jpisnice/shadcn-ui-mcp-server", "--framework", "svelte", "--github-api-key", "ghp_your_token_here"],
+        "env": {}
+      },
+      "jpisnice-shadcn-ui-mcp-server-env-svelte": {
+        "command": "npx",
+        "args": ["@jpisnice/shadcn-ui-mcp-server"],
+        "env": {
+          "FRAMEWORK": "svelte"
+        }
+      },
+      "jpisnice-shadcn-ui-mcp-server-react": {
+        "command": "npx",
+        "args": ["@jpisnice/shadcn-ui-mcp-server", "--framework", "react"],
+        "env": {}
+      },
+      "jpisnice-shadcn-ui-mcp-server-env-react": {
+        "command": "npx",
+        "args": ["@jpisnice/shadcn-ui-mcp-server"],
+        "env": {
+          "FRAMEWORK": "react"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Jpisnice",
+    "repo": "shadcn-ui-mcp-server",
+    "url": "https://github.com/Jpisnice/shadcn-ui-mcp-server",
+    "name": "jpisnice__shadcn-ui-mcp-server",
+    "path": null,
+    "stars": 2156,
+    "contributors": 6,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "83bbe4ab0bf188719925bcd9721cca6ccaaebfaf"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:38.573Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "cheerio",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    },
+    {
+      "name": "winston",
+      "importance": 3
+    },
+    {
+      "name": "joi",
+      "importance": 4
+    },
+    {
+      "name": "uuid",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@jpisnice/shadcn-ui-mcp-server\",\n  \"version\": \"1.0.3\",\n  \"description\": \"A Model Context Protocol (MCP) server for shadcn/ui components, providing AI assistants with access to component source code, demos, blocks, and metadata.\",\n  \"type\": \"module\",\n  \"main\": \"./build/index.js\",\n  \"bin\": {\n    \"shadcn-mcp\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build/**/*\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"clean\": \"rm -rf build\",\n    \"prepublishOnly\": \"npm run clean && npm run build && chmod +x build/index.js\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"tsc && node build/index.js\",\n    \"test\": \"./test-package.sh\",\n    \"examples\": \"./examples.sh\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"shadcn\",\n    \"shadcn-ui\",\n    \"ui-components\",\n    \"react\",\n    \"typescript\",\n    \"ai-tools\",\n    \"claude\",\n    \"copilot\"\n  ],\n  \"author\": \"Janardhan Pollle\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/Jpisnice/shadcn-ui-mcp-server.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/Jpisnice/shadcn-ui-mcp-server/issues\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.16.0\",\n    \"axios\": \"^1.8.4\",\n    \"cheerio\": \"^1.0.0\",\n    \"zod\": \"^3.24.2\",\n    \"winston\": \"^3.15.0\",\n    \"joi\": \"^17.13.3\",\n    \"uuid\": \"^10.0.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.10.5\",\n    \"@types/uuid\": \"^10.0.0\",\n    \"typescript\": \"^5.7.2\"\n  }\n}\n"
+}

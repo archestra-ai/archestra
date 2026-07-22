@@ -87,9 +87,29 @@ export const InteractionRequestSchema = z.union([
   Azure.API.ResponsesRequestSchema,
 ]);
 
+/**
+ * Embedding interactions are logged with a truncated vector preview (see
+ * `buildEmbeddingInteraction`): each vector holds only its first few values plus
+ * `truncatedFrom` = the full length. This interaction-only schema permits that
+ * marker (on both the write and read sides) so it survives read-back
+ * serialization, without polluting the canonical OpenAI embedding response
+ * contract used for live proxy responses.
+ */
+const EmbeddingInteractionResponseSchema =
+  OpenAi.API.EmbeddingResponseSchema.extend({
+    data: z.array(
+      z.object({
+        object: z.literal("embedding"),
+        embedding: z.array(z.number()),
+        index: z.number(),
+        truncatedFrom: z.number().optional(),
+      }),
+    ),
+  });
+
 export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
-  OpenAi.API.EmbeddingResponseSchema,
+  EmbeddingInteractionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
   Anthropic.API.MessagesResponseSchema,
   Bedrock.API.ConverseResponseSchema,
@@ -220,7 +240,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(OpenAi.API.EmbeddingResponseSchema),
+    response: withErrorResponse(EmbeddingInteractionResponseSchema),
   }),
   // Gemini embeddings are persisted through the OpenAI-compatible embedding
   // client, so they share OpenAI's embedding request/response shape.
@@ -230,7 +250,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(OpenAi.API.EmbeddingResponseSchema),
+    response: withErrorResponse(EmbeddingInteractionResponseSchema),
+  }),
+  // Bedrock (Titan) embeddings are normalized to the OpenAI embedding shape.
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["bedrock:embeddings"]),
+    request: withReadFallback(OpenAi.API.EmbeddingRequestSchema),
+    processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(EmbeddingInteractionResponseSchema),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["gemini:generateContent"]),

@@ -1,0 +1,93 @@
+{
+  "name": "jdubois__azure-cli-mcp",
+  "display_name": "azure-cli-mcp",
+  "description": "Talk with Azure using MCP",
+  "author": {
+    "name": "jdubois"
+  },
+  "server": {
+    "command": "docker",
+    "args": ["run", "-i", "--rm", "-e", "AZURE_CREDENTIALS", "ghcr.io/jdubois/azure-cli-mcp:latest"],
+    "env": {
+      "AZURE_CREDENTIALS": "${user_config.azure_credentials}"
+    },
+    "type": "local",
+    "docker_image": "ghcr.io/jdubois/azure-cli-mcp:latest"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "azure_credentials": {
+      "type": "string",
+      "title": "Azure Credentials",
+      "description": "Azure Credentials",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Azure CLI MCP Server\n\nThe Azure CLI MCP Server is an [MCP Server](https://modelcontextprotocol.io) that wraps the [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/), adds a nice prompt to improve how it works, and exposes it.\n\n> [!IMPORTANT]\n> The @Azure organization offers an official Azure MCP server, which uses the code from this Azure CLI MCP server. As it's an official server, maintained by Microsoft, we recommend to use it unless you have specific resource contraints (the Azure CLI MCP Server uses less resources as it does less, and as it can be packaged with GraalVM), or if you're a Java developer and want to tweak the prompts. You can find more details at its [Getting started documentation](https://learn.microsoft.com/en-us/azure/developer/azure-mcp-server/get-started) or at the [Azure MCP Server repository](https://github.com/Azure/azure-mcp).\n\n## Demos\n\n### Short 2-minute demo with Claude Desktop\n\n[![Short Demo](https://img.youtube.com/vi/y_OexCcfhW0/0.jpg)](https://www.youtube.com/watch?v=y_OexCcfhW0)\n\n### Complete 18-minute demo with VS Code\n\n[![Complete Demo](https://img.youtube.com/vi/NZxTr32A9lY/0.jpg)](https://www.youtube.com/watch?v=NZxTr32A9lY)\n\n## What can it do?\n\nIt has access to the full Azure CLI, so it can do anything the Azure CLI can do. Here are a few scenarios:\n\n- Listing your resources and checking their configuration. For example, you can get the rate limits of a model deployed\n  to Azure OpenAI.\n- Fixing some configuration or security issues. For example, you can ask it to secure a Blob Storage account.\n- Creating resources. For example, you can ask it to create an Azure Container Apps instance, an Azure Container Registry, and connect them using managed identity.\n\n## Is it safe to use?\n\nAs the MCP server is driven by an LLM, we would recommend to be careful and validate the commands it generates. Then, if\nyou're using a good LLM like Claude 4 or GPT-4o, which has\nexcellent training data on Azure, our experience has been very good.\n\nPlease read our [License](LICENSE) which states that \"THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND\",\nso you use this MCP server at your own risk.\n\n## Is it secured, and should I run this on a remote server?\n\nShort answer: **NO**.\n\nThis MCP server runs `az` commands for you, and could be hacked by an attacker to run any other command. It's supposed\nto run locally on your machine,\nusing your Azure CLI credentials, as you would do by yourself.\n\nThis server uses the `http` transport, and an Azure token authentication, so that it could be used remotely by different\npersons. It's probably not a good idea to do this, as it would expose your Azure resources to the internet.\n\n## How do I install it?\n\n_This server can run inside a Docker container or as a Java executable JAR file._\n\nBy default, the server runs on port `8085`, and this can be configured using the usual Spring Boot configuration options\nfor configuring the server port (for example, using the `SERVER_PORT=8085` environment variable).\n\n### Install and configure the server with Docker\n\nCreate an Azure Service Principal and set the `AZURE_CREDENTIALS` environment variable. You can do this by running the\nfollowing command in your terminal:\n\n```bash\naz ad sp create-for-rbac --name \"azure-cli-mcp\" --role contributor --scopes /subscriptions/<your-subscription-id>/resourceGroups/<your-resource-group> --json-auth\n```\n\nThis will create a new Service Principal with the specified name and role, and output the credentials in JSON format.\n\nYou can then run the server using Docker with the following command. To authenticate, set the `AZURE_CREDENTIALS` with\nthe output of the previous command.\n\n```bash\ndocker run --rm -p 8085:8085 -e AZURE_CREDENTIALS=\"{\"clientId\":\"....\",\"clientSecret\":\"....\",...}\" -it ghcr.io/jdubois/azure-cli-mcp:latest\n```\n\n### Install and configure the server with Java\n\nThis configuration is running the server locally. It's easier to set up than with Docker,\nbut it's less secured as it uses directly your credentials using the Azure CLI configured on your machine.\n\n- Install the Azure CLI: you can do this by following the\n  instructions [here](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli).\n- Authenticate to your Azure account. You can do this by running `az login` in your terminal.\n- Make sure you have Java 17 or higher installed. You can check this by running `java -version` in your terminal.\n\nBinaries are available on the [GitHub Release page](https://github.com/jdubois/azure-cli-mcp/releases), here's how you\ncan download the latest one with the GitHub CLI:\n\n- Download the latest release: `gh release download --repo jdubois/azure-cli-mcp --pattern='azure-cli-mcp.jar'`\n\nThis MCP server is a Spring Boot application, which can be run using the classical Spring Boot commands, for example\nwith Maven:\n\n```bash\nmvn spring-boot:run\n```\n\n## Using the MCP Server from VS Code\n\nTo use the server from VS Code:\n\n- Install GitHub Copilot\n- Install this MCP Server using the command palette: `MCP: Add Server...`\n    - The configuration connects to the server using the `http` transport\n    - You need to have the server running as described above.\n- Configure GitHub Copilot to run in `Agent` mode, by clicking on the arrow at the bottom of the the chat window\n- On top of the chat window, you should see the `azure-cli-mcp` server configured as a tool\n\nHere is a configuration example:\n\n```json\n{\n  \"servers\": {\n    \"azure-cli-http\": {\n      \"url\": \"http://localhost:8085/sse\",\n      \"type\": \"http\"\n    }\n  },\n  \"inputs\": []\n}\n```\n",
+  "category": "Cloud",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "jdubois-azure-cli-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "AZURE_CREDENTIALS", "ghcr.io/jdubois/azure-cli-mcp:latest"],
+        "env": {
+          "AZURE_CREDENTIALS": "${input:azure-credentials}"
+        },
+        "docker_image": "ghcr.io/jdubois/azure-cli-mcp:latest"
+      },
+      "jdubois-azure-cli-mcp-java": {
+        "command": "java",
+        "args": ["-jar", "<path-to>/azure-cli-mcp.jar"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jdubois",
+    "repo": "azure-cli-mcp",
+    "url": "https://github.com/jdubois/azure-cli-mcp",
+    "name": "jdubois__azure-cli-mcp",
+    "path": null,
+    "stars": 78,
+    "contributors": 5,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "0fcc19438a02923dfb30e09e25c6c5f52b31c50a"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:16.321Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "spring-boot",
+      "importance": 10
+    },
+    {
+      "name": "spring-ai-starter-mcp-server",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pom.xml ===\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd\">\n    <modelVersion>4.0.0</modelVersion>\n    <parent>\n        <groupId>org.springframework.boot</groupId>\n        <artifactId>spring-boot-starter-parent</artifactId>\n        <version>3.4.5</version>\n        <relativePath /> <!-- lookup parent from repository -->\n    </parent>\n    <groupId>io.github.jdubois</groupId>\n    <artifactId>azure-cli-mcp</artifactId>\n    <version>0.2.1-SNAPSHOT</version>\n    <name>azure-cli-mcp</name>\n    <description>Talk with Azure using MCP</description>\n    <url>https://github.com/jdubois/azure-cli-mcp</url>\n    <licenses>\n        <license>\n            <name>MIT License</name>\n            <url>https://opensource.org/licenses/MIT</url>\n            <distribution>repo</distribution>\n        </license>\n    </licenses>\n    <developers>\n        <developer>\n            <name>Julien Dubois</name>\n            <url>https://www.julien-dubois.com</url>\n        </developer>\n    </developers>\n    <scm>\n        <url>https://github.com/jdubois/azure-cli-mcp</url>\n        <connection>scm:git:https://github.com/jdubois/azure-cli-mcp.git</connection>\n        <tag>HEAD</tag>\n    </scm>\n    <properties>\n        <java.version>17</java.version>\n        <spring-ai.version>1.0.1</spring-ai.version>\n    </properties>\n    <dependencies>\n        <dependency>\n            <groupId>org.springframework.ai</groupId>\n            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>org.springframework.boot</groupId>\n            <artifactId>spring-boot-starter-test</artifactId>\n            <scope>test</scope>\n        </dependency>\n    </dependencies>\n    <dependencyManagement>\n        <dependencies>\n            <dependency>\n                <groupId>org.springframework.ai</groupId>\n                <artifactId>spring-ai-bom</artifactId>\n                <version>${spring-ai.version}</version>\n                <type>pom</type>\n                <scope>import</scope>\n            </dependency>\n        </dependencies>\n    </dependencyManagement>\n\n    <build>\n        <finalName>azure-cli-mcp</finalName>\n        <plugins>\n            <plugin>\n                <groupId>org.graalvm.buildtools</groupId>\n                <artifactId>native-maven-plugin</artifactId>\n            </plugin>\n            <plugin>\n                <groupId>org.springframework.boot</groupId>\n                <artifactId>spring-boot-maven-plugin</artifactId>\n            </plugin>\n            <!--\n                To do a release:\n                - mvn release:clean release:prepare\n                - gh release create <TAG_NAME>\n            -->\n            <plugin>\n                <groupId>org.apache.maven.plugins</groupId>\n                <artifactId>maven-release-plugin</artifactId>\n                <version>3.1.1</version>\n                <configuration>\n                    <tagNameFormat>v@{project.version}</tagNameFormat>\n                </configuration>\n            </plugin>\n        </plugins>\n    </build>\n\n</project>\n"
+}

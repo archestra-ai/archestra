@@ -305,6 +305,48 @@ describe("interaction routes", () => {
     expect(response.json().data[0].type).toBe("gemini:embeddings");
   });
 
+  test("preserves the truncated embedding-preview marker through serialization", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    // Embedding interactions store a truncated vector preview: the first few
+    // values plus `truncatedFrom` = the full length. The read schema must model
+    // the marker or Fastify serialization would silently strip it.
+    await InteractionModel.create({
+      profileId: agent.id,
+      request: { model: "amazon.titan-embed-text-v2:0", input: ["hello"] },
+      response: {
+        object: "list",
+        data: [
+          {
+            object: "embedding",
+            embedding: [0.1, 0.2, 0.3],
+            index: 0,
+            truncatedFrom: 1024,
+          },
+        ],
+        model: "amazon.titan-embed-text-v2:0",
+        usage: { prompt_tokens: 1, total_tokens: 1 },
+      },
+      type: "bedrock:embeddings",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions?limit=10&offset=0&sortBy=createdAt&sortDirection=desc",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const item = response.json().data[0];
+    expect(item.type).toBe("bedrock:embeddings");
+    expect(item.response.data[0].truncatedFrom).toBe(1024);
+    expect(item.response.data[0].embedding).toEqual([0.1, 0.2, 0.3]);
+  });
+
   test("returns chat errors on interaction detail for chat sessions", async ({
     makeAgent,
   }) => {

@@ -1,0 +1,120 @@
+{
+  "name": "grain__remote-mcp",
+  "display_name": "Grain",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMzIgMzQiPjxwYXRoIGZpbGw9IiMwMEI5NkMiIGQ9Ik0xMy43OTguNGE1LjkwNyA1LjkwNyAwIDAgMSA0LjI3OCAwYzEuNTQ2LjYwMSAzLjA3MSAxLjMgNC41NjkgMi4wOTguMzExLjE2Ni4yNjMuNjI3LS4wNy43NDNDMTQuMzgzIDYuMTA4IDguNTA4IDEzLjkwNiA4LjUwOCAyMy4wNzdjMCAyLjg1Ni41NyA1LjU4IDEuNjAzIDguMDYzLjE0Ni4zNS0uMjIxLjcwOC0uNTU4LjUzMmE0Mi4yNjIgNDIuMjYyIDAgMCAxLTYuOTIyLTQuNTIgNS45MDcgNS45MDcgMCAwIDEtMi4xMzktMy43MDVBNDIuMjYxIDQyLjI2MSAwIDAgMSAwIDE3YzAtMi4xOTMuMTY4LTQuMzQ2LjQ5Mi02LjQ0N2E1LjkwNyA1LjkwNyAwIDAgMSAyLjE0LTMuNzA1IDQyLjI2MSA0Mi4yNjEgMCAwIDEgNS4zMzYtMy42NUE0Mi4yNjMgNDIuMjYzIDAgMCAxIDEzLjc5OC40eiIvPjxwYXRoIGZpbGw9IiMwMEI5NkMiIGQ9Ik0yOS4yNDMgNi44NDlhNDIuMzkzIDQyLjM5MyAwIDAgMC0uNTgtLjQ1OCAxLjg0NyAxLjg0NyAwIDAgMC0xLjQ2MS0uMzY1Yy04LjkgMS42MjUtMTUuNjQ3IDkuNDE5LTE1LjY0NyAxOC43ODggMCAyLjkxMi42NTEgNS42NzIgMS44MTcgOC4xNDIuMTguMzgyLjUxNC42NjguOTEzLjgwOGE1LjkwNyA1LjkwNyAwIDAgMCAzLjc5MS0uMTY1YzEuOTgzLS43NyAzLjkzMS0xLjcgNS44My0yLjc5N2E0Mi4yNTggNDIuMjU4IDAgMCAwIDUuMzM3LTMuNjUgNS45MDcgNS45MDcgMCAwIDAgMi4xMzktMy43MDRjLjMyNC0yLjEwMi40OTItNC4yNTUuNDkyLTYuNDQ3IDAtMi4xOTMtLjE2OC00LjM0Ni0uNDkyLTYuNDQ3YTUuOTA3IDUuOTA3IDAgMCAwLTIuMTM5LTMuNzA1eiIvPjwvc3ZnPg==",
+  "description": "Official remote MCP server for Grain - AI meeting recording and notetaking. Search and fetch meeting transcripts, AI notes, action items, clips, stories, and deal intelligence.",
+  "homepage": "https://grain.com",
+  "instructions": "**⚠️ Deal intelligence and coaching tools require a Grain Business or Enterprise plan.** `fetch_deal`, `list_all_deals`, and the coaching-feedback tools return errors on Free and Starter plans even after a successful OAuth connection. Core meeting tools (transcripts, notes, search, clips) work on all plans.\n\n**⚠️ The agent sees exactly what your Grain account sees.** Access respects your existing Grain workspace permissions — no extra scoping is available, and the tool set includes write actions (creating clips, stories, and collections).\n\n1. Connect with just the server URL `https://api.grain.com/_/mcp` — no client ID or secret needed. Grain supports OAuth 2.0 dynamic client registration with PKCE and registers the client automatically.\n2. Your browser opens Grain's authorization page; sign in and click **Approve**.\n3. That's it — there is no workspace toggle or admin enablement step to flip first.\n\nNotes:\n\n- Grain does not use OAuth scopes; what you can access is determined by your Grain plan and account permissions.\n- The official docs list a subset of tools from the June 2025 launch; the live server exposes more (action items, clips, stories, collections).\n\nDocs: https://developers.grain.com/mcp",
+  "tools": [
+    {
+      "name": "myself",
+      "description": "Get your Grain account information"
+    },
+    {
+      "name": "list_meetings",
+      "description": "List all accessible meetings with optional filters"
+    },
+    {
+      "name": "fetch_meeting",
+      "description": "Get detailed information about a specific meeting"
+    },
+    {
+      "name": "fetch_meeting_transcript",
+      "description": "Retrieve the full transcript of a meeting"
+    },
+    {
+      "name": "fetch_meeting_notes",
+      "description": "Get AI-generated meeting notes (more concise than transcripts)"
+    },
+    {
+      "name": "fetch_meeting_action_items",
+      "description": "Get action items captured from a meeting"
+    },
+    {
+      "name": "search_in_transcripts",
+      "description": "Semantic search across all meeting transcripts"
+    },
+    {
+      "name": "search_companies",
+      "description": "Find companies that participated in meetings"
+    },
+    {
+      "name": "search_persons",
+      "description": "Search for meeting participants"
+    },
+    {
+      "name": "create_clip",
+      "description": "Create a shareable clip from a meeting recording"
+    },
+    {
+      "name": "list_clips",
+      "description": "List clips in the workspace"
+    },
+    {
+      "name": "create_story",
+      "description": "Create a story that combines clips"
+    },
+    {
+      "name": "list_stories",
+      "description": "List stories in the workspace"
+    },
+    {
+      "name": "create_collection",
+      "description": "Create a collection of recordings"
+    },
+    {
+      "name": "list_collections",
+      "description": "List collections in the workspace"
+    },
+    {
+      "name": "fetch_deal",
+      "description": "Get detailed deal information (Business/Enterprise plans)"
+    },
+    {
+      "name": "list_all_deals",
+      "description": "List deal intelligence records (Business/Enterprise plans)"
+    },
+    {
+      "name": "list_workspace_users",
+      "description": "Get all users in your Grain workspace"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["grain", "meetings", "transcripts", "meeting notes", "notetaker", "clips", "deals", "official"],
+  "user_config": {},
+  "oauth_config": {
+    "name": "Grain MCP",
+    "server_url": "https://api.grain.com/_/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "Grain MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "readme": null,
+  "category": "Communication",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "grain"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://api.grain.com/_/mcp",
+    "docs_url": "https://developers.grain.com/mcp"
+  },
+  "github_info": null,
+  "programming_language": null
+}

@@ -1,0 +1,133 @@
+{
+  "name": "kadykov__mcp-openapi-schema-explorer",
+  "display_name": "mcp-openapi-schema-explorer",
+  "description": "MCP server providing token-efficient access to OpenAPI/Swagger specs via MCP Resources for client-side exploration.",
+  "author": {
+    "name": "kadykov"
+  },
+  "server": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "mcp-openapi-schema-explorer@latest",
+      "${user_config.path_or_url_to_spec}",
+      "--output-format",
+      "${user_config.output_format}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "path_or_url_to_spec": {
+      "type": "string",
+      "title": "OpenAPI/Swagger Specification",
+      "description": "Absolute local file path or full remote URL of your OpenAPI/Swagger specification.",
+      "required": true
+    },
+    "output_format": {
+      "type": "string",
+      "title": "Output Format",
+      "description": "The desired output format for resources. Options: json, yaml, json-minified.",
+      "required": false,
+      "default": "json"
+    }
+  },
+  "readme": "<p align=\"center\">\n  <img src=\"assets/logo-400.png\" alt=\"MCP OpenAPI Schema Explorer Logo\" width=\"200\">\n</p>\n\n# MCP OpenAPI Schema Explorer\n\n[![npm version](https://badge.fury.io/js/mcp-openapi-schema-explorer.svg)](https://badge.fury.io/js/mcp-openapi-schema-explorer)\n[![NPM Downloads](https://img.shields.io/npm/dw/mcp-openapi-schema-explorer)](https://badge.fury.io/js/mcp-openapi-schema-explorer)\n[![Docker Pulls](https://img.shields.io/docker/pulls/kadykov/mcp-openapi-schema-explorer.svg)](https://hub.docker.com/r/kadykov/mcp-openapi-schema-explorer)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![codecov](https://codecov.io/gh/kadykov/mcp-openapi-schema-explorer/graph/badge.svg?token=LFDOMJ6W4W)](https://codecov.io/gh/kadykov/mcp-openapi-schema-explorer)\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/819a3ba3-ad54-4657-9241-648497e57d7b)\n[![Lines of code](https://tokei.rs/b1/github/kadykov/mcp-openapi-schema-explorer?category=code)](https://github.com/kadykov/mcp-openapi-schema-explorer)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/kadykov/mcp-openapi-schema-explorer)](https://archestra.ai/mcp-catalog/kadykov__mcp-openapi-schema-explorer)\n\nAn MCP (Model Context Protocol) server that provides token-efficient access to OpenAPI (v3.0) and Swagger (v2.0) specifications via **MCP Resources**.\n\n## Project Goal\n\nThe primary goal of this project is to allow MCP clients (like Cline or Claude Desktop) to explore the structure and details of large OpenAPI specifications without needing to load the entire file into an LLM's context window. It achieves this by exposing parts of the specification through MCP Resources, which are well-suited for read-only data exploration.\n\nThis server supports loading specifications from both local file paths and remote HTTP/HTTPS URLs. Swagger v2.0 specifications are automatically converted to OpenAPI v3.0 upon loading.\n\n## Why MCP Resources?\n\nThe Model Context Protocol defines both **Resources** and **Tools**.\n\n- **Resources:** Represent data sources (like files, API responses). They are ideal for read-only access and exploration by MCP clients (e.g., browsing API paths in Claude Desktop).\n- **Tools:** Represent executable actions or functions, often used by LLMs to perform tasks or interact with external systems.\n\nWhile other MCP servers exist that provide access to OpenAPI specs via _Tools_, this project specifically focuses on providing access via _Resources_. This makes it particularly useful for direct exploration within MCP client applications.\n\nFor more details on MCP clients and their capabilities, see the [MCP Client Documentation](https://modelcontextprotocol.io/clients).\n\n## Installation\n\nFor the recommended usage methods (`npx` and Docker, described below), **no separate installation step is required**. Your MCP client will download the package or pull the Docker image automatically based on the configuration you provide.\n\nHowever, if you prefer or need to install the server explicitly, you have two options:\n\n1.  **Global Installation:** You can install the package globally using npm:\n\n    ```bash\n    npm install -g mcp-openapi-schema-explorer\n    ```\n\n    See **Method 3** below for how to configure your MCP client to use a globally installed server.\n\n2.  **Local Development/Installation:** You can clone the repository and build it locally:\n    ```bash\n    git clone https://github.com/kadykov/mcp-openapi-schema-explorer.git\n    cd mcp-openapi-schema-explorer\n    npm install\n    npm run build\n    ```\n    See **Method 4** below for how to configure your MCP client to run the server from your local build using `node`.\n\n## Adding the Server to your MCP Client\n\nThis server is designed to be run by MCP clients (like Claude Desktop, Windsurf, Cline, etc.). To use it, you add a configuration entry to your client's settings file (often a JSON file). This entry tells the client how to execute the server process (e.g., using `npx`, `docker`, or `node`). The server itself doesn't require separate configuration beyond the command-line arguments specified in the client settings entry.\n\nBelow are the common methods for adding the server entry to your client's configuration.\n\n### Method 1: npx (Recommended)\n\nUsing `npx` is recommended as it avoids global/local installation and ensures the client uses the latest published version.\n\n**Example Client Configuration Entry (npx Method):**\n\nAdd the following JSON object to the `mcpServers` section of your MCP client's configuration file. This entry instructs the client on how to run the server using `npx`:\n\n```json\n{\n  \"mcpServers\": {\n    \"My API Spec (npx)\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-openapi-schema-explorer@latest\",\n        \"<path-or-url-to-spec>\",\n        \"--output-format\",\n        \"yaml\"\n      ],\n      \"env\": {}\n    }\n  }\n}\n```\n\n**Configuration Notes:**\n\n- Replace `\"My API Spec (npx)\"` with a unique name for this server instance in your client.\n- Replace `<path-or-url-to-spec>` with the absolute local file path or full remote URL of your specification.\n- The `--output-format` is optional (`json`, `yaml`, `json-minified`), defaulting to `json`.\n- To explore multiple specifications, add separate entries in `mcpServers`, each with a unique name and pointing to a different spec.\n\n### Method 2: Docker\n\nYou can instruct your MCP client to run the server using the official Docker image: `kadykov/mcp-openapi-schema-explorer`.\n\n**Example Client Configuration Entries (Docker Method):**\n\nAdd one of the following JSON objects to the `mcpServers` section of your MCP client's configuration file. These entries instruct the client on how to run the server using `docker run`:\n\n- **Remote URL:** Pass the URL directly to `docker run`.\n\n- **Using a Remote URL:**\n\n  ```json\n  {\n    \"mcpServers\": {\n      \"My API Spec (Docker Remote)\": {\n        \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"--rm\",\n          \"-i\",\n          \"kadykov/mcp-openapi-schema-explorer:latest\",\n          \"<remote-url-to-spec>\"\n        ],\n        \"env\": {}\n      }\n    }\n  }\n  ```\n\n- **Using a Local File:** (Requires mounting the file into the container)\n  ```json\n  {\n    \"mcpServers\": {\n      \"My API Spec (Docker Local)\": {\n        \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"--rm\",\n          \"-i\",\n          \"-v\",\n          \"/full/host/path/to/spec.yaml:/spec/api.yaml\",\n          \"kadykov/mcp-openapi-schema-explorer:latest\",\n          \"/spec/api.yaml\",\n          \"--output-format\",\n          \"yaml\"\n        ],\n        \"env\": {}\n      }\n    }\n  }\n  ```\n  **Important:** Replace `/full/host/path/to/spec.yaml` with the correct absolute path on your host machine. The path `/spec/api.yaml` is the corresponding path inside the container.\n\n### Method 3: Global Installation (Less Common)\n\nIf you have installed the package globally using `npm install -g`, you can configure your client to run it directly.\n\n```bash\n# Run this command once in your terminal\nnpm install -g mcp-openapi-schema-explorer\n```\n\n**Example Client Configuration Entry (Global Install Method):**\n\nAdd the following entry to your MCP client's configuration file. This assumes the `mcp-openapi-schema-explorer` command is accessible in the client's execution environment PATH.\n\n```json\n{\n  \"mcpServers\": {\n    \"My API Spec (Global)\": {\n      \"command\": \"mcp-openapi-schema-explorer\",\n      \"args\": [\"<path-or-url-to-spec>\", \"--output-format\", \"yaml\"],\n      \"env\": {}\n    }\n  }\n}\n```\n\n- Ensure the `command` (`mcp-openapi-schema-explorer`) is accessible in the PATH environment variable used by your MCP client.\n\n### Method 4: Local Development/Installation\n\nThis method is useful if you have cloned the repository locally for development or to run a modified version.\n\n**Setup Steps (Run once in your terminal):**\n\n1.  Clone the repository: `git clone https://github.com/kadykov/mcp-openapi-schema-explorer.git`\n2.  Navigate into the directory: `cd mcp-openapi-schema-explorer`\n3.  Install dependencies: `npm install`\n4.  Build the project: `npm run build` (or `just build`)\n\n**Example Client Configuration Entry (Local Development Method):**\n\nAdd the following entry to your MCP client's configuration file. This instructs the client to run the locally built server using `node`.\n\n```json\n{\n  \"mcpServers\": {\n    \"My API Spec (Local Dev)\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/full/path/to/cloned/mcp-openapi-schema-explorer/dist/src/index.js\",\n        \"<path-or-url-to-spec>\",\n        \"--output-format\",\n        \"yaml\"\n      ],\n\n      \"env\": {}\n    }\n  }\n}\n```\n\n**Important:** Replace `/full/path/to/cloned/mcp-openapi-schema-explorer/dist/src/index.js` with the correct absolute path to the built `index.js` file in your cloned repository.\n\n## Features\n\n- **MCP Resource Access:** Explore OpenAPI specs via intuitive URIs (`openapi://info`, `openapi://paths/...`, `openapi://components/...`).\n- **OpenAPI v3.0 & Swagger v2.0 Support:** Loads both formats, automatically converting v2.0 to v3.0.\n- **Local & Remote Files:** Load specs from local file paths or HTTP/HTTPS URLs.\n- **Token-Efficient:** Designed to minimize token usage for LLMs by providing structured access.\n- **Multiple Output Formats:** Get detailed views in JSON (default), YAML, or minified JSON (`--output-format`).\n- **Dynamic Server Name:** Server name in MCP clients reflects the `info.title` from the loaded spec.\n- **Reference Transformation:** Internal `$ref`s (`#/components/...`) are transformed into clickable MCP URIs.\n\n## Available MCP Resources\n\nThis server exposes the following MCP resource templates for exploring the OpenAPI specification.\n\n**Understanding Multi-Value Parameters (`*`)**\n\nSome resource templates include parameters ending with an asterisk (`*`), like `{method*}` or `{name*}`. This indicates that the parameter accepts **multiple comma-separated values**. For example, to request details for both the `GET` and `POST` methods of a path, you would use a URI like `openapi://paths/users/get,post`. This allows fetching details for multiple items in a single request.\n\n**Resource Templates:**\n\n- **`openapi://{field}`**\n  - **Description:** Accesses top-level fields of the OpenAPI document (e.g., `info`, `servers`, `tags`) or lists the contents of `paths` or `components`. The specific available fields depend on the loaded specification.\n  - **Example:** `openapi://info`\n  - **Output:** `text/plain` list for `paths` and `components`; configured format (JSON/YAML/minified JSON) for other fields.\n  - **Completions:** Provides dynamic suggestions for `{field}` based on the actual top-level keys found in the loaded spec.\n\n- **`openapi://paths/{path}`**\n  - **Description:** Lists the available HTTP methods (operations) for a specific API path.\n  - **Parameter:** `{path}` - The API path string. **Must be URL-encoded** (e.g., `/users/{id}` becomes `users%2F%7Bid%7D`).\n  - **Example:** `openapi://paths/users%2F%7Bid%7D`\n  - **Output:** `text/plain` list of methods.\n  - **Completions:** Provides dynamic suggestions for `{path}` based on the paths found in the loaded spec (URL-encoded).\n\n- **`openapi://paths/{path}/{method*}`**\n  - **Description:** Gets the detailed specification for one or more operations (HTTP methods) on a specific API path.\n  - **Parameters:**\n    - `{path}` - The API path string. **Must be URL-encoded**.\n    - `{method*}` - One or more HTTP methods (e.g., `get`, `post`, `get,post`). Case-insensitive.\n  - **Example (Single):** `openapi://paths/users%2F%7Bid%7D/get`\n  - **Example (Multiple):** `openapi://paths/users%2F%7Bid%7D/get,post`\n  - **Output:** Configured format (JSON/YAML/minified JSON).\n  - **Completions:** Provides dynamic suggestions for `{path}`. Provides static suggestions for `{method*}` (common HTTP verbs like GET, POST, PUT, DELETE, etc.).\n\n- **`openapi://components/{type}`**\n  - **Description:** Lists the names of all defined components of a specific type (e.g., `schemas`, `responses`, `parameters`). The specific available types depend on the loaded specification. Also provides a short description for each listed type.\n  - **Example:** `openapi://components/schemas`\n  - **Output:** `text/plain` list of component names with descriptions.\n  - **Completions:** Provides dynamic suggestions for `{type}` based on the component types found in the loaded spec.\n\n- **`openapi://components/{type}/{name*}`**\n  - **Description:** Gets the detailed specification for one or more named components of a specific type.\n  - **Parameters:**\n    - `{type}` - The component type.\n    - `{name*}` - One or more component names (e.g., `User`, `Order`, `User,Order`). Case-sensitive.\n  - **Example (Single):** `openapi://components/schemas/User`\n  - **Example (Multiple):** `openapi://components/schemas/User,Order`\n  - **Output:** Configured format (JSON/YAML/minified JSON).\n  - **Completions:** Provides dynamic suggestions for `{type}`. Provides dynamic suggestions for `{name*}` _only if_ the loaded spec contains exactly one component type overall (e.g., only `schemas`). This limitation exists because the MCP SDK currently doesn't support providing completions scoped to the selected `{type}`; providing all names across all types could be misleading.\n\n## Contributing\n\nContributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) file for guidelines on setting up the development environment, running tests, and submitting changes.\n\n## Releases\n\nThis project uses [`semantic-release`](https://github.com/semantic-release/semantic-release) for automated version management and package publishing based on [Conventional Commits](https://www.conventionalcommits.org/).\n\n## Future Plans\n\n(Future plans to be determined)\n",
+  "category": "Development",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-openapi-schema-explorer": {
+        "command": "npx",
+        "args": ["-y", "mcp-openapi-schema-explorer@latest", "<path-or-url-to-spec>", "--output-format", "yaml"],
+        "env": {}
+      },
+      "kadykov-mcp-openapi-schema-explorer-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "kadykov/mcp-openapi-schema-explorer:latest", "<remote-url-to-spec>"],
+        "env": {},
+        "docker_image": "kadykov/mcp-openapi-schema-explorer:latest"
+      },
+      "kadykov-mcp-openapi-schema-explorer-docker-local": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "-v",
+          "/full/host/path/to/spec.yaml:/spec/api.yaml",
+          "kadykov/mcp-openapi-schema-explorer:latest",
+          "/spec/api.yaml",
+          "--output-format",
+          "yaml"
+        ],
+        "env": {},
+        "docker_image": "kadykov/mcp-openapi-schema-explorer:latest"
+      },
+      "mcp-openapi-schema-explorer-global": {
+        "command": "mcp-openapi-schema-explorer",
+        "args": ["<path-or-url-to-spec>", "--output-format", "yaml"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kadykov",
+    "repo": "mcp-openapi-schema-explorer",
+    "url": "https://github.com/kadykov/mcp-openapi-schema-explorer",
+    "name": "kadykov__mcp-openapi-schema-explorer",
+    "path": null,
+    "stars": 45,
+    "contributors": 5,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "fa9a3476178c2bb4bfec2e17cc4a7eebaab71015"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:39.780Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "js-yaml",
+      "importance": 6
+    },
+    {
+      "name": "openapi-types",
+      "importance": 6
+    },
+    {
+      "name": "swagger2openapi",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-openapi-schema-explorer\",\n  \"version\": \"1.3.0\",\n  \"description\": \"MCP OpenAPI schema explorer\",\n  \"type\": \"module\",\n  \"main\": \"dist/src/index.js\",\n  \"types\": \"dist/src/index.d.ts\",\n  \"bin\": {\n    \"mcp-openapi-schema-explorer\": \"dist/src/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"rm -rf dist && mkdir -p dist && npx tsc && chmod +x dist/src/index.js\",\n    \"test\": \"jest\",\n    \"test:watch\": \"jest --watch\",\n    \"test:coverage\": \"jest --coverage\",\n    \"lint\": \"eslint . --ext .ts\",\n    \"lint:fix\": \"eslint . --ext .ts --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\" \\\"test/**/*.ts\\\"\",\n    \"format:check\": \"prettier --check \\\"src/**/*.ts\\\" \\\"test/**/*.ts\\\"\",\n    \"type-check\": \"tsc --noEmit\",\n    \"prepare\": \"husky\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/kadykov/mcp-openapi-schema-explorer.git\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"openapi\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"bugs\": {\n    \"url\": \"https://github.com/kadykov/mcp-openapi-schema-explorer/issues\"\n  },\n  \"homepage\": \"https://github.com/kadykov/mcp-openapi-schema-explorer#readme\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.1\",\n    \"js-yaml\": \"^4.1.0\",\n    \"openapi-types\": \"^12.1.3\",\n    \"swagger2openapi\": \"7.0.8\",\n    \"zod\": \"^4.0.5\"\n  },\n  \"devDependencies\": {\n    \"@codedependant/semantic-release-docker\": \"^5.1.0\",\n    \"@eslint/js\": \"^9.24.0\",\n    \"@semantic-release/changelog\": \"^6.0.3\",\n    \"@semantic-release/commit-analyzer\": \"^13.0.1\",\n    \"@semantic-release/exec\": \"^7.0.3\",\n    \"@semantic-release/git\": \"^10.0.1\",\n    \"@semantic-release/github\": \"^11.0.1\",\n    \"@semantic-release/npm\": \"^12.0.1\",\n    \"@semantic-release/release-notes-generator\": \"^14.0.3\",\n    \"@types/jest\": \"^30.0.0\",\n    \"@types/js-yaml\": \"^4.0.9\",\n    \"@types/node\": \"^24.0.3\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"@types/swagger2openapi\": \"^7.0.4\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.29.0\",\n    \"@typescript-eslint/parser\": \"^8.29.0\",\n    \"axios\": \"^1.8.4\",\n    \"eslint\": \"^9.24.0\",\n    \"eslint-plugin-security\": \"^3.0.1\",\n    \"globals\": \"^16.0.0\",\n    \"husky\": \"^9.1.7\",\n    \"jest\": \"^30.0.2\",\n    \"jest-silent-reporter\": \"^0.6.0\",\n    \"license-checker\": \"^25.0.1\",\n    \"msw\": \"^2.7.4\",\n    \"openapi-typescript\": \"^7.6.1\",\n    \"prettier\": \"^3.5.3\",\n    \"semantic-release\": \"^24.2.3\",\n    \"ts-jest\": \"^29.3.1\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

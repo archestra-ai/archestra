@@ -1,0 +1,167 @@
+{
+  "name": "bright8192__esxi-mcp-server",
+  "display_name": "esxi-mcp-server",
+  "description": "A VMware ESXi/vCenter management server based on MCP (Model Control Protocol), providing simple REST API interfaces for virtual machine management.",
+  "author": {
+    "name": "bright8192"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/server.py"],
+    "env": {
+      "VCENTER_HOST": "${user_config.vcenter_host}",
+      "VCENTER_USER": "${user_config.vcenter_user}",
+      "VCENTER_PASSWORD": "${user_config.vcenter_password}",
+      "VCENTER_DATACENTER": "${user_config.vcenter_datacenter}",
+      "VCENTER_CLUSTER": "${user_config.vcenter_cluster}",
+      "VCENTER_DATASTORE": "${user_config.vcenter_datastore}",
+      "VCENTER_NETWORK": "${user_config.vcenter_network}",
+      "VCENTER_INSECURE": "${user_config.vcenter_insecure}",
+      "MCP_API_KEY": "${user_config.mcp_api_key}",
+      "MCP_LOG_FILE": "${user_config.mcp_log_file}",
+      "MCP_LOG_LEVEL": "${user_config.mcp_log_level}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "vcenter_host": {
+      "type": "string",
+      "title": "vCenter/ESXi Server Address",
+      "description": "The IP address or hostname of your vCenter or ESXi server.",
+      "required": true
+    },
+    "vcenter_user": {
+      "type": "string",
+      "title": "vCenter/ESXi Login Username",
+      "description": "The username for logging into the vCenter or ESXi server (e.g., administrator@vsphere.local).",
+      "required": true
+    },
+    "vcenter_password": {
+      "type": "string",
+      "title": "vCenter/ESXi Login Password",
+      "description": "The password for the vCenter or ESXi login username.",
+      "sensitive": true,
+      "required": true
+    },
+    "vcenter_datacenter": {
+      "type": "string",
+      "title": "Datacenter Name",
+      "description": "The name of the datacenter to manage. If not provided, the first available datacenter will be used.",
+      "required": false
+    },
+    "vcenter_cluster": {
+      "type": "string",
+      "title": "Cluster Name",
+      "description": "The name of the cluster to manage. If not provided, the first available cluster will be used.",
+      "required": false
+    },
+    "vcenter_datastore": {
+      "type": "string",
+      "title": "Datastore Name",
+      "description": "The name of the datastore to use for VM operations. If not provided, the largest available datastore will be used.",
+      "required": false
+    },
+    "vcenter_network": {
+      "type": "string",
+      "title": "Network Name",
+      "description": "The name of the network to connect VMs to.",
+      "required": false,
+      "default": "VM Network"
+    },
+    "vcenter_insecure": {
+      "type": "boolean",
+      "title": "Skip SSL Verification",
+      "description": "Set to true to skip SSL certificate verification for vCenter/ESXi connections. Not recommended for production.",
+      "required": false,
+      "default": false
+    },
+    "mcp_api_key": {
+      "type": "string",
+      "title": "API Access Key",
+      "description": "An API key required for authenticating privileged operations.",
+      "sensitive": true,
+      "required": false
+    },
+    "mcp_log_file": {
+      "type": "file",
+      "title": "Log File Path",
+      "description": "The path to the file where server logs will be written. If not provided, logs will output to the console.",
+      "required": false,
+      "default": ""
+    },
+    "mcp_log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "The minimum level of logs to record (e.g., INFO, DEBUG, WARNING, ERROR).",
+      "required": false,
+      "default": "INFO"
+    }
+  },
+  "readme": "# ESXi MCP Server\n\nA VMware ESXi/vCenter management server based on MCP (Model Control Protocol), providing simple REST API interfaces for virtual machine management.\n\n## Features\n\n- Support for ESXi and vCenter Server connections\n- Real-time communication based on SSE (Server-Sent Events)\n- RESTful API interface with JSON-RPC support\n- API key authentication\n- Complete virtual machine lifecycle management\n- Real-time performance monitoring\n- SSL/TLS secure connection support\n- Flexible configuration options (YAML/JSON/Environment Variables)\n\n## Core Functions\n\n- Virtual Machine Management\n  - Create VM\n  - Clone VM\n  - Delete VM\n  - Power On/Off operations\n  - List all VMs\n- Performance Monitoring\n  - CPU usage\n  - Memory usage\n  - Storage usage\n  - Network traffic statistics\n\n## Requirements\n\n- Python 3.7+\n- pyVmomi\n- PyYAML\n- uvicorn\n- mcp-core (Machine Control Protocol core library)\n\n## Quick Start\n\n1. Install dependencies:\n\n```bash\npip install pyvmomi pyyaml uvicorn mcp-core\n```\n\n2. Create configuration file `config.yaml`:\n\n```yaml\nvcenter_host: \"your-vcenter-ip\"\nvcenter_user: \"administrator@vsphere.local\"\nvcenter_password: \"your-password\"\ndatacenter: \"your-datacenter\"        # Optional\ncluster: \"your-cluster\"              # Optional\ndatastore: \"your-datastore\"          # Optional\nnetwork: \"VM Network\"                # Optional\ninsecure: true                       # Skip SSL certificate verification\napi_key: \"your-api-key\"             # API access key\nlog_file: \"./logs/vmware_mcp.log\"   # Log file path\nlog_level: \"INFO\"                    # Log level\n```\n\n3. Run the server:\n\n```bash\npython server.py -c config.yaml\n```\n\n## API Interface\n\n### Authentication\n\nAll privileged operations require authentication first:\n\n```http\nPOST /sse/messages\nAuthorization: Bearer your-api-key\n```\n\n### Main Tool Interfaces\n\n1. Create VM\n```json\n{\n    \"name\": \"vm-name\",\n    \"cpu\": 2,\n    \"memory\": 4096,\n    \"datastore\": \"datastore-name\",\n    \"network\": \"network-name\"\n}\n```\n\n2. Clone VM\n```json\n{\n    \"template_name\": \"source-vm\",\n    \"new_name\": \"new-vm-name\"\n}\n```\n\n3. Delete VM\n```json\n{\n    \"name\": \"vm-name\"\n}\n```\n\n4. Power Operations\n```json\n{\n    \"name\": \"vm-name\"\n}\n```\n\n### Resource Monitoring Interface\n\nGet VM performance data:\n```http\nGET vmstats://{vm_name}\n```\n\n## Configuration\n\n| Parameter | Description | Required | Default |\n|-----------|-------------|----------|---------|\n| vcenter_host | vCenter/ESXi server address | Yes | - |\n| vcenter_user | Login username | Yes | - |\n| vcenter_password | Login password | Yes | - |\n| datacenter | Datacenter name | No | Auto-select first |\n| cluster | Cluster name | No | Auto-select first |\n| datastore | Storage name | No | Auto-select largest available |\n| network | Network name | No | VM Network |\n| insecure | Skip SSL verification | No | false |\n| api_key | API access key | No | - |\n| log_file | Log file path | No | Console output |\n| log_level | Log level | No | INFO |\n\n## Environment Variables\n\nAll configuration items support environment variable settings, following these naming rules:\n- VCENTER_HOST\n- VCENTER_USER\n- VCENTER_PASSWORD\n- VCENTER_DATACENTER\n- VCENTER_CLUSTER\n- VCENTER_DATASTORE\n- VCENTER_NETWORK\n- VCENTER_INSECURE\n- MCP_API_KEY\n- MCP_LOG_FILE\n- MCP_LOG_LEVEL\n\n## Security Recommendations\n\n1. Production Environment:\n   - Use valid SSL certificates\n   - Enable API key authentication\n   - Set appropriate log levels\n   - Restrict API access scope\n\n2. Testing Environment:\n   - Set insecure: true to skip SSL verification\n   - Use more detailed log level (DEBUG)\n\n## License\n\nMIT License\n\n## Contributing\n\nIssues and Pull Requests are welcome!\n\n## Changelog\n\n### v0.0.1\n- Initial release\n- Basic VM management functionality\n- SSE communication support\n- API key authentication\n- Performance monitoring\n\n## Author\n\nBright8192\n\n## Acknowledgments\n\n- VMware pyvmomi team\n- MCP Protocol development team\n",
+  "category": "Cloud",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "esxi-mcp-server": {
+        "command": "python",
+        "args": ["server.py", "-c", "config.yaml"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "bright8192",
+    "repo": "esxi-mcp-server",
+    "url": "https://github.com/bright8192/esxi-mcp-server",
+    "name": "bright8192__esxi-mcp-server",
+    "path": null,
+    "stars": 36,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a2f4c709c5eb6d2fa47a7a2239e666f6ec53abfa"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:15.660Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pyvmomi",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "pyyaml",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\npyvmomi>=7.0\npyyaml>=6.0\nuvicorn>=0.15.0\nmcp\npytest>=7.0.0"
+}

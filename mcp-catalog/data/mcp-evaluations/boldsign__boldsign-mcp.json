@@ -1,0 +1,99 @@
+{
+  "name": "boldsign__boldsign-mcp",
+  "display_name": "boldsign-mcp",
+  "description": "Model Context Protocol (MCP) server for BoldSign API",
+  "author": {
+    "name": "boldsign"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@boldsign/mcp"],
+    "env": {
+      "BOLDSIGN_API_KEY": "${user_config.boldsign_api_key}",
+      "BOLDSIGN_API_REGION": "${user_config.boldsign_api_region}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "boldsign_api_key": {
+      "type": "string",
+      "title": "BoldSign API Key",
+      "description": "Your API key obtained from your BoldSign account.",
+      "sensitive": true,
+      "required": true
+    },
+    "boldsign_api_region": {
+      "type": "string",
+      "title": "BoldSign API Region",
+      "description": "Specifies the region of your BoldSign account. This defaults to US if not specified.",
+      "default": "US",
+      "required": false
+    }
+  },
+  "readme": "# BoldSign MCP Server\n\n**Author:** Syncfusion\n\n**Homepage:** [https://boldsign.com](https://boldsign.com)\n\nAn MCP server designed to facilitate interaction between Large Language Models (LLMs) and the BoldSign API. The Model Context Protocol (MCP) extends LLM capabilities, enabling them to act as agents when connecting with external systems.\n\nThis project contains various tools that interact with the BoldSign API to manage templates and documents for your e-signature.\n\n## Prerequisites\n\nBefore you begin, ensure you have the following installed and set up:\n\n1.  **A BoldSign Account:** You will need an account to obtain API credentials. You can [sign up for a free trial here](https://boldsign.com/electronic-signature-pricing/?plan=api) or use an existing sandbox or paid account.\n2.  **BoldSign API Credentials:** Obtain your necessary application credentials, specifically an API key. Instructions on how to generate and manage your API key can be found in the [BoldSign API documentation](https://developers.boldsign.com/authentication/api-key).\n3.  **Node.js:** Version 18.0.0 or higher is required.\n4.  **An MCP Client:** To interact with the server, you need an MCP client application. Examples include Cursor, VS Code, Windsurf, Claude Desktop, Cline, or any other compatible MCP client.\n\n## Installation\n\nThis section provides instructions on how to configure popular MCP clients to connect to the BoldSign MCP server. You will need to add the relevant configuration snippet to your client's settings or configuration file.\n\n### Environment Variables\n\nYou will need to configure the following environment variables for the BoldSign MCP server to function correctly:\n\n- `BOLDSIGN_API_KEY` - Your API key obtained from your BoldSign account. Please refer to the [Prerequisites](#prerequisites) section for instructions on how to get your API key.\n\n- `BOLDSIGN_API_REGION` - Specifies the region of your BoldSign account. This defaults to `US` if not specified.\n\n  - `US` for the United States region.\n\n  - `EU` for the Europe region.\n\n  - `CA` for the Canada region.\n\n### Install in Cursor\n\nThe recommended approach is to add the following configuration to your global Cursor MCP configuration file, typically found at `~/.cursor/mcp.json`.\n\nAlternatively, you can install it for a specific project by creating a `.cursor/mcp.json` file in your project's root folder and adding the same configuration there.\n\n```json\n{\n  \"mcpServers\": {\n    \"boldsign\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@boldsign/mcp\"],\n      \"env\": {\n        \"BOLDSIGN_API_KEY\": \"YOUR_BOLDSIGN_API_KEY\",\n        \"BOLDSIGN_API_REGION\": \"US\"\n      }\n    }\n  }\n}\n```\n\nRefer to the [Cursor MCP documentation](https://docs.cursor.com/context/model-context-protocol) for more information on setting up MCP servers in Cursor.\n\n### Install in Windsurf\n\nAdd the following configuration snippet to your Windsurf MCP configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"boldsign\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@boldsign/mcp\"],\n      \"env\": {\n        \"BOLDSIGN_API_KEY\": \"YOUR_BOLDSIGN_API_KEY\",\n        \"BOLDSIGN_API_REGION\": \"US\"\n      }\n    }\n  }\n}\n```\n\nRefer to the [Windsurf MCP documentation](https://docs.windsurf.com/windsurf/mcp) for more information on Windsurf MCP setup.\n\n### Install in VS Code\n\nAdd the following configuration to the VS Code settings file where you manage MCP server configurations:\n\n```json\n{\n  \"servers\": {\n    \"boldsign\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@boldsign/mcp\"],\n      \"env\": {\n        \"BOLDSIGN_API_KEY\": \"YOUR_BOLDSIGN_API_KEY\",\n        \"BOLDSIGN_API_REGION\": \"US\"\n      }\n    }\n  }\n}\n```\n\nRefer to the [VS Code MCP documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers) for more information on VS Code MCP setup.\n\n### Install in Claude Desktop\n\nAdd the following configuration to your Claude Desktop configuration file, which is typically named `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"boldsign\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@boldsign/mcp\"],\n      \"env\": {\n        \"BOLDSIGN_API_KEY\": \"YOUR_BOLDSIGN_API_KEY\",\n        \"BOLDSIGN_API_REGION\": \"US\"\n      }\n    }\n  }\n}\n```\n\nRefer to the [Model Context Protocol quickstart guide](https://modelcontextprotocol.io/quickstart/user) for more information on Claude Desktop MCP setup.\n\n### Install in Cline\n\nAdd the following configuration snippet to your Cline MCP configuration file.\n\n```json\n{\n  \"mcpServers\": {\n    \"boldsign\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@boldsign/mcp\"],\n      \"env\": {\n        \"BOLDSIGN_API_KEY\": \"YOUR_BOLDSIGN_API_KEY\",\n        \"BOLDSIGN_API_REGION\": \"US\"\n      }\n    }\n  }\n}\n```\n\nRefer to the [Cline MCP configuration guide](https://docs.cline.bot/mcp-servers/configuring-mcp-servers) for more information on Cline MCP setup.\n\n## Available Tools\n\nThis MCP server provides access to the following tools via the BoldSign API:\n\n### Documents\n\n- [List documents](https://developers.boldsign.com/documents/list-documents): Retrieves a paginated list of your documents.\n\n- [List team documents](https://developers.boldsign.com/documents/list-team-documents): Retrieves a paginated list of team documents.\n\n- [Get document](https://developers.boldsign.com/documents/document-details-and-status): Retrieves detailed information, including status, for a specific document using its ID.\n\n- [Revoke document](https://developers.boldsign.com/documents/revoke-document): Allows you to cancel or call off a document that is in progress.\n\n- [Send reminders](https://developers.boldsign.com/documents/send-reminder): Sends reminders to signers who have not yet completed their signature on a document.\n\n### Templates\n\n- [List templates](https://developers.boldsign.com/template/list-templates): Retrieves a paginated list of templates available in your BoldSign account.\n\n- [Get template](https://developers.boldsign.com/template/template-details): Retrieves detailed information for a specific template using its ID.\n\n- [Send document from template](https://developers.boldsign.com/documents/send-document-from-template): Creates and sends out a document for signing based on a pre-configured template.\n\n### Contacts\n\n- [List Contacts](https://developers.boldsign.com/contacts/list-contacts): Retrieves a paginated list of contacts from your BoldSign account.\n\n- [Get Contact](https://developers.boldsign.com/contacts/get-contact-details): Retrieves detailed information for a specific contact using their ID.\n\n### Users\n\n- [List Users](https://developers.boldsign.com/users/list-users): Retrieves a paginated list of users in your BoldSign organization.\n\n- [Get User](https://developers.boldsign.com/users/get-user-details): Retrieves detailed information for a specific user using their ID.\n\n### Teams\n\n- [List Teams](https://developers.boldsign.com/teams/list-teams): Retrieves a paginated list of teams in your BoldSign organization.\n\n- [Get Team](https://developers.boldsign.com/teams/get-team-details): Retrieves detailed information for a specific team using their ID.\n\n## Repository\n\n[https://github.com/boldsign/boldsign-mcp](https://github.com/boldsign/boldsign-mcp)\n\n## Bug Tracker\n\n[https://github.com/boldsign/boldsign-mcp/issues](https://github.com/boldsign/boldsign-mcp/issues)\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "boldsign-mcp": {
+        "command": "npx",
+        "args": ["-y", "@boldsign/mcp"],
+        "env": {
+          "BOLDSIGN_API_KEY": "YOUR_BOLDSIGN_API_KEY",
+          "BOLDSIGN_API_REGION": "US"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "boldsign",
+    "repo": "boldsign-mcp",
+    "url": "https://github.com/boldsign/boldsign-mcp",
+    "name": "boldsign-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "4c278378cd63130eb9988cdf667d0971cce24731"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:45.369Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "boldsign",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@boldsign/mcp\",\n  \"version\": \"0.0.4\",\n  \"description\": \"Model Context Protocol (MCP) server for BoldSign API\",\n  \"license\": \"MIT\",\n  \"author\": \"Syncfusion\",\n  \"homepage\": \"https://boldsign.com\",\n  \"type\": \"module\",\n  \"bugs\": {\n    \"url\": \"https://github.com/boldsign/boldsign-mcp/issues\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/boldsign/boldsign-mcp.git\"\n  },\n  \"bin\": {\n    \"boldsign-mcp\": \"dist/index.js\"\n  },\n  \"main\": \"dist/index.js\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"format\": \"prettier --write ./src\",\n    \"watch\": \"tsc --watch\",\n    \"debug\": \"npx @modelcontextprotocol/inspector node ./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"keywords\": [\n    \"boldsign\",\n    \"boldsign-ai\",\n    \"boldsign-mcp\",\n    \"mcp\",\n    \"boldsign-nodejs-mcp\",\n    \"boldsign-contacts-api\",\n    \"boldsign-users-api\",\n    \"boldsign-teams-api\",\n    \"boldsign-documents-api\",\n    \"boldsign-templates-api\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.16.0\",\n    \"boldsign\": \"1.0.0-beta.6\",\n    \"zod\": \"^4.0.5\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.1\",\n    \"axios\": \"^1.9.0\",\n    \"prettier\": \"^3.5.3\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\n"
+}

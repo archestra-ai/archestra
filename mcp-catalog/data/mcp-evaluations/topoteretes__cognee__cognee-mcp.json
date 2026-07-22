@@ -1,0 +1,243 @@
+{
+  "name": "topoteretes__cognee__cognee-mcp",
+  "display_name": "cognee-mcp",
+  "description": "Memory for AI Agents in 5 lines of code",
+  "author": {
+    "name": "topoteretes"
+  },
+  "server": {
+    "command": "python",
+    "args": [
+      "src/server.py",
+      "--transport",
+      "${user_config.transport}",
+      "--host",
+      "${user_config.host}",
+      "--port",
+      "${user_config.port}",
+      "--path",
+      "${user_config.path}"
+    ],
+    "env": {
+      "LLM_API_KEY": "${user_config.llm_api_key}",
+      "ENV": "${user_config.env}",
+      "TOKENIZERS_PARALLELISM": "${user_config.tokenizers_parallelism}",
+      "EMBEDDING_PROVIDER": "${user_config.embedding_provider}",
+      "EMBEDDING_MODEL": "${user_config.embedding_model}",
+      "EMBEDDING_DIMENSIONS": "${user_config.embedding_dimensions}",
+      "EMBEDDING_MAX_TOKENS": "${user_config.embedding_max_tokens}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "llm_api_key": {
+      "type": "string",
+      "title": "LLM API Key",
+      "description": "Your API key for the Large Language Model provider (e.g., OpenAI)",
+      "sensitive": true,
+      "required": true
+    },
+    "env": {
+      "type": "string",
+      "title": "Environment",
+      "description": "The environment setting for the server (e.g., local)",
+      "default": "local",
+      "required": false
+    },
+    "tokenizers_parallelism": {
+      "type": "boolean",
+      "title": "Tokenizers Parallelism",
+      "description": "Whether to enable parallelism for tokenizers",
+      "default": false,
+      "required": false
+    },
+    "embedding_provider": {
+      "type": "string",
+      "title": "Embedding Provider",
+      "description": "The provider for text embeddings (e.g., fastembed)",
+      "default": "fastembed",
+      "required": false
+    },
+    "embedding_model": {
+      "type": "string",
+      "title": "Embedding Model",
+      "description": "The model to use for text embeddings (e.g., sentence-transformers/all-MiniLM-L6-v2)",
+      "default": "sentence-transformers/all-MiniLM-L6-v2",
+      "required": false
+    },
+    "embedding_dimensions": {
+      "type": "number",
+      "title": "Embedding Dimensions",
+      "description": "The dimension size for embeddings",
+      "default": 384,
+      "required": false
+    },
+    "embedding_max_tokens": {
+      "type": "number",
+      "title": "Embedding Max Tokens",
+      "description": "The maximum number of tokens for embeddings",
+      "default": 256,
+      "required": false
+    },
+    "transport": {
+      "type": "string",
+      "title": "Transport Protocol",
+      "description": "The transport protocol for the MCP server (stdio, sse, http)",
+      "default": "stdio",
+      "required": false
+    },
+    "host": {
+      "type": "string",
+      "title": "Host Address",
+      "description": "The host address for HTTP transport",
+      "default": "127.0.0.1",
+      "required": false
+    },
+    "port": {
+      "type": "number",
+      "title": "Port Number",
+      "description": "The port number for HTTP transport",
+      "default": 8000,
+      "min": 1,
+      "max": 65535,
+      "required": false
+    },
+    "path": {
+      "type": "string",
+      "title": "Path Prefix",
+      "description": "The URL path prefix for HTTP transport",
+      "default": "/mcp",
+      "required": false
+    }
+  },
+  "readme": "<div align=\"center\">\n  <a href=\"https://github.com/topoteretes/cognee\">\n    <img src=\"https://raw.githubusercontent.com/topoteretes/cognee/refs/heads/dev/assets/cognee-logo-transparent.png\" alt=\"Cognee Logo\" height=\"60\">\n  </a>\n\n  <br />\n\n  cognee‑mcp - Run cognee’s memory engine as a Model Context Protocol server\n\n  <p align=\"center\">\n  <a href=\"https://www.youtube.com/watch?v=1bezuvLwJmw&t=2s\">Demo</a>\n  .\n  <a href=\"https://cognee.ai\">Learn more</a>\n  ·\n  <a href=\"https://discord.gg/NQPKmU5CCg\">Join Discord</a>\n  ·\n  <a href=\"https://www.reddit.com/r/AIMemory/\">Join r/AIMemory</a>\n  </p>\n\n\n  [![GitHub forks](https://img.shields.io/github/forks/topoteretes/cognee.svg?style=social&label=Fork&maxAge=2592000)](https://GitHub.com/topoteretes/cognee/network/)\n  [![GitHub stars](https://img.shields.io/github/stars/topoteretes/cognee.svg?style=social&label=Star&maxAge=2592000)](https://GitHub.com/topoteretes/cognee/stargazers/)\n  [![GitHub commits](https://badgen.net/github/commits/topoteretes/cognee)](https://GitHub.com/topoteretes/cognee/commit/)\n  [![Github tag](https://badgen.net/github/tag/topoteretes/cognee)](https://github.com/topoteretes/cognee/tags/)\n  [![Downloads](https://static.pepy.tech/badge/cognee)](https://pepy.tech/project/cognee)\n  [![License](https://img.shields.io/github/license/topoteretes/cognee?colorA=00C586&colorB=000000)](https://github.com/topoteretes/cognee/blob/main/LICENSE)\n  [![Contributors](https://img.shields.io/github/contributors/topoteretes/cognee?colorA=00C586&colorB=000000)](https://github.com/topoteretes/cognee/graphs/contributors)\n\n<a href=\"https://www.producthunt.com/posts/cognee?embed=true&utm_source=badge-top-post-badge&utm_medium=badge&utm_souce=badge-cognee\" target=\"_blank\"><img src=\"https://api.producthunt.com/widgets/embed-image/v1/top-post-badge.svg?post_id=946346&theme=light&period=daily&t=1744472480704\" alt=\"cognee - Memory&#0032;for&#0032;AI&#0032;Agents&#0032;&#0032;in&#0032;5&#0032;lines&#0032;of&#0032;code | Product Hunt\" style=\"width: 250px; height: 54px;\" width=\"250\" height=\"54\" /></a>\n\n<a href=\"https://trendshift.io/repositories/13955\" target=\"_blank\"><img src=\"https://trendshift.io/api/badge/repositories/13955\" alt=\"topoteretes%2Fcognee | Trendshift\" style=\"width: 250px; height: 55px;\" width=\"250\" height=\"55\"/></a>\n\n\nBuild memory for Agents and query from any client that speaks MCP – in your terminal or IDE.\n\n</div>\n\n## ✨ Features\n\n- Multiple transports – choose Streamable HTTP --transport http (recommended for web deployments), SSE --transport sse (real‑time streaming), or stdio (classic pipe, default)\n- Integrated logging – all actions written to a rotating file (see get_log_file_location()) and mirrored to console in dev\n- Local file ingestion – feed .md, source files, Cursor rule‑sets, etc. straight from disk\n- Background pipelines – long‑running cognify & codify jobs spawn off‑thread; check progress with status tools\n- Developer rules bootstrap – one call indexes .cursorrules, .cursor/rules, AGENT.md, and friends into the developer_rules nodeset\n- Prune & reset – wipe memory clean with a single prune call when you want to start fresh\n\nPlease refer to our documentation [here](https://docs.cognee.ai/how-to-guides/deployment/mcp) for further information.\n\n## 🚀 Quick Start\n\n1. Clone cognee repo\n    ```\n    git clone https://github.com/topoteretes/cognee.git\n    ```\n2. Navigate to cognee-mcp subdirectory\n    ```\n    cd cognee/cognee-mcp\n    ```\n3. Install uv if you don't have one\n    ```\n    pip install uv\n    ```\n4. Install all the dependencies you need for cognee mcp server with uv\n    ```\n    uv sync --dev --all-extras --reinstall\n    ```\n5. Activate the virtual environment in cognee mcp directory\n    ```\n    source .venv/bin/activate\n    ```\n6. Set up your OpenAI API key in .env for a quick setup with the default cognee configurations\n    ```\n    LLM_API_KEY=\"YOUR_OPENAI_API_KEY\"\n    ```\n7. Run cognee mcp server with stdio (default)\n    ```\n    python src/server.py\n    ```\n    or stream responses over SSE\n    ```\n    python src/server.py --transport sse\n    ```\n    or run with Streamable HTTP transport (recommended for web deployments)\n    ```\n    python src/server.py --transport http --host 127.0.0.1 --port 8000 --path /mcp\n    ```\n\nYou can do more advanced configurations by creating .env file using our <a href=\"https://github.com/topoteretes/cognee/blob/main/.env.template\">template.</a>\nTo use different LLM providers / database configurations, and for more info check out our <a href=\"https://docs.cognee.ai\">documentation</a>.\n\n\n## 🐳 Docker Usage\n\nIf you’d rather run cognee-mcp in a container, you have two options:\n\n1. **Build locally**\n   1. Make sure you are in /cognee root directory and have a fresh `.env` containing only your `LLM_API_KEY` (and your chosen settings).\n   2. Remove any old image and rebuild:\n      ```bash\n      docker rmi cognee/cognee-mcp:main || true\n      docker build --no-cache -f cognee-mcp/Dockerfile -t cognee/cognee-mcp:main .\n      ```\n   3. Run it:\n      ```bash\n      # For HTTP transport (recommended for web deployments)\n      docker run -e TRANSPORT_MODE=http --env-file ./.env -p 8000:8000 --rm -it cognee/cognee-mcp:main\n      # For SSE transport  \n      docker run -e TRANSPORT_MODE=sse --env-file ./.env -p 8000:8000 --rm -it cognee/cognee-mcp:main\n      # For stdio transport (default)\n      docker run -e TRANSPORT_MODE=stdio --env-file ./.env --rm -it cognee/cognee-mcp:main\n      ```\n2. **Pull from Docker Hub** (no build required):\n   ```bash\n   # With HTTP transport (recommended for web deployments)\n   docker run -e TRANSPORT_MODE=http --env-file ./.env -p 8000:8000 --rm -it cognee/cognee-mcp:main\n   # With SSE transport\n   docker run -e TRANSPORT_MODE=sse --env-file ./.env -p 8000:8000 --rm -it cognee/cognee-mcp:main\n   # With stdio transport (default)\n   docker run -e TRANSPORT_MODE=stdio --env-file ./.env --rm -it cognee/cognee-mcp:main\n   ```\n\n### **Important: Docker vs Direct Usage**\n**Docker uses environment variables**, not command line arguments:\n- ✅ Docker: `-e TRANSPORT_MODE=http`\n- ❌ Docker: `--transport http` (won't work)\n\n**Direct Python usage** uses command line arguments:\n- ✅ Direct: `python src/server.py --transport http`\n- ❌ Direct: `-e TRANSPORT_MODE=http` (won't work)\n\n\n## 🔗 MCP Client Configuration\n\nAfter starting your Cognee MCP server with Docker, you need to configure your MCP client to connect to it.\n\n### **SSE Transport Configuration** (Recommended)\n\n**Start the server with SSE transport:**\n```bash\ndocker run -e TRANSPORT_MODE=sse --env-file ./.env -p 8000:8000 --rm -it cognee/cognee-mcp:main\n```\n\n**Configure your MCP client:**\n\n#### **Claude CLI (Easiest)**\n```bash\nclaude mcp add cognee-sse -t sse http://localhost:8000/sse\n```\n\n**Verify the connection:**\n```bash\nclaude mcp list\n```\n\nYou should see your server connected:\n```\nChecking MCP server health...\n\ncognee-sse: http://localhost:8000/sse (SSE) - ✓ Connected\n```\n\n#### **Manual Configuration**\n\n**Claude (`~/.claude.json`)**\n```json\n{\n  \"mcpServers\": {\n    \"cognee\": {\n      \"type\": \"sse\",\n      \"url\": \"http://localhost:8000/sse\"\n    }\n  }\n}\n```\n\n**Cursor (`~/.cursor/mcp.json`)**\n```json\n{\n  \"mcpServers\": {\n    \"cognee-sse\": {\n      \"url\": \"http://localhost:8000/sse\"\n    }\n  }\n}\n```\n\n### **HTTP Transport Configuration** (Alternative)\n\n**Start the server with HTTP transport:**\n```bash\ndocker run -e TRANSPORT_MODE=http --env-file ./.env -p 8000:8000 --rm -it cognee/cognee-mcp:main\n```\n\n**Configure your MCP client:**\n\n#### **Claude CLI (Easiest)**\n```bash\nclaude mcp add cognee-http -t http http://localhost:8000/mcp\n```\n\n**Verify the connection:**\n```bash\nclaude mcp list\n```\n\nYou should see your server connected:\n```\nChecking MCP server health...\n\ncognee-http: http://localhost:8000/mcp (HTTP) - ✓ Connected\n```\n\n#### **Manual Configuration**\n\n**Claude (`~/.claude.json`)**\n```json\n{\n  \"mcpServers\": {\n    \"cognee\": {\n      \"type\": \"http\",\n      \"url\": \"http://localhost:8000/mcp\"\n    }\n  }\n}\n```\n\n**Cursor (`~/.cursor/mcp.json`)**\n```json\n{\n  \"mcpServers\": {\n    \"cognee-http\": {\n      \"url\": \"http://localhost:8000/mcp\"\n    }\n  }\n}\n```\n\n### **Dual Configuration Example**\nYou can configure both transports simultaneously for testing:\n\n```json\n{\n  \"mcpServers\": {\n    \"cognee-sse\": {\n      \"type\": \"sse\",\n      \"url\": \"http://localhost:8000/sse\"\n    },\n    \"cognee-http\": {\n      \"type\": \"http\", \n      \"url\": \"http://localhost:8000/mcp\"\n    }\n  }\n}\n```\n\n**Note:** Only enable the server you're actually running to avoid connection errors.\n\n## 💻 Basic Usage\n\nThe MCP server exposes its functionality through tools. Call them from any MCP client (Cursor, Claude Desktop, Cline, Roo and more).\n\n\n### Available Tools\n\n- **cognify**: Turns your data into a structured knowledge graph and stores it in memory\n\n- **codify**: Analyse a code repository, build a code graph, stores it in memory\n\n- **search**: Query memory – supports GRAPH_COMPLETION, RAG_COMPLETION, CODE, CHUNKS, INSIGHTS\n\n- **list_data**: List all datasets and their data items with IDs for deletion operations\n\n- **delete**: Delete specific data from a dataset (supports soft/hard deletion modes)\n\n- **prune**: Reset cognee for a fresh start (removes all data)\n\n- **cognify_status / codify_status**: Track pipeline progress\n\n**Data Management Examples:**\n```bash\n# List all available datasets and data items\nlist_data()\n\n# List data items in a specific dataset\nlist_data(dataset_id=\"your-dataset-id-here\")\n\n# Delete specific data (soft deletion - safer, preserves shared entities)\ndelete(data_id=\"data-uuid\", dataset_id=\"dataset-uuid\", mode=\"soft\")\n\n# Delete specific data (hard deletion - removes orphaned entities)\ndelete(data_id=\"data-uuid\", dataset_id=\"dataset-uuid\", mode=\"hard\")\n```\n\n\n## Development and Debugging\n\n### Debugging\n\nTo use debugger, run:\n    ```bash\n    mcp dev src/server.py\n    ```\n\nOpen inspector with timeout passed:\n    ```\n    http://localhost:5173?timeout=120000\n    ```\n\nTo apply new changes while developing cognee you need to do:\n\n1. Update dependencies in cognee folder if needed\n2. `uv sync --dev --all-extras --reinstall`\n3. `mcp dev src/server.py`\n\n### Development\n\nIn order to use local cognee:\n\n1. Uncomment the following line in the cognee-mcp [`pyproject.toml`](pyproject.toml) file and set the cognee root path.\n    ```\n    #\"cognee[postgres,codegraph,gemini,huggingface,docs,neo4j] @ file:/Users/<username>/Desktop/cognee\"\n    ```\n    Remember to replace `file:/Users/<username>/Desktop/cognee` with your actual cognee root path.\n\n2. Install dependencies with uv in the mcp folder\n    ```\n    uv sync --reinstall\n    ```\n\n## Code of Conduct\n\nWe are committed to making open source an enjoyable and respectful experience for our community. See <a href=\"https://github.com/topoteretes/cognee/blob/main/CODE_OF_CONDUCT.md\"><code>CODE_OF_CONDUCT</code></a> for more information.\n\n## 💫 Contributors\n\n<a href=\"https://github.com/topoteretes/cognee/graphs/contributors\">\n  <img alt=\"contributors\" src=\"https://contrib.rocks/image?repo=topoteretes/cognee\"/>\n</a>\n\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=topoteretes/cognee&type=Date)](https://star-history.com/#topoteretes/cognee&Date)\n",
+  "category": "AI Tools",
+  "quality_score": 86,
+  "archestra_config": {
+    "client_config_permutations": {
+      "cognee-mcp-stdio": {
+        "command": "python",
+        "args": ["src/server.py"],
+        "env": {}
+      },
+      "cognee-mcp-sse": {
+        "command": "python",
+        "args": ["src/server.py", "--transport", "sse"],
+        "env": {}
+      },
+      "cognee-mcp-http": {
+        "command": "python",
+        "args": ["src/server.py", "--transport", "http", "--host", "127.0.0.1", "--port", "8000", "--path", "/mcp"],
+        "env": {}
+      },
+      "cognee-cognee-mcp-main-docker-http": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--env-file",
+          "./.env",
+          "-p",
+          "8000:8000",
+          "--rm",
+          "-it",
+          "cognee/cognee-mcp:main",
+          "--transport",
+          "http"
+        ],
+        "env": {},
+        "docker_image": "cognee/cognee-mcp:main"
+      },
+      "cognee-cognee-mcp-main-docker-sse": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--env-file",
+          "./.env",
+          "-p",
+          "8000:8000",
+          "--rm",
+          "-it",
+          "cognee/cognee-mcp:main",
+          "--transport",
+          "sse"
+        ],
+        "env": {},
+        "docker_image": "cognee/cognee-mcp:main"
+      },
+      "cognee-cognee-mcp-main-docker-stdio": {
+        "command": "docker",
+        "args": ["run", "--env-file", "./.env", "--rm", "-it", "cognee/cognee-mcp:main"],
+        "env": {},
+        "docker_image": "cognee/cognee-mcp:main"
+      },
+      "cognee-uv-run": {
+        "command": "uv",
+        "args": ["--directory", "/{cognee_root_path}/cognee-mcp", "run", "cognee"],
+        "env": {
+          "ENV": "local",
+          "TOKENIZERS_PARALLELISM": "false",
+          "EMBEDDING_PROVIDER": "fastembed",
+          "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+          "EMBEDDING_DIMENSIONS": "384",
+          "EMBEDDING_MAX_TOKENS": "256",
+          "LLM_API_KEY": "your-OpenAI-API-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "topoteretes",
+    "repo": "cognee",
+    "url": "https://github.com/topoteretes/cognee/tree/dev/cognee-mcp",
+    "name": "cognee",
+    "path": "cognee-mcp",
+    "stars": 6565,
+    "contributors": 47,
+    "issues": 30,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "5fcc8b78133a72fa335a3ad90e94d5a4be30b8f0"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:21.067Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "cognee",
+      "importance": 10
+    },
+    {
+      "name": "fastmcp",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 9
+    },
+    {
+      "name": "uv",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"cognee-mcp\"\nversion = \"0.4.0\"\ndescription = \"Cognee MCP server\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\n\ndependencies = [\n    # For local cognee repo usage remove comment bellow and add absolute path to cognee. Then run `uv sync --reinstall` in the mcp folder on local cognee changes.\n#    \"cognee[postgres,codegraph,gemini,huggingface,docs,neo4j] @ file:/Users/vasilije/Projects/tiktok/cognee\",\n    \"cognee[postgres,codegraph,gemini,huggingface,docs,neo4j]>=0.2.0,<1.0.0\",\n    \"fastmcp>=2.10.0,<3.0.0\",\n    \"mcp>=1.12.0,<2.0.0\",\n    \"uv>=0.6.3,<1.0.0\",\n]\n\nauthors = [\n    { name = \"Boris Arzentar\", email = \"boris@topoteretes.com\" },\n    { name = \"Igor Ilic\", email = \"igor@topoteretes.com\" },\n    { name = \"Laszlo Hajdu\", email = \"laszlo@topoteretes.com\" },\n]\n\n[build-system]\nrequires = [ \"hatchling\", ]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src\"]\n\n[dependency-groups]\ndev = [\n    \"debugpy>=1.8.12,<2.0.0\",\n]\n\n[tool.hatch.metadata]\nallow-direct-references = true\n\n[project.scripts]\ncognee = \"src:main\"\n"
+}

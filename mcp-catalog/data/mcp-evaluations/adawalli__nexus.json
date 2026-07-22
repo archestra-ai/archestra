@@ -1,0 +1,182 @@
+{
+  "name": "adawalli__nexus",
+  "display_name": "nexus",
+  "description": "MCP Server to make searching openrouter easy",
+  "author": {
+    "name": "adawalli"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "nexus-mcp"],
+    "env": {
+      "OPENROUTER_API_KEY": "${user_config.openrouter_api_key}",
+      "NODE_ENV": "${user_config.node_env}",
+      "LOG_LEVEL": "${user_config.log_level}",
+      "OPENROUTER_TIMEOUT_MS": "${user_config.openrouter_timeout_ms}",
+      "OPENROUTER_MAX_RETRIES": "${user_config.openrouter_max_retries}",
+      "OPENROUTER_BASE_URL": "${user_config.openrouter_base_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openrouter_api_key": {
+      "type": "string",
+      "title": "OpenRouter API Key",
+      "description": "Your OpenRouter API key",
+      "sensitive": true,
+      "required": true
+    },
+    "node_env": {
+      "type": "string",
+      "title": "Node Environment",
+      "description": "Environment setting (development, production, test)",
+      "sensitive": false,
+      "required": false
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "Logging level (debug, info, warn, error)",
+      "sensitive": false,
+      "required": false
+    },
+    "openrouter_timeout_ms": {
+      "type": "number",
+      "title": "OpenRouter Request Timeout (ms)",
+      "description": "Request timeout in milliseconds",
+      "sensitive": false,
+      "required": false,
+      "default": 30000
+    },
+    "openrouter_max_retries": {
+      "type": "number",
+      "title": "OpenRouter Max Retries",
+      "description": "Maximum retry attempts",
+      "sensitive": false,
+      "required": false,
+      "default": 3
+    },
+    "openrouter_base_url": {
+      "type": "string",
+      "title": "OpenRouter Base URL",
+      "description": "Custom OpenRouter API base URL",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "<!-- markdownlint-disable MD033 MD041 -->\n\n<div align=\"center\">\n\n# 🔍 Nexus MCP Server\n\n**AI integration without the complexity**\n\n[![npm version](https://img.shields.io/npm/v/nexus-mcp.svg)](https://www.npmjs.com/package/nexus-mcp)\n![NPM Downloads](https://img.shields.io/npm/dt/nexus-mcp?style=flat-square&logo=npm&label=downloads)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)\n[![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)\n[![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/adawalli/nexus)](https://coderabbit.ai)\n\n_Intelligent AI model search and discovery with zero-install simplicity_\n\n[Quick Start](#-quick-start) • [Features](#-features) • [Documentation](#-documentation) • [Contributing](#-contributing)\n\n</div>\n\n---\n\n## 🚀 What is Nexus?\n\nNexus is a production-ready **Model Context Protocol (MCP) server** that brings AI-powered web search directly into your development environment. Get intelligent search results with proper citations in **Claude Desktop**, **Cursor**, or any MCP-compatible client - all with a single command.\n\n### Why Nexus?\n\n- **🎯 Zero Setup**: Ready in 30 seconds with `npx` - no installation, no configuration\n- **🧠 AI-Powered**: Uses Perplexity Sonar models for intelligent, current web search\n- **📚 Source Citations**: Get authoritative sources with every search result\n- **🔧 Developer-First**: Built for developers who want AI capabilities without complexity\n- **⚡ Production-Ready**: Enterprise-grade reliability with comprehensive error handling\n\n## ✨ Features\n\n<table>\n<tr>\n<td width=\"50%\">\n\n### 🚀 **Zero-Install Simplicity**\n\n- Ready in 30 seconds with `npx`\n- No dependencies or build steps\n- Cross-platform compatibility\n- Always up-to-date\n\n### 🧠 **AI-Powered Intelligence**\n\n- Perplexity Sonar model integration\n- Real-time web content search\n- Context-aware result ranking\n- Multiple model options\n\n</td>\n<td width=\"50%\">\n\n### 📚 **Professional Quality**\n\n- Source citations and metadata\n- Comprehensive error handling\n- Production-grade reliability\n- TypeScript implementation\n\n### 🔧 **Developer Experience**\n\n- MCP protocol compliance\n- Extensive documentation\n- Configurable parameters\n- Community support\n\n</td>\n</tr>\n</table>\n\n## 🏃‍♂️ Quick Start\n\n**🚀 Zero-install setup - Ready in 30 seconds!**\n\n### Prerequisites\n\n- Node.js 16 or higher\n- An OpenRouter API key (get one at [OpenRouter](https://openrouter.ai))\n\n### Zero-Config Installation\n\nNo build steps, no dependencies, no setup required:\n\n```bash\n# Set your OpenRouter API key\nexport OPENROUTER_API_KEY=your-api-key-here\n\n# Run the server instantly\nnpx nexus-mcp\n```\n\nThat's it! The server is now running and ready for MCP client connections.\n\n### Testing the NPX Installation\n\n```bash\n# Test the CLI help\nnpx nexus-mcp --help\n\n# Test the version\nnpx nexus-mcp --version\n\n# Run with your API key\nOPENROUTER_API_KEY=your-key npx nexus-mcp\n```\n\n## Alternative: Local Development Installation\n\nFor local development or customization:\n\n1. Clone the repository:\n\n```bash\ngit clone https://github.com/adawalli/nexus.git\ncd nexus\n```\n\n2. Install dependencies:\n\n```bash\nnpm install\n```\n\n3. Build the server:\n\n```bash\nnpm run build\n```\n\n4. Configure your OpenRouter API key:\n\n```bash\n# Copy the example environment file\ncp .env.example .env\n\n# Edit .env and add your actual API key\n# OPENROUTER_API_KEY=your-api-key-here\n```\n\n5. Test the server:\n\n```bash\nnpm start\n```\n\n## Integration with MCP Clients\n\n### 🚀 Quick Setup with NPX (Recommended)\n\nThe easiest way to integrate with any MCP client is using NPX:\n\n### Claude Code\n\nAdd this server to your Claude Code MCP settings:\n\n1. Open your MCP settings file (usually `~/.claude/mcp_settings.json`)\n\n2. Add the server configuration using NPX:\n\n```json\n{\n  \"mcpServers\": {\n    \"nexus\": {\n      \"command\": \"npx\",\n      \"args\": [\"nexus-mcp\"],\n      \"env\": {\n        \"OPENROUTER_API_KEY\": \"your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\n3. Restart Claude Code\n\n**That's it!** No installation, no build steps, no path configuration required.\n\n### Cursor\n\nConfigure the server in Cursor's MCP settings:\n\n1. Open Cursor settings and navigate to MCP servers\n\n2. Add a new server with:\n\n   - **Name**: `nexus`\n   - **Command**: `npx`\n   - **Args**: `[\"nexus-mcp\"]`\n   - **Environment Variables**:\n     - `OPENROUTER_API_KEY`: `your-api-key-here`\n\n3. Restart Cursor\n\n### Other MCP Clients\n\nFor any MCP-compatible client, use these connection details:\n\n- **Transport**: stdio\n- **Command**: `npx`\n- **Args**: `[\"nexus-mcp\"]`\n- **Environment Variables**: `OPENROUTER_API_KEY=your-api-key-here`\n\n### Alternative: Local Installation\n\nIf you prefer using a local installation (after following the local development setup):\n\n```json\n{\n  \"mcpServers\": {\n    \"nexus\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/nexus-mcp/dist/cli.js\"],\n      \"env\": {\n        \"OPENROUTER_API_KEY\": \"your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\n## Usage\n\nOnce integrated, you can use the search tool in your MCP client:\n\n### Basic Search\n\n```\nUse the search tool to find information about \"latest developments in AI\"\n```\n\n### Advanced Search with Parameters\n\n```\nSearch for \"climate change solutions\" using:\n- Model: perplexity/sonar\n- Max tokens: 2000\n- Temperature: 0.3\n```\n\n## Available Tools\n\n### `search`\n\nThe main search tool that provides AI-powered web search capabilities.\n\n**Parameters:**\n\n- `query` (required): Search query (1-2000 characters)\n- `model` (optional): Perplexity model to use (default: \"perplexity/sonar\")\n- `maxTokens` (optional): Maximum response tokens (1-4000, default: 1000)\n- `temperature` (optional): Response randomness (0-2, default: 0.7)\n\n**Example Response:**\n\n```\nBased on current information, here are the latest developments in AI...\n\n[Detailed AI-generated response with current information]\n\n---\n**Search Metadata:**\n- Model: perplexity/sonar\n- Response time: 1250ms\n- Tokens used: 850\n- Sources: 5 found\n```\n\n## Configuration\n\n### Environment Variables\n\n- `OPENROUTER_API_KEY` (required): Your OpenRouter API key\n- `NODE_ENV` (optional): Environment setting (development, production, test)\n- `LOG_LEVEL` (optional): Logging level (debug, info, warn, error)\n\n### Advanced Configuration\n\nThe server supports additional configuration through environment variables:\n\n- `OPENROUTER_TIMEOUT_MS`: Request timeout in milliseconds (default: 30000)\n- `OPENROUTER_MAX_RETRIES`: Maximum retry attempts (default: 3)\n- `OPENROUTER_BASE_URL`: Custom OpenRouter API base URL\n\n## Resources\n\nThe server provides a configuration status resource at `config://status` that shows:\n\n- Server health status\n- Configuration information (with masked API key)\n- Search tool availability\n- Server uptime and version\n\n## Troubleshooting\n\n### NPX-Specific Issues\n\n**\"npx: command not found\"**\n\n- Ensure Node.js 16+ is installed: `node --version`\n- Update npm: `npm install -g npm@latest`\n\n**\"Cannot find package 'nexus-mcp'\"**\n\n- The package may not be published yet. Use local installation instead\n- Verify network connectivity for npm registry access\n\n**NPX takes a long time to start**\n\n- This is normal on first run as NPX downloads the package\n- Subsequent runs will be faster due to caching\n- For faster startup, use local installation instead\n\n**\"Permission denied\" errors with NPX**\n\n- Try: `npx --yes nexus-mcp --stdio`\n- Or set npm permissions: `npm config set user 0 && npm config set unsafe-perm true`\n\n### Common Issues\n\n**\"Search functionality is not available\"**\n\n- Ensure `OPENROUTER_API_KEY` environment variable is set\n- Verify your API key is valid at [OpenRouter](https://openrouter.ai)\n- Check the server logs for initialization errors\n\n**\"Authentication failed: Invalid API key\"**\n\n- Double-check your API key format and validity\n- Ensure the key has sufficient credits/permissions\n- Test the key directly at OpenRouter dashboard\n\n**\"Rate limit exceeded\"**\n\n- Wait for the rate limit to reset (usually 1 minute)\n- Consider upgrading your OpenRouter plan for higher limits\n- Monitor usage in your OpenRouter dashboard\n\n**Connection timeouts**\n\n- Check your internet connection\n- The server will automatically retry failed requests\n- Increase timeout if needed: `OPENROUTER_TIMEOUT_MS=60000`\n\n**MCP client can't connect to server**\n\n- Verify your MCP configuration uses the correct command and arguments\n- Check that Node.js 16+ is available in your MCP client's environment\n- Ensure the API key is properly set in the environment variables\n\n### Debug Logging\n\nEnable debug logging by:\n\n**For local development:** Add `LOG_LEVEL=debug` to your `.env` file\n\n**For MCP clients:** Add `LOG_LEVEL: \"debug\"` to the `env` section of your MCP configuration\n\nThis will provide detailed information about:\n\n- Configuration loading\n- API requests and responses\n- Error details and stack traces\n- Performance metrics\n\n### Testing Connection\n\nYou can test if the server is working by checking the configuration status resource in your MCP client, or by running a simple search query.\n\n## Development\n\nFor developers working on this server:\n\n```bash\n# Development with hot reload\nnpm run dev\n\n# Run tests\nnpm test\n\n# Run tests with coverage\nnpm run test:coverage\n\n# Lint code\nnpm run lint\n\n# Format code\nnpm run format\n```\n\n## 💰 API Credits and Costs\n\nThis server uses OpenRouter's API, which charges based on token usage:\n\n- **Perplexity Sonar models**: Check current pricing at [OpenRouter Models](https://openrouter.ai/models)\n- **Usage monitoring**: Track consumption through the OpenRouter dashboard\n- **Cost control**: Set usage limits in your OpenRouter account\n- **Optimization**: Nexus includes built-in rate limiting and intelligent caching\n\n## 📚 Documentation\n\n<div align=\"center\">\n\n| 📖 **Guide**        | 🔗 **Link**                                 | 📝 **Description**               |\n| ------------------- | ------------------------------------------- | -------------------------------- |\n| **Quick Start**     | [Getting Started](#-quick-start)            | Zero-install setup in 30 seconds |\n| **API Reference**   | [MCP Tools](CLAUDE.md#development-commands) | Complete command reference       |\n| **Configuration**   | [Environment Setup](#configuration)         | Advanced configuration options   |\n| **Contributing**    | [Contributing Guide](CONTRIBUTING.md)       | Join our open source community   |\n| **Troubleshooting** | [Common Issues](#troubleshooting)           | Solutions to common problems     |\n\n</div>\n\n## 🤝 Contributing\n\nWe welcome contributions from developers of all experience levels!\n\n<table>\n<tr>\n<td width=\"33%\">\n\n### 🚀 **Get Started**\n\n- Fork the repository\n- Read our [Contributing Guide](CONTRIBUTING.md)\n- Check out [good first issues](https://github.com/search?q=repo%3Anexus-mcp+label%3A%22good+first+issue%22&type=issues)\n\n</td>\n<td width=\"33%\">\n\n### 🐛 **Report Issues**\n\n- [Bug Reports](https://github.com/adawalli/nexus/issues/new)\n- [Feature Requests](https://github.com/adawalli/nexus/issues/new)\n- [Ask Questions](https://github.com/adawalli/nexus/issues/new)\n\n</td>\n<td width=\"33%\">\n\n### 💬 **Join Community**\n\n- [GitHub Discussions](https://github.com/adawalli/nexus/discussions)\n- [Code of Conduct](CODE_OF_CONDUCT.md)\n- [Roadmap & Project Board](https://github.com/adawalli/nexus/projects)\n\n</td>\n</tr>\n</table>\n\n### 🌟 Recognition\n\nContributors are recognized in our:\n\n- [Contributors list](https://github.com/adawalli/nexus/graphs/contributors)\n- Release notes for significant contributions\n- Community spotlights and testimonials\n\n## 🔗 Related Projects\n\n- [Model Context Protocol](https://modelcontextprotocol.io) - The standard we implement\n- [OpenRouter](https://openrouter.ai) - Our AI model provider\n- [Claude Desktop](https://claude.ai) - Primary MCP client\n- [Cursor](https://cursor.sh) - AI-powered code editor with MCP support\n\n## 📞 Support & Community\n\n<div align=\"center\">\n\n| 💬 **Need Help?**    | 🔗 **Resource**                                                                                      |\n| -------------------- | ---------------------------------------------------------------------------------------------------- |\n| **Quick Questions**  | [GitHub Discussions](https://github.com/adawalli/nexus/discussions)                                  |\n| **Bug Reports**      | [GitHub Issues](https://github.com/adawalli/nexus/issues)                                            |\n| **Documentation**    | [OpenRouter Docs](https://openrouter.ai/docs) • [MCP Specification](https://modelcontextprotocol.io) |\n| **Feature Requests** | [Enhancement Proposals](https://github.com/adawalli/nexus/issues/new)                                |\n\n</div>\n\n## 📄 License\n\n**MIT License** - see [LICENSE](LICENSE) file for details.\n\n---\n\n<div align=\"center\">\n\n**Made with ❤️ by the open source community**\n\n[⭐ Star us on GitHub](https://github.com/adawalli/nexus) • [📦 View on NPM](https://www.npmjs.com/package/nexus-mcp) • [📚 Read the Docs](CLAUDE.md)\n\n_Nexus: AI integration without the complexity_\n\n[![Star History Chart](https://api.star-history.com/svg?repos=adawalli/nexus&type=Date)](https://star-history.com/#adawalli/nexus&Date)\n\n</div>\n",
+  "category": "AI Tools",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "nexus-mcp": {
+        "command": "npx",
+        "args": ["nexus-mcp"],
+        "env": {
+          "OPENROUTER_API_KEY": "your-api-key-here"
+        }
+      },
+      "nexus-mcp-configured": {
+        "command": "npx",
+        "args": ["nexus-mcp"],
+        "env": {
+          "OPENROUTER_API_KEY": "your-key"
+        }
+      },
+      "nexus-mcp-npm-start": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {
+          "OPENROUTER_API_KEY": "your-api-key-here"
+        }
+      },
+      "nexus-mcp-claude-with-config": {
+        "command": "npx",
+        "args": ["nexus-mcp"],
+        "env": {
+          "OPENROUTER_API_KEY": "your-api-key-here"
+        }
+      },
+      "nexus-mcp-cursor-with-config": {
+        "command": "npx",
+        "args": ["nexus-mcp"],
+        "env": {
+          "OPENROUTER_API_KEY": "your-api-key-here"
+        }
+      },
+      "nexus-mcp-other-client-with-config": {
+        "command": "npx",
+        "args": ["nexus-mcp"],
+        "env": {
+          "OPENROUTER_API_KEY": "your-api-key-here"
+        }
+      },
+      "nexus-mcp-local-node-path": {
+        "command": "node",
+        "args": ["/path/to/nexus-mcp/dist/cli.js"],
+        "env": {
+          "OPENROUTER_API_KEY": "your-api-key-here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "adawalli",
+    "repo": "nexus",
+    "url": "https://github.com/adawalli/nexus",
+    "name": "nexus",
+    "path": null,
+    "stars": 7,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "c109931c2b62f4f64fefbf1345743e65e0e60a07"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:25.353Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "data-masking",
+      "importance": 5
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    },
+    {
+      "name": "winston",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"nexus-mcp\",\n  \"version\": \"2.0.1\",\n  \"description\": \"Nexus MCP server - Intelligent AI model search and discovery with OpenRouter integration\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"nexus\": \"dist/cli.js\",\n    \"nexus-mcp\": \"dist/cli.js\"\n  },\n  \"type\": \"module\",\n  \"engines\": {\n    \"node\": \">=16.0.0\"\n  },\n  \"files\": [\n    \"dist/**/*\",\n    \"README.md\",\n    \"LICENSE\",\n    \"package.json\"\n  ],\n  \"scripts\": {\n    \"build\": \"npm-run-all build:clean build:compile build:validate build:cli-setup\",\n    \"build:clean\": \"cross-env rm -rf dist\",\n    \"build:compile\": \"tsc\",\n    \"build:validate\": \"node -e \\\"console.log('Build validation - checking dist structure'); require('fs').readdirSync('dist').forEach(f => console.log('✓', f))\\\"\",\n    \"build:cli-setup\": \"echo '#!/usr/bin/env node' > dist/cli.tmp && cat dist/cli.js >> dist/cli.tmp && mv dist/cli.tmp dist/cli.js && chmod +x dist/cli.js\",\n    \"dev\": \"npm-run-all --parallel dev:watch dev:types\",\n    \"dev:start\": \"cross-env NODE_ENV=development nodemon --exec ts-node --esm src/index.ts\",\n    \"dev:watch\": \"cross-env NODE_ENV=development nodemon --exec ts-node --esm src/index.ts\",\n    \"dev:types\": \"tsc --noEmit --watch\",\n    \"dev:clean\": \"cross-env rm -rf dist .tsbuildinfo\",\n    \"test\": \"npm-run-all test:unit test:integration\",\n    \"test:unit\": \"cross-env NODE_ENV=test vitest run --exclude=tests/integration\",\n    \"test:integration\": \"cross-env NODE_ENV=test vitest run tests/integration\",\n    \"test:watch\": \"cross-env NODE_ENV=test vitest\",\n    \"test:ui\": \"cross-env NODE_ENV=test vitest --ui\",\n    \"test:coverage\": \"cross-env NODE_ENV=test vitest run --coverage\",\n    \"test:npx:local\": \"npm pack && npm install -g ./nexus-mcp-*.tgz && nexus --help && npm uninstall -g nexus-mcp\",\n    \"test:npx:published\": \"npx nexus-mcp@latest --help\",\n    \"release\": \"npm-run-all release:validate release:build release:publish\",\n    \"release:patch\": \"standard-version --release-as patch && npm-run-all release:build release:publish\",\n    \"release:minor\": \"standard-version --release-as minor && npm-run-all release:build release:publish\",\n    \"release:major\": \"standard-version --release-as major && npm-run-all release:build release:publish\",\n    \"release:validate\": \"npm-run-all lint format:check type-check secrets:scan test\",\n    \"release:build\": \"npm run build\",\n    \"release:publish\": \"npm publish\",\n    \"release:dry-run\": \"npm publish --dry-run\",\n    \"start\": \"node dist/index.js\",\n    \"cli\": \"node dist/cli.js\",\n    \"clean\": \"npm run build:clean\",\n    \"lint\": \"eslint .\",\n    \"lint:fix\": \"eslint . --fix\",\n    \"format\": \"prettier --write .\",\n    \"format:check\": \"prettier --check .\",\n    \"type-check\": \"tsc --project tsconfig.dev.json --noEmit\",\n    \"secrets:scan\": \"gitleaks detect --source . --verbose\",\n    \"secrets:scan-staged\": \"gitleaks protect --source . --verbose\",\n    \"secrets:baseline\": \"gitleaks detect --source . --report-path .gitleaks-baseline.json\",\n    \"verify\": \"node scripts/build-verification.js\",\n    \"scripts:list\": \"echo 'Available script categories:' && echo '' && echo '📦 BUILD SCRIPTS:' && echo '  build        - Complete production build pipeline' && echo '  build:clean  - Remove dist directory and artifacts' && echo '  build:compile - TypeScript compilation (no bundling)' && echo '  build:validate - Verify build output integrity' && echo '  build:cli-setup - Configure CLI executable' && echo '' && echo '🔧 DEVELOPMENT SCRIPTS:' && echo '  dev          - Parallel development with watch & types' && echo '  dev:start    - Development server with hot reload' && echo '  dev:watch    - Watch mode development server' && echo '  dev:types    - TypeScript watch mode type checking' && echo '  dev:clean    - Clean development artifacts' && echo '' && echo '🧪 TESTING SCRIPTS:' && echo '  test         - Complete test suite (unit + integration)' && echo '  test:unit    - Unit tests only' && echo '  test:integration - Integration tests only' && echo '  test:watch   - Interactive test watch mode' && echo '  test:ui      - Vitest UI for test management' && echo '  test:coverage - Tests with coverage reporting' && echo '  test:npx:local - Test local NPX installation' && echo '  test:npx:published - Test published NPX functionality' && echo '' && echo '🚀 RELEASE SCRIPTS:' && echo '  release      - Complete release workflow' && echo '  release:patch - Automated patch release' && echo '  release:minor - Automated minor release' && echo '  release:major - Automated major release' && echo '  release:validate - Pre-release validation' && echo '  release:dry-run - Test publish without publishing' && echo '' && echo '✨ QUALITY SCRIPTS:' && echo '  lint         - ESLint code quality checks' && echo '  lint:fix     - Auto-fix linting issues' && echo '  format       - Prettier code formatting' && echo '  format:check - Check Prettier formatting' && echo '  type-check   - TypeScript type validation' && echo '' && echo 'For detailed descriptions, see CLAUDE.md'\",\n    \"prepublishOnly\": \"npm run release:validate\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"nexus\",\n    \"openrouter\",\n    \"ai\",\n    \"models\",\n    \"search\",\n    \"discovery\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"Adam Wallis\",\n  \"license\": \"ISC\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/adawalli/nexus.git\"\n  },\n  \"homepage\": \"https://github.com/adawalli/nexus#readme\",\n  \"bugs\": {\n    \"url\": \"https://github.com/adawalli/nexus/issues\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.13.0\",\n    \"axios\": \"^1.10.0\",\n    \"data-masking\": \"^1.0.3\",\n    \"dotenv\": \"^16.5.0\",\n    \"winston\": \"^3.17.0\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.29.0\",\n    \"@types/node\": \"^24.0.3\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.34.1\",\n    \"@typescript-eslint/parser\": \"^8.34.1\",\n    \"@vitest/coverage-v8\": \"^3.2.4\",\n    \"@vitest/ui\": \"^3.2.4\",\n    \"cross-env\": \"^7.0.3\",\n    \"eslint\": \"^9.29.0\",\n    \"eslint-config-prettier\": \"^10.1.5\",\n    \"eslint-plugin-import\": \"^2.31.0\",\n    \"eslint-plugin-node\": \"^11.1.0\",\n    \"eslint-plugin-unused-imports\": \"^4.1.4\",\n    \"msw\": \"^2.10.2\",\n    \"nodemon\": \"^3.1.10\",\n    \"npm-run-all\": \"^4.1.5\",\n    \"prettier\": \"^3.5.3\",\n    \"standard-version\": \"^9.5.0\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.8.3\",\n    \"vitest\": \"^3.2.4\"\n  }\n}\n"
+}

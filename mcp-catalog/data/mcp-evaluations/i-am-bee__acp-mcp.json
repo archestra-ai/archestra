@@ -1,0 +1,99 @@
+{
+  "name": "i-am-bee__acp-mcp",
+  "display_name": "acp-mcp",
+  "description": "MCP server from i-am-bee/acp-mcp",
+  "author": {
+    "name": "i-am-bee"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["acp-mcp", "${user_config.acp_server_url}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "acp_server_url": {
+      "type": "string",
+      "title": "ACP Server URL",
+      "description": "The URL of your ACP server.",
+      "required": true,
+      "default": "http://localhost:8000"
+    }
+  },
+  "readme": "<div align=\"left\">\n\n<h1>ACP to MCP Adapter</h1>\n\n**Connect ACP Agents to MCP Applications Seamlessly**\n\n[![Apache 2.0](https://img.shields.io/badge/Apache%202.0-License-EA7826?style=plastic&logo=apache&logoColor=white)](https://github.com/i-am-bee/beeai-framework?tab=Apache-2.0-1-ov-file#readme)\n[![Follow on Bluesky](https://img.shields.io/badge/Follow%20on%20Bluesky-0285FF?style=plastic&logo=bluesky&logoColor=white)](https://bsky.app/profile/beeaiagents.bsky.social)\n[![Join our Discord](https://img.shields.io/badge/Join%20our%20Discord-7289DA?style=plastic&logo=discord&logoColor=white)](https://discord.com/invite/NradeA6ZNF)\n[![LF AI & Data](https://img.shields.io/badge/LF%20AI%20%26%20Data-0072C6?style=plastic&logo=linuxfoundation&logoColor=white)](https://lfaidata.foundation/projects/)\n\n</div>\n\nThe **ACP to MCP Adapter** is a lightweight standalone server that acts as a bridge between two AI ecosystems: **Agent Communication Protocol (ACP)** for agent-to-agent communication and **Model Context Protocol (MCP)** for connecting AI models to external tools. It allows MCP applications (like **Claude Desktop**) to discover and interact with ACP agents as resources.\n\n## Capabilities & Tradeoffs\n\nThis adapter enables interoperability between ACP and MCP with specific benefits and tradeoffs:\n\n### Benefits\n\n- Makes ACP agents discoverable as MCP resources\n- Exposes ACP agent runs as MCP tools\n- Bridges two ecosystems with minimal configuration\n\n### Current Limitations\n\n- ACP agents become MCP tools instead of conversational peers\n- No streaming of incremental updates\n- No shared memory across servers\n- Basic content translation between formats without support for complex data structures\n\nThis adapter is best for situations where you need ACP agents in MCP environments and accept these compromises.\n\n## Requirements\n\n- Python 3.11 or higher\n- Installed Python packages: `acp-sdk`, `mcp`\n- An ACP server running (Tip: Follow the [ACP quickstart](https://github.com/i-am-bee/acp/blob/main/README.md#quickstart) to start one easily)\n- An MCP client application (We use [Claude Desktop](https://claude.ai/download) in the quickstart)\n\n## Quickstart\n\n**1. Run the Adapter**\n\nStart the adapter and connect it to your ACP server:\n\n```sh\nuvx acp-mcp http://localhost:8000\n```\n\n> [!NOTE]\n> Replace `http://localhost:8000` with your ACP server URL if different.\n\n<details> <summary><strong>Prefer Docker?</strong></summary>\n\n```sh\ndocker run -i --rm ghcr.io/i-am-bee/acp-mcp http://host.docker.internal:8000\n```\n\n**Tip:** `host.docker.internal` allows Docker containers to reach services running on the host (adjust if needed for your setup).\n\n</details> \n\n**2. Connect via Claude Desktop**\n\nTo connect via Claude Desktop, follow these steps:\n1. Open the Claude menu on your computer and navigate to Settings (note: this is separate from the in-app Claude account settings).\n2. Navigate to Developer > Edit Config\n3. The config file will be created here:\n  - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n  - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n4. Edit the file with the following:\n\n```json\n{\n  \"mcpServers\": {\n    \"acp-local\": {\n      \"command\": \"uvx\",\n      \"args\": [\"acp-mcp\", \"http://localhost:8000\"]\n    }\n  }\n}\n```\n  \n<details> <summary><strong>Prefer Docker?</strong></summary>\n  \n```json\n{\n  \"mcpServers\": {\n    \"acp-docker\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"ghcr.io/i-am-bee/acp-mcp\",\n        \"http://host.docker.internal:8000\"\n      ]\n    }\n  }\n}\n```\n\n</details>\n\n**3. Restart Claude Desktop and Invoke Your ACP Agent**\n\nAfter restarting, invoke your ACP agent with:\n\n```\nuse \"echo\" agent with the \"Good morning!\" input\n```\n\nAccept the integration and observe the agent running.\n\n![Screenshot of Claude Desktop invoking the echo agent](docs/assets/running_echo.png)\n\n![MCP Resources](docs/assets/attach-from-mcp.png)\n\n> [!TIP]\n> ACP agents are also registered as **MCP resources** in Claude Desktop.<br />\n> To attach them manually, click the Resources icon (two plugs connecting) in the sidebar, labeled \"Attach from MCP\", then select an agent like `acp://agents/echo`.\n\n## How It Works\n\n1. The adapter connects to your ACP server.\n2. It automatically discovers all registered ACP agents.\n3. Each ACP agent is registered in MCP as a resource using the URI: `acp://agents/{agent_name}`\n4. The adapter provides a new MCP tool called `run_agent`, letting MCP apps easily invoke ACP agents.\n\n## Supported Transports\n\n- Currently supports Stdio transport\n\n---\n\nDeveloped by contributors to the BeeAI project, this initiative is part of the [Linux Foundation AI & Data program](https://lfaidata.foundation/projects/). Its development follows open, collaborative, and community-driven practices.\n",
+  "category": "AI Tools",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "acp-mcp": {
+        "command": "uvx",
+        "args": ["acp-mcp", "http://localhost:8000"],
+        "env": {}
+      },
+      "ghcr.io-i-am-bee-acp-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "ghcr.io/i-am-bee/acp-mcp", "http://host.docker.internal:8000"],
+        "env": {},
+        "docker_image": "ghcr.io/i-am-bee/acp-mcp"
+      },
+      "acp-mcp-configured": {
+        "command": "uvx",
+        "args": ["acp-mcp", "http://localhost:8000"],
+        "env": {}
+      },
+      "ghcr.io-i-am-bee-acp-mcp-docker-configured": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "ghcr.io/i-am-bee/acp-mcp", "http://host.docker.internal:8000"],
+        "env": {},
+        "docker_image": "ghcr.io/i-am-bee/acp-mcp"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "i-am-bee",
+    "repo": "acp-mcp",
+    "url": "https://github.com/i-am-bee/acp-mcp",
+    "name": "i-am-bee__acp-mcp",
+    "path": null,
+    "stars": 25,
+    "contributors": 2,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4403f9577f6aee639b3ac5d6822c8a5a20f20058"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:22.705Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "acp-sdk",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"acp-mcp\"\nversion = \"0.4.2\"\ndescription = \"Serve ACP agents over MCP\"\nreadme = \"README.md\"\nlicense = \"Apache-2.0\"\nauthors = [{ name = \"IBM Corp.\" }]\nmaintainers = [{ name = \"Tomas Pilar\", email = \"thomas7pilar@gmail.com\" }]\nrequires-python = \">=3.11, <4.0\"\ndependencies = [\"acp-sdk>=0.8.4\", \"mcp>=1.6.0\"]\n\n[project.scripts]\nacp-mcp = \"acp_mcp:main\"\nserve = \"acp_mcp:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.ruff]\nlint.select = [\n    \"E\",     # pycodestyle errors\n    \"W\",     # pycodestyle warnings\n    \"F\",     # pyflakes\n    \"UP\",    # pyupgrade\n    \"I\",     # isort\n    \"B\",     # bugbear\n    \"ANN\",   # annotations\n    \"N\",     # pep8-naming\n    \"C4\",    # Comprehensions\n    \"DTZ\",   # DatetimeZ\n    \"Q\",     # Quotes\n    \"SIM\",   # Simplify\n    \"RUF\",   # Ruff\n    \"TID\",   # tidy-imports\n    \"ASYNC\", # async\n]\nlint.ignore = [\"ANN401\", \"B904\", \"ANN202\"]\nlint.fixable = [\"ALL\"]\nlint.unfixable = []\nforce-exclude = true\nline-length = 120\n\n[tool.ruff.lint.pydocstyle]\nconvention = \"google\"\n\n[tool.ruff.lint.flake8-tidy-imports]\n# Disallow all relative imports, \"parents\" | \"all\"\nban-relative-imports = \"all\"\n\n[dependency-groups]\ndev = [\"pytest>=8.3.5\", \"pytest-asyncio>=0.26.0\", \"ruff>=0.11.8\"]\n"
+}

@@ -1,0 +1,253 @@
+{
+  "name": "googleapis__genai-toolbox",
+  "display_name": "genai-toolbox",
+  "description": "MCP Toolbox for Databases is an open source MCP server for databases.",
+  "author": {
+    "name": "googleapis"
+  },
+  "server": {
+    "command": "./toolbox",
+    "args": ["--tools-file", "${user_config.tools_file}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "tools_file": {
+      "type": "file",
+      "title": "Tools Configuration File",
+      "description": "Path to the YAML file defining your tools.",
+      "required": true,
+      "default": "tools.yaml"
+    }
+  },
+  "readme": "![logo](./logo.png)\n\n# MCP Toolbox for Databases\n\n[![Docs](https://img.shields.io/badge/docs-MCP_Toolbox-blue)](https://googleapis.github.io/genai-toolbox/)\n[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=flat&logo=discord&logoColor=white)](https://discord.gg/Dmm69peqjh)\n[![Medium](https://img.shields.io/badge/Medium-12100E?style=flat&logo=medium&logoColor=white)](https://medium.com/@mcp_toolbox)\n[![Go Report Card](https://goreportcard.com/badge/github.com/googleapis/genai-toolbox)](https://goreportcard.com/report/github.com/googleapis/genai-toolbox)\n\n> [!NOTE]\n> MCP Toolbox for Databases is currently in beta, and may see breaking\n> changes until the first stable release (v1.0).\n\nMCP Toolbox for Databases is an open source MCP server for databases. It enables\nyou to develop tools easier, faster, and more securely by handling the complexities\nsuch as connection pooling, authentication, and more.\n\nThis README provides a brief overview. For comprehensive details, see the [full\ndocumentation](https://googleapis.github.io/genai-toolbox/).\n\n> [!NOTE]\n> This solution was originally named “Gen AI Toolbox for Databases” as\n> its initial development predated MCP, but was renamed to align with recently\n> added MCP compatibility.\n\n<!-- TOC ignore:true -->\n## Table of Contents\n\n<!-- TOC -->\n\n- [Why Toolbox?](#why-toolbox)\n- [General Architecture](#general-architecture)\n- [Getting Started](#getting-started)\n  - [Installing the server](#installing-the-server)\n  - [Running the server](#running-the-server)\n    - [Homebrew Users](#homebrew-users)\n  - [Integrating your application](#integrating-your-application)\n- [Configuration](#configuration)\n  - [Sources](#sources)\n  - [Tools](#tools)\n  - [Toolsets](#toolsets)\n- [Versioning](#versioning)\n  - [Pre-1.0.0 Versioning](#pre-100-versioning)\n  - [Post-1.0.0 Versioning](#post-100-versioning)\n- [Contributing](#contributing)\n- [Community](#community)\n\n<!-- /TOC -->\n\n## Why Toolbox?\n\nToolbox helps you build Gen AI tools that let your agents access data in your\ndatabase. Toolbox provides:\n\n- **Simplified development**: Integrate tools to your agent in less than 10\n  lines of code, reuse tools between multiple agents or frameworks, and deploy\n  new versions of tools more easily.\n- **Better performance**: Best practices such as connection pooling,\n  authentication, and more.\n- **Enhanced security**: Integrated auth for more secure access to your data\n- **End-to-end observability**: Out of the box metrics and tracing with built-in\n  support for OpenTelemetry.\n\n**⚡ Supercharge Your Workflow with an AI Database Assistant ⚡**\n\nStop context-switching and let your AI assistant become a true co-developer. By\n[connecting your IDE to your databases with MCP Toolbox][connect-ide], you can\ndelegate complex and time-consuming database tasks, allowing you to build faster\nand focus on what matters. This isn't just about code completion; it's about\ngiving your AI the context it needs to handle the entire development lifecycle.\n\nHere’s how it will save you time:\n\n- **Query in Plain English**: Interact with your data using natural language\n  right from your IDE. Ask complex questions like, *\"How many orders were\n  delivered in 2024, and what items were in them?\"* without writing any SQL.\n- **Automate Database Management**: Simply describe your data needs, and let the\n  AI assistant manage your database for you. It can handle generating queries,\n  creating tables, adding indexes, and more.\n- **Generate Context-Aware Code**: Empower your AI assistant to generate\n  application code and tests with a deep understanding of your real-time\n  database schema.  This accelerates the development cycle by ensuring the\n  generated code is directly usable.\n- **Slash Development Overhead**: Radically reduce the time spent on manual\n  setup and boilerplate. MCP Toolbox helps streamline lengthy database\n  configurations, repetitive code, and error-prone schema migrations.\n\nLearn [how to connect your AI tools (IDEs) to Toolbox using MCP][connect-ide].\n\n[connect-ide]: https://googleapis.github.io/genai-toolbox/how-to/connect-ide/\n\n## General Architecture\n\nToolbox sits between your application's orchestration framework and your\ndatabase, providing a control plane that is used to modify, distribute, or\ninvoke tools. It simplifies the management of your tools by providing you with a\ncentralized location to store and update tools, allowing you to share tools\nbetween agents and applications and update those tools without necessarily\nredeploying your application.\n\n![architecture](./docs/en/getting-started/introduction/architecture.png)\n\n## Getting Started\n\n### Installing the server\n\nFor the latest version, check the [releases page][releases] and use the\nfollowing instructions for your OS and CPU architecture.\n\n[releases]: https://github.com/googleapis/genai-toolbox/releases\n\n<details open>\n<summary>Binary</summary>\n\nTo install Toolbox as a binary:\n\n<!-- {x-release-please-start-version} -->\n```sh\n# see releases page for other versions\nexport VERSION=0.14.0\ncurl -O https://storage.googleapis.com/genai-toolbox/v$VERSION/linux/amd64/toolbox\nchmod +x toolbox\n```\n\n</details>\n\n<details>\n<summary>Container image</summary>\nYou can also install Toolbox as a container:\n\n```sh\n# see releases page for other versions\nexport VERSION=0.14.0\ndocker pull us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:$VERSION\n```\n\n</details>\n\n<details>\n<summary>Homebrew</summary>\n\nTo install Toolbox using Homebrew on macOS or Linux:\n\n```sh\nbrew install mcp-toolbox\n```\n\n</details>\n\n<details>\n<summary>Compile from source</summary>\n\nTo install from source, ensure you have the latest version of\n[Go installed](https://go.dev/doc/install), and then run the following command:\n\n```sh\ngo install github.com/googleapis/genai-toolbox@v0.14.0\n```\n<!-- {x-release-please-end} -->\n\n</details>\n\n### Running the server\n\n[Configure](#configuration) a `tools.yaml` to define your tools, and then\nexecute `toolbox` to start the server:\n\n<details open>\n<summary>Binary</summary>\n\nTo run Toolbox from binary:\n\n```sh\n./toolbox --tools-file \"tools.yaml\"\n```\n\nⓘ **NOTE:**  \nToolbox enables dynamic reloading by default. To disable, use the `--disable-reload` flag.\n\n</details>\n\n<details>\n\n<summary>Container image</summary>\n\nTo run the server after pulling the [container image](#installing-the-server):\n\n```sh\nexport VERSION=0.11.0 # Use the version you pulled\ndocker run -p 5000:5000 \\\n-v $(pwd)/tools.yaml:/app/tools.yaml \\\nus-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:$VERSION \\\n--tools-file \"/app/tools.yaml\"\n```\n\nⓘ **NOTE:**  \nThe `-v` flag mounts your local `tools.yaml` into the container, and `-p` maps the container's port `5000` to your host's port `5000`.\n\n</details>\n\n<details>\n\n<summary>Source</summary>\n\nTo run the server directly from source, navigate to the project root directory and run:\n\n```sh\ngo run .\n```\n\nⓘ **NOTE:**  \nThis command runs the project from source, and is more suitable for development and testing. It does **not** compile a binary into your `$GOPATH`. If you want to compile a binary instead, refer the [Developer Documentation](./DEVELOPER.md#building-the-binary).\n\n</details>\n\n<details>\n\n<summary>Homebrew</summary>\n\nIf you installed Toolbox using [Homebrew](https://brew.sh/), the `toolbox` binary is available in your system path. You can start the server with the same command:\n\n```sh\ntoolbox --tools-file \"tools.yaml\"\n```\n\n</details>\n\nYou can use `toolbox help` for a full list of flags! To stop the server, send a\nterminate signal (`ctrl+c` on most platforms).\n\nFor more detailed documentation on deploying to different environments, check\nout the resources in the [How-to\nsection](https://googleapis.github.io/genai-toolbox/how-to/)\n\n\n### Integrating your application\n\nOnce your server is up and running, you can load the tools into your\napplication. See below the list of Client SDKs for using various frameworks:\n\n<details open>\n  <summary>Python (<a href=\"https://github.com/googleapis/mcp-toolbox-sdk-python\">Github</a>)</summary>\n  <br>\n  <blockquote>\n\n  <details open>\n    <summary>Core</summary>\n\n1. Install [Toolbox Core SDK][toolbox-core]:\n\n    ```bash\n    pip install toolbox-core\n    ```\n\n1. Load tools:\n\n    ```python\n    from toolbox_core import ToolboxClient\n\n    # update the url to point to your server\n    async with ToolboxClient(\"http://127.0.0.1:5000\") as client:\n\n        # these tools can be passed to your application!\n        tools = await client.load_toolset(\"toolset_name\")\n    ```\n\nFor more detailed instructions on using the Toolbox Core SDK, see the\n[project's README][toolbox-core-readme].\n\n[toolbox-core]: https://pypi.org/project/toolbox-core/\n[toolbox-core-readme]: https://github.com/googleapis/mcp-toolbox-sdk-python/tree/main/packages/toolbox-core/README.md\n\n  </details>\n  <details>\n    <summary>LangChain / LangGraph</summary>\n\n1. Install [Toolbox LangChain SDK][toolbox-langchain]:\n\n    ```bash\n    pip install toolbox-langchain\n    ```\n\n1. Load tools:\n\n    ```python\n    from toolbox_langchain import ToolboxClient\n\n    # update the url to point to your server\n    async with ToolboxClient(\"http://127.0.0.1:5000\") as client:\n\n        # these tools can be passed to your application!\n        tools = client.load_toolset()\n    ```\n\n    For more detailed instructions on using the Toolbox LangChain SDK, see the\n    [project's README][toolbox-langchain-readme].\n\n    [toolbox-langchain]: https://pypi.org/project/toolbox-langchain/\n    [toolbox-langchain-readme]: https://github.com/googleapis/mcp-toolbox-sdk-python/blob/main/packages/toolbox-langchain/README.md\n\n  </details>\n  <details>\n    <summary>LlamaIndex</summary>\n\n1. Install [Toolbox Llamaindex SDK][toolbox-llamaindex]:\n\n    ```bash\n    pip install toolbox-llamaindex\n    ```\n\n1. Load tools:\n\n    ```python\n    from toolbox_llamaindex import ToolboxClient\n\n    # update the url to point to your server\n    async with ToolboxClient(\"http://127.0.0.1:5000\") as client:\n\n        # these tools can be passed to your application!\n        tools = client.load_toolset()\n    ```\n\n    For more detailed instructions on using the Toolbox Llamaindex SDK, see the\n    [project's README][toolbox-llamaindex-readme].\n\n    [toolbox-llamaindex]: https://pypi.org/project/toolbox-llamaindex/\n    [toolbox-llamaindex-readme]: https://github.com/googleapis/genai-toolbox-llamaindex-python/blob/main/README.md\n\n  </details>\n</details>\n</blockquote>\n<details>\n  <summary>Javascript/Typescript (<a href=\"https://github.com/googleapis/mcp-toolbox-sdk-js\">Github</a>)</summary>\n  <br>\n  <blockquote>\n\n  <details open>\n    <summary>Core</summary>\n\n1. Install [Toolbox Core SDK][toolbox-core-js]:\n\n    ```bash\n    npm install @toolbox-sdk/core\n    ```\n\n1. Load tools:\n\n    ```javascript\n    import { ToolboxClient } from '@toolbox-sdk/core';\n\n    // update the url to point to your server\n    const URL = 'http://127.0.0.1:5000';\n    let client = new ToolboxClient(URL);\n\n    // these tools can be passed to your application!\n    const tools = await client.loadToolset('toolsetName');\n    ```\n\n    For more detailed instructions on using the Toolbox Core SDK, see the\n    [project's README][toolbox-core-js-readme].\n\n    [toolbox-core-js]: https://www.npmjs.com/package/@toolbox-sdk/core\n    [toolbox-core-js-readme]: https://github.com/googleapis/mcp-toolbox-sdk-js/blob/main/packages/toolbox-core/README.md\n\n  </details>\n  <details>\n    <summary>LangChain / LangGraph</summary>\n\n1. Install [Toolbox Core SDK][toolbox-core-js]:\n\n    ```bash\n    npm install @toolbox-sdk/core\n    ```\n\n2. Load tools:\n\n    ```javascript\n    import { ToolboxClient } from '@toolbox-sdk/core';\n\n    // update the url to point to your server\n    const URL = 'http://127.0.0.1:5000';\n    let client = new ToolboxClient(URL);\n\n    // these tools can be passed to your application!\n    const toolboxTools = await client.loadToolset('toolsetName');\n\n    // Define the basics of the tool: name, description, schema and core logic\n    const getTool = (toolboxTool) => tool(currTool, {\n        name: toolboxTool.getName(),\n        description: toolboxTool.getDescription(),\n        schema: toolboxTool.getParamSchema()\n    });\n\n    // Use these tools in your Langchain/Langraph applications\n    const tools = toolboxTools.map(getTool);\n    ```\n\n  </details>\n  <details>\n    <summary>Genkit</summary>\n\n1. Install [Toolbox Core SDK][toolbox-core-js]:\n\n    ```bash\n    npm install @toolbox-sdk/core\n    ```\n\n2. Load tools:\n\n    ```javascript\n    import { ToolboxClient } from '@toolbox-sdk/core';\n    import { genkit } from 'genkit';\n\n    // Initialise genkit\n    const ai = genkit({\n        plugins: [\n            googleAI({\n                apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY\n            })\n        ],\n        model: googleAI.model('gemini-2.0-flash'),\n    });\n\n    // update the url to point to your server\n    const URL = 'http://127.0.0.1:5000';\n    let client = new ToolboxClient(URL);\n\n    // these tools can be passed to your application!\n    const toolboxTools = await client.loadToolset('toolsetName');\n\n    // Define the basics of the tool: name, description, schema and core logic\n    const getTool = (toolboxTool) => ai.defineTool({\n        name: toolboxTool.getName(),\n        description: toolboxTool.getDescription(),\n        schema: toolboxTool.getParamSchema()\n    }, toolboxTool)\n\n    // Use these tools in your Genkit applications\n    const tools = toolboxTools.map(getTool);\n    ```\n\n  </details>\n</details>\n</blockquote>\n<details>\n  <summary>Go (<a href=\"https://github.com/googleapis/mcp-toolbox-sdk-go\">Github</a>)</summary>\n  <br>\n  <blockquote>\n\n  <details open>\n    <summary>Core</summary>\n\n1. Install [Toolbox Go SDK][toolbox-go]:\n\n    ```bash\n    go get github.com/googleapis/mcp-toolbox-sdk-go\n    ```\n\n1. Load tools:\n\n    ```go\n    package main\n\n    import (\n      \"github.com/googleapis/mcp-toolbox-sdk-go/core\"\n      \"context\"\n    )\n\n    func main() {\n      // Make sure to add the error checks\n      // update the url to point to your server\n      URL := \"http://127.0.0.1:5000\";\n      ctx := context.Background()\n\n      client, err := core.NewToolboxClient(URL)\n\n      // Framework agnostic tools\n      tools, err := client.LoadToolset(\"toolsetName\", ctx)\n    }\n    ```\n\n    For more detailed instructions on using the Toolbox Go SDK, see the\n    [project's README][toolbox-core-go-readme].\n\n    [toolbox-go]: https://pkg.go.dev/github.com/googleapis/mcp-toolbox-sdk-go/core\n    [toolbox-core-go-readme]: https://github.com/googleapis/mcp-toolbox-sdk-go/blob/main/core/README.md\n\n  </details>\n  <details>\n    <summary>LangChain Go</summary>\n\n1. Install [Toolbox Go SDK][toolbox-go]:\n\n    ```bash\n    go get github.com/googleapis/mcp-toolbox-sdk-go\n    ```\n\n2. Load tools:\n\n    ```go\n    package main\n\n    import (\n      \"context\"\n      \"encoding/json\"\n\n      \"github.com/googleapis/mcp-toolbox-sdk-go/core\"\n      \"github.com/tmc/langchaingo/llms\"\n    )\n\n    func main() {\n      // Make sure to add the error checks\n      // update the url to point to your server\n      URL := \"http://127.0.0.1:5000\"\n      ctx := context.Background()\n\n      client, err := core.NewToolboxClient(URL)\n\n      // Framework agnostic tool\n      tool, err := client.LoadTool(\"toolName\", ctx)\n\n      // Fetch the tool's input schema\n      inputschema, err := tool.InputSchema()\n\n      var paramsSchema map[string]any\n      _ = json.Unmarshal(inputschema, &paramsSchema)\n\n      // Use this tool with LangChainGo\n      langChainTool := llms.Tool{\n        Type: \"function\",\n        Function: &llms.FunctionDefinition{\n          Name:        tool.Name(),\n          Description: tool.Description(),\n          Parameters:  paramsSchema,\n        },\n      }\n    }\n\n    ```\n\n  </details>\n  <details>\n    <summary>Genkit</summary>\n\n1. Install [Toolbox Go SDK][toolbox-go]:\n\n    ```bash\n    go get github.com/googleapis/mcp-toolbox-sdk-go\n    ```\n\n2. Load tools:\n\n    ```go\n    package main\n    import (\n      \"context\"\n      \"encoding/json\"\n\n      \"github.com/firebase/genkit/go/ai\"\n      \"github.com/firebase/genkit/go/genkit\"\n      \"github.com/googleapis/mcp-toolbox-sdk-go/core\"\n      \"github.com/googleapis/mcp-toolbox-sdk-go/tbgenkit\"\n      \"github.com/invopop/jsonschema\"\n    )\n\n    func main() {\n      // Make sure to add the error checks\n      // Update the url to point to your server\n      URL := \"http://127.0.0.1:5000\"\n      ctx := context.Background()\n      g, err := genkit.Init(ctx)\n\n      client, err := core.NewToolboxClient(URL)\n\n      // Framework agnostic tool\n      tool, err := client.LoadTool(\"toolName\", ctx)\n\n      // Convert the tool using the tbgenkit package\n      // Use this tool with Genkit Go\n      genkitTool, err := tbgenkit.ToGenkitTool(tool, g)\n      if err != nil {\n        log.Fatalf(\"Failed to convert tool: %v\\n\", err)\n      }\n    }\n    ```\n\n  </details>\n  <details>\n    <summary>Go GenAI</summary>\n\n1. Install [Toolbox Go SDK][toolbox-go]:\n\n    ```bash\n    go get github.com/googleapis/mcp-toolbox-sdk-go\n    ```\n\n2. Load tools:\n\n    ```go\n    package main\n\n    import (\n      \"context\"\n      \"encoding/json\"\n\n      \"github.com/googleapis/mcp-toolbox-sdk-go/core\"\n      \"google.golang.org/genai\"\n    )\n\n    func main() {\n      // Make sure to add the error checks\n      // Update the url to point to your server\n      URL := \"http://127.0.0.1:5000\"\n      ctx := context.Background()\n\n      client, err := core.NewToolboxClient(URL)\n\n      // Framework agnostic tool\n      tool, err := client.LoadTool(\"toolName\", ctx)\n\n      // Fetch the tool's input schema\n      inputschema, err := tool.InputSchema()\n\n      var schema *genai.Schema\n      _ = json.Unmarshal(inputschema, &schema)\n\n      funcDeclaration := &genai.FunctionDeclaration{\n        Name:        tool.Name(),\n        Description: tool.Description(),\n        Parameters:  schema,\n      }\n\n      // Use this tool with Go GenAI\n      genAITool := &genai.Tool{\n        FunctionDeclarations: []*genai.FunctionDeclaration{funcDeclaration},\n      }\n    }\n    ```\n\n  </details>\n  <details>\n    <summary>OpenAI Go</summary>\n\n1. Install [Toolbox Go SDK][toolbox-go]:\n\n    ```bash\n    go get github.com/googleapis/mcp-toolbox-sdk-go\n    ```\n\n2. Load tools:\n\n    ```go\n    package main\n\n    import (\n      \"context\"\n      \"encoding/json\"\n\n      \"github.com/googleapis/mcp-toolbox-sdk-go/core\"\n      openai \"github.com/openai/openai-go\"\n    )\n\n    func main() {\n      // Make sure to add the error checks\n      // Update the url to point to your server\n      URL := \"http://127.0.0.1:5000\"\n      ctx := context.Background()\n\n      client, err := core.NewToolboxClient(URL)\n\n      // Framework agnostic tool\n      tool, err := client.LoadTool(\"toolName\", ctx)\n\n      // Fetch the tool's input schema\n      inputschema, err := tool.InputSchema()\n\n      var paramsSchema openai.FunctionParameters\n      _ = json.Unmarshal(inputschema, &paramsSchema)\n\n      // Use this tool with OpenAI Go\n      openAITool := openai.ChatCompletionToolParam{\n        Function: openai.FunctionDefinitionParam{\n          Name:        tool.Name(),\n          Description: openai.String(tool.Description()),\n          Parameters:  paramsSchema,\n        },\n      }\n\n    }\n    ```\n\n  </details>\n</details>\n</blockquote>\n</details>\n\n## Configuration\n\nThe primary way to configure Toolbox is through the `tools.yaml` file. If you\nhave multiple files, you can tell toolbox which to load with the `--tools-file\ntools.yaml` flag.\n\nYou can find more detailed reference documentation to all resource types in the\n[Resources](https://googleapis.github.io/genai-toolbox/resources/).\n\n### Sources\n\nThe `sources` section of your `tools.yaml` defines what data sources your\nToolbox should have access to. Most tools will have at least one source to\nexecute against.\n\n```yaml\nsources:\n  my-pg-source:\n    kind: postgres\n    host: 127.0.0.1\n    port: 5432\n    database: toolbox_db\n    user: toolbox_user\n    password: my-password\n```\n\nFor more details on configuring different types of sources, see the\n[Sources](https://googleapis.github.io/genai-toolbox/resources/sources).\n\n### Tools\n\nThe `tools` section of a `tools.yaml` define the actions an agent can take: what\nkind of tool it is, which source(s) it affects, what parameters it uses, etc.\n\n```yaml\ntools:\n  search-hotels-by-name:\n    kind: postgres-sql\n    source: my-pg-source\n    description: Search for hotels based on name.\n    parameters:\n      - name: name\n        type: string\n        description: The name of the hotel.\n    statement: SELECT * FROM hotels WHERE name ILIKE '%' || $1 || '%';\n```\n\nFor more details on configuring different types of tools, see the\n[Tools](https://googleapis.github.io/genai-toolbox/resources/tools).\n\n### Toolsets\n\nThe `toolsets` section of your `tools.yaml` allows you to define groups of tools\nthat you want to be able to load together. This can be useful for defining\ndifferent groups based on agent or application.\n\n```yaml\ntoolsets:\n    my_first_toolset:\n        - my_first_tool\n        - my_second_tool\n    my_second_toolset:\n        - my_second_tool\n        - my_third_tool\n```\n\nYou can load toolsets by name:\n\n```python\n# This will load all tools\nall_tools = client.load_toolset()\n\n# This will only load the tools listed in 'my_second_toolset'\nmy_second_toolset = client.load_toolset(\"my_second_toolset\")\n```\n\n## Versioning\n\nThis project uses [semantic versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).\nSince the project is in a pre-release stage (version `0.x.y`), we follow the\nstandard conventions for initial  development:\n\n### Pre-1.0.0 Versioning\nWhile the major version is `0`, the public API should be considered unstable.\nThe version will be incremented  as follows:\n\n- **`0.MINOR.PATCH`**: The **MINOR** version is incremented when we add\n  new functionality or make breaking, incompatible API changes.\n- **`0.MINOR.PATCH`**: The **PATCH** version is incremented for\n  backward-compatible bug fixes.\n\n### Post-1.0.0 Versioning\nOnce the project reaches a stable `1.0.0` release, the versioning will follow\nthe more common convention:\n\n- **`MAJOR.MINOR.PATCH`**: Incremented for incompatible API changes.\n- **`MAJOR.MINOR.PATCH`**: Incremented for new, backward-compatible functionality.\n- **`MAJOR.MINOR.PATCH`**: Incremented for backward-compatible bug fixes.\n\nThe public API that this applies to is the CLI associated with Toolbox, the\ninteractions with official SDKs, and the definitions in the `tools.yaml` file.\n\n## Contributing\n\nContributions are welcome. Please, see the [CONTRIBUTING](CONTRIBUTING.md)\nto get started.\n\nPlease note that this project is released with a Contributor Code of Conduct.\nBy participating in this project you agree to abide by its terms. See\n[Contributor Code of Conduct](CODE_OF_CONDUCT.md) for more information.\n\n## Community\n\nJoin our [discord community](https://discord.gg/GQrFB3Ec3W) to connect with our developers!\n",
+  "category": "Development",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "toolbox": {
+        "command": "./toolbox",
+        "args": ["--tools-file", "tools.yaml"],
+        "env": {}
+      },
+      "toolbox-no-reload": {
+        "command": "./toolbox",
+        "args": ["--tools-file", "tools.yaml", "--disable-reload"],
+        "env": {}
+      },
+      "mcp-toolbox": {
+        "command": "toolbox",
+        "args": ["--tools-file", "tools.yaml"],
+        "env": {}
+      },
+      "mcp-toolbox-no-reload": {
+        "command": "toolbox",
+        "args": ["--tools-file", "tools.yaml", "--disable-reload"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "googleapis",
+    "repo": "genai-toolbox",
+    "url": "https://github.com/googleapis/genai-toolbox",
+    "name": "googleapis__genai-toolbox",
+    "path": null,
+    "stars": 10261,
+    "contributors": 57,
+    "issues": 228,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4b32c2a7701ce5ccc56d019055283e73e7046372"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:29.107Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "cloud.google.com/go/alloydbconn",
+      "importance": 8
+    },
+    {
+      "name": "cloud.google.com/go/bigquery",
+      "importance": 8
+    },
+    {
+      "name": "cloud.google.com/go/bigtable",
+      "importance": 8
+    },
+    {
+      "name": "cloud.google.com/go/cloudsqlconn",
+      "importance": 8
+    },
+    {
+      "name": "cloud.google.com/go/dataplex",
+      "importance": 6
+    },
+    {
+      "name": "cloud.google.com/go/firestore",
+      "importance": 8
+    },
+    {
+      "name": "cloud.google.com/go/spanner",
+      "importance": 8
+    },
+    {
+      "name": "GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric",
+      "importance": 7
+    },
+    {
+      "name": "GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace",
+      "importance": 7
+    },
+    {
+      "name": "couchbase/gocb/v2",
+      "importance": 8
+    },
+    {
+      "name": "couchbase/tools-common/http",
+      "importance": 4
+    },
+    {
+      "name": "fsnotify/fsnotify",
+      "importance": 6
+    },
+    {
+      "name": "go-chi/chi/v5",
+      "importance": 9
+    },
+    {
+      "name": "go-chi/httplog/v2",
+      "importance": 6
+    },
+    {
+      "name": "go-chi/render",
+      "importance": 6
+    },
+    {
+      "name": "go-playground/validator/v10",
+      "importance": 6
+    },
+    {
+      "name": "go-sql-driver/mysql",
+      "importance": 8
+    },
+    {
+      "name": "goccy/go-yaml",
+      "importance": 6
+    },
+    {
+      "name": "google/go-cmp",
+      "importance": 4
+    },
+    {
+      "name": "google/uuid",
+      "importance": 4
+    },
+    {
+      "name": "jackc/pgx/v5",
+      "importance": 8
+    },
+    {
+      "name": "json-iterator/go",
+      "importance": 4
+    },
+    {
+      "name": "looker-open-source/sdk-codegen/go",
+      "importance": 6
+    },
+    {
+      "name": "microsoft/go-mssqldb",
+      "importance": 8
+    },
+    {
+      "name": "neo4j/neo4j-go-driver/v5",
+      "importance": 8
+    },
+    {
+      "name": "redis/go-redis/v9",
+      "importance": 8
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 8
+    },
+    {
+      "name": "thlib/go-timezone-local",
+      "importance": 3
+    },
+    {
+      "name": "valkey-io/valkey-go",
+      "importance": 8
+    },
+    {
+      "name": "go.mongodb.org/mongo-driver",
+      "importance": 8
+    },
+    {
+      "name": "go.opentelemetry.io/contrib/propagators/autoprop",
+      "importance": 6
+    },
+    {
+      "name": "go.opentelemetry.io/otel",
+      "importance": 8
+    },
+    {
+      "name": "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp",
+      "importance": 7
+    },
+    {
+      "name": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "importance": 7
+    },
+    {
+      "name": "go.opentelemetry.io/otel/metric",
+      "importance": 7
+    },
+    {
+      "name": "go.opentelemetry.io/otel/sdk",
+      "importance": 7
+    },
+    {
+      "name": "go.opentelemetry.io/otel/sdk/metric",
+      "importance": 7
+    },
+    {
+      "name": "go.opentelemetry.io/otel/trace",
+      "importance": 7
+    },
+    {
+      "name": "golang.org/x/oauth2",
+      "importance": 8
+    },
+    {
+      "name": "google.golang.org/api",
+      "importance": 9
+    },
+    {
+      "name": "modernc.org/sqlite",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/googleapis/genai-toolbox\n\ngo 1.24.0\n\ntoolchain go1.25.1\n\nrequire (\n\tcloud.google.com/go/alloydbconn v1.15.5\n\tcloud.google.com/go/bigquery v1.69.0\n\tcloud.google.com/go/bigtable v1.39.0\n\tcloud.google.com/go/cloudsqlconn v1.18.1\n\tcloud.google.com/go/dataplex v1.26.0\n\tcloud.google.com/go/firestore v1.18.0\n\tcloud.google.com/go/spanner v1.84.1\n\tgithub.com/ClickHouse/clickhouse-go/v2 v2.40.1\n\tgithub.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.53.0\n\tgithub.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.29.0\n\tgithub.com/cenkalti/backoff/v5 v5.0.3\n\tgithub.com/couchbase/gocb/v2 v2.11.0\n\tgithub.com/couchbase/tools-common/http v1.0.9\n\tgithub.com/fsnotify/fsnotify v1.9.0\n\tgithub.com/go-chi/chi/v5 v5.2.3\n\tgithub.com/go-chi/httplog/v2 v2.1.1\n\tgithub.com/go-chi/render v1.0.3\n\tgithub.com/go-goquery/goquery v1.0.1\n\tgithub.com/go-playground/validator/v10 v10.27.0\n\tgithub.com/go-sql-driver/mysql v1.9.3\n\tgithub.com/goccy/go-yaml v1.18.0\n\tgithub.com/google/go-cmp v0.7.0\n\tgithub.com/google/uuid v1.6.0\n\tgithub.com/jackc/pgx/v5 v5.7.5\n\tgithub.com/json-iterator/go v1.1.12\n\tgithub.com/looker-open-source/sdk-codegen/go v0.25.10\n\tgithub.com/microsoft/go-mssqldb v1.9.3\n\tgithub.com/nakagami/firebirdsql v0.9.15\n\tgithub.com/neo4j/neo4j-go-driver/v5 v5.28.3\n\tgithub.com/redis/go-redis/v9 v9.13.0\n\tgithub.com/spf13/cobra v1.9.1\n\tgithub.com/thlib/go-timezone-local v0.0.7\n\tgithub.com/trinodb/trino-go-client v0.328.0\n\tgithub.com/valkey-io/valkey-go v1.0.64\n\tgo.mongodb.org/mongo-driver v1.17.4\n\tgo.opentelemetry.io/contrib/propagators/autoprop v0.62.0\n\tgo.opentelemetry.io/otel v1.37.0\n\tgo.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.37.0\n\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.37.0\n\tgo.opentelemetry.io/otel/metric v1.37.0\n\tgo.opentelemetry.io/otel/sdk v1.37.0\n\tgo.opentelemetry.io/otel/sdk/metric v1.37.0\n\tgo.opentelemetry.io/otel/trace v1.37.0\n\tgolang.org/x/oauth2 v0.30.0\n\tgoogle.golang.org/api v0.248.0\n\tgoogle.golang.org/genproto v0.0.0-20250826171959-ef028d996bc1\n\tmodernc.org/sqlite v1.38.2\n)\n\nrequire (\n\tgithub.com/ClickHouse/ch-go v0.67.0 // indirect\n\tgithub.com/andybalholm/brotli v1.2.0 // indirect\n\tgithub.com/andybalholm/cascadia v1.3.3 // indirect\n\tgithub.com/go-faster/city v1.0.1 // indirect\n\tgithub.com/go-faster/errors v0.7.1 // indirect\n\tgithub.com/paulmach/orb v0.11.1 // indirect\n\tgithub.com/segmentio/asm v1.2.0 // indirect\n\tgithub.com/shopspring/decimal v1.4.0 // indirect\n\tgolang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect\n\tgonum.org/v1/gonum v0.16.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n\nrequire (\n\tcel.dev/expr v0.24.0 // indirect\n\tcloud.google.com/go v0.121.6 // indirect\n\tcloud.google.com/go/alloydb v1.18.0 // indirect\n\tcloud.google.com/go/auth v0.16.5 // indirect\n\tcloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect\n\tcloud.google.com/go/compute/metadata v0.8.0 // indirect\n\tcloud.google.com/go/iam v1.5.2 // indirect\n\tcloud.google.com/go/longrunning v0.6.7 // indirect\n\tcloud.google.com/go/monitoring v1.24.2 // indirect\n\tcloud.google.com/go/trace v1.11.6 // indirect\n\tfilippo.io/edwards25519 v1.1.0 // indirect\n\tgithub.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.5.3 // indirect\n\tgithub.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.27.0 // indirect\n\tgithub.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.53.0 // indirect\n\tgithub.com/PuerkitoBio/goquery v1.10.3 // indirect\n\tgithub.com/ajg/form v1.5.1 // indirect\n\tgithub.com/apache/arrow/go/v15 v15.0.2 // indirect\n\tgithub.com/cespare/xxhash/v2 v2.3.0 // indirect\n\tgithub.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect\n\tgithub.com/couchbase/gocbcore/v10 v10.8.0 // indirect\n\tgithub.com/couchbase/gocbcoreps v0.1.3 // indirect\n\tgithub.com/couchbase/goprotostellar v1.0.2 // indirect\n\tgithub.com/couchbase/tools-common/errors v1.0.0 // indirect\n\tgithub.com/couchbaselabs/gocbconnstr/v2 v2.0.0-20240607131231-fb385523de28 // indirect\n\tgithub.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect\n\tgithub.com/dustin/go-humanize v1.0.1 // indirect\n\tgithub.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect\n\tgithub.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect\n\tgithub.com/felixge/httpsnoop v1.0.4 // indirect\n\tgithub.com/gabriel-vasile/mimetype v1.4.8 // indirect\n\tgithub.com/go-jose/go-jose/v4 v4.0.5 // indirect\n\tgithub.com/go-logr/logr v1.4.3 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/go-playground/locales v0.14.1 // indirect\n\tgithub.com/go-playground/universal-translator v0.18.1 // indirect\n\tgithub.com/goccy/go-json v0.10.5 // indirect\n\tgithub.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect\n\tgithub.com/golang-sql/sqlexp v0.1.0 // indirect\n\tgithub.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect\n\tgithub.com/golang/snappy v1.0.0 // indirect\n\tgithub.com/google/flatbuffers v25.2.10+incompatible // indirect\n\tgithub.com/google/s2a-go v0.1.9 // indirect\n\tgithub.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect\n\tgithub.com/googleapis/gax-go/v2 v2.15.0 // indirect\n\tgithub.com/gorilla/websocket v1.5.3 // indirect\n\tgithub.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect\n\tgithub.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect\n\tgithub.com/hashicorp/go-uuid v1.0.3 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/jackc/pgpassfile v1.0.0 // indirect\n\tgithub.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect\n\tgithub.com/jackc/puddle/v2 v2.2.2 // indirect\n\tgithub.com/jcmturner/aescts/v2 v2.0.0 // indirect\n\tgithub.com/jcmturner/dnsutils/v2 v2.0.0 // indirect\n\tgithub.com/jcmturner/gofork v1.7.6 // indirect\n\tgithub.com/jcmturner/goidentity/v6 v6.0.1 // indirect\n\tgithub.com/jcmturner/gokrb5/v8 v8.4.4 // indirect\n\tgithub.com/jcmturner/rpc/v2 v2.0.3 // indirect\n\tgithub.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect\n\tgithub.com/klauspost/compress v1.18.0 // indirect\n\tgithub.com/klauspost/cpuid/v2 v2.2.11 // indirect\n\tgithub.com/leodido/go-urn v1.4.0 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/montanaflynn/stats v0.7.1 // indirect\n\tgithub.com/nakagami/chacha20 v0.1.0 // indirect\n\tgithub.com/ncruces/go-strftime v0.1.9 // indirect\n\tgithub.com/pierrec/lz4 v2.6.1+incompatible // indirect\n\tgithub.com/pierrec/lz4/v4 v4.1.22 // indirect\n\tgithub.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect\n\tgithub.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect\n\tgithub.com/spf13/pflag v1.0.6 // indirect\n\tgithub.com/spiffe/go-spiffe/v2 v2.5.0 // indirect\n\tgithub.com/xdg-go/pbkdf2 v1.0.0 // indirect\n\tgithub.com/xdg-go/scram v1.1.2 // indirect\n\tgithub.com/xdg-go/stringprep v1.0.4 // indirect\n\tgithub.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect\n\tgithub.com/zeebo/errs v1.4.0 // indirect\n\tgithub.com/zeebo/xxh3 v1.0.2 // indirect\n\tgitlab.com/nyarla/go-crypt v0.0.0-20160106005555-d9a5dc2b789b // indirect\n\tgo.opencensus.io v0.24.0 // indirect\n\tgo.opentelemetry.io/auto/sdk v1.1.0 // indirect\n\tgo.opentelemetry.io/contrib/detectors/gcp v1.36.0 // indirect\n\tgo.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.62.0 // indirect\n\tgo.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.62.0 // indirect\n\tgo.opentelemetry.io/contrib/propagators/aws v1.37.0 // indirect\n\tgo.opentelemetry.io/contrib/propagators/b3 v1.37.0 // indirect\n\tgo.opentelemetry.io/contrib/propagators/jaeger v1.37.0 // indirect\n\tgo.opentelemetry.io/contrib/propagators/ot v1.37.0 // indirect\n\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace v1.37.0 // indirect\n\tgo.opentelemetry.io/proto/otlp v1.7.0 // indirect\n\tgo.uber.org/multierr v1.11.0 // indirect\n\tgo.uber.org/zap v1.27.0 // indirect\n\tgolang.org/x/crypto v0.41.0 // indirect\n\tgolang.org/x/mod v0.26.0 // indirect\n\tgolang.org/x/net v0.43.0 // indirect\n\tgolang.org/x/sync v0.16.0 // indirect\n\tgolang.org/x/sys v0.35.0 // indirect\n\tgolang.org/x/text v0.28.0 // indirect\n\tgolang.org/x/time v0.12.0 // indirect\n\tgolang.org/x/tools v0.35.0 // indirect\n\tgolang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect\n\tgoogle.golang.org/genproto/googleapis/api v0.0.0-20250818200422-3122310a409c // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250818200422-3122310a409c // indirect\n\tgoogle.golang.org/grpc v1.74.2 // indirect\n\tgoogle.golang.org/protobuf v1.36.8 // indirect\n\tgopkg.in/ini.v1 v1.67.0 // indirect\n\tmodernc.org/libc v1.66.3 // indirect\n\tmodernc.org/mathutil v1.7.1 // indirect\n\tmodernc.org/memory v1.11.0 // indirect\n)\n\n\n=== .hugo/go.mod ===\nmodule github.com/googleapis/genai-toolbox\n\ngo 1.23.2\n\nrequire (\n\tgithub.com/google/docsy v0.11.0 // indirect\n\tgithub.com/martignoni/hugo-notice v0.0.0-20240707105359-40327ac00cc4 // indirect\n)\n\n\n=== .hugo/package.json ===\n{\n  \"devDependencies\": {\n    \"autoprefixer\": \"^10.4.20\",\n    \"postcss\": \"^8.4.49\",\n    \"postcss-cli\": \"^11.0.0\"\n  }\n}\n"
+}

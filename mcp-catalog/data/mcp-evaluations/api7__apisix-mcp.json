@@ -1,0 +1,142 @@
+{
+  "name": "api7__apisix-mcp",
+  "display_name": "APISIX",
+  "description": "APISIX Model Context Protocol (MCP) server is used to bridge large language models (LLMs) with the APISIX Admin API.",
+  "author": {
+    "name": "api7"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "apisix-mcp"],
+    "env": {
+      "APISIX_SERVER_HOST": "${user_config.apisix_server_host}",
+      "APISIX_SERVER_PORT": "${user_config.apisix_server_port}",
+      "APISIX_ADMIN_API_PORT": "${user_config.apisix_admin_api_port}",
+      "APISIX_ADMIN_API_PREFIX": "${user_config.apisix_admin_api_prefix}",
+      "APISIX_ADMIN_KEY": "${user_config.apisix_admin_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "apisix_server_host": {
+      "type": "string",
+      "title": "APISIX Server Host",
+      "description": "Host that have access to your APISIX server",
+      "default": "http://127.0.0.1",
+      "required": false,
+      "sensitive": false
+    },
+    "apisix_server_port": {
+      "type": "number",
+      "title": "APISIX Server Port",
+      "description": "APISIX server port",
+      "default": 9080,
+      "required": false,
+      "sensitive": false
+    },
+    "apisix_admin_api_port": {
+      "type": "number",
+      "title": "APISIX Admin API Port",
+      "description": "Admin API port",
+      "default": 9180,
+      "required": false,
+      "sensitive": false
+    },
+    "apisix_admin_api_prefix": {
+      "type": "string",
+      "title": "APISIX Admin API Prefix",
+      "description": "Admin API prefix",
+      "default": "/apisix/admin",
+      "required": false,
+      "sensitive": false
+    },
+    "apisix_admin_key": {
+      "type": "string",
+      "title": "APISIX Admin API Key",
+      "description": "Admin API authentication key",
+      "default": "edd1c9f034335f136f87ad84b625c8f1",
+      "required": false,
+      "sensitive": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/api7-apisix-mcp-badge.png)](https://mseep.ai/app/api7-apisix-mcp)\n\n# APISIX Model Context Protocol (MCP) Server\n[![smithery badge](https://smithery.ai/badge/@api7/apisix-mcp)](https://smithery.ai/server/@api7/apisix-mcp)\n\nAPISIX Model Context Protocol (MCP) server is used to bridge large language models (LLMs) with the APISIX Admin API. It aims to enable natural language-based interaction for viewing and managing resources in APISIX through MCP-compatible AI clients.\n\nhttps://github.com/user-attachments/assets/081e878c-225e-4ff8-a9c5-5813f4784cfe\n\n## Support Operations\n\n### Common Operations\n\n- `get_resource`: Retrieve resources by type (routes, services, upstreams, etc.)\n- `delete_resource`: Remove resources by ID\n- `send_request_to_gateway`: Send a request or multiple requests to the APISIX gateway\n\n### API Resources Operations\n\n- `create_route`/`update_route`/`delete_route`: Manage routes\n- `create_service`/`update_service`/`delete_service`: Manage services\n- `create_upstream`/`update_upstream`/`delete_upstream`: Manage upstream\n- `create_ssl`/`update_ssl`/`delete_ssl`: Manage SSL certificates\n- `create_or_update_proto`: Manage protobuf definitions\n- `create_or_update_stream_route`: Manage stream routes\n\n### Plugin Operations\n\n- `get_all_plugin_names`: Get all available plugin names\n- `get_plugin_info`/`get_plugins_by_type`/`get_plugin_schema`: Retrieve plugins configuration\n- `create_plugin_config`/`update_plugin_config`: Manage plugin configurations\n- `create_global_rule`/`update_global_rule`: Manage plugin global rules\n- `get_plugin_metadata`/`create_or_update_plugin_metadata`/`delete_plugin_metadata`: Manage plugin metadata\n\n### Security Configuration\n\n- `get_secret_by_id`/`create_secret`/`update_secret`: Manage secrets\n- `create_or_update_consumer`/`delete_consumer`: Manage consumers\n- `get_credential`/`create_or_update_credential`/`delete_credential`/: Manage consumer credentials\n- `create_consumer_group`/`delete_consumer_group`: Manage consumer groups\n\n## Configuration in AI client\n\n### Prerequisite\n\nFollow the APISIX [Getting Started](https://docs.api7.ai/apisix/getting-started/) guide to set up and run APISIX.\n\n### Installing via Smithery\n\nTo install APISIX Model Context Protocol Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@api7/apisix-mcp):\n\n```bash\nnpx -y @smithery/cli install @api7/apisix-mcp --client claude\n```\n\n### Using npm\n\nConfigure your AI client (Cursor, Claude, Copilot, etc.) with following settings:\n\n```json\n{\n  \"mcpServers\": {\n    \"apisix-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"apisix-mcp\"\n      ],\n      \"env\": {\n        \"APISIX_SERVER_HOST\": \"your-apisix-server-host\",\n        \"APISIX_SERVER_PORT\": \"your-apisix-server-port\",\n        \"APISIX_ADMIN_API_PORT\": \"your-apisix-admin-api-port\",\n        \"APISIX_ADMIN_API_PREFIX\": \"your-apisix-admin-api-prefix\",\n        \"APISIX_ADMIN_KEY\": \"your-apisix-api-key\"\n      }\n    }\n  }\n}\n```\n\n### Using source code\n\nFirst clone the apisix-mcp repository:\n\n```bash\ngit clone https://github.com/api7/apisix-mcp.git\ncd apisix-mcp\n```\n\nInstall the dependencies and build the project:\n\n```bash\npnpm install\npnpm build\n```\n\nConfigure your AI client (Cursor, Claude, Copilot, etc.) with following settings:\n\n```json\n{\n  \"mcpServers\": {\n    \"apisix-mcp\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"your-apisix-mcp-path/dist/index.js\"\n      ],\n      \"env\": {\n        \"APISIX_SERVER_HOST\": \"your-apisix-server-host\",\n        \"APISIX_SERVER_PORT\": \"your-apisix-server-port\",\n        \"APISIX_ADMIN_API_PORT\": \"your-apisix-admin-api-port\",\n        \"APISIX_ADMIN_API_PREFIX\": \"your-apisix-admin-api-prefix\",\n        \"APISIX_ADMIN_KEY\": \"your-apisix-api-key\"\n      }\n    }\n  }\n}\n```\n\n## Environment Variables\n\n| Variable                  | Description                                 | Default Value                      |\n| ------------------------- | ------------------------------------------- | ---------------------------------- |\n| `APISIX_SERVER_HOST`      | Host that have access to your APISIX server | `http://127.0.0.1`                 |\n| `APISIX_SERVER_PORT`      | APISIX server port                          | `9080`                             |\n| `APISIX_ADMIN_API_PORT`   | Admin API port                              | `9180`                             |\n| `APISIX_ADMIN_API_PREFIX` | Admin API prefix                            | `/apisix/admin`                    |\n| `APISIX_ADMIN_KEY`        | Admin API authentication key                | `edd1c9f034335f136f87ad84b625c8f1` |\n\nTo view or modify Admin API configurations in APISIX, refer to the [Admin API](https://apisix.apache.org/docs/apisix/admin-api) documentation.\n\n\n## Resources \n\n### Open MCP Marketplace API Support \n![MCP Marketplace User Review Rating Badge](http://www.deepnlp.org/api/marketplace/svg?api7/apisix-mcp)|[GitHub](https://github.com/AI-Agent-Hub/mcp-marketplace)|[Doc](http://www.deepnlp.org/doc/mcp_marketplace)|[MCP Marketplace](http://www.deepnlp.org/store/ai-agent/mcp-server)\n- Allow AI App/Agent/LLM to find this MCP Server via common python/typescript API, search and explore relevant servers and tools\n\n***Example: Search Server and Tools***\n```python\n    import anthropic\n    import mcp_marketplace as mcpm\n\n    result_q = mcpm.search(query=\"apisix mcp\", mode=\"list\", page_id=0, count_per_page=100, config_name=\"deepnlp\") # search server by category choose various endpoint\n    result_id = mcpm.search(id=\"api7/apisix-mcp\", mode=\"list\", page_id=0, count_per_page=100, config_name=\"deepnlp\")      # search server by id choose various endpoint \n    tools = mcpm.list_tools(id=\"api7/apisix-mcp\", config_name=\"deepnlp_tool\")\n\n    # Call Claude to Choose Tools Function Calls \n    client = anthropic.Anthropic()\n    response = client.messages.create(model=\"claude-3-7-sonnet-20250219\", max_tokens=1024, tools=tools, messages=[])\n```\n\n\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "apisix-mcp-npm": {
+        "command": "npx",
+        "args": ["-y", "apisix-mcp"],
+        "env": {
+          "APISIX_SERVER_HOST": "your-apisix-server-host",
+          "APISIX_SERVER_PORT": "your-apisix-server-port",
+          "APISIX_ADMIN_API_PORT": "your-apisix-admin-api-port",
+          "APISIX_ADMIN_API_PREFIX": "your-apisix-admin-api-prefix",
+          "APISIX_ADMIN_KEY": "your-apisix-api-key"
+        }
+      },
+      "apisix-mcp-source": {
+        "command": "node",
+        "args": ["your-apisix-mcp-path/dist/index.js"],
+        "env": {
+          "APISIX_SERVER_HOST": "your-apisix-server-host",
+          "APISIX_SERVER_PORT": "your-apisix-server-port",
+          "APISIX_ADMIN_API_PORT": "your-apisix-admin-api-port",
+          "APISIX_ADMIN_API_PREFIX": "your-apisix-admin-api-prefix",
+          "APISIX_ADMIN_KEY": "your-apisix-api-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "api7",
+    "repo": "apisix-mcp",
+    "url": "https://github.com/api7/apisix-mcp",
+    "name": "api7__apisix-mcp",
+    "path": null,
+    "stars": 26,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f650b9e600e629bac3cf2a57cb3e2e03fdd84d25"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:34.656Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"type\": \"module\",\n  \"name\": \"apisix-mcp\",\n  \"version\": \"0.0.7\",\n  \"main\": \"dist/index.js\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/api7/apisix-mcp.git\"\n  },\n  \"homepage\": \"https://github.com/api7/apisix-mcp\",\n  \"keywords\": [\n    \"apisix\",\n    \"mcp\",\n    \"mcp-server\",\n    \"model-context-protocol\",\n    \"apisix-mcp\"\n  ],\n  \"bin\": {\n    \"apisix-mcp\": \"dist/index.js\"\n  },\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\",\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"start\": \"node dist/index.js\",\n    \"lint\": \"eslint . --fix\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"axios\": \"^1.8.4\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.23.0\",\n    \"@types/node\": \"^22.13.10\",\n    \"eslint\": \"^9.23.0\",\n    \"globals\": \"^16.0.0\",\n    \"shx\": \"^0.4.0\",\n    \"tsup\": \"^8.4.0\",\n    \"typescript\": \"^5.8.2\",\n    \"typescript-eslint\": \"^8.28.0\"\n  }\n}\n"
+}

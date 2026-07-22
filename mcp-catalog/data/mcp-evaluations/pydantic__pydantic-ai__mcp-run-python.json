@@ -1,0 +1,108 @@
+{
+  "name": "pydantic__pydantic-ai__mcp-run-python",
+  "display_name": "mcp-run-python",
+  "description": "Agent Framework / shim to use Pydantic with LLMs",
+  "author": {
+    "name": "pydantic"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Run Python\n\n[Model Context Protocol](https://modelcontextprotocol.io/) server to run Python code in a sandbox.\n\nThe code is executed using [Pyodide](https://pyodide.org) in [Deno](https://deno.com/) and is therefore isolated from\nthe rest of the operating system.\n\n**See <https://ai.pydantic.dev/mcp/run-python/> for complete documentation.**\n\nThe server can be run with `deno` installed using:\n\n```bash\ndeno run \\\n  -N -R=node_modules -W=node_modules --node-modules-dir=auto \\\n  jsr:@pydantic/mcp-run-python [stdio|sse|warmup]\n```\n\nwhere:\n\n- `-N -R=node_modules -W=node_modules` (alias of `--allow-net --allow-read=node_modules --allow-write=node_modules`)\n  allows network access and read+write access to `./node_modules`. These are required so pyodide can download and cache\n  the Python standard library and packages\n- `--node-modules-dir=auto` tells deno to use a local `node_modules` directory\n- `stdio` runs the server with the\n  [Stdio MCP transport](https://spec.modelcontextprotocol.io/specification/2024-11-05/basic/transports/#stdio) —\n  suitable for running the process as a subprocess locally\n- `sse` runs the server with the\n  [SSE MCP transport](https://spec.modelcontextprotocol.io/specification/2024-11-05/basic/transports/#http-with-sse) —\n  running the server as an HTTP server to connect locally or remotely\n- `warmup` will run a minimal Python script to download and cache the Python standard library. This is also useful to\n  check the server is running correctly.\n\nHere's an example of using `@pydantic/mcp-run-python` with Pydantic AI:\n\n```python\nfrom pydantic_ai import Agent\nfrom pydantic_ai.mcp import MCPServerStdio\n\nimport logfire\n\nlogfire.configure()\nlogfire.instrument_mcp()\nlogfire.instrument_pydantic_ai()\n\nserver = MCPServerStdio('deno',\n    args=[\n        'run',\n        '-N',\n        '-R=node_modules',\n        '-W=node_modules',\n        '--node-modules-dir=auto',\n        'jsr:@pydantic/mcp-run-python',\n        'stdio',\n    ])\nagent = Agent('claude-3-5-haiku-latest', toolsets=[server])\n\n\nasync def main():\n    async with agent:\n        result = await agent.run('How many days between 2000-01-01 and 2025-03-18?')\n    print(result.output)\n    #> There are 9,208 days between January 1, 2000, and March 18, 2025.w\n\nif __name__ == '__main__':\n    import asyncio\n    asyncio.run(main())\n```\n",
+  "category": "AI Tools",
+  "quality_score": 68,
+  "archestra_config": {
+    "client_config_permutations": {
+      "jsr-pydantic-mcp-run-python-stdio": {
+        "command": "deno",
+        "args": [
+          "run",
+          "-N",
+          "-R=node_modules",
+          "-W=node_modules",
+          "--node-modules-dir=auto",
+          "jsr:@pydantic/mcp-run-python",
+          "stdio"
+        ],
+        "env": {}
+      },
+      "jsr-pydantic-mcp-run-python-sse": {
+        "command": "deno",
+        "args": [
+          "run",
+          "-N",
+          "-R=node_modules",
+          "-W=node_modules",
+          "--node-modules-dir=auto",
+          "jsr:@pydantic/mcp-run-python",
+          "sse"
+        ],
+        "env": {}
+      },
+      "jsr-pydantic-mcp-run-python-warmup": {
+        "command": "deno",
+        "args": [
+          "run",
+          "-N",
+          "-R=node_modules",
+          "-W=node_modules",
+          "--node-modules-dir=auto",
+          "jsr:@pydantic/mcp-run-python",
+          "warmup"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pydantic",
+    "repo": "pydantic-ai",
+    "url": "https://github.com/pydantic/pydantic-ai/tree/main/mcp-run-python",
+    "name": "pydantic-ai",
+    "path": "mcp-run-python",
+    "stars": 11411,
+    "contributors": 191,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4e754481d1bf8bbacf30f6e5629d4bf31ed83342"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:33:12.172Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "micropip",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-run-python\"\nversion = \"0.0.1\"\nreadme = \"README.md\"\nclassifiers = [\"Private :: do not release\"]\n\n[dependency-groups]\ndev = [\n    \"anyio>=4.5.0\",\n    \"dirty-equals>=0.9.0\",\n    \"httpx>=0.28.1\",\n    \"inline-snapshot>=0.19.3\",\n    \"mcp>=1.4.1; python_version >= '3.10'\",\n    \"micropip>=0.9.0; python_version >= '3.12'\",\n    \"pytest>=8.3.3\",\n    \"pytest-pretty>=1.2.0\",\n]\n\n[tool.uv.sources]\nmcp-run-python = { workspace = true }\n"
+}

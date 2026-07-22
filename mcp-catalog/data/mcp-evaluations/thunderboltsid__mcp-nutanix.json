@@ -1,0 +1,86 @@
+{
+  "name": "thunderboltsid__mcp-nutanix",
+  "display_name": "mcp-nutanix",
+  "description": "MCP Server for Nutanix",
+  "author": {
+    "name": "thunderboltsid"
+  },
+  "server": {
+    "command": "./bin/mcp-nutanix",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Nutanix\n\nA Model Context Protocol (MCP) server for interacting with Nutanix Prism Central APIs through Large Language Models (LLMs).\n\n## ⚠️ Disclaimer\n\n**THIS IS AN EXPERIMENTAL PROJECT**\n\nThis project was created as a personal project to explore the capabilities of the Model Context Protocol frameworks in Go. It is:\n\n- **NOT** an official Nutanix product or tool\n- **NOT** supported, endorsed, or maintained by Nutanix\n- **NOT** suitable for production environments\n- **PROVIDED AS-IS** with no warranties or guarantees\n\n**USE AT YOUR OWN RISK**: The author takes no responsibility for any issues, damages, or outages that may result from using this code.\n\n## Overview\n\nThis MCP server allows LLMs to interact with Nutanix Prism Central by:\n\n1. Connecting to a Prism Central instance with user credentials\n2. Listing various resources (VMs, Clusters, Hosts, etc.)\n3. Retrieving specific resource details via URI-based access\n\nThe implementation uses the [Prism Go Client](https://github.com/nutanix-cloud-native/prism-go-client) to communicate with Prism Central and the [MCP Go library](https://github.com/mark3labs/mcp-go) to implement the Model Context Protocol.\n\n## Getting Started\n\n### Prerequisites\n\n- Go 1.23 or higher\n- Access to a Nutanix Prism Central instance\n- Tools like `make` and `go fmt` for building\n\n### Building\n\n```bash\n# Clone the repository\ngit clone https://github.com/thunderboltsid/mcp-nutanix.git\ncd mcp-nutanix\n\n# Build the MCP server\nmake build\n```\n\n## Credential Configuration\n\nThe server supports two credential methods:\n\n1. **Interactive credentials** (default) - Works with Claude via MCP prompts\n2. **Static credentials** - Required for tools like Cursor that don't support interactive prompts\n\n## MCP Client Configuration\n\nTo use this server with MCP clients, you need to configure the client to connect to the server.\n\n### Claude Desktop/Code\n\nCreate or update `~/.anthropic/claude_desktop.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"nutanix\": {\n      \"command\": \"/path/to/mcp-nutanix\"\n    }\n  }\n}\n```\n\nClaude will prompt you for credentials when first using the server.\n\n### Cursor\n\nFor Cursor, you need to provide static credentials via environment variables since it doesn't support interactive prompts.\n\nCreate or update `~/.cursor/mcp.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"nutanix\": {\n      \"command\": \"/path/to/mcp-nutanix\",\n      \"env\": {\n        \"NUTANIX_ENDPOINT\": \"your-prism-central-ip-or-hostname\",\n        \"NUTANIX_USERNAME\": \"your-username\", \n        \"NUTANIX_PASSWORD\": \"your-password\",\n        \"NUTANIX_INSECURE\": \"true\"\n      }\n    }\n  }\n}\n```\n\n**Environment Variables:**\n- `NUTANIX_ENDPOINT` - Prism Central IP or hostname (required)\n- `NUTANIX_USERNAME` - API username (required)\n- `NUTANIX_PASSWORD` - API password (required)\n- `NUTANIX_INSECURE` - Set to \"true\" for self-signed certificates (optional)\n\n### Other MCP Clients\n\nThis server follows the standard MCP protocol and should work with any MCP client that supports stdio transport. Refer to your client's documentation for configuration instructions.\n\n## Usage\n\nOnce the MCP server is configured with your client and connected to your Prism Central instance, LLMs can interact with it through the MCP protocol.\n\n### Resource Listing\n\nTo list resources, use the appropriate tool:\n\n```\nvms\nclusters\nhosts\nimages\nsubnets\n```\n\nThe LLM will receive a JSON list of resources that it can parse and analyze.\n\n### Resource Access\n\nTo access a specific resource, use a resource URI:\n\n```\nvm://{uuid}\ncluster://{uuid}\nhost://{uuid}\n```\n\nThe LLM will receive detailed JSON information about the specific resource.\n\n## Development\n\n### Project Structure\n\n```\nmcp-nutanix/\n├── bin/                  # Compiled binaries\n├── internal/             # Internal packages\n│   ├── client/           # Prism Central client handling\n│   ├── codegen/          # Code generation utilities\n│   └── json/             # JSON helpers\n├── pkg/                  # components\n│   ├── prompts/          # MCP prompt implementations\n│   ├── resources/        # Resource handlers\n│   └── tools/            # Tool handlers\n└── Makefile              # Build and utility commands\n```\n\n### Code Generation\n\nThe project uses code generation to create resource and tool handlers. To update these:\n\n```bash\nmake generate\n```\n\n## Limitations\n\n- Response size is limited by the MCP protocol\n- Some resources with large response sizes may cause errors\n- No pagination support in the current implementation\n- Only supports read operations, no create/update/delete\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Acknowledgments\n\n- [Nutanix](https://www.nutanix.com/) for creating the Prism API\n- [Mark3Labs](https://github.com/mark3labs) for the MCP Go library\n- [Nutanix Cloud Native](https://github.com/nutanix-cloud-native) for the Prism Go Client\n\n## Contributing\n\nThis is an experimental project with no formal contribution process. Feel free to create issues or pull requests.\n",
+  "category": "Cloud",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-nutanix": {
+        "command": "./bin/mcp-nutanix",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "thunderboltsid",
+    "repo": "mcp-nutanix",
+    "url": "https://github.com/thunderboltsid/mcp-nutanix",
+    "name": "thunderboltsid__mcp-nutanix",
+    "path": null,
+    "stars": 10,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "6184c0d15e49524742c5ffb27655b3c89e7e3995"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:18.379Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "nutanix-cloud-native/prism-go-client",
+      "importance": 9
+    },
+    {
+      "name": "itchyny/gojq",
+      "importance": 6
+    },
+    {
+      "name": "k8s.io/klog",
+      "importance": 4
+    },
+    {
+      "name": "stretchr/testify",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/thunderboltsid/mcp-nutanix\n\ngo 1.23.7\n\nrequire (\n\tgithub.com/itchyny/gojq v0.12.17\n\tgithub.com/mark3labs/mcp-go v0.17.1-0.20250329140527-051cda5533c7\n\tgithub.com/nutanix-cloud-native/prism-go-client v0.5.2-0.20250415200013-f6ab247eefb8\n\tgithub.com/stretchr/testify v1.9.0\n\tk8s.io/klog v1.0.0\n)\n\nrequire (\n\tgithub.com/PaesslerAG/gval v1.0.0 // indirect\n\tgithub.com/PaesslerAG/jsonpath v0.1.1 // indirect\n\tgithub.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/go-logr/logr v1.4.1 // indirect\n\tgithub.com/go-logr/zapr v1.3.0 // indirect\n\tgithub.com/go-openapi/analysis v0.23.0 // indirect\n\tgithub.com/go-openapi/errors v0.22.0 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.21.0 // indirect\n\tgithub.com/go-openapi/jsonreference v0.21.0 // indirect\n\tgithub.com/go-openapi/loads v0.22.0 // indirect\n\tgithub.com/go-openapi/spec v0.21.0 // indirect\n\tgithub.com/go-openapi/strfmt v0.23.0 // indirect\n\tgithub.com/go-openapi/swag v0.23.0 // indirect\n\tgithub.com/go-openapi/validate v0.24.0 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/hashicorp/go-cleanhttp v0.5.2 // indirect\n\tgithub.com/hashicorp/go-retryablehttp v0.7.7 // indirect\n\tgithub.com/itchyny/timefmt-go v0.1.6 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mitchellh/mapstructure v1.5.0 // indirect\n\tgithub.com/nutanix/ntnx-api-golang-clients/clustermgmt-go-client/v4 v4.0.1-beta.2 // indirect\n\tgithub.com/nutanix/ntnx-api-golang-clients/networking-go-client/v4 v4.0.2-beta.1 // indirect\n\tgithub.com/nutanix/ntnx-api-golang-clients/prism-go-client/v4 v4.0.1-beta.1 // indirect\n\tgithub.com/nutanix/ntnx-api-golang-clients/storage-go-client/v4 v4.0.2-alpha.3 // indirect\n\tgithub.com/nutanix/ntnx-api-golang-clients/vmm-go-client/v4 v4.0.1-beta.1 // indirect\n\tgithub.com/nutanix/ntnx-api-golang-clients/volumes-go-client/v4 v4.0.1-beta.1 // indirect\n\tgithub.com/oklog/ulid v1.3.1 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/sirupsen/logrus v1.9.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.mongodb.org/mongo-driver v1.14.0 // indirect\n\tgo.uber.org/multierr v1.10.0 // indirect\n\tgo.uber.org/zap v1.27.0 // indirect\n\tgolang.org/x/sys v0.20.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

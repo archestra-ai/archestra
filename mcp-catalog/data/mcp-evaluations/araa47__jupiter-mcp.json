@@ -1,0 +1,165 @@
+{
+  "name": "araa47__jupiter-mcp",
+  "display_name": "jupiter-mcp",
+  "description": "MCP server from araa47/jupiter-mcp",
+  "author": {
+    "name": "araa47"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/araa47/jupiter-mcp", "jupiter-mcp"],
+    "env": {
+      "SOLANA_RPC_URL": "${user_config.solana_rpc_url}",
+      "PRIVATE_KEY": "${user_config.private_key}",
+      "SOLANA_NETWORK": "${user_config.solana_network}",
+      "REQUEST_TIMEOUT": "${user_config.request_timeout}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "private_key": {
+      "type": "string",
+      "title": "Solana Private Key",
+      "description": "Your base58 encoded Solana private key (from Phantom wallet export)",
+      "sensitive": true,
+      "required": true
+    },
+    "solana_rpc_url": {
+      "type": "string",
+      "title": "Solana RPC URL",
+      "description": "The Solana RPC endpoint to use for transactions.",
+      "default": "https://api.mainnet-beta.solana.com",
+      "required": false
+    },
+    "solana_network": {
+      "type": "string",
+      "title": "Solana Network",
+      "description": "The Solana network to connect to (e.g., mainnet-beta, devnet).",
+      "default": "mainnet-beta",
+      "required": false
+    },
+    "request_timeout": {
+      "type": "number",
+      "title": "Request Timeout (seconds)",
+      "description": "Timeout for API requests in seconds.",
+      "default": 30,
+      "required": false,
+      "min": 1,
+      "max": 300
+    }
+  },
+  "readme": "# Jupiter MCP\n\nA Model Context Protocol server for Jupiter API, Solana's premier DEX aggregator. Supports immediate swaps through Ultra API and limit orders through Trigger API.\n\n## 📦 Pre-built Desktop Extension (DXT)\n\n### Prerequisites\nBefore installing the extension, ensure you have:\n\n1. **Node.js and npx** (for envmcp support)\n   - Download from: https://nodejs.org/\n   - Verify with: `npx --version`\n\n2. **uv/uvx** (Python package manager)\n   - Install from: https://docs.astral.sh/uv/getting-started/installation/\n   - macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`\n   - Windows: `powershell -c \"irm https://astral.sh/uv/install.ps1 | iex\"`\n   - Verify with: `uvx --version`\n\n\nOnce you have prereqs for easy installation in Claude Desktop:\n\n**[Download jupiter-mcp-latest.dxt](https://github.com/araa47/jupiter-mcp/raw/main/jupiter-mcp-latest.dxt)** 📥\n\nThe DXT includes:\n- ✅ One-click installation in Claude Desktop\n- ✅ Automatic dependency management with uvx\n- ✅ Secure environment variable configuration\n- ✅ Built-in error handling and debugging\n\n> **Note**: The DXT file is automatically updated on every commit for the latest features and fixes.\n\n## 🚀 Quick Installation Options\n\n### Option 1: Claude Desktop DXT (Recommended) 🖱️\nDownload the DXT file and double-click to install. See `dxt/README.md` for detailed instructions.\n\n### Option 2: Quick Install with Cursor 🎯\n\n**Instructions:**\n1. Copy the link below (click the copy button in the code block)\n2. Paste it into your browser address bar or Cursor's command palette\n3. Follow the prompts to complete installation\n4. You'll be prompted to replace `REPLACE_THIS` with your actual solana private key!\n\n\n**🚀 Install with Direct Input:**\n```\ncursor://anysphere.cursor-deeplink/mcp/install?name=jupiter-mcp&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyItLWZyb20iLCJnaXQraHR0cHM6Ly9naXRodWIuY29tL2FyYWE0Ny9qdXBpdGVyLW1jcCIsImp1cGl0ZXItbWNwIl0sImVudiI6eyJQUklWQVRFX0tFWSI6IlJFUExBQ0VfVEhJUyIsIlNPTEFOQV9SUENfVVJMIjoiaHR0cHM6Ly9hcGkubWFpbm5ldC1iZXRhLnNvbGFuYS5jb20iLCJTT0xBTkFfTkVUV09SSyI6Im1haW5uZXQtYmV0YSIsIlJFUVVFU1RfVElNRU9VVCI6IjMwIn19\n```\n**Note:** These links only work in Cursor\n\n**Manual config for .env file approach:**\n\n```json\n{\n  \"mcpServers\": {\n    \"jupiter-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"envmcp\",\n        \"--env-file\",\n        \"/path/to/your/.env\",\n        \"uvx\",\n        \"--from\",\n        \"git+https://github.com/araa47/jupiter-mcp\",\n        \"jupiter-mcp\"\n      ]\n    }\n  }\n}\n```\n\nReplace `/path/to/your/.env` with your actual env file path (e.g., `/Users/yourname/.env`)\n\n**Pre-configured values:**\n\n* `SOLANA_RPC_URL`: <https://api.mainnet-beta.solana.com>\n* `SOLANA_NETWORK`: mainnet-beta\n* `REQUEST_TIMEOUT`: 30 seconds\n* `PRIVATE_KEY`: You'll need to replace `REPLACE_THIS` with your base58 encoded private key\n\n## ⚡ Quick Start (MCP Configuration)\n\nAdd this to your MCP client configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"jupiter-mcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--from\",\n        \"git+https://github.com/araa47/jupiter-mcp\",\n        \"jupiter-mcp\"\n      ],\n      \"env\": {\n        \"SOLANA_RPC_URL\": \"https://api.mainnet-beta.solana.com\",\n        \"PRIVATE_KEY\": \"${PRIVATE_KEY}\",\n        \"SOLANA_NETWORK\": \"mainnet-beta\",\n        \"REQUEST_TIMEOUT\": \"30\"\n      }\n    }\n  }\n}\n```\n\n### Alternative Configuration (Using .env file)\n\nIf you prefer to load environment variables from a `.env` file to avoid storing sensitive data in your MCP configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"jupiter-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"envmcp\",\n        \"--env-file\",\n        \"${ENV_FILE_PATH}\",\n        \"uvx\",\n        \"--from\",\n        \"git+https://github.com/araa47/jupiter-mcp\",\n        \"jupiter-mcp\"\n      ],\n      \"env\": {\n        \"ENV_FILE_PATH\": \".env\"\n      }\n    }\n  }\n}\n```\n\nThis approach uses `envmcp` to securely load your PRIVATE_KEY from a `.env` file without exposing it in configuration files. Replace `ENV_FILE_PATH` with the absolute path to your `.env` file (e.g., `/Users/yourname/.env` or `/home/user/.env`).\n\n### Environment Variables Required:\n\n* `PRIVATE_KEY`: Your base58 encoded Solana private key (from Phantom wallet export)\n* Optional: Override `SOLANA_RPC_URL` if you have a custom RPC endpoint\n\n## 🎉 Available Tools\n\n### 💱 Ultra API (Immediate Swaps)\n\n| Tool                       | Description                               | Parameters                        | Cost     |\n| -------------------------- | ----------------------------------------- | --------------------------------- | -------- |\n| get\\_swap\\_quote           | Get a swap quote and unsigned transaction | input\\_mint, output\\_mint, amount | **FREE** |\n| execute\\_swap\\_transaction | Execute a signed swap transaction         | transaction, request\\_id          | **PAID** |\n| get\\_balances              | Get token balances for a wallet           | wallet\\_address?                  | **FREE** |\n| get\\_shield                | Get token security information            | mints                             | **FREE** |\n| search\\_token              | Search for tokens                         | query                             | **FREE** |\n\n### 📊 Trigger API (Limit Orders)\n\n| Tool                  | Description                        | Parameters                                                                              | Cost     |\n| --------------------- | ---------------------------------- | --------------------------------------------------------------------------------------- | -------- |\n| create\\_limit\\_order  | Create a limit order transaction   | input\\_mint, output\\_mint, making\\_amount, taking\\_amount, slippage\\_bps?, expired\\_at? | **FREE** |\n| execute\\_limit\\_order | Execute a limit order transaction  | transaction, request\\_id                                                                | **PAID** |\n| cancel\\_limit\\_order  | Cancel a single limit order        | order                                                                                   | **FREE** |\n| cancel\\_limit\\_orders | Cancel multiple limit orders       | orders?                                                                                 | **FREE** |\n| get\\_limit\\_orders    | Get active/historical limit orders | order\\_status, wallet\\_address?, input\\_mint?, output\\_mint?, page?                     | **FREE** |\n\n### Key Differences: Swaps vs Limit Orders\n\n* **Swaps** (Ultra API): Execute immediately at current market price\n* **Limit Orders** (Trigger API): Execute automatically when your target price is reached\n\n## 🛠️ Development & CI/CD\n\n### Automated DXT Building\n\nThis project includes automated DXT building integrated with pre-commit hooks:\n\n- **Pre-commit Hook**: Automatically builds DXT files when changes are made to `dxt/` folder\n- **Simple Naming**: Always creates `jupiter-mcp-latest.dxt` for easy downloads\n- **Auto-update**: The latest DXT file is always current with the main branch\n\n### Manual DXT Build\n\n```bash\n# Build DXT\n./scripts/build-dxt.sh\n\n# Output: jupiter-mcp-latest.dxt\n```\n\n### Pre-commit Setup\n\n```bash\n# Install pre-commit hooks (includes DXT building)\npre-commit install\n\n# The DXT will be automatically built when changes are detected in:\n# - dxt/ directory\n# - scripts/build-dxt.sh\n```\n\n## 🔧 Alternative Installation (Development)\n\nFor local development or testing:\n\n### Prerequisites\n\n* Python 3.12+\n* uv for dependency management\n* direnv\n\n### Setup\n\n```bash\ngit clone https://github.com/araa47/jupiter-mcp\ncd jupiter-mcp\ndirenv allow\ncp .env.example .env\n# Edit .env with your configuration\n```\n\n### Environment Variables (.env file)\n\n```bash\nSOLANA_RPC_URL=https://api.mainnet-beta.solana.com\nPRIVATE_KEY=your_base58_encoded_private_key_here\nSOLANA_NETWORK=mainnet-beta\nREQUEST_TIMEOUT=30\n```\n\n### Local Development Usage\n\n```bash\n# Start the server locally\nuv run python run_server.py\n```\n\n## 🧪 Testing\n\nThe project includes comprehensive testing with safety features:\n\n### Test Types\n\n**🆓 Free Tests** (Default - No SOL spent):\n\n* Mock execution tests\n* API quote/balance checks\n* Token searches and security checks\n* Error handling validation\n\n**💰 Paid Tests** (Requires `--run-paid-tests` flag):\n\n* Real trade execution on mainnet\n* Swap tests: Uses tiny amounts (0.0001 SOL ≈ $0.015)\n* Limit order tests: Creates orders 20% above market price\n   * Uses 0.04 SOL (≈ $6) to meet minimum requirements\n   * Orders won't execute at the high price\n   * Automatically cancelled after verification\n* Full transaction signing and broadcasting\n\n### Running Tests\n\n```bash\n# Safe tests only (default)\nuv run pytest tests/ -v\n\n# Include real trade execution (spends tiny amounts)\nuv run pytest tests/ -v --run-paid-tests\n\n# Test with detailed output\nuv run pytest tests/ -v --run-paid-tests -s\n```\n\n### Test Safety Features\n\n* **Paid tests clearly marked** with `@pytest.mark.paid`\n* **Minimal trade amounts** for real execution\n* **Limit orders use out-of-range prices** that won't execute\n* **Clear warnings** before spending real money\n* **Transaction confirmations** with blockchain signatures\n\n## 💡 Important Notes\n\n### Free vs Paid Operations\n\n* **🆓 FREE**: `get_swap_quote`, `get_balances`, `get_shield`, `search_token`, `create_limit_order`, `cancel_limit_order`, `cancel_limit_orders`, `get_limit_orders` - API calls only\n* **💰 PAID**: `execute_swap_transaction`, `execute_limit_order` - Executes real trades and spends SOL\n\n### Automatic Referral System\n\n* All orders include a 255 basis point (2.55%) referral fee (maximum allowed)\n* Referral wallet: `8cK8hCyRQCp52nVuPLnLL71afkRvRcFibSwHMjGFT8bm` ([Referral Dashboard](https://referral.jup.ag/dashboard/8cK8hCyRQCp52nVuPLnLL71afkRvRcFibSwHMjGFT8bm))\n* **Note**: Fees only collected for tokens with referral token accounts (currently SOL)\n* Supports development and maintenance\n\n### Security\n\n* 🔐 Private keys never leave your machine\n* 🛡️ All API calls use HTTPS\n* ⚠️ Never commit `.env` files to version control\n\n## 🐛 Troubleshooting\n\n### Common Issues\n\n1. **\"PRIVATE\\_KEY environment variable is required\"**\n   * Copy `env.example` to `.env` and set your private key\n2. **\"Invalid PRIVATE\\_KEY format\"**\n   * Use base58 encoded private key (from Phantom wallet export)\n3. **Connection timeouts**\n   * Try different RPC URL or increase `REQUEST_TIMEOUT`\n\n## 🎉 Ready to Trade!\n\nYour Jupiter MCP server is ready for Solana DeFi interactions! 🚀\n",
+  "category": "Finance",
+  "quality_score": 41,
+  "archestra_config": {
+    "client_config_permutations": {
+      "jupiter-mcp": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/araa47/jupiter-mcp", "jupiter-mcp"],
+        "env": {
+          "SOLANA_RPC_URL": "https://api.mainnet-beta.solana.com",
+          "PRIVATE_KEY": "${PRIVATE_KEY}",
+          "SOLANA_NETWORK": "mainnet-beta",
+          "REQUEST_TIMEOUT": "30"
+        }
+      },
+      "jupiter-mcp-env-file": {
+        "command": "npx",
+        "args": [
+          "envmcp",
+          "--env-file",
+          "${ENV_FILE_PATH}",
+          "uvx",
+          "--from",
+          "git+https://github.com/araa47/jupiter-mcp",
+          "jupiter-mcp"
+        ],
+        "env": {
+          "ENV_FILE_PATH": ".env"
+        }
+      },
+      "jupiter-mcp-env-file-manual-path": {
+        "command": "npx",
+        "args": [
+          "envmcp",
+          "--env-file",
+          "/path/to/your/.env",
+          "uvx",
+          "--from",
+          "git+https://github.com/araa47/jupiter-mcp",
+          "jupiter-mcp"
+        ],
+        "env": {}
+      },
+      "jupiter-mcp-direct-input": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/araa47/jupiter-mcp", "jupiter-mcp"],
+        "env": {
+          "PRIVATE_KEY": "REPLACE_THIS",
+          "SOLANA_RPC_URL": "https://api.mainnet-beta.solana.com",
+          "SOLANA_NETWORK": "mainnet-beta",
+          "REQUEST_TIMEOUT": "30"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "araa47",
+    "repo": "jupiter-mcp",
+    "url": "https://github.com/araa47/jupiter-mcp",
+    "name": "araa47__jupiter-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "14b3cc720f315e3d8ea8cf23524c7a610f193661"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:08.541Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "solana",
+      "importance": 9
+    },
+    {
+      "name": "solders",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "aiohttp",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"jupiter-mcp\"\nversion = \"0.1.0\"\ndescription = \"Jupiter MCP Server - Model Context Protocol server for Jupiter Ultra and Trigger APIs\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"fastmcp>=0.4.0\",\n    \"solana>=0.34.0\",\n    \"solders>=0.21.0\",\n    \"python-dotenv>=1.0.0\",\n    \"aiohttp>=3.9.0\",\n]\n\n[project.scripts]\njupiter-mcp = \"src.server:main\"\n\n[tool.setuptools.packages.find]\nwhere = [\".\"]\ninclude = [\"src*\"]\n\n[tool.setuptools.package-dir]\n\"\" = \".\"\n\n[project.optional-dependencies]\ndev = [\n    \"ruff>=0.6.3\",\n    \"pre-commit>=3.3.3\",\n    \"pytest\",\n    \"pytest-asyncio<0.23\",\n    \"pytest-cov\",\n]\n\n[tool.pyright]\ntypeCheckingMode = \"strict\"\nvenvPath = \".\"\nvenv = \".venv\"\n\n[tool.pytest.ini_options]\nfilterwarnings = [\n    \"ignore::DeprecationWarning\",\n]\nmarkers = [\n    \"paid: marks tests that execute real trades and spend money (deselect with '-m \\\"not paid\\\"')\",\n]\naddopts = \"-m 'not paid'\"\n\n[tool.isort]\nprofile = \"black\"\nsrc_paths = \"tests\"\nline_length = 80\ninclude_trailing_comma = true\nmulti_line_output = 3\n\n[tool.ruff]\nexclude = [\"__pycache__\", \"terraform\", \".git\", \".venv\"]\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"B\"]\nignore = [\"E501\"]\n"
+}

@@ -1,0 +1,138 @@
+{
+  "name": "tinybirdco__mcp-tinybird",
+  "display_name": "mcp-tinybird",
+  "description": "MCP server from tinybirdco/mcp-tinybird",
+  "author": {
+    "name": "tinybirdco"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-tinybird", "stdio"],
+    "env": {
+      "TB_API_URL": "${user_config.tb_api_url}",
+      "TB_ADMIN_TOKEN": "${user_config.tb_admin_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "tb_api_url": {
+      "type": "string",
+      "title": "Tinybird API URL",
+      "description": "Your Tinybird API URL (e.g., https://api.tinybird.co)",
+      "sensitive": false,
+      "required": true
+    },
+    "tb_admin_token": {
+      "type": "string",
+      "title": "Tinybird Admin Token",
+      "description": "Your Tinybird Admin Token",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# 🚨 DEPRECATED\n\n**This repository is deprecated and no longer maintained.**\n\n**New implementation:** [Tinybird MCP Server](https://www.tinybird.co/docs/forward/analytics-agents/mcp)\n\n**Please migrate to the official implementation.**\n",
+  "category": "Development",
+  "quality_score": 73,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-tinybird-stdio-configured": {
+        "command": "uvx",
+        "args": ["mcp-tinybird", "stdio"],
+        "env": {
+          "TB_API_URL": "<TINYBIRD_API_URL>",
+          "TB_ADMIN_TOKEN": "<TINYBIRD_ADMIN_TOKEN>"
+        }
+      },
+      "mcp-tinybird-sse": {
+        "command": "uvx",
+        "args": ["mcp-tinybird", "sse"],
+        "env": {}
+      },
+      "mcp-tinybird_local": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/your/mcp-tinybird", "run", "mcp-tinybird", "stdio"],
+        "env": {}
+      },
+      "mcp-tinybird": {
+        "command": "uvx",
+        "args": ["mcp-tinybird"],
+        "env": {}
+      },
+      "modelcontextprotocol-inspector": {
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/inspector",
+          "uv",
+          "--directory",
+          "/Users/alrocar/gr/mcp-tinybird",
+          "run",
+          "mcp-tinybird"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tinybirdco",
+    "repo": "mcp-tinybird",
+    "url": "https://github.com/tinybirdco/mcp-tinybird",
+    "name": "tinybirdco__mcp-tinybird",
+    "path": null,
+    "stars": 70,
+    "contributors": 8,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "3a94f2abd101aea9e0b974d7f538731a92a2d23c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:26.204Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "tinybird-python-sdk",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "starlette",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-tinybird\"\nversion = \"1.0.2\"\ndescription = \"An MCP server to interact with a Tinybird Workspace from any MCP client.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n \"httpx>=0.27.2\",\n \"mcp>=1.0.0\",\n \"python-dotenv>=1.0.1\",\n \"tinybird-python-sdk>=0.1.6\",\n \"uvicorn>=0.27.0\",\n \"starlette>=0.36.0\",\n]\n[[project.authors]]\nname = \"alrocar\"\nemail = \"alrocar@tinybird.co\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-tinybird = \"mcp_tinybird.__main__:main\"\n\n[project.urls]\nhomepage = \"https://github.com/tinybirdco/mcp-tinybird\"\n\n[project.optional-dependencies]\ndev = [\n    \"black>=23.12.1\",\n    \"pyproject-toml>=0.0.10\",\n]\n\n[tool.black]\nline-length = 88\ntarget-version = ['py37']\ninclude = '\\.pyi?$'\n\n\n=== bluesky-demo/package.json ===\n{\n  \"name\": \"bluesky-demo\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"dev\": \"next dev --turbopack\",\n    \"build\": \"next build\",\n    \"start\": \"next start\",\n    \"lint\": \"next lint\"\n  },\n  \"dependencies\": {\n    \"@radix-ui/react-slot\": \"^1.1.0\",\n    \"class-variance-authority\": \"^0.7.1\",\n    \"clsx\": \"^2.1.1\",\n    \"jose\": \"^5.9.6\",\n    \"lucide-react\": \"^0.464.0\",\n    \"next\": \"^15.2.4\",\n    \"react\": \"^19.0.0\",\n    \"react-dom\": \"^19.0.0\",\n    \"tailwind-merge\": \"^2.5.5\",\n    \"tailwindcss-animate\": \"^1.0.7\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20\",\n    \"@types/react\": \"^18\",\n    \"@types/react-dom\": \"^18\",\n    \"eslint\": \"^8\",\n    \"eslint-config-next\": \"15.0.3\",\n    \"postcss\": \"^8\",\n    \"tailwindcss\": \"^3.4.1\",\n    \"typescript\": \"^5\"\n  }\n}\n"
+}

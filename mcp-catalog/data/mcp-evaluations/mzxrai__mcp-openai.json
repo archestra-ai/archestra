@@ -1,0 +1,86 @@
+{
+  "name": "mzxrai__mcp-openai",
+  "display_name": "mcp-openai",
+  "description": "Chat with OpenAI models from Claude Desktop",
+  "author": {
+    "name": "mzxrai"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@mzxrai/mcp-openai@latest"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key for authentication",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# MCP OpenAI Server\n\nA Model Context Protocol (MCP) server that lets you seamlessly use OpenAI's models right from Claude.\n\n## Features\n\n- Direct integration with OpenAI's chat models\n- Support for multiple models including:\n  - gpt-4o\n  - gpt-4o-mini\n  - o1-preview\n  - o1-mini\n- Simple message passing interface\n- Basic error handling\n\n## Prerequisites\n\n- [Node.js](https://nodejs.org/) >= 18 (includes `npm` and `npx`)\n- [Claude Desktop app](https://claude.ai/download)\n- [OpenAI API key](https://platform.openai.com/api-keys)\n\n## Installation\n\nFirst, make sure you've got the [Claude Desktop app](https://claude.ai/download) installed and you've requested an [OpenAI API key](https://platform.openai.com/api-keys).\n\nAdd this entry to your `claude_desktop_config.json` (on Mac, you'll find it at `~/Library/Application\\ Support/Claude/claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-openai\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@mzxrai/mcp-openai@latest\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-api-key-here (get one from https://platform.openai.com/api-keys)\"\n      }\n    }\n  }\n}\n```\n\nThis config lets Claude Desktop fire up the OpenAI MCP server whenever you need it.\n\n## Usage\n\nJust start chatting with Claude and when you want to use OpenAI's models, ask Claude to use them. \n\nFor example, you can say,\n\n```plaintext\nCan you ask o1 what it thinks about this problem?\n```\n\nor,\n\n```plaintext\nWhat does gpt-4o think about this?\n```\n\nThe server currently supports these models:\n\n- gpt-4o (default)\n- gpt-4o-mini\n- o1-preview\n- o1-mini\n\n### Tools\n\n1. `openai_chat`\n   - Sends messages to OpenAI's chat completion API\n   - Arguments: \n     - `messages`: Array of messages (required)\n     - `model`: Which model to use (optional, defaults to gpt-4o)\n\n## Problems\n\nThis is alpha software, so may have bugs. If you have an issue, check Claude Desktop's MCP logs:\n\n```bash\ntail -n 20 -f ~/Library/Logs/Claude/mcp*.log\n```\n\n## Development\n\n```bash\n# Install dependencies\npnpm install\n\n# Build the project\npnpm build\n\n# Watch for changes\npnpm watch\n\n# Run in development mode\npnpm dev\n```\n\n## Requirements\n\n- Node.js >= 18\n- OpenAI API key\n\n## Verified Platforms\n\n- [x] macOS\n- [ ] Linux\n\n## License\n\nMIT\n\n## Author\n\n[mzxrai](https://github.com/mzxrai) ",
+  "category": "Development",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mzxrai-mcp-openai": {
+        "command": "npx",
+        "args": ["-y", "@mzxrai/mcp-openai@latest"],
+        "env": {
+          "OPENAI_API_KEY": "your-api-key-here (get one from https://platform.openai.com/api-keys)"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mzxrai",
+    "repo": "mcp-openai",
+    "url": "https://github.com/mzxrai/mcp-openai",
+    "name": "mcp-openai",
+    "path": null,
+    "stars": 55,
+    "contributors": 1,
+    "issues": 6,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "df0d846c4fe0b54ec7a18c6dcdbf408e14fa340d"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:49.754Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@mzxrai/mcp-openai\",\n  \"version\": \"0.1.1\",\n  \"description\": \"MCP server for simple interaction with OpenAI API\",\n  \"license\": \"MIT\",\n  \"author\": \"mzxrai\",\n  \"homepage\": \"https://github.com/mzxrai/mcp-openai\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/mzxrai/mcp-openai.git\"\n  },\n  \"bugs\": \"https://github.com/mzxrai/mcp-openai/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-webresearch\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"pnpm run build\",\n    \"watch\": \"tsc --watch\",\n    \"dev\": \"tsx watch index.ts\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"openai\",\n    \"o1\",\n    \"ai\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.1\",\n    \"openai\": \"^4.76.0\"\n  },\n  \"devDependencies\": {\n    \"shx\": \"^0.3.4\",\n    \"tsx\": \"^4.19.2\",\n    \"typescript\": \"^5.6.2\"\n  }\n}"
+}

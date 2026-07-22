@@ -1,0 +1,140 @@
+{
+  "name": "hydrolix__mcp-hydrolix",
+  "display_name": "mcp-hydrolix",
+  "description": "An MCP server for Hydrolix",
+  "author": {
+    "name": "hydrolix"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "--with", "mcp-hydrolix", "--python", "3.13", "mcp-hydrolix"],
+    "env": {
+      "HYDROLIX_HOST": "${user_config.hydrolix_host}",
+      "HYDROLIX_USER": "${user_config.hydrolix_user}",
+      "HYDROLIX_PASSWORD": "${user_config.hydrolix_password}",
+      "HYDROLIX_PORT": "${user_config.hydrolix_port}",
+      "HYDROLIX_VERIFY": "${user_config.hydrolix_verify}",
+      "HYDROLIX_DATABASE": "${user_config.hydrolix_database}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "hydrolix_host": {
+      "type": "string",
+      "title": "Hydrolix Host",
+      "description": "The hostname of your Hydrolix server",
+      "required": true,
+      "sensitive": false
+    },
+    "hydrolix_user": {
+      "type": "string",
+      "title": "Hydrolix User",
+      "description": "The username for authentication",
+      "required": true,
+      "sensitive": false
+    },
+    "hydrolix_password": {
+      "type": "string",
+      "title": "Hydrolix Password",
+      "description": "The password for authentication",
+      "required": true,
+      "sensitive": true
+    },
+    "hydrolix_port": {
+      "type": "number",
+      "title": "Hydrolix Port",
+      "description": "The port number of your Hydrolix server",
+      "required": false,
+      "default": 8088
+    },
+    "hydrolix_verify": {
+      "type": "boolean",
+      "title": "Verify SSL Certificate",
+      "description": "Enable/disable SSL certificate verification",
+      "required": false,
+      "default": true
+    },
+    "hydrolix_database": {
+      "type": "string",
+      "title": "Default Hydrolix Database",
+      "description": "Default database to use",
+      "required": false,
+      "default": ""
+    }
+  },
+  "readme": "# Hydrolix MCP Server\n\n[![PyPI - Version](https://img.shields.io/pypi/v/mcp-hydrolix)](https://pypi.org/project/mcp-hydrolix)\n\nAn MCP server for Hydrolix.\n\n## Tools\n\n* `run_select_query`\n  * Execute SQL queries on your Hydrolix cluster.\n  * Input: `sql` (string): The SQL query to execute.\n  * All Hydrolix queries are run with `readonly = 1` to ensure they are safe.\n\n* `list_databases`\n  * List all databases on your Hydrolix cluster.\n\n* `list_tables`\n  * List all tables in a database.\n  * Input: `database` (string): The name of the database.\n\n## Effective Usage\n\nDue to the wide variety in LLM architectures, not all models will proactively use the tools above, and few will use them effectively without guidance, even with the carefully-constructed tool descriptions provided to the model. To get the best results out of your model while using the Hydrolix MCP server, we recommend the following:\n\n* Refer to your Hydrolix database by name and request tool usage in your prompts (e.g., \"Using MCP tools to access my Hydrolix database, please ...\")\n  - This encourages the model to use the MCP tools available and minimizes hallucinations.\n* Include time ranges in your prompts (e.g., \"Between December 5 2023 and January 18 2024, ...\") and specifically request that the output be ordered by timestamp.\n  - This prompts the model to write more efficient queries that take advantage of [primary key optimizations](https://hydrolix.io/blog/optimizing-latest-n-row-queries/)\n\n### Health Check Endpoint\n\nWhen running with HTTP or SSE transport, a health check endpoint is available at `/health`. This endpoint:\n- Returns `200 OK` with the Hydrolix query-head's Clickhouse version if the server is healthy and can connect to Hydrolix\n- Returns `503 Service Unavailable` if the server cannot connect to the Hydrolix query-head\n\nExample:\n```bash\ncurl http://localhost:8000/health\n# Response: OK - Connected to Hydrolix compatible with ClickHouse 24.3.1\n```\n\n## Configuration\n\nThe Hydrolix MCP server is configured using a standard MCP server entry. Consult your client's documentation for specific instructions on where to find or declare MCP servers. An example setup using Claude Desktop is documented below.\n\nThe recommended way to launch the Hydrolix MCP server is via the [`uv` project manager](https://github.com/astral-sh/uv), which will manage installing all other dependencies in an isolated environment.\n\nMCP Server definition (JSON):\n\n```json\n{\n  \"command\": \"uv\",\n  \"args\": [\n    \"run\",\n    \"--with\",\n    \"mcp-hydrolix\",\n    \"--python\",\n    \"3.13\",\n    \"mcp-hydrolix\"\n  ],\n  \"env\": {\n    \"HYDROLIX_HOST\": \"<hydrolix-host>\",\n    \"HYDROLIX_USER\": \"<hydrolix-user>\",\n    \"HYDROLIX_PASSWORD\": \"<hydrolix-password>\"\n  }\n}\n```\n\nMCP Server definition (YAML):\n\n```yaml\ncommand: uv\nargs:\n- run\n- --with\n- mcp-hydrolix\n- --python\n- \"3.13\"\n- mcp-hydrolix\nenv:\n  HYDROLIX_HOST: <hydrolix-host>\n  HYDROLIX_USER: <hydrolix-user>\n  HYDROLIX_PASSWORD: <hydrolix-password>\n```\n\n### Configuration Example (Claude Desktop)\n\n1. Open the Claude Desktop configuration file located at:\n   - On macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - On Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n2. Add a `mcp-hydrolix` server entry to the `mcpServers` config block:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-hydrolix\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--with\",\n        \"mcp-hydrolix\",\n        \"--python\",\n        \"3.13\",\n        \"mcp-hydrolix\"\n      ],\n      \"env\": {\n        \"HYDROLIX_HOST\": \"<hydrolix-host>\",\n        \"HYDROLIX_USER\": \"<hydrolix-user>\",\n        \"HYDROLIX_PASSWORD\": \"<hydrolix-password>\"\n      }\n    }\n  }\n}\n```\n\n3. Update the environment variable definitions to point to your Hydrolix cluster.\n\n4. (Recommended) Locate the command entry for `uv` and replace it with the absolute path to the `uv` executable. This ensures that the correct version of `uv` is used when starting the server. You can find this path using `which uv` or `where.exe uv`.\n\n5. Restart Claude Desktop to apply the changes. If you are using Windows, ensure Claude is stopped completely by closing the client using the system tray icon.\n\n### Environment Variables\n\nThe following variables are used to configure the Hydrolix connection. These variables may be provided via the MCP config block (as shown above), a `.env` file, or traditional environment variables.\n\n#### Required Variables\n* `HYDROLIX_HOST`: The hostname of your Hydrolix server\n* `HYDROLIX_USER`: The username for authentication\n* `HYDROLIX_PASSWORD`: The password for authentication\n\n#### Optional Variables\n* `HYDROLIX_PORT`: The port number of your Hydrolix server\n  * Default: `8088`\n  * Usually doesn't need to be set unless using a non-standard port\n* `HYDROLIX_VERIFY`: Enable/disable SSL certificate verification\n  * Default: `\"true\"`\n  * Set to `\"false\"` to disable certificate verification (not recommended for production)\n* `HYDROLIX_DATABASE`: Default database to use\n  *Default: None (uses server default)\n  * Set this to automatically connect to a specific database\n* `HYDROLIX_MCP_SERVER_TRANSPORT`: Sets the transport method for the MCP server.\n  * Default: `\"stdio\"`\n  * Valid options: `\"stdio\"`, `\"http\"`, `\"sse\"`. This is useful for local development with tools like MCP Inspector.\n* `HYDROLIX_MCP_BIND_HOST`: Host to bind the MCP server to when using HTTP or SSE transport\n  * Default: `\"127.0.0.1\"`\n  * Set to `\"0.0.0.0\"` to bind to all network interfaces (useful for Docker or remote access)\n  * Only used when transport is `\"http\"` or `\"sse\"`\n* `HYDROLIX_MCP_BIND_PORT`: Port to bind the MCP server to when using HTTP or SSE transport\n  * Default: `\"8000\"`\n  * Only used when transport is `\"http\"` or `\"sse\"`\n\n\nFor MCP Inspector or remote access with HTTP transport:\n\n```env\nHYDROLIX_HOST=localhost\nHYDROLIX_USER=default\nHYDROLIX_PASSWORD=myPassword\nHYDROLIX_MCP_SERVER_TRANSPORT=http\nHYDROLIX_MCP_BIND_HOST=0.0.0.0  # Bind to all interfaces\nHYDROLIX_MCP_BIND_PORT=4200  # Custom port (default: 8000)\n```\n\nWhen using HTTP transport, the server will run on the configured port (default 8000). For example, with the above configuration:\n- MCP endpoint: `http://localhost:4200/mcp`\n- Health check: `http://localhost:4200/health`\n\nNote: The bind host and port settings are only used when transport is set to \"http\" or \"sse\".\n",
+  "category": "Data",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-hydrolix": {
+        "command": "uv",
+        "args": ["run", "--with", "mcp-hydrolix", "--python", "3.13", "mcp-hydrolix"],
+        "env": {
+          "HYDROLIX_HOST": "<hydrolix-host>",
+          "HYDROLIX_USER": "<hydrolix-user>",
+          "HYDROLIX_PASSWORD": "<hydrolix-password>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hydrolix",
+    "repo": "mcp-hydrolix",
+    "url": "https://github.com/hydrolix/mcp-hydrolix",
+    "name": "hydrolix__mcp-hydrolix",
+    "path": null,
+    "stars": 3,
+    "contributors": 15,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "32617b36f3ed10aa9afebad28f22a092289cd529"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:29.113Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "clickhouse-connect",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    },
+    {
+      "name": "pip-system-certs",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-hydrolix\"\nversion = \"0.1.4\"\ndescription = \"An MCP server for Hydrolix.\"\nreadme = \"README.md\"\nlicense = \"Apache-2.0\"\nlicense-files = [\"LICENSE\"]\nrequires-python = \">=3.13\"\ndependencies = [\n     \"mcp[cli]>=1.3.0\",\n     \"python-dotenv>=1.0.1\",\n     \"uvicorn>=0.34.0\",\n     \"clickhouse-connect>=0.8.16\",\n     \"pip-system-certs>=4.0\",\n]\n\n[project.scripts]\nmcp-hydrolix = \"mcp_hydrolix.main:main\"\n\n[project.urls]\nHome = \"https://github.com/hydrolix/mcp-hydrolix\"\n\n[project.optional-dependencies]\ndev = [\n    \"ruff\",\n    \"pytest\",\n    \"pre-commit\"\n]\n\n[tool.hatch.build.targets.wheel]\npackages = [\"mcp_hydrolix\"]\n\n[tool.ruff]\nline-length = 100\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n"
+}

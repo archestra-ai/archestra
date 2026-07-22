@@ -199,7 +199,7 @@ export async function handleSkillDelegation(
   const parentDelegationChain = context.delegationChain || context.agentId;
 
   // dispatching the skill to its designated agent counts one use.
-  SkillModel.recordUsage(skill.id);
+  SkillModel.recordUsage({ skillId: skill.id, userId });
 
   try {
     const sessionId =

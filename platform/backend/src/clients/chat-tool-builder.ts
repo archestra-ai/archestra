@@ -41,6 +41,7 @@ import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
 import { AgentTeamModel, ToolModel, TrustedDataPolicyModel } from "@/models";
+import ChatToolExecutionClaimModel from "@/models/chat-tool-execution-claim";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import { metrics } from "@/observability";
 import {
@@ -48,7 +49,11 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import type { Tool as CatalogTool, UnsafeContextBoundary } from "@/types";
+import type {
+  Tool as CatalogTool,
+  ChatToolExecutionClaim,
+  UnsafeContextBoundary,
+} from "@/types";
 import { agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
@@ -144,6 +149,7 @@ export function buildMcpGatewayTool(params: {
         args,
         spanToolArgs: toolArguments,
         ctx,
+        toolCallId: options.toolCallId,
         entryLogMessage: "Executing MCP tool from chat (direct)",
         abortLogMessage: "MCP tool execution aborted",
         failureLogMessage: "MCP tool execution failed",
@@ -355,6 +361,7 @@ export function buildAgentDelegationTool(params: {
         args,
         spanToolArgs: args,
         ctx,
+        toolCallId: options.toolCallId,
         entryLogMessage: "Executing agent tool from chat",
         abortLogMessage: "Agent tool execution aborted",
         failureLogMessage: "Agent tool execution failed",
@@ -714,6 +721,104 @@ function needsApprovalProps(params: {
   };
 }
 
+type ClaimGateOutcome =
+  | { kind: "proceed" }
+  | {
+      kind: "claimed";
+      claimKey: { conversationId: string; toolCallId: string };
+    }
+  | { kind: "dedup"; result: string | { content: string } };
+
+/**
+ * The atomic at-most-once claim for an approval-gated dispatch (#5132). Only
+ * approval-gated calls inside a conversation are claimed; everything else
+ * proceeds unclaimed. On a lost claim, builds the loser's replay result from
+ * the recorded outcome — fail closed (an "already executing/executed" text)
+ * whenever the recorded result cannot be reproduced.
+ *
+ * A winner short-circuited before dispatch (PreToolUse block, repeat-breaker
+ * nudge) still records its text as the completed outcome: replays get the
+ * same content success-shaped rather than re-entering the block path. That
+ * asymmetry is accepted — replays must stay deterministic, and a fresh retry
+ * always arrives under a new toolCallId.
+ */
+async function claimApprovalGatedDispatch(params: {
+  toolName: string;
+  args: unknown;
+  ctx: ChatToolContext;
+  toolCallId: string | undefined;
+}): Promise<ClaimGateOutcome> {
+  const { toolName, args, ctx, toolCallId } = params;
+  // blockOnApprovalRequired contexts never execute approval-gated calls at
+  // all (throwIfApprovalRequired above), so there is nothing to claim.
+  if (ctx.blockOnApprovalRequired || !ctx.conversationId || !toolCallId) {
+    return { kind: "proceed" };
+  }
+
+  // An existing claim is honored before any policy check: the call was
+  // approval-gated when it first dispatched, and relaxing or deleting the
+  // policy afterwards must not reopen duplicate dispatch for its replays.
+  const claimKey = { conversationId: ctx.conversationId, toolCallId };
+  const priorClaim = await ChatToolExecutionClaimModel.findByKey(claimKey);
+  if (priorClaim) {
+    return { kind: "dedup", result: buildReplayResult(priorClaim) };
+  }
+
+  const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
+  const approvalRequired =
+    await ToolInvocationPolicyModel.checkApprovalRequired(
+      approvalTarget.toolName,
+      approvalTarget.toolInput,
+      { teamIds: [], externalAgentId: getChatExternalAgentId() },
+    );
+  if (!approvalRequired) {
+    return { kind: "proceed" };
+  }
+
+  const outcome = await ChatToolExecutionClaimModel.claim({
+    ...claimKey,
+    toolName,
+  });
+  if (outcome.claimed) {
+    return { kind: "claimed", claimKey };
+  }
+  return { kind: "dedup", result: buildReplayResult(outcome.existing) };
+}
+
+/** The loser's replay result for a lost claim — fail closed when the recorded
+ * result cannot be reproduced. */
+function buildReplayResult(
+  existing: ChatToolExecutionClaim.Select | null,
+): string | { content: string } {
+  if (existing?.state === "completed" && existing.result) {
+    const content = existing.result.truncated
+      ? `${existing.result.content}\n[Result truncated for replay.]`
+      : existing.result.content;
+    return existing.result.resultKind === "text" ? content : { content };
+  }
+  if (existing?.state === "failed") {
+    const failure = existing.result?.content ?? "unknown error";
+    return `This tool call was already dispatched earlier and failed (${failure}). It was NOT re-executed; retry with a new tool call if appropriate.`;
+  }
+  // Still `executing` (or the claim row vanished): the external write may be
+  // in flight or already committed — never dispatch again.
+  return "This tool call was already dispatched (it may still be executing or have completed). It was NOT re-executed to avoid a duplicate external write. Do not retry this exact call.";
+}
+
+/** Best-effort outcome write: a failure here must never fail the tool call. */
+async function recordClaimOutcome(
+  params: Parameters<typeof ChatToolExecutionClaimModel.recordOutcome>[0],
+): Promise<void> {
+  try {
+    await ChatToolExecutionClaimModel.recordOutcome(params);
+  } catch (error) {
+    logger.warn(
+      { error, toolCallId: params.toolCallId },
+      "Failed to record tool execution claim outcome; replays of this call will fail closed",
+    );
+  }
+}
+
 /**
  * The execute skeleton shared by both tool kinds: the autonomous approval
  * block, the entry log, the MCP span, the abort check, and the catch that
@@ -726,6 +831,7 @@ async function executeWithToolSpan<R>(params: {
   args: unknown;
   spanToolArgs: Record<string, unknown> | undefined;
   ctx: ChatToolContext;
+  toolCallId: string | undefined;
   entryLogMessage: string;
   abortLogMessage: string;
   failureLogMessage: string;
@@ -739,6 +845,7 @@ async function executeWithToolSpan<R>(params: {
     args,
     spanToolArgs,
     ctx,
+    toolCallId,
     entryLogMessage,
     abortLogMessage,
     failureLogMessage,
@@ -747,6 +854,25 @@ async function executeWithToolSpan<R>(params: {
 
   if (ctx.blockOnApprovalRequired) {
     await throwIfApprovalRequired(toolName, args);
+  }
+
+  // At-most-once dispatch for approval-gated calls (#5132): the client-driven
+  // approval flow can replay an approved call (stale tab, re-approve of a
+  // resolved turn) with the same toolCallId, so dispatch is gated on an atomic
+  // per-(conversation, toolCallId) claim. Losers answer from the claim and
+  // never reach `run`.
+  const claimGate = await claimApprovalGatedDispatch({
+    toolName,
+    args,
+    ctx,
+    toolCallId,
+  });
+  if (claimGate.kind === "dedup") {
+    logger.info(
+      { agentId: ctx.agentId, userId: ctx.userId, toolName, toolCallId },
+      "Duplicate approval-gated tool call deduplicated, not re-dispatching",
+    );
+    return claimGate.result as R;
   }
 
   logger.info(
@@ -769,9 +895,31 @@ async function executeWithToolSpan<R>(params: {
     callback: async (span) => {
       try {
         throwIfAborted(ctx.abortSignal);
-        return await run({ span, startTime });
+        const result = await run({ span, startTime });
+        if (claimGate.kind === "claimed") {
+          await recordClaimOutcome({
+            ...claimGate.claimKey,
+            state: "completed",
+            result: ChatToolExecutionClaimModel.toStoredResult(
+              result as string | { content: string },
+            ),
+          });
+        }
+        return result;
       } catch (error) {
         const aborted = ctx.abortSignal?.aborted || isAbortLikeError(error);
+        // An abort after dispatch is an ambiguous external write — the claim
+        // stays `executing` so replays keep failing closed. Only a definite
+        // failure is recorded (replays then report it without re-running).
+        if (claimGate.kind === "claimed" && !aborted) {
+          await recordClaimOutcome({
+            ...claimGate.claimKey,
+            state: "failed",
+            result: ChatToolExecutionClaimModel.toStoredResult(
+              error instanceof Error ? error.message : String(error),
+            ),
+          });
+        }
         // A stopped run is a cancellation, not a tool failure — don't count it.
         if (!aborted) {
           reportToolMetrics({

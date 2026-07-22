@@ -1,0 +1,160 @@
+{
+  "name": "couchbase-ecosystem__mcp-server-couchbase",
+  "display_name": "mcp-server-couchbase",
+  "description": "MCP Server to interact with data in Couchbase Clusters",
+  "author": {
+    "name": "Couchbase-Ecosystem"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["couchbase-mcp-server"],
+    "env": {
+      "CB_CONNECTION_STRING": "${user_config.cb_connection_string}",
+      "CB_USERNAME": "${user_config.cb_username}",
+      "CB_PASSWORD": "${user_config.cb_password}",
+      "CB_BUCKET_NAME": "${user_config.cb_bucket_name}",
+      "CB_MCP_READ_ONLY_QUERY_MODE": "${user_config.cb_mcp_read_only_query_mode}",
+      "CB_MCP_TRANSPORT": "${user_config.cb_mcp_transport}",
+      "CB_MCP_HOST": "${user_config.cb_mcp_host}",
+      "CB_MCP_PORT": "${user_config.cb_mcp_port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "cb_connection_string": {
+      "type": "string",
+      "title": "Connection String",
+      "description": "Connection string to the Couchbase cluster",
+      "required": true
+    },
+    "cb_username": {
+      "type": "string",
+      "title": "Username",
+      "description": "Username with bucket access",
+      "required": true
+    },
+    "cb_password": {
+      "type": "string",
+      "title": "Password",
+      "description": "Password for authentication",
+      "sensitive": true,
+      "required": true
+    },
+    "cb_bucket_name": {
+      "type": "string",
+      "title": "Bucket Name",
+      "description": "Name of the bucket to access",
+      "required": true
+    },
+    "cb_mcp_read_only_query_mode": {
+      "type": "boolean",
+      "title": "Read-Only Query Mode",
+      "description": "Prevent data modification queries",
+      "default": true,
+      "required": false
+    },
+    "cb_mcp_transport": {
+      "type": "string",
+      "title": "Transport Mode",
+      "description": "Transport mode: stdio, http, sse",
+      "default": "stdio",
+      "required": false
+    },
+    "cb_mcp_host": {
+      "type": "string",
+      "title": "Host",
+      "description": "Host for HTTP/SSE transport modes",
+      "default": "127.0.0.1",
+      "required": false
+    },
+    "cb_mcp_port": {
+      "type": "number",
+      "title": "Port",
+      "description": "Port for HTTP/SSE transport modes",
+      "default": 8000,
+      "required": false
+    }
+  },
+  "readme": "# Couchbase MCP Server\n\nAn [MCP](https://modelcontextprotocol.io/) server implementation of Couchbase that allows LLMs to directly interact with Couchbase clusters.\n\n[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![PyPI version](https://badge.fury.io/py/couchbase-mcp-server.svg)](https://pypi.org/project/couchbase-mcp-server/) [![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/13fce476-0e74-4b1e-ab82-1df2a3204809) [![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/Couchbase-Ecosystem/mcp-server-couchbase)](https://archestra.ai/mcp-catalog/couchbase-ecosystem__mcp-server-couchbase)\n\n<a href=\"https://glama.ai/mcp/servers/@Couchbase-Ecosystem/mcp-server-couchbase\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@Couchbase-Ecosystem/mcp-server-couchbase/badge\" alt=\"Couchbase Server MCP server\" />\n</a>\n\n## Features\n\n- Get a list of all the buckets in the cluster\n- Get a list of all the scopes and collections in the specified bucket\n- Get a list of all the scopes in the specified bucket\n- Get a list of all the collections in a specified scope and bucket. Note that this tool requires the cluster to have Query service.\n- Get the structure for a collection\n- Get a document by ID from a specified scope and collection\n- Upsert a document by ID to a specified scope and collection\n- Delete a document by ID from a specified scope and collection\n- Run a [SQL++ query](https://www.couchbase.com/sqlplusplus/) on a specified scope\n  - There is an option in the MCP server, `CB_MCP_READ_ONLY_QUERY_MODE` that is set to true by default to disable running SQL++ queries that change the data or the underlying collection structure. Note that the documents can still be updated by ID.\n- Get the status of the MCP server\n- Check the cluster credentials by connecting to the cluster\n\n## Prerequisites\n\n- Python 3.10 or higher.\n- A running Couchbase cluster. The easiest way to get started is to use [Capella](https://docs.couchbase.com/cloud/get-started/create-account.html#getting-started) free tier, which is fully managed version of Couchbase server. You can follow [instructions](https://docs.couchbase.com/cloud/clusters/data-service/import-data-documents.html#import-sample-data) to import one of the sample datasets or import your own.\n- [uv](https://docs.astral.sh/uv/) installed to run the server.\n- An [MCP client](https://modelcontextprotocol.io/clients) such as [Claude Desktop](https://claude.ai/download) installed to connect the server to Claude. The instructions are provided for Claude Desktop and Cursor. Other MCP clients could be used as well.\n\n## Configuration\n\nThe MCP server can be run either from the pre built PyPI package or the source using uv.\n\n### Running from PyPI\n\nWe publish a pre built [PyPI package](https://pypi.org/project/couchbase-mcp-server/) for the MCP server.\n\n#### Server Configuration using Pre built Package for MCP Clients\n\n```json\n{\n  \"mcpServers\": {\n    \"couchbase\": {\n      \"command\": \"uvx\",\n      \"args\": [\"couchbase-mcp-server\"],\n      \"env\": {\n        \"CB_CONNECTION_STRING\": \"couchbases://connection-string\",\n        \"CB_USERNAME\": \"username\",\n        \"CB_PASSWORD\": \"password\"\n      }\n    }\n  }\n}\n```\n\n> Note: If you have other MCP servers in use in the client, you can add it to the existing `mcpServers` object.\n\n### Running from Source\n\nThe MCP server can be run from the source using this repository.\n\n#### Clone the repository to your local machine.\n\n```bash\ngit clone https://github.com/Couchbase-Ecosystem/mcp-server-couchbase.git\n```\n\n#### Server Configuration using Source for MCP Clients\n\nThis is the common configuration for the MCP clients such as Claude Desktop, Cursor, Windsurf Editor.\n\n```json\n{\n  \"mcpServers\": {\n    \"couchbase\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"path/to/cloned/repo/mcp-server-couchbase/\",\n        \"run\",\n        \"src/mcp_server.py\"\n      ],\n      \"env\": {\n        \"CB_CONNECTION_STRING\": \"couchbases://connection-string\",\n        \"CB_USERNAME\": \"username\",\n        \"CB_PASSWORD\": \"password\"\n      }\n    }\n  }\n}\n```\n\n> Note: `path/to/cloned/repo/mcp-server-couchbase/` should be the path to the cloned repository on your local machine. Don't forget the trailing slash at the end!\n\n> Note: If you have other MCP servers in use in the client, you can add it to the existing `mcpServers` object.\n\n### Additional Configuration for MCP Server\n\nThe server can be configured using environment variables or command line arguments:\n\n| Environment Variable          | CLI Argument             | Description                                | Default      |\n| ----------------------------- | ------------------------ | ------------------------------------------ | ------------ |\n| `CB_CONNECTION_STRING`        | `--connection-string`    | Connection string to the Couchbase cluster | **Required** |\n| `CB_USERNAME`                 | `--username`             | Username with access to required buckets   | **Required** |\n| `CB_PASSWORD`                 | `--password`             | Password for authentication                | **Required** |\n| `CB_MCP_READ_ONLY_QUERY_MODE` | `--read-only-query-mode` | Prevent data modification queries          | `true`       |\n| `CB_MCP_TRANSPORT`            | `--transport`            | Transport mode: `stdio`, `http`, `sse`     | `stdio`      |\n| `CB_MCP_HOST`                 | `--host`                 | Host for HTTP/SSE transport modes          | `127.0.0.1`  |\n| `CB_MCP_PORT`                 | `--port`                 | Port for HTTP/SSE transport modes          | `8000`       |\n\nYou can also check the version of the server using:\n\n```bash\nuvx couchbase-mcp-server --version\n```\n\n#### Client Specific Configuration\n\n<details>\n<summary>Claude Desktop</summary>\n\nFollow the steps below to use Couchbase MCP server with Claude Desktop MCP client\n\n1. The MCP server can now be added to Claude Desktop by editing the configuration file. More detailed instructions can be found on the [MCP quickstart guide](https://modelcontextprotocol.io/quickstart/user).\n\n   - On Mac, the configuration file is located at `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - On Windows, the configuration file is located at `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n   Open the configuration file and add the [configuration](#configuration) to the `mcpServers` section.\n\n2. Restart Claude Desktop to apply the changes.\n\n3. You can now use the server in Claude Desktop to run queries on the Couchbase cluster using natural language and perform CRUD operations on documents.\n\nLogs\n\nThe logs for Claude Desktop can be found in the following locations:\n\n- MacOS: ~/Library/Logs/Claude\n- Windows: %APPDATA%\\Claude\\Logs\n\nThe logs can be used to diagnose connection issues or other problems with your MCP server configuration. For more details, refer to the [official documentation](https://modelcontextprotocol.io/quickstart/user#troubleshooting).\n\n</details>\n\n<details>\n<summary>Cursor</summary>\n\nFollow steps below to use Couchbase MCP server with Cursor:\n\n1. Install [Cursor](https://cursor.sh/) on your machine.\n\n2. In Cursor, go to Cursor > Cursor Settings > Tools & Integrations > MCP Tools. Also, checkout the docs on [setting up MCP server configuration](https://docs.cursor.com/en/context/mcp#configuring-mcp-servers) from Cursor.\n\n3. Specify the same [configuration](#configuration). You may need to add the server configuration under a parent key of mcpServers.\n\n4. Save the configuration.\n\n5. You will see couchbase as an added server in MCP servers list. Refresh to see if server is enabled.\n\n6. You can now use the Couchbase MCP server in Cursor to query your Couchbase cluster using natural language and perform CRUD operations on documents.\n\nFor more details about MCP integration with Cursor, refer to the [official Cursor MCP documentation](https://docs.cursor.com/en/context/mcp).\n\nLogs\n\nIn the bottom panel of Cursor, click on \"Output\" and select \"Cursor MCP\" from the dropdown menu to view server logs. This can help diagnose connection issues or other problems with your MCP server configuration.\n\n</details>\n\n<details>\n<summary>Windsurf Editor</summary>\n\nFollow the steps below to use the Couchbase MCP server with [Windsurf Editor](https://windsurf.com/).\n\n1. Install [Windsurf Editor](https://windsurf.com/download) on your machine.\n\n2. In Windsurf Editor, navigate to Command Palette > Windsurf MCP Configuration Panel or Windsurf - Settings > Advanced > Cascade > Model Context Protocol (MCP) Servers. For more details on the configuration, please refer to the [official documentation](https://docs.windsurf.com/windsurf/cascade/mcp#adding-a-new-mcp-plugin).\n\n3. Click on Add Server and then Add custom server. On the configuration that opens in the editor, add the Couchbase MCP Server [configuration](#configuration) from above.\n\n4. Save the configuration.\n\n5. You will see couchbase as an added server in MCP Servers list under Advanced Settings. Refresh to see if server is enabled.\n\n6. You can now use the Couchbase MCP server in Windsurf Editor to query your Couchbase cluster using natural language and perform CRUD operations on documents.\n\nFor more details about MCP integration with Windsurf Editor, refer to the official [Windsurf MCP documentation](https://docs.windsurf.com/windsurf/cascade/mcp).\n\n</details>\n\n## Streamable HTTP Transport Mode\n\nThe MCP Server can be run in [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http) transport mode which allows multiple clients to connect to the same server instance via HTTP.\nCheck if your [MCP client](https://modelcontextprotocol.io/clients) supports streamable http transport before attempting to connect to MCP server in this mode.\n\n> Note: This mode does not include authorization support.\n\n### Usage\n\nBy default, the MCP server will run on port 8000 but this can be configured using the `--port` or `CB_MCP_PORT` environment variable.\n\n```bash\nuvx couchbase-mcp-server \\\n  --connection-string='<couchbase_connection_string>' \\\n  --username='<database_username>' \\\n  --password='<database_password>' \\\n  --read-only-query-mode=true \\\n  --transport=http\n```\n\nThe server will be available on http://localhost:8000/mcp. This can be used in MCP clients supporting streamable http transport mode such as Cursor.\n\n### MCP Client Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"couchbase-http\": {\n      \"url\": \"http://localhost:8000/mcp\"\n    }\n  }\n}\n```\n\n## SSE Transport Mode\n\nThere is an option to run the MCP server in [Server-Sent Events (SSE)](https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#http-with-sse) transport mode.\n\n> Note: SSE mode has been [deprecated](https://modelcontextprotocol.io/docs/concepts/transports#server-sent-events-sse-deprecated) by MCP. We have support for [Streamable HTTP](#streamable-http-transport-mode).\n\n### Usage\n\nBy default, the MCP server will run on port 8000 but this can be configured using the `--port` or `CB_MCP_PORT` environment variable.\n\n```bash\nuvx couchbase-mcp-server \\\n  --connection-string='<couchbase_connection_string>' \\\n  --username='<database_username>' \\\n  --password='<database_password>' \\\n  --read-only-query-mode=true \\\n  --transport=sse\n```\n\nThe server will be available on http://localhost:8000/sse. This can be used in MCP clients supporting SSE transport mode such as Cursor.\n\n### MCP Client Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"couchbase-sse\": {\n      \"url\": \"http://localhost:8000/sse\"\n    }\n  }\n}\n```\n\n## Docker Image\n\nThe MCP server can also be built and run as a Docker container. Prebuilt images can be found on [DockerHub](https://hub.docker.com/r/couchbaseecosystem/mcp-server-couchbase).\n\nAlternatively, we are part of the [Docker MCP Catalog](https://hub.docker.com/mcp/server/couchbase/overview).\n\n### Building Image\n\n```bash\ndocker build -t mcp/couchbase .\n```\n\n<details>\n<summary>Building with Arguments</summary>\nIf you want to build with the build arguments for commit hash and the build time, you can build using:\n\n```bash\ndocker build --build-arg GIT_COMMIT_HASH=$(git rev-parse HEAD) \\\n  --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \\\n  -t mcp/couchbase .\n```\n\n**Alternatively, use the provided build script:**\n\n```bash\n./build.sh\n```\n\nThis script automatically:\n\n- Generates git commit hash and build timestamp\n- Creates multiple useful tags (`latest`, `<short-commit>`)\n- Shows build information and results\n- Uses the same arguments as CI/CD builds\n\n**Verify image labels:**\n\n```bash\n# View git commit hash in image\ndocker inspect --format='{{index .Config.Labels \"org.opencontainers.image.revision\"}}' mcp/couchbase:latest\n\n# View all metadata labels\ndocker inspect --format='{{json .Config.Labels}}' mcp/couchbase:latest\n```\n\n</details>\n\n### Running\n\nThe MCP server can be run with the environment variables being used to configure the Couchbase settings. The environment variables are the same as described in the [Configuration section](#server-configuration-for-mcp-clients).\n\n#### Independent Docker Container\n\n```bash\ndocker run --rm -i \\\n  -e CB_CONNECTION_STRING='<couchbase_connection_string>' \\\n  -e CB_USERNAME='<database_user>' \\\n  -e CB_PASSWORD='<database_password>' \\\n  -e CB_MCP_TRANSPORT='<http|sse|stdio>' \\\n  -e CB_MCP_READ_ONLY_QUERY_MODE='<true|false>' \\\n  -e CB_MCP_PORT=9001 \\\n  -p 9001:9001 \\\n  mcp/couchbase\n```\n\nThe `CB_MCP_PORT` environment variable is only applicable in the case of HTTP transport modes like http and sse.\n\n#### MCP Client Configuration\n\nThe Docker image can be used in `stdio` transport mode with the following configuration.\n\n```json\n{\n  \"mcpServers\": {\n    \"couchbase-mcp-docker\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"-e\",\n        \"CB_CONNECTION_STRING=<couchbase_connection_string>\",\n        \"-e\",\n        \"CB_USERNAME=<database_user>\",\n        \"-e\",\n        \"CB_PASSWORD=<database_password>\",\n        \"mcp/couchbase\"\n      ]\n    }\n  }\n}\n```\n\nNotes\n\n- The `couchbase_connection_string` value depends on whether the Couchbase server is running on the same host machine, in another Docker container, or on a remote host. If your Couchbase server is running on your host machine, your connection string would likely be of the form `couchbase://host.docker.internal`. For details refer to the [docker documentation](https://docs.docker.com/desktop/features/networking/#i-want-to-connect-from-a-container-to-a-service-on-the-host).\n- You can specify the container's networking using the `--network=<your_network>` option. The network you choose depends on your environment; the default is `bridge`. For details, refer to [network drivers in docker](https://docs.docker.com/engine/network/drivers/).\n\n### Risks Associated with LLMs\n\n- The use of large language models and similar technology involves risks, including the potential for inaccurate or harmful outputs.\n- Couchbase does not review or evaluate the quality or accuracy of such outputs, and such outputs may not reflect Couchbase's views.\n- You are solely responsible for determining whether to use large language models and related technology, and for complying with any license terms, terms of use, and your organization's policies governing your use of the same.\n\n### Managed MCP Server\n\nThe Couchbase MCP server can also be used as a managed server in your agentic applications via [Smithery.ai](https://smithery.ai/server/@Couchbase-Ecosystem/mcp-server-couchbase).\n\n## Troubleshooting Tips\n\n- Ensure the path to your MCP server repository is correct in the configuration if running from source.\n- Verify that your Couchbase connection string, database username, password are correct.\n- If using Couchbase Capella, ensure that the cluster is [accessible](https://docs.couchbase.com/cloud/clusters/allow-ip-address.html) from the machine where the MCP server is running.\n- Check that the database user has proper permissions to access the specified bucket.\n- Confirm that the `uv` package manager is properly installed and accessible. You may need to provide absolute path to `uv`/`uvx` in the `command` field in the configuration.\n- Check the logs for any errors or warnings that may indicate issues with the MCP server. The location of the logs depend on your MCP client.\n- If you are observing issues running your MCP server from source after updating your local MCP server repository, try running `uv sync` to update the [dependencies](https://docs.astral.sh/uv/concepts/projects/sync/#syncing-the-environment).\n\n---\n\n## 👩‍💻 Contributing\n\nWe welcome contributions from the community! Whether you want to fix bugs, add features, or improve documentation, your help is appreciated.\n\nIf you need help, have found a bug, or want to contribute improvements, the best place to do that is right here — by [opening a GitHub issue](https://github.com/Couchbase-Ecosystem/mcp-server-couchbase/issues).\n\n### For Developers\n\nIf you're interested in contributing code or setting up a development environment:\n\n📖 **See [CONTRIBUTING.md](CONTRIBUTING.md)** for comprehensive developer setup instructions, including:\n\n- Development environment setup with `uv`\n- Code linting and formatting with Ruff\n- Pre-commit hooks installation\n- Project structure overview\n- Development workflow and practices\n\n### Quick Start for Contributors\n\n```bash\n# Clone and setup\ngit clone https://github.com/Couchbase-Ecosystem/mcp-server-couchbase.git\ncd mcp-server-couchbase\n\n# Install with development dependencies\nuv sync --extra dev\n\n# Install pre-commit hooks\nuv run pre-commit install\n\n# Run linting\n./scripts/lint.sh\n```\n\n---\n\n## 📢 Support Policy\n\nWe truly appreciate your interest in this project!\nThis project is **Couchbase community-maintained**, which means it's **not officially supported** by our support team. However, our engineers are actively monitoring and maintaining this repo and will try to resolve issues on a best-effort basis.\n\nOur support portal is unable to assist with requests related to this project, so we kindly ask that all inquiries stay within GitHub.\n\nYour collaboration helps us all move forward together — thank you!\n",
+  "category": "AI Tools",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "couchbase-mcp-server": {
+        "command": "uvx",
+        "args": ["couchbase-mcp-server"],
+        "env": {
+          "CB_CONNECTION_STRING": "couchbases://connection-string",
+          "CB_USERNAME": "username",
+          "CB_PASSWORD": "password",
+          "CB_BUCKET_NAME": "bucket_name"
+        }
+      },
+      "mcp-server-couchbase-configured": {
+        "command": "uv",
+        "args": ["--directory", "path/to/cloned/repo/mcp-server-couchbase/", "run", "src/mcp_server.py"],
+        "env": {
+          "CB_CONNECTION_STRING": "couchbases://connection-string",
+          "CB_USERNAME": "username",
+          "CB_PASSWORD": "password",
+          "CB_BUCKET_NAME": "bucket_name"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Couchbase-Ecosystem",
+    "repo": "mcp-server-couchbase",
+    "url": "https://github.com/Couchbase-Ecosystem/mcp-server-couchbase",
+    "name": "couchbase-ecosystem__mcp-server-couchbase",
+    "path": null,
+    "stars": 18,
+    "contributors": 10,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "37fe8e16e9bd11339998afff9c714c37954f0f49"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:27.307Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "click",
+      "importance": 7
+    },
+    {
+      "name": "couchbase",
+      "importance": 9
+    },
+    {
+      "name": "lark-sqlpp",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"couchbase-mcp-server\"\nversion = \"0.4.0\"\ndescription = \"Couchbase MCP Server - The Developer Data Platform for Critical Applications in Our AI World\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = \"Apache-2.0\"\nauthors = [\n    { name=\"Nithish Raghunandanan\", email=\"devadvocates@couchbase.com\" },\n]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Programming Language :: Python :: 3\",\n    \"Topic :: Database\",\n]\n\ndependencies = [\n    \"click==8.2.1\",\n    \"couchbase==4.4.0\",\n    \"lark-sqlpp==0.0.1\",\n    \"mcp[cli]==1.12.0\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/Couchbase-Ecosystem/mcp-server-couchbase\"\nDocumentation = \"https://github.com/Couchbase-Ecosystem/mcp-server-couchbase#readme\"\nIssues = \"https://github.com/Couchbase-Ecosystem/mcp-server-couchbase/issues\"\n\n[project.scripts]\ncouchbase-mcp-server = \"mcp_server:main\"\n\n# Development dependencies\n[project.optional-dependencies]\ndev = [\n    \"ruff==0.12.5\",\n    \"pre-commit==4.2.0\",\n]\n\n# Ruff configuration\n[tool.ruff]\n# Set the line length to match Black's default\nline-length = 88\ntarget-version = \"py310\"\n\n# Include and exclude patterns\ninclude = [\"src/**/*.py\", \"*.py\"]\nexclude = [\n    \".bzr\",\n    \".direnv\",\n    \".eggs\",\n    \".git\",\n    \".git-rewrite\",\n    \".hg\",\n    \".ipynb_checkpoints\",\n    \".mypy_cache\",\n    \".nox\",\n    \".pants.d\",\n    \".pyenv\",\n    \".pytest_cache\",\n    \".pytype\",\n    \".ruff_cache\",\n    \".svn\",\n    \".tox\",\n    \".venv\",\n    \"__pypackages__\",\n    \"_build\",\n    \"buck-out\",\n    \"build\",\n    \"dist\",\n    \"node_modules\",\n    \"site-packages\",\n    \"venv\",\n]\n\n[tool.ruff.lint]\n# Enable specific rule categories\nselect = [\n    \"E\",    # pycodestyle errors\n    \"W\",    # pycodestyle warnings\n    \"F\",    # Pyflakes\n    \"UP\",   # pyupgrade\n    \"B\",    # flake8-bugbear\n    \"SIM\",  # flake8-simplify\n    \"I\",    # isort\n    \"N\",    # pep8-naming\n    \"C4\",   # flake8-comprehensions\n    \"PIE\",  # flake8-pie\n    \"PL\",   # Pylint\n    \"RUF\",  # Ruff-specific rules\n]\n\n# Disable specific rules that might be too strict for your project\nignore = [\n    \"E501\",   # Line too long (handled by formatter)\n    \"PLR0913\", # Too many arguments\n    \"PLR2004\", # Magic value used in comparison\n    \"N806\",   # Variable in function should be lowercase (for SQL++ variables)\n    \"RUF022\", # __all__ is not sorted\n]\n\n# Allow fix for all enabled rules (when `--fix`) is provided.\nfixable = [\"ALL\"]\nunfixable = []\n\n# Allow unused variables when underscore-prefixed.\ndummy-variable-rgx = \"^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$\"\n\n[tool.ruff.lint.per-file-ignores]\n# Tests can use magic values and have longer names\n\"test_*.py\" = [\"PLR2004\", \"N802\"]\n# Config files can have longer names\n\"**/config.py\" = [\"N802\"]\n\n[tool.ruff.lint.isort]\n# Organize imports\nknown-first-party = [\"utils\", \"tools\"]\nsplit-on-trailing-comma = true\n\n[tool.ruff.format]\n# Format configuration\nquote-style = \"double\"\nindent-style = \"space\"\nskip-magic-trailing-comma = false\nline-ending = \"auto\"\n\n[tool.uv]\npackage = true\n"
+}

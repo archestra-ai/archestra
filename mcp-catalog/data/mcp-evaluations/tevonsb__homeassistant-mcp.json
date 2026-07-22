@@ -1,0 +1,185 @@
+{
+  "name": "tevonsb__homeassistant-mcp",
+  "display_name": "homeassistant-mcp",
+  "description": "A MCP server for Home Assistant",
+  "author": {
+    "name": "tevonsb"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {
+      "HASS_HOST": "${user_config.hass_host}",
+      "HASS_TOKEN": "${user_config.hass_token}",
+      "HASS_SOCKET_URL": "${user_config.hass_socket_url}",
+      "PORT": "${user_config.port}",
+      "NODE_ENV": "${user_config.node_env}",
+      "DEBUG": "${user_config.debug}",
+      "TEST_HASS_HOST": "${user_config.test_hass_host}",
+      "TEST_HASS_TOKEN": "${user_config.test_hass_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "hass_host": {
+      "type": "string",
+      "title": "Home Assistant Host",
+      "description": "Your Home Assistant instance URL",
+      "required": true,
+      "default": "http://homeassistant.local:8123"
+    },
+    "hass_token": {
+      "type": "string",
+      "title": "Home Assistant Access Token",
+      "description": "Long-lived access token for Home Assistant",
+      "sensitive": true,
+      "required": true
+    },
+    "hass_socket_url": {
+      "type": "string",
+      "title": "Home Assistant WebSocket URL",
+      "description": "WebSocket URL for Home Assistant",
+      "required": true,
+      "default": "ws://homeassistant.local:8123/api/websocket"
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "Server port",
+      "required": false,
+      "default": 3000
+    },
+    "node_env": {
+      "type": "string",
+      "title": "Node Environment",
+      "description": "Environment (production/development)",
+      "required": false,
+      "default": "production"
+    },
+    "debug": {
+      "type": "boolean",
+      "title": "Debug Mode",
+      "description": "Enable debug mode",
+      "required": false,
+      "default": false
+    },
+    "test_hass_host": {
+      "type": "string",
+      "title": "Test Home Assistant Host",
+      "description": "Test instance URL",
+      "required": false,
+      "default": "http://localhost:8123"
+    },
+    "test_hass_token": {
+      "type": "string",
+      "title": "Test Home Assistant Token",
+      "description": "Test token",
+      "sensitive": true,
+      "required": false,
+      "default": "test_token"
+    }
+  },
+  "readme": "# Model Context Protocol Server for Home Assistant\n\nThe server uses the MCP protocol to share access to a local Home Assistant instance with an LLM application.\n\nA powerful bridge between your Home Assistant instance and Language Learning Models (LLMs), enabling natural language control and monitoring of your smart home devices through the Model Context Protocol (MCP). This server provides a comprehensive API for managing your entire Home Assistant ecosystem, from device control to system administration.\n\n![License](https://img.shields.io/badge/license-MIT-blue.svg)\n![Node.js](https://img.shields.io/badge/node-%3E%3D20.10.0-green.svg)\n![Docker Compose](https://img.shields.io/badge/docker-compose-%3E%3D1.27.0-blue.svg)\n![NPM](https://img.shields.io/badge/npm-%3E%3D7.0.0-orange.svg)\n![TypeScript](https://img.shields.io/badge/typescript-%5E5.0.0-blue.svg)\n![Test Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)\n\n## Features\n\n- 🎮 **Device Control**: Control any Home Assistant device through natural language\n- 🔄 **Real-time Updates**: Get instant updates through Server-Sent Events (SSE)\n- 🤖 **Automation Management**: Create, update, and manage automations\n- 📊 **State Monitoring**: Track and query device states\n- 🔐 **Secure**: Token-based authentication and rate limiting\n- 📱 **Mobile Ready**: Works with any HTTP-capable client\n\n## Real-time Updates with SSE\n\nThe server includes a powerful Server-Sent Events (SSE) system that provides real-time updates from your Home Assistant instance. This allows you to:\n\n- 🔄 Get instant state changes for any device\n- 📡 Monitor automation triggers and executions\n- 🎯 Subscribe to specific domains or entities\n- 📊 Track service calls and script executions\n\n### Quick SSE Example\n\n```javascript\nconst eventSource = new EventSource(\n  'http://localhost:3000/subscribe_events?token=YOUR_TOKEN&domain=light'\n);\n\neventSource.onmessage = (event) => {\n  const data = JSON.parse(event.data);\n  console.log('Update received:', data);\n};\n```\n\nSee [SSE_API.md](docs/SSE_API.md) for complete documentation of the SSE system.\n\n## Table of Contents\n\n- [Key Features](#key-features)\n- [Prerequisites](#prerequisites)\n- [Installation](#installation)\n  - [Basic Setup](#basic-setup)\n  - [Docker Setup (Recommended)](#docker-setup-recommended)\n- [Configuration](#configuration)\n- [Development](#development)\n- [API Reference](#api-reference)\n  - [Device Control](#device-control)\n  - [Add-on Management](#add-on-management)\n  - [Package Management](#package-management)\n  - [Automation Management](#automation-management)\n- [Natural Language Integration](#natural-language-integration)\n- [Troubleshooting](#troubleshooting)\n- [Project Status](#project-status)\n- [Contributing](#contributing)\n- [Resources](#resources)\n- [License](#license)\n\n## Key Features\n\n### Core Functionality 🎮\n- **Smart Device Control**\n  - 💡 **Lights**: Brightness, color temperature, RGB color\n  - 🌡️ **Climate**: Temperature, HVAC modes, fan modes, humidity\n  - 🚪 **Covers**: Position and tilt control\n  - 🔌 **Switches**: On/off control\n  - 🚨 **Sensors & Contacts**: State monitoring\n  - 🎵 **Media Players**: Playback control, volume, source selection\n  - 🌪️ **Fans**: Speed, oscillation, direction\n  - 🔒 **Locks**: Lock/unlock control\n  - 🧹 **Vacuums**: Start, stop, return to base\n  - 📹 **Cameras**: Motion detection, snapshots\n\n### System Management 🛠️\n- **Add-on Management**\n  - Browse available add-ons\n  - Install/uninstall add-ons\n  - Start/stop/restart add-ons\n  - Version management\n  - Configuration access\n\n- **Package Management (HACS)**\n  - Integration with Home Assistant Community Store\n  - Multiple package types support:\n    - Custom integrations\n    - Frontend themes\n    - Python scripts\n    - AppDaemon apps\n    - NetDaemon apps\n  - Version control and updates\n  - Repository management\n\n- **Automation Management**\n  - Create and edit automations\n  - Advanced configuration options:\n    - Multiple trigger types\n    - Complex conditions\n    - Action sequences\n    - Execution modes\n  - Duplicate and modify existing automations\n  - Enable/disable automation rules\n  - Trigger automation manually\n\n### Architecture Features 🏗️\n- **Intelligent Organization**\n  - Area and floor-based device grouping\n  - State monitoring and querying\n  - Smart context awareness\n  - Historical data access\n\n- **Robust Architecture**\n  - Comprehensive error handling\n  - State validation\n  - Secure API integration\n  - TypeScript type safety\n  - Extensive test coverage\n\n## Prerequisites\n\n- **Node.js** 20.10.0 or higher\n- **NPM** package manager\n- **Docker Compose** for containerization\n- Running **Home Assistant** instance\n- Home Assistant long-lived access token ([How to get token](https://community.home-assistant.io/t/how-to-get-long-lived-access-token/162159))\n- **HACS** installed for package management features\n- **Supervisor** access for add-on management\n\n## Installation\n\n### Basic Setup\n\n```bash\n# Clone the repository\ngit clone https://github.com/jango-blockchained/homeassistant-mcp.git\ncd homeassistant-mcp\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n\n### Docker Setup (Recommended)\n\nThe project includes Docker support for easy deployment and consistent environments across different platforms.\n\n1. **Clone the repository:**\n    ```bash\n    git clone https://github.com/jango-blockchained/homeassistant-mcp.git\n    cd homeassistant-mcp\n    ```\n\n2. **Configure environment:**\n    ```bash\n    cp .env.example .env\n    ```\n    Edit the `.env` file with your Home Assistant configuration:\n    ```env\n    # Home Assistant Configuration\n    HASS_HOST=http://homeassistant.local:8123\n    HASS_TOKEN=your_home_assistant_token\n    HASS_SOCKET_URL=ws://homeassistant.local:8123/api/websocket\n\n    # Server Configuration\n    PORT=3000\n    NODE_ENV=production\n    DEBUG=false\n    ```\n\n3. **Build and run with Docker Compose:**\n    ```bash\n    # Build and start the containers\n    docker compose up -d\n\n    # View logs\n    docker compose logs -f\n\n    # Stop the service\n    docker compose down\n    ```\n\n4. **Verify the installation:**\n    The server should now be running at `http://localhost:3000`. You can check the health endpoint at `http://localhost:3000/health`.\n\n5. **Update the application:**\n    ```bash\n    # Pull the latest changes\n    git pull\n\n    # Rebuild and restart the containers\n    docker compose up -d --build\n    ```\n\n#### Docker Configuration\n\nThe Docker setup includes:\n- Multi-stage build for optimal image size\n- Health checks for container monitoring\n- Volume mounting for environment configuration\n- Automatic container restart on failure\n- Exposed port 3000 for API access\n\n#### Docker Compose Environment Variables\n\nAll environment variables can be configured in the `.env` file. The following variables are supported:\n- `HASS_HOST`: Your Home Assistant instance URL\n- `HASS_TOKEN`: Long-lived access token for Home Assistant\n- `HASS_SOCKET_URL`: WebSocket URL for Home Assistant\n- `PORT`: Server port (default: 3000)\n- `NODE_ENV`: Environment (production/development)\n- `DEBUG`: Enable debug mode (true/false)\n\n## Configuration\n\n### Environment Variables\n\n```env\n# Home Assistant Configuration\nHASS_HOST=http://homeassistant.local:8123  # Your Home Assistant instance URL\nHASS_TOKEN=your_home_assistant_token       # Long-lived access token\nHASS_SOCKET_URL=ws://homeassistant.local:8123/api/websocket  # WebSocket URL\n\n# Server Configuration\nPORT=3000                # Server port (default: 3000)\nNODE_ENV=production     # Environment (production/development)\nDEBUG=false            # Enable debug mode\n\n# Test Configuration\nTEST_HASS_HOST=http://localhost:8123  # Test instance URL\nTEST_HASS_TOKEN=test_token           # Test token\n```\n\n### Configuration Files\n\n1. **Development**: Copy `.env.example` to `.env.development`\n2. **Production**: Copy `.env.example` to `.env.production`\n3. **Testing**: Copy `.env.example` to `.env.test`\n\n### Adding to Claude Desktop (or other clients)\n\nTo use your new Home Assistant MCP server, you can add Claude Desktop as a client. Add the following to the configuration. Note this will run the MCP within claude and does not work with the Docker method.\n\n```\n{\n  \"homeassistant\": {\n    \"command\": \"node\",\n    \"args\": [<path/to/your/dist/folder>]\n    \"env\": {\n      NODE_ENV=development\n      HASS_HOST=http://homeassistant.local:8123\n      HASS_TOKEN=your_home_assistant_token\n      PORT=3000\n      HASS_SOCKET_URL=ws://homeassistant.local:8123/api/websocket\n      LOG_LEVEL=debug\n    }\n  }\n}\n\n```\n\n\n\n## API Reference\n\n### Device Control\n\n#### Common Entity Controls\n```json\n{\n  \"tool\": \"control\",\n  \"command\": \"turn_on\",  // or \"turn_off\", \"toggle\"\n  \"entity_id\": \"light.living_room\"\n}\n```\n\n#### Light Control\n```json\n{\n  \"tool\": \"control\",\n  \"command\": \"turn_on\",\n  \"entity_id\": \"light.living_room\",\n  \"brightness\": 128,\n  \"color_temp\": 4000,\n  \"rgb_color\": [255, 0, 0]\n}\n```\n\n### Add-on Management\n\n#### List Available Add-ons\n```json\n{\n  \"tool\": \"addon\",\n  \"action\": \"list\"\n}\n```\n\n#### Install Add-on\n```json\n{\n  \"tool\": \"addon\",\n  \"action\": \"install\",\n  \"slug\": \"core_configurator\",\n  \"version\": \"5.6.0\"\n}\n```\n\n#### Manage Add-on State\n```json\n{\n  \"tool\": \"addon\",\n  \"action\": \"start\",  // or \"stop\", \"restart\"\n  \"slug\": \"core_configurator\"\n}\n```\n\n### Package Management\n\n#### List HACS Packages\n```json\n{\n  \"tool\": \"package\",\n  \"action\": \"list\",\n  \"category\": \"integration\"  // or \"plugin\", \"theme\", \"python_script\", \"appdaemon\", \"netdaemon\"\n}\n```\n\n#### Install Package\n```json\n{\n  \"tool\": \"package\",\n  \"action\": \"install\",\n  \"category\": \"integration\",\n  \"repository\": \"hacs/integration\",\n  \"version\": \"1.32.0\"\n}\n```\n\n### Automation Management\n\n#### Create Automation\n```json\n{\n  \"tool\": \"automation_config\",\n  \"action\": \"create\",\n  \"config\": {\n    \"alias\": \"Motion Light\",\n    \"description\": \"Turn on light when motion detected\",\n    \"mode\": \"single\",\n    \"trigger\": [\n      {\n        \"platform\": \"state\",\n        \"entity_id\": \"binary_sensor.motion\",\n        \"to\": \"on\"\n      }\n    ],\n    \"action\": [\n      {\n        \"service\": \"light.turn_on\",\n        \"target\": {\n          \"entity_id\": \"light.living_room\"\n        }\n      }\n    ]\n  }\n}\n```\n\n#### Duplicate Automation\n```json\n{\n  \"tool\": \"automation_config\",\n  \"action\": \"duplicate\",\n  \"automation_id\": \"automation.motion_light\"\n}\n```\n\n### Core Functions\n\n#### State Management\n```http\nGET /api/state\nPOST /api/state\n```\n\nManages the current state of the system.\n\n**Example Request:**\n```json\nPOST /api/state\n{\n  \"context\": \"living_room\",\n  \"state\": {\n    \"lights\": \"on\",\n    \"temperature\": 22\n  }\n}\n```\n\n#### Context Updates\n```http\nPOST /api/context\n```\n\nUpdates the current context with new information.\n\n**Example Request:**\n```json\nPOST /api/context\n{\n  \"user\": \"john\",\n  \"location\": \"kitchen\",\n  \"time\": \"morning\",\n  \"activity\": \"cooking\"\n}\n```\n\n### Action Endpoints\n\n#### Execute Action\n```http\nPOST /api/action\n```\n\nExecutes a specified action with given parameters.\n\n**Example Request:**\n```json\nPOST /api/action\n{\n  \"action\": \"turn_on_lights\",\n  \"parameters\": {\n    \"room\": \"living_room\",\n    \"brightness\": 80\n  }\n}\n```\n\n#### Batch Actions\n```http\nPOST /api/actions/batch\n```\n\nExecutes multiple actions in sequence.\n\n**Example Request:**\n```json\nPOST /api/actions/batch\n{\n  \"actions\": [\n    {\n      \"action\": \"turn_on_lights\",\n      \"parameters\": {\n        \"room\": \"living_room\"\n      }\n    },\n    {\n      \"action\": \"set_temperature\",\n      \"parameters\": {\n        \"temperature\": 22\n      }\n    }\n  ]\n}\n```\n\n### Query Functions\n\n#### Get Available Actions\n```http\nGET /api/actions\n```\n\nReturns a list of all available actions.\n\n**Example Response:**\n```json\n{\n  \"actions\": [\n    {\n      \"name\": \"turn_on_lights\",\n      \"parameters\": [\"room\", \"brightness\"],\n      \"description\": \"Turns on lights in specified room\"\n    },\n    {\n      \"name\": \"set_temperature\",\n      \"parameters\": [\"temperature\"],\n      \"description\": \"Sets temperature in current context\"\n    }\n  ]\n}\n```\n\n#### Context Query\n```http\nGET /api/context?type=current\n```\n\nRetrieves context information.\n\n**Example Response:**\n```json\n{\n  \"current_context\": {\n    \"user\": \"john\",\n    \"location\": \"kitchen\",\n    \"time\": \"morning\",\n    \"activity\": \"cooking\"\n  }\n}\n```\n\n### WebSocket Events\n\nThe server supports real-time updates via WebSocket connections.\n\n```javascript\n// Client-side connection example\nconst ws = new WebSocket('ws://localhost:3000/ws');\n\nws.onmessage = (event) => {\n  const data = JSON.parse(event.data);\n  console.log('Received update:', data);\n};\n```\n\n#### Supported Events\n\n- `state_change`: Emitted when system state changes\n- `context_update`: Emitted when context is updated\n- `action_executed`: Emitted when an action is completed\n- `error`: Emitted when an error occurs\n\n**Example Event Data:**\n```json\n{\n  \"event\": \"state_change\",\n  \"data\": {\n    \"previous_state\": {\n      \"lights\": \"off\"\n    },\n    \"current_state\": {\n      \"lights\": \"on\"\n    },\n    \"timestamp\": \"2024-03-20T10:30:00Z\"\n  }\n}\n```\n\n### Error Handling\n\nAll endpoints return standard HTTP status codes:\n\n- 200: Success\n- 400: Bad Request\n- 401: Unauthorized\n- 403: Forbidden\n- 404: Not Found\n- 500: Internal Server Error\n\n**Error Response Format:**\n```json\n{\n  \"error\": {\n    \"code\": \"INVALID_PARAMETERS\",\n    \"message\": \"Missing required parameter: room\",\n    \"details\": {\n      \"missing_fields\": [\"room\"]\n    }\n  }\n}\n```\n\n### Rate Limiting\n\nThe API implements rate limiting to prevent abuse:\n\n- 100 requests per minute per IP for regular endpoints\n- 1000 requests per minute per IP for WebSocket connections\n\nWhen rate limit is exceeded, the server returns:\n\n```json\n{\n  \"error\": {\n    \"code\": \"RATE_LIMIT_EXCEEDED\",\n    \"message\": \"Too many requests\",\n    \"reset_time\": \"2024-03-20T10:31:00Z\"\n  }\n}\n```\n\n### Example Usage\n\n#### Using curl\n```bash\n# Get current state\ncurl -X GET \\\n  http://localhost:3000/api/state \\\n  -H 'Authorization: ApiKey your_api_key_here'\n\n# Execute action\ncurl -X POST \\\n  http://localhost:3000/api/action \\\n  -H 'Authorization: ApiKey your_api_key_here' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    \"action\": \"turn_on_lights\",\n    \"parameters\": {\n      \"room\": \"living_room\",\n      \"brightness\": 80\n    }\n  }'\n```\n\n#### Using JavaScript\n```javascript\n// Execute action\nasync function executeAction() {\n  const response = await fetch('http://localhost:3000/api/action', {\n    method: 'POST',\n    headers: {\n      'Authorization': 'ApiKey your_api_key_here',\n      'Content-Type': 'application/json'\n    },\n    body: JSON.stringify({\n      action: 'turn_on_lights',\n      parameters: {\n        room: 'living_room',\n        brightness: 80\n      }\n    })\n  });\n  \n  const data = await response.json();\n  console.log('Action result:', data);\n}\n```\n\n## Development\n\n```bash\n# Development mode with hot reload\nnpm run dev\n\n# Build project\nnpm run build\n\n# Production mode\nnpm run start\n\n# Run tests\nnpx jest --config=jest.config.cjs\n\n# Run tests with coverage\nnpx jest --coverage\n\n# Lint code\nnpm run lint\n\n# Format code\nnpm run format\n```\n\n## Troubleshooting\n\n### Common Issues\n\n1. **Node.js Version (`toSorted is not a function`)**\n   - **Solution:** Update to Node.js 20.10.0+\n   ```bash\n   nvm install 20.10.0\n   nvm use 20.10.0\n   ```\n\n2. **Connection Issues**\n   - Verify Home Assistant is running\n   - Check `HASS_HOST` accessibility\n   - Validate token permissions\n   - Ensure WebSocket connection for real-time updates\n\n3. **Add-on Management Issues**\n   - Verify Supervisor access\n   - Check add-on compatibility\n   - Validate system resources\n\n4. **HACS Integration Issues**\n   - Verify HACS installation\n   - Check HACS integration status\n   - Validate repository access\n\n5. **Automation Issues**\n   - Verify entity availability\n   - Check trigger conditions\n   - Validate service calls\n   - Monitor execution logs\n\n## Project Status\n\n✅ **Complete**\n- Entity, Floor, and Area access\n- Device control (Lights, Climate, Covers, Switches, Contacts)\n- Add-on management system\n- Package management through HACS\n- Advanced automation configuration\n- Basic state management\n- Error handling and validation\n- Docker containerization\n- Jest testing setup\n- TypeScript integration\n- Environment variable management\n- Home Assistant API integration\n- Project documentation\n\n🚧 **In Progress**\n- WebSocket implementation for real-time updates\n- Enhanced security features\n- Tool organization optimization\n- Performance optimization\n- Resource context integration\n- API documentation generation\n- Multi-platform desktop integration\n- Advanced error recovery\n- Custom prompt testing\n- Enhanced macOS integration\n- Type safety improvements\n- Testing coverage expansion\n\n## Contributing\n\n1. Fork the repository\n2. Create a feature branch\n3. Implement your changes\n4. Add tests for new functionality\n5. Ensure all tests pass\n6. Submit a pull request\n\n## Resources\n\n- [MCP Documentation](https://modelcontextprotocol.io/introduction)\n- [Home Assistant Docs](https://www.home-assistant.io)\n- [HA REST API](https://developers.home-assistant.io/docs/api/rest)\n- [HACS Documentation](https://hacs.xyz)\n- [TypeScript Documentation](https://www.typescriptlang.org/docs)\n\n## License\n\nMIT License - See [LICENSE](LICENSE) file\n",
+  "category": "IoT",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "homeassistant-mcp-docker": {
+        "command": "docker",
+        "args": ["compose", "up", "-d"],
+        "env": {
+          "HASS_HOST": "http://homeassistant.local:8123",
+          "HASS_TOKEN": "your_home_assistant_token",
+          "HASS_SOCKET_URL": "ws://homeassistant.local:8123/api/websocket",
+          "PORT": "3000",
+          "NODE_ENV": "production",
+          "DEBUG": "false"
+        },
+        "docker_image": "compose"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tevonsb",
+    "repo": "homeassistant-mcp",
+    "url": "https://github.com/tevonsb/homeassistant-mcp",
+    "name": "homeassistant-mcp",
+    "path": null,
+    "stars": 384,
+    "contributors": 3,
+    "issues": 12,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "41bbfad10c73b2c768a84aa70b181c79bab8579d"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:52.658Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@digital-alchemy/core",
+      "importance": 9
+    },
+    {
+      "name": "@digital-alchemy/hass",
+      "importance": 9
+    },
+    {
+      "name": "ajv",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 8
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "express-rate-limit",
+      "importance": 7
+    },
+    {
+      "name": "helmet",
+      "importance": 7
+    },
+    {
+      "name": "litemcp",
+      "importance": 10
+    },
+    {
+      "name": "uuid",
+      "importance": 4
+    },
+    {
+      "name": "ws",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"homeassistant-mcp\",\n  \"version\": \"0.1.0\",\n  \"description\": \"Model Context Protocol Server for Home Assistant\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"scripts\": {\n    \"build\": \"npx tsc\",\n    \"start\": \"node dist/src/index.js\",\n    \"dev\": \"tsx watch src/index.ts\",\n    \"test\": \"NODE_OPTIONS=--experimental-vm-modules jest --config=jest.config.cjs\",\n    \"test:coverage\": \"NODE_OPTIONS=--experimental-vm-modules jest --config=jest.config.cjs --coverage\",\n    \"test:watch\": \"NODE_OPTIONS=--experimental-vm-modules jest --config=jest.config.cjs --watch\",\n    \"lint\": \"eslint src --ext .ts\",\n    \"lint:fix\": \"eslint src --ext .ts --fix\",\n    \"prepare\": \"npm run build\",\n    \"clean\": \"rimraf dist\",\n    \"types:check\": \"tsc --noEmit\",\n    \"types:install\": \"npm install --save-dev @types/node @types/jest\"\n  },\n  \"dependencies\": {\n    \"@digital-alchemy/core\": \"^24.11.4\",\n    \"@digital-alchemy/hass\": \"^24.11.4\",\n    \"ajv\": \"^8.12.0\",\n    \"dotenv\": \"^16.3.1\",\n    \"express\": \"^4.18.2\",\n    \"express-rate-limit\": \"^7.1.5\",\n    \"helmet\": \"^7.1.0\",\n    \"litemcp\": \"^0.7.0\",\n    \"uuid\": \"^9.0.1\",\n    \"ws\": \"^8.16.0\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/ajv\": \"^1.0.0\",\n    \"@types/express\": \"^4.17.21\",\n    \"@types/express-rate-limit\": \"^6.0.0\",\n    \"@types/helmet\": \"^4.0.0\",\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/node\": \"^20.17.16\",\n    \"@types/uuid\": \"^9.0.8\",\n    \"@types/ws\": \"^8.5.10\",\n    \"jest\": \"^29.7.0\",\n    \"rimraf\": \"^5.0.5\",\n    \"ts-jest\": \"^29.1.2\",\n    \"tsx\": \"^4.7.0\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"author\": \"Jango Blockchained\",\n  \"license\": \"MIT\",\n  \"packageManager\": \"yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e\"\n}\n"
+}

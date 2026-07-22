@@ -1,0 +1,169 @@
+{
+  "name": "rad-security__mcp-server",
+  "display_name": "mcp-server",
+  "description": "Rad Security MCP Server",
+  "author": {
+    "name": "rad-security"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@rad-security/mcp-server"],
+    "env": {
+      "RAD_SECURITY_ACCESS_KEY_ID": "${user_config.rad_security_access_key_id}",
+      "RAD_SECURITY_SECRET_KEY": "${user_config.rad_security_secret_key}",
+      "RAD_SECURITY_ACCOUNT_ID": "${user_config.rad_security_account_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "rad_security_access_key_id": {
+      "type": "string",
+      "title": "RAD Security Access Key ID",
+      "description": "Your access key ID for RAD Security.",
+      "sensitive": true,
+      "required": true
+    },
+    "rad_security_secret_key": {
+      "type": "string",
+      "title": "RAD Security Secret Key",
+      "description": "Your secret key for RAD Security.",
+      "sensitive": true,
+      "required": true
+    },
+    "rad_security_account_id": {
+      "type": "string",
+      "title": "RAD Security Account ID",
+      "description": "Your account ID for RAD Security.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# RAD Security MCP Server\n\nA Model Context Protocol (MCP) server for RAD Security, providing AI-powered security insights for Kubernetes and cloud environments.\n\n## Installation\n\n```bash\nnpm install @rad-security/mcp-server\n```\n\n## Usage\n\n### Prerequisites\n\n- Node.js 20.x or higher\n\n### Environment Variables\n\nThe following environment are required required to use the MCP server with Rad Security:\n\n```bash\nRAD_SECURITY_ACCESS_KEY_ID=\"your_access_key\"\nRAD_SECURITY_SECRET_KEY=\"your_secret_key\"\nRAD_SECURITY_ACCOUNT_ID=\"your_account_id\"\n```\n\nbut you can also use few operations without authentication:\n\n- List CVEs\n- Get details of a specific CVE\n- Get latest 30 CVEs\n- List Kubernetes resource misconfiguration policies\n\n### In cursor IDE\n\nIt's quite problematic to set ENV variables in cursor IDE.\n\nSo, you can use the following start.sh script to start the server.\n\n```bash\n./start.sh\n```\n\nPlease set the ENV variables in the start.sh script first!\n\n### In Claude Desktop\n\nYou can use the following config to start the server in Claude Desktop.\n\n```json\n{\n  \"mcpServers\": {\n    \"rad-security\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@rad-security/mcp-server\"],\n      \"env\": {\n        \"RAD_SECURITY_ACCESS_KEY_ID\": \"<your-access-key-id>\",\n        \"RAD_SECURITY_SECRET_KEY\": \"<your-secret-key>\",\n        \"RAD_SECURITY_ACCOUNT_ID\": \"<your-account-id>\"\n      }\n    }\n  }\n```\n\n### As a Docker Container - with Streamable HTTP\n\n```bash\ndocker build -t rad-security/mcp-server .\ndocker run \\\n  -e TRANSPORT_TYPE=streamable \\\n  -e RAD_SECURITY_ACCESS_KEY_ID=your_access_key \\\n  -e RAD_SECURITY_SECRET_KEY=your_secret_key \\\n  -e RAD_SECURITY_ACCOUNT_ID=your_account_id \\\n  -p 3000:3000 \\\n  rad-security/mcp-server\n```\n\n### As a Docker Container - with SSE (deprecated)\n\n*Note:* The SSE transport is now deprecated in favor of Streamable HTTP. It's still supported for backward compatibility, but it's recommended to use Streamable HTTP instead.\n\n```bash\ndocker build -t rad-security/mcp-server .\ndocker run \\\n  -e TRANSPORT_TYPE=sse \\\n  -e RAD_SECURITY_ACCESS_KEY_ID=your_access_key \\\n  -e RAD_SECURITY_SECRET_KEY=your_secret_key \\\n  -e RAD_SECURITY_ACCOUNT_ID=your_account_id \\\n  -p 3000:3000 \\\n  rad-security/mcp-server\n```\n\n## Features\n\n- Account Inventory\n  - List clusters and their details*\n\n- Containers Inventory\n  - List containers and their details*\n\n- Security Findings\n  - List and analyze security findings*\n\n- Runtime Security\n  - Get process trees of running containers*\n  - Get runtime baselines of running containers*\n  - Analyze process behavior of running containers*\n\n- Network Security\n  - Monitor HTTP requests*\n  - Track network connections*\n  - Analyze network patterns*\n\n- Identity and Access\n  - List identities*\n  - Get identity details*\n\n- Audit\n  - List who shelled into a pod*\n\n- Cloud Security\n  - List and monitor cloud resources*\n  - Get resource details and compliance status*\n\n- Images\n  - Get SBOMs*\n  - List images and their vulnerabilities*\n  - Get top vulnerable images*\n\n- Kubernetes Objects\n  - Get details of a specific Kubernetes resource*\n  - List Kubernetes resources*\n  - List Kubernetes resource misconfiguration policies*\n\n- Threat Vector\n  - List threat vectors*\n  - Get details of a specific threat vector*\n\n- CVEs\n  - List CVEs\n  - Get details of a specific CVE\n  - Get latest 30 CVEs\n\n`*` - requires authentication and account in Rad Security.\n\n## Development\n\n```bash\n# Install dependencies\nnpm install\n\n# Run type checking\nnpm run type-check\n\n# Run linter\nnpm run lint\n\n# Build\nnpm run build\n```\n\n## License\n\nMIT License - see the [LICENSE](LICENSE) file for details\n",
+  "category": "Security",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "rad-security-mcp-server-start-script": {
+        "command": "./start.sh",
+        "args": [],
+        "env": {}
+      },
+      "rad-security-mcp-server-npx-configured": {
+        "command": "npx",
+        "args": ["-y", "@rad-security/mcp-server"],
+        "env": {
+          "RAD_SECURITY_ACCESS_KEY_ID": "<your-access-key-id>",
+          "RAD_SECURITY_SECRET_KEY": "<your-secret-key>",
+          "RAD_SECURITY_ACCOUNT_ID": "<your-account-id>"
+        }
+      },
+      "rad-security-mcp-server-docker-streamable": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-e",
+          "TRANSPORT_TYPE=streamable",
+          "-e",
+          "RAD_SECURITY_ACCESS_KEY_ID=your_access_key",
+          "-e",
+          "RAD_SECURITY_SECRET_KEY=your_secret_key",
+          "-e",
+          "RAD_SECURITY_ACCOUNT_ID=your_account_id",
+          "-p",
+          "3000:3000",
+          "rad-security/mcp-server"
+        ],
+        "env": {
+          "TRANSPORT_TYPE": "streamable",
+          "RAD_SECURITY_ACCESS_KEY_ID": "your_access_key",
+          "RAD_SECURITY_SECRET_KEY": "your_secret_key",
+          "RAD_SECURITY_ACCOUNT_ID": "your_account_id"
+        },
+        "docker_image": "rad-security/mcp-server"
+      },
+      "rad-security-mcp-server-docker-sse": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-e",
+          "TRANSPORT_TYPE=sse",
+          "-e",
+          "RAD_SECURITY_ACCESS_KEY_ID=your_access_key",
+          "-e",
+          "RAD_SECURITY_SECRET_KEY=your_secret_key",
+          "-e",
+          "RAD_SECURITY_ACCOUNT_ID=your_account_id",
+          "-p",
+          "3000:3000",
+          "rad-security/mcp-server"
+        ],
+        "env": {
+          "TRANSPORT_TYPE": "sse",
+          "RAD_SECURITY_ACCESS_KEY_ID": "your_access_key",
+          "RAD_SECURITY_SECRET_KEY": "your_secret_key",
+          "RAD_SECURITY_ACCOUNT_ID": "your_account_id"
+        },
+        "docker_image": "rad-security/mcp-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "rad-security",
+    "repo": "mcp-server",
+    "url": "https://github.com/rad-security/mcp-server",
+    "name": "mcp-server",
+    "path": null,
+    "stars": 5,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "742cc5c90743246e9acbb1bfc68a0365e0c3a2ca"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.055Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "cors",
+      "importance": 8
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@rad-security/mcp-server\",\n  \"version\": \"0.0.0\",\n  \"description\": \"RAD Security MCP Server for AI-powered security insights\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"bin\": {\n    \"mcp-server\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"type-check\": \"tsc --noEmit\",\n    \"lint\": \"npx eslint src --ext .ts\",\n    \"lint:fix\": \"npx eslint src --ext .ts --fix\",\n    \"prepare\": \"npm run build\",\n    \"prepublishOnly\": \"npm run lint\",\n    \"start\": \"node dist/index.js\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/rad-security/mcp-server.git\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"security\",\n    \"rad-security\",\n    \"kubernetes\",\n    \"cloud\"\n  ],\n  \"author\": \"RAD Security\",\n  \"license\": \"MIT\",\n  \"bugs\": {\n    \"url\": \"https://github.com/rad-security/mcp-server/issues\"\n  },\n  \"homepage\": \"https://github.com/rad-security/mcp-server#readme\",\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.12.0\",\n    \"cors\": \"2.8.5\",\n    \"express\": \"4.18.2\",\n    \"zod\": \"3.24.2\",\n    \"zod-to-json-schema\": \"3.24.5\"\n  },\n  \"devDependencies\": {\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/express\": \"^4.17.21\",\n    \"@types/node\": \"^22\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.29.0\",\n    \"@typescript-eslint/parser\": \"^8.29.0\",\n    \"eslint\": \"^9.15.0\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}\n"
+}

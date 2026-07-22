@@ -1,0 +1,78 @@
+{
+  "name": "quentincody__catalysishub-mcp-server",
+  "display_name": "catalysishub-mcp-server",
+  "description": "MCP server from QuentinCody/catalysishub-mcp-server",
+  "author": {
+    "name": "QuentinCody"
+  },
+  "server": {
+    "command": "python3",
+    "args": ["${__dirname}/catalysishub_mcp_server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Catalysis Hub MCP Server\n\nA Model Context Protocol (MCP) server interface to Catalysis Hub's GraphQL API, enabling programmatic access to catalysis research data through flexible GraphQL queries.\n\n## Key Features\n\n- **Direct GraphQL Access**: Execute any valid GraphQL query against Catalysis Hub's API\n- **Comprehensive Data Access**:\n  - Catalytic reactions (equations, conditions, catalysts)\n  - Material systems (structures, properties, descriptors)\n  - Research publications (titles, DOIs, authors)\n  - Surface reaction data (adsorption energies, binding sites)\n- **MCP Standard Compliance**: Implements the Model Context Protocol for AI-agent interoperability\n- **Flexible Query Support**: Execute complex queries with variables parameterization\n- **Error Handling**: Robust error reporting for API connectivity and query execution\n\n## License and Citation\n\nThis project is available under the MIT License with an Academic Citation Requirement. This means you can freely use, modify, and distribute the code, but any academic or scientific publication that uses this software must provide appropriate attribution.\n\n### For academic/research use:\nIf you use this software in a research project that leads to a publication, presentation, or report, you **must** cite this work according to the format provided in [CITATION.md](CITATION.md).\n\n### For commercial/non-academic use:\nCommercial and non-academic use follows the standard MIT License terms without the citation requirement.\n\nBy using this software, you agree to these terms. See [LICENSE.md](LICENSE.md) for the complete license text.\n\n## Implementation Details\n\n- **Server Configuration** (matches `claude_desktop_config.json`):\n  ```json\n  {\n    \"command\": \"/Users/quentincody/.env/bin/python3\",\n    \"args\": [\"/Users/quentincody/catalysishub-mcp-server/catalysishub_mcp_server.py\"],\n    \"options\": {\n      \"cwd\": \"/Users/quentincody/catalysishub-mcp-server\"\n    }\n  }\n  ```\n- **Core Dependency**: `httpx` for asynchronous HTTP requests\n- **Transport**: Standard input/output communication following MCP specifications\n\n## Setup & Installation\n\n1. **Clone the repository**:\n   ```bash\n   git clone <repository_url>\n   cd catalysishub-mcp-server\n   ```\n\n2. **Install dependencies**:\n   ```bash\n   pip install -r requirements.txt\n   ```\n\n3. **Verify installation**:\n   ```bash\n   python3 catalysishub_mcp_server.py --version\n   # Should output: catalysishub-mcp-server 0.1.0\n   ```\n\n## Usage Examples\n\n### Basic Query Execution\n```python\nfrom mcp.client import MCPClient\n\nasync with MCPClient(\"catalysishub\") as hub:\n    result = await hub.catalysishub_graphql(\n        query=\"\"\"{\n            reactions(first: 5) {\n                edges {\n                    node {\n                        id\n                        Equation\n                        Temperature\n                    }\n                }\n            }\n        }\"\"\"\n    )\n    print(json.loads(result))\n```\n\n### Parameterized Query with Variables\n```python\nvariables = {\n    \"materialId\": \"mp-1234\",\n    \"firstResults\": 5\n}\n\nresponse = await hub.catalysishub_graphql(\n    query=\"\"\"query GetMaterial($materialId: String!, $firstResults: Int!) {\n        systems(uniqueId: $materialId) {\n            edges {\n                node {\n                    energy\n                    Cifdata\n                    relatedReactions(first: $firstResults) {\n                        edges {\n                            node {\n                                id\n                                Equation\n                            }\n                        }\n                    }\n                }\n            }\n        }\n    }\"\"\",\n    variables=variables\n)\n```\n\n## Query Optimization Tips\n\n1. **Use GraphQL Fragments**:\n   ```graphql\n   fragment ReactionDetails on Reaction {\n       id\n       Equation\n       ActivationEnergy\n       Catalyst {\n           formula\n           surface\n       }\n   }\n   \n   query {\n       reactions(first: 10) {\n           edges {\n               node {\n                   ...ReactionDetails\n               }\n           }\n       }\n   }\n   ```\n\n2. **Batch Related Queries**:\n   ```graphql\n   query BatchQuery {\n       reactions: reactions(first: 5) { edges { node { id Equation } } }\n       materials: systems(first: 5) { edges { node { formula energy } } }\n   }\n   ```\n\n## Response Structure\n\nSuccessful responses follow this structure:\n```json\n{\n    \"data\": { /* Query results */ },\n    \"extensions\": {\n        \"responseMetadata\": {\n            \"requestDuration\": 145,\n            \"apiVersion\": \"2024-06\"\n        }\n    }\n}\n```\n\nError responses include detailed diagnostics:\n```json\n{\n    \"errors\": [{\n        \"message\": \"Cannot query field 'invalidField' on type 'Reaction'\",\n        \"locations\": [{\"line\": 5, \"column\": 21}],\n        \"path\": [\"query\", \"reactions\", \"edges\", \"node\", \"invalidField\"]\n    }]\n}\n```\n\n## Troubleshooting\n\n**Common Issues**:\n- `HTTP Request Error`: Verify network connectivity to `api.catalysis-hub.org`\n- `JSON Decode Error`: Check query syntax using Catalysis Hub's [GraphQL Playground](https://www.catalysis-hub.org/api/graphql)\n- `Timeout Errors`: Add `timeout` parameter to complex queries\n\n## Acknowledgements\n\nThis project builds on the Model Context Protocol (MCP) framework and is designed to interface with the Catalysis Hub database, a comprehensive resource for catalysis research data.",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "catalysishub-mcp-server-configured": {
+        "command": "/Users/quentincody/.env/bin/python3",
+        "args": ["/Users/quentincody/catalysishub-mcp-server/catalysishub_mcp_server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "QuentinCody",
+    "repo": "catalysishub-mcp-server",
+    "url": "https://github.com/QuentinCody/catalysishub-mcp-server",
+    "name": "catalysishub-mcp-server",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "86b5724e576326efe62690169210f17e16093f06"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:29.717Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp>=0.1.0\nhttpx>=0.24.0\npython-dotenv>=1.0.0 "
+}

@@ -1,0 +1,113 @@
+{
+  "name": "iplocate__mcp-server-iplocate",
+  "display_name": "mcp-server-iplocate",
+  "description": "MCP server for looking up IP address geolocation (IP to country, IP to city), network information, proxy and VPN detection, abuse contacts, and more - using the IPLocate.io API.",
+  "author": {
+    "name": "iplocate"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@iplocate/mcp-server"],
+    "env": {
+      "IPLOCATE_API_KEY": "${user_config.iplocate_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "iplocate_api_key": {
+      "type": "string",
+      "title": "IPLocate API Key",
+      "description": "Your API key from IPLocate.io for increased request quota. (50 requests/day without key, 1000 requests/day with free key)",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# MCP Server for IP address geolocation and network data from IPLocate.io\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=iplocate&config=eyJjb21tYW5kIjoibnB4IC15IEBpcGxvY2F0ZS9tY3Atc2VydmVyIiwiZW52Ijp7IklQTE9DQVRFX0FQSV9LRVkiOiIifX0%3D)\n\nAn MCP (Model Context Protocol) server for [IPLocate.io](https://iplocate.io) - providing comprehensive IP address intelligence including geolocation, network information, privacy detection, and abuse contacts.\n\n## Features\n\nThis MCP server provides tools to look up detailed information about IP addresses:\n\n- **Geolocation**: Country, city, coordinates, timezone, postal code and more\n- **Network Information**: ASN name, number, type, network range, ISP information\n- **Privacy & Security**: VPN detection, proxy detection, Tor exit nodes, hosting providers\n- **Company Data**: Organization name, domain, business type\n- **Abuse Contacts**: Email, phone, and address for reporting malicious activity\n\n## Requirements\n\nTo follow our quick start setup instructions, you will need:\n\n- Node.js 18 or higher\n- npm\n- A compatible MCP client. For example, Cursor, Claude Desktop.\n\n## Quick Start\n\nThe easiest way to use this MCP server is through your MCP client. Simply configure your client with the setup instructions below:\n\n### Configure your MCP client\n\n<details>\n<summary><strong>Cursor</strong></summary>\n\nOne-click setup:\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=iplocate&config=eyJjb21tYW5kIjoibnB4IC15IEBpcGxvY2F0ZS9tY3Atc2VydmVyIiwiZW52Ijp7IklQTE9DQVRFX0FQSV9LRVkiOiIifX0%3D)\n\nManual configuration:\n\n1. In your project directory, create the configuration:\n\n   ```bash\n   mkdir -p .cursor\n   touch .cursor/mcp.json\n   ```\n\n2. Add the following to `.cursor/mcp.json`:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"iplocate\": {\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"@iplocate/mcp-server\"],\n         \"env\": {\n           \"IPLOCATE_API_KEY\": \"your_api_key_here\"\n         }\n       }\n     }\n   }\n   ```\n\n   Replace `your_api_key_here` with your actual API key from [IPLocate.io](https://iplocate.io/signup).\n\n</details>\n\n<details>\n<summary><strong>Claude Desktop</strong></summary>\n\n1. Open Claude Desktop settings\n   - On macOS: `Cmd + ,`\n   - On Windows: `Ctrl + ,`\n\n2. Go to the \"Developer\" tab and click \"Edit Config\"\n\n3. Add the IPLocate server configuration:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"iplocate\": {\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"@iplocate/mcp-server\"],\n         \"env\": {\n           \"IPLOCATE_API_KEY\": \"your_api_key_here\"\n         }\n       }\n     }\n   }\n   ```\n\n   Replace `your_api_key_here` with your actual API key from [IPLocate.io](https://iplocate.io/signup).\n\n</details>\n\n<details>\n<summary><strong>VS Code (Preview)</strong></summary>\n\n1. Create the VS Code MCP configuration:\n\n   ```bash\n   mkdir -p .vscode\n   touch .vscode/mcp.json\n   ```\n\n2. Add the following to `.vscode/mcp.json`:\n\n   ```json\n   {\n     \"servers\": {\n       \"iplocate\": {\n         \"type\": \"stdio\",\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"@iplocate/mcp-server\"],\n         \"env\": {\n           \"IPLOCATE_API_KEY\": \"your_api_key_here\"\n         }\n       }\n     }\n   }\n   ```\n\n   Replace `your_api_key_here` with your actual API key from [IPLocate.io](https://iplocate.io/signup).\n\n</details>\n\n### Available tools\n\nThe server provides the following tools:\n\n#### `lookup_ip_address_details`\n\nGet comprehensive information about an IP address including all available data.\n\n**Parameters:**\n\n- `ip` (optional): IPv4 or IPv6 address to look up. If not provided, returns information about the caller's IP address.\n\n**Example:**\n\n```json\n{\n  \"ip\": \"8.8.8.8\"\n}\n```\n\n**Returns:** All available data about the IP address, including geolocation, network information, privacy, and company data.\n\n#### `lookup_ip_address_location`\n\nGet geographic location information for an IP address.\n\n**Parameters:**\n\n- `ip` (optional): IPv4 or IPv6 address to look up.\n\n**Returns:** Country, city, coordinates, timezone, postal code, and more.\n\n#### `lookup_ip_address_privacy`\n\nCheck whether an IP address is detected as a VPN, proxy, other anonymizing service; is on an abuse blocklist; or is a hosting provider.\n\n**Parameters:**\n\n- `ip` (optional): IPv4 or IPv6 address to look up.\n\n**Returns:** VPN status, proxy detection, Tor exit node status, hosting provider information.\n\n#### `lookup_ip_address_network`\n\nGet network and ASN (Autonomous System Number) information for an IP address.\n\n**Parameters:**\n\n- `ip` (optional): IPv4 or IPv6 address to look up.\n\n**Returns:** ASN details, network range, ISP information, regional registry.\n\n#### `lookup_ip_address_company`\n\nGet company/organization information for an IP address.\n\n**Parameters:**\n\n- `ip` (optional): IPv4 or IPv6 address to look up.\n\n**Returns:** Company name, domain, country, organization type.\n\n#### `lookup_ip_address_abuse_contacts`\n\nGet abuse contact information for an IP address to report malicious activity.\n\n**Parameters:**\n\n- `ip` (optional): IPv4 or IPv6 address to look up.\n\n**Returns:** Abuse contact email, phone, address, and network range.\n\n### Available prompts\n\nThe server also provides pre-configured prompts to help with common IP analysis tasks:\n\n#### `check_ip_security`\n\nAnalyze an IP address for security concerns including VPN, proxy, Tor usage, and abuse history.\n\n**Example usage:** \"Use the check_ip_security prompt to analyze 192.168.1.1\"\n\n#### `locate_ip_geographically`\n\nGet detailed geographic information about an IP address.\n\n**Example usage:** \"Use the locate_ip_geographically prompt to find where I am\"\n\n#### `investigate_ip_ownership`\n\nGet detailed information about who owns and operates an IP address.\n\n**Example usage:** \"Use the investigate_ip_ownership prompt to check who owns 8.8.8.8\"\n\n#### `ip_comparison`\n\nCompare geographic and network information between two IP addresses.\n\n**Example usage:** \"Use the ip_comparison prompt to compare 1.1.1.1 and 8.8.8.8\"\n\n## Add your API key\n\nYou can make up to 50 requests per day without an API key.\n\nSign up for a free API key at [IPLocate.io](https://iplocate.io/signup) to increase your free quota to **1,000 requests per day**.\n\n### Sign up for a free API key\n\n1. Visit [https://iplocate.io/signup](https://iplocate.io/signup)\n2. Create a free account\n3. Get your API key from the dashboard\n\n### Using an API key with this server\n\nThe server automatically reads your API key from the `IPLOCATE_API_KEY` environment variable. Configure it in your MCP client settings (see the configuration examples above) or set it when running manually.\n\n## Running the server manually\n\nIf you need to run the server manually (for development or testing), you have several options:\n\n### Prerequisites\n\n- Node.js 18 or higher\n- npm or yarn\n\n### Using npx (recommended)\n\n```bash\nnpx -y @iplocate/mcp-server\n```\n\nWith API key:\n\n**On macOS/Linux:**\n\n```bash\nexport IPLOCATE_API_KEY=your_api_key_here\nnpx -y @iplocate/mcp-server\n```\n\n**On Windows:**\n\n```powershell\nset IPLOCATE_API_KEY=your_api_key_here\nnpx -y @iplocate/mcp-server\n```\n\n### Install from npm\n\n```bash\nnpm install -g @iplocate/mcp-server\nmcp-server-iplocate\n```\n\n### Install from source\n\n```bash\ngit clone https://github.com/iplocate/mcp-server-iplocate.git\ncd mcp-server-iplocate\nyarn install\nyarn build\nyarn start\n```\n\nFor development with auto-reload:\n\n```bash\nyarn dev\n```\n\n### Testing\n\nYou can test the server using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):\n\n```bash\nnpx @modelcontextprotocol/inspector node dist/index.js\n```\n\n## API Response Format\n\nThe IPLocate API returns comprehensive data about IP addresses. Here's an example response structure:\n\n```json\n{\n  \"ip\": \"8.8.8.8\",\n  \"country\": \"United States\",\n  \"country_code\": \"US\",\n  \"city\": \"Mountain View\",\n  \"latitude\": 37.386,\n  \"longitude\": -122.0838,\n  \"asn\": {\n    \"asn\": \"AS15169\",\n    \"name\": \"Google LLC\",\n    \"domain\": \"google.com\"\n  },\n  \"privacy\": {\n    \"is_vpn\": false,\n    \"is_proxy\": false,\n    \"is_tor\": false,\n    \"is_hosting\": true\n  }\n  // ... and more fields\n}\n```\n\nFor full details, see the [IPLocate API documentation](https://iplocate.io/docs).\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## Support\n\n- For issues with this MCP server, please open an issue on GitHub\n- For IPLocate API support, contact <support@iplocate.io>\n- For IPLocate API documentation, visit [https://iplocate.io/docs](https://iplocate.io/docs)\n\n## Acknowledgments\n\n- [Model Context Protocol](https://modelcontextprotocol.io) for the MCP specification\n- [Anthropic](https://anthropic.com) for the MCP TypeScript SDK\n\n## About IPLocate.io\n\nSince 2017, IPLocate has set out to provide the most reliable and accurate IP address data.\n\nWe process 50TB+ of data to produce our comprehensive IP geolocation, IP to company, proxy and VPN detection, hosting detection, ASN, and WHOIS data sets. Our API handles over 15 billion requests a month for thousands of businesses and developers.\n\n- Email: [support@iplocate.io](mailto:support@iplocate.io)\n- Website: [iplocate.io](https://iplocate.io)\n- Documentation: [iplocate.io/docs](https://iplocate.io/docs)\n- Sign up for a free API Key: [iplocate.io/signup](https://iplocate.io/signup)\n",
+  "category": "Data",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "iplocate-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "@iplocate/mcp-server"],
+        "env": {}
+      },
+      "iplocate-mcp-server-with-api-key": {
+        "command": "npx",
+        "args": ["-y", "@iplocate/mcp-server"],
+        "env": {
+          "IPLOCATE_API_KEY": "your_api_key_here"
+        }
+      },
+      "iplocate-mcp-server-stdio": {
+        "command": "npx",
+        "args": ["-y", "@iplocate/mcp-server"],
+        "env": {
+          "IPLOCATE_API_KEY": "your_api_key_here"
+        }
+      },
+      "mcp-server-iplocate": {
+        "command": "mcp-server-iplocate",
+        "args": [],
+        "env": {}
+      },
+      "iplocate-mcp-server-yarn-start": {
+        "command": "yarn",
+        "args": ["start"],
+        "env": {}
+      },
+      "iplocate-mcp-server-yarn-dev": {
+        "command": "yarn",
+        "args": ["dev"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "iplocate",
+    "repo": "mcp-server-iplocate",
+    "url": "https://github.com/iplocate/mcp-server-iplocate",
+    "name": "mcp-server-iplocate",
+    "path": null,
+    "stars": 3,
+    "contributors": 2,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "a41926dd620ee794973f920286f7bbdb8993567d"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.065Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@iplocate/mcp-server\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP server for IPLocate.io - IP address geolocation, network information, and threat detection\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"mcp-server-iplocate\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"prebuild\": \"node -p \\\"'export const LIB_VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\\\" > src/version.ts\",\n    \"build\": \"tsc\",\n    \"dev\": \"tsx src/index.ts\",\n    \"start\": \"node dist/index.js\",\n    \"prepare\": \"yarn build\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"iplocate\",\n    \"ip-geolocation\",\n    \"ip-address\",\n    \"geolocation\",\n    \"threat-detection\",\n    \"vpn-detection\"\n  ],\n  \"author\": \"IPLocate\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.13.2\",\n    \"zod\": \"^3.25.67\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.0.7\",\n    \"tsx\": \"^4.20.3\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\n"
+}

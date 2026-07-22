@@ -65,6 +65,7 @@ const renderServiceRoutes: FastifyPluginAsyncZod = async (fastify) => {
         bundle: body.bundle as AppRecordingBundle,
         userId,
         title: body.title,
+        bundleBytes: Number(headers["content-length"]) || undefined,
       });
       return reply.send({ jobId });
     },

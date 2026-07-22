@@ -1,0 +1,92 @@
+{
+  "name": "sirmews__apple-notes-mcp",
+  "display_name": "apple-notes-mcp",
+  "description": "Read your Apple Notes with Claude Model Context Protocol",
+  "author": {
+    "name": "sirmews"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["apple-notes-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Apple Notes Model Context Protocol Server for Claude Desktop.\n\nRead your local Apple Notes database and provide it to Claude Desktop.\n\nNow Claude can search your most forgotten notes and know even more about you.\n\nNoting could go wrong.\n\n## Components\n\n### Resources\n\nThe server implements the ability to read and write to your Apple Notes.\n\n### Tools\n\nThe server provides multiple prompts:\n- `get-all-notes`: Get all notes.\n- `read-note`: Get full content of a specific note.\n- `search-notes`: Search through notes.\n\n### Missing Features:\n\n- No handling of encrypted notes (ZISPASSWORDPROTECTED)\n- No support for pinned notes filtering\n- No handling of cloud sync status\n- Missing attachment content retrieval\n- No support for checklist status (ZHASCHECKLIST)\n- No ability to create or edit notes\n\n## Quickstart\n\n### Install the server\n\nRecommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) to install the server locally for Claude.\n\n```\nuvx apple-notes-mcp\n```\nOR\n```\nuv pip install apple-notes-mcp\n```\n\nAdd your config as described below.\n\n#### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\nNote: You might need to use the direct path to `uv`. Use `which uv` to find the path.\n\n\n__Development/Unpublished Servers Configuration__\n  \n```json\n\"mcpServers\": {\n  \"apple-notes-mcp\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"--directory\",\n      \"{project_dir}\",\n      \"run\",\n      \"apple-notes-mcp\"\n    ]\n  }\n}\n```\n\n\n__Published Servers Configuration__\n  \n```json\n\"mcpServers\": {\n  \"apple-notes-mcp\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"apple-notes-mcp\"\n    ]\n  }\n}\n```\n\n\n## Mac OS Disk Permissions\n\nYou'll need to grant Full Disk Access to the server. This is because the Apple Notes sqlite database is nested deep in the MacOS file system.\n\nI may look at an AppleScript solution in the future if this annoys me further or if I want to start adding/appending to Apple Notes.\n\n## Development\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n```bash\nuv sync\n```\n\n2. Build package distributions:\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n3. Publish to PyPI:\n```bash\nuv publish\n```\n\nNote: You'll need to set PyPI credentials via environment variables or command flags:\n- Token: `--token` or `UV_PUBLISH_TOKEN`\n- Or username/password: `--username`/`UV_PUBLISH_USERNAME` and `--password`/`UV_PUBLISH_PASSWORD`\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory {project_dir} run apple-notes-mcp\n```\n\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n## Source Code\n\nThe source code is available on [GitHub](https://github.com/sirmews/apple-notes-mcp).\n\n## Contributing\n\nSend your ideas and feedback to me on [Bluesky](https://bsky.app/profile/perfectlycromulent.bsky.social) or by opening an issue.\n",
+  "category": "AI Tools",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "apple-notes-mcp-dev": {
+        "command": "uv",
+        "args": ["--directory", "{project_dir}", "run", "apple-notes-mcp"],
+        "env": {}
+      },
+      "apple-notes-mcp-published": {
+        "command": "uvx",
+        "args": ["apple-notes-mcp"],
+        "env": {}
+      },
+      "apple-notes-mcp-debug": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/inspector", "uv", "--directory", "{project_dir}", "run", "apple-notes-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sirmews",
+    "repo": "apple-notes-mcp",
+    "url": "https://github.com/sirmews/apple-notes-mcp",
+    "name": "apple-notes-mcp",
+    "path": null,
+    "stars": 113,
+    "contributors": 2,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "d4cfb110b8141bf16d7db08b8573e54192cf4873"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:52.630Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "protobuf",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"apple-notes-mcp\"\nversion = \"0.1.1\"\ndescription = \"Read local Apple Notes sqlite database and provide it as a context protocol server for Claude Desktop.\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n \"httpx>=0.28.0\",\n \"mcp>=1.0.0\",\n \"protobuf>=5.29.0\",\n \"python-dotenv>=1.0.1\",\n]\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: MacOS\",\n]\n[[project.authors]]\nname = \"Navishkar Rao\"\nemail = \"sirmews@gmail.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\napple-notes-mcp = \"apple_notes_mcp:main\"\n\n[tool.apple-notes-mcp]\nserver_name = \"apple-notes-mcp\"\n\n[project.urls]\nHomepage = \"https://sirmews.github.io/apple-notes-mcp/\"\nIssues = \"https://github.com/sirmews/apple-notes-mcp/issues\"\n"
+}

@@ -34,6 +34,7 @@ function makeOrgSkill(id: string, name: string): OrgSkill {
     lastSyncedAt: null,
     lastSyncError: null,
     usageCount: 0,
+    usageUserCount: 0,
     lastUsedAt: null,
     fileCount: 0,
     teams: [],

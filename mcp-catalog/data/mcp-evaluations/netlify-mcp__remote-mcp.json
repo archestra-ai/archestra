@@ -1,0 +1,44 @@
+{
+  "name": "netlify-mcp__remote-mcp",
+  "display_name": "Netlify",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxLjE0ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDIyNiI+PHBhdGggZmlsbD0iIzA1YmRiYSIgZD0iTTY5LjE4MSAxODguMDg3aC0yLjQxN2wtMTIuMDY1LTEyLjA2NXYtMi40MTdsMTguNDQ0LTE4LjQ0NGgxMi43NzhsMS43MDQgMS43MDR2MTIuNzc4ek01NC42OTkgNTEuNjI4di0yLjQxN2wxMi4wNjUtMTIuMDY1aDIuNDE3TDg3LjYyNSA1NS41OXYxMi43NzhsLTEuNzA0IDEuNzA0SDczLjE0M3oiLz48cGF0aCBmaWxsPSIjMDE0ODQ3IiBkPSJNMTYwLjkwNiAxNDkuMTk4aC0xNy41NTJsLTEuNDY2LTEuNDY2di00MS4wODljMC03LjMxLTIuODczLTEyLjk3Ni0xMS42ODktMTMuMTc0Yy00LjUzNy0uMTE5LTkuNzI3IDAtMTUuMjc0LjIxOGwtLjgzMy44NTJ2NTMuMTczbC0xLjQ2NiAxLjQ2Nkg5NS4wNzRsLTEuNDY2LTEuNDY2di03MC4xOWwxLjQ2Ni0xLjQ2N2gzOS41MDNjMTUuMzU0IDAgMjcuNzk1IDEyLjQ0MSAyNy43OTUgMjcuNzk1djQzLjg4MnoiLz48cGF0aCBmaWxsPSIjMDViZGJhIiBkPSJNNzEuNjc3IDEyMi44ODlIMS40NjZMMCAxMjEuNDIzVjEwMy44M2wxLjQ2Ni0xLjQ2Nmg3MC4yMTFsMS40NjYgMS40NjZ2MTcuNTkzem0xODIuODU3IDBoLTcwLjIxMWwtMS40NjYtMS40NjZWMTAzLjgzbDEuNDY2LTEuNDY2aDcwLjIxMUwyNTYgMTAzLjgzdjE3LjU5M3pNMTE3Ljg3NiA1NC4xMjRWMS40NjZMMTE5LjM0MiAwaDE3LjU5M2wxLjQ2NiAxLjQ2NnY1Mi42NThsLTEuNDY2IDEuNDY2aC0xNy41OTN6bTAgMTY5LjY2M3YtNTIuNjU4bDEuNDY2LTEuNDY2aDE3LjU5M2wxLjQ2NiAxLjQ2NnY1Mi42NThsLTEuNDY2IDEuNDY1aC0xNy41OTN6Ii8+PC9zdmc+",
+  "description": "Remote MCP server for Netlify - web development platform and hosting",
+  "oauth_config": {
+    "name": "Netlify MCP",
+    "server_url": "https://netlify-mcp.netlify.app/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "Netlify MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Development",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "netlify-mcp"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://netlify-mcp.netlify.app/mcp",
+    "docs_url": "https://docs.netlify.com/build/build-with-ai/netlify-mcp-server/"
+  },
+  "github_info": null,
+  "programming_language": null
+}

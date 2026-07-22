@@ -1,0 +1,105 @@
+{
+  "name": "alchemyplatform__alchemy-mcp-server",
+  "display_name": "Alchemy",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPjxwYXRoIGZpbGw9IiMwQzBDMEUiIGQ9Ik0xMi4wMDYgMS43NjRhLjQ0LjQ0IDAgMCAwLS4yMTUuMDU0YS40LjQgMCAwIDAtLjE1Ni4xNTJMOS4zNiA1LjgzNWEuOC44IDAgMCAwLS4xMTMuNDE2YzAgLjE0Ni4wMzkuMjkuMTEzLjQxNmw0Ljk1MSA4LjQxMmEuODQuODQgMCAwIDAgLjMxMy4zMDVhLjg2Ljg2IDAgMCAwIC40MjQuMTExaDQuNTQ5YS40NC40NCAwIDAgMCAuMjEzLS4wNTZhLjQuNCAwIDAgMCAuMTU0LS4xNTNhLjQuNCAwIDAgMCAuMDU5LS4yMDdhLjQuNCAwIDAgMC0uMDU3LS4yMDlMMTIuMzcgMS45NzVhLjQuNCAwIDAgMC0uMTU0LS4xNTNhLjQzLjQzIDAgMCAwLS4yMTEtLjA1OE04LjAyIDguNTA2YS40My40MyAwIDAgMC0uMjExLjA1NmEuNC40IDAgMCAwLS4xNTcuMTUzTC4wNTggMjEuNjFhLjQxLjQxIDAgMCAwLS4wMDIuNDE4YS40LjQgMCAwIDAgLjE1Ny4xNTJhLjQzLjQzIDAgMCAwIC4yMTMuMDU3aDQuNTVhLjg2Ljg2IDAgMCAwIC40MjQtLjExMmEuODQuODQgMCAwIDAgLjMxLS4zMDVsNC45NTQtOC40MTJhLjguOCAwIDAgMCAuMTEzLS40MTZhLjguOCAwIDAgMC0uMTEzLS40MThsLTIuMjc1LTMuODZhLjQuNCAwIDAgMC0uMTU3LS4xNTJhLjQ0LjQ0IDAgMCAwLS4yMTMtLjA1Nm0zLjAxMSA4LjgyNGEuOS45IDAgMCAwLS40MjYuMTEyYS44NC44NCAwIDAgMC0uMzEuMzA0TDguMDIgMjEuNjA4YS40LjQgMCAwIDAtLjA1Ny4yMDlhLjQuNCAwIDAgMCAuMDU3LjIwN2EuNC40IDAgMCAwIC4xNTQuMTU0YS40My40MyAwIDAgMCAuMjEzLjA1NWgxNS4xOWEuNDMuNDMgMCAwIDAgLjIxMi0uMDU1YS40LjQgMCAwIDAgLjE1NS0uMTU0YS40LjQgMCAwIDAgLjA1Ni0uMjA3YS40LjQgMCAwIDAtLjA1Ni0uMjFsLTIuMjc0LTMuODZhLjg0Ljg0IDAgMCAwLS4zMS0uMzA1YS44Ni44NiAwIDAgMC0uNDI0LS4xMTJ6Ii8+PC9zdmc+",
+  "description": "Alchemy's official MCP Server. Allow AI agents to interact with Alchemy's blockchain APIs.",
+  "author": {
+    "name": "alchemyplatform"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@alchemy/mcp-server"],
+    "env": {
+      "ALCHEMY_API_KEY": "${user_config.alchemy_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "alchemy_api_key": {
+      "type": "string",
+      "title": "Alchemy API Key",
+      "description": "Your API key for Alchemy's blockchain APIs.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Alchemy MCP Server\n\nA Model Context Protocol (MCP) server that enables AI agents to interact with Alchemy's blockchain APIs in a structured way. This allows agents to query blockchain data directly without writing any code.\n\n<a href=\"https://glama.ai/mcp/servers/@alchemyplatform/alchemy-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@alchemyplatform/alchemy-mcp-server/badge\" alt=\"Alchemy Server MCP server\" />\n</a>\n\n## General Usage\n\nThis MCP server creates a bridge between AI agents and Alchemy's blockchain APIs, allowing agents to:\n- Query token prices and price history (including flexible time frame queries)\n- Get NFT ownership information and contract data\n- View transaction history across multiple networks\n- Check token balances across multiple blockchain networks\n- Retrieve detailed asset transfers with filtering\n- Send transactions via Smart Contract Accounts (**requires configured wallet agent server**)\n- Execute token swaps via DEX protocols (**requires configured wallet agent server**)\n- And more!\n\n### Quick Setup\n\nTo quickly set up the MCP server, use the following configuration in your MCP config file (typically in Claude Desktop or Cursor settings):\n\n```json\n{\n  \"mcpServers\": {\n    \"alchemy\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@alchemy/mcp-server\"\n      ],\n      \"env\": {\n        \"ALCHEMY_API_KEY\": \"YOUR_API_KEY\"\n      }\n    }\n  }\n}\n```\n\nThis configuration allows you to use the server without manually cloning the repository.\n\n### Environment Variables\n\nThe MCP server requires the following environment variable:\n\n- `ALCHEMY_API_KEY` - Your Alchemy API key (required for all blockchain data queries)\n\n**For transaction and swap functionality**, you must also configure:\n\n- `AGENT_WALLET_SERVER` - URL of a configured wallet agent server that handles Smart Contract Account operations\n\n⚠️ **Important**: The `sendTransaction` and `swap` methods will not function without a properly configured wallet agent server. These methods require external wallet infrastructure to handle signing and broadcasting transactions.\n\n## Available Methods\n\nYou can prompt your AI agent to use the following methods:\n\n### Token Price Methods\n\n1. **fetchTokenPriceBySymbol**\n   - Gets current price data for tokens by symbol\n   - Example: \"What's the current price of ETH and BTC?\"\n\n2. **fetchTokenPriceByAddress**\n   - Gets current price data for tokens by contract address\n   - Example: \"What's the price of the token at address 0x1234...5678 on Ethereum mainnet?\"\n\n3. **fetchTokenPriceHistoryBySymbol**\n   - Gets historical price data for tokens with specific date ranges\n   - Example: \"Show me BTC price history from Jan 1 to Feb 1, 2023, with daily intervals\"\n\n4. **fetchTokenPriceHistoryByTimeFrame**\n   - Gets historical price data using flexible time frames or natural language\n   - Example: \"Show me ETH price for the last week\" or \"Get BTC price for the past 30 days\"\n\n### Multichain Token Methods\n\n5. **fetchTokensOwnedByMultichainAddresses**\n   - Gets token balances for addresses across multiple networks\n   - Example: \"What tokens does 0xabc...123 hold on Ethereum and Base?\"\n\n### Transaction History Methods\n\n6. **fetchAddressTransactionHistory**\n   - Gets transaction history for addresses across multiple networks\n   - Example: \"Show recent transactions for wallet 0xdef...456 on Ethereum\"\n\n7. **fetchTransfers**\n   - Gets detailed asset transfer data with advanced filtering options\n   - Example: \"Show me all ERC-20 transfers to or from 0xghi...789\"\n\n### NFT Methods\n\n8. **fetchNftsOwnedByMultichainAddresses**\n   - Gets all NFTs owned by addresses with spam filtering\n   - Example: \"What NFTs does 0xjkl...012 own?\"\n\n9. **fetchNftContractDataByMultichainAddress**\n   - Gets NFT contract data for addresses\n   - Example: \"What NFT collections does 0xmno...345 have tokens from?\"\n\n### Transaction Methods\n\n10. **sendTransaction**\n    - Sends transactions via Smart Contract Accounts\n    - **⚠️ Important**: Requires a configured wallet agent server with `AGENT_WALLET_SERVER` environment variable\n    - Example: \"Send 0.1 ETH to 0xpqr...678\"\n\n### Swap Methods\n\n11. **swap**\n    - Executes token swaps via DEX protocols (Uniswap)\n    - **⚠️ Important**: Requires a configured wallet agent server with `AGENT_WALLET_SERVER` environment variable\n    - Example: \"Swap 100 USDC for ETH\"\n\n## Local Development and Open Source Contributions\n\n### Installation\n\n1. Clone the repository\n```bash\ngit clone https://github.com/alchemyplatform/alchemy-mcp.git\ncd alchemy-mcp\n```\n\n2. Install dependencies\n```bash\npnpm install\n```\n\n### Development\n\n```bash\npnpm watch\n```\n\n### Building for Production\n\n```bash\npnpm build\n```\n\n### Using the MCP Inspector for Debugging\n\nThe MCP Inspector helps you debug your MCP server by providing a visual interface to test your methods:\n\n```bash\npnpm inspector\n```\n\nThis will start the MCP Inspector which you can access in your browser. It allows you to:\n- See all available methods\n- Test methods with different parameters\n- View the response data\n- Debug issues with your MCP server\n\n## Contributing\n\nPull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License.\n\n## Example Prompts\n\nHere are some example prompts you can use with your AI agent:\n\n```\nWhat's the current price of Bitcoin and Ethereum?\n\nShow me the NFTs owned by the wallet 0x1234...5678 on Ethereum.\n\nWhat tokens does wallet 0xabcd...6789 hold across Ethereum and Base?\n\nGet me the transaction history for 0x9876...5432.\n\nShow me the price history of Ethereum from January 1st to today with daily intervals.\n\nGet me Bitcoin price data for the last week with hourly intervals.\n\nShow me ETH price performance for the past month.\n\nWhat ERC-20 transfers happened to address 0x1234...5678 in the last 100 blocks?\n```\n\n## API Reference\n\nFor more information about Alchemy's APIs, refer to:\n- [Alchemy API Documentation](https://docs.alchemy.com/)\n",
+  "category": "Finance",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "alchemy-mcp-server-configured": {
+        "command": "npx",
+        "args": ["-y", "@alchemy/mcp-server"],
+        "env": {
+          "ALCHEMY_API_KEY": "YOUR_API_KEY"
+        }
+      },
+      "alchemy-mcp-dev": {
+        "command": "pnpm",
+        "args": ["dev"],
+        "env": {}
+      },
+      "alchemy-mcp-start": {
+        "command": "pnpm",
+        "args": ["start"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "github_info": {
+    "owner": "alchemyplatform",
+    "repo": "alchemy-mcp-server",
+    "url": "https://github.com/alchemyplatform/alchemy-mcp-server",
+    "name": "alchemyplatform__alchemy-mcp-server",
+    "path": null,
+    "stars": 68,
+    "contributors": 4,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "76bc08c5525ee36ac17b990bf280810f8c83a7e3"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:08.649Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@alchemy/mcp-server\",\n  \"version\": \"0.2.0-rc.0\",\n  \"description\": \"MCP server for using Alchemy APIs\",\n  \"license\": \"MIT\",\n  \"author\": \"Alchemy, (https://www.alchemy.com)\",\n  \"homepage\": \"https://github.com/alchemyplatform/alchemy-mcp\",\n  \"bugs\": \"https://github.com/alchemyplatform/alchemy-mcp/issues\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"mcp-server-alchemy\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector node dist/index.js\",\n    \"test\": \"node --test tests/*.test.ts --loader=tsx/esm\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.14.0\",\n    \"axios\": \"^1.10.0\",\n    \"dotenv\": \"^16.6.1\",\n    \"zod\": \"^3.25.71\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.19.4\",\n    \"shx\": \"^0.4.0\",\n    \"tsx\": \"^4.20.3\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"packageManager\": \"pnpm@10.7.0+sha512.6b865ad4b62a1d9842b61d674a393903b871d9244954f652b8842c2b553c72176b278f64c463e52d40fff8aba385c235c8c9ecf5cc7de4fd78b8bb6d49633ab6\"\n}\n"
+}

@@ -1,0 +1,106 @@
+{
+  "name": "stackloklabs__osv-mcp",
+  "display_name": "osv-mcp",
+  "description": "An MCP server for OSV",
+  "author": {
+    "name": "StacklokLabs"
+  },
+  "server": {
+    "command": "${__dirname}/server/osv-mcp-server",
+    "args": [],
+    "env": {
+      "MCP_PORT": "${user_config.mcp_port}",
+      "MCP_TRANSPORT": "${user_config.mcp_transport}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mcp_port": {
+      "type": "number",
+      "title": "MCP Port",
+      "description": "The port number to run the server on",
+      "required": false,
+      "default": 8080,
+      "min": 0,
+      "max": 65535
+    },
+    "mcp_transport": {
+      "type": "string",
+      "title": "MCP Transport Mode",
+      "description": "The transport mode for the server (e.g., sse, streamable-http)",
+      "required": false,
+      "default": "sse"
+    }
+  },
+  "readme": "# OSV MCP Server\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/StacklokLabs/osv-mcp)](https://archestra.ai/mcp-catalog/stackloklabs__osv-mcp)\n\nAn MCP (Model Context Protocol) server that provides access to the\n[OSV (Open Source Vulnerabilities) database](https://osv.dev/).\n\n## Overview\n\nThis project implements an SSE-based MCP server that allows LLM-powered\napplications to query the OSV database for vulnerability information. The server\nprovides tools for:\n\n1. Querying vulnerabilities for a specific package version or commit\n2. Batch querying vulnerabilities for multiple packages or commits\n3. Getting detailed information about a specific vulnerability by ID\n\n## Installation\n\n### Prerequisites\n\n- Go 1.21 or later\n- [Task](https://taskfile.dev/) (optional, for running tasks)\n- [ko](https://ko.build/) (optional, for building container images)\n\n### Building from source\n\n```bash\n# Clone the repository\ngit clone https://github.com/StacklokLabs/osv-mcp.git\ncd osv-mcp\n\n# Build the server\ntask build\n```\n\n## Usage\n\n### Running with ToolHive (Recommended)\n\nThe easiest way to run the OSV MCP server is using\n[ToolHive](https://github.com/stacklok/toolhive), which provides secure,\ncontainerized deployment of MCP servers:\n\n```bash\n# Install ToolHive (if not already installed)\n# See: https://docs.stacklok.com/toolhive/guides-cli/install\n\n# Register a supported client so ToolHive can auto-configure your environment\nthv client setup\n\n# Run the OSV MCP server (packaged as 'osv' in ToolHive)\nthv run osv\n\n# List running servers\nthv list\n\n# Get detailed information about the server\nthv registry info osv\n```\n\nThe server will be available to your MCP-compatible clients and can query the\nOSV database for vulnerability information.\n\n### Running from Source\n\n### Server Configuration\n\nThe server can be configured using environment variables:\n\n- `MCP_PORT`: The port number to run the server on (default: 8080)\n\n  - Must be a valid integer between 0 and 65535\n  - If invalid or not set, the server will use port 8080\n\n- `MCP_TRANSPORT`: The transport mode for the server (default: `sse`)\n  - Supported values: `sse`, `streamable-http`\n  - If invalid or not set, the server will use SSE transport mode\n\nExample:\n\n```bash\n# Run on port 3000\nMCP_PORT=3000 ./build/osv-mcp-server\n\n# Run on default port 8080\n./build/osv-mcp-server\n```\n\n### MCP Tools\n\nThe server provides the following MCP tools:\n\n#### query_vulnerability\n\nQuery for vulnerabilities affecting a specific package version or commit.\n\n**Input Schema:**\n\n```json\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"commit\": {\n      \"type\": \"string\",\n      \"description\": \"The commit hash to query for. If specified, version should not be set.\"\n    },\n    \"version\": {\n      \"type\": \"string\",\n      \"description\": \"The version string to query for. If specified, commit should not be set.\"\n    },\n    \"package_name\": {\n      \"type\": \"string\",\n      \"description\": \"The name of the package.\"\n    },\n    \"ecosystem\": {\n      \"type\": \"string\",\n      \"description\": \"The ecosystem for this package (e.g., PyPI, npm, Go).\"\n    },\n    \"purl\": {\n      \"type\": \"string\",\n      \"description\": \"The package URL for this package. If purl is used, package_name and ecosystem should not be set.\"\n    }\n  }\n}\n```\n\n#### query_vulnerabilities_batch\n\nQuery for vulnerabilities affecting multiple packages or commits at once.\n\n**Input Schema:**\n\n```json\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"queries\": {\n      \"type\": \"array\",\n      \"description\": \"Array of query objects\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"commit\": {\n            \"type\": \"string\",\n            \"description\": \"The commit hash to query for. If specified, version should not be set.\"\n          },\n          \"version\": {\n            \"type\": \"string\",\n            \"description\": \"The version string to query for. If specified, commit should not be set.\"\n          },\n          \"package_name\": {\n            \"type\": \"string\",\n            \"description\": \"The name of the package.\"\n          },\n          \"ecosystem\": {\n            \"type\": \"string\",\n            \"description\": \"The ecosystem for this package (e.g., PyPI, npm, Go).\"\n          },\n          \"purl\": {\n            \"type\": \"string\",\n            \"description\": \"The package URL for this package. If purl is used, package_name and ecosystem should not be set.\"\n          }\n        }\n      }\n    }\n  },\n  \"required\": [\"queries\"]\n}\n```\n\n#### get_vulnerability\n\nGet details for a specific vulnerability by ID.\n\n**Input Schema:**\n\n```json\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"id\": {\n      \"type\": \"string\",\n      \"description\": \"The OSV vulnerability ID\"\n    }\n  },\n  \"required\": [\"id\"]\n}\n```\n\n## Examples\n\n### Querying vulnerabilities for a package\n\n```json\n{\n  \"package_name\": \"lodash\",\n  \"ecosystem\": \"npm\",\n  \"version\": \"4.17.15\"\n}\n```\n\n### Querying vulnerabilities for a commit\n\n```json\n{\n  \"commit\": \"6879efc2c1596d11a6a6ad296f80063b558d5e0f\"\n}\n```\n\n### Batch querying vulnerabilities\n\n```json\n{\n  \"queries\": [\n    {\n      \"package_name\": \"lodash\",\n      \"ecosystem\": \"npm\",\n      \"version\": \"4.17.15\"\n    },\n    {\n      \"package_name\": \"jinja2\",\n      \"ecosystem\": \"PyPI\",\n      \"version\": \"2.4.1\"\n    }\n  ]\n}\n```\n\n### Getting vulnerability details\n\n```json\n{\n  \"id\": \"GHSA-vqj2-4v8m-8vrq\"\n}\n```\n\n## Development\n\n### Running tests\n\n```bash\ntask test\n```\n\n### Linting\n\n```bash\ntask lint\n```\n\n### Formatting code\n\n```bash\ntask fmt\n```\n\n## Contributing\n\nWe welcome contributions to this MCP server! If you'd like to contribute, please\nreview the [CONTRIBUTING guide](./CONTRIBUTING.md) for details on how to get\nstarted.\n\nIf you run into a bug or have a feature request, please\n[open an issue](https://github.com/StacklokLabs/osv-mcp/issues) in the\nrepository or join us in the `#mcp-servers` channel on our\n[community Discord server](https://discord.gg/stacklok).\n\n## License\n\nThis project is licensed under the Apache v2 License - see the LICENSE file for\ndetails.\n",
+  "category": "Security",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "osv": {
+        "command": "thv",
+        "args": ["run", "osv"],
+        "env": {}
+      },
+      "osv-mcp-server": {
+        "command": "./build/osv-mcp-server",
+        "args": [],
+        "env": {}
+      },
+      "osv-mcp-server-configured": {
+        "command": "./build/osv-mcp-server",
+        "args": [],
+        "env": {
+          "MCP_PORT": "3000"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "StacklokLabs",
+    "repo": "osv-mcp",
+    "url": "https://github.com/StacklokLabs/osv-mcp",
+    "name": "osv-mcp",
+    "path": null,
+    "stars": 14,
+    "contributors": 9,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "fd07dbea3aac76835a7ef78e7ecd55c992429b1a"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.936Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "invopop/jsonschema",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/StacklokLabs/osv-mcp\n\ngo 1.24.2\n\nrequire (\n\tgithub.com/mark3labs/mcp-go v0.36.0\n\tgithub.com/stretchr/testify v1.10.0\n)\n\nrequire (\n\tgithub.com/bahlo/generic-list-go v0.2.0 // indirect\n\tgithub.com/buger/jsonparser v1.1.1 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/invopop/jsonschema v0.13.0 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/spf13/cast v1.9.2 // indirect\n\tgithub.com/wk8/go-ordered-map/v2 v2.1.8 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

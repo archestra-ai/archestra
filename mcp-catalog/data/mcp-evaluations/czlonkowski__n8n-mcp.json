@@ -1,0 +1,110 @@
+{
+  "name": "czlonkowski__n8n-mcp",
+  "display_name": "n8n",
+  "description": "A Model Context Protocol (MCP) server that provides AI assistants with comprehensive access to n8n node documentation, properties, and operations. Features 541 n8n nodes with 99% property coverage and 87% documentation coverage.",
+  "author": {
+    "name": "czlonkowski"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["n8n-mcp"],
+    "env": {
+      "MCP_MODE": "stdio",
+      "LOG_LEVEL": "error",
+      "DISABLE_CONSOLE_OUTPUT": "true"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": ["n8n", "workflow", "automation", "documentation", "nodes"],
+  "user_config": {
+    "N8N_API_URL": {
+      "type": "string",
+      "title": "n8n API URL",
+      "description": "Your n8n instance URL (e.g., https://your-instance.n8n.cloud). Required for workflow management features.",
+      "required": false
+    },
+    "N8N_API_KEY": {
+      "type": "string",
+      "title": "n8n API Key",
+      "description": "API authentication token from n8n settings. Required for workflow management features.",
+      "required": false,
+      "sensitive": true
+    }
+  },
+  "readme": "# n8n-MCP\n\nA Model Context Protocol (MCP) server that provides AI assistants with comprehensive access to n8n node documentation, properties, and operations.\n\n## Features\n\n- 541 n8n nodes from n8n-nodes-base and @n8n/n8n-nodes-langchain\n- 99% node property coverage with detailed schemas\n- 87% documentation coverage from official n8n docs\n- 271 AI-capable nodes with full documentation\n- 2,646 pre-extracted configurations from popular templates\n- Smart node search and configuration validation\n- AI workflow validation\n\n## Installation\n\n### Quick Start with NPX\n```bash\nnpx n8n-mcp\n```\n\n### Docker\n```bash\ndocker pull ghcr.io/czlonkowski/n8n-mcp:latest\n```\n\n### Local Installation\n```bash\ngit clone https://github.com/czlonkowski/n8n-mcp.git\ncd n8n-mcp\nnpm install && npm run build && npm run rebuild\nnpm start\n```\n\n## Configuration\n\n### Environment Variables\n\n| Variable | Purpose | Required |\n|----------|---------|----------|\n| `MCP_MODE` | Set to \"stdio\" for Claude Desktop | **Yes** |\n| `LOG_LEVEL` | Set to \"error\" for production | No |\n| `DISABLE_CONSOLE_OUTPUT` | Set to \"true\" to suppress logs | No |\n| `N8N_API_URL` | Your n8n instance URL | Optional* |\n| `N8N_API_KEY` | API authentication token | Optional* |\n\n*API credentials enable workflow management; documentation tools work without them.\n\n## Usage with Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"n8n\": {\n      \"command\": \"npx\",\n      \"args\": [\"n8n-mcp\"],\n      \"env\": {\n        \"MCP_MODE\": \"stdio\",\n        \"LOG_LEVEL\": \"error\",\n        \"N8N_API_URL\": \"https://your-instance.n8n.cloud\",\n        \"N8N_API_KEY\": \"your-api-key\",\n        \"DISABLE_CONSOLE_OUTPUT\": \"true\"\n      }\n    }\n  }\n}\n```\n\n## License\n\nMIT License - See LICENSE file for details.\n",
+  "category": "Development",
+  "quality_score": 0,
+  "archestra_config": {
+    "client_config_permutations": {
+      "n8n-mcp-configured": {
+        "command": "npx",
+        "args": ["n8n-mcp"],
+        "env": {
+          "MCP_MODE": "stdio",
+          "LOG_LEVEL": "error",
+          "N8N_API_URL": "https://your-instance.n8n.cloud",
+          "N8N_API_KEY": "your-api-key",
+          "DISABLE_CONSOLE_OUTPUT": "true"
+        }
+      },
+      "n8n-mcp-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "MCP_MODE=stdio",
+          "-e",
+          "LOG_LEVEL=error",
+          "-e",
+          "N8N_API_URL=https://your-instance.n8n.cloud",
+          "-e",
+          "N8N_API_KEY=your-api-key",
+          "-e",
+          "DISABLE_CONSOLE_OUTPUT=true",
+          "ghcr.io/czlonkowski/n8n-mcp:latest"
+        ],
+        "env": {},
+        "docker_image": "ghcr.io/czlonkowski/n8n-mcp:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "czlonkowski",
+    "repo": "n8n-mcp",
+    "url": "https://github.com/czlonkowski/n8n-mcp",
+    "name": "czlonkowski__n8n-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": ""
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-11-11T00:00:00.000Z",
+  "evaluation_model": "manual",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [],
+  "raw_dependencies": ""
+}

@@ -180,8 +180,7 @@ export function ChatSidebarSection({
   const pinProjectMutation = usePinProject();
   const pinnedProjects = (projectsData ?? []).filter((p) => p.pinnedAt);
   // Pinned apps join the sidebar's Pinned section exactly like pinned projects.
-  // /api/apps is access-filtered (returns the caller's accessible apps), so it
-  // needs no permission gate.
+  // useApps skips the request for roles without app:read.
   const { data: appsData } = useApps({ limit: 100, offset: 0 });
   const pinAppMutation = usePinApp();
   const openAppMutation = useOpenAppInChat();

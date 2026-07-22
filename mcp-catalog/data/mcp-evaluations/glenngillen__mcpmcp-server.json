@@ -1,0 +1,69 @@
+{
+  "name": "glenngillen__mcpmcp-server",
+  "display_name": "mcpmcp-server",
+  "description": "Discover, setup, and integrate MCP servers with your favorite clients. Unlock the full potential of AI in your daily workflow.",
+  "author": {
+    "name": "glenngillen"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-remote@latest", "https://mcpmcp.io/mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# mcpmcp-server\n\nDiscover, setup, and integrate MCP servers with your favorite clients. Unlock the full potential of AI in your daily workflow.\n\n## Installation/usage:\n\nUpdate the configuration of your MCP client to the following: \n\n```json\n{\n  \"mcpServers\": {\n    \"mcpmcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-remote@latest\", \"https://mcpmcp.io/mcp\"]\n    }\n  }\n}\n```\n\n(**note:** this config definitely works for Claude Desktop on macOS. If you need variations for other apps or platforms check the [homepage](https://mcpmcp.io/#install)\n",
+  "category": "AI Tools",
+  "quality_score": 32,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-remote": {
+        "command": "npx",
+        "args": ["-y", "mcp-remote@latest", "https://mcpmcp.io/mcp"]
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "glenngillen",
+    "repo": "mcpmcp-server",
+    "url": "https://github.com/glenngillen/mcpmcp-server",
+    "name": "glenngillen__mcpmcp-server",
+    "path": null,
+    "stars": 17,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "c4b3dceb1f11087d956c3c7d1f37f3ffe66fccae"
+  },
+  "programming_language": "Unknown",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:09.991Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp-remote",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": null
+}

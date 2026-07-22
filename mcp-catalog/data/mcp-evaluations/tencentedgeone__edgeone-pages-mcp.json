@@ -1,0 +1,103 @@
+{
+  "name": "tencentedgeone__edgeone-pages-mcp",
+  "display_name": "edgeone-pages-mcp",
+  "description": "An MCP service designed for deploying HTML content to EdgeOne Pages and obtaining an accessible public URL.",
+  "author": {
+    "name": "TencentEdgeOne"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["edgeone-pages-mcp"],
+    "env": {
+      "EDGEONE_PAGES_API_TOKEN": "${user_config.edgeone_pages_api_token}",
+      "EDGEONE_PAGES_PROJECT_NAME": "${user_config.edgeone_pages_project_name}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "edgeone_pages_api_token": {
+      "type": "string",
+      "title": "EdgeOne Pages API Token",
+      "description": "Your EdgeOne Pages API token, required for deploying folders or zip files. See https://edgeone.ai/document/177158578324279296 for how to obtain it.",
+      "sensitive": true,
+      "required": false
+    },
+    "edgeone_pages_project_name": {
+      "type": "string",
+      "title": "EdgeOne Pages Project Name",
+      "description": "Provide a project name to update an existing EdgeOne Pages project. Leave empty to create a new project.",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# EdgeOne Pages MCP\n\nAn MCP service for deploying HTML content, folder, and zip file to EdgeOne Pages and obtaining a publicly accessible URL.\n\n<a href=\"https://glama.ai/mcp/servers/@TencentEdgeOne/edgeone-pages-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@TencentEdgeOne/edgeone-pages-mcp/badge\" alt=\"EdgeOne Pages MCP server\" />\n</a>\n\n## Demo\n\n### Deploy HTML\n\n![](https://cdnstatic.tencentcs.com/edgeone/pages/assets/U_GpJ-1746519327306.gif)\n\n### Deploy Folder\n\n![](https://cdnstatic.tencentcs.com/edgeone/pages/assets/kR_Kk-1746519251292.gif)\n\n## Requirements\n\n- Node.js 18 or higher\n\n## Configure MCP\n\n### stdio MCP Server\n\nSuitable for most MCP applications\n\n```json\n{\n  \"mcpServers\": {\n    \"edgeone-pages-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\"edgeone-pages-mcp\"],\n      \"env\": {\n        // Optional. If deploying a folder or zip file to an EdgeOne Pages project\n        // provide your EdgeOne Pages API token.\n        // How to obtain your API token: https://edgeone.ai/document/177158578324279296\n        \"EDGEONE_PAGES_API_TOKEN\": \"\",\n        // Optional. Leave empty to create a new EdgeOne Pages project.\n        // Provide a project name to update an existing project.\n        \"EDGEONE_PAGES_PROJECT_NAME\": \"\"\n      }\n    }\n  }\n}\n```\n\n### Streamable HTTP MCP Server\n\nAvailable in applications supporting Streamable HTTP MCP Server\n\n```json\n{\n  \"mcpServers\": {\n    \"edgeone-pages-mcp-server\": {\n      \"url\": \"https://mcp-on-edge.edgeone.site/mcp-server\"\n    }\n  }\n}\n```\n\n## Architecture\n\n![EdgeOne Pages MCP Architecture](./assets/architecture.svg)\n\nThe architecture diagram illustrates the workflow:\n\n1. Large Language Model generates HTML content\n2. Content is sent to the EdgeOne Pages MCP Server\n3. MCP Server deploys the content to EdgeOne Pages Edge Functions\n4. Content is stored in EdgeOne KV Store for fast edge access\n5. MCP Server returns a public URL\n6. Users can access the deployed content via browser with fast edge delivery\n\n## Features\n\n- MCP protocol for rapid deployment of HTML content to EdgeOne Pages\n- Automatic generation of publicly accessible URLs\n\n## Implementation\n\nThis MCP service integrates with EdgeOne Pages Functions to deploy static HTML content. The implementation uses:\n\n1. **EdgeOne Pages Functions** - A serverless computing platform that allows execution of JavaScript/TypeScript code at the edge.\n\n2. **Key Implementation Details** :\n\n   - Uses EdgeOne Pages KV store to store and serve the HTML content\n   - Automatically generates a public URL for each deployment\n   - Handles API errors with appropriate error messages\n\n3. **How it works** :\n\n   - The MCP server accepts HTML content through the `deploy_html` tool\n   - It connects to EdgeOne Pages API to get the base URL\n   - Deploys the HTML content using the EdgeOne Pages KV API\n   - Returns a publicly accessible URL to the deployed content\n\n4. **Usage Example** :\n   - Provide HTML content to the MCP service\n   - Receive a public URL that can be accessed immediately\n\nFor more information, see the [EdgeOne Pages Functions documentation](https://edgeone.ai/document/162227908259442688) and [EdgeOne Pages KV Storage Guide](https://edgeone.ai/document/162227803822321664).\n\n## License\n\nMIT\n",
+  "category": "Cloud",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "edgeone-pages-mcp-server": {
+        "command": "npx",
+        "args": ["edgeone-pages-mcp"],
+        "env": {
+          "EDGEONE_PAGES_API_TOKEN": "",
+          "EDGEONE_PAGES_PROJECT_NAME": ""
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "TencentEdgeOne",
+    "repo": "edgeone-pages-mcp",
+    "url": "https://github.com/TencentEdgeOne/edgeone-pages-mcp",
+    "name": "tencentedgeone__edgeone-pages-mcp",
+    "path": null,
+    "stars": 279,
+    "contributors": 1,
+    "issues": 12,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "cf30f32bddfd3cdc00e699e9d4e770061be7cc2f"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:43.403Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "cos-nodejs-sdk-v5",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"edgeone-pages-mcp\",\n  \"version\": \"0.0.14\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/TencentEdgeOne/edgeone-pages-mcp\"\n  },\n  \"homepage\": \"https://edgeone.ai/products/pages\",\n  \"description\": \"An MCP service for deploying HTML content to EdgeOne Pages and obtaining a publicly accessible URL.\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"edgeone-pages-mcp\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"prepack\": \"npm run build\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"keywords\": [\n    \"edgeone\",\n    \"pages\",\n    \"deploy\",\n    \"mcp\"\n  ],\n  \"author\": \"EdgeOne Pages\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"cos-nodejs-sdk-v5\": \"^2.14.7\",\n    \"dotenv\": \"^16.4.7\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.28\",\n    \"typescript\": \"^5.4.2\"\n  }\n}\n"
+}

@@ -1,0 +1,125 @@
+{
+  "name": "eat-pray-ai__yutu",
+  "display_name": "yutu",
+  "description": "A fully functional MCP server and CLI for YouTube",
+  "author": {
+    "name": "eat-pray-ai"
+  },
+  "server": {
+    "command": "yutu",
+    "args": ["mcp"],
+    "env": {
+      "YUTU_CREDENTIAL": "${user_config.yutu_credential}",
+      "YUTU_CACHE_TOKEN": "${user_config.yutu_cache_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "yutu_credential": {
+      "type": "file",
+      "title": "Credential File (client_secret.json)",
+      "description": "Path to the client_secret.json file downloaded from your Google Cloud Platform project's OAuth 2.0 Client ID.",
+      "required": true
+    },
+    "yutu_cache_token": {
+      "type": "file",
+      "title": "Cache Token File (youtube.token.json)",
+      "description": "Path to the youtube.token.json file. This file is generated after the initial authentication and stores the access/refresh tokens.",
+      "required": true
+    }
+  },
+  "readme": "![Yutu](./asset/yutu.svg)\n\n# `yutu`\n\n[![Static Badge](https://img.shields.io/badge/gitmoji-%F0%9F%98%BF%F0%9F%90%B0%F0%9F%90%A7%E2%9D%A4%EF%B8%8F%E2%80%8D%F0%9F%A9%B9-love?style=flat-square&labelColor=%23EDD1CC&color=%23FF919F)](https://gitmoji.dev)\n[![Go Report Card](https://goreportcard.com/badge/github.com/eat-pray-ai/yutu?style=flat-square)](https://goreportcard.com/report/github.com/eat-pray-ai/yutu)\n[![GitHub License](https://img.shields.io/github/license/eat-pray-ai/yutu?style=flat-square)](https://github.com/eat-pray-ai/yutu?tab=Apache-2.0-1-ov-file)\n[![Go Reference](https://pkg.go.dev/badge/github.com/eat-pray-ai/yutu?style=flat-square)](https://pkg.go.dev/github.com/eat-pray-ai/yutu)\n[![Go Coverage](https://github.com/eat-pray-ai/yutu/wiki/coverage.svg)](https://raw.githack.com/wiki/eat-pray-ai/yutu/coverage.html)\n\n[![GitHub Repo stars](https://img.shields.io/github/stars/eat-pray-ai/yutu?style=flat-square&logo=github)](https://github.com/eat-pray-ai/yutu/stargazers)\n[![GitHub Downloads](https://img.shields.io/github/downloads/eat-pray-ai/yutu/total?style=flat-square)](https://github.com/eat-pray-ai/yutu/releases/latest)\n[![GitHub Actions build Status](https://img.shields.io/github/actions/workflow/status/eat-pray-ai/yutu/publish.yml?style=flat-square&logo=githubactions)](https://github.com/eat-pray-ai/yutu/actions/workflows/publish.yml)\n[![GitHub Actions CodeQL Status](https://img.shields.io/github/actions/workflow/status/eat-pray-ai/yutu/codeql.yml?style=flat-square&logo=githubactions&label=CodeQL)](https://github.com/eat-pray-ai/yutu/actions/workflows/codeql.yml)\n[![GitHub Actions test Status](https://img.shields.io/github/actions/workflow/status/eat-pray-ai/yutu/test.yml?style=flat-square&logo=githubactions&label=test)](https://github.com/eat-pray-ai/yutu/actions/workflows/test.yml)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/eat-pray-ai/yutu)](https://archestra.ai/mcp-catalog/eat-pray-ai__yutu)\n\n[![GitHub Release](https://img.shields.io/github/v/release/eat-pray-ai/yutu?sort=semver&style=flat-square&logo=go)](https://github.com/eat-pray-ai/yutu/releases/latest)\n[![Homebrew Formula Version](https://img.shields.io/homebrew/v/yutu?style=flat-square&logo=homebrew)](https://formulae.brew.sh/formula/yutu)\n[![WinGet Package Version](https://img.shields.io/winget/v/eat-pray-ai.yutu?style=flat-square&label=%F0%9F%93%A6%20winget\n)](https://winstall.app/apps/eat-pray-ai.yutu)\n\n[![yutu - build a fully automated YouTube Channel!](https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=988886&theme=light)](https://www.producthunt.com/posts/yutu?embed=true&utm_source=badge-featured&utm_medium=badge&utm_souce=badge-yutu)\n\n`yutu` is a fully functional MCP server and CLI for YouTube to automate your YouTube workflows. It can manipulate almost all YouTube resources, like videos, playlists, channels, comments, captions, and more.\n\n[![mcp demo](./asset/mcp-demo.gif)](https://asciinema.org/a/wXIHU4ciFBAKrHfaFNkMoIs12)\n\n## Table of Contents\n\n- [Prerequisites](#prerequisites)\n- [Installation](#installation)\n  - [GitHub Actions](#github-actions)\n  - [Docker](#docker)\n  - [Gopher](#gopher)\n  - [Linux](#linux)\n  - [macOS](#macos)\n  - [Windows](#windows)\n  - [Verifying Installation](#verifying-installation)\n- [MCP Server](#mcp-server)\n- [Usage](#usage)\n- [Features](#features)\n- [Contributing](#contributing)\n\n## Prerequisites\n\nBefore you begin, an account on [Google Cloud Platform](https://console.cloud.google.com/) is required to create a **Project** and enable these APIs for this project, in `APIs & Services -> Enable APIs and services -> + ENABLE APIS AND SERVICES`\n\n- [YouTube Data API v3(Required)](https://console.cloud.google.com/apis/api/youtubeanalytics.googleapis.com/overview)\n- [YouTube Analytics API(Optional)](https://console.cloud.google.com/apis/api/youtubeanalytics.googleapis.com/overview)\n- [YouTube Reporting API(Optional)](https://console.cloud.google.com/apis/api/youtubereporting.googleapis.com/overview)\n\nAfter enabling the APIs, create an `OAuth content screen` with yourself as test user, then create an `OAuth Client ID` of type `Web Application` with `http://localhost:8216` as the redirect URI.\n\nDownload this credential to your local machine with name `client_secret.json`, it should look like\n\n```json\n{\n  \"web\": {\n    \"client_id\": \"11181119.apps.googleusercontent.com\",\n    \"project_id\": \"yutu-11181119\",\n    \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n    \"token_uri\": \"https://oauth2.googleapis.com/token\",\n    \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n    \"client_secret\": \"XXXXXXXXXXXXXXXX\",\n    \"redirect_uris\": [\n      \"http://localhost:8216\"\n    ]\n  }\n}\n```\n\nTo verify this credential, run the following command\n\n```shell\n❯ yutu auth --credential client_secret.json\n```\n\nA browser window will open asking for your permission to access your YouTube account, after granting the permission, a token will be generated and saved to `youtube.token.json`.\n\n```json\n{\n  \"access_token\": \"ya29.XXXXXXXXX\",\n  \"token_type\":\"Bearer\",\n  \"refresh_token\":\"1//XXXXXXXXXX\",\n  \"expiry\":\"2024-05-26T18:49:56.1911165+08:00\"\n}\n```\n\nBy default, `yutu` will read `client_secret.json` and `youtube.token.json` from the current directory, `--credential/-c` and `--cacheToken/-t` flags are available only in `auth` subcommand. To modify the default path in all subcommands, set these environment variables\n\n```shell\n❯ export YUTU_CREDENTIAL=client_secret.json\n❯ export YUTU_CACHE_TOKEN=youtube.token.json\n# or\n❯ YUTU_CREDENTIAL=client_secret.json YUTU_CACHE_TOKEN=youtube.token.json yutu subcommand --flag value\n```\n\n## Installation\n\nYou can download `yutu` from [releases page](https://github.com/eat-pray-ai/yutu/releases/latest) directly, or use the following methods as you prefer.\n\n### GitHub Actions\n\nThere are two actions available for yutu, one is for general purpose and the other is for uploading video to YouTube. Refer to [youtube-action](https://github.com/eat-pray-ai/youtube-action) and [youtube-uploader](https://github.com/eat-pray-ai/youtube-uploader) for more information.\n\n### Docker\n\n```shell\n❯ docker pull ghcr.io/eat-pray-ai/yutu:latest\n❯ docker run --rm ghcr.io/eat-pray-ai/yutu:latest\n# make sure client_secret.json is in the current directory\n❯ docker run --rm -it -u $(id -u):$(id -g) -v $(pwd):/app ghcr.io/eat-pray-ai/yutu:latest auth\n```\n\n### Gopher\n\n```shell\n❯ go install github.com/eat-pray-ai/yutu@latest\n```\n\n### Linux\n\n```shell\n❯ curl -sSfL https://raw.githubusercontent.com/eat-pray-ai/yutu/main/scripts/install.sh | bash\n```\n\n### macOS\n\nInstall `yutu` using [Homebrew🍺](https://brew.sh/)(recommended), or run the shell script.\n\n```shell\n❯ brew install yutu\n\n# or\n❯ curl -sSfL https://raw.githubusercontent.com/eat-pray-ai/yutu/main/scripts/install.sh | bash\n```\n\n### Windows\n\n```shell\n❯ winget install yutu\n```\n\n### Verifying Installation\n\nVerify the integrity and provenance of `yutu` using its associated cryptographically signed attestations.\n\n```shell\n# Docker\n❯ gh attestation verify oci://ghcr.io/eat-pray-ai/yutu:latest --repo eat-pray-ai/yutu\n\n# Linux and macOS(if installed using shell script)\n❯ gh attestation verify $(which yutu) --repo eat-pray-ai/yutu\n\n# Windows\n❯ gh attestation verify $(where.exe yutu.exe) --repo eat-pray-ai/yutu\n```\n\n## MCP Server\n\n[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=yutu&config=%7B%22type%22%3A%20%22stdio%22%2C%22command%22%3A%20%22yutu%22%2C%22args%22%3A%20%5B%22mcp%22%5D%2C%22env%22%3A%20%7B%22YUTU_CREDENTIAL%22%3A%20%22%2Fabsolute%2Fpath%2Fto%2Fclient_secret.json%22%2C%22YUTU_CACHE_TOKEN%22%3A%20%22%2Fabsolute%2Fpath%2Fto%2Fyoutube.token.json%22%7D%7D)\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=yutu&config=JTdCJTIyY29tbWFuZCUyMiUzQSUyMnl1dHUlMjBtY3AlMjIlMkMlMjJlbnYlMjIlM0ElN0IlMjJZVVRVX0NSRURFTlRJQUwlMjIlM0ElMjIlMkZhYnNvbHV0ZSUyRnBhdGglMkZ0byUyRmNsaWVudF9zZWNyZXQuanNvbiUyMiUyQyUyMllVVFVfQ0FDSEVfVE9LRU4lMjIlM0ElMjIlMkZhYnNvbHV0ZSUyRnBhdGglMkZ0byUyRnlvdXR1YmUudG9rZW4uanNvbiUyMiU3RCU3RA%3D%3D)\n\nAs a [MCP server](https://modelcontextprotocol.io/introduction), `yutu` can be used in MCP clients like [Claude Desktop](https://modelcontextprotocol.io/quickstart/user), [VS Code](https://code.visualstudio.com/) or [Cursor](https://docs.cursor.com/), which allows you to interact with YouTube resources in a chat-like interface.\n\nBefore using `yutu` as an MCP server, make sure `yutu` is installed(see [Installation](#installation) section), and you have a valid `client_secret.json` and `youtube.token.json` files(refer to [Prerequisites](#prerequisites) section).\n\nYou can add `yutu` as a MCP server in VS Code or Cursor by clicking corresponding badge above, or add the following configuration manually to your MCP client. Remember to replace the values of `YUTU_CREDENTIAL` and `YUTU_CACHE_TOKEN` with correct paths on your local machine.\n\n```json\n{\n  \"yutu\": {\n    \"type\": \"stdio\",\n    \"command\": \"yutu\",\n    \"args\": [\n      \"mcp\"\n    ],\n    \"env\": {\n      \"YUTU_CREDENTIAL\": \"/absolute/path/to/client_secret.json\",\n      \"YUTU_CACHE_TOKEN\": \"/absolute/path/to/youtube.token.json\"\n    }\n  }\n}\n```\n\n## Usage\n\n```shell\n❯ yutu is a fully functional MCP server and CLI for YouTube, which can manipulate almost all YouTube resources\n\nUsage:\n  yutu [flags]\n  yutu [command]\n\nAvailable Commands:\n  activity               List YouTube activities\n  auth                   Authenticate with YouTube API\n  caption                Manipulate YouTube captions\n  channel                Manipulate YouTube channels\n  channelBanner          Insert Youtube channel banner\n  channelSection         Manipulate YouTube channel sections\n  comment                Manipulate YouTube comments\n  commentThread          Manipulate YouTube comment threads\n  completion             Generate the autocompletion script for the specified shell\n  help                   Help about any command\n  i18nLanguage           List YouTube i18n languages\n  i18nRegion             List YouTube i18n regions\n  mcp                    Start MCP server\n  member                 List channel's members' info\n  membershipsLevel       List memberships levels' info\n  playlist               Manipulate YouTube playlists\n  playlistImage          Manipulate YouTube playlist images\n  playlistItem           Manipulate YouTube playlist items\n  search                 Search for YouTube resources\n  subscription           Manipulate YouTube subscriptions\n  superChatEvent         List Super Chat events for a channel\n  thumbnail              Set thumbnail for a video\n  version                Show the version of yutu\n  video                  Manipulate YouTube videos\n  videoAbuseReportReason List YouTube video abuse report reasons\n  videoCategory          List YouTube video categories\n  watermark              Manipulate YouTube watermarks\n\nFlags:\n  -h, --help   help for yutu\n\nUse \"yutu [command] --help\" for more information about a command.\n```\n\n## Features\n\nPlease refer to [FEATURES.md](./FEATURES.md) for more information.\n\n## Contributing\n\nPlease refer to [CONTRIBUTING.md](./CONTRIBUTING.md) for more information.\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=eat-pray-ai/yutu&type=Date)](https://star-history.com/#eat-pray-ai/yutu&Date)\n",
+  "category": "CLI Tools",
+  "quality_score": 68,
+  "archestra_config": {
+    "client_config_permutations": {
+      "yutu": {
+        "command": "yutu",
+        "args": ["mcp"],
+        "env": {
+          "YUTU_CREDENTIAL": "/absolute/path/to/client_secret.json",
+          "YUTU_CACHE_TOKEN": "/absolute/path/to/youtube.token.json"
+        }
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "eat-pray-ai",
+    "repo": "yutu",
+    "url": "https://github.com/eat-pray-ai/yutu",
+    "name": "eat-pray-ai__yutu",
+    "path": null,
+    "stars": 218,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "783d78885e9b7ab271e36116e2c7b8b6f1b16fb9"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:13.944Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "spf13/cobra",
+      "importance": 9
+    },
+    {
+      "name": "google.golang.org/api",
+      "importance": 9
+    },
+    {
+      "name": "golang.org/x/oauth2",
+      "importance": 8
+    },
+    {
+      "name": "spf13/viper",
+      "importance": 8
+    },
+    {
+      "name": "spf13/pflag",
+      "importance": 7
+    },
+    {
+      "name": "gopkg.in/yaml.v3",
+      "importance": 6
+    },
+    {
+      "name": "jedib0t/go-pretty/v6",
+      "importance": 4
+    },
+    {
+      "name": "ohler55/ojg",
+      "importance": 4
+    },
+    {
+      "name": "savioxavier/termlink",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/eat-pray-ai/yutu\n\ngo 1.25.0\n\nrequire (\n\tgithub.com/mark3labs/mcp-go v0.39.1\n\tgithub.com/savioxavier/termlink v1.4.3\n\tgithub.com/spf13/cobra v1.10.1\n\tgithub.com/spf13/viper v1.20.1\n\tgolang.org/x/oauth2 v0.30.0\n)\n\nrequire (\n\tcloud.google.com/go/auth v0.16.5 // indirect\n\tcloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect\n\tgithub.com/bahlo/generic-list-go v0.2.0 // indirect\n\tgithub.com/buger/jsonparser v1.1.1 // indirect\n\tgithub.com/felixge/httpsnoop v1.0.4 // indirect\n\tgithub.com/go-logr/logr v1.4.3 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/go-viper/mapstructure/v2 v2.4.0 // indirect\n\tgithub.com/google/s2a-go v0.1.9 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect\n\tgithub.com/googleapis/gax-go/v2 v2.15.0 // indirect\n\tgithub.com/invopop/jsonschema v0.13.0 // indirect\n\tgithub.com/mailru/easyjson v0.9.0 // indirect\n\tgithub.com/mattn/go-runewidth v0.0.16 // indirect\n\tgithub.com/rivo/uniseg v0.4.7 // indirect\n\tgithub.com/wk8/go-ordered-map/v2 v2.1.8 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.opentelemetry.io/auto/sdk v1.1.0 // indirect\n\tgo.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect\n\tgo.opentelemetry.io/otel v1.38.0 // indirect\n\tgo.opentelemetry.io/otel/metric v1.38.0 // indirect\n\tgo.opentelemetry.io/otel/trace v1.38.0 // indirect\n\tgolang.org/x/crypto v0.41.0 // indirect\n\tgolang.org/x/net v0.43.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250826171959-ef028d996bc1 // indirect\n\tgoogle.golang.org/grpc v1.75.0 // indirect\n)\n\nrequire (\n\tcloud.google.com/go/compute/metadata v0.8.0 // indirect\n\tgithub.com/fsnotify/fsnotify v1.9.0 // indirect\n\tgithub.com/inconshreveable/mousetrap v1.1.0 // indirect\n\tgithub.com/jedib0t/go-pretty/v6 v6.6.8\n\tgithub.com/ohler55/ojg v1.26.10\n\tgithub.com/pelletier/go-toml/v2 v2.2.4 // indirect\n\tgithub.com/sagikazarmark/locafero v0.10.0 // indirect\n\tgithub.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect\n\tgithub.com/spf13/afero v1.14.0 // indirect\n\tgithub.com/spf13/cast v1.9.2 // indirect\n\tgithub.com/spf13/pflag v1.0.10\n\tgithub.com/subosito/gotenv v1.6.0 // indirect\n\tgolang.org/x/sys v0.35.0 // indirect\n\tgolang.org/x/text v0.28.0 // indirect\n\tgoogle.golang.org/api v0.248.0\n\tgoogle.golang.org/protobuf v1.36.8 // indirect\n\tgopkg.in/yaml.v3 v3.0.1\n)\n"
+}

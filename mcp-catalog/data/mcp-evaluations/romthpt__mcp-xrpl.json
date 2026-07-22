@@ -1,0 +1,104 @@
+{
+  "name": "romthpt__mcp-xrpl",
+  "display_name": "mcp-xrpl",
+  "description": "MCP server from RomThpt/mcp-xrpl",
+  "author": {
+    "name": "RomThpt"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {
+      "DEFAULT_SEED": "${user_config.default_seed}",
+      "XRPL_NETWORK": "${user_config.xrpl_network}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "default_seed": {
+      "type": "string",
+      "title": "Default XRPL Wallet Seed",
+      "description": "Optional: XRPL wallet seed for automatic connection. If not provided, you can connect using the connect-to-xrpl tool.",
+      "sensitive": true,
+      "required": false
+    },
+    "xrpl_network": {
+      "type": "string",
+      "title": "XRPL Network",
+      "description": "Network selection for the XRP Ledger (mainnet, testnet, devnet).",
+      "default": "testnet",
+      "required": false
+    }
+  },
+  "readme": "# XRP Ledger Model Context Protocol Server\n\n[![MCP Server](https://glama.ai/mcp/servers/%40RomThpt/mcp-xrpl/badge)](https://glama.ai/mcp/servers/%40RomThpt/mcp-xrpl)\n\nLicense: MIT | XRPL Networks | TypeScript | xrpl.js\n\nA comprehensive Model Context Protocol (MCP) server that provides blockchain services for the XRP Ledger ecosystem. This server enables AI agents to interact with XRPL MainNet, TestNet, and DevNet with a unified interface.\n\n## 📋 Contents\n\n-   [Overview](#-overview)\n-   [Features](#-features)\n-   [Supported Networks](#-supported-networks)\n-   [Prerequisites](#️-prerequisites)\n-   [Installation](#-installation)\n-   [Server Configuration](#️-server-configuration)\n-   [Usage](#-usage)\n-   [API Reference](#-api-reference)\n-   [Security Considerations](#-security-considerations)\n-   [Project Structure](#-project-structure)\n-   [Development](#️-development)\n-   [License](#-license)\n\n## 🔭 Overview\n\nThe MCP XRPL Server leverages the Model Context Protocol to provide XRP Ledger services to AI agents. It supports a wide range of services including:\n\n-   Reading ledger state (balances, transactions, account info, etc.)\n-   Interacting with smart contracts (via Hooks)\n-   Transferring XRP and issued tokens\n-   Querying token metadata and balances\n-   Managing decentralized identifiers (DIDs)\n-   Working with NFTs on the XRPL\n-   Automated Market Maker (AMM) operations\n-   Payment channels, escrows, and checks\n-   Oracle data operations\n-   Trustline management\n\nAll services are exposed through a consistent interface of MCP tools and resources, making it easy for AI agents to discover and use XRPL functionality.\n\n## ✨ Features\n\n### Account Management\n\n-   Connect to XRPL networks (MainNet, TestNet, DevNet)\n-   Account information retrieval\n-   Account property management\n-   Deposit preauthorization\n-   Regular key management\n\n### XRP and Token Operations\n\n-   Transfer XRP between accounts\n-   Get token metadata (name, symbol, decimals, supply)\n-   Check token balances\n-   Transfer tokens between addresses\n-   Approve token spending\n-   Token clawback\n\n### NFT Operations\n\n-   Mint NFTs on the XRP Ledger\n-   View NFT metadata\n-   Verify NFT ownership\n-   Transfer NFTs between addresses\n-   Get NFT collections\n\n### Decentralized Identifier (DID)\n\n-   Create DIDs on the XRPL\n-   Resolve DIDs\n-   Update DID documents\n-   Deactivate DIDs\n\n### AMM Operations\n\n-   Create Automated Market Makers\n-   Deposit to AMMs\n-   Place bids on AMMs\n-   Vote on AMM parameters\n-   Delete AMMs\n-   Clawback assets from AMMs\n\n### Check Operations\n\n-   Create checks\n-   Cash checks\n-   Cancel checks\n\n### Offer/DEX Operations\n\n-   Create offers\n-   Cancel offers\n\n### Oracle Operations\n\n-   Set oracle data\n-   Delete oracle data\n\n### Payment Channels\n\n-   Create payment channels\n-   Fund payment channels\n-   Claim from payment channels\n\n### Escrow\n\n-   Create escrows\n-   Finish escrows\n-   Cancel escrows\n\n### Trustlines\n\n-   Set and manage trustlines\n\n### Ticketing\n\n-   Create tickets for transaction processing\n\n## 🌐 Supported Networks\n\n-   **MainNet**: Production XRP Ledger network\n-   **TestNet**: Test network for development\n-   **DevNet**: Development network for experimental features\n\n## 🛠️ Prerequisites\n\n-   Node.js 18.0.0 or higher\n\n## 📦 Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/yourusername/mcp-xrpl.git\ncd mcp-xrpl\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n\n## ⚙️ Server Configuration\n\nCreate a `.env` file in the project root with the following variables:\n\n```\n# Optional: XRPL wallet seed for automatic connection\n# If not provided, you can connect using the connect-to-xrpl tool\nDEFAULT_SEED=sEdVoKkRRF8RsNYZ689NDeMyrijiCbg  # Example - replace with your own or remove\n\n# Network selection (default is \"testnet\")\nXRPL_NETWORK=testnet  # Options: mainnet, testnet, devnet\n```\n\n## 🚀 Usage\n\n### Starting the Server\n\n```bash\n# Start the server in stdio mode (for CLI tools)\nnpm start\n```\n\n### Connecting to the Server\n\nConnect to this MCP server using any MCP-compatible client. For testing and debugging, you can use the MCP Inspector.\n\n## 📚 API Reference\n\n### Tools\n\nThe server provides the following MCP tools for agents:\n\n#### Account Management\n\n| Tool Name                | Description                        | Key Parameters                   |\n| ------------------------ | ---------------------------------- | -------------------------------- |\n| `connect-to-xrpl`        | Connect to XRP Ledger using a seed | seed, network                    |\n| `get-account-info`       | Get account information            | address, network                 |\n| `delete-account`         | Delete an XRPL account             | privateKey, destination, network |\n| `set-account-properties` | Set account properties             | privateKey, properties, network  |\n| `deposit-preauth`        | Preauthorize a deposit             | privateKey, authorize, network   |\n| `set-regular-key`        | Set a regular key for an account   | privateKey, regularKey, network  |\n\n#### XRP and Token Operations\n\n| Tool Name                | Description            | Key Parameters                                  |\n| ------------------------ | ---------------------- | ----------------------------------------------- |\n| `transfer-xrp`           | Send XRP to an account | privateKey, to, amount, network                 |\n| `get-token-metadata`     | Get token metadata     | tokenAddress, network                           |\n| `check-token-balance`    | Check token balance    | tokenAddress, ownerAddress, network             |\n| `transfer-token`         | Transfer tokens        | privateKey, tokenAddress, to, amount, network   |\n| `approve-token-spending` | Approve token spending | privateKey, tokenAddress, limit, network        |\n| `token-clawback`         | Clawback tokens        | privateKey, tokenAddress, from, amount, network |\n\n#### NFT Operations\n\n| Tool Name             | Description              | Key Parameters                   |\n| --------------------- | ------------------------ | -------------------------------- |\n| `nft-mint`            | Mint an NFT              | privateKey, uri, flags, network  |\n| `get-nft-info`        | Get NFT metadata         | tokenID, network                 |\n| `check-nft-ownership` | Verify NFT ownership     | tokenID, ownerAddress, network   |\n| `transfer-nft`        | Transfer an NFT          | privateKey, tokenID, to, network |\n| `get-nft-collection`  | Get NFTs in a collection | address, network                 |\n\n#### DID Operations\n\n| Tool Name        | Description      | Key Parameters                 |\n| ---------------- | ---------------- | ------------------------------ |\n| `create-did`     | Create a DID     | privateKey, data, network      |\n| `resolve-did`    | Resolve a DID    | did, network                   |\n| `update-did`     | Update a DID     | privateKey, did, data, network |\n| `deactivate-did` | Deactivate a DID | privateKey, did, network       |\n\n#### AMM Operations\n\n| Tool Name      | Description              | Key Parameters                     |\n| -------------- | ------------------------ | ---------------------------------- |\n| `amm-create`   | Create an AMM            | privateKey, assets, network        |\n| `amm-deposit`  | Deposit to an AMM        | privateKey, ammID, assets, network |\n| `amm-bid`      | Place bid on an AMM      | privateKey, ammID, bid, network    |\n| `amm-vote`     | Vote on AMM parameters   | privateKey, ammID, vote, network   |\n| `amm-delete`   | Delete an AMM            | privateKey, ammID, network         |\n| `amm-clawback` | Clawback assets from AMM | privateKey, ammID, assets, network |\n\n### Resources\n\nThe server exposes XRPL data through the following MCP resource URIs:\n\n#### Ledger Resources\n\n| Resource URI Pattern                         | Description                |\n| -------------------------------------------- | -------------------------- |\n| `xrpl://{network}/ledger/current`            | Current ledger information |\n| `xrpl://{network}/ledger/{ledger_index}`     | Ledger by index            |\n| `xrpl://{network}/account/{address}`         | Account information        |\n| `xrpl://{network}/account/{address}/balance` | Account XRP balance        |\n| `xrpl://{network}/tx/{tx_hash}`              | Transaction details        |\n\n#### Token Resources\n\n| Resource URI Pattern                                             | Description               |\n| ---------------------------------------------------------------- | ------------------------- |\n| `xrpl://{network}/token/{currency}/{issuer}`                     | Token information         |\n| `xrpl://{network}/token/{currency}/{issuer}/balanceOf/{address}` | Token balance             |\n| `xrpl://{network}/nft/{tokenID}`                                 | NFT information           |\n| `xrpl://{network}/nft/{tokenID}/owner`                           | NFT ownership information |\n\n## 🔒 Security Considerations\n\n-   Wallet seeds are used only for transaction signing and should be kept secure\n-   Consider implementing additional authentication mechanisms for production use\n-   For high-value services, consider adding confirmation steps\n-   Default operations are performed on TestNet to ensure safety during development\n-   Use environment variables for sensitive configuration\n\n## 📁 Project Structure\n\n```\nmcp-xrpl/\n├── src/\n│   ├── core/                # Core utilities and services\n│   │   ├── constants.ts     # XRPL network URLs and other constants\n│   │   ├── state.ts         # State management for connected wallet\n│   │   ├── utils.ts         # Helper functions\n│   │   └── services/        # Service modules\n│   ├── server/              # MCP server implementation\n│   ├── transactions/        # XRPL transaction implementation\n│   │   ├── token/           # Token-related transactions\n│   │   ├── nft/             # NFT-related transactions\n│   │   ├── did/             # DID-related transactions\n│   │   ├── amm/             # AMM-related transactions\n│   │   ├── check/           # Check-related transactions\n│   │   ├── offer/           # Offer-related transactions\n│   │   ├── oracle/          # Oracle-related transactions\n│   │   ├── payment/         # Payment-related transactions\n│   │   ├── escrow/          # Escrow-related transactions\n│   │   └── trust/           # Trust line-related transactions\n│   └── index.ts             # Entry point\n├── build/                   # Compiled JavaScript output\n├── package.json\n├── package-lock.json\n└── tsconfig.json\n```\n\n## 🛠️ Development\n\n### Adding New Tools\n\nTo add a new tool:\n\n1. Create a new TypeScript file in the appropriate directory under `src/transactions/`\n2. Import the server from `server/server.js`\n3. Define the tool using `server.tool()`\n4. Import the tool in `src/index.ts`\n\n### Project Dependencies\n\n-   [`@modelcontextprotocol/sdk`](https://www.npmjs.com/package/@modelcontextprotocol/sdk): MCP SDK\n-   [`xrpl`](https://www.npmjs.com/package/xrpl): XRP Ledger JavaScript/TypeScript API\n-   [`dotenv`](https://www.npmjs.com/package/dotenv): Environment variable management\n-   [`zod`](https://www.npmjs.com/package/zod): TypeScript-first schema declaration and validation\n\n## 📄 License\n\nThis project is licensed under the terms of the MIT License.\n\n## ⚠️ Disclaimer\n\nThis software is provided for educational and development purposes only. Use it at your own risk. Always test thoroughly on the Testnet before using on Mainnet with real XRP.\n",
+  "category": "Finance",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "RomThpt-mcp-xrpl": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "RomThpt",
+    "repo": "mcp-xrpl",
+    "url": "https://github.com/RomThpt/mcp-xrpl",
+    "name": "mcp-xrpl",
+    "path": null,
+    "stars": 4,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "db7cc873f3bfde33e10851066f7de34c9493c13e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:16.619Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "mcp-proxy",
+      "importance": 9
+    },
+    {
+      "name": "xrpl",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"mcp-xrpl\",\n    \"version\": \"1.0.0\",\n    \"type\": \"module\",\n    \"description\": \"MCP XRPL Wrapper\",\n    \"scripts\": {\n        \"build\": \"cd mcp-server && npm run build\",\n        \"start\": \"cd mcp-server && npm start\"\n    }\n}\n\n\n=== mcp-server/package.json ===\n{\n    \"type\": \"module\",\n    \"bin\": {\n        \"xrpl-mcp-server\": \"./build/index.js\"\n    },\n    \"scripts\": {\n        \"build\": \"tsc && chmod 755 build/index.js\",\n        \"start\": \"npx mcp-proxy --port 8080 --endpoint /sse npx tsx src/index.ts\"\n    },\n    \"files\": [\n        \"build\"\n    ],\n    \"dependencies\": {\n        \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n        \"dotenv\": \"^16.4.7\",\n        \"mcp-proxy\": \"^2.12.2\",\n        \"xrpl\": \"^4.2.0\",\n        \"zod\": \"^3.24.2\"\n    },\n    \"devDependencies\": {\n        \"@types/node\": \"^22.14.0\",\n        \"tsx\": \"^4.7.1\",\n        \"typescript\": \"^5.8.3\"\n    }\n}\n"
+}

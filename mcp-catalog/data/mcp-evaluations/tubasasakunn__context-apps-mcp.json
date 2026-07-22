@@ -1,0 +1,72 @@
+{
+  "name": "tubasasakunn__context-apps-mcp",
+  "display_name": "context-apps-mcp",
+  "description": "MCP server from tubasasakunn/context-apps-mcp",
+  "author": {
+    "name": "tubasasakunn"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Context Apps MCP\n\n**AI-powered productivity suite** connecting Todo, Idea, Journal, and Timer apps with Claude via Model Context Protocol.\n\n🌐 **Server URL**: `https://mcp-server.basaapp.com/mcp`  \n📱 **Learn More**: [mcp-app.basaapp.com](https://mcp-app.basaapp.com/)\n\n## Quick Start (30 seconds)\n\n### Claude Desktop\n1. Open Settings → **Manage connectors**\n2. Click **Add custom connector** \n3. Enter URL: `https://mcp-server.basaapp.com/mcp`\n4. Click **Connect** → Sign in with Apple ID\n5. ✅ Ready to use!\n\n### Other MCP Clients\n```json\n{\n  \"mcpServers\": {\n    \"context-apps\": {\n      \"url\": \"https://mcp-server.basaapp.com/mcp\"\n    }\n  }\n}\n```\n\n## Available Apps\n\nDownload all apps from App Store to unlock full functionality:\n\n| App | Purpose | Download |\n|-----|---------|----------|\n| 🎯 Context Todo | AI task management & scheduling | [App Store](https://apps.apple.com/jp/app/context-todo-mcp%E5%AF%BE%E5%BF%9Ctodo%E3%82%A2%E3%83%97%E3%83%AA/id6747934261) |\n| 💡 Context Idea | AI idea development & organization | [App Store](https://apps.apple.com/jp/app/context-idea-mcp%E5%AF%BE%E5%BF%9C%E3%82%A2%E3%82%A4%E3%83%87%E3%82%A2%E3%83%8E%E3%83%BC%E3%83%88/id6747934378) |\n| 📔 Context Journal | AI journal analysis & insights | [App Store](https://apps.apple.com/jp/app/context-journal-mcp%E5%AF%BE%E5%BF%9C%E6%97%A5%E8%A8%98%E3%82%A2%E3%83%97%E3%83%AA/id6747934304) |\n| ⏰ Context Timer | AI productivity & time tracking | [App Store](https://apps.apple.com/jp/app/context-timer-mcp%E5%AF%BE%E5%BF%9C%E3%82%BF%E3%82%A4%E3%83%9E%E3%83%BC/id6747934337) |\n\n## What You Get\n\n### 🎯 Smart Task Management\n* AI task breakdown and prioritization\n* Intelligent time estimation\n* Context-aware scheduling\n* Progress tracking and insights\n\n### 💡 Idea Development\n* AI-powered brainstorming assistance\n* Concept expansion and refinement\n* Knowledge linking and organization\n* Creative synthesis and insights\n\n### 📔 Journal Intelligence\n* Emotional pattern recognition\n* Personal growth tracking\n* AI-guided reflection prompts\n* Behavioral insight analysis\n\n### ⏰ Productivity Optimization\n* Focus session management\n* Work pattern analysis and optimization\n* Habit formation guidance\n* Performance metrics and recommendations\n\n## Authentication & Security\n\n* **Authentication**: Apple ID OAuth 2.0\n* **Requirements**: Context apps installed on iOS device\n* **Permissions**: Read/write access to your productivity data\n* **Privacy**: End-to-end encrypted communication\n* **Data Control**: You own your data, export anytime\n\n## Available MCP Tools\n\n* **Task Management**: `todo_search`, `todo_insert`, `todo_update`, `todo_delete`, `todo_status_list`\n* **Idea Development**: `idea_search`, `idea_insert`, `idea_update`, `idea_delete`\n* **Journal Analysis**: `journal_search`, `journal_insert`, `journal_update`, `journal_delete`, `journal_tag_list`\n* **Time Management**: `timer_search`, `timer_insert`, `timer_update`, `timer_delete`\n\n→ [View detailed tool documentation](docs/tools.md)\n\n## Example Interactions\n\n👤 \"Help me organize my day with 5 tasks and 3 meetings\"  \n🤖 *Analyzes tasks via Context Todo, estimates times, creates optimized schedule*\n\n👤 \"Expand my idea about sustainable urban transportation\"  \n🤖 *Uses Context Idea to develop concepts, suggest research areas, structure thinking*\n\n👤 \"How has my productivity changed this month compared to last?\"  \n🤖 *Analyzes patterns using Context Timer and Journal data, provides insights*\n\n👤 \"Create a reflection prompt based on my recent journal entries\"  \n🤖 *Reviews Context Journal data, generates personalized reflection questions*\n\n## Supported Platforms\n\n| Platform | Status | Setup Guide |\n|----------|--------|-------------|\n| 🖥 Claude Desktop | ✅ Full Support | [Quick Start](#quick-start-30-seconds) |\n| 📝 Cursor IDE | ✅ Compatible | Standard MCP config |\n| 🛠 Cline (VS Code) | ✅ Compatible | Standard MCP config |\n| 🌐 Other MCP Clients | ✅ Standard MCP | JSON config above |\n\n## System Requirements\n\n* **MCP Client**: Any MCP-compatible application\n* **Authentication**: Apple ID required\n* **iOS Apps**: Context apps installed on iOS device\n* **Internet**: Stable connection required\n\n## Troubleshooting\n\n**Connection Issues:**\n* Verify URL: `https://mcp-server.basaapp.com/mcp`\n* Check internet connectivity\n* Ensure MCP client supports remote servers\n\n**Authentication Problems:**\n* Confirm Apple ID credentials\n* Verify Context apps are installed on iOS device\n* Check app permissions in iOS Settings\n\n**Tool Errors:**\n* Ensure specific Context app is installed for tool category\n* Check app is signed in with same Apple ID\n* Verify app permissions are granted\n\n## Support & Community\n\n* 🌐 **Website**: [mcp-app.basaapp.com](https://mcp-app.basaapp.com/)\n* 📧 **Support**: support@basaapp.com\n* 🐛 **Issues**: [GitHub Issues](https://github.com/basaapp/context-apps-mcp/issues)\n* 💬 **Community**: Join our Discord server\n\n## Service Information\n\n* **Status**: Production (launched November 2024)\n* **Users**: 10,000+ active users\n* **Uptime**: 99.9% SLA\n* **Updates**: Automatic server updates\n* **Regions**: Global availability\n\n---\n\n## Legal\n\nThis is a hosted remote MCP server. Usage is governed by:\n* **Terms of Service**: [basaapp.com/terms](https://basaapp.com/terms)\n* **Privacy Policy**: [basaapp.com/privacy](https://basaapp.com/privacy)\n\nContext Apps mobile applications are available under their respective App Store licenses.\n\nCopyright © 2024 Basaapp. All rights reserved.\n",
+  "category": "AI Tools",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tubasasakunn",
+    "repo": "context-apps-mcp",
+    "url": "https://github.com/tubasasakunn/context-apps-mcp",
+    "name": "context-apps-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "544a7e5df8f74770e5432254324c7e568d815aa8"
+  },
+  "programming_language": "Unknown",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:41.677Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "Anthropic API client",
+      "importance": 9
+    },
+    {
+      "name": "OAuth 2.0 library",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": null
+}

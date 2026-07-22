@@ -1,0 +1,123 @@
+{
+  "name": "gongrzhe__gmail-mcp-server",
+  "display_name": "Gmail-MCP-Server",
+  "description": "A Model Context Protocol (MCP) server for Gmail integration in Claude Desktop with auto authentication support. This server enables AI assistants to manage Gmail through natural language interactions.",
+  "author": {
+    "name": "GongRzhe"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Gmail AutoAuth MCP Server\n\nA Model Context Protocol (MCP) server for Gmail integration in Claude Desktop with auto authentication support. This server enables AI assistants to manage Gmail through natural language interactions.\n\n![](https://badge.mcpx.dev?type=server 'MCP Server')\n[![smithery badge](https://smithery.ai/badge/@gongrzhe/server-gmail-autoauth-mcp)](https://smithery.ai/server/@gongrzhe/server-gmail-autoauth-mcp)\n\n\n## Features\n\n- Send emails with subject, content, **attachments**, and recipients\n- **Full attachment support** - send and receive file attachments\n- **Download email attachments** to local filesystem\n- Support for HTML emails and multipart messages with both HTML and plain text versions\n- Full support for international characters in subject lines and email content\n- Read email messages by ID with advanced MIME structure handling\n- **Enhanced attachment display** showing filenames, types, sizes, and download IDs\n- Search emails with various criteria (subject, sender, date range)\n- **Comprehensive label management with ability to create, update, delete and list labels**\n- List all available Gmail labels (system and user-defined)\n- List emails in inbox, sent, or custom labels\n- Mark emails as read/unread\n- Move emails to different labels/folders\n- Delete emails\n- **Batch operations for efficiently processing multiple emails at once**\n- Full integration with Gmail API\n- Simple OAuth2 authentication flow with auto browser launch\n- Support for both Desktop and Web application credentials\n- Global credential storage for convenience\n\n## Installation & Authentication\n\n### Installing via Smithery\n\nTo install Gmail AutoAuth for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@gongrzhe/server-gmail-autoauth-mcp):\n\n```bash\nnpx -y @smithery/cli install @gongrzhe/server-gmail-autoauth-mcp --client claude\n```\n\n### Installing Manually\n1. Create a Google Cloud Project and obtain credentials:\n\n   a. Create a Google Cloud Project:\n      - Go to [Google Cloud Console](https://console.cloud.google.com/)\n      - Create a new project or select an existing one\n      - Enable the Gmail API for your project\n\n   b. Create OAuth 2.0 Credentials:\n      - Go to \"APIs & Services\" > \"Credentials\"\n      - Click \"Create Credentials\" > \"OAuth client ID\"\n      - Choose either \"Desktop app\" or \"Web application\" as application type\n      - Give it a name and click \"Create\"\n      - For Web application, add `http://localhost:3000/oauth2callback` to the authorized redirect URIs\n      - Download the JSON file of your client's OAuth keys\n      - Rename the key file to `gcp-oauth.keys.json`\n\n2. Run Authentication:\n\n   You can authenticate in two ways:\n\n   a. Global Authentication (Recommended):\n   ```bash\n   # First time: Place gcp-oauth.keys.json in your home directory's .gmail-mcp folder\n   mkdir -p ~/.gmail-mcp\n   mv gcp-oauth.keys.json ~/.gmail-mcp/\n\n   # Run authentication from anywhere\n   npx @gongrzhe/server-gmail-autoauth-mcp auth\n   ```\n\n   b. Local Authentication:\n   ```bash\n   # Place gcp-oauth.keys.json in your current directory\n   # The file will be automatically copied to global config\n   npx @gongrzhe/server-gmail-autoauth-mcp auth\n   ```\n\n   The authentication process will:\n   - Look for `gcp-oauth.keys.json` in the current directory or `~/.gmail-mcp/`\n   - If found in current directory, copy it to `~/.gmail-mcp/`\n   - Open your default browser for Google authentication\n   - Save credentials as `~/.gmail-mcp/credentials.json`\n\n   > **Note**: \n   > - After successful authentication, credentials are stored globally in `~/.gmail-mcp/` and can be used from any directory\n   > - Both Desktop app and Web application credentials are supported\n   > - For Web application credentials, make sure to add `http://localhost:3000/oauth2callback` to your authorized redirect URIs\n\n3. Configure in Claude Desktop:\n\n```json\n{\n  \"mcpServers\": {\n    \"gmail\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@gongrzhe/server-gmail-autoauth-mcp\"\n      ]\n    }\n  }\n}\n```\n\n### Docker Support\n\nIf you prefer using Docker:\n\n1. Authentication:\n```bash\ndocker run -i --rm \\\n  --mount type=bind,source=/path/to/gcp-oauth.keys.json,target=/gcp-oauth.keys.json \\\n  -v mcp-gmail:/gmail-server \\\n  -e GMAIL_OAUTH_PATH=/gcp-oauth.keys.json \\\n  -e \"GMAIL_CREDENTIALS_PATH=/gmail-server/credentials.json\" \\\n  -p 3000:3000 \\\n  mcp/gmail auth\n```\n\n2. Usage:\n```json\n{\n  \"mcpServers\": {\n    \"gmail\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-v\",\n        \"mcp-gmail:/gmail-server\",\n        \"-e\",\n        \"GMAIL_CREDENTIALS_PATH=/gmail-server/credentials.json\",\n        \"mcp/gmail\"\n      ]\n    }\n  }\n}\n```\n\n### Cloud Server Authentication\n\nFor cloud server environments (like n8n), you can specify a custom callback URL during authentication:\n\n```bash\nnpx @gongrzhe/server-gmail-autoauth-mcp auth https://gmail.gongrzhe.com/oauth2callback\n```\n\n#### Setup Instructions for Cloud Environment\n\n1. **Configure Reverse Proxy:**\n   - Set up your n8n container to expose a port for authentication\n   - Configure a reverse proxy to forward traffic from your domain (e.g., `gmail.gongrzhe.com`) to this port\n\n2. **DNS Configuration:**\n   - Add an A record in your DNS settings to resolve your domain to your cloud server's IP address\n\n3. **Google Cloud Platform Setup:**\n   - In your Google Cloud Console, add your custom domain callback URL (e.g., `https://gmail.gongrzhe.com/oauth2callback`) to the authorized redirect URIs list\n\n4. **Run Authentication:**\n   ```bash\n   npx @gongrzhe/server-gmail-autoauth-mcp auth https://gmail.gongrzhe.com/oauth2callback\n   ```\n\n5. **Configure in your application:**\n   ```json\n   {\n     \"mcpServers\": {\n       \"gmail\": {\n         \"command\": \"npx\",\n         \"args\": [\n           \"@gongrzhe/server-gmail-autoauth-mcp\"\n         ]\n       }\n     }\n   }\n   ```\n\nThis approach allows authentication flows to work properly in environments where localhost isn't accessible, such as containerized applications or cloud servers.\n\n## Available Tools\n\nThe server provides the following tools that can be used through Claude Desktop:\n\n### 1. Send Email (`send_email`)\n\nSends a new email immediately. Supports plain text, HTML, or multipart emails **with optional file attachments**.\n\nBasic Email:\n```json\n{\n  \"to\": [\"recipient@example.com\"],\n  \"subject\": \"Meeting Tomorrow\",\n  \"body\": \"Hi,\\n\\nJust a reminder about our meeting tomorrow at 10 AM.\\n\\nBest regards\",\n  \"cc\": [\"cc@example.com\"],\n  \"bcc\": [\"bcc@example.com\"],\n  \"mimeType\": \"text/plain\"\n}\n```\n\n**Email with Attachments:**\n```json\n{\n  \"to\": [\"recipient@example.com\"],\n  \"subject\": \"Project Files\",\n  \"body\": \"Hi,\\n\\nPlease find the project files attached.\\n\\nBest regards\",\n  \"attachments\": [\n    \"/path/to/document.pdf\",\n    \"/path/to/spreadsheet.xlsx\",\n    \"/path/to/presentation.pptx\"\n  ]\n}\n```\n\nHTML Email Example:\n```json\n{\n  \"to\": [\"recipient@example.com\"],\n  \"subject\": \"Meeting Tomorrow\",\n  \"mimeType\": \"text/html\",\n  \"body\": \"<html><body><h1>Meeting Reminder</h1><p>Just a reminder about our <b>meeting tomorrow</b> at 10 AM.</p><p>Best regards</p></body></html>\"\n}\n```\n\nMultipart Email Example (HTML + Plain Text):\n```json\n{\n  \"to\": [\"recipient@example.com\"],\n  \"subject\": \"Meeting Tomorrow\",\n  \"mimeType\": \"multipart/alternative\",\n  \"body\": \"Hi,\\n\\nJust a reminder about our meeting tomorrow at 10 AM.\\n\\nBest regards\",\n  \"htmlBody\": \"<html><body><h1>Meeting Reminder</h1><p>Just a reminder about our <b>meeting tomorrow</b> at 10 AM.</p><p>Best regards</p></body></html>\"\n}\n```\n\n### 2. Draft Email (`draft_email`)\nCreates a draft email without sending it. **Also supports attachments**.\n\n```json\n{\n  \"to\": [\"recipient@example.com\"],\n  \"subject\": \"Draft Report\",\n  \"body\": \"Here's the draft report for your review.\",\n  \"cc\": [\"manager@example.com\"],\n  \"attachments\": [\"/path/to/draft_report.docx\"]\n}\n```\n\n### 3. Read Email (`read_email`)\nRetrieves the content of a specific email by its ID. **Now shows enhanced attachment information**.\n\n```json\n{\n  \"messageId\": \"182ab45cd67ef\"\n}\n```\n\n**Enhanced Response includes attachment details:**\n```\nSubject: Project Files\nFrom: sender@example.com\nTo: recipient@example.com\nDate: Thu, 19 Jun 2025 10:30:00 -0400\n\nEmail body content here...\n\nAttachments (2):\n- document.pdf (application/pdf, 245 KB, ID: ANGjdJ9fkTs-i3GCQo5o97f_itG...)\n- spreadsheet.xlsx (application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, 89 KB, ID: BWHkeL8gkUt-j4HDRp6o98g_juI...)\n```\n\n### 4. **Download Attachment (`download_attachment`)**\n**NEW**: Downloads email attachments to your local filesystem.\n\n```json\n{\n  \"messageId\": \"182ab45cd67ef\",\n  \"attachmentId\": \"ANGjdJ9fkTs-i3GCQo5o97f_itG...\",\n  \"savePath\": \"/path/to/downloads\",\n  \"filename\": \"downloaded_document.pdf\"\n}\n```\n\nParameters:\n- `messageId`: The ID of the email containing the attachment\n- `attachmentId`: The attachment ID (shown in enhanced email display)\n- `savePath`: Directory to save the file (optional, defaults to current directory)\n- `filename`: Custom filename (optional, uses original filename if not provided)\n\n### 5. Search Emails (`search_emails`)\nSearches for emails using Gmail search syntax.\n\n```json\n{\n  \"query\": \"from:sender@example.com after:2024/01/01 has:attachment\",\n  \"maxResults\": 10\n}\n```\n\n### 6. Modify Email (`modify_email`)\nAdds or removes labels from emails (move to different folders, archive, etc.).\n\n```json\n{\n  \"messageId\": \"182ab45cd67ef\",\n  \"addLabelIds\": [\"IMPORTANT\"],\n  \"removeLabelIds\": [\"INBOX\"]\n}\n```\n\n### 7. Delete Email (`delete_email`)\nPermanently deletes an email.\n\n```json\n{\n  \"messageId\": \"182ab45cd67ef\"\n}\n```\n\n### 8. List Email Labels (`list_email_labels`)\nRetrieves all available Gmail labels.\n\n```json\n{}\n```\n\n### 9. Create Label (`create_label`)\nCreates a new Gmail label.\n\n```json\n{\n  \"name\": \"Important Projects\",\n  \"messageListVisibility\": \"show\",\n  \"labelListVisibility\": \"labelShow\"\n}\n```\n\n### 10. Update Label (`update_label`)\nUpdates an existing Gmail label.\n\n```json\n{\n  \"id\": \"Label_1234567890\",\n  \"name\": \"Urgent Projects\",\n  \"messageListVisibility\": \"show\",\n  \"labelListVisibility\": \"labelShow\"\n}\n```\n\n### 11. Delete Label (`delete_label`)\nDeletes a Gmail label.\n\n```json\n{\n  \"id\": \"Label_1234567890\"\n}\n```\n\n### 12. Get or Create Label (`get_or_create_label`)\nGets an existing label by name or creates it if it doesn't exist.\n\n```json\n{\n  \"name\": \"Project XYZ\",\n  \"messageListVisibility\": \"show\",\n  \"labelListVisibility\": \"labelShow\"\n}\n```\n\n### 13. Batch Modify Emails (`batch_modify_emails`)\nModifies labels for multiple emails in efficient batches.\n\n```json\n{\n  \"messageIds\": [\"182ab45cd67ef\", \"182ab45cd67eg\", \"182ab45cd67eh\"],\n  \"addLabelIds\": [\"IMPORTANT\"],\n  \"removeLabelIds\": [\"INBOX\"],\n  \"batchSize\": 50\n}\n```\n\n### 14. Batch Delete Emails (`batch_delete_emails`)\nPermanently deletes multiple emails in efficient batches.\n\n```json\n{\n  \"messageIds\": [\"182ab45cd67ef\", \"182ab45cd67eg\", \"182ab45cd67eh\"],\n  \"batchSize\": 50\n}\n```\n\n## Advanced Search Syntax\n\nThe `search_emails` tool supports Gmail's powerful search operators:\n\n| Operator | Example | Description |\n|----------|---------|-------------|\n| `from:` | `from:john@example.com` | Emails from a specific sender |\n| `to:` | `to:mary@example.com` | Emails sent to a specific recipient |\n| `subject:` | `subject:\"meeting notes\"` | Emails with specific text in the subject |\n| `has:attachment` | `has:attachment` | Emails with attachments |\n| `after:` | `after:2024/01/01` | Emails received after a date |\n| `before:` | `before:2024/02/01` | Emails received before a date |\n| `is:` | `is:unread` | Emails with a specific state |\n| `label:` | `label:work` | Emails with a specific label |\n\nYou can combine multiple operators: `from:john@example.com after:2024/01/01 has:attachment`\n\n## Advanced Features\n\n### **Email Attachment Support**\n\nThe server provides comprehensive attachment functionality:\n\n- **Sending Attachments**: Include file paths in the `attachments` array when sending or drafting emails\n- **Attachment Detection**: Automatically detects MIME types and file sizes\n- **Download Capability**: Download any email attachment to your local filesystem\n- **Enhanced Display**: View detailed attachment information including filenames, types, sizes, and download IDs\n- **Multiple Formats**: Support for all common file types (documents, images, archives, etc.)\n- **RFC822 Compliance**: Uses Nodemailer for proper MIME message formatting\n\n**Supported File Types**: All standard file types including PDF, DOCX, XLSX, PPTX, images (PNG, JPG, GIF), archives (ZIP, RAR), and more.\n\n### Email Content Extraction\n\nThe server intelligently extracts email content from complex MIME structures:\n\n- Prioritizes plain text content when available\n- Falls back to HTML content if plain text is not available\n- Handles multi-part MIME messages with nested parts\n- **Processes attachments information (filename, type, size, download ID)**\n- Preserves original email headers (From, To, Subject, Date)\n\n### International Character Support\n\nThe server fully supports non-ASCII characters in email subjects and content, including:\n- Turkish, Chinese, Japanese, Korean, and other non-Latin alphabets\n- Special characters and symbols\n- Proper encoding ensures correct display in email clients\n\n### Comprehensive Label Management\n\nThe server provides a complete set of tools for managing Gmail labels:\n\n- **Create Labels**: Create new labels with customizable visibility settings\n- **Update Labels**: Rename labels or change their visibility settings\n- **Delete Labels**: Remove user-created labels (system labels are protected)\n- **Find or Create**: Get a label by name or automatically create it if not found\n- **List All Labels**: View all system and user labels with detailed information\n- **Label Visibility Options**: Control how labels appear in message and label lists\n\nLabel visibility settings include:\n- `messageListVisibility`: Controls whether the label appears in the message list (`show` or `hide`)\n- `labelListVisibility`: Controls how the label appears in the label list (`labelShow`, `labelShowIfUnread`, or `labelHide`)\n\nThese label management features enable sophisticated organization of emails directly through Claude, without needing to switch to the Gmail interface.\n\n### Batch Operations\n\nThe server includes efficient batch processing capabilities:\n\n- Process up to 50 emails at once (configurable batch size)\n- Automatic chunking of large email sets to avoid API limits\n- Detailed success/failure reporting for each operation\n- Graceful error handling with individual retries\n- Perfect for bulk inbox management and organization tasks\n\n## Security Notes\n\n- OAuth credentials are stored securely in your local environment (`~/.gmail-mcp/`)\n- The server uses offline access to maintain persistent authentication\n- Never share or commit your credentials to version control\n- Regularly review and revoke unused access in your Google Account settings\n- Credentials are stored globally but are only accessible by the current user\n- **Attachment files are processed locally and never stored permanently by the server**\n\n## Troubleshooting\n\n1. **OAuth Keys Not Found**\n   - Make sure `gcp-oauth.keys.json` is in either your current directory or `~/.gmail-mcp/`\n   - Check file permissions\n\n2. **Invalid Credentials Format**\n   - Ensure your OAuth keys file contains either `web` or `installed` credentials\n   - For web applications, verify the redirect URI is correctly configured\n\n3. **Port Already in Use**\n   - If port 3000 is already in use, please free it up before running authentication\n   - You can find and stop the process using that port\n\n4. **Batch Operation Failures**\n   - If batch operations fail, they automatically retry individual items\n   - Check the detailed error messages for specific failures\n   - Consider reducing the batch size if you encounter rate limiting\n\n5. **Attachment Issues**\n   - **File Not Found**: Ensure attachment file paths are correct and accessible\n   - **Permission Errors**: Check that the server has read access to attachment files\n   - **Size Limits**: Gmail has a 25MB attachment size limit per email\n   - **Download Failures**: Verify you have write permissions to the download directory\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n\n## Running evals\n\nThe evals package loads an mcp client that then runs the index.ts file, so there is no need to rebuild between tests. You can load environment variables by prefixing the npx command. Full documentation can be found [here](https://www.mcpevals.io/docs).\n\n```bash\nOPENAI_API_KEY=your-key  npx mcp-eval src/evals/evals.ts src/index.ts\n```\n\n## License\n\nMIT\n\n## Support\n\nIf you encounter any issues or have questions, please file an issue on the GitHub repository.\n",
+  "category": "Email",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gongrzhe-server-gmail-autoauth-mcp": {
+        "command": "npx",
+        "args": ["@gongrzhe/server-gmail-autoauth-mcp"],
+        "env": {}
+      },
+      "mcp-gmail-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-v",
+          "mcp-gmail:/gmail-server",
+          "-e",
+          "GMAIL_CREDENTIALS_PATH=/gmail-server/credentials.json",
+          "mcp/gmail"
+        ],
+        "env": {
+          "GMAIL_CREDENTIALS_PATH": "/gmail-server/credentials.json"
+        },
+        "docker_image": "mcp/gmail"
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "GongRzhe",
+    "repo": "Gmail-MCP-Server",
+    "url": "https://github.com/GongRzhe/Gmail-MCP-Server",
+    "name": "Gmail-MCP-Server",
+    "path": null,
+    "stars": 573,
+    "contributors": 9,
+    "issues": 26,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "649ca9d3bd176599215d69d659e0afc025fa6cfc"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:55:48.538Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@types/mime-types",
+      "importance": 3
+    },
+    {
+      "name": "google-auth-library",
+      "importance": 9
+    },
+    {
+      "name": "googleapis",
+      "importance": 9
+    },
+    {
+      "name": "mcp-evals",
+      "importance": 7
+    },
+    {
+      "name": "mime-types",
+      "importance": 6
+    },
+    {
+      "name": "nodemailer",
+      "importance": 8
+    },
+    {
+      "name": "open",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@gongrzhe/server-gmail-autoauth-mcp\",\n  \"version\": \"1.1.10\",\n  \"description\": \"Gmail MCP server with auto authentication support\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"gmail-mcp\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\",\n    \"auth\": \"node dist/index.js auth\",\n    \"prepare\": \"npm run build\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\"\n  ],\n  \"keywords\": [\n    \"gmail\",\n    \"mcp\",\n    \"cursor\",\n    \"ai\",\n    \"oauth\",\n    \"model-context-protocol\",\n    \"google-gmail\",\n    \"claude\",\n    \"auto-auth\"\n  ],\n  \"author\": \"gongrzhe\",\n  \"license\": \"ISC\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/gongrzhe/server-gmail-autoauth-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/gongrzhe/server-gmail-autoauth-mcp/issues\"\n  },\n  \"homepage\": \"https://github.com/gongrzhe/server-gmail-autoauth-mcp#readme\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"engines\": {\n    \"node\": \">=14.0.0\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.4.0\",\n    \"@types/mime-types\": \"^2.1.4\",\n    \"google-auth-library\": \"^9.4.1\",\n    \"googleapis\": \"^129.0.0\",\n    \"mcp-evals\": \"^1.0.18\",\n    \"mime-types\": \"^3.0.1\",\n    \"nodemailer\": \"^7.0.3\",\n    \"open\": \"^10.0.0\",\n    \"zod\": \"^3.22.4\",\n    \"zod-to-json-schema\": \"^3.22.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.10.5\",\n    \"@types/nodemailer\": \"^6.4.17\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

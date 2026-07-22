@@ -1,0 +1,211 @@
+{
+  "name": "neo4j-contrib__mcp-neo4j",
+  "display_name": "mcp-neo4j",
+  "description": "Model Context Protocol with Neo4j",
+  "author": {
+    "name": "neo4j-contrib"
+  },
+  "server": {
+    "command": "mcp-neo4j-cypher",
+    "args": [],
+    "env": {
+      "NEO4J_TRANSPORT": "${user_config.neo4j_transport}",
+      "NEO4J_MCP_SERVER_HOST": "${user_config.neo4j_mcp_server_host}",
+      "NEO4J_MCP_SERVER_PORT": "${user_config.neo4j_mcp_server_port}",
+      "NEO4J_MCP_SERVER_PATH": "${user_config.neo4j_mcp_server_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "neo4j_transport": {
+      "type": "string",
+      "title": "Neo4j Transport Mode",
+      "description": "Transport mode for the MCP server (STDIO, SSE, HTTP)",
+      "default": "STDIO",
+      "required": false
+    },
+    "neo4j_mcp_server_host": {
+      "type": "string",
+      "title": "Neo4j MCP Server Host",
+      "description": "Host address for the HTTP transport mode",
+      "default": "0.0.0.0",
+      "required": false
+    },
+    "neo4j_mcp_server_port": {
+      "type": "number",
+      "title": "Neo4j MCP Server Port",
+      "description": "Port for the HTTP transport mode",
+      "default": 8080,
+      "required": false
+    },
+    "neo4j_mcp_server_path": {
+      "type": "string",
+      "title": "Neo4j MCP Server Path",
+      "description": "Path prefix for the HTTP transport mode",
+      "default": "/api/mcp/",
+      "required": false
+    }
+  },
+  "readme": "# Neo4j MCP Clients & Servers\n\nModel Context Protocol (MCP) is a [standardized protocol](https://modelcontextprotocol.io/introduction) for managing context between large language models (LLMs) and external systems. \n\nThis lets you use Claude Desktop, or any other MCP Client (VS Code, Cursor, Windsurf), to use natural language to accomplish things with Neo4j and your Aura account, e.g.:\n\n* What is in this graph?\n* Render a chart from the top products sold by frequency, total and average volume\n* List my instances\n* Create a new instance named mcp-test for Aura Professional with 4GB and Graph Data Science enabled\n* Store the fact that I worked on the Neo4j MCP Servers today with Andreas and Oskar\n\n## Servers\n\n### `mcp-neo4j-cypher` - natural language to Cypher queries\n\n[Details in Readme](./servers/mcp-neo4j-cypher/)\n\nGet database schema for a configured database and execute generated read and write Cypher queries on that database.\n\n### `mcp-neo4j-memory` - knowledge graph memory stored in Neo4j\n\n[Details in Readme](./servers/mcp-neo4j-memory/)\n\nStore and retrieve entities and relationships from your personal knowledge graph in a local or remote Neo4j instance.\nAccess that information over different sessions, conversations, clients.\n\n### `mcp-neo4j-cloud-aura-api` - Neo4j Aura cloud service management API\n\n[Details in Readme](./servers/mcp-neo4j-cloud-aura-api//)\n\nManage your [Neo4j Aura](https://console.neo4j.io) instances directly from the comfort of your AI assistant chat.\n\nCreate and destroy instances, find instances by name, scale them up and down and enable features.\n\n### `mcp-neo4j-data-modeling` - interactive graph data modeling and visualization\n\n[Details in Readme](./servers/mcp-neo4j-data-modeling/)\n\nCreate, validate, and visualize Neo4j graph data models. Allows for model import/export from Arrows.app.\n\n## Transport Modes\n\nAll servers support multiple transport modes:\n\n- **STDIO** (default): Standard input/output for local tools and Claude Desktop integration\n- **SSE**: Server-Sent Events for web-based deployments\n- **HTTP**: Streamable HTTP for modern web deployments and microservices\n\n### HTTP Transport Configuration\n\nTo run a server in HTTP mode, use the `--transport http` flag:\n\n```bash\n# Basic HTTP mode\nmcp-neo4j-cypher --transport http\n\n# Custom HTTP configuration\nmcp-neo4j-cypher --transport http --host 127.0.0.1 --port 8080 --path /api/mcp/\n```\n\nEnvironment variables are also supported:\n\n```bash\nexport NEO4J_TRANSPORT=http\nexport NEO4J_MCP_SERVER_HOST=127.0.0.1\nexport NEO4J_MCP_SERVER_PORT=8080\nexport NEO4J_MCP_SERVER_PATH=/api/mcp/\nmcp-neo4j-cypher\n```\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## Blog Posts\n\n* [Everything a Developer Needs to Know About the Model Context Protocol (MCP)](https://neo4j.com/blog/developer/model-context-protocol/)\n* [Claude Converses With Neo4j Via MCP - Graph Database & Analytics](https://neo4j.com/blog/developer/claude-converses-neo4j-via-mcp/)\n* [Building Knowledge Graphs With Claude and Neo4j: A No-Code MCP Approach - Graph Database & Analytics](https://neo4j.com/blog/developer/knowledge-graphs-claude-neo4j-mcp/)\n\n## License\n\nMIT License\n",
+  "category": "AI Tools",
+  "quality_score": 74,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-neo4j-cypher-stdio": {
+        "command": "mcp-neo4j-cypher",
+        "args": [],
+        "env": {}
+      },
+      "mcp-neo4j-cypher-http": {
+        "command": "mcp-neo4j-cypher",
+        "args": ["--transport", "http"],
+        "env": {}
+      },
+      "mcp-neo4j-cypher-http-configured": {
+        "command": "mcp-neo4j-cypher",
+        "args": ["--transport", "http", "--host", "0.0.0.0", "--port", "8080", "--path", "/api/mcp/"],
+        "env": {}
+      },
+      "mcp-neo4j-cypher-http-env": {
+        "command": "mcp-neo4j-cypher",
+        "args": [],
+        "env": {
+          "NEO4J_TRANSPORT": "http",
+          "NEO4J_MCP_SERVER_HOST": "0.0.0.0",
+          "NEO4J_MCP_SERVER_PORT": "8080",
+          "NEO4J_MCP_SERVER_PATH": "/api/mcp/"
+        }
+      },
+      "mcp-neo4j-memory-stdio": {
+        "command": "mcp-neo4j-memory",
+        "args": [],
+        "env": {}
+      },
+      "mcp-neo4j-memory-http": {
+        "command": "mcp-neo4j-memory",
+        "args": ["--transport", "http"],
+        "env": {}
+      },
+      "mcp-neo4j-memory-http-configured": {
+        "command": "mcp-neo4j-memory",
+        "args": ["--transport", "http", "--host", "0.0.0.0", "--port", "8080", "--path", "/api/mcp/"],
+        "env": {}
+      },
+      "mcp-neo4j-memory-http-env": {
+        "command": "mcp-neo4j-memory",
+        "args": [],
+        "env": {
+          "NEO4J_TRANSPORT": "http",
+          "NEO4J_MCP_SERVER_HOST": "0.0.0.0",
+          "NEO4J_MCP_SERVER_PORT": "8080",
+          "NEO4J_MCP_SERVER_PATH": "/api/mcp/"
+        }
+      },
+      "mcp-neo4j-cloud-aura-api-stdio": {
+        "command": "mcp-neo4j-cloud-aura-api",
+        "args": [],
+        "env": {}
+      },
+      "mcp-neo4j-cloud-aura-api-http": {
+        "command": "mcp-neo4j-cloud-aura-api",
+        "args": ["--transport", "http"],
+        "env": {}
+      },
+      "mcp-neo4j-cloud-aura-api-http-configured": {
+        "command": "mcp-neo4j-cloud-aura-api",
+        "args": ["--transport", "http", "--host", "0.0.0.0", "--port", "8080", "--path", "/api/mcp/"],
+        "env": {}
+      },
+      "mcp-neo4j-cloud-aura-api-http-env": {
+        "command": "mcp-neo4j-cloud-aura-api",
+        "args": [],
+        "env": {
+          "NEO4J_TRANSPORT": "http",
+          "NEO4J_MCP_SERVER_HOST": "0.0.0.0",
+          "NEO4J_MCP_SERVER_PORT": "8080",
+          "NEO4J_MCP_SERVER_PATH": "/api/mcp/"
+        }
+      },
+      "mcp-neo4j-data-modeling-stdio": {
+        "command": "mcp-neo4j-data-modeling",
+        "args": [],
+        "env": {}
+      },
+      "mcp-neo4j-data-modeling-http": {
+        "command": "mcp-neo4j-data-modeling",
+        "args": ["--transport", "http"],
+        "env": {}
+      },
+      "mcp-neo4j-data-modeling-http-configured": {
+        "command": "mcp-neo4j-data-modeling",
+        "args": ["--transport", "http", "--host", "0.0.0.0", "--port", "8080", "--path", "/api/mcp/"],
+        "env": {}
+      },
+      "mcp-neo4j-data-modeling-http-env": {
+        "command": "mcp-neo4j-data-modeling",
+        "args": [],
+        "env": {
+          "NEO4J_TRANSPORT": "http",
+          "NEO4J_MCP_SERVER_HOST": "0.0.0.0",
+          "NEO4J_MCP_SERVER_PORT": "8080",
+          "NEO4J_MCP_SERVER_PATH": "/api/mcp/"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "neo4j-contrib",
+    "repo": "mcp-neo4j",
+    "url": "https://github.com/neo4j-contrib/mcp-neo4j",
+    "name": "neo4j-contrib__mcp-neo4j",
+    "path": null,
+    "stars": 673,
+    "contributors": 11,
+    "issues": 51,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "04e36b72b634ac1468633c7afc89507021325003"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:29.763Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "neo4j-driver",
+      "importance": 9
+    },
+    {
+      "name": "express",
+      "importance": 8
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": null
+}

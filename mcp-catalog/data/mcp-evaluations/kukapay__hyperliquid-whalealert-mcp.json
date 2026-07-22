@@ -1,0 +1,86 @@
+{
+  "name": "kukapay__hyperliquid-whalealert-mcp",
+  "display_name": "hyperliquid-whalealert-mcp",
+  "description": "An MCP server that provides real-time whale alerts on Hyperliquid.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {
+      "COINGLASS_API_KEY": "${user_config.coinglass_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "coinglass_api_key": {
+      "type": "string",
+      "title": "CoinGlass API Key",
+      "description": "Your API key for CoinGlass API access.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Hyperliquid WhaleAlert MCP\n\nAn MCP server that provides real-time whale alerts on Hyperliquid, flagging positions with a notional value exceeding $1 million.\n\n![GitHub License](https://img.shields.io/github/license/kukapay/hyperliquid-whalealert-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Tool: `get_whale_alerts`**: Fetches recent whale transactions and returns them as a Markdown table using `pandas` for clean formatting.\n- **Prompt: `summarize_whale_activity`**: Generates a summary of whale transactions, including metrics like total position value and notable symbols.\n\n## Prerequisites\n\n- **Python**: Version 3.10 or higher.\n- **CoinGlass API Key**: Obtain from [CoinGlass](https://www.coinglass.com/) (required for API access).\n- **uv**: Package and dependency manager ([install uv](https://docs.astral.sh/uv/)).\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/hyperliquid-whalealert-mcp.git\n   cd hyperliquid-whalealert-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   uv sync\n   ```\n   This installs dependencies specified in `pyproject.toml`.\n\n3. **Claude Desktop Integration**:\n   Install the server in Claude Desktop:\n   ```bash\n   uv run mcp install mcp.py --name \"Hyperliquid Whale Alert\"\n   ```\n   \n    Or update the configuration file manually:\n  \n    ```\n    {\n      \"mcpServers\": {\n        \"hyperliquid-whalealert\": {\n          \"command\": \"uv\",\n          \"args\": [ \"--directory\", \"/path/to/hyperliquid-whalealert-mcp\", \"run\", \"main.py\" ],\n          \"env\": { \"COINGLASS_API_KEY\": \"your_api_key\" }\n        }\n      }\n    }\n    ```       \n    Replace `/path/to/hyperliquid-whalealert-mcp` with your actual installation path and `COINGLASS_API_KEY` with your API key.\n\n## Usage\n\n### Using the Tool\n\nThe `get_whale_alerts` tool fetches whale transaction data and returns it as a Markdown list. Example output:\n\n```markdown\n- **ETH Transaction**:\n  - User Address: 0x3fd4444154242720c0d0c61c74a240d90c127d33\n  - Position Size: 12700\n  - Entry Price: $1611.62\n  - Liquidation Price: $527.2521\n  - Position Value (USD): $21003260\n  - Action: Close\n  - Create Time: 2025-05-20 12:31:57\n- **BTC Transaction**:\n  - User Address: 0x1cadadf0e884ac5527ae596a4fc1017a4ffd4e2c\n  - Position Size: 33.54032\n  - Entry Price: $87486.2\n  - Liquidation Price: $44836.8126\n  - Position Value (USD): $2936421.4757\n  - Action: Close\n  - Create Time: 2025-05-20 12:31:17\n```\n  \nTo invoke the tool:\n- In the MCP Inspector, select `get_whale_alerts` and execute.\n- In Claude Desktop, use the registered server and call the tool via the UI or API.\n\n### Using the Prompt\n\nThe `summarize_whale_activity` prompt generates a summary of whale transactions. Example interaction (in a compatible client):\n\n```plaintext\n/summarize_whale_activity\n```\n\nResponse:\n```\nI'll analyze the whale transaction data and provide a summary.\n```\n\nThis can be extended by LLMs to provide detailed metrics like total position value or notable symbols.\n\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Finance",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "hyperliquid-whalealert": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/hyperliquid-whalealert-mcp", "run", "main.py"],
+        "env": {
+          "COINGLASS_API_KEY": "your_api_key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "hyperliquid-whalealert-mcp",
+    "url": "https://github.com/kukapay/hyperliquid-whalealert-mcp",
+    "name": "hyperliquid-whalealert-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "5602cff43cff19578a395f030892cc5f0af03dce"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:14.322Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"hyperliquid-whalealert-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.8.0\",\n    \"python-dotenv>=1.1.0\",\n]\n"
+}

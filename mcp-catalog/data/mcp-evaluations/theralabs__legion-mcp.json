@@ -1,0 +1,171 @@
+{
+  "name": "theralabs__legion-mcp",
+  "display_name": "legion-mcp",
+  "description": "A server that helps people access and query data in databases using the Legion Query Runner with Model Context Protocol (MCP) in Python.",
+  "author": {
+    "name": "TheRaLabs"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "database_mcp"],
+    "env": {
+      "DB_TYPE": "${user_config.db_type}",
+      "DB_CONFIG": "${user_config.db_config}",
+      "DB_CONFIGS": "${user_config.db_configs}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "db_type": {
+      "type": "string",
+      "title": "Single Database Type",
+      "description": "The type code for a single database (e.g., 'pg', 'mysql'). Use with 'Single Database Configuration JSON'. Do not use with 'Multiple Database Configurations JSON'.",
+      "required": false,
+      "default": "pg"
+    },
+    "db_config": {
+      "type": "string",
+      "title": "Single Database Configuration JSON",
+      "description": "A JSON string containing connection details for a single database. Example: {\"host\":\"localhost\",\"port\":5432,\"user\":\"user\",\"password\":\"pw\",\"dbname\":\"dbname\"}. Use with 'Single Database Type'. Do not use with 'Multiple Database Configurations JSON'.",
+      "sensitive": true,
+      "required": false,
+      "default": "{\"host\":\"localhost\",\"port\":5432,\"user\":\"user\",\"password\":\"pw\",\"dbname\":\"dbname\"}"
+    },
+    "db_configs": {
+      "type": "string",
+      "title": "Multiple Database Configurations JSON",
+      "description": "A JSON array string of configurations for multiple databases. Example: [{\"id\":\"pg_main\",\"db_type\":\"pg\",\"configuration\":{\"host\":\"localhost\",\"port\":5432,\"user\":\"user\",\"password\":\"pw\",\"dbname\":\"postgres\"},\"description\":\"PostgreSQL Database\"}]. Do not use with 'Single Database Type' or 'Single Database Configuration JSON'.",
+      "sensitive": true,
+      "required": false,
+      "default": "[{\"id\":\"pg_main\",\"db_type\":\"pg\",\"configuration\":{\"host\":\"localhost\",\"port\":5432,\"user\":\"user\",\"password\":\"pw\",\"dbname\":\"postgres\"},\"description\":\"PostgreSQL Database\"},{\"id\":\"mysql_data\",\"db_type\":\"mysql\",\"configuration\":{\"host\":\"localhost\",\"port\":3306,\"user\":\"root\",\"password\":\"pass\",\"database\":\"mysql\"},\"description\":\"MySQL Database\"}]"
+    }
+  },
+  "readme": "# Multi-Database MCP Server (by Legion AI)\n\nA server that helps people access and query data in databases using the Legion Query Runner with integration of the Model Context Protocol (MCP) Python SDK.\n\n# Start Generation Here\nThis tool is provided by [Legion AI](https://thelegionai.com/). To use the full-fledged and fully powered AI data analytics tool, please visit the site. Email us if there is one database you want us to support.\n# End Generation Here\n\n## Why Choose Database MCP\n\nDatabase MCP stands out from other database access solutions for several compelling reasons:\n\n- **Unified Multi-Database Interface**: Connect to PostgreSQL, MySQL, SQL Server, and other databases through a single consistent API - no need to learn different client libraries for each database type.\n- **AI-Ready Integration**: Built specifically for AI assistant interactions through the Model Context Protocol (MCP), enabling natural language database operations.\n- **Zero-Configuration Schema Discovery**: Automatically discovers and exposes database schemas without manual configuration or mapping.\n- **Database-Agnostic Tools**: Find tables, explore schemas, and execute queries with the same set of tools regardless of the underlying database technology.\n- **Secure Credential Management**: Handles database authentication details securely, separating credentials from application code.\n- **Simple Deployment**: Works with modern AI development environments like LangChain, FastAPI, and others with minimal setup.\n- **Extensible Design**: Easily add custom tools and prompts to enhance functionality for specific use cases.\n\nWhether you're building AI agents that need database access or simply want a unified interface to multiple databases, Database MCP provides a streamlined solution that dramatically reduces development time and complexity.\n\n## Features\n\n- Multi-database support - connect to multiple databases simultaneously\n- Database access via Legion Query Runner\n- Model Context Protocol (MCP) support for AI assistants\n- Expose database operations as MCP resources, tools, and prompts\n- Multiple deployment options (standalone MCP server, FastAPI integration)\n- Query execution and result handling\n- Flexible configuration via environment variables, command-line arguments, or MCP settings JSON\n- User-driven database selection for multi-database setups\n\n## Supported Databases\n\n| Database | DB_TYPE code |\n|----------|--------------|\n| PostgreSQL | pg |\n| Redshift | redshift |\n| CockroachDB | cockroach |\n| MySQL | mysql |\n| RDS MySQL | rds_mysql |\n| Microsoft SQL Server | mssql |\n| Big Query | bigquery |\n| Oracle DB | oracle |\n| SQLite | sqlite |\n\nWe use Legion Query Runner library as connectors. You can find more info on their [api doc](https://theralabs.github.io/legion-database/docs/category/query-runners).\n\n## What is MCP?\n\nThe Model Context Protocol (MCP) is a specification for maintaining context in AI applications. This server uses the [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) to:\n\n- Expose database operations as tools for AI assistants\n- Provide database schemas and metadata as resources\n- Generate useful prompts for database operations\n- Enable stateful interactions with databases\n\n## Installation & Configuration\n\n### Required Parameters\n\nFor single database configuration:\n- **DB_TYPE**: The database type code (see table above)\n- **DB_CONFIG**: A JSON configuration string for database connection\n\nFor multi-database configuration:\n- **DB_CONFIGS**: A JSON array of database configurations, each containing:\n  - **db_type**: The database type code\n  - **configuration**: Database connection configuration\n  - **description**: A human-readable description of the database\n\nThe configuration format varies by database type. See the [API documentation](https://theralabs.github.io/legion-database/docs/category/query-runners) for database-specific configuration details.\n\n### Installation Methods\n\n#### Option 1: Using UV (Recommended)\n\nWhen using [`uv`](https://docs.astral.sh/uv/), no specific installation is needed. We will use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *database-mcp*.\n\n**UV Configuration Example (Single Database):**\n\n```json\nREPLACE DB_TYPE and DB_CONFIG with your connection info.\n{\n    \"mcpServers\": {\n      \"database-mcp\": {\n        \"command\": \"uvx\",\n        \"args\": [\n          \"database-mcp\"\n        ],\n        \"env\": {\n          \"DB_TYPE\": \"pg\",\n          \"DB_CONFIG\": \"{\\\"host\\\":\\\"localhost\\\",\\\"port\\\":5432,\\\"user\\\":\\\"user\\\",\\\"password\\\":\\\"pw\\\",\\\"dbname\\\":\\\"dbname\\\"}\"\n        },\n        \"disabled\": true,\n        \"autoApprove\": []\n      }\n    }\n}\n```\n\n**UV Configuration Example (Multiple Databases):**\n\n```json\n{\n    \"mcpServers\": {\n      \"database-mcp\": {\n        \"command\": \"uvx\",\n        \"args\": [\n          \"database-mcp\"\n        ],\n        \"env\": {\n          \"DB_CONFIGS\": \"[{\\\"id\\\":\\\"pg_main\\\",\\\"db_type\\\":\\\"pg\\\",\\\"configuration\\\":{\\\"host\\\":\\\"localhost\\\",\\\"port\\\":5432,\\\"user\\\":\\\"user\\\",\\\"password\\\":\\\"pw\\\",\\\"dbname\\\":\\\"postgres\\\"},\\\"description\\\":\\\"PostgreSQL Database\\\"},{\\\"id\\\":\\\"mysql_data\\\",\\\"db_type\\\":\\\"mysql\\\",\\\"configuration\\\":{\\\"host\\\":\\\"localhost\\\",\\\"port\\\":3306,\\\"user\\\":\\\"root\\\",\\\"password\\\":\\\"pass\\\",\\\"database\\\":\\\"mysql\\\"},\\\"description\\\":\\\"MySQL Database\\\"}]\"\n        },\n        \"disabled\": true,\n        \"autoApprove\": []\n      }\n    }\n}\n```\n\n#### Option 2: Using PIP\n\nInstall via pip:\n\n```bash\npip install database-mcp\n```\n\n**PIP Configuration Example (Single Database):**\n\n```json\n{\n  \"mcpServers\": {\n    \"database\": {\n      \"command\": \"python\",\n      \"args\": [\n        \"-m\", \"database_mcp\", \n        \"--repository\", \"path/to/git/repo\"\n      ],\n      \"env\": {\n        \"DB_TYPE\": \"pg\",\n        \"DB_CONFIG\": \"{\\\"host\\\":\\\"localhost\\\",\\\"port\\\":5432,\\\"user\\\":\\\"user\\\",\\\"password\\\":\\\"pw\\\",\\\"dbname\\\":\\\"dbname\\\"}\"\n      }\n    }\n  }\n}\n```\n\n## Running the Server\n\n### Production Mode\n\n```bash\npython mcp_server.py\n```\n\n### Configuration Methods\n\n#### Environment Variables (Single Database)\n\n```bash\nexport DB_TYPE=\"pg\"  # or mysql, postgresql, etc.\nexport DB_CONFIG='{\"host\":\"localhost\",\"port\":5432,\"user\":\"username\",\"password\":\"password\",\"dbname\":\"database_name\"}'\nuv run src/database_mcp/mcp_server.py\n```\n\n#### Environment Variables (Multiple Databases)\n\n```bash\nexport DB_CONFIGS='[{\"id\":\"pg_main\",\"db_type\":\"pg\",\"configuration\":{\"host\":\"localhost\",\"port\":5432,\"user\":\"username\",\"password\":\"password\",\"dbname\":\"database_name\"},\"description\":\"PostgreSQL Database\"},{\"id\":\"mysql_users\",\"db_type\":\"mysql\",\"configuration\":{\"host\":\"localhost\",\"port\":3306,\"user\":\"root\",\"password\":\"pass\",\"database\":\"mysql\"},\"description\":\"MySQL Database\"}]'\nuv run src/database_mcp/mcp_server.py\n```\n\nIf you don't specify an ID, the system will generate one automatically based on the database type and description:\n\n```bash\nexport DB_CONFIGS='[{\"db_type\":\"pg\",\"configuration\":{\"host\":\"localhost\",\"port\":5432,\"user\":\"username\",\"password\":\"password\",\"dbname\":\"database_name\"},\"description\":\"PostgreSQL Database\"},{\"db_type\":\"mysql\",\"configuration\":{\"host\":\"localhost\",\"port\":3306,\"user\":\"root\",\"password\":\"pass\",\"database\":\"mysql\"},\"description\":\"MySQL Database\"}]'\n# IDs will be generated as something like \"pg_postgres_0\" and \"my_mysqldb_1\"\nuv run src/database_mcp/mcp_server.py\n```\n\n#### Command Line Arguments (Single Database)\n\n```bash\npython mcp_server.py --db-type pg --db-config '{\"host\":\"localhost\",\"port\":5432,\"user\":\"username\",\"password\":\"password\",\"dbname\":\"database_name\"}'\n```\n\n#### Command Line Arguments (Multiple Databases)\n\n```bash\npython mcp_server.py --db-configs '[{\"id\":\"pg_main\",\"db_type\":\"pg\",\"configuration\":{\"host\":\"localhost\",\"port\":5432,\"user\":\"username\",\"password\":\"password\",\"dbname\":\"database_name\"},\"description\":\"PostgreSQL Database\"},{\"id\":\"mysql_users\",\"db_type\":\"mysql\",\"configuration\":{\"host\":\"localhost\",\"port\":3306,\"user\":\"root\",\"password\":\"pass\",\"database\":\"mysql\"},\"description\":\"MySQL Database\"}]'\n```\n\nNote that you can specify custom IDs for each database using the `id` field, or let the system generate them based on database type and description.\n\n## Multi-Database Support\n\nWhen connecting to multiple databases, you need to specify which database to use for each query:\n\n1. Use the `list_databases` tool to see available databases with their IDs\n2. Use `get_database_info` to view schema details of databases\n3. Use `find_table` to locate a table across all databases\n4. Provide the `db_id` parameter to tools like `execute_query`, `get_table_columns`, etc.\n\nDatabase connections are managed internally as a dictionary of `DbConfig` objects, with each database having a unique ID. Schema information is represented as a list of table objects, where each table contains its name and column information.\n\nThe `select_database` prompt guides users through the database selection process.\n\n## Schema Representation\n\nDatabase schemas are represented as a list of table objects, with each table containing information about its columns:\n\n```json\n[\n  {\n    \"name\": \"users\",\n    \"columns\": [\n      {\"name\": \"id\", \"type\": \"integer\"},\n      {\"name\": \"username\", \"type\": \"varchar\"},\n      {\"name\": \"email\", \"type\": \"varchar\"}\n    ]\n  },\n  {\n    \"name\": \"orders\",\n    \"columns\": [\n      {\"name\": \"id\", \"type\": \"integer\"},\n      {\"name\": \"user_id\", \"type\": \"integer\"},\n      {\"name\": \"product_id\", \"type\": \"integer\"},\n      {\"name\": \"quantity\", \"type\": \"integer\"}\n    ]\n  }\n]\n```\n\nThis representation makes it easy to programmatically access table and column information while keeping a clean hierarchical structure.\n\n## Exposed MCP Capabilities\n\n### Resources\n\n| Resource | Description |\n|----------|-------------|\n| `resource://schema/{database_id}` | Get the schemas for one or all configured databases |\n\n### Tools\n\n| Tool | Description |\n|------|-------------|\n| `execute_query` | Execute a SQL query and return results as a markdown table |\n| `execute_query_json` | Execute a SQL query and return results as JSON |\n| `get_table_columns` | Get column names for a specific table |\n| `get_table_types` | Get column types for a specific table |\n| `get_query_history` | Get the recent query history |\n| `list_databases` | List all available database connections |\n| `get_database_info` | Get detailed information about a database including schema |\n| `find_table` | Find which database contains a specific table |\n| `describe_table` | Get detailed description of a table including column names and types |\n| `get_table_sample` | Get a sample of data from a table |\n\nAll database-specific tools (like `execute_query`, `get_table_columns`, etc.) require a `db_id` parameter to specify which database to use.\n\n### Prompts\n\n| Prompt | Description |\n|--------|-------------|\n| `sql_query` | Create an SQL query against the database |\n| `explain_query` | Explain what a SQL query does |\n| `optimize_query` | Optimize a SQL query for better performance |\n| `select_database` | Help user select which database to use |\n\n## Development\n\n### Using MCP Inspector\n\nrun this to start the inspector\n```bash\nnpx @modelcontextprotocol/inspector uv run src/database_mcp/mcp_server.py\n```\n\nthen in the command input field, set something like\n```\nrun src/database_mcp/mcp_server.py --db-type pg --db-config '{\"host\":\"localhost\",\"port\":5432,\"user\":\"username\",\"password\":\"password\",\"dbname\":\"database_name\"}'\n```\n\n### Testing\n\n```bash\nuv pip install -e \".[dev]\"\npytest\n```\n\n### Publishing\n\n```bash\n# Clean up build artifacts\nrm -rf dist/ build/ \n# Remove any .egg-info directories if they exist\nfind . -name \"*.egg-info\" -type d -exec rm -rf {} + 2>/dev/null || true\n# Build the package\nuv run python -m build\n# Upload to PyPI\nuv run python -m twine upload dist/*\n```\n\n## License\n\nThis repository is licensed under GPL",
+  "category": "AI Tools",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "database-mcp-uvx-single-db": {
+        "command": "uvx",
+        "args": ["database-mcp"],
+        "env": {
+          "DB_TYPE": "pg",
+          "DB_CONFIG": "{\"host\":\"localhost\",\"port\":5432,\"user\":\"user\",\"password\":\"pw\",\"dbname\":\"dbname\"}"
+        }
+      },
+      "database-mcp-uvx-multi-db": {
+        "command": "uvx",
+        "args": ["database-mcp"],
+        "env": {
+          "DB_CONFIGS": "[{\"id\":\"pg_main\",\"db_type\":\"pg\",\"configuration\":{\"host\":\"localhost\",\"port\":5432,\"user\":\"user\",\"password\":\"pw\",\"dbname\":\"postgres\"},\"description\":\"PostgreSQL Database\"},{\"id\":\"mysql_data\",\"db_type\":\"mysql\",\"configuration\":{\"host\":\"localhost\",\"port\":3306,\"user\":\"root\",\"password\":\"pass\",\"database\":\"mysql\"},\"description\":\"MySQL Database\"}]"
+        }
+      },
+      "database-mcp-pip-single-db": {
+        "command": "python",
+        "args": ["-m", "database_mcp", "--repository", "path/to/git/repo"],
+        "env": {
+          "DB_TYPE": "pg",
+          "DB_CONFIG": "{\"host\":\"localhost\",\"port\":5432,\"user\":\"user\",\"password\":\"pw\",\"dbname\":\"dbname\"}"
+        }
+      },
+      "database-mcp-production": {
+        "command": "python",
+        "args": ["mcp_server.py"],
+        "env": {}
+      },
+      "database-mcp-uv-env-single-db": {
+        "command": "uv",
+        "args": ["run", "src/database_mcp/mcp_server.py"],
+        "env": {
+          "DB_TYPE": "pg",
+          "DB_CONFIG": "{\"host\":\"localhost\",\"port\":5432,\"user\":\"username\",\"password\":\"password\",\"dbname\":\"database_name\"}"
+        }
+      },
+      "database-mcp-uv-env-multi-db": {
+        "command": "uv",
+        "args": ["run", "src/database_mcp/mcp_server.py"],
+        "env": {
+          "DB_CONFIGS": "[{\"id\":\"pg_main\",\"db_type\":\"pg\",\"configuration\":{\"host\":\"localhost\",\"port\":5432,\"user\":\"username\",\"password\":\"password\",\"dbname\":\"database_name\"},\"description\":\"PostgreSQL Database\"},{\"id\":\"mysql_users\",\"db_type\":\"mysql\",\"configuration\":{\"host\":\"localhost\",\"port\":3306,\"user\":\"root\",\"password\":\"pass\",\"database\":\"mysql\"},\"description\":\"MySQL Database\"}]"
+        }
+      },
+      "database-mcp-uv-env-multi-db-auto-id": {
+        "command": "uv",
+        "args": ["run", "src/database_mcp/mcp_server.py"],
+        "env": {
+          "DB_CONFIGS": "[{\"db_type\":\"pg\",\"configuration\":{\"host\":\"localhost\",\"port\":5432,\"user\":\"username\",\"password\":\"password\",\"dbname\":\"database_name\"},\"description\":\"PostgreSQL Database\"},{\"db_type\":\"mysql\",\"configuration\":{\"host\":\"localhost\",\"port\":3306,\"user\":\"root\",\"password\":\"pass\",\"database\":\"mysql\"},\"description\":\"MySQL Database\"}]"
+        }
+      },
+      "database-mcp-cli-single-db": {
+        "command": "python",
+        "args": [
+          "mcp_server.py",
+          "--db-type",
+          "pg",
+          "--db-config",
+          "{\"host\":\"localhost\",\"port\":5432,\"user\":\"username\",\"password\":\"password\",\"dbname\":\"database_name\"}"
+        ],
+        "env": {}
+      },
+      "database-mcp-cli-multi-db": {
+        "command": "python",
+        "args": [
+          "mcp_server.py",
+          "--db-configs",
+          "[{\"id\":\"pg_main\",\"db_type\":\"pg\",\"configuration\":{\"host\":\"localhost\",\"port\":5432,\"user\":\"username\",\"password\":\"password\",\"dbname\":\"database_name\"},\"description\":\"PostgreSQL Database\"},{\"id\":\"mysql_users\",\"db_type\":\"mysql\",\"configuration\":{\"host\":\"localhost\",\"port\":3306,\"user\":\"root\",\"password\":\"pass\",\"database\":\"mysql\"},\"description\":\"MySQL Database\"}]"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "TheRaLabs",
+    "repo": "legion-mcp",
+    "url": "https://github.com/TheRaLabs/legion-mcp",
+    "name": "theralabs__legion-mcp",
+    "path": null,
+    "stars": 66,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "06019948dd13e950444e107de6f3e8f650ae9dd7"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.917Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "legion-query-runner",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"database-mcp\"\nversion = \"0.1.4\"\nauthors = [\n  { name=\"Legion AI\", email=\"luke@thelegionai.com\" },\n]\nreadme = \"README.md\"\ndescription = \"A MCP server that helps access and query data in various popular databases\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"legion-query-runner>=0.1.3\",\n    \"python-dotenv>=1.0.0\",\n    \"mcp>=1.0.0\",\n]\nlicense = \"GPL-3.0-or-later\"\n\n[project.scripts]\ndatabase-mcp = \"database_mcp.mcp_server:main\"\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.4.2\",\n    \"mcp[cli]>=1.0.0\",\n]\n\n[tool.setuptools]\npackage-dir = {\"\" = \"src\"}\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n\n[tool.uv]\ndev-dependencies = [\n    \"build>=1.2.2.post1\",\n    \"twine>=6.1.0\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/TheRaLabs/legion-mcp\"\n"
+}

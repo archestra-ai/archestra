@@ -1,0 +1,116 @@
+{
+  "name": "kw510__strava-mcp",
+  "display_name": "strava-mcp",
+  "description": "A Model Context Protocol (MCP) server with Strava OAuth integration, built on Cloudflare Workers. Enables secure authentication and tool access for MCP clients like Claude and Cursor through Strava login. Perfect for developers looking to integrate Strava authentication with AI tools.",
+  "author": {
+    "name": "kw510"
+  },
+  "server": {
+    "command": "wrangler",
+    "args": ["dev"],
+    "env": {
+      "STRAVA_CLIENT_ID": "${user_config.strava_client_id}",
+      "STRAVA_CLIENT_SECRET": "${user_config.strava_client_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "strava_client_id": {
+      "type": "string",
+      "title": "Strava Client ID",
+      "description": "Your Strava API Client ID, obtained from Strava's API Settings. Used for both development and production.",
+      "sensitive": true,
+      "required": true
+    },
+    "strava_client_secret": {
+      "type": "string",
+      "title": "Strava Client Secret",
+      "description": "Your Strava API Client Secret, obtained from Strava's API Settings. Used for both development and production.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Model Context Protocol (MCP) Server + Strava OAuth\n\nThis is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server that supports remote MCP connections, with Strava OAuth built-in. It allows users to connect to your MCP server by signing in with their Strava account.\n\n## Overview\n\nThe MCP server (powered by [Cloudflare Workers](https://developers.cloudflare.com/workers/)) serves two roles:\n- Acts as an OAuth Server for your MCP clients\n- Acts as an OAuth Client for Strava's OAuth services\n\nThis project serves as a reference example for integrating OAuth providers with an MCP server deployed to Cloudflare, using the [`workers-oauth-provider` library](https://github.com/cloudflare/workers-oauth-provider).\n\n## Prerequisites\n\n- A Strava account\n- A Cloudflare account\n- Node.js and npm installed\n- Wrangler CLI installed (`npm install -g wrangler`)\n\n## Quick Start\n\n1. Clone the repository:\n   ```bash\n   git clone https://github.com/kw510/strava-mcp.git\n   cd strava-mcp\n   npm install\n   ```\n\n2. Set up your Strava API credentials (see [Setting Up Strava API Credentials](#setting-up-strava-api-credentials))\n\n3. Set up your Cloudflare KV namespace:\n   ```bash\n   wrangler kv:namespace create \"OAUTH_KV\"\n   ```\n   Update the `wrangler.toml` file with the generated KV ID.\n\n4. Deploy to Cloudflare:\n   ```bash\n   wrangler deploy\n   ```\n\n## Setting Up Strava API Credentials\n\n### For Production\n1. Go to [Strava's API Settings](https://www.strava.com/settings/api) and create a new application\n2. Configure your application:\n   - Application Name: Choose a name for your application\n   - Category: Select an appropriate category\n   - Website: Your website URL\n   - Application Description: Brief description of your application\n   - Authorization Callback Domain: `mcp-strava-oauth.<your-subdomain>.workers.dev`\n   - Authorization Callback URL: `https://mcp-strava-oauth.<your-subdomain>.workers.dev/callback`\n\n3. Set your production environment variables:\n   ```bash\n   wrangler secret put STRAVA_CLIENT_ID\n   wrangler secret put STRAVA_CLIENT_SECRET\n   ```\n\n### For Development\n1. Create a separate Strava API application for development\n2. Configure your development application:\n   - Authorization Callback Domain: `localhost`\n   - Authorization Callback URL: `http://localhost:8788/callback`\n\n3. Create a `.dev.vars` file in your project root:\n   ```\n   STRAVA_CLIENT_ID=your_development_strava_client_id\n   STRAVA_CLIENT_SECRET=your_development_strava_client_secret\n   ```\n\n## Testing Your MCP Server\n\n### Using Inspector\n1. Install the Inspector tool:\n   ```bash\n   npx @modelcontextprotocol/inspector@latest\n   ```\n\n2. Connect to your server:\n   - For production: `https://mcp-strava-oauth.<your-subdomain>.workers.dev/sse`\n   - For development: `http://localhost:8788/sse`\n\n### Using Claude Desktop\n1. Open Claude Desktop and go to Settings -> Developer -> Edit Config\n2. Add your MCP server configuration:\n   ```json\n   {\n     \"mcpServers\": {\n       \"strava\": {\n         \"command\": \"npx\",\n         \"args\": [\n           \"mcp-remote\",\n           \"https://mcp-strava-oauth.<your-subdomain>.workers.dev/sse\"\n         ]\n       }\n     }\n   }\n   ```\n3. Restart Claude Desktop and complete the OAuth flow\n\n## Development\n\n### Local Development\n1. Start the development server:\n   ```bash\n   wrangler dev\n   ```\n\n2. The server will be available at `http://localhost:8788`\n\n### API Rate Limits\nThe Strava API has the following rate limits:\n- 200 requests every 15 minutes\n- 2,000 requests per day\n\n## How It Works\n\n### OAuth Provider\nThe OAuth Provider library handles:\n- OAuth 2.1 server implementation\n- Token issuance and validation\n- Secure token storage in KV\n- Strava OAuth integration\n\n### Durable MCP\nProvides:\n- Persistent state management\n- Secure authentication context storage\n- User information access via `this.props`\n- Conditional tool availability\n\n### MCP Remote\nEnables:\n- Client-server communication\n- Tool definition and management\n- Request/response serialization\n- SSE connection maintenance\n\n## Troubleshooting\n\n- If you see error messages in Claude Desktop, verify the connection by hovering over the 🔨 icon\n- For Cursor integration, use the \"Command\" type and combine command and args into one string\n- Ensure your callback URLs match exactly with what's configured in your Strava application\n",
+  "category": "AI Tools",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "strava-mcp": {
+        "command": "wrangler",
+        "args": ["dev"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kw510",
+    "repo": "strava-mcp",
+    "url": "https://github.com/kw510/strava-mcp",
+    "name": "strava-mcp",
+    "path": null,
+    "stars": 15,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "3c93f08c535d66568767e3ae17628e620e92f654"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:49.848Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "hono",
+      "importance": 10
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@cloudflare/workers-oauth-provider",
+      "importance": 9
+    },
+    {
+      "name": "workers-mcp",
+      "importance": 9
+    },
+    {
+      "name": "octokit",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    },
+    {
+      "name": "agents",
+      "importance": 3
+    },
+    {
+      "name": "just-pick",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"mcp-github-oauth\",\n\t\"version\": \"0.0.1\",\n\t\"private\": true,\n\t\"scripts\": {\n\t\t\"deploy\": \"wrangler deploy\",\n\t\t\"dev\": \"wrangler dev\",\n\t\t\"start\": \"wrangler dev\",\n\t\t\"cf-typegen\": \"wrangler types\"\n\t},\n\t\"devDependencies\": {\n\t\t\"@cloudflare/workers-oauth-provider\": \"^0.0.2\",\n\t\t\"@cloudflare/workers-types\": \"^4.20250405.0\",\n\t\t\"@modelcontextprotocol/sdk\": \"^1.7.0\",\n\t\t\"@types/node\": \"^22.14.0\",\n\t\t\"agents\": \"^0.0.45\",\n\t\t\"hono\": \"^4.7.4\",\n\t\t\"just-pick\": \"^4.2.0\",\n\t\t\"octokit\": \"^4.1.2\",\n\t\t\"prettier\": \"^3.5.3\",\n\t\t\"typescript\": \"^5.5.2\",\n\t\t\"workers-mcp\": \"0.1.0-3\",\n\t\t\"wrangler\": \"^4.7.2\",\n\t\t\"zod\": \"^3.24.2\"\n\t}\n}\n"
+}

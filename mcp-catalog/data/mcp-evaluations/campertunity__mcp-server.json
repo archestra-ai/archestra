@@ -1,0 +1,82 @@
+{
+  "name": "campertunity__mcp-server",
+  "display_name": "Campertunity",
+  "description": "MCP server from campertunity/mcp-server",
+  "author": {
+    "name": "campertunity"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "campertunity-mcp-server@latest"],
+    "env": {
+      "CAMPERTUNITY_API_KEY": "${user_config.campertunity_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "campertunity_api_key": {
+      "type": "string",
+      "title": "Campertunity API Key",
+      "description": "Your API key for accessing the Campertunity API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# MCP Server for Campertunity\n\n[![smithery badge](https://smithery.ai/badge/@campertunity/mcp-server)](https://smithery.ai/server/@campertunity/mcp-server)\n\nThis server implements the Model Context Protocol (MCP) for Campertunity, providing AI models with tools to interact with camping and outdoor recreation data.\n\n## MCP Client Config\n\n```\n{\n  \"mcpServers\": {\n    \"campground-search-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"campertunity-mcp-server@latest\"],\n      \"env\": {\n        \"CAMPERTUNITY_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\n## Setup\n\n1. Get your API key from [https://campertunity.com/mcp](https://campertunity.com/mcp)\n2. Set the environment variable:\n   ```\n   CAMPERTUNITY_API_KEY=your_api_key_here\n   ```\n\n## Available Tools\n\n### place-search\nSearch for camping places with various filters and criteria.\n- **Parameters:**\n  - `limit`: Number of results (default: 50, max: 1000)\n  - `startDate`: Start date for availability (YYYY-MM-DD)\n  - `endDate`: End date for availability (YYYY-MM-DD)\n  - `adults`: Number of adults (default: 1)\n  - `children`: Number of children (default: 0)\n  - `latitude`: Center point latitude\n  - `longitude`: Center point longitude\n  - `radius`: Search radius in kilometers (default: 20)\n  - `filters`: Array of tags to filter by (see Tag enum below)\n  - `campgroundDescription`: Natural language description of desired campground features\n\n### place-details\nGet detailed information about a specific camping place.\n- **Parameters:**\n  - `placeId`: ID of the place to get details for\n\n### place-availability\nCheck availability of camping sites at a specific place.\n- **Parameters:**\n  - `placeId`: ID of the place to check\n  - `siteIds`: Optional array of specific site IDs to check\n  - `startDate`: Start date (YYYY-MM-DD)\n  - `endDate`: End date (YYYY-MM-DD)\n\n### place-book\nBook a camping site.\n- **Parameters:**\n  - `placeId`: ID of the place to book\n  - `startDate`: Start date (YYYY-MM-DD)\n  - `endDate`: End date (YYYY-MM-DD)\n  - `adults`: Number of adults (default: 1)\n  - `children`: Number of children (default: 0)\n\n## Available Tags for Filtering\n\n### Site Types\n- tent\n- rv\n- lodging\n- glamping\n- cabin\n\n### Access Types\n- driveIn\n- walkIn\n- equestrian\n- boat\n\n### Activities\n- biking\n- boating\n- fishing\n- hiking\n- horsebackRiding\n- paddling\n- windSports\n- surfing\n- swimming\n- whitewaterPaddling\n- wildlifeWatching\n\n### Amenities\n- picnicTable\n- fires\n- toilets\n- outhouse\n- potableWater\n- petFriendly\n- rvHookup\n- rvSanitation\n- trash\n- showers\n- wifi\n- handicap\n\n### Terrain\n- beach\n- cave\n- desert\n- forest\n- hotSpring\n- lake\n- river\n- swimmingHole\n- waterfall\n- creek\n\n## Important Notice\n\nThe data provided through these tools is collected from multiple sources and enhanced with AI. To ensure data accuracy and respect intellectual property rights:\n\n- Do not redistribute the data\n- Do not save or cache the data\n- Do not modify the data\n- Always use real-time data through the server\n\nFor more information, visit [campertunity.com](https://campertunity.com)\n",
+  "category": "Travel",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "campground-search-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "campertunity-mcp-server@latest"],
+        "env": {
+          "CAMPERTUNITY_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "campertunity",
+    "repo": "mcp-server",
+    "url": "https://github.com/campertunity/mcp-server",
+    "name": "mcp-server",
+    "path": null,
+    "stars": 4,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b73f73ceafe07a819b2ee0b081fcd4a7a80cb5f6"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:39.675Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"campertunity-mcp-server\",\n  \"version\": \"0.0.7\",\n  \"description\": \"MCP Server for Campertunity - A Model Context Protocol server for interacting with camping and outdoor recreation data\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-campertunity-server\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"campertunity\",\n    \"camping\",\n    \"outdoor\",\n    \"recreation\",\n    \"ai\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"Campertunity\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/campertunity/mcp-server\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/campertunity/mcp-server/issues\"\n  },\n  \"homepage\": \"https://campertunity.com\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.7.0\",\n    \"@types/node\": \"^22\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}"
+}

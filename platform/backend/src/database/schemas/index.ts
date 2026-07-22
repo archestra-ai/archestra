@@ -39,6 +39,7 @@
  *   - chat_active_runs — ephemeral run state predating this guidance
  */
 export { default as a2aContextsTable } from "./a2a-context";
+export { default as a2aContextCompactionsTable } from "./a2a-context-compaction";
 export { default as a2aMessagesTable } from "./a2a-message";
 export { default as a2aTasksTable } from "./a2a-task";
 export { default as a2aTaskApprovalRequestsTable } from "./a2a-task-approval-request";
@@ -66,8 +67,10 @@ export {
   chatActiveRunEventsTable,
   chatActiveRunsTable,
 } from "./chat-active-run";
+export { default as chatToolExecutionClaimsTable } from "./chat-tool-execution-claim";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
+export { default as chatopsThreadContextsTable } from "./chatops-thread-context";
 export {
   connectionSetupSkillsTable,
   default as connectionSetupsTable,
@@ -158,6 +161,7 @@ export {
 } from "./skill-share-link";
 export { default as skillShareLinkRevisionsTable } from "./skill-share-link-revision";
 export { default as skillTeamsTable } from "./skill-team";
+export { default as skillUsageEventsTable } from "./skill-usage-event";
 export { default as skillVersionsTable } from "./skill-version";
 export { default as skillVersionFilesTable } from "./skill-version-file";
 export { default as tasksTable } from "./task";

@@ -12,6 +12,7 @@ const {
   getSkills,
   getSkill,
   getSkillSourceRepos,
+  getSkillUsageStatistics,
   createSkill,
   updateSkill,
   updateSkillGithubSync,
@@ -86,6 +87,21 @@ export function useSearchSkillCatalog(search: string) {
         throw new Error(getApiErrorMessage(error));
       }
       return data;
+    },
+  });
+}
+
+/** Per-user activation counts for one skill over the last 30 days. */
+export function useSkillUsageStatistics(id: string | null) {
+  return useQuery({
+    queryKey: ["skills", id, "usage-statistics"],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await getSkillUsageStatistics({
+        path: { id: id as string },
+      });
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }

@@ -1,0 +1,128 @@
+{
+  "name": "dataring-engineering__mcp-server-trino",
+  "display_name": "mcp-server-trino",
+  "description": "MCP Server for Trino",
+  "author": {
+    "name": "Dataring-engineering"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "mcp_server_trino"],
+    "env": {
+      "TRINO_HOST": "${user_config.trino_host}",
+      "TRINO_PORT": "${user_config.trino_port}",
+      "TRINO_USER": "${user_config.trino_user}",
+      "TRINO_PASSWORD": "${user_config.trino_password}",
+      "TRINO_CATALOG": "${user_config.trino_catalog}",
+      "TRINO_SCHEMA": "${user_config.trino_schema}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "trino_host": {
+      "type": "string",
+      "title": "Trino Host",
+      "description": "Trino server hostname or IP",
+      "default": "localhost",
+      "required": false
+    },
+    "trino_port": {
+      "type": "number",
+      "title": "Trino Port",
+      "description": "Trino server port",
+      "default": 8080,
+      "required": false
+    },
+    "trino_user": {
+      "type": "string",
+      "title": "Trino User",
+      "description": "Trino user name",
+      "required": true
+    },
+    "trino_password": {
+      "type": "string",
+      "title": "Trino Password",
+      "description": "Trino password (optional, depends on your authentication setup)",
+      "sensitive": true,
+      "required": false
+    },
+    "trino_catalog": {
+      "type": "string",
+      "title": "Trino Catalog",
+      "description": "Default catalog to use (e.g., hive, tpch, postgresql, etc.)",
+      "required": true
+    },
+    "trino_schema": {
+      "type": "string",
+      "title": "Trino Schema",
+      "description": "Default schema to use (e.g., default, public, etc.)",
+      "required": true
+    }
+  },
+  "readme": "# Trino MCP Server\n\nThis repository provides an MCP (Model-Control-Protocol) server that allows you to list and query tables via Trino using Python.\n\n## Overview\n\n- MCP: MCP is a protocol for bridging AI models, data, and tools. This example MCP server provides:\n    - A list of Trino tables as MCP resources\n    - Ability to read table contents through MCP\n    - A tool for executing arbitrary SQL queries against Trino\n- Trino: A fast, distributed SQL query engine for big data analytics. This server makes use of Trino’s Python client (trino.dbapi) to connect to a Trino host, catalog, and schema.\n\n## Requirements\n\n- Python 3.9+ (or a version compatible with mcp, trino, and asyncio)\n- trino (the Python driver for Trino)\n- mcp (the Model-Control-Protocol Python library)\n\n## Configuration\n\nThe server reads Trino connection details from environment variables:\n\n| Variable         | Description                                                          | Default     |\n|------------------|----------------------------------------------------------------------|------------|\n| `TRINO_HOST`     | Trino server hostname or IP                                          | `localhost`|\n| `TRINO_PORT`     | Trino server port                                                    | `8080`     |\n| `TRINO_USER`     | Trino user name                                                      | *required* |\n| `TRINO_PASSWORD` | Trino password (optional, depends on your authentication setup)      | (empty)    |\n| `TRINO_CATALOG`  | Default catalog to use (e.g., `hive`, `tpch`, `postgresql`, etc.)    | *required* |\n| `TRINO_SCHEMA`   | Default schema to use (e.g., `default`, `public`, etc.)             | *required* |\n\n## Usage\n\n``` json\n{\n  \"mcpServers\": {\n    \"trino\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\", \n        \"<path_to_mcp_server_trino>\",\n        \"run\",\n        \"mcp_server_trino\"\n      ],\n      \"env\": {\n        \"TRINO_HOST\": \"<host>\",\n        \"TRINO_PORT\": \"<port>\",\n        \"TRINO_USER\": \"<user>\",\n        \"TRINO_PASSWORD\": \"<password>\",\n        \"TRINO_CATALOG\": \"<catalog>\",\n        \"TRINO_SCHEMA\": \"<schema>\"\n      }\n    }\n  }\n}\n\n```",
+  "category": "Development",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp_server_trino": {
+        "command": "uv",
+        "args": ["--directory", "<path_to_mcp_server_trino>", "run", "mcp_server_trino"],
+        "env": {
+          "TRINO_HOST": "<host>",
+          "TRINO_PORT": "<port>",
+          "TRINO_USER": "<user>",
+          "TRINO_PASSWORD": "<password>",
+          "TRINO_CATALOG": "<catalog>",
+          "TRINO_SCHEMA": "<schema>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Dataring-engineering",
+    "repo": "mcp-server-trino",
+    "url": "https://github.com/Dataring-engineering/mcp-server-trino",
+    "name": "dataring-engineering__mcp-server-trino",
+    "path": null,
+    "stars": 17,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "9acf767475353e868a51c2fb05a82ec7d508bdb1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:27.242Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "trino",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp_server_trino\"\nversion = \"0.1.1\"\ndescription = \"A Model Context Protocol (MCP) server that enables secure interaction with Trino. This server allows AI assistants to list tables, read data, and execute SQL queries through a controlled interface, making data exploration and analysis safer and more structured.\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"mcp>=1.0.0\",\n    \"trino==0.333.0\",\n]\n[[project.authors]]\nname = \"Mahesh Premachandran\"\nemail = \"mahesh@getdataring.com\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp_server_trino = \"mcp_server_trino:main\"\n\n=== requirements.txt ===\nmcp>=1.0.0\ntrino"
+}

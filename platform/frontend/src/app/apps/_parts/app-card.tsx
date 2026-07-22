@@ -136,13 +136,13 @@ function CardOpeningOverlay() {
   );
 }
 
-// The app's type, as the leading icon. External cards show the backing MCP
-// server's registry icon (emoji or image) when the catalog has one;
-// McpCatalogIcon falls back to the same generic Server glyph otherwise. The
-// label (what "owned" vs "external" means) rides in the tooltip + aria-label
-// rather than a separate badge. Lifted above the full-card click button so it
-// can be hovered.
-function AppTypeIcon({
+// The app's type, as the leading icon (shared by cards and table rows).
+// External apps show the backing MCP server's registry icon (emoji or image)
+// when the catalog has one; McpCatalogIcon falls back to the same generic
+// Server glyph otherwise. The label (what "owned" vs "external" means) rides
+// in the tooltip + aria-label rather than a separate badge. Lifted above the
+// full-card click button so it can be hovered.
+export function AppTypeIcon({
   owned,
   icon,
 }: {

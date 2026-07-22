@@ -1,0 +1,110 @@
+{
+  "name": "sinanefeozler__reddit-summarizer-mcp",
+  "display_name": "reddit-summarizer-mcp",
+  "description": "MCP server from sinanefeozler/reddit-summarizer-mcp",
+  "author": {
+    "name": "sinanefeozler"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {
+      "REDDIT_USERNAME": "${user_config.reddit_username}",
+      "REDDIT_PASSWORD": "${user_config.reddit_password}",
+      "REDDIT_CLIENT_ID": "${user_config.reddit_client_id}",
+      "REDDIT_CLIENT_SECRET": "${user_config.reddit_client_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "reddit_username": {
+      "type": "string",
+      "title": "Reddit Username",
+      "description": "Your Reddit username for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "reddit_password": {
+      "type": "string",
+      "title": "Reddit Password",
+      "description": "Your Reddit password for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "reddit_client_id": {
+      "type": "string",
+      "title": "Reddit Client ID",
+      "description": "Your Reddit API client ID.",
+      "sensitive": true,
+      "required": true
+    },
+    "reddit_client_secret": {
+      "type": "string",
+      "title": "Reddit Client Secret",
+      "description": "Your Reddit API client secret.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Reddit Summarizer MCP Server\r\nA Model Context Protocol (MCP) server for summarizing homepage of the user or contents of subreddits and comments on posts.\r\n## Features\r\n- Summarize user's reddit frontpage (homepage) with or without comment analyses.\r\n- Summarize a subreddit contents by inspecting posts sorted by hot, new, top, rising, random (if aviable) with or without comment analysis.\r\n- Summarize comments on a post.\r\n## Requirements\r\n- Python 3.12 or higher\r\n- uv package manager (recommended)\r\n- Reddit API credentials\r\n- MCP client (e.g. Claude Desktop)\r\n## Installation\r\nClone repository or download files manually.\r\n```bash\r\ngit clone https://github.com/sinanefeozler/reddit-summarizer-mcp.git\r\ncd reddit-summarizer-mcp\r\n```\r\nCreate virtual envoriment and install dependencies.\r\n```bash\r\nuv venv\r\nsource .venv/bin/activate\r\nuv sync\r\n```\r\n### Setting Up The Envoriment Variables\r\n- This server needs reddit username, password and reddit authentication.\r\n- You can get client id and client secret by following [these steps](https://github.com/reddit-archive/reddit/wiki/OAuth2-Quick-Start-Example#first-steps)\r\n- When you get the required keys create .env file according to .env.example\r\nFor claude desktop client users check out this [link](https://modelcontextprotocol.io/quickstart/user) to setup the server.\r\n## Available Tools\r\n### `summarize_frontpage`\r\nSummarize user's homepage with post limits and optional comment analyse on posts.\r\nParameters:\r\n- `limit` (default: 10): Post fetching limit\r\n- `with_comments` (default: false): Summarize with comments on posts\r\n### `summarize_subreddit`\r\nSummarize a subreddit's contents by inspecting posts.\r\nParameters:\r\n- `limit` (default: 10): Post fetching limit\r\n- `with_comments` (default: false): Summarize with comments on posts\r\n- `fetch_by` (default: 'hot') : Sorting option for posts. (hot, new, top, rising, random if aviable)\r\n### `reed_comments`\r\nReed and summarize comments on a post. Needs post id or url.\r\nParameters:\r\n- `id` (default: None) : id of post\r\n- `url` (default: None) : url of post\r\n- `limit` (default: 15) : fetching limit of the comments\r\n## Prompts\r\n### Example Prompts:\r\n- \"Summarize my reddit frontpage with comment analyse for deeper understanding of public opinion\"\r\n- \"Summarize the hot post of Politics\"\r\n### Prompt Template:\r\n#### `/summarize_my_page`\r\nProvides a prompt to summarize and categorize the posts and comments on frontpage. Gives LLM a predefined template and categorize to make a more human readable outputs.\r\n## License\r\nMIT",
+  "category": "Social Media",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sinanefeozler",
+    "repo": "reddit-summarizer-mcp",
+    "url": "https://github.com/sinanefeozler/reddit-summarizer-mcp",
+    "name": "reddit-summarizer-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e4506330779689e167c9fa46fa87d3f56b2eecaf"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:36.677Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "asyncpraw",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"reddit-summarizer-mcp\"\nversion = \"0.1.0\"\ndescription = \"Reddit summarizer mcp server\"\nreadme = \"README.md\"\nlicense = {text = \"MIT\"}\nrequires-python = \">=3.12\"\ndependencies = [\n    \"asyncpraw>=7.8.1\",\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.11.0\",\n    \"python-dotenv>=1.1.1\",\n]\n"
+}

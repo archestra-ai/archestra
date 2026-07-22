@@ -1,0 +1,105 @@
+{
+  "name": "gotoolkits__mcp-difyworkflow-server",
+  "display_name": "mcp-difyworkflow-server",
+  "description": "mcp-difyworkflow-server is an mcp server Tools application that implements the query and invocation of Dify workflows, supporting the on-demand operation of multiple custom Dify workflows.",
+  "author": {
+    "name": "gotoolkits"
+  },
+  "server": {
+    "command": "mcp-difyworkflow-server",
+    "args": ["-base-url", "${user_config.base_url}"],
+    "env": {
+      "DIFY_WORKFLOW_NAME": "${user_config.dify_workflow_name}",
+      "DIFY_API_KEYS": "${user_config.dify_api_keys}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "base_url": {
+      "type": "string",
+      "title": "Dify Base URL",
+      "description": "The base URL of the Dify platform API server.",
+      "required": true,
+      "default": "http://localhost/v1",
+      "sensitive": false
+    },
+    "dify_workflow_name": {
+      "type": "string",
+      "title": "Dify Workflow Names",
+      "description": "Comma-separated list of Dify workflow names to be exposed. Need to correspond one by one with Dify API Keys.",
+      "required": true,
+      "default": "workflow-translator,workflow-genImag",
+      "sensitive": false
+    },
+    "dify_api_keys": {
+      "type": "string",
+      "title": "Dify API Keys",
+      "description": "Comma-separated list of Dify API keys, corresponding to the workflow names. Generate these for the respective workflows on the Dify platform.",
+      "required": true,
+      "default": "appkey-xxxxxxxxxxxa,appkey-xxxxxxxxxxxb",
+      "sensitive": true
+    }
+  },
+  "readme": "## mcp-difyworkflow-server\n\nmcp-difyworkflow-server is an mcp server Tools application that implements the query and invocation of Dify workflows, supporting the on-demand operation of multiple custom Dify workflows.\n\n## INSTALL\n\n```shell\ngit clone https://github.com/gotoolkis/mcp-difyworkflow-server.git\n\n# build by go\ncd mcp-difyworkflow-server\ngo build .\n\n## or use make build\nmake build\n```\n\n## Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-difyworkflow-server\": {\n      \"command\": \"mcp-difyworkflow-server\",\n      \"args\": [\"-base-url\", \"http://localhost/v1\"],\n      \"env\": {\n        \"DIFY_WORKFLOW_NAME\": \"workflow-translator“,workflow-genImag\",\n        \"DIFY_API_KEYS\": \"appkey-xxxxxxxxxxxa,appkey-xxxxxxxxxxxb\"\n      }\n    }\n  }\n}\n```\n\n- **\"base-url\":\"http://localhost/v1\"**\n\n  The base URL of the Dify platform api server url.\n\n- **\"command\":\"mcp-difyworkflow-server\"**\n\n  You can specify the absolute path for the compiled binary, or create a symbolic link with:<br>\n  \"sudo ln -s \\<gitWorkPath\\>/mcp-difyworkflow-server /usr/local/bin/mcp-difyworkflow-server\"\n\n- **DIFY_WORKFLOW_NAME、DIFY_API_KEYS**\n\n  Need to correspond one by one in order.<br>\n  Workflow name can be self-defined by the user in the Prompt, and the Workflow API Key needs to be generated for the corresponding workflow created on the Dify platform (refer to the relevant Dify documentation for how to generate the API KEY).\n\n## Usage\n\n- **list_workflows**<br>\n  List authorized workflows\n- **execute_workflow**<br>\n  Execute a specified workflow,args: workflow_name, input\n  Note: The input variable name of the **dify workflow** should be defined by default as: **\"message\"**\n\n#### Samples\n\n> prompt: **查看 mcp-difyworkflow-server 可使用的工具列表**<br>\n> prompt: **给我执行 dify 名为 workflow-translator 的工作流，输入的消息为“这是一条测试消息”**\n\n> prompt: **View the list of tools available for mcp-difyworkflow-server.**<br>\n> prompt: **Execute the workflow named 'workflow-translator' for me, the input message is \"This is a test message\".**\n",
+  "category": "AI Tools",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-difyworkflow-server": {
+        "command": "mcp-difyworkflow-server",
+        "args": ["-base-url", "http://localhost/v1"],
+        "env": {
+          "DIFY_WORKFLOW_NAME": "workflow-translator“,workflow-genImag",
+          "DIFY_API_KEYS": "appkey-xxxxxxxxxxxa,appkey-xxxxxxxxxxxb"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gotoolkits",
+    "repo": "mcp-difyworkflow-server",
+    "url": "https://github.com/gotoolkits/mcp-difyworkflow-server",
+    "name": "mcp-difyworkflow-server",
+    "path": null,
+    "stars": 54,
+    "contributors": 2,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "429c0b3d402ad9ab9cd898bbe749029d264f608f"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.293Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 9
+    },
+    {
+      "name": "google/uuid",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule mcp-difyworkflow-server\n\ngo 1.23.3\n\nrequire github.com/mark3labs/mcp-go v0.8.2\n\nrequire github.com/google/uuid v1.6.0 // indirect\n"
+}

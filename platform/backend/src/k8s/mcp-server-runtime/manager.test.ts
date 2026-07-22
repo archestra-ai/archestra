@@ -65,6 +65,11 @@ vi.mock("@/config", async () =>
         namespace: "test-namespace",
         kubeconfig: undefined,
         loadKubeconfigFromCurrentCluster: false,
+        // Pin to empty: configModuleMock inherits the real config, so an
+        // ambient ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES (dev .env,
+        // CI's copied .env.example) would add sweep namespaces and double
+        // every reap/cleanup call count.
+        environmentNamespaces: [],
       },
     },
   }),
@@ -190,6 +195,14 @@ vi.mock("./k8s-deployment", () => {
     fetchPlatformPodNodeSelector: vi.fn().mockResolvedValue(undefined),
     fetchPlatformPodTolerations: vi.fn().mockResolvedValue(undefined),
   };
+});
+
+// Some tests stub findById with a sticky mockResolvedValue; vi.clearAllMocks()
+// clears calls but NOT implementations, so under randomized test order the
+// catalog leaked into unrelated tests (extra sweep namespaces, throwing paths).
+// Reset the implementation after every test.
+afterEach(() => {
+  vi.mocked(InternalMcpCatalogModel.findById).mockReset();
 });
 
 describe("validateKubeconfig", () => {
@@ -2091,11 +2104,14 @@ describe("McpServerRuntimeManager.backfillRegcredTeamLabels", () => {
 describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    // Reset model-mock implementations left behind by earlier (seed-shuffled)
-    // tests — the namespace-resolution path consults all three models, so
-    // leaked implementations change which sweep branch runs.
+    // clearAllMocks resets call history but not implementations, so a
+    // persistent mockResolvedValue from another suite would otherwise leak in
+    // under a shuffling seed. These tests expect the frozen-name path by
+    // default, so pin findById back to null — and pin the other models the
+    // namespace-resolution path consults, since leaked implementations change
+    // which sweep branch runs.
     const OrganizationModel = (await import("@/models/organization")).default;
-    vi.mocked(InternalMcpCatalogModel.findById).mockReset();
+    vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue(null);
     vi.mocked(McpServerModel.findById).mockReset();
     vi.mocked(McpServerModel.findById).mockResolvedValue(null);
     vi.mocked(OrganizationModel.getById).mockResolvedValue({

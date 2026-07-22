@@ -2992,6 +2992,41 @@ class AgentModel {
   }
 
   /**
+   * Authoritative existence check for the public connection-health endpoint:
+   * a fresh, uncached query — a just-deleted gateway must read as missing
+   * immediately, so the {@link AgentModel.resolveIdFromIdOrSlug} positive
+   * cache (whose staleness its callers tolerate by re-loading the row
+   * downstream) is deliberately not used here. Type-scoped so a proxy ref
+   * can never pass as a gateway or vice versa.
+   */
+  static async existsByIdOrSlugAndType(params: {
+    idOrSlug: string;
+    agentType: AgentType;
+  }): Promise<boolean> {
+    const { idOrSlug, agentType } = params;
+    const matchesIdOrSlug = isUuid(idOrSlug)
+      ? or(
+          eq(schema.agentsTable.id, idOrSlug),
+          eq(schema.agentsTable.slug, idOrSlug),
+        )
+      : eq(schema.agentsTable.slug, idOrSlug);
+
+    const [row] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          matchesIdOrSlug,
+          eq(schema.agentsTable.agentType, agentType),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    return row !== undefined;
+  }
+
+  /**
    * Clone an agent and all its associations.
    * Returns the newly created agent.
    */

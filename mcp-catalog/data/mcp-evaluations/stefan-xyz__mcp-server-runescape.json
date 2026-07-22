@@ -1,0 +1,83 @@
+{
+  "name": "stefan-xyz__mcp-server-runescape",
+  "display_name": "mcp-server-runescape",
+  "description": "MCP server from stefan-xyz/mcp-server-runescape",
+  "author": {
+    "name": "stefan-xyz"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-server-runescape"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# mcp-server-runescape\n[![npm version](https://badge.fury.io/js/mcp-server-runescape.svg)](https://badge.fury.io/js/mcp-server-runescape)\n[![smithery badge](https://smithery.ai/badge/@stefan-xyz/mcp-server-runescape)](https://smithery.ai/server/@stefan-xyz/mcp-server-runescape)\n\nThis is an MCP server with tools for interacting with RuneScape (RS) and Old School RuneScape (OSRS) data, including item prices, player hiscores, and more.\n\nhttps://github.com/user-attachments/assets/7c141575-443b-4b76-8b33-6d48ec82fbe7\n\n## Features\n\nThe MCP server provides several tools which are used to answer your questions during gaming with data from accurate sources.\n\n### 1. Item Details (`get_item_details`)\n\nRetrieve comprehensive information about tradeable items, including:\n\n- Current price in the Grand Exchange\n- Price trends (24h, 30, 90, and 180 days)\n- Name\n- Category\n- Description (examine text)\n- Image\n- Members\n- ID\n\nhttps://runescape.wiki/w/Application_programming_interface#detail\n\n### 2. Item Price History (`get_item_price_history`)\n\nAccess the price history of an item over the last 180 days, including:\n\n- Price on a given day (timestamp)\n- Average price on a given day (timestamp)\n\nhttps://runescape.wiki/w/Application_programming_interface#Graph\n\n### 3. Player Hiscore (`get_player_hiscore`)\n\nFetch rankings and experience for skills and activities of any player, including:\n\n- Player rank\n- Skill level\n- Experience points\n- Activity scores\n\nhttps://runescape.wiki/w/Application_programming_interface#Hiscores_Lite_2\n\n### 4. Top Rankings (`get_top_rankings`)\n\nView the top (max 50) players for a specific skill or activity, including:\n\n- Name\n- Score (used for both skill and activity)\n- Rank\n\nhttps://runescape.wiki/w/Application_programming_interface#ranking\n\n### 5. Player Count (`get_player_count`)\n\nGets the number of players currently online in RuneScape and Old School RuneScape, including:\n\n- Real-time player counts\n\nhttps://runescape.wiki/w/Application_programming_interface#player_count\n\n### 6. Account Totals (`get_rsuser_total`)\n\nGets the current amount of accounts created that can access any form of RuneScape. This includes accounts made on FunOrb or a particular version of RuneScape, including:\n\n- Historical accounts creation data\n\nhttps://runescape.wiki/w/Application_programming_interface#rsusertotal\n\n#### Note\n\nFor consistency I tried to only use API endpoints which support both RS and OSRS data.\n\n## Example Use Cases\n\nThe goal is for you to have an easy way to fetch more accurate data right from the source while scaping.\n\nHere are some example queries you can ask the AI when using this MCP server:\n\n### Item Details\n\n```\n\"What is the price of a dragon scimitar in the Grand Exchange?\"\n\"Torva full helm price\"\n\"Current price of a dragon pickaxe\"\n\"How much percentage has the price of a dragon pickaxe changed in the past 30 days?\"\n\"How much percentage has the price of a dragon pickaxe changed in the past 90 days?\"\n\"How much percentage has the price of a dragon pickaxe changed in the past 180 days?\"\n\"Give me the description of an armadyl godsword\"\n\"Give me the icon of a dragon scimitar\"\n\"What is the id of an abbyssal whip?\"\n```\n\n### Item Price History\n\n```\n\"Give me the price history of a dragon scimitar\"\n\"Rune scimitar price on 1 april 2025?\"\n```\n\n### Player Hiscore\n\n```\n\"What rank is Zezima?\"\n\"What rank is Zezima on runescape?\"\n\"How much experience does Lynx Titan have overall?\"\n\"Iron Hyger ironman rank?\"\n```\n\n### Top Rankings\n\n```\n\"Top 10 players overall?\"\n\"Give me the top 50 attack rankings\"\n\"Number one agility on runescape?\"\n\"Most zulrah kills?\"\n\"Give me the top 5 jad rankings\"\n```\n\n## Getting Started\n\n[Introduction to MCP servers](https://modelcontextprotocol.io/introduction)\n\nYou can use the MCP server in many clients, for example:\n\n- Claude desktop\n- Cursor\n\n### 1. Add the MCP server in your config (NPM Package)\n\nPaste this snippet in your mcp config that your client is using\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-server-runescape\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-server-runescape\"]\n    }\n  }\n}\n```\n\nYou can find the config file in (mac):\n\n- Claude desktop:\n\n`~/Library/Application Support/Claude/claude_desktop_config.json`\n\n- Cursor:\n\n`/Users/name/.cursor/mcp.json`\n\n### 2. From Source\n\n**Required** [Node.js](https://nodejs.org/en) installed on your system\n\n1. Clone this repository\n2. Install dependencies:\n   ```bash   \n   yarn\n   ```\n   or\n   ```bash   \n   npm install\n   ```\n3. Then update your Claude desktop or Cursor with:\n   ```json\n   {\n     \"mcpServers\": {\n       \"mcp-server-runescape\": {\n         \"command\": \"node\",\n         \"args\": [\"/Users/path/to/mcp-server-runescape/src/server.js\"]\n       }\n     }\n   }\n   ```\n4. **Optional**: Run the debugger/inspector\n   ```bash\n   yarn dev\n   ```\n   or\n   ```bash   \n   npm run build\n   ```\n\nMake sure to:\n\n- Replace `/path/to/mcp-server-runescape` with the actual path to your installation.\n\nAfter updating the configuration, restart Claude desktop or Cursor for the changes to take effect.\n\n#### Personal preference\n\nYou can use any client you want, my personal preference goes to Cursor at the moment in combination with deepseek-v3.1 which is performing really well.\n\n[List of clients](https://modelcontextprotocol.io/clients)\n\n## API Documentation\n\nFor detailed information about the Runescape API endpoints used by this MCP server, visit:\n[RS/Wiki API](https://runescape.wiki/w/Application_programming_interface)\n\n## Thank you\n\nI built this over the weekend, to learn a bit more about MCP servers. Runescape was the perfect subject to try it out on.\n\n- Shout out to the rs/wiki team for the docs and API.\n\nIf this helps you out in anyway when scaping and you would like to support me, feel free to\n\n[![\"Buy Me A Coffee\"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/stefanxyz)\n",
+  "category": "Gaming",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-runescape": {
+        "command": "npx",
+        "args": ["-y", "mcp-server-runescape"],
+        "env": {}
+      },
+      "mcp-server-runescape-node": {
+        "command": "node",
+        "args": ["/Users/path/to/mcp-server-runescape/src/server.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "stefan-xyz",
+    "repo": "mcp-server-runescape",
+    "url": "https://github.com/stefan-xyz/mcp-server-runescape",
+    "name": "mcp-server-runescape",
+    "path": null,
+    "stars": 3,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f06c8f2c45287428f51f757ceddfb685b8f62220"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:19.291Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "fuse.js",
+      "importance": 6
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-server-runescape\",\n  \"version\": \"1.0.1\",\n  \"main\": \"dist/server.js\",\n  \"author\": \"stefan-xyz\",\n  \"keywords\": [\n    \"mcp\",\n    \"rs\",\n    \"osrs\",\n    \"runescape\",\n    \"old school\"\n  ],\n  \"license\": \"Apache-2.0\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-runescape\": \"./dist/server.js\"\n  },\n  \"scripts\": {\n    \"start\": \"node dist/server.js\",\n    \"dev\": \"npx @modelcontextprotocol/inspector node src/server.js\",\n    \"build\": \"mkdir -p dist && cp -r src/* dist/\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.1\",\n    \"fuse.js\": \"^7.1.0\",\n    \"node-fetch\": \"^3.3.2\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.25.1\",\n    \"eslint\": \"^9.25.1\",\n    \"eslint-config-prettier\": \"^10.1.2\",\n    \"eslint-plugin-prettier\": \"^5.2.6\",\n    \"globals\": \"^16.0.0\",\n    \"prettier\": \"^3.5.3\"\n  },\n  \"files\": [\n    \"dist\",\n    \"LICENSE\",\n    \"README.md\"\n  ]  \n}\n"
+}

@@ -1,0 +1,99 @@
+{
+  "name": "kukapay__token-revoke-mcp",
+  "display_name": "token-revoke-mcp",
+  "description": "An MCP server for checking and revoking ERC-20 token allowances across multiple blockchains.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {
+      "MORALIS_API_KEY": "${user_config.moralis_api_key}",
+      "PRIVATE_KEY": "${user_config.private_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "moralis_api_key": {
+      "type": "string",
+      "title": "Moralis API Key",
+      "description": "Your Moralis API key, required for fetching token approval data.",
+      "sensitive": true,
+      "required": true
+    },
+    "private_key": {
+      "type": "string",
+      "title": "Wallet Private Key",
+      "description": "An Ethereum-compatible private key for signing revocation transactions.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Token Revoke MCP\n\nAn MCP server for checking and revoking ERC-20 token allowances, enhancing security and control.\n\n![License](https://img.shields.io/badge/license-MIT-blue.svg)\n![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Fetch Token Approvals**: Retrieve all ERC20 token approvals for a wallet on a specified chain, including token details, balances, and USD values at risk.\n- **Revoke Allowances**: Submit transactions to revoke ERC20 token allowances for specific spenders.\n- **Check Transaction Status**: Verify the success or failure of submitted transactions using transaction hashes.\n- **Multi-Chain Support**: Supports over 50 EVM-compatible chains, including mainnets (e.g., Ethereum, Polygon, BSC) and testnets (e.g., Goerli, Mumbai).\n\n## Prerequisites\n\n- **Node.js**: Version 18 or higher (for native `fetch` support).\n- **Moralis API Key**: Required for fetching token approval data.\n- **Private Key**: An Ethereum-compatible private key for signing revocation transactions.\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/token-revoke-mcp.git\n   cd token-revoke-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   npm install\n   ```\n   \n3. **Client Configuration**:\n\n    ```json\n    {\n      \"mcpServers\": {\n        \"token-revoke-mcp\": {\n          \"command\": \"node\",\n          \"args\": [\"path/to/token-revoke-mcp/index.js\"],\n          \"env\": {\n            \"MORALIS_API_KEY\": \"your moralis api key\",\n            \"PRIVATE_KEY\": \"your wallet private key\"\n          }\n        }\n      }\n    }   \n    ```\n\n## Usage\n\nBelow are examples of how you might interact with the server using natural language prompts as input. The outputs are the raw `text` values from the `content` array returned by the server, assuming a client translates the prompts into tool calls.\n\n### Example 1: Fetch Token Approvals\n**Input Prompt**:  \n> \"Show me all the token approvals for my wallet on Polygon.\"\n\n**Output Response**:  \n```\n[\n  {\n    \"tokenAddress\": \"0x2791bca1f2de4661ed88a30c99a7a9449aa84174\",\n    \"tokenSymbol\": \"USDC\",\n    \"balance\": \"100.5\",\n    \"usdPrice\": \"1.00\",\n    \"usdValueAtRisk\": \"50.25\",\n    \"spenderAddress\": \"0x1111111254eeb25477b68fb85ed929f73a960582\",\n    \"approvedAmount\": \"1000.0\",\n    \"transactionHash\": \"0xabc...\",\n    \"timestamp\": \"2023-10-01T12:00:00Z\"\n  }\n]\n```\n\n### Example 2: Revoke an Allowance\n**Input Prompt**:  \n> \"Revoke the allowance for token 0x2791bca1f2de4661ed88a30c99a7a9449aa84174 to spender 0x1111111254eeb25477b68fb85ed929f73a960582 on BSC.\"\n\n**Output Response**:  \n```\nAllowance revocation submitted on bsc. Transaction hash: 0x123.... Note: Transaction is not yet confirmed.\n```\n\n### Example 3: Check Transaction Status\n**Input Prompt**:  \n> \"Did my transaction 0x123... on BSC go through?\"\n\n**Output Response** (possible outputs):  \n- **Pending**:  \n  ```\n  Transaction 0x123... on bsc is still pending or not found.\n  ```\n- **Success**:  \n  ```\n  Transaction 0x123... on bsc has completed with status: successful. Block number: 12345.\n  ```\n- **Failure**:  \n  ```\n  Transaction 0x123... on bsc has completed with status: failed. Block number: 12345.\n  ```\n\n## Supported Chains\n\nThe server supports a wide range of EVM-compatible chains based on the Moralis JS SDK’s `chaindata.ts`. Examples include:\n- Mainnets: `ethereum`, `polygon`, `bsc`, `avalanche`, `fantom`, `arbitrum`, `optimism`, etc.\n- Testnets: `goerli`, `mumbai`, `bsc testnet`, `arbitrum goerli`, `optimism sepolia`, etc.\n- Full list: See `SUPPORTED_CHAINS` in `server.js`.\n\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Security",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "token-revoke-mcp": {
+        "command": "node",
+        "args": ["path/to/token-revoke-mcp/index.js"],
+        "env": {
+          "MORALIS_API_KEY": "your moralis api key",
+          "PRIVATE_KEY": "your wallet private key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "token-revoke-mcp",
+    "url": "https://github.com/kukapay/token-revoke-mcp",
+    "name": "token-revoke-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "6329892f519f25ee5160b1329f64314699a6a690"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.024Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "ethers",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"token-revoke-mcp\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"homepage\": \"https://github.com/kukapay/token-revoke-mcp\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"dotenv\": \"^16.4.7\",\n    \"ethers\": \"^6.13.5\"\n  }\n}\n"
+}

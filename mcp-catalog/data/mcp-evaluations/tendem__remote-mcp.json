@@ -1,0 +1,88 @@
+{
+  "name": "tendem__remote-mcp",
+  "display_name": "Tendem by Toloka",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMTAiIGhlaWdodD0iMjEwIiBmaWxsPSJub25lIj48ZyBjbGlwLXBhdGg9InVybCgjYSkiPjxyZWN0IHdpZHRoPSIyMTAiIGhlaWdodD0iMjEwIiBmaWxsPSIjZmZmIiByeD0iMjgiLz48cGF0aCBmaWxsPSIjMkMyQzFEIiBkPSJNMTgxLjQ4NyAwSDI4LjUxM0MxMi43NjYgMCAwIDEyLjc2NiAwIDI4LjUxM3YxNTIuOTc0QzAgMTk3LjIzNCAxMi43NjYgMjEwIDI4LjUxMyAyMTBoMTUyLjk3NEMxOTcuMjM0IDIxMCAyMTAgMTk3LjIzNCAyMTAgMTgxLjQ4N1YyOC41MTNDMjEwIDEyLjc2NiAxOTcuMjM0IDAgMTgxLjQ4NyAwWm0tMTMuNzM1IDgwLjI4YzAgOC4xMTUtMTEuMTI3IDEwLjM5Ny0xNC4zMjIgMi45MzctMi44NC02LjYzNC0xMi41MDctNS43NzMtMTQuMTMgMS4yNThsLTE2Ljg3MSA3My4wNTdhNy40NjIgNy40NjIgMCAwIDEtNy4yNzEgNS43ODNINjUuMzUyYy02LjAyIDAtOS41NjItNi43NjItNi4xMzUtMTEuNzExbDM0LjE5MS00OS4zNjVjNC44NjMtNy4wMjItMy45NzEtMTUuMzgyLTEwLjcxNC0xMC4xNGwtMTkuNTQ2IDE1LjE5NGMtNC45IDMuODExLTEyLjA0Mi4zMTgtMTIuMDQyLTUuODkxVjUzLjg4NmMwLTUuNjY1IDYuMjQ1LTkuMTA2IDExLjAzNC02LjA4bDUzLjUwNiAzMy44MDhhNy40NjIgNy40NjIgMCAwIDAgOS42NzUtMS40OGwyNS40OS0zMC4wMzFjNS43OS02LjgyMiAxNi45NDEtMi43MjggMTYuOTQxIDYuMjJ2MjMuOTU2WiIvPjwvZz48ZGVmcz48Y2xpcFBhdGggaWQ9ImEiPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0wIDBoMjEwdjIxMEgweiIvPjwvY2xpcFBhdGg+PC9kZWZzPjwvc3ZnPg==",
+  "description": "Hybrid AI + human-expert task service. Submit a task, Tendem scopes and quotes it, then vetted human experts execute it and return markdown plus files.",
+  "homepage": "https://tendem.ai",
+  "tools": [
+    {
+      "name": "create_task",
+      "description": "Submit a task for execution; supports conversation_id to correlate tasks"
+    },
+    {
+      "name": "get_task",
+      "description": "Poll a task's status, price, approval and result (supports long-poll via wait_for_change_seconds)"
+    },
+    {
+      "name": "get_task_result",
+      "description": "Fetch a completed task's result as markdown plus files (pre-signed URLs)"
+    },
+    {
+      "name": "list_tasks",
+      "description": "List your submitted tasks"
+    },
+    {
+      "name": "approve_task",
+      "description": "Approve a scoped quote; returns a top-up URL if balance is insufficient"
+    },
+    {
+      "name": "cancel_task",
+      "description": "Return a Tendem-UI URL to cancel a task"
+    },
+    {
+      "name": "get_account",
+      "description": "Return account balance and a top-up URL"
+    },
+    {
+      "name": "get_file_upload_url",
+      "description": "Get a URL to upload input files for a task"
+    },
+    {
+      "name": "send_message",
+      "description": "Agent-to-agent chat with the Tendem orchestrator"
+    },
+    {
+      "name": "read_chat",
+      "description": "Read the scoping/execution chat for a task"
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "ai",
+    "human-in-the-loop",
+    "human-experts",
+    "experts",
+    "escalation",
+    "task-delegation",
+    "outsourcing",
+    "research",
+    "automation",
+    "toloka"
+  ],
+  "user_config": {},
+  "readme": null,
+  "category": "AI Tools",
+  "quality_score": 70,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "Toloka"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.tendem.ai/mcp",
+    "docs_url": "https://tendem.ai/for/mcp"
+  },
+  "github_info": null,
+  "programming_language": null
+}

@@ -1,0 +1,79 @@
+{
+  "name": "r-huijts__oorlogsbronnen-mcp",
+  "display_name": "oorlogsbronnen-mcp",
+  "description": "MCP server for accessing Dutch World War II archives through the Oorlogsbronnen API. Provides structured access to historical records, photographs, and documents from 1940-1945 Netherlands.",
+  "author": {
+    "name": "r-huijts"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "oorlogsbronnen-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Oorlogsbronnen MCP Server\n\nA Model Context Protocol (MCP) server that provides AI-powered access to the Oorlogsbronnen (War Sources) database. This server enables natural language interactions with historical World War II archives from the Netherlands.\n\n## Natural Language Interaction Examples\n\nAsk your AI assistant questions like these to explore Dutch WWII history:\n\n- **\"What happened during the bombing of Rotterdam in May 1940?\"**\n- **\"Tell me about Anne Frank's life in hiding based on historical records.\"**\n- **\"Show me photographs of the Dutch Hunger Winter of 1944-1945.\"**\n- **\"Were any of my ancestors imprisoned in Camp Vught during the war?\"**\n- **\"I'm visiting Arnhem next week. What historical sites related to Operation Market Garden should I see?\"**\n- **\"Find information about resistance activities in Utrecht during the Nazi occupation.\"**\n- **\"What was daily life like for Jewish families in Amsterdam before deportations began?\"**\n- **\"Show me firsthand accounts from people who witnessed the liberation of the Netherlands in 1945.\"**\n- **\"What records exist about children who were hidden by Dutch families during the war?\"**\n- **\"I'm researching the impact of WWII on Dutch infrastructure. Can you find documents about the reconstruction of bridges and railways?\"**\n\n## Features\n\n- 🔍 Natural language search across the Oorlogsbronnen database\n- 🏷️ Filter results by content type (person, photo, article, etc.)\n- 📊 Control the number of results returned\n- 🤖 AI-friendly JSON responses for further processing\n\n## Installation\n\nYou can install this server in two ways:\n\n### 1. Using Claude Desktop with NPX Package\n\nUpdate your Claude configuration file (`~/Library/Application Support/Claude/claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"oorlogsbronnen-server\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"oorlogsbronnen-mcp\"\n      ]\n    }\n  }\n}\n```\n\nAfter updating the configuration, restart Claude Desktop for the changes to take effect.\n\n### 2. From Source\n\n1. Clone this repository:\n```bash\ngit clone https://github.com/r-huijts/oorlogsbronnen-mcp.git\ncd oorlogsbronnen-mcp\n```\n\n2. Install dependencies:\n```bash\nnpm install\n```\n\n3. Build the project:\n```bash\nnpm run build\n```\n\n4. Configure Claude Desktop by updating your configuration file (located at `~/Library/Application Support/Claude/claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"oorlogsbronnen-server\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/absolute/path/to/oorlogsbronnen-mcp/dist/mcp-server.js\"\n      ]\n    }\n  }\n}\n```\n\nReplace `/absolute/path/to/oorlogsbronnen-mcp` with the actual path to your installation.\n\n## Usage Examples\n\nThe MCP server understands natural language queries and can help you explore World War II archives. Here are some example queries you can use with Claude:\n\n### Basic Searches\n\n- \"Use search_ww2_nl_archives to find documents about the resistance movement in Amsterdam\"\n- \"Search the Dutch WW2 archives for information about Jewish refugees in 1942\"\n- \"Look through the Netherlands war archives for records of Allied bombing raids\"\n\n### Filtering by Type\n\n- \"Use search_ww2_nl_archives to show me photographs of the liberation of Rotterdam\"\n- \"Find personal accounts in the Dutch WW2 archives about life in concentration camps\"\n- \"Search the Netherlands war archives for newspaper articles about food shortages\"\n\n### Specific Queries\n\n- \"Search the Dutch WW2 archives for documents about Anne Frank's time in Amsterdam\"\n- \"Use search_ww2_nl_archives to find records of the February Strike of 1941\"\n- \"Look through the Netherlands war archives for information about Operation Market Garden\"\n\n### Research Examples\n\n1. **Personal History Research**:\n   ```\n   Use search_ww2_nl_archives to find any records or documents about the Rosenberg family in Amsterdam between 1940-1945\n   ```\n\n2. **Local History**:\n   ```\n   Search the Dutch WW2 archives for photographs and documents about daily life in Utrecht during the occupation\n   ```\n\n3. **Military Operations**:\n   ```\n   Use search_ww2_nl_archives to find firsthand accounts and official reports about the Battle of the Scheldt\n   ```\n\n### Advanced Usage\n\nYou can combine different search criteria:\n```\nSearch the Netherlands WW2 archives for photographs and personal accounts of the Dutch famine in 1944-1945, limit to 20 results\n```\n\n## API Reference\n\nThe server exposes the following MCP tool:\n\n### search_ww2_nl_archives\n\nA powerful search tool designed to query the Oorlogsbronnen (War Sources) database for World War II related content in the Netherlands. This tool can be used to find historical documents, photographs, personal accounts, and other archival materials from 1940-1945.\n\n**When to use this tool:**\n- Searching for specific historical events during WWII in the Netherlands\n- Finding information about people, places, or organizations during the war\n- Locating photographs or documents from specific time periods or locations\n- Researching personal or family history related to WWII\n- Finding primary sources about the Dutch resistance, occupation, or liberation\n- Discovering materials about Jewish life and persecution during the war\n- Researching military operations that took place in the Netherlands\n\nParameters:\n- `query` (required): \n  - Type: string\n  - Description: The main search term or phrase to look for in the archives\n  - Can include: names, places, dates, events, or descriptive terms\n  - Examples:\n    - \"Anne Frank\"\n    - \"Rotterdam bombing 1940\"\n    - \"Dutch resistance Amsterdam\"\n    - \"Jewish deportation Westerbork\"\n    - \"Operation Market Garden\"\n\n- `type` (optional):\n  - Type: string\n  - Description: Filter results by specific content type\n  - Available types:\n    - \"person\": Individual biographical records\n    - \"photo\": Historical photographs\n    - \"article\": News articles and written documents\n    - \"video\": Video footage\n    - \"object\": Physical artifacts and objects\n    - \"location\": Places and geographical records\n    - \"book\": Published books, memoirs, and monographs\n  - Use when: You need to focus on specific types of historical materials\n  - Default: All types included\n\n- `count` (optional):\n  - Type: number\n  - Description: Number of results to return in the response\n  - Minimum: 1\n  - Maximum: 100\n  - Default: 10\n  - Use when: You need to control the volume of returned results\n  - Note: Larger numbers will provide more comprehensive results but may take longer to process\n\n**Response Format:**\n```json\n{\n  \"results\": [\n    {\n      \"id\": string,          // Unique identifier for the record\n      \"title\": string,       // Title or name of the item\n      \"type\": string,        // Content type (person, photo, article, etc.)\n      \"description\": string, // Detailed description (if available)\n      \"url\": string         // Direct link to view the item on Oorlogsbronnen\n    }\n  ]\n}\n```\n\n**Example Queries and Their Tool Calls:**\n\n1. Basic Historical Search:\n```typescript\n{\n  query: \"February Strike 1941\",\n  type: \"article\",\n  count: 5\n}\n```\n\n2. Person Research:\n```typescript\n{\n  query: \"Rosenberg family Amsterdam Jewish\",\n  type: \"person\",\n  count: 20\n}\n```\n\n3. Photo Collection Search:\n```typescript\n{\n  query: \"liberation celebrations Amsterdam Dam Square 1945\",\n  type: \"photo\",\n  count: 15\n}\n```\n\n**Error Handling:**\n- The tool will return an error message if:\n  - The query is empty or contains invalid characters\n  - The specified type is not supported\n  - The count is outside the valid range (1-100)\n  - The API is temporarily unavailable\n  - Rate limits are exceeded\n\n**Best Practices:**\n1. Start with broader searches and narrow down with specific terms\n2. Use location names to focus on specific areas\n3. Include dates when searching for specific events\n4. Combine person names with locations for family research\n5. Use type filtering to focus on specific kinds of historical materials\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Acknowledgments\n\n- Oorlogsbronnen for providing access to their valuable historical archives\n- The Model Context Protocol (MCP) community for enabling AI-powered interactions ",
+  "category": "Art & Culture",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "oorlogsbronnen-mcp": {
+        "command": "npx",
+        "args": ["-y", "oorlogsbronnen-mcp"],
+        "env": {}
+      },
+      "oorlogsbronnen-mcp-configured": {
+        "command": "node",
+        "args": ["/absolute/path/to/oorlogsbronnen-mcp/dist/mcp-server.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "r-huijts",
+    "repo": "oorlogsbronnen-mcp",
+    "url": "https://github.com/r-huijts/oorlogsbronnen-mcp",
+    "name": "r-huijts__oorlogsbronnen-mcp",
+    "path": null,
+    "stars": 11,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "52d981ccd3d730a89f87f5d185e7ef4a5ca3253d"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:12.257Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"oorlogsbronnen-mcp\",\n  \"version\": \"1.1.0\",\n  \"description\": \"Model Context Protocol (MCP) server for accessing Dutch WWII archives via the Oorlogsbronnen API. Enables AI assistants to search and retrieve historical documents, photographs, and records from the Netherlands during 1940-1945, including resistance movements, Jewish persecution, and the Nazi occupation.\",\n  \"type\": \"module\",\n  \"main\": \"dist/mcp-server.js\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/mcp-server.js\",\n    \"dev\": \"tsc && node dist/mcp-server.js\",\n    \"test\": \"jest --config jest.config.cjs\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"oorlogsbronnen\",\n    \"api\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.2\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.12\",\n    \"@types/node\": \"^20.11.28\",\n    \"jest\": \"^29.7.0\",\n    \"ts-jest\": \"^29.1.2\",\n    \"typescript\": \"^5.4.2\"\n  }\n}\n"
+}

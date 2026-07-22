@@ -1,0 +1,90 @@
+{
+  "name": "kukapay__opcua-mcp",
+  "display_name": "opcua-mcp",
+  "description": "An MCP server that connects to OPC UA-enabled industrial systems.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {
+      "OPCUA_SERVER_URL": "${user_config.opcua_server_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "opcua_server_url": {
+      "type": "string",
+      "title": "OPC UA Server URL",
+      "description": "The URL of the OPC UA server to connect to (e.g., opc.tcp://localhost:4840)",
+      "required": true,
+      "sensitive": false
+    }
+  },
+  "readme": "# OPC UA MCP Server\n\nAn MCP server that connects to OPC UA-enabled industrial systems, allowing AI agents to monitor, analyze, and control operational data in real time.\n\nThis project is ideal for developers and engineers looking to bridge AI-driven workflows with industrial automation systems.\n\n![GitHub License](https://img.shields.io/github/license/kukapay/opcua-mcp)\n![Python Version](https://img.shields.io/badge/python-3.13+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Read OPC UA Nodes**: Retrieve real-time values from industrial devices.\n- **Write to OPC UA Nodes**: Control devices by writing values to specified nodes.\n- **Browse nodes**: Request to list allopcua  nodes\n- **Read multiple OPC UA Nodes**: Retrieve multiple real-time values from devices.\n- **Write to multiple OPC UA Nodes**: Control devices by writing values to multiple nodes.\n- **Seamless Integration**: Works with MCP clients like Claude Desktop for natural language interaction.\n\n\n### Tools\nThe server exposes five tools:\n- **`read_opcua_node`**:\n  - **Description**: Read the value of a specific OPC UA node.\n  - **Parameters**:\n    - `node_id` (str): OPC UA node ID (e.g., `ns=2;i=2`).\n  - **Returns**: A string with the node ID and its value (e.g., \"Node ns=2;i=2 value: 42\").\n\n- **`write_opcua_node`**:\n  - **Description**: Write a value to a specific OPC UA node.\n  - **Parameters**:\n    - `node_id` (str): OPC UA node ID (e.g., `ns=2;i=3`).\n    - `value` (str): Value to write (converted based on node type).\n  - **Returns**: A success or error message (e.g., \"Successfully wrote 100 to node ns=2;i=3\").\n\n- **`Browse nodes`**:\n  - **Description**: Read the value of a specific OPC UA node.\n\n- **`Read multiple OPC UA Nodes`**:\n  - **Description**: Read the value of a specific OPC UA node.\n\n- **`Write to multiple OPC UA Nodes`**:\n  - **Description**: Read the value of a specific OPC UA node.\n\n\n### Example Prompts\n\n- \"What’s the value of node ns=2;i=2?\" → Returns the current value.\n- \"Set node ns=2;i=3 to 100.\" → Writes 100 to the node.\n\n## Installation\n\n### Prerequisites\n- Python 3.13 or higher\n- An OPC UA server (e.g., a simulator or real industrial device)\n\n### Install Dependencies\nClone the repository and install the required Python packages:\n\n```bash\ngit clone https://github.com/kukapay/opcua-mcp.git\ncd opcua-mcp\npip install mcp[cli] opcua cryptography\n```\n\n### MCP Client Configuration\n\n```json\n{\n \"mcpServers\": {\n   \"opcua-mcp\": {\n     \"command\": \"python\",\n     \"args\": [\"path/to/opcua_mcp/main.py\"],\n     \"env\": {\n        \"OPCUA_SERVER_URL\": \"your-opc-ua-server-url\"\n     }\n   }\n }\n}\n```\n\n\n## License\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "opcua-mcp": {
+        "command": "python",
+        "args": ["path/to/opcua_mcp/main.py"],
+        "env": {
+          "OPCUA_SERVER_URL": "your-opc-ua-server-url"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "opcua-mcp",
+    "url": "https://github.com/kukapay/opcua-mcp",
+    "name": "kukapay__opcua-mcp",
+    "path": null,
+    "stars": 15,
+    "contributors": 2,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ac56b8a13050b3179402ce3e3ccecc828b0c9155"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:06.192Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "cryptography",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "opcua",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"opcua-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that connects AI agents to OPC UA-enabled industrial systems.\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"cryptography>=45.0.2\",\n    \"mcp[cli]>=1.5.0\",\n    \"opcua>=0.98.13\",\n]\n"
+}

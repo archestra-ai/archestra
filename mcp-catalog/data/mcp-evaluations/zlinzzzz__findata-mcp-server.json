@@ -1,0 +1,107 @@
+{
+  "name": "zlinzzzz__findata-mcp-server",
+  "display_name": "finData-mcp-server",
+  "description": "FinData enables  your AI agents retrieve financial data from different providers like Tushare, Wind, and DataYes.",
+  "author": {
+    "name": "zlinzzzz"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}/src/findata", "run", "server.py"],
+    "env": {
+      "DATA_API_TOKEN": "${user_config.data_api_token}",
+      "PROVIDER": "${user_config.provider}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "data_api_token": {
+      "type": "string",
+      "title": "Data API Token",
+      "description": "API Token for accessing the specified financial data provider.",
+      "sensitive": true,
+      "required": true
+    },
+    "provider": {
+      "type": "string",
+      "title": "Data Provider",
+      "description": "The financial data provider to use (e.g., tushare, wind, datayes).",
+      "default": "tushare",
+      "required": true
+    }
+  },
+  "readme": "<h1 align=\"center\">\n<img src=\"assets/logo.png\" width=\"400\" align=center/>\n</h1><br>\n\n<div align=\"center\">\n\n[![English](https://img.shields.io/badge/English-Click-yellow\n)](README.md)\n[![English](https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-%E7%82%B9%E5%87%BB%E6%9F%A5%E7%9C%8B-orange)](README_zh.md)\n[![License](https://img.shields.io/badge/License-Apache--2.0-green)](LICENSE)\n[![Python Versions](https://img.shields.io/badge/python-3.11-blue)]()\n[![Tushare](https://img.shields.io/badge/Tushare-purple)]()\n\n</div>\n\n<div class=\"toc\" align=\"center\">\n  <a href=\"#Overview\">Overview</a> •\n  <a href=\"#Demonstration\">Demo</a> •\n  <a href=\"#Quick-Start\">Quick Start</a> •\n  <a href=\"#Supported-Data-Providers\">Supported Data Providers</a> •\n  <a href=\"#Tools\">Tools</a> \n</div>\n\n\n# Overview\n\n**FinData** is an open-source **Model Context Protocol(MCP) Server** that provides professional financial data access capabilities for LLM. It supports various data providers such as **Tushare**, **Wind**, **DataYes**, etc. This enables AI applications to quickly retrieve financial data.\n\nFully supports both **Stdio** and **SSE** transports, offering flexibility for different environments.\n\n\n# Demonstration\n\nhttps://github.com/user-attachments/assets/1a6d02af-22a3-44a0-ada7-a771a1c4818d\n\n# Quick Start\n\n## Prerequisites\n\nBefore getting started, please complete the following preparations:\n\n- python => 3.11\n- mcp[cli]>=1.6.0\n- pandas>=2.2.3\n- [uv](https://docs.astral.sh/uv/getting-started/installation/)\n\nDepending on your data provider, install optional packages such as:\n\n- tushare>=1.4.21\n\n## Configuration\n\n### Stdio Transport\n\nYou will need to edit the MCP client configuration file to add finData:\n\n```JSON\n{\n  \"mcpServers\": {\n    \"finData\": {\n      \"command\": \"uv\", \n      \"args\": [\n        \"--directory\",\n        \"/ABSOLUTE/PATH/TO/PARENT/FOLDER/finData-mcp-server/src/findata\", \n        \"run\",\n        \"server.py\"\n      ],\n      \"env\": {\n        \"DATA_API_TOKEN\": \"\",  // API Token for accessing data provider\n        \"PROVIDER\": \"tushare\"  // Specified data provider\n      }\n    }\n  }\n}\n```\n\n### SSE Transport\n\nSet the environment variables `DATA_API_TOKEN` and `PROVIDER` on the server hosting the MCP Server:\n\n   **Windows**\n   ```bash\n    set DATA_API_TOKEN=<API Token for accessing data provider>\n    set PROVIDER=<Specified data provider>\n   ```\n\n   **Linux**\n  ```bash\n    export DATA_API_TOKEN=<API Token for accessing data provider>\n    export PROVIDER=<Specified data provider>\n   ```\n\nThen, start the MCP Server:\n\n```bash\nuv run server.py --transport sse   \n```\n\n- Optional Arguments:\n  \n  `--sse-host` Host to bind SSE server to (default: localhost)\n\n  `--sse-port` Port for SSE server (default: 8000)\n\n \nOnce the MCP Server is running, update your MCP client's configuration with the following settings to connect to it.\n\n```JSON\n{\n  \"mcpServers\": {\n    \"finData\": {\n      \"name\": \"finData\",\n      \"type\": \"sse\",\n      \"baseUrl\": \"http://localhost:8000/sse\"\n    }\n  }\n}\n```\n\n**Note:** Variable names in configuration files may vary slightly between MCP clients. Refer to each client's documentation for proper configuration.\n\n# Supported Data Providers\n\nSet the `PROVIDER` environment variable to specify your provider:\n\n- tushare\n\n# Tools\n\n## Tushare\n\n### Market Data\n\n- `daily` Get unadjusted daily stock market data.\n\n### Fundamental Data\n\n- `stock_basic` Get stock basic information including name, code, etc.\n- `stock_company` Get listed company basic information.\n- `bak_basic`  Get fundamental data for specific stocks within a given time range.\n \n### Financial Data\n\n- `income` Get company income statement data.\n- `balancesheet` Get company balance sheet data.\n- `cashflow` Get company cash flow statement data.\n\n### Macroeconomic Data\n\n- `shibor_lpr` Get Loan Prime Rate (LPR) data.\n- `cn_gdp` Get Gross Domestic Product (GDP) data.\n- `cn_cpi` Get Consumer Price Index (CPI) data.\n- `cn_ppi` Get Producer Price Index (PPI) data.\n- `cn_m` Get Money Supply data.\n- `sf_month` Get Social Financing data.\n- `cn_pmi` Get Purchasing Managers' Index (PMI) data.\n\n# DataCanvas\n\n\n![datacanvas](https://raw.githubusercontent.com/DataCanvasIO/HyperTS/main/docs/static/images/dc_logo_1.png)\n\nThis project is open-sourced by [DataCanvas](https://datacanvas.com/)\n\n\n",
+  "category": "Finance",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "finData-stdio": {
+        "command": "uv",
+        "args": ["--directory", "/ABSOLUTE/PATH/TO/PARENT/FOLDER/finData-mcp-server/src/findata", "run", "server.py"],
+        "env": {
+          "DATA_API_TOKEN": "",
+          "PROVIDER": "tushare"
+        }
+      },
+      "finData-sse": {
+        "command": "uv",
+        "args": ["run", "server.py", "--transport", "sse"],
+        "env": {
+          "DATA_API_TOKEN": "<API Token for accessing data provider>",
+          "PROVIDER": "<Specified data provider>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zlinzzzz",
+    "repo": "finData-mcp-server",
+    "url": "https://github.com/zlinzzzz/finData-mcp-server",
+    "name": "finData-mcp-server",
+    "path": null,
+    "stars": 39,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f9a2f3a7c9c22f5a04ebe4db769f9e0c30743d75"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:17.253Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pandas",
+      "importance": 8
+    },
+    {
+      "name": "tushare",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"findata\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"mcp[cli]>=1.6.0\",\n    \"pandas>=2.2.3\",\n    \"tushare>=1.4.21\",\n]\n"
+}

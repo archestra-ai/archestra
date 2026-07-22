@@ -1,0 +1,132 @@
+{
+  "name": "sanyambassi__thales-cdsp-crdp-mcp-server",
+  "display_name": "thales-cdsp-crdp-mcp-server",
+  "description": "MCP server for Thales CipherTrust RESTful Data Protection (CRDP)",
+  "author": {
+    "name": "sanyambassi"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/crdp-mcp-server.js"],
+    "env": {
+      "CRDP_SERVICE_URL": "${user_config.crdp_service_url}",
+      "CRDP_PROBES_URL": "${user_config.crdp_probes_url}",
+      "MCP_TRANSPORT": "${user_config.mcp_transport}",
+      "MCP_PORT": "${user_config.mcp_port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "crdp_service_url": {
+      "type": "string",
+      "title": "CRDP Service URL",
+      "description": "CRDP service endpoint for protect/reveal operations",
+      "required": false,
+      "default": "http://localhost:8090"
+    },
+    "crdp_probes_url": {
+      "type": "string",
+      "title": "CRDP Probes URL",
+      "description": "CRDP service endpoint for monitoring operations",
+      "required": false,
+      "default": "http://localhost:8080"
+    },
+    "mcp_transport": {
+      "type": "string",
+      "title": "MCP Transport Type",
+      "description": "Transport type (stdio or streamable-http)",
+      "required": false,
+      "default": "stdio"
+    },
+    "mcp_port": {
+      "type": "number",
+      "title": "MCP HTTP Port",
+      "description": "HTTP port (when using streamable-http)",
+      "required": false,
+      "default": 3000
+    }
+  },
+  "readme": "# Thales CDSP CRDP MCP Server\n\nA Model Context Protocol (MCP) server that allows interacting with the CipherTrust RestFul Data Protection (CRDP) service.\n\n## Overview\n\nThis MCP server enables AI applications and LLMs to securely protect and reveal sensitive data through the CipherTrust CRDP service. It supports both individual and bulk protect and reveal operations with versioning support.\n\n## Demo Videos\n\n- **Video 1**: [https://youtu.be/O2pQRoykaaU] - Deployment and usage with Cursor AI\n- **Video 2**: [https://youtu.be/ILNyWRYQUpw] - How to use the n8n workflows\n\n## Features\n\n- **Data Protection**: Protect sensitive data using Data Protection policies defined on the Thales CipherTrust manager.\n- **Data Revelation**: Securely reveal protected data with proper authorization (username/jwt)\n- **Bulk Operations**: Process multiple data items in single batch operations\n- **Versioning Support**: Handles external versioned, internal versioned, and version disabled protection policies.\n- **Monitoring**: Health checks and metrics collection\n- **Multiple Transports**: Support for stdio and HTTP transports\n\n## Prerequisites\n\nBefore installing and running the CRDP MCP Server, ensure you have the following prerequisites installed:\n\n- **Node.js** (v18 or higher)\n- **npm** (comes with Node.js)\n- **TypeScript** (installed globally)\n- **CRDP container running and registered with CipherTrust Manager** \n\nSee [prerequisites](docs/prerequisites.md) for detailed installation instructions.\n\n## Quick Start\n\n### 1. Clone the Repository\n\n```bash\ngit clone https://github.com/sanyambassi/thales-cdsp-crdp-mcp-server.git\ncd thales-cdsp-crdp-mcp-server\n```\n\n### 2. Install Dependencies\n\n```bash\nnpm install\n```\n\n### 3. Build the Project\n\n```bash\nnpm run build\n```\n\n### 4. Start the Server\n\n#### For stdio transport (default):\n```bash\nnpm start\n```\n\n#### For HTTP transport:\n```bash\nMCP_TRANSPORT=streamable-http npm start\n```\n\n## Configuration\n\n### Environment Variables\n\n| Variable | Description | Default |\n|----------|-------------|---------|\n| `CRDP_SERVICE_URL` | CRDP service endpoint for protect/reveal operations | `http://localhost:8090` |\n| `CRDP_PROBES_URL` | CRDP service endpoint for monitoring operations | `http://localhost:8080` |\n| `MCP_TRANSPORT` | Transport type (`stdio` or `streamable-http`) | `stdio` |\n| `MCP_PORT` | HTTP port (when using streamable-http) | `3000` |\n\n### Setting Environment Variables\n\n**Windows (PowerShell):**\n```powershell\n$env:CRDP_SERVICE_URL=\"http://crdp-server:8090\"\n$env:MCP_TRANSPORT=\"streamable-http\"\n```\n\n**Windows (CMD):**\n```cmd\nset CRDP_SERVICE_URL=http://crdp-server:8090\nset MCP_TRANSPORT=streamable-http\n```\n\n**Linux/macOS:**\n```bash\nexport CRDP_SERVICE_URL=\"http://crdp-server:8090\"\nexport CRDP_PROBES_URL=\"http://crdp-server:8080\"\nexport MCP_TRANSPORT=\"streamable-http\"\nexport MCP_PORT=\"3000\"\n```\n\n## Available Tools\n\n### Data Protection Tools\n\n#### `protect_data`\nProtect a single piece of sensitive data.\n\n**Parameters:**\n- `data` (required): The sensitive data to protect\n- `protection_policy_name` (required): CRDP protection policy name\n- `jwt` (optional, required if CRDP is running with JWT verification enabled): JWT token for authorization\n\n> **Note:** If CRDP is running with JWT verification enabled, 'jwt' is required.\n\n**Example:**\n```json\n{\n  \"name\": \"protect_data\",\n  \"arguments\": {\n    \"data\": \"john.doe@example.com\",\n    \"protection_policy_name\": \"email_policy\",\n    \"jwt\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n  }\n}\n```\n\n#### `protect_bulk`\nProtect multiple data items in a single batch operation.\n\n**Parameters:**\n- `request_data` (required): Array of protection request objects\n- `jwt` (optional, required if CRDP is running with JWT verification enabled): JWT token for authorization\n\n> **Note:** If CRDP is running with JWT verification enabled, 'jwt' is required.\n\n**Example:**\n```json\n{\n  \"name\": \"protect_bulk\",\n  \"arguments\": {\n    \"request_data\": [\n      {\n        \"protection_policy_name\": \"email_policy\",\n        \"data\": \"john.doe@example.com\"\n      },\n      {\n        \"protection_policy_name\": \"ssn_policy\",\n        \"data\": \"123-45-6789\"\n      }\n    ]\n  }\n}\n```\n\n### Data Revelation Tools\n\n#### `reveal_data`\nReveal a single piece of protected data.\n\n**Parameters:**\n- `protected_data` (required): The protected data to reveal\n- `protection_policy_name` (required): Policy name used for protection\n- `external_version` (optional): Version information for the protected data\n- `username` (conditionally required): User identity for authorization (required if 'jwt' is not provided)\n- `jwt` (conditionally required): JWT token for authorization (required if 'username' is not provided)\n\n> **Note:** At least one of 'username' or 'jwt' is required for reveal operations.\n\n**Example:**\n```json\n{\n  \"name\": \"reveal_data\",\n  \"arguments\": {\n    \"protected_data\": \"enc_abc123def456\",\n    \"username\": \"authorized_user\",\n    \"protection_policy_name\": \"email_policy\",\n    \"external_version\": \"1003000\",\n    \"jwt\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n  }\n}\n```\n\n#### `reveal_bulk`\nReveal multiple protected data items in a single batch operation.\n\n**Parameters:**\n- `protected_data` (required): The protected data to reveal\n- `username` (required): User identity for authorization\n- `protection_policy_name` (required): Policy name used for protection\n- `external_version` (optional): From the output of the protect operation when using a protection policy with external versioning\n- `jwt` (optional): JWT token for authorization\n\n**Example:**\n```json\n{\n  \"name\": \"reveal_bulk\",\n  \"arguments\": {\n    \"username\": \"authorized_user\",\n    \"protected_data_array\": [\n      {\n        \"protection_policy_name\": \"email_policy\",\n        \"protected_data\": \"enc_abc123\"\n      },\n      {\n        \"protection_policy_name\": \"ssn_policy\",\n        \"protected_data\": \"enc_def456\"\n      }\n    ],\n    \"jwt\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n  }\n}\n```\n\n### Monitoring Tools\n\n#### `get_metrics`\nGet CRDP service metrics.\n\n#### `check_health`\nCheck CRDP service health status.\n\n#### `check_liveness`\nCheck CRDP service liveness.\n\n## Versioning Support\n\nThe server supports Portection Policy versioning:\n\n### 1. External Versioning\nReturns both protected data and external version:\n```\nData protected successfully. Protected data: abcdefcLJTrU0Y8FKC\nExternal version: 1003000\n```\n\n### 2. Internal Versioning\nReturns protected data with embedded version:\n```\nData protected successfully. Protected data: 1001000Y57IlQvok1Ke\n```\n\n### 3. Versioning Disabled\nReturns protected data only:\n```\nData protected successfully. Protected data: BcmX5McZK6BB\n```\n\n## Testing\n\nFor comprehensive testing instructions, see [testing](docs/testing.md).\n\n## Integration with AI Assistants\n\nThis MCP server can be integrated with various AI assistants to enable secure data protection and revelation capabilities through natural language interactions.\n\n### Supported AI Assistants\n\n- **Cursor AI**\n- **Google Gemini**\n- **Claude Desktop**\n\n### Quick Setup\n\nAll supported AI assistants use the same `mcp.json` configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"crdp\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/your/crdp-mcp-server/dist/crdp-mcp-server.js\"],\n      \"env\": {\n        \"CRDP_SERVICE_URL\": \"http://your-crdp-server:8090\",\n        \"CRDP_PROBES_URL\": \"http://your-crdp-server:8080\",\n        \"MCP_TRANSPORT\": \"stdio\"\n      }\n    }\n  }\n}\n```\n\n### Usage Examples\n\nAfter configuration, you can use natural language commands like:\n\n- \"Protect my email address john.doe@example.com using the email_policy\"\n- \"Reveal the protected data abc123def456 for user admin using protection policy ssn_policy\"\n- \"Check the health of my CRDP service\"\n\nFor detailed setup instructions and troubleshooting, see [AI Assistant Integration Guide](docs/ai-assistants.md).\n\n## n8n Integration\n\nThis project includes n8n workflow templates for creating conversational AI interfaces to the CRDP service:\n\n### **n8n Templates**\n\n- **`crdp_demo_mcp_server.json`**: MCP Server workflow that exposes CRDP tools\n- **`crdp_demo_mcp_client.json`**: MCP Client workflow with conversational AI interface. \n**Note:** You will need an [OpenAI API key](https://platform.openai.com/api-keys) to use the conversational AI features. Sign up or generate a key at the OpenAI website.\n\n### **Features**\n\n- **Conversational Interface**: Protect and reveal data using natural language\n- **JWT Authorization**: Secure operations with optional JWT tokens\n- **Conversational Memory**: Maintains context across chat sessions\n- **Intelligent Tool Selection**: Automatically uses bulk operations for multiple data items\n- **Strict Security**: Always requires proper authorization parameters\n\n### **Quick Setup**\n\n1. **Import Workflows**: Import both JSON files into your n8n instance\n2. **Configure Credentials**: Add your OpenAI credentials to the MCP Client\n3. **Activate Workflows**: Enable both workflows\n4. **Start Chatting**: Use the chat interface to interact with CRDP\n\nFor detailed n8n setup instructions, see [n8n docs](n8n/README.md).\n\n### Quick Test\n\nTest the server using curl:\n\n```bash\n# Test HTTP transport\ncurl -X POST http://localhost:3000/mcp \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"jsonrpc\": \"2.0\",\n    \"id\": 1,\n    \"method\": \"tools/call\",\n    \"params\": {\n      \"name\": \"protect_data\",\n      \"arguments\": {\n        \"data\": \"test@example.com\",\n        \"protection_policy_name\": \"email_policy\"\n      }\n    }\n  }'\n```\n\n## Development\n\n### Project Structure\n\n```\ncrdp-mcp-server/\n├── src/\n│   └── crdp-mcp-server.ts    # Main server implementation\n├── dist/                     # Compiled JavaScript output\n├── docs/                     # Documentation\n├── n8n/                      # n8n workflow templates\n├── package.json              # Project configuration\n├── scripts/\t\t\t\t  \n│\t└── test-server.ts\t  # Test Script\n└── tsconfig.json             # TypeScript configuration\n```\n\n### npm Commands\n\n| Script | Description |\n|--------|-------------|\n| `npm start` | Start the server (stdio transport) |\n| `npm run dev` | Start development server with auto-reload |\n| `npm run build` | Compile TypeScript to JavaScript |\n| `npm run clean` | Clean the dist directory |\n\n## Security Considerations\n\n- All sensitive data is processed through the secure CRDP service\n- User authorization is required for all reveal operations\n- The server does not store sensitive data locally\n- This MCP server only supports CRDP running in no-tls mode\n\n## Troubleshooting\n\n### Common Issues\n\n1. **\"tsc is not recognized\"**: Install TypeScript globally with `npm install -g typescript`\n2. **Connection refused**: Ensure CRDP service is running and accessible\n3. **404 errors**: Ensure correct protection policy names are being used\n\n### Logs\n\nThe server outputs logs to stderr. Check for:\n- CRDP service connection status\n- Tool execution results\n- Error messages and stack traces\n\n## Contributing\n\n1. Fork the repository\n2. Create a feature branch\n3. Make your changes\n4. Add tests if applicable\n5. Submit a pull request\n\n## License\n\nThis project is licensed under the MIT License (c) 2025 Thales Group. See the [LICENSE](LICENSE) file for details.\n\n## Support\n\nFor issues and questions:\n- Check the [troubleshooting section](#troubleshooting)\n- Review the [testing documentation](docs/testing.md)\n- Open an issue on GitHub\n\n\n",
+  "category": "Security",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "crdp-stdio": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "crdp-http": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {
+          "MCP_TRANSPORT": "streamable-http"
+        }
+      },
+      "crdp-ai-assistant-config": {
+        "command": "node",
+        "args": ["/path/to/your/crdp-mcp-server/dist/crdp-mcp-server.js"],
+        "env": {
+          "CRDP_SERVICE_URL": "http://your-crdp-server:8090",
+          "CRDP_PROBES_URL": "http://your-crdp-server:8080",
+          "MCP_TRANSPORT": "stdio"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sanyambassi",
+    "repo": "thales-cdsp-crdp-mcp-server",
+    "url": "https://github.com/sanyambassi/thales-cdsp-crdp-mcp-server",
+    "name": "thales-cdsp-crdp-mcp-server",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f77e225ea2ee05936873a302081f1d3605b2fac0"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.026Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\r\n  \"name\": \"crdp-mcp-server\",\r\n  \"version\": \"1.0.0\",\r\n  \"description\": \"MCP server for CRDP\",\r\n  \"main\": \"dist/crdp-mcp-server.js\",\r\n  \"scripts\": {\r\n    \"start\": \"node dist/crdp-mcp-server.js\",\r\n    \"dev\": \"ts-node-dev --respawn src/crdp-mcp-server.ts\",\r\n    \"build\": \"tsc\",\r\n    \"clean\": \"rimraf dist\",\r\n    \"test\": \"node test-server.js\"\r\n  },\r\n  \"dependencies\": {\r\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\r\n    \"axios\": \"^1.6.0\",\r\n    \"express\": \"^4.18.0\",\r\n    \"zod\": \"^3.22.0\"\r\n  },\r\n  \"devDependencies\": {\r\n    \"@types/express\": \"^4.17.0\",\r\n    \"@types/node\": \"^20.0.0\",\r\n    \"rimraf\": \"^5.0.0\",\r\n    \"ts-node-dev\": \"^2.0.0\",\r\n    \"typescript\": \"^5.0.0\"\r\n  },\r\n  \"overrides\": {\r\n    \"glob\": \"^10.0.0\",\r\n    \"rimraf\": \"^5.0.0\"\r\n  }\r\n} "
+}

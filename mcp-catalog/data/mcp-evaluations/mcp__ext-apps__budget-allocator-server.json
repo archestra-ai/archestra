@@ -1,0 +1,87 @@
+{
+  "name": "mcp__ext-apps__budget-allocator-server",
+  "display_name": "Budget Allocator",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPjxwYXRoIGZpbGw9IiMwMDAwMDAiIGQ9Ik0xMy44NSAwYTQuMTYgNC4xNiAwIDAgMC0yLjk1IDEuMjE3TDEuNDU2IDEwLjY2YS44MzUuODM1IDAgMCAwIDAgMS4xOGEuODM1LjgzNSAwIDAgMCAxLjE4IDBsOS40NDItOS40NDJhMi40OSAyLjQ5IDAgMCAxIDMuNTQxIDBhMi40OSAyLjQ5IDAgMCAxIDAgMy41NDFMOC41OSAxMi45N2wtLjEuMWEuODM1LjgzNSAwIDAgMCAwIDEuMThhLjgzNS44MzUgMCAwIDAgMS4xOCAwbC4xLS4wOThsNy4wMy03LjAzNGEyLjQ5IDIuNDkgMCAwIDEgMy41NDIgMGwuMDQ5LjA1YTIuNDkgMi40OSAwIDAgMSAwIDMuNTRsLTguNTQgOC41NGExLjk2IDEuOTYgMCAwIDAgMCAyLjc1NWwxLjc1MyAxLjc1M2EuODM1LjgzNSAwIDAgMCAxLjE4IDBhLjgzNS44MzUgMCAwIDAgMC0xLjE4bC0xLjc1My0xLjc1M2EuMjY2LjI2NiAwIDAgMSAwLS4zOTRsOC41NC04LjU0YTQuMTg1IDQuMTg1IDAgMCAwIDAtNS45bC0uMDUtLjA1YTQuMTYgNC4xNiAwIDAgMC0yLjk1LTEuMjE4Yy0uMiAwLS40MDEuMDItLjYuMDQ4YTQuMTcgNC4xNyAwIDAgMC0xLjE3LTMuNTUyQTQuMTYgNC4xNiAwIDAgMCAxMy44NSAwbTAgMy4zMzNhLjg0Ljg0IDAgMCAwLS41OS4yNDVMNi4yNzUgMTAuNTZhNC4xODYgNC4xODYgMCAwIDAgMCA1LjkwMmE0LjE4NiA0LjE4NiAwIDAgMCA1LjkwMiAwTDE5LjE2IDkuNDhhLjgzNS44MzUgMCAwIDAgMC0xLjE4YS44MzUuODM1IDAgMCAwLTEuMTggMGwtNi45ODUgNi45ODRhMi40OSAyLjQ5IDAgMCAxLTMuNTQgMGEyLjQ5IDIuNDkgMCAwIDEgMC0zLjU0bDYuOTgzLTYuOTg1YS44MzUuODM1IDAgMCAwIDAtMS4xOGEuODQuODQgMCAwIDAtLjU5LS4yNDUiLz48L3N2Zz4=",
+  "description": "Interactive budget allocation interface for planning and visualizing spending distributions",
+  "author": {
+    "name": "modelcontextprotocol"
+  },
+  "server": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "--silent",
+      "--registry=https://registry.npmjs.org/",
+      "@modelcontextprotocol/server-budget-allocator",
+      "--stdio"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": null,
+  "category": "MCP Apps Demo",
+  "quality_score": null,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-budget-allocator": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "--silent",
+          "--registry=https://registry.npmjs.org/",
+          "@modelcontextprotocol/server-budget-allocator",
+          "--stdio"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "github_info": {
+    "owner": "modelcontextprotocol",
+    "repo": "ext-apps",
+    "url": "https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/budget-allocator-server",
+    "name": "mcp__ext-apps__budget-allocator-server",
+    "path": "examples/budget-allocator-server",
+    "stars": 0,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@anthropic-ai/sdk",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": null
+}

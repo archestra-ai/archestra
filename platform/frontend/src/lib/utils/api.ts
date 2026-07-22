@@ -51,6 +51,24 @@ export function getApiErrorType(error: unknown): string | undefined {
 }
 
 /**
+ * The machine-readable `internal_code` of an API error, if present. Lets a caller
+ * branch on a specific failure (e.g. which field's validation failed) to show the
+ * message inline instead of a generic toast.
+ */
+export function getApiErrorInternalCode(error: unknown): string | undefined {
+  const unwrapped = unwrapApiError(error);
+  if (
+    typeof unwrapped === "object" &&
+    unwrapped !== null &&
+    "internal_code" in unwrapped &&
+    typeof (unwrapped as { internal_code?: unknown }).internal_code === "string"
+  ) {
+    return (unwrapped as { internal_code: string }).internal_code;
+  }
+  return undefined;
+}
+
+/**
  * Convert an API SDK error object into a proper Error instance.
  * Use this instead of `throw error` to avoid Sentry's
  * "Object captured as exception with keys: error" warning.
@@ -67,7 +85,10 @@ export function handleApiError(error: ApiSdkError) {
   if (typeof window !== "undefined") {
     // Errors stay long enough to read and copy; the close button dismisses early.
     // The toast shows the humanized message; Sentry keeps the raw error.
-    toast.error(getApiErrorMessage(error), { duration: 12000 });
+    // Keyed by message so a repeating failure (retries, several queries hitting
+    // the same missing permission) refreshes one toast instead of stacking.
+    const message = getApiErrorMessage(error);
+    toast.error(message, { duration: 12000, id: message });
   }
 
   void import("@sentry/nextjs")

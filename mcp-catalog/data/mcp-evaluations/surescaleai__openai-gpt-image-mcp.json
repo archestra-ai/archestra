@@ -1,0 +1,140 @@
+{
+  "name": "surescaleai__openai-gpt-image-mcp",
+  "display_name": "openai-gpt-image-mcp",
+  "description": "A Model Context Protocol (MCP) tool server for OpenAI's GPT-4o/gpt-image-1 image generation and editing APIs.",
+  "author": {
+    "name": "SureScaleAI"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js", "--env-file", "${user_config.env_file}"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "AZURE_OPENAI_API_KEY": "${user_config.azure_openai_api_key}",
+      "AZURE_OPENAI_ENDPOINT": "${user_config.azure_openai_endpoint}",
+      "OPENAI_API_VERSION": "${user_config.openai_api_version}",
+      "MCP_HF_WORK_DIR": "${user_config.mcp_hf_work_dir}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key (e.g., sk-...). Required for standard OpenAI access.",
+      "sensitive": true,
+      "required": false
+    },
+    "azure_openai_api_key": {
+      "type": "string",
+      "title": "Azure OpenAI API Key",
+      "description": "Your Azure OpenAI API key. Required for Azure deployments.",
+      "sensitive": true,
+      "required": false
+    },
+    "azure_openai_endpoint": {
+      "type": "string",
+      "title": "Azure OpenAI Endpoint",
+      "description": "Your Azure OpenAI endpoint URL (e.g., my.endpoint.com). Required for Azure deployments.",
+      "required": false
+    },
+    "openai_api_version": {
+      "type": "string",
+      "title": "OpenAI API Version",
+      "description": "The API version for Azure OpenAI (e.g., 2024-12-01-preview). Required for Azure deployments.",
+      "required": false
+    },
+    "mcp_hf_work_dir": {
+      "type": "directory",
+      "title": "Working Directory",
+      "description": "Directory to save large images and file outputs. Defaults to the system's temporary directory if not set.",
+      "required": false
+    },
+    "env_file": {
+      "type": "file",
+      "title": "Environment File",
+      "description": "Optional path to a .env file containing configuration variables instead of providing them here.",
+      "required": false
+    }
+  },
+  "readme": "# openai-gpt-image-mcp\n\n<p align=\"center\">\n  <a href=\"https://www.npmjs.com/package/@modelcontextprotocol/sdk\"><img src=\"https://img.shields.io/npm/v/@modelcontextprotocol/sdk?label=MCP%20SDK&color=blue\" alt=\"MCP SDK\"></a>\n  <a href=\"https://www.npmjs.com/package/openai\"><img src=\"https://img.shields.io/npm/v/openai?label=OpenAI%20SDK&color=blueviolet\" alt=\"OpenAI SDK\"></a>\n  <a href=\"https://github.com/SureScaleAI/openai-gpt-image-mcp/blob/main/LICENSE\"><img src=\"https://img.shields.io/github/license/SureScaleAI/openai-gpt-image-mcp?color=brightgreen\" alt=\"License\"></a>\n  <a href=\"https://github.com/SureScaleAI/openai-gpt-image-mcp/stargazers\"><img src=\"https://img.shields.io/github/stars/SureScaleAI/openai-gpt-image-mcp?style=social\" alt=\"GitHub stars\"></a>\n  <a href=\"https://github.com/SureScaleAI/openai-gpt-image-mcp/actions\"><img src=\"https://img.shields.io/github/actions/workflow/status/SureScaleAI/openai-gpt-image-mcp/main.yml?label=build&logo=github\" alt=\"Build Status\"></a>\n</p>\n\n---\n\nA Model Context Protocol (MCP) tool server for OpenAI's GPT-4o/gpt-image-1 image generation and editing APIs.\n\n- **Generate images** from text prompts using OpenAI's latest models.\n- **Edit images** (inpainting, outpainting, compositing) with advanced prompt control.\n- **Supports**: Claude Desktop, Cursor, VSCode, Windsurf, and any MCP-compatible client.\n\n---\n\n## ✨ Features\n\n- **create-image**: Generate images from a prompt, with advanced options (size, quality, background, etc).\n- **edit-image**: Edit or extend images using a prompt and optional mask, supporting both file paths and base64 input.\n- **File output**: Save generated images directly to disk, or receive as base64.\n\n---\n\n## 🚀 Installation\n\n```sh\ngit clone https://github.com/SureScaleAI/openai-gpt-image-mcp.git\ncd openai-gpt-image-mcp\nyarn install\nyarn build\n```\n\n---\n\n## 🔑 Configuration\n\nAdd to Claude Desktop or VSCode (including Cursor/Windsurf) config:\n\n```json\n{\n  \"mcpServers\": {\n    \"openai-gpt-image-mcp\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/dist/index.js\"],\n      \"env\": { \"OPENAI_API_KEY\": \"sk-...\" }\n    }\n  }\n}\n```\n\nAlso supports Azure deployments:\n\n```json\n{\n  \"mcpServers\": {\n    \"openai-gpt-image-mcp\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/dist/index.js\"],\n      \"env\": { \n        \"AZURE_OPENAI_API_KEY\": \"sk-...\",\n        \"AZURE_OPENAI_ENDPOINT\": \"my.endpoint.com\",\n        \"OPENAI_API_VERSION\": \"2024-12-01-preview\"\n      }\n    }\n  }\n}\n```\n\nAlso supports supplying an environment files:\n\n```json\n{\n  \"mcpServers\": {\n    \"openai-gpt-image-mcp\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/dist/index.js\", \"--env-file\", \"./deployment/.env\"]\n    }\n  }\n}\n```\n\n---\n\n## ⚡ Advanced\n\n- For `create-image`, set `n` to generate up to 10 images at once.\n- For `edit-image`, provide a mask image (file path or base64) to control where edits are applied.\n- Provide an environment file with `--env-file path/to/file/.env`\n- See `src/index.ts` for all options.\n\n---\n\n## 🧑‍💻 Development\n\n- TypeScript source: `src/index.ts`\n- Build: `yarn build`\n- Run: `node dist/index.js`\n\n---\n\n## 📝 License\n\nMIT\n\n---\n\n## 🩺 Troubleshooting\n\n- Make sure your `OPENAI_API_KEY` is valid and has image API access.\n- You must have a [verified OpenAI organization](https://platform.openai.com/account/organization). After verifying, it can take 15–20 minutes for image API access to activate.\n- File paths must be absolute.\n  - **Unix/macOS/Linux**: Starting with `/` (e.g., `/path/to/image.png`)\n  - **Windows**: Drive letter followed by `:` (e.g., `C:/path/to/image.png` or `C:\\path\\to\\image.png`)\n- For file output, ensure the directory is writable.\n- If you see errors about file types, check your image file extensions and formats.\n\n---\n\n## ⚠️ Limitations & Large File Handling\n\n- **1MB Payload Limit:** MCP clients (including Claude Desktop) have a hard 1MB limit for tool responses. Large images (especially high-res or multiple images) can easily exceed this limit if returned as base64.\n- **Auto-Switch to File Output:** If the total image size exceeds 1MB, the tool will automatically save images to disk and return the file path(s) instead of base64. This ensures compatibility and prevents errors like `result exceeds maximum length of 1048576`.\n- **Default File Location:** If you do not specify a `file_output` path, images will be saved to `/tmp` (or the directory set by the `MCP_HF_WORK_DIR` environment variable) with a unique filename.\n- **Environment Variable:**\n  - `MCP_HF_WORK_DIR`: Set this to control where large images and file outputs are saved. Example: `export MCP_HF_WORK_DIR=/your/desired/dir`\n- **Best Practice:** For large or production images, always use file output and ensure your client is configured to handle file paths.\n\n---\n\n## 📚 References\n\n- [OpenAI Images API Documentation](https://platform.openai.com/docs/api-reference/images)\n\n---\n\n## 🙏 Credits\n\n- Built with [@modelcontextprotocol/sdk](https://www.npmjs.com/package/@modelcontextprotocol/sdk)\n- Uses [openai](https://www.npmjs.com/package/openai) Node.js SDK \n- Built by [SureScale.ai](https://surescale.ai)\n- Contributions from [Axle Research and Technology](https://axleinfo.com/)",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "openai-gpt-image-mcp": {
+        "command": "node",
+        "args": ["dist/index.js"],
+        "env": {}
+      },
+      "openai-gpt-image-mcp-configured": {
+        "command": "node",
+        "args": ["/absolute/path/to/dist/index.js"],
+        "env": {
+          "OPENAI_API_KEY": "sk-..."
+        }
+      },
+      "openai-gpt-image-mcp-azure": {
+        "command": "node",
+        "args": ["/absolute/path/to/dist/index.js"],
+        "env": {
+          "AZURE_OPENAI_API_KEY": "sk-...",
+          "AZURE_OPENAI_ENDPOINT": "my.endpoint.com",
+          "OPENAI_API_VERSION": "2024-12-01-preview"
+        }
+      },
+      "openai-gpt-image-mcp-with-env-file": {
+        "command": "node",
+        "args": ["/absolute/path/to/dist/index.js", "--env-file", "./deployment/.env"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "SureScaleAI",
+    "repo": "openai-gpt-image-mcp",
+    "url": "https://github.com/SureScaleAI/openai-gpt-image-mcp",
+    "name": "surescaleai__openai-gpt-image-mcp",
+    "path": null,
+    "stars": 70,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "558265a1c92d4ab51efdd03135286b727487204c"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:10.052Z",
+  "evaluation_model": null,
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"openai-gpt-image-mcp\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"license\": \"MIT\",\n  \"devDependencies\": {\n    \"@types/node\": \"^22.15.2\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.2\",\n    \"openai\": \"^4.96.0\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\"\n  }\n}\n"
+}

@@ -1,0 +1,99 @@
+{
+  "name": "yuchenssr__mindmap-mcp-server",
+  "display_name": "mindmap-mcp-server",
+  "description": "mindmap, mcp server, artifact",
+  "author": {
+    "name": "YuChenSSR"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/mindmap_mcp_server/server.py", "--return-type", "${user_config.return_type}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "return_type": {
+      "type": "string",
+      "title": "Return Type",
+      "description": "Specify the return type of the mindmap content. Choose 'html' to return the entire HTML content or 'filePath' to save to a file and return the path.",
+      "required": true,
+      "default": "filePath"
+    }
+  },
+  "readme": "# Mindmap MCP Server\n\n<p align=\"center\">\n  <img src=\"https://raw.githubusercontent.com/YuChenSSR/pics/master/imgs/2025-03-21/JMi7Mn89Hw5ikd9z.jpeg\" alt=\"mindmap_mcp\" width=\"50%\">\n</p>\n\nA Model Context Protocol (MCP) server for converting Markdown content to interactive mindmaps.\n\n\n\n## Installation\n\n```bash\npip install mindmap-mcp-server\n```\n\nOr using `uvx`:\n\n```bash\nuvx mindmap-mcp-server\n```\nOr using `docker` safer and easier.\n\n## Attention\n\nThree installation methods have been successfully tested on macOS and Linux. \n\nFor Windows users experiencing issues with `npx` for this MCP, consider using the Docker method. Alternatively, if you use Visual Studio Code, the [\"Markmap\"](https://marketplace.visualstudio.com/items?itemName=gera2ld.markmap-vscode) extension offers a potentially simpler solution than navigating command-line tools.\n\n---\n\nIf you're experiencing unresolved issues, you can use my recent system prompt as a Mindmap Assistant instead of using this MCP server.\n\n<details>  \n<summary>Using my system prompt instead of using this MCP server</summary>   \n\n```\nYou are a specialized assistant that generates HTML code for interactive markdown-based mind maps (markmaps). When a user sends you content, respond with a complete HTML document that displays their content as a markmap visualization.\nIf artifact tool is turned on, you can use the artifact.\n\nFollow these requirements:\n1. Use the markmap-autoloader library (version 0.18 or latest stable version)\n2. Format the HTML exactly according to the template below\n3. Replace the demo content in the template with the user's content, preserving their hierarchical structure\n4. Maintain the markmap configuration options (maxWidth: 300, colorFreezeLevel: 2)\n5. If the user doesn't provide markdown formatting (# for headings), format their content appropriately with main topics using # and subtopics using ##\n\nTemplate to follow:\n\n<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>Markmap</title>\n    <style>\n      svg.markmap {\n        width: 100%;\n        height: 100vh;\n      }\n    </style>\n    <script src=\"https://cdn.jsdelivr.net/npm/markmap-autoloader@0.18\"></script>\n  </head>\n  <body>\n    <div class=\"markmap\">\n      <script type=\"text/template\">\n        ---\n        markmap:\n          maxWidth: 300\n          colorFreezeLevel: 2\n        ---\n\n        # markmap\n\n        ## Links\n\n        - <https://markmap.js.org/>\n        - [GitHub](https://github.com/markmap/markmap)\n\n        ## Related\n\n        - [coc-markmap](https://github.com/markmap/coc-markmap)\n        - [gatsby-remark-markmap](https://github.com/markmap/gatsby-remark-markmap)\n\n        ## Features\n\n        - links\n        - **inline** ~~text~~ *styles*\n        - multiline\n          text\n        - `inline code`\n        - Katex - $x = {-b \\pm \\sqrt{b^2-4ac} \\over 2a}$\n        - This is a very very very very very very very very very very very very very very very long line.\n      </script>\n    </div>\n  </body>\n</html>\n```\n  \n*Visualization options:*  (If formulas or symbols don’t display correctly, download the HTML file and open it in a browser.)\n1. View the mindmap  in artifacts (if available):\n![system_prompt_artifact](https://raw.githubusercontent.com/YuChenSSR/pics/master/imgs/2025-05-20/1i9LIfoVRdCV97HM.png)\n  \n2. Render the HTML file as a mindmap:\n![system_prompt_render](https://raw.githubusercontent.com/YuChenSSR/pics/master/imgs/2025-05-20/qv4ActvFaphc64oA.png)\n\n</details>\n\n---\n\n## Prerequisites\n\nThis package requires Node.js to be installed when using command `python` or `uvx` to run the server.\n\n\n\n## Usage\n\n### With Claude Desktop or other MCP clients\n\nAdd this server to your `claude_desktop_config.json`:\n\n<details>\n \n <summary>using `uvx`:</summary>\n\n```json\n{\n  \"mcpServers\": {\n    \"mindmap\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mindmap-mcp-server\", \"--return-type\", \"html\"]\n    }\n  }\n}\n```\n\nor  \n\nrecommended:\n\n```json\n{\n  \"mcpServers\": {\n    \"mindmap\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mindmap-mcp-server\", \"--return-type\", \"filePath\"]\n    }\n  }\n}\n```\n\nwe use `--return-type` to specify the return type of the mindmap content, you can choose `html` or `filePath` according to your needs.   \n`html` will return the entire HTML content of the mindmap, which you can preview in your AI client's artifact; \n\n![return_html_content](https://raw.githubusercontent.com/YuChenSSR/pics/master/imgs/2025-03-20/qAEimhwZJDQ3NBLs.png)\n\n![html_preview](https://raw.githubusercontent.com/YuChenSSR/pics/master/imgs/2025-03-21/SujqY2L5lhWSHWvi.png)\n\n\n`filePath` will save the mindmap to a file and return the file path,which you can open in your browser. It can **save your tokens** !\n\n![generate_file](https://raw.githubusercontent.com/YuChenSSR/pics/master/imgs/2025-03-20/WDqlWhsoiAYpLmBF.png)\n\n![file_to_open](https://raw.githubusercontent.com/YuChenSSR/pics/master/imgs/2025-03-20/jfRIDc5mfvNtKykC.png) \n\n</details>\n\n<details>\n<summary>using `python`:</summary>\n\nUsing [a specific Python file](https://github.com/YuChenSSR/mindmap-mcp-server/blob/main/mindmap_mcp_server/server.py) in this repository:\n\n\n```json\n{\n  \"mcpServers\": {\n    \"mindmap\": {\n      \"command\": \"python\",\n      \"args\": [\"/path/to/your/mindmap_mcp_server/server.py\", \"--return-type\", \"html\"]\n    }\n  }\n}\n```\n  \nor   \n\n```json\n{\n  \"mcpServers\": {\n    \"mindmap\": {\n      \"command\": \"python\",\n      \"args\": [\"/path/to/your/mindmap_mcp_server/server.py\", \"--return-type\", \"filePath\"]\n    }\n  }\n}\n```\nwe use `--return-type` to specify the return type of the mindmap content, you can choose `html` or `filePath` according to your needs. see using \\`uvx\\` for more details.\n\n</details>\n\n<details>\n\n<summary>using `docker`:</summary>\n\nFirst, you pull the image:\n\n```bash\ndocker pull ychen94/mindmap-converter-mcp\n```\n\nSecond, set the server:\n\n```json\n{\n  \"mcpServers\": {\n    \"mindmap-converter\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"--rm\", \"-i\", \"-v\", \"/path/to/output/folder:/output\", \"ychen94/mindmap-converter-mcp:latest\"]\n    }\n  }\n}\n```\n⚠️ Replace `/path/to/output/folder` with an actual path on your system where you want to save mind maps, such as `/Users/username/Downloads` on macOS or `C:\\\\Users\\\\username\\\\Downloads` on Windows.\n\n**Tools Provided in the docker container**\nThe server provides the following MCP tools:\n1. **markdown-to-mindmap-content**  \nConverts Markdown to an HTML mind map and returns the entire HTML content.  \nYou don't use the args: `-v` and `/path/to/output/folder:/output` in the command `docker`.  \n**Parameters**:   \n\t•\tmarkdown (string, required): The Markdown content to convert  \n\t•\ttoolbar (boolean, optional): Whether to show the toolbar (default: true)  \n**Best for**: Simple mind maps where the HTML content size isn't a concern. And you can use **artifact** in your AI client to preview the mindmap.  \n2. **markdown-to-mindmap-file**  \nConverts Markdown to an HTML mind map and saves it to a file in the mounted directory.  \n**Parameters**:  \n\t•\tmarkdown (string, required): The Markdown content to convert  \n\t•\tfilename (string, optional): Custom filename (default: auto-generated timestamp name)  \n\t•\ttoolbar (boolean, optional): Whether to show the toolbar (default: true)  \n**Best for**: Complex mind maps or when you want to **save the tokens** for later use.  \nyou can open the html file in your browser to view the mindmap. Also you can use the [iterm-mcp-server](https://github.com/ferrislucas/iterm-mcp) or other terminals' mcp servers to open the file in your browser without interrupting your workflow.  \n\n</details>\n\n### Troubleshooting \n\n**File Not Found**  \nIf your mind map file isn't accessible:  \n\t1\tCheck that you've correctly mounted a volume to the Docker container  \n\t2\tEnsure the path format is correct for your operating system  \n\t3\tMake sure Docker has permission to access the directory  \n \n**Docker Command Not Found**  \n\t1\tVerify Docker is installed and in your PATH  \n\t2\tTry using the absolute path to Docker  \n \n**Server Not Appearing in Claude**  \n\t1\tRestart Claude for Desktop after configuration changes  \n\t2\tCheck Claude logs for connection errors  \n\t3\tVerify Docker is running  \n\n**Advanced Usage  \nUsing with Other MCP Clients**  \nThis server works with any MCP-compatible client, not just Claude for Desktop. The server implements the Model Context Protocol (MCP) version 1.0 specification.  \n\n\n\n\n## Features  \n\nThis server provides a tool for converting Markdown content to mindmaps using the `markmap-cli` library:  \n\n- Convert Markdown to interactive mindmap HTML  \n- Option to create offline-capable mindmaps  \n- Option to hide the toolbar  \n- Return either HTML content or file path  \n\n## Example  \n\nIn Claude, you can ask:\n\n1. \n\"**give a mindmap for the following markdown code, using a mindmap tool:**\n```\n# Project Planning\n## Research\n### Market Analysis\n### Competitor Review\n## Design\n### Wireframes\n### Mockups\n## Development\n### Frontend\n### Backend\n## Testing\n### Unit Tests\n### User Testing\n```\n\"\n\n\nif you want to save the mindmap to a file, and then open it in your browser using the iTerm MCP server:   \n\n2. \n\"**give a mindmap for the following markdown input_code using a mindmap tool,\nafter that,use iterm to open the generated html file.\ninput_code:**\n```\nmarkdown content\n```\n\"\n\n\n3.\n\"**Think about the process of putting an elephant into a refrigerator, and provide a mind map. Open it with a terminal.**\"\n\n<details>\n\t\n<summary>see the result</summary>\n\t\n![aiworkflow](https://raw.githubusercontent.com/YuChenSSR/pics/master/imgs/2025-03-22/QUjGnpmUcPfd3lBI.png)\n\n![mindmapinbrowser](https://raw.githubusercontent.com/YuChenSSR/pics/master/imgs/2025-03-22/w7DZ4shFhLoQZruq.png)\n\n </details>\n\n \n**and more**\n\n\n## License\n\nThis project is licensed under the MIT License.\nFor more details, please see the LICENSE file in [this project repository](https://github.com/YuChenSSR/mindmap-mcp-server)  \n \n---\n \nIf this project is helpful to you, please consider giving it a Star ⭐️\n\nThe advancement of technology ought to benefit all individuals rather than exploit the general populace.\n",
+  "category": "Knowledge",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mindmap-mcp-server-html": {
+        "command": "uvx",
+        "args": ["mindmap-mcp-server", "--return-type", "html"],
+        "env": {}
+      },
+      "mindmap-mcp-server-filepath": {
+        "command": "uvx",
+        "args": ["mindmap-mcp-server", "--return-type", "filePath"],
+        "env": {}
+      },
+      "mindmap-mcp-server-python-html": {
+        "command": "python",
+        "args": ["/path/to/your/mindmap_mcp_server/server.py", "--return-type", "html"],
+        "env": {}
+      },
+      "mindmap-mcp-server-python-filepath": {
+        "command": "python",
+        "args": ["/path/to/your/mindmap_mcp_server/server.py", "--return-type", "filePath"],
+        "env": {}
+      },
+      "ychen94-mindmap-converter-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "-v", "/path/to/output/folder:/output", "ychen94/mindmap-converter-mcp:latest"],
+        "env": {},
+        "docker_image": "ychen94/mindmap-converter-mcp:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "YuChenSSR",
+    "repo": "mindmap-mcp-server",
+    "url": "https://github.com/YuChenSSR/mindmap-mcp-server",
+    "name": "yuchenssr__mindmap-mcp-server",
+    "path": null,
+    "stars": 190,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f61f76fd6093805dd207eebd40e5bad5a982c2a5"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:00.680Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"mindmap-mcp-server\"\nversion = \"0.1.1\"\ndescription = \"MCP server for converting Markdown to mindmaps\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = {file = \"LICENSE\"}\nauthors = [\n    {name = \"YuChenSSR\"}\n]\nkeywords = [\"mcp\", \"mindmap\", \"markdown\", \"claude\", \"ai\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Topic :: Software Development :: Libraries\",\n]\ndependencies = [\n    \"mcp>=1.2.0\",\n]\n\n[project.urls]\n\"Homepage\" = \"https://github.com/YuChenSSR/mindmap-mcp-server\"\n\"Bug Tracker\" = \"https://github.com/YuChenSSR/mindmap-mcp-server/issues\"\n\n[project.scripts]\nmindmap-mcp-server = \"mindmap_mcp_server.server:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"mindmap_mcp_server\"]\n"
+}

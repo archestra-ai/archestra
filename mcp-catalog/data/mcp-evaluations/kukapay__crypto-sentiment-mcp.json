@@ -1,0 +1,86 @@
+{
+  "name": "kukapay__crypto-sentiment-mcp",
+  "display_name": "crypto-sentiment-mcp",
+  "description": "An MCP server that delivers cryptocurrency sentiment analysis to AI agents.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {
+      "SANTIMENT_API_KEY": "${user_config.santiment_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "santiment_api_key": {
+      "type": "string",
+      "title": "Santiment API Key",
+      "description": "Your API key for accessing Santiment's data. Obtain a free or paid key from Santiment.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Crypto Sentiment MCP Server\n\nAn MCP server that delivers cryptocurrency sentiment analysis to AI agents, leveraging Santiment's aggregated social media and news data to track market mood and detect emerging trends.\n\n![GitHub License](https://img.shields.io/github/license/kukapay/crypto-sentiment-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n\n## Features\n\n- **Sentiment Analysis**: Retrieve sentiment balance (positive vs. negative) for specific cryptocurrencies.\n- **Social Volume Tracking**: Monitor total social media mentions and detect significant shifts (spikes or drops).\n- **Social Dominance**: Measure the share of discussions an asset occupies in crypto media.\n- **Trending Words**: Identify the most popular terms trending in cryptocurrency discussions.\n\n## Tools\n\n| Tool Name               | Description                                                                                   | Parameters                                  |\n|-------------------------|-----------------------------------------------------------------------------------------------|---------------------------------------------|\n| `get_sentiment_balance` | Get the average sentiment balance for an asset over a specified period.                      | `asset: str`, `days: int = 7`              |\n| `get_social_volume`     | Fetch the total number of social media mentions for an asset.                                | `asset: str`, `days: int = 7`              |\n| `alert_social_shift`    | Detect significant spikes or drops in social volume compared to the previous average.        | `asset: str`, `threshold: float = 50.0`, `days: int = 7` |\n| `get_trending_words`    | Retrieve the top trending words in crypto discussions, ranked by score over a period.        | `days: int = 7`, `top_n: int = 5`          |\n| `get_social_dominance`  | Measure the percentage of crypto media discussions dominated by an asset.                    | `asset: str`, `days: int = 7`              |\n\n## Prerequisites\n\n- **Python**: 3.10 or higher\n- **Santiment API Key**: Obtain a free or paid key from [Santiment](https://app.santiment.net/). \n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/crypto-sentiment-mcp.git\n   cd crypto-sentiment-mcp\n   ```\n\n2. **Configure Client**:\n    ```\n    {\n      \"mcpServers\": {\n        \"crypto-sentiment-mcp\": {\n          \"command\": \"uv\",\n          \"args\": [\"--directory\", \"path/to/crypto-sentiment-mcp\", \"run\", \"main.py\"],\n          \"env\": {\n            \"SANTIMENT_API_KEY\": \"your_api_key_here\"\n          }\n        }\n      }\n    }\n    ```  \n\n## Examples\n\nBelow are examples of natural language inputs and their corresponding outputs when interacting with the server via an MCP-compatible client:\n\n- **Input**: \"What's the sentiment balance for Bitcoin over the last week?\"\n  - **Output**: \"Bitcoin's sentiment balance over the past 7 days is 12.5.\"\n\n- **Input**: \"How many times has Ethereum been mentioned on social media in the past 5 days?\"\n  - **Output**: \"Ethereum's social volume over the past 5 days is 8,432 mentions.\"\n\n- **Input**: \"Tell me if there's been a big change in Bitcoin's social volume recently, with a 30% threshold.\"\n  - **Output**: \"Bitcoin's social volume spiked by 75.0% in the last 24 hours, from an average of 1,000 to 1,750.\"\n\n- **Input**: \"What are the top 3 trending words in crypto over the past 3 days?\"\n  - **Output**: \"Top 3 trending words over the past 3 days: 'halving', 'bullrun', 'defi'.\"\n\n- **Input**: \"How dominant is Ethereum in social media discussions this week?\"\n  - **Output**: \"Ethereum's social dominance over the past 7 days is 18.7%.\"\n\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Finance",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "crypto-sentiment-mcp": {
+        "command": "uv",
+        "args": ["--directory", "path/to/crypto-sentiment-mcp", "run", "main.py"],
+        "env": {
+          "SANTIMENT_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-sentiment-mcp",
+    "url": "https://github.com/kukapay/crypto-sentiment-mcp",
+    "name": "crypto-sentiment-mcp",
+    "path": null,
+    "stars": 29,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:13.785Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "sanpy",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": null
+}

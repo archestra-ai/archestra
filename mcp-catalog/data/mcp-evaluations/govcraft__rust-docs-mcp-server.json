@@ -1,0 +1,198 @@
+{
+  "name": "govcraft__rust-docs-mcp-server",
+  "display_name": "rust-docs-mcp-server",
+  "description": "🦀 Prevents outdated Rust code suggestions from AI assistants. This MCP server fetches current crate docs, uses embeddings/LLMs, and provides accurate context via a tool call.",
+  "author": {
+    "name": "Govcraft"
+  },
+  "server": {
+    "command": "rustdocs_mcp_server",
+    "args": ["${user_config.crate_package_id}", "--features", "${user_config.crate_features}"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key, required for generating embeddings and summarizing answers. The server also requires network access to interact with the OpenAI API.",
+      "sensitive": true,
+      "required": true
+    },
+    "crate_package_id": {
+      "type": "string",
+      "title": "Rust Crate Package ID",
+      "description": "The Cargo Package ID Specification for the target crate (e.g., 'serde@^1.0', 'reqwest@0.12.0', 'tokio').",
+      "required": true
+    },
+    "crate_features": {
+      "type": "string",
+      "title": "Crate Features",
+      "description": "Comma-separated list of features to enable for documentation generation (e.g., 'runtime-tokio-hyper-rustls'). This is necessary for crates that require specific features to be enabled for `cargo doc` to succeed.",
+      "required": false
+    }
+  },
+  "readme": "# Rust Docs MCP Server\n\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\n⭐ **Like this project? Please\n[star the repository](https://github.com/Govcraft/rust-docs-mcp-server) on\nGitHub to show your support and stay updated!** ⭐\n\n## Motivation\n\nModern AI-powered coding assistants (like Cursor, Cline, Roo Code, etc.) excel\nat understanding code structure and syntax but often struggle with the specifics\nof rapidly evolving libraries and frameworks, especially in ecosystems like Rust\nwhere crates are updated frequently. Their training data cutoff means they may\nlack knowledge of the latest APIs, leading to incorrect or outdated code\nsuggestions.\n\nThis MCP server addresses this challenge by providing a focused, up-to-date\nknowledge source for a specific Rust crate. By running an instance of this\nserver for a crate (e.g., `serde`, `tokio`, `reqwest`), you give your LLM coding\nassistant a tool (`query_rust_docs`) it can use _before_ writing code related to\nthat crate.\n\nWhen instructed to use this tool, the LLM can ask specific questions about the\ncrate's API or usage and receive answers derived directly from the _current_\ndocumentation. This significantly improves the accuracy and relevance of the\ngenerated code, reducing the need for manual correction and speeding up\ndevelopment.\n\nMultiple instances of this server can be run concurrently, allowing the LLM\nassistant to access documentation for several different crates during a coding\nsession.\n\nThis server fetches the documentation for a specified Rust crate, generates\nembeddings for the content, and provides an MCP tool to answer questions about\nthe crate based on the documentation context.\n\n## Features\n\n- **Targeted Documentation:** Focuses on a single Rust crate per server\n  instance.\n- **Feature Support:** Allows specifying required crate features for\n  documentation generation.\n- **Semantic Search:** Uses OpenAI's `text-embedding-3-small` model to find the\n  most relevant documentation sections for a given question.\n- **LLM Summarization:** Leverages OpenAI's `gpt-4o-mini-2024-07-18` model to\n  generate concise answers based _only_ on the retrieved documentation context.\n- **Caching:** Caches generated documentation content and embeddings in the\n  user's XDG data directory (`~/.local/share/rustdocs-mcp-server/` or similar)\n  based on crate, version, _and_ requested features to speed up subsequent\n  launches.\n- **MCP Integration:** Runs as a standard MCP server over stdio, exposing tools\n  and resources.\n\n## Prerequisites\n\n- **OpenAI API Key:** Needed for generating embeddings and summarizing answers.\n  The server expects this key to be available in the `OPENAI_API_KEY`\n  environment variable. (The server also requires network access to download\n  crate dependencies and interact with the OpenAI API).\n\n## Installation\n\nThe recommended way to install is to download the pre-compiled binary for your\noperating system from the\n[GitHub Releases page](https://github.com/Govcraft/rust-docs-mcp-server/releases).\n\n1. Go to the\n   [Releases page](https://github.com/Govcraft/rust-docs-mcp-server/releases).\n2. Download the appropriate archive (`.zip` for Windows, `.tar.gz` for\n   Linux/macOS) for your system.\n3. Extract the `rustdocs_mcp_server` (or `rustdocs_mcp_server.exe`) binary.\n4. Place the binary in a directory included in your system's `PATH` environment\n   variable (e.g., `/usr/local/bin`, `~/bin`).\n\n### Building from Source (Alternative)\n\nIf you prefer to build from source, you will need the\n[Rust Toolchain](https://rustup.rs/) installed.\n\n1. **Clone the repository:**\n   ```bash\n   git clone https://github.com/Govcraft/rust-docs-mcp-server.git\n   cd rust-docs-mcp-server\n   ```\n2. **Build the server:**\n   ```bash\n   cargo build --release\n   ```\n\n## Usage\n\n**Important Note for New Crates:**\n\nWhen using the server with a crate for the first time (or with a new version/feature set), it needs to download the documentation and generate embeddings. This process can take some time, especially for crates with extensive documentation, and requires an active internet connection and OpenAI API key.\n\nIt is recommended to run the server once directly from your command line for any new crate configuration *before* adding it to your AI coding assistant (like Roo Code, Cursor, etc.). This allows the initial embedding generation and caching to complete. Once you see the server startup messages indicating it's ready (e.g., \"MCP Server listening on stdio\"), you can shut it down (Ctrl+C). Subsequent launches, including those initiated by your coding assistant, will use the cached data and start much faster.\n\n\n### Running the Server\n\nThe server is launched from the command line and requires the **Package ID\nSpecification** for the target crate. This specification follows the format used\nby Cargo (e.g., `crate_name`, `crate_name@version_req`). For the full\nspecification details, see `man cargo-pkgid` or the\n[Cargo documentation](https://doc.rust-lang.org/cargo/reference/pkgid-spec.html).\n\nOptionally, you can specify required crate features using the `-F` or\n`--features` flag, followed by a comma-separated list of features. This is\nnecessary for crates that require specific features to be enabled for\n`cargo doc` to succeed (e.g., crates requiring a runtime feature like\n`async-stripe`).\n\n```bash\n# Set the API key (replace with your actual key)\nexport OPENAI_API_KEY=\"sk-...\"\n\n# Example: Run server for the latest 1.x version of serde\nrustdocs_mcp_server \"serde@^1.0\"\n\n# Example: Run server for a specific version of reqwest\nrustdocs_mcp_server \"reqwest@0.12.0\"\n\n# Example: Run server for the latest version of tokio\nrustdocs_mcp_server tokio\n\n# Example: Run server for async-stripe, enabling a required runtime feature\nrustdocs_mcp_server \"async-stripe@0.40\" -F runtime-tokio-hyper-rustls\n\n# Example: Run server for another crate with multiple features\nrustdocs_mcp_server \"some-crate@1.2\" --features feat1,feat2\n```\n\nOn the first run for a specific crate version _and feature set_, the server\nwill:\n\n1. Download the crate documentation using `cargo doc` (with specified features).\n2. Parse the HTML documentation.\n3. Generate embeddings for the documentation content using the OpenAI API (this\n   may take some time and incur costs, though typically only fractions of a US\n   penny for most crates; even a large crate like `async-stripe` with over 5000\n   documentation pages cost only $0.18 USD for embedding generation during\n   testing).\n4. Cache the documentation content and embeddings so that the cost isn't\n   incurred again.\n5. Start the MCP server.\n\nSubsequent runs for the same crate version _and feature set_ will load the data\nfrom the cache, making startup much faster.\n\n### MCP Interaction\n\nThe server communicates using the Model Context Protocol over standard\ninput/output (stdio). It exposes the following:\n\n- **Tool: `query_rust_docs`**\n  - **Description:** Query documentation for the specific Rust crate the server\n    was started for, using semantic search and LLM summarization.\n  - **Input Schema:**\n    ```json\n    {\n      \"type\": \"object\",\n      \"properties\": {\n        \"question\": {\n          \"type\": \"string\",\n          \"description\": \"The specific question about the crate's API or usage.\"\n        }\n      },\n      \"required\": [\"question\"]\n    }\n    ```\n  - **Output:** A text response containing the answer generated by the LLM based\n    on the relevant documentation context, prefixed with\n    `From <crate_name> docs:`.\n  - **Example MCP Call:**\n    ```json\n    {\n      \"jsonrpc\": \"2.0\",\n      \"method\": \"callTool\",\n      \"params\": {\n        \"tool_name\": \"query_rust_docs\",\n        \"arguments\": {\n          \"question\": \"How do I make a simple GET request with reqwest?\"\n        }\n      },\n      \"id\": 1\n    }\n    ```\n\n- **Resource: `crate://<crate_name>`**\n  - **Description:** Provides the name of the Rust crate this server instance is\n    configured for.\n  - **URI:** `crate://<crate_name>` (e.g., `crate://serde`, `crate://reqwest`)\n  - **Content:** Plain text containing the crate name.\n\n- **Logging:** The server sends informational logs (startup messages, query\n  processing steps) back to the MCP client via `logging/message` notifications.\n\n### Example Client Configuration (Roo Code)\n\nYou can configure MCP clients like Roo Code to run multiple instances of this\nserver, each targeting a different crate. Here's an example snippet for Roo\nCode's `mcp_settings.json` file, configuring servers for `reqwest` and\n`async-stripe` (note the added features argument for `async-stripe`):\n\n```json\n{\n  \"mcpServers\": {\n    \"rust-docs-reqwest\": {\n      \"command\": \"/path/to/your/rustdocs_mcp_server\",\n      \"args\": [\n        \"reqwest@0.12\"\n      ],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"YOUR_OPENAI_API_KEY_HERE\"\n      },\n      \"disabled\": false,\n      \"alwaysAllow\": []\n    },\n    \"rust-docs-async-stripe\": {\n      \"command\": \"rustdocs_mcp_server\",\n      \"args\": [\n        \"async-stripe@0.40\",\n        \"-F\",\n        \" runtime-tokio-hyper-rustls\"\n      ],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"YOUR_OPENAI_API_KEY_HERE\"\n      },\n      \"disabled\": false,\n      \"alwaysAllow\": []\n    }\n  }\n}\n```\n\n**Note:**\n\n- Replace `/path/to/your/rustdocs_mcp_server` with the actual path to the\n  compiled binary on your system if it isn't in your PATH.\n- Replace `YOUR_OPENAI_API_KEY_HERE` with your actual OpenAI API key.\n- The keys (`rust-docs-reqwest`, `rust-docs-async-stripe`) are arbitrary names\n  you choose to identify the server instances within Roo Code.\n\n### Example Client Configuration (Claude Desktop)\n\nFor Claude Desktop users, you can configure the server in the MCP settings.\nHere's an example configuring servers for `serde` and `async-stripe`:\n\n```json\n{\n  \"mcpServers\": {\n    \"rust-docs-serde\": {\n      \"command\": \"/path/to/your/rustdocs_mcp_server\",\n      \"args\": [\n        \"serde@^1.0\"\n      ]\n    },\n    \"rust-docs-async-stripe-rt\": {\n      \"command\": \"rustdocs_mcp_server\",\n      \"args\": [\n        \"async-stripe@0.40\",\n        \"-F\",\n        \"runtime-tokio-hyper-rustls\"\n      ]\n    }\n  }\n}\n```\n\n**Note:**\n\n- Ensure `rustdocs_mcp_server` is in your system's PATH or provide the full path\n  (e.g., `/path/to/your/rustdocs_mcp_server`).\n- The keys (`rust-docs-serde`, `rust-docs-async-stripe-rt`) are arbitrary names\n  you choose to identify the server instances.\n- Remember to set the `OPENAI_API_KEY` environment variable where Claude Desktop\n  can access it (this might be system-wide or via how you launch Claude\n  Desktop). Claude Desktop's MCP configuration might not directly support\n  setting environment variables per-server like Roo Code.\n- The example shows how to add the `-F` argument for crates like `async-stripe`\n  that require specific features.\n\n### Caching\n\n- **Location:** Cached documentation and embeddings are stored in the XDG data\n  directory, typically under\n  `~/.local/share/rustdocs-mcp-server/<crate_name>/<sanitized_version_req>/<features_hash>/embeddings.bin`.\n  The `sanitized_version_req` is derived from the version requirement, and\n  `features_hash` is a hash representing the specific combination of features\n  requested at startup. This ensures different feature sets are cached\n  separately.\n- **Format:** Data is cached using `bincode` serialization.\n- **Regeneration:** If the cache file is missing, corrupted, or cannot be\n  decoded, the server will automatically regenerate the documentation and\n  embeddings.\n\n## How it Works\n\n1. **Initialization:** Parses the crate specification and optional features from\n   the command line using `clap`.\n2. **Cache Check:** Looks for a pre-existing cache file for the specific crate,\n   version requirement, and feature set.\n3. **Documentation Generation (if cache miss):**\n   - Creates a temporary Rust project depending only on the target crate,\n     enabling the specified features in its `Cargo.toml`.\n   - Runs `cargo doc` using the `cargo` library API to generate HTML\n     documentation in the temporary directory.\n   - Dynamically locates the correct output directory within `target/doc` by\n     searching for the subdirectory containing `index.html`.\n4. **Content Extraction (if cache miss):**\n   - Walks the generated HTML files within the located documentation directory.\n   - Uses the `scraper` crate to parse each HTML file and extract text content\n     from the main content area (`<section id=\"main-content\">`).\n5. **Embedding Generation (if cache miss):**\n   - Uses the `async-openai` crate and `tiktoken-rs` to generate embeddings for\n     each extracted document chunk using the `text-embedding-3-small` model.\n   - Calculates the estimated cost based on the number of tokens processed.\n6. **Caching (if cache miss):** Saves the extracted document content and their\n   corresponding embeddings to the cache file (path includes features hash)\n   using `bincode`.\n7. **Server Startup:** Initializes the `RustDocsServer` with the\n   loaded/generated documents and embeddings.\n8. **MCP Serving:** Starts the MCP server using `rmcp` over stdio.\n9. **Query Handling (`query_rust_docs` tool):**\n   - Generates an embedding for the user's question.\n   - Calculates the cosine similarity between the question embedding and all\n     cached document embeddings.\n   - Identifies the document chunk with the highest similarity.\n   - Sends the user's question and the content of the best-matching document\n     chunk to the `gpt-4o-mini-2024-07-18` model via the OpenAI API.\n   - The LLM is prompted to answer the question based _only_ on the provided\n     context.\n   - Returns the LLM's response to the MCP client.\n\n## License\n\nThis project is licensed under the MIT License.\n\nCopyright (c) 2025 Govcraft\n\n## Sponsor\n\nIf you find this project helpful, consider sponsoring the development!\n\n[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-%E2%9D%A4-%23db61a2?logo=GitHub)](https://github.com/sponsors/Govcraft)\n",
+  "category": "Development",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "rustdocs-mcp-server-serde": {
+        "command": "rustdocs_mcp_server",
+        "args": ["serde@^1.0"],
+        "env": {
+          "OPENAI_API_KEY": "sk-..."
+        }
+      },
+      "rustdocs-mcp-server-reqwest": {
+        "command": "rustdocs_mcp_server",
+        "args": ["reqwest@0.12.0"],
+        "env": {
+          "OPENAI_API_KEY": "sk-..."
+        }
+      },
+      "rustdocs-mcp-server-tokio": {
+        "command": "rustdocs_mcp_server",
+        "args": ["tokio"],
+        "env": {
+          "OPENAI_API_KEY": "sk-..."
+        }
+      },
+      "rustdocs-mcp-server-async-stripe-configured": {
+        "command": "rustdocs_mcp_server",
+        "args": ["async-stripe@0.40", "-F", "runtime-tokio-hyper-rustls"],
+        "env": {
+          "OPENAI_API_KEY": "sk-..."
+        }
+      },
+      "rustdocs-mcp-server-some-crate-configured": {
+        "command": "rustdocs_mcp_server",
+        "args": ["some-crate@1.2", "--features", "feat1,feat2"],
+        "env": {
+          "OPENAI_API_KEY": "sk-..."
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Govcraft",
+    "repo": "rust-docs-mcp-server",
+    "url": "https://github.com/Govcraft/rust-docs-mcp-server",
+    "name": "govcraft__rust-docs-mcp-server",
+    "path": null,
+    "stars": 182,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "1350f507a335638bd97b43413bd150f5a0022073"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:37.013Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "dotenvy",
+      "importance": 4
+    },
+    {
+      "name": "serde",
+      "importance": 8
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "thiserror",
+      "importance": 4
+    },
+    {
+      "name": "walkdir",
+      "importance": 4
+    },
+    {
+      "name": "scraper",
+      "importance": 8
+    },
+    {
+      "name": "ndarray",
+      "importance": 7
+    },
+    {
+      "name": "async-openai",
+      "importance": 9
+    },
+    {
+      "name": "futures",
+      "importance": 6
+    },
+    {
+      "name": "bincode",
+      "importance": 7
+    },
+    {
+      "name": "tiktoken-rs",
+      "importance": 7
+    },
+    {
+      "name": "cargo",
+      "importance": 8
+    },
+    {
+      "name": "tempfile",
+      "importance": 4
+    },
+    {
+      "name": "anyhow",
+      "importance": 4
+    },
+    {
+      "name": "schemars",
+      "importance": 7
+    },
+    {
+      "name": "clap",
+      "importance": 8
+    },
+    {
+      "name": "xdg",
+      "importance": 5
+    },
+    {
+      "name": "dirs",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"rustdocs_mcp_server\"\nversion = \"1.3.1\"\nedition = \"2024\"\n\n[dependencies]\nrmcp = { version = \"0.1.5\", features = [\"tower\", \"transport-io\", \"transport-sse-server\", \"macros\", \"server\"] } # Add macros, server, schemars\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\ndotenvy = \"0.15\"\nserde = { version = \"1\", features = [\"derive\"] }\nserde_json = \"1\"\nthiserror = \"2.0.12\"\nwalkdir = \"2.5.0\"\nscraper = \"0.23.1\"\nndarray = { version = \"0.16.1\", features = [\"serde\"] } # Enable serde feature\nasync-openai = \"0.28.0\"\n# async-trait = \"0.1.88\" # Removed, likely no longer needed\nfutures = \"0.3\"\nbincode = { version = \"2.0.1\", features = [\"serde\"] } # Enable serde integration\ntiktoken-rs = \"0.6.0\"\n# Configure cargo crate to vendor openssl to avoid system mismatches\ncargo = { version = \"0.87.1\", default-features = false, features = [\"vendored-openssl\"] }\ntempfile = \"3.19.1\"\nanyhow = \"1.0.97\"\nschemars = \"0.8.22\"\nclap = { version = \"4.5.34\", features = [\"cargo\", \"derive\", \"env\"] }\n\n\n# --- Platform Specific Dependencies ---\n\n[target.'cfg(not(target_os = \"windows\"))'.dependencies]\nxdg = { version = \"2.5.2\", features = [\"serde\"] }\n\n[target.'cfg(target_os = \"windows\")'.dependencies]\ndirs = \"6.0.0\"\n\n\n# Optimize release builds for size\n[profile.release]\nopt-level = \"z\"  # Optimize for size\nlto = true         # Enable Link Time Optimization\ncodegen-units = 1  # Maximize size reduction opportunities\npanic = \"abort\"    # Abort on panic to remove unwinding code\nstrip = true       # Strip symbols from binary\n\n"
+}

@@ -1,0 +1,111 @@
+{
+  "name": "pab1it0__tripadvisor-mcp",
+  "display_name": "tripadvisor-mcp",
+  "description": "A Model Context Protocol (MCP) server for Tripadvisor Content API.  This provides access to Tripadvisor location data, reviews, and photos through standardized MCP interfaces, allowing AI assistants to search for travel destinations and experiences.",
+  "author": {
+    "name": "pab1it0"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "src/tripadvisor_mcp/main.py"],
+    "env": {
+      "TRIPADVISOR_API_KEY": "${user_config.tripadvisor_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "tripadvisor_api_key": {
+      "type": "string",
+      "title": "Tripadvisor API Key",
+      "description": "Your Tripadvisor Content API key from the Tripadvisor Developer Portal.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Tripadvisor MCP Server\n\nA [Model Context Protocol][mcp] (MCP) server for Tripadvisor Content API.\n\nThis provides access to Tripadvisor location data, reviews, and photos through standardized MCP interfaces, allowing AI assistants to search for travel destinations and experiences.\n\n[mcp]: https://modelcontextprotocol.io\n\n## Features\n\n- [x] Search for locations (hotels, restaurants, attractions) on Tripadvisor\n- [x] Get detailed information about specific locations\n- [x] Retrieve reviews and photos for locations\n- [x] Search for nearby locations based on coordinates\n- [x] API Key authentication\n- [x] Docker containerization support\n\n- [x] Provide interactive tools for AI assistants\n\nThe list of tools is configurable, so you can choose which tools you want to make available to the MCP client.\n\n## Usage\n\n1. Get your Tripadvisor Content API key from the [Tripadvisor Developer Portal](https://developer.tripadvisor.com/).\n\n2. Configure the environment variables for your Tripadvisor Content API, either through a `.env` file or system environment variables:\n\n```env\n# Required: Tripadvisor Content API configuration\nTRIPADVISOR_API_KEY=your_api_key_here\n```\n\n3. Add the server configuration to your client configuration file. For example, for Claude Desktop:\n\n```json\n{\n  \"mcpServers\": {\n    \"tripadvisor\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"<full path to tripadvisor-mcp directory>\",\n        \"run\",\n        \"src/tripadvisor_mcp/main.py\"\n      ],\n      \"env\": {\n        \"TRIPADVISOR_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\n> Note: if you see `Error: spawn uv ENOENT` in Claude Desktop, you may need to specify the full path to `uv` or set the environment variable `NO_UV=1` in the configuration.\n\n## Docker Usage\n\nThis project includes Docker support for easy deployment and isolation.\n\n### Building the Docker Image\n\nBuild the Docker image using:\n\n```bash\ndocker build -t tripadvisor-mcp-server .\n```\n\n### Running with Docker\n\nYou can run the server using Docker in several ways:\n\n#### Using docker run directly:\n\n```bash\ndocker run -it --rm \\\n  -e TRIPADVISOR_API_KEY=your_api_key_here \\\n  tripadvisor-mcp-server\n```\n\n#### Using docker-compose:\n\nCreate a `.env` file with your Tripadvisor API key and then run:\n\n```bash\ndocker-compose up\n```\n\n### Running with Docker in Claude Desktop\n\nTo use the containerized server with Claude Desktop, update the configuration to use Docker with the environment variables:\n\n```json\n{\n  \"mcpServers\": {\n    \"tripadvisor\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"-e\", \"TRIPADVISOR_API_KEY\",\n        \"tripadvisor-mcp-server\"\n      ],\n      \"env\": {\n        \"TRIPADVISOR_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\nThis configuration passes the environment variables from Claude Desktop to the Docker container by using the `-e` flag with just the variable name, and providing the actual values in the `env` object.\n\n## Development\n\nContributions are welcome! Please open an issue or submit a pull request if you have any suggestions or improvements.\n\nThis project uses [`uv`](https://github.com/astral-sh/uv) to manage dependencies. Install `uv` following the instructions for your platform:\n\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\nYou can then create a virtual environment and install the dependencies with:\n\n```bash\nuv venv\nsource .venv/bin/activate  # On Unix/macOS\n.venv\\Scripts\\activate     # On Windows\nuv pip install -e .\n```\n\n## Project Structure\n\nThe project has been organized with a `src` directory structure:\n\n```\ntripadvisor-mcp/\n├── src/\n│   └── tripadvisor_mcp/\n│       ├── __init__.py      # Package initialization\n│       ├── server.py        # MCP server implementation\n│       ├── main.py          # Main application logic\n├── Dockerfile               # Docker configuration\n├── docker-compose.yml       # Docker Compose configuration\n├── .dockerignore            # Docker ignore file\n├── pyproject.toml           # Project configuration\n└── README.md                # This file\n```\n\n### Testing\n\nThe project includes a test suite that ensures functionality and helps prevent regressions.\n\nRun the tests with pytest:\n\n```bash\n# Install development dependencies\nuv pip install -e \".[dev]\"\n\n# Run the tests\npytest\n\n# Run with coverage report\npytest --cov=src --cov-report=term-missing\n```\n\n### Tools\n\n| Tool | Category | Description |\n| --- | --- | --- |\n| `search_locations` | Search | Search for locations by query text, category, and other filters |\n| `search_nearby_locations` | Search | Find locations near specific coordinates |\n| `get_location_details` | Retrieval | Get detailed information about a location |\n| `get_location_reviews` | Retrieval | Retrieve reviews for a location |\n| `get_location_photos` | Retrieval | Get photos for a location |\n\n## License\n\nMIT\n\n---\n\n[mcp]: https://modelcontextprotocol.io\n",
+  "category": "Travel",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "tripadvisor-mcp-uv": {
+        "command": "uv",
+        "args": ["--directory", "<full path to tripadvisor-mcp directory>", "run", "src/tripadvisor_mcp/main.py"],
+        "env": {
+          "TRIPADVISOR_API_KEY": "your_api_key_here"
+        }
+      },
+      "tripadvisor-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "-it", "--rm", "-e", "TRIPADVISOR_API_KEY=your_api_key_here", "tripadvisor-mcp-server"],
+        "env": {
+          "TRIPADVISOR_API_KEY": "your_api_key_here"
+        },
+        "docker_image": "tripadvisor-mcp-server"
+      },
+      "tripadvisor-mcp-server-docker-compose": {
+        "command": "docker-compose",
+        "args": ["up"],
+        "env": {}
+      },
+      "tripadvisor-mcp-server-docker-configured": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "-e", "TRIPADVISOR_API_KEY", "tripadvisor-mcp-server"],
+        "env": {
+          "TRIPADVISOR_API_KEY": "your_api_key_here"
+        },
+        "docker_image": "tripadvisor-mcp-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pab1it0",
+    "repo": "tripadvisor-mcp",
+    "url": "https://github.com/pab1it0/tripadvisor-mcp",
+    "name": "tripadvisor-mcp",
+    "path": null,
+    "stars": 40,
+    "contributors": 1,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ff3bd320cd00012b6474ec7f5036aed0ed7c1289"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:39.650Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"tripadvisor_mcp\"\nversion = \"0.1.0\"\ndescription = \"MCP server for Tripadvisor Content API integration\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]\",\n    \"httpx\",\n    \"python-dotenv\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.0.0\",\n    \"pytest-cov>=4.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-mock>=3.10.0\",\n]\n\n[project.scripts]\ntripadvisor-mcp = \"tripadvisor_mcp.main:run_server\"\n\n[tool.setuptools]\npackages = [\"tripadvisor_mcp\"]\npackage-dir = {\"\" = \"src\"}\n\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_functions = \"test_*\"\npython_classes = \"Test*\"\naddopts = \"--cov=src --cov-report=term-missing\"\n\n[tool.coverage.run]\nsource = [\"src/tripadvisor_mcp\"]\nomit = [\"*/__pycache__/*\", \"*/tests/*\", \"*/.venv/*\", \"*/venv/*\"]\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"if self.debug:\",\n    \"raise NotImplementedError\",\n    \"if __name__ == .__main__.:\",\n    \"pass\",\n    \"raise ImportError\"\n]\n"
+}

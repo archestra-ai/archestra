@@ -1,0 +1,132 @@
+{
+  "name": "utensils__mcp-nixos",
+  "display_name": "mcp-nixos",
+  "description": "MCP-NixOS - Model Context Protocol Server for NixOS resources",
+  "author": {
+    "name": "utensils"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/mcp_nixos/server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP-NixOS - Because Your AI Assistant Shouldn't Hallucinate About Packages\n\n[![CI](https://github.com/utensils/mcp-nixos/actions/workflows/ci.yml/badge.svg)](https://github.com/utensils/mcp-nixos/actions/workflows/ci.yml)\n[![codecov](https://codecov.io/gh/utensils/mcp-nixos/graph/badge.svg?token=kdcbgvq4Bh)](https://codecov.io/gh/utensils/mcp-nixos)\n[![PyPI](https://img.shields.io/pypi/v/mcp-nixos.svg)](https://pypi.org/project/mcp-nixos/)\n[![Python versions](https://img.shields.io/pypi/pyversions/mcp-nixos.svg)](https://pypi.org/project/mcp-nixos/)\n[![smithery badge](https://smithery.ai/badge/@utensils/mcp-nixos)](https://smithery.ai/server/@utensils/mcp-nixos)\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/99cc55fb-a5c5-4473-b315-45a6961b2e8c)\n\n> **🎉 REFACTORED**: Version 1.0.0 represents a complete rewrite that drastically simplified everything. We removed all the complex caching, abstractions, and \"enterprise\" patterns. Because sometimes less is more, and more is just showing off.\n>\n> **🚀 ASYNC UPDATE**: Version 1.0.1 migrated to FastMCP 2.x for modern async goodness. Because who doesn't love adding `await` to everything?\n\n## Quick Start (Because You Want to Use It NOW)\n\n**🚨 No Nix/NixOS Required!** This tool works on any system - Windows, macOS, Linux. You're just querying web APIs.\n\n### Option 1: Using uvx (Recommended for most users)\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=nixos&config=eyJjb21tYW5kIjoidXZ4IG1jcC1uaXhvcyJ9)\n```json\n{\n  \"mcpServers\": {\n    \"nixos\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-nixos\"]\n    }\n  }\n}\n```\n\n### Option 2: Using Nix (For Nix users)\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=nixos&config=eyJjb21tYW5kIjoibml4IHJ1biBnaXRodWI6dXRlbnNpbHMvbWNwLW5peG9zIC0tIn0%3D)\n```json\n{\n  \"mcpServers\": {\n    \"nixos\": {\n      \"command\": \"nix\",\n      \"args\": [\"run\", \"github:utensils/mcp-nixos\", \"--\"]\n    }\n  }\n}\n```\n\n### Option 3: Using Docker (Container lovers unite)\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=nixos&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItLXJtIiwiLWkiLCJnaGNyLmlvL3V0ZW5zaWxzL21jcC1uaXhvcyJdfQ%3D%3D)\n```json\n{\n  \"mcpServers\": {\n    \"nixos\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"--rm\", \"-i\", \"ghcr.io/utensils/mcp-nixos\"]\n    }\n  }\n}\n```\n\nThat's it. Your AI assistant now has access to real NixOS data instead of making things up. You're welcome.\n\n## What Is This Thing?\n\nMCP-NixOS is a Model Context Protocol server that gives your AI assistant accurate, real-time information about:\n- **NixOS packages** (130K+ packages that actually exist)\n- **Configuration options** (22K+ ways to break your system)\n- **Home Manager settings** (4K+ options for the power users)\n- **nix-darwin configurations** (1K+ macOS settings Apple doesn't want you to touch)\n- **Package version history** via [NixHub.io](https://www.nixhub.io) (Find that ancient Ruby 2.6 with commit hashes)\n\n## The Tools You Actually Care About\n\n### 🔍 NixOS Tools\n- `nixos_search(query, type, channel)` - Search packages, options, or programs\n- `nixos_info(name, type, channel)` - Get detailed info about packages/options\n- `nixos_stats(channel)` - Package and option counts\n- `nixos_channels()` - List all available channels\n- `nixos_flakes_search(query)` - Search community flakes\n- `nixos_flakes_stats()` - Flake ecosystem statistics\n\n### 📦 Version History Tools (NEW!)\n- `nixhub_package_versions(package, limit)` - Get version history with commit hashes\n- `nixhub_find_version(package, version)` - Smart search for specific versions\n\n### 🏠 Home Manager Tools\n- `home_manager_search(query)` - Search user config options\n- `home_manager_info(name)` - Get option details (with suggestions!)\n- `home_manager_stats()` - See what's available\n- `home_manager_list_options()` - Browse all 131 categories\n- `home_manager_options_by_prefix(prefix)` - Explore options by prefix\n\n### 🍎 Darwin Tools\n- `darwin_search(query)` - Search macOS options\n- `darwin_info(name)` - Get option details\n- `darwin_stats()` - macOS configuration statistics\n- `darwin_list_options()` - Browse all 21 categories\n- `darwin_options_by_prefix(prefix)` - Explore macOS options\n\n## Installation Options\n\n**Remember: You DON'T need Nix/NixOS installed!** This tool runs anywhere Python runs.\n\n### For Regular Humans (Windows/Mac/Linux)\n```bash\n# Run directly with uvx (no installation needed)\nuvx mcp-nixos\n\n# Or install globally\npip install mcp-nixos\nuv pip install mcp-nixos\n```\n\n### For Nix Users (You Know Who You Are)\n```bash\n# Run without installing\nnix run github:utensils/mcp-nixos\n\n# Install to profile\nnix profile install github:utensils/mcp-nixos\n```\n\n## Features Worth Mentioning\n\n### 🚀 Version 1.0.1: The Async Revolution (After The Great Simplification)\n- **Drastically less code** - v1.0.0 removed thousands of lines, v1.0.1 made them async\n- **100% functionality** - Everything still works, now with more `await`\n- **0% cache corruption** - Because we removed the cache entirely (still gone!)\n- **Stateless operation** - No files to clean up (async doesn't change this)\n- **Direct API access** - No abstraction nonsense (but now it's async nonsense)\n- **Modern MCP** - FastMCP 2.x because the old MCP was too synchronous\n\n### 📊 What You Get\n- **Real-time data** - Always current, never stale\n- **Plain text output** - Human and AI readable\n- **Smart suggestions** - Helps when you typo option names\n- **Cross-platform** - Works on Linux, macOS, and yes, even Windows\n- **No configuration** - It just works™\n\n### 🎯 Key Improvements\n- **Dynamic channel resolution** - `stable` always points to current stable\n- **Enhanced error messages** - Actually helpful when things go wrong\n- **Deduped flake results** - No more duplicate spam\n- **Version-aware searches** - Find that old Ruby version you need\n- **Category browsing** - Explore options systematically\n\n## For Developers (The Brave Ones)\n\n### Local Development Setup\n\nWant to test your changes in Claude Code or another MCP client? Create a `.mcp.json` file in your project directory:\n\n```json\n{\n  \"mcpServers\": {\n    \"nixos\": {\n      \"type\": \"stdio\",\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--directory\",\n        \"/home/hackerman/Projects/mcp-nixos\",\n        \"mcp-nixos\"\n      ]\n    }\n  }\n}\n```\n\nReplace `/home/hackerman/Projects/mcp-nixos` with your actual project path (yes, even you, Windows users with your `C:\\Users\\CoolDev\\...` paths).\n\nThis `.mcp.json` file:\n- **Automatically activates** when you launch Claude Code from the project directory\n- **Uses your local code** instead of the installed package\n- **Enables real-time testing** - just restart Claude Code after changes\n- **Already in .gitignore** so you won't accidentally commit your path\n\n### With Nix (The Blessed Path)\n```bash\nnix develop\nmenu  # Shows all available commands\n\n# Common tasks\nrun        # Start the server (now with FastMCP!)\nrun-tests  # Run all tests (now async!)\nlint       # Format and check code (ruff replaced black/flake8)\ntypecheck  # Check types (mypy still judges you)\nbuild      # Build the package\npublish    # Upload to PyPI (requires credentials)\n```\n\n### Without Nix (The Path of Pain)\n```bash\n# Install development dependencies\nuv pip install -e \".[dev]\"  # or pip install -e \".[dev]\"\n\n# Run the server locally\nuv run mcp-nixos  # or python -m mcp_nixos.server\n\n# Development commands\npytest tests/          # Now with asyncio goodness\nruff format mcp_nixos/ # black is so 2023\nruff check mcp_nixos/  # flake8 is for boomers\nmypy mcp_nixos/        # Still pedantic as ever\n\n# Build and publish\npython -m build        # Build distributions\ntwine upload dist/*    # Upload to PyPI\n```\n\n### Testing Philosophy\n- **367 tests** that actually test things (now async because why not)\n- **Real API calls** because mocks are for cowards (await real_courage())\n- **Plain text validation** ensuring no XML leaks through\n- **Cross-platform tests** because Windows users deserve pain too\n- **15 test files** down from 29 because organization is a virtue\n\n## Environment Variables\n\nJust one. We're minimalists now:\n\n| Variable | Description | Default |\n|----------|-------------|---------|\n| `ELASTICSEARCH_URL` | NixOS API endpoint | https://search.nixos.org/backend |\n\n## Troubleshooting\n\n### Nix Sandbox Error\n\nIf you encounter this error when running via Nix:\n```\nerror: derivation '/nix/store/...-python3.11-watchfiles-1.0.4.drv' specifies a sandbox profile, \nbut this is only allowed when 'sandbox' is 'relaxed'\n```\n\n**Solution**: Run with relaxed sandbox mode:\n```bash\nnix run --option sandbox relaxed github:utensils/mcp-nixos --\n```\n\n**Why this happens**: The `watchfiles` package (a transitive dependency via MCP) requires custom sandbox permissions for file system monitoring. This is only allowed when Nix's sandbox is in 'relaxed' mode instead of the default 'strict' mode.\n\n**Permanent fix**: Add to your `/etc/nix/nix.conf`:\n```\nsandbox = relaxed\n```\n\n## Acknowledgments\n\nThis project queries data from several amazing services:\n- **[NixHub.io](https://www.nixhub.io)** - Provides package version history and commit tracking\n- **[search.nixos.org](https://search.nixos.org)** - Official NixOS package and option search\n- **[Jetify](https://www.jetify.com)** - Creators of [Devbox](https://www.jetify.com/devbox) and NixHub\n\n*Note: These services have not endorsed this tool. We're just grateful API consumers.*\n\n## License\n\nMIT - Because sharing is caring, even if the code hurts.\n\n---\n\n_Created by James Brink and maintained by masochists who enjoy Nix and async/await patterns._\n\n_Special thanks to the NixOS project for creating an OS that's simultaneously the best and worst thing ever._",
+  "category": "Development",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "nixos-uvx": {
+        "command": "uvx",
+        "args": ["mcp-nixos"],
+        "env": {}
+      },
+      "nixos-nix-run": {
+        "command": "nix",
+        "args": ["run", "github:utensils/mcp-nixos", "--"],
+        "env": {}
+      },
+      "nixos-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "ghcr.io/utensils/mcp-nixos"],
+        "env": {},
+        "docker_image": "ghcr.io/utensils/mcp-nixos"
+      },
+      "nixos-local-dev": {
+        "command": "uv",
+        "args": ["run", "--directory", "/home/hackerman/Projects/mcp-nixos", "mcp-nixos"],
+        "env": {}
+      },
+      "nixos-uv-run": {
+        "command": "uv",
+        "args": ["run", "mcp-nixos"],
+        "env": {}
+      },
+      "nixos-python-module": {
+        "command": "python",
+        "args": ["-m", "mcp_nixos.server"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "utensils",
+    "repo": "mcp-nixos",
+    "url": "https://github.com/utensils/mcp-nixos",
+    "name": "utensils__mcp-nixos",
+    "path": null,
+    "stars": 270,
+    "contributors": 5,
+    "issues": 16,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "46b4d4d3d6421bfbadc415532ef74433871e1cda"
+  },
+  "programming_language": "HTML",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:43.397Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "beautifulsoup4",
+      "importance": 7
+    },
+    {
+      "name": "next",
+      "importance": 10
+    },
+    {
+      "name": "react",
+      "importance": 9
+    },
+    {
+      "name": "react-dom",
+      "importance": 8
+    },
+    {
+      "name": "react-syntax-highlighter",
+      "importance": 6
+    },
+    {
+      "name": "rehype-pretty-code",
+      "importance": 7
+    },
+    {
+      "name": "sharp",
+      "importance": 7
+    },
+    {
+      "name": "shiki",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"mcp-nixos\"\nversion = \"1.0.1\"\ndescription = \"Model Context Protocol server for NixOS, Home Manager, and nix-darwin resources\"\nreadme = \"README.md\"\nauthors = [\n    {name = \"James Brink\", email = \"james@utensils.io\"},\n]\nrequires-python = \">=3.11\"\nlicense = {text = \"MIT\"}\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Programming Language :: Python :: 3.13\",\n]\ndependencies = [\n    \"fastmcp>=2.11.0\",\n    \"requests>=2.32.4\",\n    \"beautifulsoup4>=4.13.4\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"build>=1.2.2\",\n    \"pytest>=8.4.1\",\n    \"pytest-cov>=6.2.1\",\n    \"pytest-asyncio>=1.1.0\",\n    \"pytest-xdist>=3.6.0\",\n    \"ruff>=0.12.4\",\n    \"mypy>=1.17.0\",\n    \"types-beautifulsoup4>=4.12.0.20250516\",\n    \"types-requests>=2.32.4\",\n    \"twine>=6.0.1\",\n]\nwin = [\n    \"pywin32>=308.0\",  # Required for Windows-specific file operations and tests\n]\n\n[project.scripts]\nmcp-nixos = \"mcp_nixos.server:main\"\n\n[tool.ruff]\nline-length = 120\ntarget-version = \"py311\"\nsrc = [\"mcp_nixos\", \"tests\"]\n\n[tool.ruff.lint]\nselect = [\n    \"E\",  # pycodestyle errors\n    \"W\",  # pycodestyle warnings\n    \"F\",  # pyflakes\n    \"I\",  # isort\n    \"B\",  # flake8-bugbear\n    \"C4\", # flake8-comprehensions\n    \"UP\", # pyupgrade\n]\nignore = [\"E402\", \"E203\"]\n\n[tool.mypy]\npython_version = \"3.11\"\nstrict = true\nwarn_return_any = true\nwarn_unused_configs = true\nno_implicit_reexport = true\nnamespace_packages = true\nexplicit_package_bases = true\n\n[[tool.mypy.overrides]]\nmodule = \"tests.*\"\nignore_errors = true\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\naddopts = \"--cov=mcp_nixos --cov-report=term-missing\"\n\n[tool.coverage.run]\nsource = [\"mcp_nixos\"]\n\n\n=== website/package.json ===\n{\n  \"name\": \"mcp-nixos-website\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"dev\": \"next dev\",\n    \"build\": \"next build\",\n    \"start\": \"next start\",\n    \"lint\": \"next lint\",\n    \"lint:fix\": \"next lint --fix\",\n    \"type-check\": \"tsc --noEmit\",\n    \"format\": \"prettier --write \\\"**/*.{js,jsx,ts,tsx,json,md}\\\"\",\n    \"check-format\": \"prettier --check \\\"**/*.{js,jsx,ts,tsx,json,md}\\\"\"\n  },\n  \"dependencies\": {\n    \"@types/react-syntax-highlighter\": \"^15.5.13\",\n    \"next\": \"^15.2.4\",\n    \"react\": \"^18.3.1\",\n    \"react-dom\": \"^18.3.1\",\n    \"react-syntax-highlighter\": \"^15.6.1\",\n    \"rehype-pretty-code\": \"^0.14.1\",\n    \"sharp\": \"^0.33.5\",\n    \"shiki\": \"^3.2.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.17.30\",\n    \"@types/react\": \"^18.3.20\",\n    \"@types/react-dom\": \"^18.3.6\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.29.0\",\n    \"@typescript-eslint/parser\": \"^8.29.0\",\n    \"autoprefixer\": \"^10.4.21\",\n    \"eslint\": \"^8.57.1\",\n    \"eslint-config-next\": \"^15.2.4\",\n    \"eslint-plugin-react\": \"^7.37.5\",\n    \"eslint-plugin-react-hooks\": \"^5.2.0\",\n    \"postcss\": \"^8.5.3\",\n    \"prettier\": \"^3.5.3\",\n    \"prettier-plugin-tailwindcss\": \"^0.6.11\",\n    \"tailwindcss\": \"^3.4.17\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"overrides\": {\n    \"prismjs\": \"^1.30.0\"\n  }\n}\n"
+}

@@ -1,0 +1,179 @@
+{
+  "name": "jfrog__mcp-jfrog",
+  "display_name": "JFrog",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxLjA0ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI0OCI+PHBhdGggZmlsbD0iIzQxYmY0NyIgZD0ibTExMy42NjggMTYyLjM5N2wtMTMuNTI3IDMuNzY0YzEuMTc2IDMuNDExIDIuMTE3IDkuNTI4IDIuMTE3IDE3Ljc2MnY0MC40NjVoMTUuMTc0VjE4MS41N2MyLjgyNC0zLjQxMiA1Ljg4Mi01LjA1OCA5LjE3Ni01LjA1OGMxLjY0NiAwIDIuOTQuMzUzIDQuMzUyIDEuMTc2bDQuMTE3LTEzLjk5OGMtMi4zNTMtMS4wNTktMy40MTEtMS4yOTQtNS42NDYtMS4yOTRjLTEuNjQ3IDAtMy42NDcuMzUzLTQuOTQuOTQxYy0yLjgyNCAxLjQxMi02LjM1MyA0LjU4OC04LjU4OCA3LjY0NmMwLTMuNDExLS44MjMtNi4xMTctMi4yMzUtOC41ODdNNjEuNDQxIDE0Mi40aC0xLjY0N3Y4MS44N2gxNS43NjJ2LTM2LjIzaDE5Ljg4di0xMy41MjdoLTE5Ljg4di0xOC44MmgyNC44MmwuOTQxLTcuMTc2YTI1MCAyNTAgMCAwIDEtMzkuODc2LTYuMTE3bS0zNi44MTggOTIuODFsNy4yOTMgOC40N2M3LjA1OC0yLjgyNCAxNS44OC05LjE3NiAxOC4yMzItMTkuMjkyYy44MjQtMy4yOTQgMS4wNTktNS40MTEgMS4wNTktMTYuMTE1di02NS43NTVoLTE1Ljg4djY3LjUxOWMwIDguODIyLS4zNTMgMTIuMTE2LTEuNTMgMTUuMTc0Yy0xLjUyOCAzLjQxMi01LjE3NSA3LjQxLTkuMTc0IDkuOTk5bTE0My4xNTUtNDEuNTIzYzAgMTQuMzUtMi44MjMgMjAuNDY3LTkuMjkzIDIwLjQ2N2MtMi45NCAwLTYuMjM0LTEuNjQ3LTcuNjQ2LTQuOTRjLTEuMTc2LTMuMDU5LTEuODgyLTguMjM0LTEuODgyLTE1LjI5MmMwLTYgLjU4OC0xMC4yMzQgMS41My0xMy41MjhjMS4xNzYtMy43NjQgNC4xMTYtNi4xMTYgNy43NjMtNi4xMTZjMi43MDUgMCA1LjA1OCAxLjE3NiA2LjQ3IDMuMTc2YzIuMTE3IDIuODIzIDMuMDU4IDguMTE2IDMuMDU4IDE2LjIzM205LjI5MyAyMy41MjVjNC45NC01Ljg4MSA3LjE3NS0xMy4wNTYgNy4xNzUtMjMuNDA4YzAtOS43NjMtMi0xNi40NjgtNi41ODctMjIuMTE0Yy00Ljk0LTYuMTE3LTExLjI5My05LjA1OC0xOS41MjctOS4wNThjLTE1LjUyNyAwLTI1Ljg3OCAxMi41ODctMjUuODc4IDMxLjY0M3MxMC4yMzQgMzEuMjkgMjUuODc4IDMxLjI5YzguODIyLjExNyAxNC41ODYtMy4xNzcgMTguOTM5LTguMzUzbTQzLjA1Mi0zMy44NzdjMCA1LjUyOS0zLjI5NCA4LjU4Ny05LjE3NSA4LjU4N2MtNS4yOTMgMC04LjgyMi0yLjQ3LTguODIyLTguNTg3YzAtNS42NDYgMy4yOTMtOC45NCA4Ljk0LTguOTRzOS4wNTcgMy4yOTQgOS4wNTcgOC45NG0yNi43MDItMTIuOTRsLTYuMjM0LTkuOTk4Yy0zLjUzIDMuMjk0LTcuNzY0IDUuMTc2LTExLjg4MSA1LjE3NmMtMS44ODIgMC0yLjk0LS4yMzUtNy4wNTgtMS4yOTRjLTQuMTE3LTEuMTc2LTcuMDU4LTEuNTI5LTEwLjM1MS0xLjUyOWMtMTQuNzA0IDAtMjQuMjMyIDcuOTk5LTI0LjIzMiAyMC40NjhjMCA4Ljk0IDQgMTQuNTg2IDEyLjM1MSAxNi44MmMtMy40MTEuODI0LTcuMDU4IDIuNTg4LTguNzA0IDQuNTg4Yy0xLjE3NyAxLjQxMi0xLjc2NSAzLjI5NC0xLjc2NSA1LjUyOWMwIDEuODgyLjQ3IDMuNTI5IDEuMTc2IDQuOTRjLjgyNCAxLjI5NCAxLjg4MyAyLjM1MyAzLjI5NCAyLjk0YzIuNzA2IDEuMDYgNy4wNTggMS43NjUgMTMuNzYzIDEuODgzYzMuNTI5IDAgNS42NDYuMTE4IDYuMzUyLjExOGM0LjExNy4yMzUgNi4yMzQuOTQgNy44OCAxLjc2NGMxLjUzLjk0MSAyLjcwNiAzLjA1OCAyLjcwNiA1LjQxYzAgMi4zNTQtMS40MTEgNC43MDYtMy42NDYgNi4xMThjLTIgMS40MTEtNS4yOTMgMi05LjUyOCAyYy02Ljk0IDAtMTAuODIyLTIuNTg4LTEwLjgyMi03LjQxMWMwLTIuMTE4LjIzNS0yLjU4OC43MDYtMy44ODJoLTEzLjg4Yy0uNTg5IDEuMTc2LTEuMjk0IDIuODIzLTEuMjk0IDYuMTE3YzAgNC4xMTcgMS41MjkgNy42NDYgNC43MDUgMTAuNzA0YzUuMTc1IDUuMDU4IDEzLjY0NSA2LjQ3IDIxLjc2MSA2LjQ3YzguOTQgMCAxNy42NDUtMi4xMTggMjIuNzAzLTcuNzY0YzMuMTc2LTMuNTI5IDQuNTg3LTcuNDEgNC41ODctMTIuNDY5YzAtNS40MS0xLjUyOS05LjUyOC00Ljk0LTEyLjkzOWMtNC0zLjg4Mi04LjU4Ny01LjI5My0xNy40MS01LjQxbC04LjExNi0uMTE5Yy0xLjUyOSAwLTIuNDctLjU4OC0yLjQ3LTEuNDExYzAtMS42NDcgMi4xMTctMy4wNTggNi00Ljk0YzEuMTc1LjExNyAxLjUyOC4xMTcgMi4yMzQuMTE3YzEyLjIzNCAwIDIxLjE3My03LjUyOCAyMS4xNzMtMTcuOTk3YzAtNC0xLjE3Ni03LjA1OC0zLjQxLTkuODgxYzEuODgxLjIzNSAyLjQ3LjM1MyAzLjg4LjM1M2M0IDAgNy4xNzYtMS4yOTQgMTAuNDctNC40N001Ny40NCA3MS4yMzZDMzguNjIxIDc1LjgyMSAyNS44IDg0Ljg3OCAyNS44IDk1LjIzYzAgNi40NyA0Ljk0IDEyLjM1IDEzLjA1NyAxNi45MzhjLTIuNDctMy44ODEtMy43NjQtOC4xMTYtMy43NjQtMTIuMzVjLjExNy0xMC43MDUgOC40Ny0yMC43MDQgMjIuMzUtMjguNTg1TTI1NiAxMTEuODE1YzAtNi44MjItNC4yMzUtMTMuMDU2LTExLjI5Mi0xOC4yMzJjLjU4OCAyLjExNyAxLjA1OCA0LjIzNCAxLjA1OCA2LjM1MmMwIDE5LjQwOS0yNy4xNzIgMzYuMTEyLTY1Ljc1NSA0My4wNTJjNC4zNTMuNDcgOC44MjMuNzA2IDEzLjUyOC43MDZjMzQuNDY1LS4xMTggNjIuNDYxLTE0LjM1IDYyLjQ2MS0zMS44NzhtLTIyLjIzMi0xMC41ODZjMC03LjE3Ni02LjExNy0xMy43NjMtMTYuNTg2LTE5LjE3NGMyLjQ3IDIuOTQgMy43NjQgNi4xMTcgMy43NjQgOS40MWMwIDE3LjI5Mi0zNi43IDMxLjI5LTgyLjEwNSAzMS4yOWMtNDUuMjg3IDAtODIuMTA1LTEzLjk5OC04Mi4xMDUtMzEuMjlxMC0zLjM1MiAxLjc2NC02LjM1MWMtNy4yOTMgNC44MjItMTEuNDEgMTAuMzUtMTEuNDEgMTYuMjMyYzAgMTguNzAzIDQxLjc1OCAzMy44NzggOTMuMjggMzMuODc4czkzLjM5OC0xNS40MSA5My4zOTgtMzMuOTk1bS00MC43LS45NDFjLTE5LjA1NiAxMi4yMzMtNzcuNjM1IDE2LjkzOC0xMDIuODA4IDEuMTc2Yy0xOS43NjItMTIuMzUtMTIuOTQtMzEuOTk0LTY5LjUxOS03NS4wNDdjLTcuNDEtNS42NDYgMS40MTItMTEuNjQ1IDYuOTQtNy43NjNzLjQ3IDQuODIzIDExLjY0NSAxNS45OTdjMjIuNTg1IDIyLjU4NSAyMi4zNSAyLjIzNSAyNS44NzkgOS45OTlDNzIuNzMzIDYwLjc2NSA4OS4yIDc2Ljk5OCA4OS4yIDc2Ljk5OGMxNi41ODYgMTAuODIyIDI5Ljc2IDEzLjE3NSA1NC4yMjgtMy40MTFjMTUuNTI3LTEwLjQ3IDkuMTc1IDE2LjcwMyA0Ny4xNjktMi45NGMxMy44OC03LjE3NiAxMy4yOTItMi4zNTQgMjcuNDA4LTIxLjk5OGM1Ljg4MS04LjExNiAxNy4wNTYgNi4yMzUgNC4zNTIgOC4yMzRjLTUuMDU4LjgyNC0xMy42NDUgNi4zNTItMTcuMjkyIDE1LjA1N2MtNS4yOTMgMTMuMDU3LTMuMDU4IDIyLjcwMy0xMS45OTggMjguMzQ5TTg3LjQzNyA2Ny4xMTdDODIuNzMyIDY1IDc3Ljc5IDU3LjAwMSA3NS45MDkgNTMuODI1YzUuMjk0LTUuMTc2IDMuMTc2LTEzLjc2My4xMTgtMTguNDY4Yy0yLjk0LTQuNzA1LTYuNTg3LTMuNDExLTEwLjQ3LTcuNzYzYy0zLjk5OS00LjM1MyAxLjUzLTE1LjY0NSA2LjU4OC02Ljk0YzE4LjkzOCAzMi41ODMgMzEuNDA3IDE5LjA1NiA0Ni44MTcgMTcuMDU2YzE0LjgyLTEuODgyIDI3Ljk5NSA2LjIzNCAzMS45OTUtMTYuNzA0Yy43MDYtMy43NjQgNC4zNTItNC41ODcgNC43MDUgMS41M2MuMzUzIDYuMjM0IDIuNzA2IDIxLjI5IDEwLjgyMiAyMy4xNzNjOC4xMTYgMiAxNC43MDQtMS44ODIgMTYuNTg2LTRjMS44ODItMi4xMTcgMi45NC0xLjg4MiAzLjc2NCAzLjUzYy44MjMgNS4yOTIgMi45NCAxMi43MDMgMTQuMzUgNC40NjljMjMuNDA5LTE2LjcwMyAxNi43MDQtMjMuMTczIDI1Ljg4LTI3LjUyNWM1LjE3NS0yLjQ3IDEzLjQwOSA1LjUyOCAxLjUyOCAxMS41MjdjLTE2LjkzOCA4LjU4Ny0xOC43MDMgMTkuMTc0LTI5LjQwNyAyNS44NzljLTE3Ljk5NyAxMS4yOTItMTIuNDY5LjQ3LTQxLjQwNi0zLjY0N2MtMTEuMTc0LTEuNTI5LTE0LjcwMyAxMC44MjItMjMuNDA4IDcuMjkzYy0xOS44OC04LjIzNC0zMy44NzctNi41ODctNDYuOTM0IDMuODgybTYyLjY5Ni02MC4zNDRjLjcwNiA0Ljk0IDEuNTMgNC44MjMgMy4yOTQgNS4xNzZjMS43NjUuNDcgNC0yLjM1MyA0LTQuOTRjLjExNy0yLjcwNi0xLjE3Ny00LjM1My0zLjc2NS00LjIzNWMtMi43MDUuMTE3LTMuNjQ2IDEuNDExLTMuNTI5IDRtODcuMDQ2IDguODIyYzIuMTE4IDIgNy43NjQuNzA2IDkuMDU4LS44MjNjMy40MTEtMy43NjQgMy41MjktNS45OTkgMS43NjQtOC41ODdjLTEuNzY0LTIuNDctNS40MS0yLjExNy05LjA1Ny41ODhzLTIuOTQxIDcuNzY0LTEuNzY1IDguODIybS0xLjUyOSAyNC45MzhjLTEuNzY0IDIuMzUzLTEuODgyIDQuMTE3LS41ODggNS40MWMxLjQxMiAxLjQxMiA0LjIzNSAyLjU4OSA2LjIzNCAxLjA2YzItMS42NDcgMi00IC4zNTMtNmMtMS43NjQtMi4xMTctNC4xMTctMi4xMTctNS45OTktLjQ3TTU3LjA5IDExLjEyNmMyLjcwNS44MjMgMy45OTkgMy40MSA2LjIzNC40N2MxLjE3Ni0xLjQxMSAxLjI5NC0zLjQxMS0uMjM1LTUuNTI5Yy0uOTQxLTEuMjkzLTUuNDExLTIuMjM0LTcuMjkzLS4zNTJzLS4xMTggNC45NCAxLjI5NCA1LjQxTTEuOTIgOS40NzljNC45NCAzLjA1OCA4LjExNyA3LjY0NiAxMS44OCAzLjUyOWMxLjI5NS0xLjQxMiAyLjgyNC0zLjg4Mi4xMTgtOC44MjNDMTEuOTE4LjU0IDUuNDUtLjg3MyAzLjIxNC41NEMuODYyIDEuODMzLTEuOTYgNy4xMjYgMS45MiA5LjQ3OW00NS41MjMgMjMuNDA4YzEuNTMgMS42NDcgNC4yMzUgMS41MyA1Ljg4MS41ODhjMS41My0uOTQgMS4yOTQtMy40MTEtLjIzNS01LjUyOGMtLjk0LTEuMjk0LTMuNzY0LTItNS42NDYgMHMtMS4wNTkgMy43NjQgMCA0Ljk0Ii8+PC9zdmc+",
+  "description": "Official JFrog MCP server that enables AI assistants to interact with the JFrog Platform. Supports repository management, build tracking, runtime monitoring, artifact searching, package intelligence, and Xray security scanning.",
+  "author": {
+    "name": "JFrog"
+  },
+  "server": {
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-jfrog:v0.0.0-exp-1"
+    ],
+    "docker_image": "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-jfrog:v0.0.0-exp-1",
+    "env": {
+      "JFROG_ACCESS_TOKEN": "${user_config.access_token}",
+      "JFROG_URL": "${user_config.jfrog_url}"
+    },
+    "type": "local"
+  },
+  "tools": [
+    {
+      "name": "check_jfrog_availability",
+      "description": "Check JFrog platform availability"
+    },
+    {
+      "name": "create_local_repository",
+      "description": "Create a local repository"
+    },
+    {
+      "name": "create_remote_repository",
+      "description": "Create a remote repository"
+    },
+    {
+      "name": "create_virtual_repository",
+      "description": "Create a virtual repository"
+    },
+    {
+      "name": "list_repositories",
+      "description": "List all repositories"
+    },
+    {
+      "name": "set_folder_property",
+      "description": "Set properties on a folder"
+    },
+    {
+      "name": "execute_aql_query",
+      "description": "Execute AQL queries for artifact search"
+    },
+    {
+      "name": "list_jfrog_builds",
+      "description": "List all builds"
+    },
+    {
+      "name": "get_specific_build",
+      "description": "Get details of a specific build"
+    },
+    {
+      "name": "list_jfrog_runtime_clusters",
+      "description": "List runtime clusters"
+    },
+    {
+      "name": "get_jfrog_runtime_specific_cluster",
+      "description": "Get details of a specific runtime cluster"
+    },
+    {
+      "name": "list_jfrog_running_images",
+      "description": "List running container images"
+    },
+    {
+      "name": "list_jfrog_environments",
+      "description": "List environments"
+    },
+    {
+      "name": "list_jfrog_projects",
+      "description": "List all projects"
+    },
+    {
+      "name": "get_specific_project",
+      "description": "Get details of a specific project"
+    },
+    {
+      "name": "create_project",
+      "description": "Create a new project"
+    },
+    {
+      "name": "jfrog_get_package_info",
+      "description": "Get package information from catalog"
+    },
+    {
+      "name": "jfrog_get_package_versions",
+      "description": "Get available package versions"
+    },
+    {
+      "name": "jfrog_get_package_version_vulnerabilities",
+      "description": "Get vulnerabilities for a package version"
+    },
+    {
+      "name": "jfrog_get_vulnerability_info",
+      "description": "Get detailed vulnerability information"
+    },
+    {
+      "name": "jfrog_get_package_curation_status",
+      "description": "Check package curation status"
+    },
+    {
+      "name": "jfrog_get_artifacts_summary",
+      "description": "Get Xray scan summary for artifacts"
+    }
+  ],
+  "keywords": ["jfrog", "artifactory", "xray", "devops", "ci-cd", "security", "artifacts", "packages", "builds"],
+  "user_config": {
+    "access_token": {
+      "type": "string",
+      "title": "JFrog Access Token",
+      "description": "JFrog access or identity token for authentication",
+      "default": "",
+      "required": true,
+      "sensitive": true
+    },
+    "jfrog_url": {
+      "type": "string",
+      "title": "JFrog URL",
+      "description": "Base URL for your JFrog platform instance (e.g., https://acme.jfrog.io)",
+      "default": "",
+      "required": true,
+      "sensitive": false
+    }
+  },
+  "readme": "# JFrog MCP Server\n\nThe official JFrog MCP server provides tools for interacting with the JFrog Platform through AI assistants.\n\n## Features\n\n- **Repository Management**: Create and manage local, remote, and virtual repositories\n- **Build Tracking**: List and inspect build information\n- **Runtime Monitoring**: Monitor runtime clusters and running container images\n- **Artifact Search**: Execute AQL queries to find artifacts\n- **Package Intelligence**: Get package info, versions, and vulnerability data\n- **Security Scanning**: Access Xray scan summaries organized by severity\n- **Curation**: Check package curation status\n\n## Environment Variables\n\n- `JFROG_ACCESS_TOKEN`: JFrog access or identity token for authentication (required)\n- `JFROG_URL`: Base URL for your JFrog platform instance (required)\n- `TRANSPORT`: Transport mode - 'stdio' (default) or 'sse'\n- `PORT`: Port for SSE transport (default: 8080)\n",
+  "category": "Development",
+  "quality_score": 85,
+  "last_scraped_at": "2026-01-14T00:00:00.000Z",
+  "evaluation_model": "manual",
+  "raw_dependencies": "",
+  "github_info": {
+    "owner": "jfrog",
+    "repo": "mcp-jfrog",
+    "url": "https://github.com/jfrog/mcp-jfrog",
+    "name": "jfrog__mcp-jfrog",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 9
+    }
+  ],
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  }
+}

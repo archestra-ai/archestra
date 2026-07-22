@@ -1,0 +1,130 @@
+{
+  "name": "xeroapi__xero-mcp-server",
+  "display_name": "xero-mcp-server",
+  "description": "An MCP server that integrates with the MCP protocol. https://modelcontextprotocol.io/introduction",
+  "author": {
+    "name": "XeroAPI"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@xeroapi/xero-mcp-server@latest"],
+    "env": {
+      "XERO_CLIENT_ID": "${user_config.xero_client_id}",
+      "XERO_CLIENT_SECRET": "${user_config.xero_client_secret}",
+      "XERO_CLIENT_BEARER_TOKEN": "${user_config.xero_client_bearer_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "xero_client_id": {
+      "type": "string",
+      "title": "Xero Client ID",
+      "description": "Your Xero OAuth2 Client ID for Custom Connections. Required if not using a Bearer Token.",
+      "sensitive": true,
+      "required": false
+    },
+    "xero_client_secret": {
+      "type": "string",
+      "title": "Xero Client Secret",
+      "description": "Your Xero OAuth2 Client Secret for Custom Connections. Required if not using a Bearer Token.",
+      "sensitive": true,
+      "required": false
+    },
+    "xero_client_bearer_token": {
+      "type": "string",
+      "title": "Xero Bearer Token",
+      "description": "Your Xero OAuth2 Bearer Token for direct authentication. This takes precedence over Client ID/Secret if provided.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Xero MCP Server\n\nThis is a Model Context Protocol (MCP) server implementation for Xero. It provides a bridge between the MCP protocol and Xero's API, allowing for standardized access to Xero's accounting and business features.\n\n## Features\n\n- Xero OAuth2 authentication with custom connections\n- Contact management\n- Chart of Accounts management\n- Invoice creation and management\n- MCP protocol compliance\n\n## Prerequisites\n\n- Node.js (v18 or higher)\n- npm or pnpm\n- A Xero developer account with API credentials\n\n## Docs and Links\n\n- [Xero Public API Documentation](https://developer.xero.com/documentation/api/)\n- [Xero API Explorer](https://api-explorer.xero.com/)\n- [Xero OpenAPI Specs](https://github.com/XeroAPI/Xero-OpenAPI)\n- [Xero-Node Public API SDK Docs](https://xeroapi.github.io/xero-node/accounting)\n- [Developer Documentation](https://developer.xero.com/)\n\n## Setup\n\n### Create a Xero Account\n\nIf you don't already have a Xero account and organisation already, can create one by signing up [here](https://www.xero.com/au/signup/) using the free trial.\n\nWe recommend using a Demo Company to start with because it comes with some pre-loaded sample data. Once you are logged in, switch to it by using the top left-hand dropdown and selecting \"Demo Company\". You can reset the data on a Demo Company, or change the country, at any time by using the top left-hand dropdown and navigating to [My Xero](https://my.xero.com).\n\nNOTE: To use Payroll-specific queries, the region should be either NZ or UK.\n\n### Authentication\n\nThere are 2 modes of authentication supported in the Xero MCP server:\n\n#### 1. Custom Connections\n\nThis is a better choice for testing and development which allows you to specify client id and secrets for a specific organisation.\nIt is also the recommended approach if you are integrating this into 3rd party MCP clients such as Claude Desktop.\n\n##### Configuring your Xero Developer account\n\nSet up a Custom Connection following these instructions: https://developer.xero.com/documentation/guides/oauth2/custom-connections/\n\nCurrently the following scopes are required for all sessions: [scopes](src/clients/xero-client.ts#L91-L92)\n\n##### Integrating the MCP server with Claude Desktop\n\nTo add the MCP server to Claude go to Settings > Developer > Edit config and add the following to your claude_desktop_config.json file:\n\n```json\n{\n  \"mcpServers\": {\n    \"xero\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@xeroapi/xero-mcp-server@latest\"],\n      \"env\": {\n        \"XERO_CLIENT_ID\": \"your_client_id_here\",\n        \"XERO_CLIENT_SECRET\": \"your_client_secret_here\"\n      }\n    }\n  }\n}\n```\n\nNOTE: If you are using [Node Version Manager](https://github.com/nvm-sh/nvm) `\"command\": \"npx\"` section change it to be the full path to the executable, ie: `your_home_directory/.nvm/versions/node/v22.14.0/bin/npx` on Mac / Linux or `\"your_home_directory\\\\.nvm\\\\versions\\\\node\\\\v22.14.0\\\\bin\\\\npx\"` on Windows\n\n#### 2. Bearer Token\n\nThis is a better choice if you are to support multiple Xero accounts at runtime and allow the MCP client to execute an auth flow (such as PKCE) as required.\nIn this case, use the following configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"xero\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@xeroapi/xero-mcp-server@latest\"],\n      \"env\": {\n        \"XERO_CLIENT_BEARER_TOKEN\": \"your_bearer_token\"\n      }\n    }\n  }\n}\n```\n\nNOTE: The `XERO_CLIENT_BEARER_TOKEN` will take precedence over the `XERO_CLIENT_ID` if defined.\n\n### Available MCP Commands\n\n- `list-accounts`: Retrieve a list of accounts\n- `list-contacts`: Retrieve a list of contacts from Xero\n- `list-credit-notes`: Retrieve a list of credit notes\n- `list-invoices`: Retrieve a list of invoices\n- `list-items`: Retrieve a list of items\n- `list-organisation-details`: Retrieve details about an organisation\n- `list-profit-and-loss`: Retrieve a profit and loss report\n- `list-quotes`: Retrieve a list of quotes\n- `list-tax-rates`: Retrieve a list of tax rates\n- `list-payments`: Retrieve a list of payments\n- `list-trial-balance`: Retrieve a trial balance report\n- `list-profit-and-loss`: Retrieve a profit and loss report\n- `list-bank-transactions`: Retrieve a list of bank account transactions\n- `list-payroll-employees`: Retrieve a list of Payroll Employees\n- `list-report-balance-sheet`: Retrieve a balance sheet report\n- `list-payroll-employee-leave`: Retrieve a Payroll Employee's leave records\n- `list-payroll-employee-leave-balances`: Retrieve a Payroll Employee's leave balances\n- `list-payroll-employee-leave-types`: Retrieve a list of Payroll leave types\n- `list-payroll-leave-periods`: Retrieve a list of a Payroll Employee's leave periods\n- `list-payroll-leave-types`: Retrieve a list of all avaliable leave types in Xero Payroll\n- `list-aged-receivables-by-contact`: Retrieves aged receivables for a contact\n- `list-aged-payables-by-contact`: Retrieves aged payables for a contact\n- `list-contact-groups`: Retrieve a list of contact groups\n- `create-contact`: Create a new contact\n- `create-credit-note`: Create a new credit note\n- `create-invoice`: Create a new invoice\n- `create-payment`: Create a new payment\n- `create-quote`: Create a new quote\n- `create-credit-note`: Create a new credit note\n- `create-payroll-timesheet`: Create a new Payroll Timesheet\n- `update-contact`: Update an existing contact\n- `update-invoice`: Update an existing draft invoice\n- `update-quote`: Update an existing draft quote\n- `update-credit-note`: Update an existing draft credit note\n- `update-payroll-timesheet-line`: Update a line on an existing Payroll Timesheet\n- `approve-payroll-timesheet`: Approve a Payroll Timesheet\n- `revert-payroll-timesheet`: Revert an approved Payroll Timesheet\n- `add-payroll-timesheet-line`: Add new line on an existing Payroll Timesheet\n- `delete-payroll-timesheet`: Delete an existing Payroll Timesheet\n- `get-payroll-timesheet`: Retrieve an existing Payroll Timesheet\n\nFor detailed API documentation, please refer to the [MCP Protocol Specification](https://modelcontextprotocol.io/).\n\n## For Developers\n\n### Installation\n\n```bash\n# Using npm\nnpm install\n\n# Using pnpm\npnpm install\n```\n\n### Run a build\n\n```bash\n# Using npm\nnpm run build\n\n# Using pnpm\npnpm build\n```\n\n### Integrating with Claude Desktop\n\nTo link your Xero MCP server in development to Claude Desktop go to Settings > Developer > Edit config and add the following to your `claude_desktop_config.json` file:\n\nNOTE: For Windows ensure the `args` path escapes the `\\` between folders ie. `\"C:\\\\projects\\xero-mcp-server\\\\dist\\\\index.js\"`\n\n```json\n{\n  \"mcpServers\": {\n    \"xero\": {\n      \"command\": \"node\",\n      \"args\": [\"insert-your-file-path-here/xero-mcp-server/dist/index.js\"],\n      \"env\": {\n        \"XERO_CLIENT_ID\": \"your_client_id_here\",\n        \"XERO_CLIENT_SECRET\": \"your_client_secret_here\"\n      }\n    }\n  }\n}\n```\n\n## License\n\nMIT\n\n## Security\n\nPlease do not commit your `.env` file or any sensitive credentials to version control (it is included in `.gitignore` as a safe default.)\n",
+  "category": "Finance",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "xeroapi-xero-mcp-server-npx-custom-connections": {
+        "command": "npx",
+        "args": ["-y", "@xeroapi/xero-mcp-server@latest"],
+        "env": {
+          "XERO_CLIENT_ID": "your_client_id_here",
+          "XERO_CLIENT_SECRET": "your_client_secret_here"
+        }
+      },
+      "xeroapi-xero-mcp-server-npx-bearer-token": {
+        "command": "npx",
+        "args": ["-y", "@xeroapi/xero-mcp-server@latest"],
+        "env": {
+          "XERO_CLIENT_BEARER_TOKEN": "your_bearer_token"
+        }
+      },
+      "xero-mcp-server-local-dev": {
+        "command": "node",
+        "args": ["insert-your-file-path-here/xero-mcp-server/dist/index.js"],
+        "env": {
+          "XERO_CLIENT_ID": "your_client_id_here",
+          "XERO_CLIENT_SECRET": "your_client_secret_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "XeroAPI",
+    "repo": "xero-mcp-server",
+    "url": "https://github.com/XeroAPI/xero-mcp-server",
+    "name": "xero-mcp-server",
+    "path": null,
+    "stars": 108,
+    "contributors": 13,
+    "issues": 10,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "df9cba019b9303c8381802a9ea83f45ad2510dbf"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:17.384Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "openid-client",
+      "importance": 8
+    },
+    {
+      "name": "xero-node",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@xeroapi/xero-mcp-server\",\n  \"version\": \"0.0.12\",\n  \"description\": \"MCP server implementation for Xero integration\",\n  \"license\": \"MIT\",\n  \"main\": \"dist/index.js\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git://github.com/XeroAPI/xero-mcp-server.git\"\n  },\n  \"author\": \"Xero (https://xero.com)\",\n  \"type\": \"module\",\n  \"bin\": \"./dist/index.js\",\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"lint:fix\": \"eslint --fix\",\n    \"lint\": \"eslint .\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.6.0\",\n    \"dotenv\": \"^16.4.7\",\n    \"openid-client\": \"^6.3.4\",\n    \"xero-node\": \"^10.0.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.22.0\",\n    \"@types/node\": \"^22.13.10\",\n    \"eslint\": \"^9.22.0\",\n    \"eslint-config-prettier\": \"^10.1.1\",\n    \"globals\": \"^16.0.0\",\n    \"prettier\": \"3.5.3\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.8.2\",\n    \"typescript-eslint\": \"^8.26.1\"\n  }\n}\n"
+}

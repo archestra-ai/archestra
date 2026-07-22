@@ -1,0 +1,91 @@
+{
+  "name": "cloudflare__mcp-server-cloudflare",
+  "display_name": "mcp-server-cloudflare",
+  "description": "MCP server from cloudflare/mcp-server-cloudflare",
+  "author": {
+    "name": "cloudflare"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-remote", "${user_config.mcp_server_url}"],
+    "env": {
+      "CLOUDFLARE_API_TOKEN": "${user_config.cloudflare_api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "cloudflare_api_token": {
+      "type": "string",
+      "title": "Cloudflare API Token",
+      "description": "Your Cloudflare API token with necessary permissions for the selected MCP server. Create one at https://dash.cloudflare.com/profile/api-tokens.",
+      "sensitive": true,
+      "required": true
+    },
+    "mcp_server_url": {
+      "type": "string",
+      "title": "MCP Server URL",
+      "description": "The URL of the specific Cloudflare MCP server to connect to (e.g., https://observability.mcp.cloudflare.com/sse).",
+      "required": true
+    }
+  },
+  "readme": "# Cloudflare MCP Server\n\nModel Context Protocol (MCP) is a [new, standardized protocol](https://modelcontextprotocol.io/introduction) for managing context between large language models (LLMs) and external systems. In this repository, you can find several MCP servers allowing you to connect to Cloudflare's service from an MCP client (e.g. Cursor, Claude) and use natural language to accomplish tasks through your Cloudflare account.\n\nThese MCP servers allow your [MCP Client](https://modelcontextprotocol.io/clients) to read configurations from your account, process information, make suggestions based on data, and even make those suggested changes for you. All of these actions can happen across Cloudflare's many services including application development, security and performance.\n\nThe following servers are included in this repository:\n\n| Server Name                                                    | Description                                                                                     | Server URL                                     |\n| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- |\n| [**Documentation server**](/apps/docs-vectorize)               | Get up to date reference information on Cloudflare                                              | `https://docs.mcp.cloudflare.com/sse`          |\n| [**Workers Bindings server**](/apps/workers-bindings)          | Build Workers applications with storage, AI, and compute primitives                             | `https://bindings.mcp.cloudflare.com/sse`      |\n| [**Workers Builds server**](/apps/workers-builds)              | Get insights and manage your Cloudflare Workers Builds                                          | `https://builds.mcp.cloudflare.com/sse`        |\n| [**Observability server**](/apps/workers-observability)        | Debug and get insight into your application's logs and analytics                                | `https://observability.mcp.cloudflare.com/sse` |\n| [**Radar server**](/apps/radar)                                | Get global Internet traffic insights, trends, URL scans, and other utilities                    | `https://radar.mcp.cloudflare.com/sse`         |\n| [**Container server**](/apps/sandbox-container)                | Spin up a sandbox development environment                                                       | `https://containers.mcp.cloudflare.com/sse`    |\n| [**Browser rendering server**](/apps/browser-rendering)        | Fetch web pages, convert them to markdown and take screenshots                                  | `https://browser.mcp.cloudflare.com/sse`       |\n| [**Logpush server**](/apps/logpush)                            | Get quick summaries for Logpush job health                                                      | `https://logs.mcp.cloudflare.com/sse`          |\n| [**AI Gateway server**](/apps/ai-gateway)                      | Search your logs, get details about the prompts and responses                                   | `https://ai-gateway.mcp.cloudflare.com/sse`    |\n| [**AutoRAG server**](/apps/autorag)                            | List and search documents on your AutoRAGs                                                      | `https://autorag.mcp.cloudflare.com/sse`       |\n| [**Audit Logs server**](/apps/auditlogs)                       | Query audit logs and generate reports for review                                                | `https://auditlogs.mcp.cloudflare.com/sse`     |\n| [**DNS Analytics server**](/apps/dns-analytics)                | Optimize DNS performance and debug issues based on current set up                               | `https://dns-analytics.mcp.cloudflare.com/sse` |\n| [**Digital Experience Monitoring server**](/apps/dex-analysis) | Get quick insight on critical applications for your organization                                | `https://dex.mcp.cloudflare.com/sse`           |\n| [**Cloudflare One CASB server**](/apps/cloudflare-one-casb)    | Quickly identify any security misconfigurations for SaaS applications to safeguard users & data | `https://casb.mcp.cloudflare.com/sse`          |\n| [**GraphQL server**](/apps/graphql/)                           | Get analytics data using Cloudflare’s GraphQL API                                               | `https://graphql.mcp.cloudflare.com/sse`       |\n\n## Access the remote MCP server from any MCP client\n\nIf your MCP client has first class support for remote MCP servers, the client will provide a way to accept the server URL directly within its interface (e.g. [Cloudflare AI Playground](https://playground.ai.cloudflare.com/))\n\nIf your client does not yet support remote MCP servers, you will need to set up its respective configuration file using mcp-remote (https://www.npmjs.com/package/mcp-remote) to specify which servers your client can access.\n\n```json\n{\n\t\"mcpServers\": {\n\t\t\"cloudflare-observability\": {\n\t\t\t\"command\": \"npx\",\n\t\t\t\"args\": [\"mcp-remote\", \"https://observability.mcp.cloudflare.com/sse\"]\n\t\t},\n\t\t\"cloudflare-bindings\": {\n\t\t\t\"command\": \"npx\",\n\t\t\t\"args\": [\"mcp-remote\", \"https://bindings.mcp.cloudflare.com/sse\"]\n\t\t}\n\t}\n}\n```\n\n## Using Cloudflare's MCP servers from the OpenAI Responses API\n\nTo use one of Cloudflare's MCP servers with [OpenAI's responses API](https://openai.com/index/new-tools-and-features-in-the-responses-api/), you will need to provide the Responses API with an API token that has the scopes (permissions) required for that particular MCP server.\n\nFor example, to use the [Browser Rendering MCP server](https://github.com/cloudflare/mcp-server-cloudflare/tree/main/apps/browser-rendering) with OpenAI, create an API token in the Cloudflare dashboard [here](https://dash.cloudflare.com/profile/api-tokens), with the following permissions:\n\n<img width=\"937\" alt=\"Screenshot 2025-05-21 at 10 38 02 AM\" src=\"https://github.com/user-attachments/assets/872e253f-23ce-43b3-983c-45f9d0f66100\" />\n\n## Need access to more Cloudflare tools?\n\nWe're continuing to add more functionality to this remote MCP server repo. If you'd like to leave feedback, file a bug or provide a feature request, [please open an issue](https://github.com/cloudflare/mcp-server-cloudflare/issues/new/choose) on this repository\n\n## Troubleshooting\n\n\"Claude's response was interrupted ... \"\n\nIf you see this message, Claude likely hit its context-length limit and stopped mid-reply. This happens most often on servers that trigger many chained tool calls such as the observability server.\n\nTo reduce the chance of running in to this issue:\n\n- Try to be specific, keep your queries concise.\n- If a single request calls multiple tools, try to to break it into several smaller tool calls to keep the responses short.\n\n## Paid Features\n\nSome features may require a paid Cloudflare Workers plan. Ensure your Cloudflare account has the necessary subscription level for the features you intend to use.\n\n## Contributing\n\nInterested in contributing, and running this server locally? See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.\n",
+  "category": "Cloud",
+  "quality_score": 78,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-remote-observability": {
+        "command": "npx",
+        "args": ["mcp-remote", "https://observability.mcp.cloudflare.com/sse"],
+        "env": {}
+      },
+      "mcp-remote-bindings": {
+        "command": "npx",
+        "args": ["mcp-remote", "https://bindings.mcp.cloudflare.com/sse"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "cloudflare",
+    "repo": "mcp-server-cloudflare",
+    "url": "https://github.com/cloudflare/mcp-server-cloudflare",
+    "name": "cloudflare__mcp-server-cloudflare",
+    "path": null,
+    "stars": 2922,
+    "contributors": 29,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4267fd7fa9d94565382bcb6229fdd6d7f8f25d9d"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:15.797Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"@cloudflare/mcp-server-cloudflare\",\n\t\"version\": \"1.0.0\",\n\t\"description\": \"Monorepo for Cloudflare MCP servers\",\n\t\"private\": true,\n\t\"license\": \"Apache-2.0\",\n\t\"author\": \"Cloudflare, Inc. (https://cloudflare.com)\",\n\t\"homepage\": \"https://github.com/cloudflare/mcp-server-cloudflare\",\n\t\"bugs\": \"https://github.com/cloudflare/mcp-server-cloudflare/issues\",\n\t\"type\": \"module\",\n\t\"sideEffects\": false,\n\t\"scripts\": {\n\t\t\"changeset:new\": \"run-changeset-new\",\n\t\t\"check:deps\": \"syncpack lint\",\n\t\t\"check:format\": \"prettier . --check --cache --ignore-unknown\",\n\t\t\"check:turbo\": \"run-turbo check\",\n\t\t\"types\": \"run-turbo types\",\n\t\t\"test:ci\": \"run-vitest-ci\",\n\t\t\"test\": \"vitest run --passWithNoTests\",\n\t\t\"fix:format\": \"prettier . --write --cache --ignore-unknown\",\n\t\t\"fix:deps\": \"run-fix-deps\",\n\t\t\"test:watch\": \"vitest\",\n\t\t\"eval:ci\": \"run-turbo eval:ci\",\n\t\t\"eval:dev\": \"run-turbo eval:dev\",\n\t\t\"update-deps\": \"syncpack update\"\n\t},\n\t\"devDependencies\": {\n\t\t\"@changesets/cli\": \"2.28.1\",\n\t\t\"@cloudflare/vitest-pool-workers\": \"0.8.14\",\n\t\t\"@ianvs/prettier-plugin-sort-imports\": \"4.4.1\",\n\t\t\"@repo/eslint-config\": \"workspace:*\",\n\t\t\"@repo/tools\": \"workspace:*\",\n\t\t\"@repo/typescript-config\": \"workspace:*\",\n\t\t\"@vitest/ui\": \"3.0.9\",\n\t\t\"prettier\": \"3.5.3\",\n\t\t\"syncpack\": \"13.0.3\",\n\t\t\"turbo\": \"2.5.0\",\n\t\t\"typescript\": \"5.5.4\",\n\t\t\"vitest\": \"3.0.9\"\n\t},\n\t\"packageManager\": \"pnpm@10.8.0\",\n\t\"pnpm\": {\n\t\t\"onlyBuiltDependencies\": [\n\t\t\t\"esbuild\",\n\t\t\t\"sharp\",\n\t\t\t\"workerd\"\n\t\t],\n\t\t\"overrides\": {\n\t\t\t\"esbuild\": \"0.25.1\"\n\t\t}\n\t}\n}\n"
+}

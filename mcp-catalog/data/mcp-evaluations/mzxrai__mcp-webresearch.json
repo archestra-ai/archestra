@@ -1,0 +1,83 @@
+{
+  "name": "mzxrai__mcp-webresearch",
+  "display_name": "mcp-webresearch",
+  "description": "MCP web research server (give Claude real-time info from the web)",
+  "author": {
+    "name": "mzxrai"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@mzxrai/mcp-webresearch@latest"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Web Research Server\n\nA Model Context Protocol (MCP) server for web research. \n\nBring real-time info into Claude and easily research any topic.\n\n## Features\n\n- Google search integration\n- Webpage content extraction\n- Research session tracking (list of visited pages, search queries, etc.)\n- Screenshot capture\n\n## Prerequisites\n\n- [Node.js](https://nodejs.org/) >= 18 (includes `npm` and `npx`)\n- [Claude Desktop app](https://claude.ai/download)\n\n## Installation\n\nFirst, ensure you've downloaded and installed the [Claude Desktop app](https://claude.ai/download) and you have npm installed.\n\nNext, add this entry to your `claude_desktop_config.json` (on Mac, found at `~/Library/Application\\ Support/Claude/claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"webresearch\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@mzxrai/mcp-webresearch@latest\"]\n    }\n  }\n}\n```\n\nThis config allows Claude Desktop to automatically start the web research MCP server when needed.\n\n## Usage\n\nSimply start a chat with Claude and send a prompt that would benefit from web research. If you'd like a prebuilt prompt customized for deeper web research, you can use the `agentic-research` prompt that we provide through this package. Access that prompt in Claude Desktop by clicking the Paperclip icon in the chat input and then selecting `Choose an integration` → `webresearch` → `agentic-research`.\n\n<img src=\"https://i.ibb.co/N6Y3C0q/Screenshot-2024-12-05-at-11-01-27-PM.png\" alt=\"Example screenshot of web research\" width=\"400\"/>\n\n### Tools\n\n1. `search_google`\n   - Performs Google searches and extracts results\n   - Arguments: `{ query: string }`\n\n2. `visit_page`\n   - Visits a webpage and extracts its content\n   - Arguments: `{ url: string, takeScreenshot?: boolean }`\n\n3. `take_screenshot`\n   - Takes a screenshot of the current page\n   - No arguments required\n\n### Prompts\n\n#### `agentic-research`\nA guided research prompt that helps Claude conduct thorough web research. The prompt instructs Claude to:\n- Start with broad searches to understand the topic landscape\n- Prioritize high-quality, authoritative sources\n- Iteratively refine the research direction based on findings\n- Keep you informed and let you guide the research interactively\n- Always cite sources with URLs\n\n### Resources\n\nWe expose two things as MCP resources: (1) captured webpage screenshots, and (2) the research session.\n\n#### Screenshots\n\nWhen you take a screenshot, it's saved as an MCP resource. You can access captured screenshots in Claude Desktop via the Paperclip icon.\n\n#### Research Session\n\nThe server maintains a research session that includes:\n- Search queries\n- Visited pages\n- Extracted content\n- Screenshots\n- Timestamps\n\n### Suggestions\n\nFor the best results, if you choose not to use the `agentic-research` prompt when doing your research, it may be helpful to suggest high-quality sources for Claude to use when researching general topics. For example, you could prompt `news today from reuters or AP` instead of `news today`.\n\n## Problems\n\nThis is very much pre-alpha code. And it is also AIGC, so expect bugs.\n\nIf you run into issues, it may be helpful to check Claude Desktop's MCP logs:\n\n```bash\ntail -n 20 -f ~/Library/Logs/Claude/mcp*.log\n```\n\n## Development\n\n```bash\n# Install dependencies\npnpm install\n\n# Build the project\npnpm build\n\n# Watch for changes\npnpm watch\n\n# Run in development mode\npnpm dev\n```\n\n## Requirements\n\n- Node.js >= 18\n- Playwright (automatically installed as a dependency)\n\n## Verified Platforms\n\n- [x] macOS\n- [ ] Linux\n\n## License\n\nMIT\n\n## Author\n\n[mzxrai](https://github.com/mzxrai) ",
+  "category": "AI Tools",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-webresearch": {
+        "command": "npx",
+        "args": ["-y", "@mzxrai/mcp-webresearch@latest"],
+        "env": {}
+      },
+      "mcp-webresearch-dev": {
+        "command": "pnpm",
+        "args": ["dev"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mzxrai",
+    "repo": "mcp-webresearch",
+    "url": "https://github.com/mzxrai/mcp-webresearch",
+    "name": "mcp-webresearch",
+    "path": null,
+    "stars": 272,
+    "contributors": 0,
+    "issues": 7,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "5be90e90070ff49dcf3434efccf816b366d374ba"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:29.693Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "playwright",
+      "importance": 9
+    },
+    {
+      "name": "turndown",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@mzxrai/mcp-webresearch\",\n  \"version\": \"0.1.7\",\n  \"description\": \"MCP server for web research\",\n  \"license\": \"MIT\",\n  \"author\": \"mzxrai\",\n  \"homepage\": \"https://github.com/mzxrai/mcp-webresearch\",\n  \"bugs\": \"https://github.com/mzxrai/mcp-webresearch/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-webresearch\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"pnpm run build\",\n    \"postinstall\": \"playwright install chromium\",\n    \"watch\": \"tsc --watch\",\n    \"dev\": \"tsx watch index.ts\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"web-research\",\n    \"ai\",\n    \"web-scraping\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.1\",\n    \"playwright\": \"^1.49.0\",\n    \"turndown\": \"^7.1.2\"\n  },\n  \"devDependencies\": {\n    \"shx\": \"^0.3.4\",\n    \"tsx\": \"^4.19.2\",\n    \"typescript\": \"^5.6.2\",\n    \"@types/turndown\": \"^5.0.4\"\n  }\n}"
+}

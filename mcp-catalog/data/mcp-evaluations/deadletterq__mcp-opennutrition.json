@@ -1,0 +1,93 @@
+{
+  "name": "deadletterq__mcp-opennutrition",
+  "display_name": "mcp-opennutrition",
+  "description": "MCP server providing access to the comprehensive OpenNutrition food database with 300,000+ food items, nutritional data, and barcode lookups",
+  "author": {
+    "name": "deadletterq"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP OpenNutrition\n\nA Model Context Protocol (MCP) server providing access to the comprehensive OpenNutrition food database with 300,000+ food items, nutritional data, and barcode lookups.\n\nOpenNutrition addresses the longstanding issues with fragmented and unreliable nutritional data by combining authoritative public sources (USDA, CNF, FRIDA, AUSNUT). Unlike other databases that suffer from inconsistent user-generated content or restrictive commercial licensing, OpenNutrition provides transparent, comprehensive, and accurate nutritional data that's freely accessible to developers and researchers.\n\n## Tools\n\n- **Search by Name**: Find foods by name, brand, or partial matches\n- **Browse Foods**: Get paginated lists of all available foods\n- **Get by ID**: Retrieve detailed nutritional information using food IDs\n- **Barcode Lookup**: Find foods using EAN-13 barcodes\n\n## Installation\n\n1. Install dependencies:\n   ```bash\n   npm install\n   ```\n\n2. Build the project:\n   ```bash\n   npm run build\n   ```\n\n3. Add to your Claude/Cline MCP configuration (set the same version of node that you used to build the project):\n   ```json\n   \"mcp-opennutrition\": {\n       \"command\": \"/Users/YOUR.USERNAME/.nvm/versions/node/v20.19.0/bin/node\",\n       \"args\": [\n           \"/ABSOLUTE/PATH/TO/PARENT/FOLDER/mcp-opennutrition/build/index.js\"\n       ]\n   }\n   ```\n\n## Data Source\n\nThis server uses the [OpenNutrition dataset](https://www.opennutrition.app/).\n\nThe dataset provides comprehensive nutritional profiles including macronutrients, vitamins, and minerals.\n\n## Usage\n\nOnce configured, the MCP server runs fully locally on your machine and automatically provides food and nutrition query capabilities to Claude/Cline. All data processing and queries happen locally with no external API calls, ensuring privacy and fast response times.\n\n## Example\n\nHere is an example of how Claude uses the tool for a brownie recipe:\n\n![Brownie Recipe Example](readme_example.png)\n",
+  "category": "Data",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-opennutrition": {
+        "command": "node",
+        "args": [
+          "/Users/YOUR.USERNAME/.nvm/versions/node/v20.19.0/bin/node",
+          "/ABSOLUTE/PATH/TO/PARENT/FOLDER/mcp-opennutrition/build/index.js"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "deadletterq",
+    "repo": "mcp-opennutrition",
+    "url": "https://github.com/deadletterq/mcp-opennutrition",
+    "name": "mcp-opennutrition",
+    "path": null,
+    "stars": 92,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "3477c52404dae50c0c734163d3c6a6aba97fe3d1"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:26.243Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@types/yauzl",
+      "importance": 2
+    },
+    {
+      "name": "better-sqlite3",
+      "importance": 9
+    },
+    {
+      "name": "papaparse",
+      "importance": 7
+    },
+    {
+      "name": "yauzl",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-opennutrition\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-opennutrition\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"rm -rf build && tsc && npm run convert-data && chmod 755 build/index.js\",\n    \"inspector\": \"tsc && npm run convert-data && npx @modelcontextprotocol/inspector npx tsx src/index.ts\",\n    \"convert-data\": \"tsx scripts/decompress-dataset.ts && tsx scripts/tsv-to-sqlite.ts && rm -rf data_local_temp\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"MCP implementation for OpenNutrition dataset access. Provides  listing, querying, and filtering foods.\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"@types/yauzl\": \"^2.10.3\",\n    \"better-sqlite3\": \"^11.7.0\",\n    \"papaparse\": \"^5.4.1\",\n    \"yauzl\": \"^3.2.0\",\n    \"zod\": \"^3.25.46\"\n  },\n  \"devDependencies\": {\n    \"@types/better-sqlite3\": \"^7.6.13\",\n    \"@types/node\": \"^22.15.29\",\n    \"@types/papaparse\": \"^5.3.16\",\n    \"tsx\": \"^4.19.2\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

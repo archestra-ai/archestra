@@ -1,0 +1,188 @@
+{
+  "name": "securityfortech__secops-mcp",
+  "display_name": "secops-mcp",
+  "description": "All-in-one security testing toolbox that brings together popular open source tools through a single MCP interface. Connected to an AI agent, it enables tasks like pentesting, bug bounty hunting, threat hunting, and more.",
+  "author": {
+    "name": "securityfortech"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Security Operations Multi-Tool Platform (MCP)\n\nA comprehensive security operations platform that integrates multiple security tools into a unified interface. This platform provides a centralized way to run various security scanning and testing tools.\n\n## Features\n\n- **Unified Interface**: Single entry point for multiple security tools\n- **Docker Support**: Easy deployment using Docker\n- **JSON Output**: Consistent JSON output format across all tools\n- **Error Handling**: Robust error handling and reporting\n- **Extensible**: Easy to add new tools and functionality\n\n## Included Tools\n\n- **Nuclei**: Fast and customizable vulnerability scanner\n- **FFUF**: Fast web fuzzer and content discovery tool\n- **Amass**: In-depth attack surface mapping and external asset discovery\n- **Arjun**: HTTP parameter discovery tool for finding hidden parameters\n- **Dirsearch**: Web path scanner\n- **Gospider**: Fast web spider for crawling and URL discovery\n- **Hashcat**: Advanced password recovery\n- **HTTPX**: Fast and multi-purpose HTTP toolkit\n- **IPInfo**: IP address information gathering\n- **Nmap**: Network exploration and security auditing\n- **SQLMap**: Automatic SQL injection and database takeover tool\n- **Subfinder**: Subdomain discovery tool\n- **TLSX**: TLS/SSL scanning and analysis\n- **WFuzz**: Web application fuzzer\n- **XSStrike**: Advanced XSS detection and exploitation\n\n## Tool Categories\n\n### Web Application Security\n- **Nuclei**: Vulnerability scanning with custom templates\n- **FFUF**: Fast web fuzzing and content discovery\n- **WFuzz**: Web application fuzzing\n- **XSStrike**: XSS detection and exploitation\n- **SQLMap**: SQL injection testing and exploitation\n- **Arjun**: HTTP parameter discovery and testing\n- **Gospider**: Web crawling and URL discovery\n- **Dirsearch**: Directory and file enumeration\n\n### Network Security\n- **Nmap**: Network scanning and service enumeration\n- **HTTPX**: HTTP probing and analysis\n- **TLSX**: TLS/SSL configuration analysis\n\n### Reconnaissance\n- **Amass**: Attack surface mapping and asset discovery\n- **Subfinder**: Subdomain enumeration\n- **IPInfo**: IP address intelligence gathering\n\n### Cryptography\n- **Hashcat**: Password cracking and hash analysis\n\n## Recent Additions\n\n### Gospider Integration\n- **Web Crawling**: Automated website crawling and URL discovery\n- **Multiple Output Formats**: JSON and text output support\n- **Filtering Capabilities**: Extension-based filtering and content filtering\n- **Configurable Depth**: Customizable crawling depth and concurrency\n- **Subdomain Support**: Option to include subdomains in crawling\n- **Form Detection**: Automatic detection of HTML forms\n- **Secret Discovery**: Identification of potential sensitive information\n\n### Arjun Integration\n- **Parameter Discovery**: Find hidden HTTP parameters in web applications\n- **Multiple HTTP Methods**: Support for GET, POST, PUT, and other methods\n- **Bulk Scanning**: Scan multiple URLs simultaneously\n- **Custom Wordlists**: Use custom parameter wordlists\n- **Stable Mode**: Reduced false positives with stable scanning mode\n- **Custom Headers**: Support for custom HTTP headers and authentication\n- **Threading Support**: Configurable threading for faster scans\n\n## Installation\n\n### Using Docker (Recommended)\n\n1. Clone the repository:\n   ```bash\n   git clone https://github.com/securityfortech/secops-mcp.git\n   cd secops-mcp\n   ```\n\n2. Build the Docker image:\n   ```bash\n   docker build -t secops-mcp .\n   ```\n\n3. Run the container:\n   ```bash\n   docker run -it --rm secops-mcp\n   ```\n\n### Manual Installation\n\n1. Clone the repository:\n   ```bash\n   git clone https://github.com/securityfortech/secops-mcp.git\n   cd secops-mcp\n   ```\n\n2. Create and activate a virtual environment:\n   ```bash\n   python -m venv venv\n   source venv/bin/activate  # On Windows: venv\\Scripts\\activate\n   ```\n\n3. Install dependencies:\n   ```bash\n   pip install -r requirements.txt\n   ```\n\n4. Install required tools:\n   - Follow the installation instructions for each tool in the `tools/` directory\n   - Ensure all tools are in your system PATH\n\n## Usage\n\n1. Start the application:\n   ```bash\n   python main.py\n   ```\n\n2. The application will provide a unified interface for running various security tools.\n\n3. Each tool returns results in a consistent JSON format:\n   ```json\n   {\n       \"success\": boolean,\n       \"error\": string (if error),\n       \"results\": object (if success)\n   }\n   ```\n\n## Usage Examples\n\n### Gospider Web Crawling\n```python\n# Basic web crawling\ngospider_scan(\"https://example.com\", depth=3, include_subs=True)\n\n# Filtered crawling for specific file types\ngospider_filtered_scan(\n    \"https://example.com\",\n    extensions=[\"js\", \"json\", \"xml\"],\n    exclude_extensions=[\"png\", \"jpg\", \"css\"]\n)\n```\n\n### Arjun Parameter Discovery\n```python\n# Basic parameter discovery\narjun_scan(\"https://example.com/api\", method=\"GET\")\n\n# POST parameter discovery with custom data\narjun_scan(\n    \"https://example.com/login\",\n    method=\"POST\",\n    data=\"username=test&password=test\",\n    stable=True\n)\n\n# Bulk parameter scanning\narjun_bulk_parameter_scan([\n    \"https://example.com/api/v1\",\n    \"https://example.com/api/v2\"\n])\n```\n\n## Tool Configuration\n\nEach tool can be configured through its respective wrapper in the `tools/` directory. Configuration options include:\n\n- Output formats\n- Timeouts\n- Verbosity levels\n- Custom wordlists\n- Tool-specific parameters\n\n## Security Considerations\n\n- This tool is for authorized security testing only\n- Always obtain proper authorization before scanning systems\n- Be mindful of rate limiting and scanning intensity\n- Respect robots.txt and terms of service\n- Use appropriate wordlists and scanning parameters\n\n## Contributing\n\n1. Fork the repository\n2. Create a feature branch\n3. Commit your changes\n4. Push to the branch\n5. Create a Pull Request\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Acknowledgments\n\n- All the security tools and their developers\n- The security community for their contributions and support\n",
+  "category": "Security",
+  "quality_score": 36,
+  "archestra_config": {
+    "client_config_permutations": {
+      "secops-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-it", "--rm", "secops-mcp"],
+        "env": {},
+        "docker_image": "secops-mcp"
+      },
+      "secops-mcp": {
+        "command": "python",
+        "args": ["main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "securityfortech",
+    "repo": "secops-mcp",
+    "url": "https://github.com/securityfortech/secops-mcp",
+    "name": "secops-mcp",
+    "path": null,
+    "stars": 124,
+    "contributors": 3,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "395ee6dc4087ff97f61c70bda0dad715b66faefd"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.098Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "starlette",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "pydantic_core",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 7
+    },
+    {
+      "name": "openai",
+      "importance": 7
+    },
+    {
+      "name": "openai-agents",
+      "importance": 7
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 7
+    },
+    {
+      "name": "anyio",
+      "importance": 6
+    },
+    {
+      "name": "httpcore",
+      "importance": 6
+    },
+    {
+      "name": "httpx-sse",
+      "importance": 6
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 6
+    },
+    {
+      "name": "urllib3",
+      "importance": 6
+    },
+    {
+      "name": "click",
+      "importance": 5
+    },
+    {
+      "name": "h11",
+      "importance": 5
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "annotated-types",
+      "importance": 4
+    },
+    {
+      "name": "jiter",
+      "importance": 4
+    },
+    {
+      "name": "sniffio",
+      "importance": 4
+    },
+    {
+      "name": "typing_extensions",
+      "importance": 4
+    },
+    {
+      "name": "certifi",
+      "importance": 3
+    },
+    {
+      "name": "charset-normalizer",
+      "importance": 3
+    },
+    {
+      "name": "colorama",
+      "importance": 3
+    },
+    {
+      "name": "distro",
+      "importance": 3
+    },
+    {
+      "name": "idna",
+      "importance": 3
+    },
+    {
+      "name": "tqdm",
+      "importance": 3
+    },
+    {
+      "name": "typing-inspection",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nannotated-types==0.7.0\nanyio==4.9.0\ncertifi==2025.1.31\ncharset-normalizer==3.4.1\nclick==8.1.8\ncolorama==0.4.6\ndistro==1.9.0\ngriffe==1.7.2\nh11==0.14.0\nhttpcore==1.0.7\nhttpx==0.28.1\nhttpx-sse==0.4.0\nidna==3.10\njiter==0.9.0\nmcp==1.6.0\nopenai==1.70.0\nopenai-agents==0.0.7\npydantic==2.11.2\npydantic-settings==2.8.1\npydantic_core==2.33.1\npython-dotenv==1.1.0\nrequests==2.32.3\nsniffio==1.3.1\nsse-starlette==2.2.1\nstarlette==0.46.1\ntqdm==4.67.1\ntypes-requests==2.32.0.20250328\ntyping-inspection==0.4.0\ntyping_extensions==4.13.1\nurllib3==2.3.0\nuvicorn==0.34.0\n"
+}

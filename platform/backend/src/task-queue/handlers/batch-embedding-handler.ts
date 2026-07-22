@@ -23,16 +23,19 @@ export async function handleBatchEmbedding(
   // *processed*, not ones still queued behind a backlog, so it can't stand in for
   // that check; the task-existence signal is what keeps a slow drain alive.
 
+  let outcome: Awaited<ReturnType<typeof embeddingService.processDocuments>>;
   try {
-    await embeddingService.processDocuments(
+    outcome = await embeddingService.processDocuments(
       documentIds,
       connectorRunId ?? undefined,
     );
     metrics.rag.reportEmbeddingBatch({
       documentCount: documentIds.length,
-      status: "success",
+      status: outcome.failedDocumentCount > 0 ? "error" : "success",
     });
   } catch (error) {
+    // processDocuments records per-document failures itself; a throw here is an
+    // unexpected fault (e.g. the database is down) — let the task queue retry it.
     metrics.rag.reportEmbeddingBatch({
       documentCount: documentIds.length,
       status: "error",
@@ -44,7 +47,17 @@ export async function handleBatchEmbedding(
     return;
   }
 
-  const updatedRun = await ConnectorRunModel.completeBatch(connectorRunId);
+  // Record any embedding failures on the connector run atomically with the batch
+  // completion, so the failure's cause is visible in the run (not just the logs).
+  const updatedRun = await ConnectorRunModel.completeBatch(
+    connectorRunId,
+    outcome.failedDocumentCount > 0
+      ? {
+          failedItems: outcome.failedDocumentCount,
+          error: outcome.errorMessage ?? "Embedding failed",
+        }
+      : undefined,
+  );
 
   // If all batches are done, update the connector's sync status.
   // Skip if run was superseded/failed — a newer run owns the connector status.

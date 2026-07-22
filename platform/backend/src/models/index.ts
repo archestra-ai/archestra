@@ -1,4 +1,5 @@
 export { default as A2AContextModel } from "./a2a-context";
+export { default as A2AContextCompactionModel } from "./a2a-context-compaction";
 export { default as A2AMessageModel } from "./a2a-message";
 export { default as A2ATaskModel } from "./a2a-task";
 export { default as A2ATaskApprovalRequestModel } from "./a2a-task-approval-request";
@@ -25,6 +26,7 @@ export { default as ActiveChatRunModel } from "./chat-active-run";
 export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";
 export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
+export { default as ChatOpsThreadContextModel } from "./chatops-thread-context";
 export { default as ConnectionSetupModel } from "./connection-setup";
 export { default as ConnectorRunModel } from "./connector-run";
 export { default as ConversationModel } from "./conversation";
@@ -100,6 +102,7 @@ export { default as SkillSandboxReplayEventModel } from "./skill-sandbox-replay-
 export { default as SkillShareLinkModel } from "./skill-share-link";
 export { default as SkillShareLinkRevisionModel } from "./skill-share-link-revision";
 export { default as SkillTeamModel } from "./skill-team";
+export { default as SkillUsageEventModel } from "./skill-usage-event";
 export { default as SkillVersionModel } from "./skill-version";
 export { default as StatisticsModel } from "./statistics";
 export { default as TaskModel } from "./task";

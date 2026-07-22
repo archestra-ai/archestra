@@ -1,0 +1,174 @@
+{
+  "name": "gabrielmaialva33__winx-code-agent",
+  "display_name": "winx-code-agent",
+  "description": "✨ A high-performance code agent written in Rust, combining the best features of WCGW for maximum efficiency and semantic capabilities. 🦀",
+  "author": {
+    "name": "gabrielmaialva33"
+  },
+  "server": {
+    "command": "server/winx-code-agent",
+    "args": [],
+    "env": {
+      "RUST_LOG": "${user_config.rust_log}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "rust_log": {
+      "type": "string",
+      "title": "Rust Log Level",
+      "description": "Set the logging level for the Rust application (e.g., info, debug, warn, error, trace).",
+      "default": "info",
+      "required": false
+    }
+  },
+  "readme": "<table style=\"width:100%\" align=\"center\" border=\"0\">\n  <tr>\n    <td width=\"40%\" align=\"center\"><img src=\".github/assets/fairy.png\" alt=\"Winx\" width=\"300\"></td>\n    <td><h1>✨ Ｗｉｎｘ Ａｇｅｎｔ ✨</h1></td>\n  </tr>\n</table>\n\n<p align=\"center\">\n  <strong>🦀 A high-performance Rust implementation of WCGW for code agents 🦀</strong>\n</p>\n\n<p align=\"center\">\n  <img src=\"https://img.shields.io/badge/language-Rust-orange?style=flat&logo=rust\" alt=\"Language\" />\n  <img src=\"https://img.shields.io/badge/license-MIT-blue?style=flat&logo=appveyor\" alt=\"License\" />\n  <img src=\"https://img.shields.io/github/languages/count/gabrielmaialva33/winx-code-agent?style=flat&logo=appveyor\" alt=\"GitHub language count\" >\n  <img src=\"https://img.shields.io/github/repo-size/gabrielmaialva33/winx-code-agent?style=flat&logo=appveyor\" alt=\"Repository size\" >\n  <a href=\"https://github.com/gabrielmaialva33/winx-code-agent/commits/main\">\n    <img src=\"https://img.shields.io/github/last-commit/gabrielmaialva33/winx-code-agent?style=flat&logo=appveyor\" alt=\"Last Commit\" >\n  </a>\n  <img src=\"https://img.shields.io/badge/made%20by-Maia-15c3d6?style=flat&logo=appveyor\" alt=\"Made by Maia\" >\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/gabrielmaialva33/winx-code-agent)](https://archestra.ai/mcp-catalog/gabrielmaialva33__winx-code-agent)\n</p>\n\n---\n\n## 📖 Overview\n\nWinx is a Rust reimplementation of [WCGW](https://github.com/rusiaaman/wcgw), providing shell execution and file\nmanagement capabilities for LLM code agents. Designed for high performance and reliability, Winx integrates with Claude\nand other LLMs via the Model Context Protocol (MCP).\n\n## 🌟 Features\n\n- ⚡ **High Performance**: Implemented in Rust for maximum efficiency\n- 🤖 **Multi-Provider AI Integration** (v0.1.5):\n    - 🎯 **DashScope/Qwen3**: Primary AI provider with Alibaba Cloud's Qwen3-Coder-Plus model\n    - 🔄 **NVIDIA NIM**: Fallback 1 with Qwen3-235B-A22B model and thinking mode\n    - 💎 **Google Gemini**: Fallback 2 with Gemini-1.5-Pro and Gemini-1.5-Flash models\n    - 🔧 **AI-Powered Code Analysis**: Detect bugs, security issues, and performance problems\n    - 🚀 **AI Code Generation**: Generate code from natural language descriptions\n    - 📚 **AI Code Explanation**: Get detailed explanations of complex code\n    - 🎭 **AI-to-AI Chat**: Winx fairy assistant with personality and multiple conversation modes\n    - 🛡️ **Smart Fallback System**: Automatic provider switching on failures\n- 📁 **Advanced File Operations**:\n    - 📖 Read files with line range support\n    - ✏️ Write new files with syntax validation\n    - 🔍 Edit existing files with intelligent search/replace\n    - 🔄 Smart file caching with change detection\n    - 📏 Line-level granular read tracking\n- 🖥️ **Command Execution**:\n    - 🚀 Run shell commands with status tracking\n    - 📟 Interactive shell with persistent session\n    - ⌨️ Full input/output control via PTY\n    - 🏃‍♂️ Background process execution\n- 🔀 **Operational Modes**:\n    - 🔓 `wcgw`: Complete access to all features\n    - 🔎 `architect`: Read-only mode for planning and analysis\n    - 🔒 `code_writer`: Restricted access for controlled modifications\n- 📊 **Project Management**:\n    - 📝 Repository structure analysis\n    - 💾 Context saving and task resumption\n- 🖼️ **Media Support**: Read images and encode as base64\n- 🧩 **MCP Protocol**: Seamless integration with Claude and other LLMs\n\n---\n\n## 🖇️ Installation & Setup\n\n### Prerequisites\n\n- Rust 1.70 or higher\n- Tokio runtime\n\n### 1. Clone the Repository\n\n```bash\ngit clone https://github.com/gabrielmaialva33/winx-code-agent.git && cd winx\n```\n\n### 2. Build the Project\n\n```bash\n# For development\ncargo build\n\n# For production\ncargo build --release\n```\n\n### 3. Run the Agent\n\n```bash\n# Using cargo\ncargo run\n\n# Or directly\n./target/release/winx-code-agent\n```\n\n---\n\n## 🔧 Integration with Claude\n\nWinx is designed to work seamlessly with Claude via the MCP interface:\n\n1. **Edit Claude's Configuration**\n   ```json\n   // In claude_desktop_config.json (Mac: ~/Library/Application Support/Claude/claude_desktop_config.json)\n   {\n     \"mcpServers\": {\n       \"winx\": {\n         \"command\": \"/path/to/winx-code-agent\",\n         \"args\": [],\n         \"env\": {\n           \"RUST_LOG\": \"info\",\n           \"DASHSCOPE_API_KEY\": \"your-dashscope-api-key\",\n           \"DASHSCOPE_MODEL\": \"qwen3-coder-plus\",\n           \"NVIDIA_API_KEY\": \"your-nvidia-api-key\",\n           \"NVIDIA_DEFAULT_MODEL\": \"qwen/qwen3-235b-a22b\",\n           \"GEMINI_API_KEY\": \"your-gemini-api-key\",\n           \"GEMINI_MODEL\": \"gemini-1.5-pro\"\n         }\n       }\n     }\n   }\n   ```\n\n2. **Restart Claude** after configuration to see the Winx MCP integration icon.\n\n3. **Start using the tools** through Claude's interface.\n\n---\n\n## 🛠️ Available Tools\n\n### 🚀 initialize\n\nAlways call this first to set up your workspace environment.\n\n```\ninitialize(\n  type=\"first_call\",\n  any_workspace_path=\"/path/to/project\",\n  mode_name=\"wcgw\"\n)\n```\n\n### 🖥️ bash_command\n\nExecute shell commands with persistent shell state and full interactive capabilities.\n\n```\n# Execute commands\nbash_command(\n  action_json={\"command\": \"ls -la\"},\n  chat_id=\"i1234\"\n)\n\n# Check command status\nbash_command(\n  action_json={\"status_check\": true},\n  chat_id=\"i1234\"\n)\n\n# Send input to running commands\nbash_command(\n  action_json={\"send_text\": \"y\"},\n  chat_id=\"i1234\"\n)\n\n# Send special keys (Ctrl+C, arrow keys, etc.)\nbash_command(\n  action_json={\"send_specials\": [\"Enter\", \"CtrlC\"]},\n  chat_id=\"i1234\"\n)\n```\n\n### 📁 File Operations\n\n- **read_files**: Read file content with line range support\n  ```\n  read_files(\n    file_paths=[\"/path/to/file.rs\"],\n    show_line_numbers_reason=null\n  )\n  ```\n\n- **file_write_or_edit**: Write or edit files\n  ```\n  file_write_or_edit(\n    file_path=\"/path/to/file.rs\",\n    percentage_to_change=100,\n    file_content_or_search_replace_blocks=\"content...\",\n    chat_id=\"i1234\"\n  )\n  ```\n\n- **read_image**: Process image files as base64\n  ```\n  read_image(\n    file_path=\"/path/to/image.png\"\n  )\n  ```\n\n### 💾 context_save\n\nSave task context for later resumption.\n\n```\ncontext_save(\n  id=\"task_name\",\n  project_root_path=\"/path/to/project\",\n  description=\"Task description\",\n  relevant_file_globs=[\"**/*.rs\"]\n)\n```\n\n### 🤖 AI-Powered Tools (v0.1.5)\n\n- **code_analyzer**: AI-powered code analysis for bugs, security, and performance\n  ```\n  code_analyzer(\n    file_path=\"/path/to/code.rs\",\n    language=\"Rust\"\n  )\n  ```\n\n- **ai_generate_code**: Generate code from natural language description\n  ```\n  ai_generate_code(\n    prompt=\"Create a REST API for user management\",\n    language=\"Rust\",\n    context=\"Using Axum framework\",\n    max_tokens=1000,\n    temperature=0.7\n  )\n  ```\n\n- **ai_explain_code**: Get AI explanation and documentation for code\n  ```\n  ai_explain_code(\n    file_path=\"/path/to/code.rs\",\n    language=\"Rust\",\n    detail_level=\"expert\"\n  )\n  ```\n\n- **winx_chat**: Chat with Winx, your AI assistant fairy ✨\n  ```\n  winx_chat(\n    message=\"Oi Winx, como funciona o sistema de fallback?\",\n    conversation_mode=\"technical\",\n    include_system_info=true,\n    personality_level=8\n  )\n  ```\n\n  **Conversation Modes:**\n  - `casual`: Informal, friendly chat with personality 😊\n  - `technical`: Focused technical responses 🔧\n  - `help`: Help mode with detailed explanations 🆘\n  - `debug`: Debugging assistance 🐛\n  - `creative`: Creative brainstorming 💡\n  - `mentor`: Teaching and best practices 🧙‍♀️\n\n---\n\n## 👨‍💻 Usage Workflow\n\n1. **Initialize the workspace**\n   ```\n   initialize(type=\"first_call\", any_workspace_path=\"/path/to/your/project\")\n   ```\n\n2. **Explore the codebase**\n   ```\n   bash_command(action_json={\"command\": \"find . -type f -name '*.rs' | sort\"}, chat_id=\"i1234\")\n   ```\n\n3. **Read key files**\n   ```\n   read_files(file_paths=[\"/path/to/important_file.rs\"])\n   ```\n\n4. **Make changes**\n   ```\n   file_write_or_edit(file_path=\"/path/to/file.rs\", percentage_to_change=30, \n   file_content_or_search_replace_blocks=\"<<<<<<< SEARCH\\nold code\\n=======\\nnew code\\n>>>>>>> REPLACE\", \n   chat_id=\"i1234\")\n   ```\n\n5. **Run tests**\n   ```\n   bash_command(action_json={\"command\": \"cargo test\"}, chat_id=\"i1234\")\n   ```\n\n6. **Chat with Winx for help**\n   ```\n   winx_chat(message=\"Winx, posso ter ajuda para otimizar este código?\", \n   conversation_mode=\"mentor\", include_system_info=true)\n   ```\n\n7. **Save context for later**\n   ```\n   context_save(id=\"my_task\", project_root_path=\"/path/to/project\", \n   description=\"Implementation of feature X\", relevant_file_globs=[\"src/**/*.rs\"])\n   ```\n\n---\n\n## 🏷 Need Support or Assistance?\n\nIf you need help or have any questions about Winx, feel free to reach out via the following channels:\n\n- [GitHub Issues](https://github.com/gabrielmaialva33/winx-code-agent/issues/new?assignees=&labels=question&title=support%3A+):\n  Open a support issue on GitHub.\n- Email: gabrielmaialva33@gmail.com\n\n---\n\n## 📝 Changelog\n\n### v0.1.5 (Latest) - Multi-Provider AI Integration\n\n**🚀 Major Features:**\n- **Multi-Provider AI System**: Primary DashScope, fallback to NVIDIA, then Gemini\n- **DashScope/Qwen3 Integration**: Alibaba Cloud's Qwen3-Coder-Plus as primary AI provider\n- **Smart Fallback System**: Automatic provider switching with comprehensive error handling\n- **3 New AI Tools**: `code_analyzer`, `ai_generate_code`, `ai_explain_code`\n\n**🎯 AI Providers:**\n- **DashScope**: Primary provider with OpenAI-compatible API format\n- **NVIDIA NIM**: Qwen3-235B-A22B with thinking mode and MoE architecture\n- **Google Gemini**: Gemini-1.5-Pro and Gemini-1.5-Flash models\n\n**🛠️ Technical Improvements:**\n- Rate limiting and retry logic for all AI providers\n- Comprehensive logging and error reporting\n- Environment-based configuration management\n- Full CI/CD quality checks (formatting, linting, testing)\n\n---\n\n## 🙏 Special Thanks\n\nA huge thank you to [rusiaaman](https://github.com/rusiaaman) for the inspiring work\non [WCGW](https://github.com/rusiaaman/wcgw), which served as the primary inspiration for this project. Winx\nreimplements WCGW's features in Rust for enhanced performance and reliability.\n\n---\n\n## 📜 License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "winx": {
+        "command": "/path/to/winx-code-agent",
+        "args": [],
+        "env": {
+          "RUST_LOG": "info"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gabrielmaialva33",
+    "repo": "winx-code-agent",
+    "url": "https://github.com/gabrielmaialva33/winx-code-agent",
+    "name": "gabrielmaialva33__winx-code-agent",
+    "path": null,
+    "stars": 16,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "ffe32681fd43ba9f75061ea82cdd3b84afe16b90"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:19.936Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "vte",
+      "importance": 8
+    },
+    {
+      "name": "serde",
+      "importance": 7
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "schemars",
+      "importance": 7
+    },
+    {
+      "name": "rayon",
+      "importance": 7
+    },
+    {
+      "name": "libc",
+      "importance": 7
+    },
+    {
+      "name": "anyhow",
+      "importance": 6
+    },
+    {
+      "name": "thiserror",
+      "importance": 6
+    },
+    {
+      "name": "base64",
+      "importance": 6
+    },
+    {
+      "name": "regex",
+      "importance": 6
+    },
+    {
+      "name": "memmap2",
+      "importance": 6
+    },
+    {
+      "name": "tokenizers",
+      "importance": 6
+    },
+    {
+      "name": "tracing",
+      "importance": 5
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 5
+    },
+    {
+      "name": "glob",
+      "importance": 5
+    },
+    {
+      "name": "bytes",
+      "importance": 5
+    },
+    {
+      "name": "rand",
+      "importance": 4
+    },
+    {
+      "name": "sha2",
+      "importance": 4
+    },
+    {
+      "name": "home",
+      "importance": 3
+    },
+    {
+      "name": "mime_guess",
+      "importance": 3
+    },
+    {
+      "name": "lazy_static",
+      "importance": 3
+    },
+    {
+      "name": "tempfile",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"winx-code-agent\"\nversion = \"0.1.6\"\nedition = \"2021\"\ndescription = \"Shell and coding agent for Claude Desktop\"\nauthors = [\"Gabriel Maia <gabrielmaialva33@gmail.com>\"]\n\n[dependencies]\n# Original MCP SDK - rmcp 0.5.0\nrmcp = { version = \"0.5.0\", features = [\"transport-io\", \"server\"] }\nschemars = \"1.0.4\"\n\n# Async runtime\ntokio = { version = \"1.44\", features = [\"full\"] }\nasync-trait = \"0.1\"\n\n# Serialization\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\n\n# Error handling\nanyhow = \"1.0\"\nthiserror = \"2.0\"\n\n# Logging and tracing\ntracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\"env-filter\"] }\n\n# File and system operations\nhome = \"0.5\"\nsha2 = \"0.10\"\nbase64 = \"0.22\"\nglob = \"0.3\"\nregex = \"1.11\"\nmime_guess = \"2.0\"\nmemmap2 = \"0.9\"\ntempfile = \"3.20\"\nchrono = { version = \"0.4\", features = [\"serde\"] }\n\n# Performance and concurrency\nrayon = \"1.10\"\nbytes = \"1.10\"\nlazy_static = \"1.5\"\nlibc = \"0.2\"\n\n# Terminal and text processing\nvte = \"0.15\"\n\n# Random number generation\nrand = \"0.9\"\n\n# NLP processing\ntokenizers = \"0.21.4\"\n\n# HTTP client for NVIDIA API integration\nreqwest = { version = \"0.12\", features = [\"json\", \"stream\"] }\nuuid = { version = \"1.0\", features = [\"v4\"] }\n\n[dev-dependencies]\ntempfile = \"3.8.1\"\ntokio-test = \"0.4\"\ncriterion = { version = \"0.7.0\", features = [\"html_reports\"] }"
+}

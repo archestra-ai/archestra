@@ -1,0 +1,134 @@
+{
+  "name": "lucashild__mcp-server-bigquery",
+  "display_name": "mcp-server-bigquery",
+  "description": "A Model Context Protocol server that provides access to BigQuery",
+  "author": {
+    "name": "LucasHild"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-bigquery"],
+    "env": {
+      "BIGQUERY_PROJECT": "${user_config.bigquery_project}",
+      "BIGQUERY_LOCATION": "${user_config.bigquery_location}",
+      "BIGQUERY_DATASETS": "${user_config.bigquery_datasets}",
+      "BIGQUERY_KEY_FILE": "${user_config.bigquery_key_file}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bigquery_project": {
+      "type": "string",
+      "title": "GCP Project ID",
+      "description": "The GCP project ID.",
+      "required": true,
+      "sensitive": false
+    },
+    "bigquery_location": {
+      "type": "string",
+      "title": "GCP Location",
+      "description": "The GCP location (e.g. `europe-west9`).",
+      "required": true,
+      "sensitive": false
+    },
+    "bigquery_datasets": {
+      "type": "string",
+      "title": "BigQuery Datasets",
+      "description": "Only take specific BigQuery datasets into consideration. Several datasets can be specified by joining them with a comma. If not provided, all datasets in the project will be considered.",
+      "required": false,
+      "sensitive": false
+    },
+    "bigquery_key_file": {
+      "type": "file",
+      "title": "Service Account Key File",
+      "description": "Path to a service account key file for BigQuery. If not provided, the server will use the default credentials.",
+      "required": false,
+      "sensitive": true
+    }
+  },
+  "readme": "# BigQuery MCP server\n\n[![smithery badge](https://smithery.ai/badge/mcp-server-bigquery)](https://smithery.ai/server/mcp-server-bigquery)\n\nA Model Context Protocol server that provides access to BigQuery. This server enables LLMs to inspect database schemas and execute queries.\n\n## Components\n\n### Tools\n\nThe server implements one tool:\n\n- `execute-query`: Executes a SQL query using BigQuery dialect\n- `list-tables`: Lists all tables in the BigQuery database\n- `describe-table`: Describes the schema of a specific table\n\n## Configuration\n\nThe server can be configured either with command line arguments or environment variables.\n\n| Argument     | Environment Variable | Required | Description                                                                                                                                                                                                                                                                                                                                                    |\n| ------------ | -------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |\n| `--project`  | `BIGQUERY_PROJECT`   | Yes      | The GCP project ID.                                                                                                                                                                                                                                                                                                                                            |\n| `--location` | `BIGQUERY_LOCATION`  | Yes      | The GCP location (e.g. `europe-west9`).                                                                                                                                                                                                                                                                                                                        |\n| `--dataset`  | `BIGQUERY_DATASETS`  | No       | Only take specific BigQuery datasets into consideration. Several datasets can be specified by repeating the argument (e.g. `--dataset my_dataset_1 --dataset my_dataset_2`) or by joining them with a comma in the environment variable (e.g. `BIGQUERY_DATASETS=my_dataset_1,my_dataset_2`). If not provided, all datasets in the project will be considered. |\n| `--key-file` | `BIGQUERY_KEY_FILE`  | No       | Path to a service account key file for BigQuery. If not provided, the server will use the default credentials.                                                                                                                                                                                                                                                 |\n\n## Quickstart\n\n### Install\n\n#### Installing via Smithery\n\nTo install BigQuery Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-server-bigquery):\n\n```bash\nnpx -y @smithery/cli install mcp-server-bigquery --client claude\n```\n\n#### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n##### Development/Unpublished Servers Configuration</summary>\n\n```json\n\"mcpServers\": {\n  \"bigquery\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"--directory\",\n      \"{{PATH_TO_REPO}}\",\n      \"run\",\n      \"mcp-server-bigquery\",\n      \"--project\",\n      \"{{GCP_PROJECT_ID}}\",\n      \"--location\",\n      \"{{GCP_LOCATION}}\"\n    ]\n  }\n}\n```\n\n##### Published Servers Configuration\n\n```json\n\"mcpServers\": {\n  \"bigquery\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"mcp-server-bigquery\",\n      \"--project\",\n      \"{{GCP_PROJECT_ID}}\",\n      \"--location\",\n      \"{{GCP_LOCATION}}\"\n    ]\n  }\n}\n```\n\nReplace `{{PATH_TO_REPO}}`, `{{GCP_PROJECT_ID}}`, and `{{GCP_LOCATION}}` with the appropriate values.\n\n## Development\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Increase the version number in `pyproject.toml`\n\n2. Sync dependencies and update lockfile:\n\n```bash\nuv sync\n```\n\n3. Build package distributions:\n\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n4. Publish to PyPI:\n\n```bash\nuv publish\n```\n\nNote: You'll need to set PyPI credentials via environment variables or command flags:\n\n- Token: `--token` or `UV_PUBLISH_TOKEN`\n- Or username/password: `--username`/`UV_PUBLISH_USERNAME` and `--password`/`UV_PUBLISH_PASSWORD`\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory {{PATH_TO_REPO}} run mcp-server-bigquery\n```\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-bigquery-development": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "{{PATH_TO_REPO}}",
+          "run",
+          "mcp-server-bigquery",
+          "--project",
+          "{{GCP_PROJECT_ID}}",
+          "--location",
+          "{{GCP_LOCATION}}"
+        ],
+        "env": {}
+      },
+      "mcp-server-bigquery-published": {
+        "command": "uvx",
+        "args": ["mcp-server-bigquery", "--project", "{{GCP_PROJECT_ID}}", "--location", "{{GCP_LOCATION}}"],
+        "env": {}
+      },
+      "mcp-server-bigquery-inspector": {
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/inspector",
+          "uv",
+          "--directory",
+          "{{PATH_TO_REPO}}",
+          "run",
+          "mcp-server-bigquery"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "LucasHild",
+    "repo": "mcp-server-bigquery",
+    "url": "https://github.com/LucasHild/mcp-server-bigquery",
+    "name": "lucashild__mcp-server-bigquery",
+    "path": null,
+    "stars": 118,
+    "contributors": 5,
+    "issues": 9,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d8c3ad9c5d558d3cfe6e4abc907d97ae1c5345d7"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:29.613Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "google-cloud-bigquery",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-bigquery\"\nversion = \"0.3.1\"\ndescription = \"A Model Context Protocol server that provides access to BigQuery. This server enables LLMs to inspect database schemas and execute queries.\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n \"google-cloud-bigquery>=3.27.0\",\n \"mcp>=1.0.0\",\n]\n[[project.authors]]\nname = \"Lucas Hild\"\nemail = \"\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-server-bigquery = \"mcp_server_bigquery:main\"\n"
+}

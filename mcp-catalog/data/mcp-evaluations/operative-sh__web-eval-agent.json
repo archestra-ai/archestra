@@ -1,0 +1,114 @@
+{
+  "name": "operative-sh__web-eval-agent",
+  "display_name": "web-eval-agent",
+  "description": "An MCP server that autonomously evaluates web applications. ",
+  "author": {
+    "name": "Operative-Sh"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@mcp/server"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# 🚀 operative.sh web-eval-agent MCP Server\n\n> *Let the coding agent debug itself, you've got better things to do.*\n\n![Demo](./demo.gif)\n\n\n\n## 🔥 Supercharge Your Debugging\n\n[operative.sh](https://www.operative.sh/mcp)'s MCP Server launches a browser-use powered agent to autonomously execute and debug web apps directly in your code editor.\n\n## ⚡ Features\n\n- 🌐 **Navigate your webapp** using BrowserUse (2x faster with operative backend)\n- 📊 **Capture network traffic** - requests are intelligently filtered and returned into the context window\n- 🚨 **Collect console errors** - captures logs & errors\n- 🤖 **Autonomous debugging** - the Cursor agent calls the web QA agent mcp server to test if the code it wrote works as epected end-to-end.\n\n## 🧰 MCP Tool Reference\n\n| Tool | Purpose |\n|------|---------|\n| `web_eval_agent` | 🤖 Automated UX evaluator that drives the browser, captures screenshots, console & network logs, and returns a rich UX report. |\n| `setup_browser_state` | 🔒 Opens an interactive (non-headless) browser so you can sign in once; the saved cookies/local-storage are reused by subsequent `web_eval_agent` runs. |\n\n**Key arguments**\n\n* `web_eval_agent`\n  * `url` **(required)** – address of the running app (e.g. `http://localhost:3000`)\n  * `task` **(required)** – natural-language description of what to test (\"run through the signup flow and note any UX issues\")\n  * `headless_browser` *(optional, default `false`)* – set to `true` to hide the browser window\n\n* `setup_browser_state`\n  * `url` *(optional)* – page to open first (handy to land directly on a login screen)\n\nYou can trigger these tools straight from your IDE chat, for example:\n\n```bash\nEvaluate my app at http://localhost:3000 – run web_eval_agent with the task \"Try the full signup flow and report UX issues\".\n```\n\n## 🏁 Quick Start\n\n### Easy Setup with One-Click Integration\n1. [Get your API key (free)](https://www.operative.sh/mcp) - when you create your API key, you'll see:\n   - **\"Add to Cursor\"** button with a deeplink for instant Cursor installation\n   - **Prefilled Claude Code command** with your API key automatically included\n\n### Manual Setup (macOS/Linux)\n\n1. Pre-requisites (typically not needed):\n - brew: `/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"`\n - npm: (`brew install npm`)\n - jq: `brew install jq` \n2. Run the installer after [getting an api key (free)](https://www.operative.sh/mcp)\n   - Installs [playwright](https://github.com/microsoft/playwright) \n   - [Installs uv](https://astral.sh/)\n   - Inserts JSON into your code editor (Cursor/Cline/Windsurf) for you! \n```bash\ncurl -LSf https://operative.sh/install.sh -o install.sh && bash install.sh && rm install.sh\n```\n3. Visit your favorite IDE and restart to apply the changes\n4. Send a prompt in chat mode to call the web eval agent tool! e.g. \n```bash\nTest my app on http://localhost:3000. Use web-eval-agent.\n```\n\n## 🛠️ Manual Installation\n1. Get your API key at operative.sh/mcp\n2. [Install uv](https://docs.astral.sh/uv/#highlights)\n\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n3. Source environment variables after installing UV\n\nMac\n```\nsource ~/.zshrc\n```\n\nLinux \n```\nsource ~/.bashrc \n```\n4. Install playwright:\n\n```bash\nnpm install -g chromium playwright && uvx --with playwright playwright install --with-deps\n```\n5. Add below JSON to your relevant code editor with api key \n6. Restart your code editor\n   \n## 🔃 Updating \n- `uv cache clean`\n- refresh MCP server \n\n```json \n    \"web-eval-agent\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--refresh-package\",\n        \"webEvalAgent\",\n        \"--from\",\n        \"git+https://github.com/Operative-Sh/web-eval-agent.git\",\n        \"webEvalAgent\"\n      ],\n      \"env\": {\n        \"OPERATIVE_API_KEY\": \"<YOUR_KEY>\"\n      }\n    }\n```\n## [Operative Discord Server](https://discord.gg/ryjCnf9myb)\n\n## 🛠️ Manual Installation (Mac + Cursor/Cline/Windsurf) \n1. Get your API key at operative.sh/mcp\n2. [Install uv](https://docs.astral.sh/uv/#highlights)\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh)\n```\n3. Install playwright:\n```bash\nnpm install -g chromium playwright && uvx --with playwright playwright install --with-deps\n```\n4. Add below JSON to your relevant code editor with api key \n5. Restart your code editor\n\n## Manual Installation (Windows + Cursor/Cline/Windsurf)  \n\nWe're refining this, please open an issue if you have any issues! \n1. Do all this in your code editor terminal \n2. `curl -LSf https://operative.sh/install.sh -o install.sh && bash install.sh && rm install.sh`\n3. Get your API key at operative.sh/mcp\n4. Install uv `(curl -LsSf https://astral.sh/uv/install.sh | sh)`\n5. `uvx --from git+https://github.com/Operative-Sh/web-eval-agent.git playwright install`\n6. Restart code editor \n\n\n## 🚨 Issues \n- Updates aren't being received in code editors, update or reinstall for latest version: Run `uv cache clean` for latest \n- Any issues feel free to open an Issue on this repo or in the discord!\n- 5/5 - static apps without changes weren't screencasting, fixed! `uv clean` + restart to get fix\n\n## Changelog \n- 4/29 - Agent overlay update - pause/play/stop agent run in the browser\n\n## 📋 Example MCP Server Output Report\n\n```text\n📊 Web Evaluation Report for http://localhost:5173 complete!\n📝 Task: Test the API-key deletion flow by navigating to the API Keys section, deleting a key, and judging the UX.\n\n🔍 Agent Steps\n  📍 1. Navigate → http://localhost:5173\n  📍 2. Click     \"Login\"        (button index 2)\n  📍 3. Click     \"API Keys\"     (button index 4)\n  📍 4. Click     \"Create Key\"   (button index 9)\n  📍 5. Type      \"Test API Key\" (input index 2)\n  📍 6. Click     \"Done\"         (button index 3)\n  📍 7. Click     \"Delete\"       (button index 10)\n  📍 8. Click     \"Delete\"       (confirm index 3)\n🏁 Flow tested successfully – UX felt smooth and intuitive.\n\n🖥️ Console Logs (10)\n  1. [debug] [vite] connecting…\n  2. [debug] [vite] connected.\n  3. [info]  Download the React DevTools …\n     …\n\n🌐 Network Requests (10)\n  1. GET /src/pages/SleepingMasks.tsx                   304\n  2. GET /src/pages/MCPRegistryRegistry.tsx             304\n     …\n\n⏱️ Chronological Timeline\n  01:16:23.293 🖥️ Console [debug] [vite] connecting…\n  01:16:23.303 🖥️ Console [debug] [vite] connected.\n  01:16:23.312 ➡️ GET /src/pages/SleepingMasks.tsx\n  01:16:23.318 ⬅️ 304 /src/pages/SleepingMasks.tsx\n     …\n  01:17:45.038 🤖 🏁 Flow finished – deletion verified\n  01:17:47.038 🤖 📋 Conclusion repeated above\n👁️  See the \"Operative Control Center\" dashboard for live logs.\n```\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=Operative-Sh/web-eval-agent&type=Date)](https://www.star-history.com/#Operative-Sh/web-eval-agent&Date)\n\n\n---\n\nBuilt with <3 @ [operative.sh](https://www.operative.sh)\n",
+  "category": "Development",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "web-eval-agent": {
+        "command": "uvx",
+        "args": [
+          "--refresh-package",
+          "webEvalAgent",
+          "--from",
+          "git+https://github.com/Operative-Sh/web-eval-agent.git",
+          "webEvalAgent"
+        ],
+        "env": {
+          "OPERATIVE_API_KEY": "<YOUR_KEY>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Operative-Sh",
+    "repo": "web-eval-agent",
+    "url": "https://github.com/Operative-Sh/web-eval-agent",
+    "name": "operative-sh__web-eval-agent",
+    "path": null,
+    "stars": 1177,
+    "contributors": 6,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "0599223bb1d82708ddeab6979d19dd2af63ac172"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:14.662Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "flask",
+      "importance": 10
+    },
+    {
+      "name": "browser-use",
+      "importance": 9
+    },
+    {
+      "name": "playwright",
+      "importance": 9
+    },
+    {
+      "name": "langchain",
+      "importance": 8
+    },
+    {
+      "name": "flask-socketio",
+      "importance": 8
+    },
+    {
+      "name": "google-generativeai",
+      "importance": 7
+    },
+    {
+      "name": "langchain-google-genai",
+      "importance": 7
+    },
+    {
+      "name": "langchain-anthropic",
+      "importance": 7
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"web-eval-agent\"\nversion = \"0.1.1\"\ndescription = \"Operative AI - WebAgentEval Agent\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"browser-use==0.1.40\",\n    \"google-genai>=1.7.0\",\n    \"google-generativeai>=0.8.4\",\n    \"langchain>=0.3.21\",\n    \"langchain-anthropic>=0.3.3\",\n    \"langchain-google-genai>=2.0.10\",\n    \"mcp==1.6.0\",\n    \"python-dotenv>=1.1.0\",\n    \"playwright>=1.41.0\",\n    \"flask>=3.1.0\",\n    \"flask-socketio>=5.5.1\",\n    \"ruff>=0.11.9\",\n]\n\n[project.scripts]\nwebEvalAgent = \"webEvalAgent.mcp_server:main\"       \n\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.setuptools.package-data]\nwebEvalAgent = [\"templates/**\", \"src/agent_overlay.js\", \"src/**\"]\n\n=== requirements.txt ===\nannotated-types==0.7.0\nanthropic==0.49.0\nanyio==4.9.0\nbackoff==2.2.1\nbeautifulsoup4==4.13.3\nbrowser-use==0.1.40\ncachetools==5.5.2\ncertifi==2025.1.31\ncharset-normalizer==3.4.1\nclick==8.1.8\ndefusedxml==0.7.1\ndistro==1.9.0\nfiletype==1.2.0\ngoogle-ai-generativelanguage==0.6.15\ngoogle-api-core==2.24.2\ngoogle-api-python-client==2.166.0\ngoogle-auth==2.38.0\ngoogle-auth-httplib2==0.2.0\ngoogle-genai==1.9.0\ngoogle-generativeai==0.8.4\ngoogleapis-common-protos==1.69.2\ngreenlet==3.1.1\ngrpcio==1.71.0\ngrpcio-status==1.71.0\nh11==0.14.0\nhttpcore==1.0.7\nhttplib2==0.22.0\nhttpx==0.28.1\nhttpx-sse==0.4.0\nidna==3.10\njiter==0.9.0\njsonpatch==1.33\njsonpointer==3.0.0\nlangchain==0.3.22\nlangchain-anthropic==0.3.3\nlangchain-core==0.3.49\nlangchain-google-genai==2.0.10\nlangchain-ollama==0.2.2\nlangchain-openai==0.3.1\nlangchain-text-splitters==0.3.7\nlangsmith==0.3.22\nmarkdownify==0.14.1\nmcp==1.6.0\nmonotonic==1.6\nollama==0.4.7\nopenai==1.70.0\norjson==3.10.16\npackaging==24.2\nplaywright==1.51.0\nposthog==3.23.0\nproto-plus==1.26.1\nprotobuf==5.29.4\npyasn1==0.6.1\npyasn1-modules==0.4.2\npydantic==2.11.1\npydantic-core==2.33.0\npydantic-settings==2.8.1\npyee==12.1.1\npyparsing==3.2.3\npython-dateutil==2.9.0.post0\npython-dotenv==1.1.0\npyyaml==6.0.2\nregex==2024.11.6\nrequests==2.32.3\nrequests-toolbelt==1.0.0\nrsa==4.9\nsetuptools==78.1.0\nsix==1.17.0\nsniffio==1.3.1\nsoupsieve==2.6\nsqlalchemy==2.0.40\nsse-starlette==2.2.1\nstarlette==0.46.1\ntenacity==9.0.0\ntiktoken==0.9.0\ntqdm==4.67.1\ntyping-extensions==4.13.0\ntyping-inspection==0.4.0\nuritemplate==4.1.1\nurllib3==2.3.0\nuvicorn==0.34.0\nwebsockets==15.0.1\nzstandard==0.23.0\nFlask==3.0.3\nFlask-SocketIO==5.3.6\n"
+}

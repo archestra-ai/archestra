@@ -1,0 +1,193 @@
+{
+  "name": "takumi0706__google-calendar-mcp",
+  "display_name": "google-calendar-mcp",
+  "description": "Google Calendar MCP server for Claude Desktop integration",
+  "author": {
+    "name": "takumi0706"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@takumi0706/google-calendar-mcp@1.0.7"],
+    "env": {
+      "GOOGLE_CLIENT_ID": "${user_config.google_client_id}",
+      "GOOGLE_CLIENT_SECRET": "${user_config.google_client_secret}",
+      "GOOGLE_REDIRECT_URI": "${user_config.google_redirect_uri}",
+      "TOKEN_ENCRYPTION_KEY": "${user_config.token_encryption_key}",
+      "AUTH_PORT": "${user_config.auth_port}",
+      "AUTH_HOST": "${user_config.auth_host}",
+      "PORT": "${user_config.port}",
+      "HOST": "${user_config.host}",
+      "USE_MANUAL_AUTH": "${user_config.use_manual_auth}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "google_client_id": {
+      "type": "string",
+      "title": "Google Client ID",
+      "description": "Your Google OAuth Client ID obtained from the Google Cloud Console.",
+      "sensitive": true,
+      "required": true
+    },
+    "google_client_secret": {
+      "type": "string",
+      "title": "Google Client Secret",
+      "description": "Your Google OAuth Client Secret obtained from the Google Cloud Console.",
+      "sensitive": true,
+      "required": true
+    },
+    "google_redirect_uri": {
+      "type": "string",
+      "title": "Google Redirect URI",
+      "description": "The redirect URI configured in your Google Cloud Console for OAuth2. This must match the value used by the server.",
+      "sensitive": false,
+      "required": true,
+      "default": "http://localhost:4153/oauth2callback"
+    },
+    "token_encryption_key": {
+      "type": "string",
+      "title": "Token Encryption Key",
+      "description": "Optional: A 32-byte hexadecimal key used for encrypting authentication tokens. If not provided, one will be auto-generated.",
+      "sensitive": true,
+      "required": false
+    },
+    "auth_port": {
+      "type": "number",
+      "title": "Authentication Server Port",
+      "description": "Optional: The port for the OAuth2 authentication server. Defaults to 4153.",
+      "sensitive": false,
+      "required": false,
+      "default": 4153
+    },
+    "auth_host": {
+      "type": "string",
+      "title": "Authentication Server Host",
+      "description": "Optional: The host for the OAuth2 authentication server. Defaults to localhost.",
+      "sensitive": false,
+      "required": false,
+      "default": "localhost"
+    },
+    "port": {
+      "type": "number",
+      "title": "MCP Server Port",
+      "description": "Optional: The port for the main MCP server. Defaults to 3000.",
+      "sensitive": false,
+      "required": false,
+      "default": 3000
+    },
+    "host": {
+      "type": "string",
+      "title": "MCP Server Host",
+      "description": "Optional: The host for the main MCP server. Defaults to localhost.",
+      "sensitive": false,
+      "required": false,
+      "default": "localhost"
+    },
+    "use_manual_auth": {
+      "type": "boolean",
+      "title": "Enable Manual Authentication",
+      "description": "Optional: Set to true to enable manual authentication, which is useful when localhost is not accessible for the OAuth flow.",
+      "sensitive": false,
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "# Google Calendar MCP Server\n![Apr-15-2025 12-17-08](https://github.com/user-attachments/assets/8970351e-c90d-42e3-8609-b4dfe33f8615)\n\n\n> **🔔 VERSION UPDATE NOTICE 🔔**  \n> Version 1.0.5 adds support for recurring events through the `recurrence` parameter in both `createEvent` and `updateEvent` tools. This allows you to create and modify recurring events directly without having to set them up manually after creation.\n\n![](https://badge.mcpx.dev?type=server 'MCP Server')\n![Version](https://img.shields.io/badge/version-1.0.7-blue.svg)\n![License](https://img.shields.io/badge/license-MIT-green.svg)\n\n[![日本語](https://img.shields.io/badge/日本語-クリック-青)](README.ja.md)\n[![English](https://img.shields.io/badge/English-Click-blue)](README.md)\n\n\n## Project Overview\n\nGoogle Calendar MCP Server is an MCP (Model Context Protocol) server implementation that enables integration between Google Calendar and Claude Desktop. This project enables Claude to interact with the user's Google Calendar, providing the ability to display, create, update, and delete calendar events through natural language interaction.\n\n### Core Features\n\n- **Google Calendar integration**: Provides a bridge between Claude Desktop and the Google Calendar API\n- **MCP implementation**: Follows the Model Context Protocol specification for AI assistant tool integration\n- **OAuth2 authentication**: Handles the Google API authentication flow securely\n- **Event management**: Supports comprehensive calendar event operations (get, create, update, delete)\n- **Color support**: Ability to set and update event colors using colorId parameter\n- **STDIO transport**: Uses standard input/output for communication with Claude Desktop\n\n## Technical Architecture\n\nThis project uses:\n\n- **TypeScript**: For type-safe code development\n- **MCP SDK**: Uses `@modelcontextprotocol/sdk` for integration with Claude Desktop\n- **Google API**: Uses `googleapis` for Google Calendar API access\n- **Hono**: Lightweight and fast web framework for the authentication server\n- **OAuth2 Providers**: Uses `@hono/oauth-providers` for PKCE-enabled OAuth2 flow\n- **Zod**: Implements schema validation for request/response data\n- **Environment-based configuration**: Uses dotenv for configuration management\n- **AES-256-GCM**: For token encryption using Node.js crypto module\n- **Open**: For automatic browser launching during authentication\n- **Readline**: For manual authentication input in server environments\n- **Jest**: For unit testing and coverage\n- **GitHub Actions**: For CI/CD\n\n## Main Components\n\n1. **MCP Server**: Core server implementation that handles communication with Claude Desktop\n2. **Google Calendar Tools**: Calendar operations (retrieval, creation, update, deletion)\n3. **Authentication Handler**: Management of OAuth2 flow with Google API\n4. **Schema Validation**: Ensuring data integrity in all operations\n5. **Token Manager**: Secure handling of authentication tokens\n\n## Available Tools\n\nThis MCP server provides the following tools for interacting with Google Calendar:\n\n### 1. getEvents\n\nRetrieves calendar events with various filtering options.\n\n**Parameters:**\n- `calendarId` (optional): Calendar ID (uses primary calendar if omitted, empty string, null, or undefined)\n- `timeMin` (optional): Start time for event retrieval (ISO 8601 format, e.g., \"2025-03-01T00:00:00Z\"). Empty strings, null, or undefined values are ignored\n- `timeMax` (optional): End time for event retrieval (ISO 8601 format). Empty strings, null, or undefined values are ignored\n- `maxResults` (optional): Maximum number of events to retrieve (default: 10)\n- `orderBy` (optional): Sort order (\"startTime\" or \"updated\"). Defaults to \"startTime\" if empty string, null, or undefined\n\n### 2. createEvent\n\nCreates a new calendar event.\n\n**Parameters:**\n- `calendarId` (optional): Calendar ID (uses primary calendar if omitted)\n- `event`: Event details object containing:\n  - `summary` (required): Event title\n  - `description` (optional): Event description\n  - `location` (optional): Event location\n  - `start`: Start time object with:\n    - `dateTime` (optional): ISO 8601 format (e.g., \"2025-03-15T09:00:00+09:00\")\n    - `date` (optional): YYYY-MM-DD format for all-day events\n    - `timeZone` (optional): Time zone (e.g., \"Asia/Tokyo\")\n  - `end`: End time object (same format as start)\n  - `attendees` (optional): Array of attendees with email and optional displayName\n  - `colorId` (optional): Event color ID (1-11)\n  - `recurrence` (optional): Array of recurrence rules in RFC5545 format (e.g., [\"RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR\"])\n\n### 3. updateEvent\n\nUpdates an existing calendar event. The function fetches the existing event data first and merges it with the update data, preserving fields that are not included in the update request.\n\n**Parameters:**\n- `calendarId` (optional): Calendar ID (uses primary calendar if omitted)\n- `eventId` (required): ID of the event to update\n- `event`: Event details object containing fields to update (same structure as createEvent, all fields optional)\n  - Only fields that are explicitly provided will be updated\n  - Fields not included in the update request will retain their existing values\n  - This allows for partial updates without losing data\n  - `recurrence` parameter can be updated to modify recurring event patterns\n\n### 4. deleteEvent\n\nDeletes a calendar event.\n\n**Parameters:**\n- `calendarId` (optional): Calendar ID (uses primary calendar if omitted)\n- `eventId` (required): ID of the event to delete\n\n### 5. authenticate\n\nRe-authenticates with Google Calendar. This is useful when you want to switch between different Google accounts without having to restart Claude.\n\n**Parameters:**\n- None\n\n## Development Guidelines\n\nWhen adding new functions, modifying code, or fixing bugs, please semantically increase the version for each change using `npm version` command.\nAlso, please make sure that your coding is clear and follows all the necessary coding rules, such as OOP.\nThe version script will automatically run `npm install` when the version is updated, but you should still build, run lint, and test your code before submitting it.\n\n### Code Structure\n\n- **src/**: Source code directory\n  - **auth/**: Authentication handling\n  - **config/**: Configuration settings\n  - **mcp/**: MCP server implementation\n  - **tools/**: Google Calendar tool implementations\n  - **utils/**: Utility functions and helpers\n\n### Best Practices\n\n- Proper typing according to TypeScript best practices\n- Maintaining comprehensive error handling\n- Ensure proper authentication flow\n- Keep dependencies up to date\n- Write clear documentation for all functions\n- Implement security best practices\n- Follow the OAuth 2.1 authentication standards\n- Use schema validation for all input/output data\n\n### Testing\n\n- Implement unit tests for core functionality\n- Thoroughly test authentication flow\n- Verify calendar manipulation against Google API\n- Run tests with coverage reports\n- Ensure security tests are included\n\n## Deployment\n\nThis package is published on npm as `@takumi0706/google-calendar-mcp`:\n\n```bash\nnpx @takumi0706/google-calendar-mcp@1.0.7\n```\n\n### Prerequisites\n\n1. Create a Google Cloud Project and enable the Google Calendar API\n2. Configure OAuth2 credentials in the Google Cloud Console\n3. Set up environment variables:\n\n```bash\n# Create a .env file with your Google OAuth credentials\nGOOGLE_CLIENT_ID=your_client_id\nGOOGLE_CLIENT_SECRET=your_client_secret\nGOOGLE_REDIRECT_URI=http://localhost:4153/oauth2callback\n# Optional: Token encryption key (auto-generated if not provided)\nTOKEN_ENCRYPTION_KEY=32-byte-hex-key\n# Optional: Auth server port and host (default port: 4153, host: localhost)\nAUTH_PORT=4153\nAUTH_HOST=localhost\n# Optional: MCP server port and host (default port: 3000, host: localhost)\nPORT=3000\nHOST=localhost\n# Optional: Enable manual authentication (useful when localhost is not accessible)\nUSE_MANUAL_AUTH=true\n```\n\n### Claude Desktop Configuration\n\nAdd the server to your `claude_desktop_config.json`. If you're running in an environment where localhost is not accessible, add the `USE_MANUAL_AUTH` environment variable set to \"true\".\n\n```json\n{\n  \"mcpServers\": {\n    \"google-calendar\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@takumi0706/google-calendar-mcp\"\n      ],\n      \"env\": {\n        \"GOOGLE_CLIENT_ID\": \"your_client_id\",\n        \"GOOGLE_CLIENT_SECRET\": \"your_client_secret\",\n        \"GOOGLE_REDIRECT_URI\": \"http://localhost:4153/oauth2callback\"\n      }\n    }\n  }\n}\n```\n\n## Security Considerations\n\n- **OAuth tokens** are stored in memory only (not stored in a file-based storage)\n- **Sensitive credentials** must be provided as environment variables\n- **Token encryption** using AES-256-GCM for secure storage\n- **PKCE implementation** with explicit code_verifier and code_challenge generation\n- **State parameter validation** for CSRF protection\n- **Rate limiting** for API endpoint protection\n- **Input validation** with Zod schema\n\nFor more details, see [SECURITY.md](SECURITY.md).\n\n## Maintenance\n\n- Regular updates to maintain compatibility with the Google Calendar API\n- Version updates are documented in README.md\n\n## Troubleshooting\n\nIf you encounter any issues:\n\n1. Make sure your Google OAuth credentials are correctly configured\n2. Ensure you have sufficient permissions for Google Calendar API access\n3. Verify your Claude Desktop configuration is correct\n\n### Common Errors\n\n- **JSON Parsing Errors**: If you see errors like `Unexpected non-whitespace character after JSON at position 4 (line 1 column 5)`, it's typically due to malformed JSON-RPC messages. This issue has been fixed in version 0.6.7 and later. If you're still experiencing these errors, please update to the latest version.\n- **Authentication Errors**: Verify your Google OAuth credentials\n- **Invalid state parameter**: If you see `Authentication failed: Invalid state parameter` when re-authenticating, update to version 1.0.3 or later which fixes the OAuth server lifecycle management. In older versions, you may need to close port 4153 and restart the application.\n- **Connection Errors**: Make sure only one instance of the server is running\n- **Disconnection Issues**: Ensure your server is properly handling MCP messages without custom TCP sockets\n- **Cannot access localhost**: If you're running the application in an environment where localhost is not accessible (like a remote server or container), enable manual authentication by setting `USE_MANUAL_AUTH=true`. This will allow you to manually enter the authorization code shown by Google after authorizing the application.\n- **MCP Parameter Validation Errors**: If you see error -32602 with empty string parameters, update to version 1.0.7 or later which handles empty strings, null, and undefined values properly.\n\n## Version History\n\n### Version 1.0.7 Changes\n- Enhanced parameter validation for MCP tools to properly handle empty strings, null, and undefined values\n- Fixed MCP error -32602 when empty string parameters were passed to getEvents tool\n- Improved preprocessArgs function to skip empty values, allowing Zod schema defaults to be applied correctly\n- Added comprehensive test coverage for empty parameter handling\n\n### Version 1.0.6 Changes\n- Fixed the scope is not needed in this google calendar mcp server\n\n### Version 1.0.5 Changes\n- Added support for recurring events through the `recurrence` parameter in both `createEvent` and `updateEvent` tools\n- Allows creation and modification of recurring events directly without manual setup\n\n### Version 1.0.4 Changes\n- Maintenance release with version number update\n- No functional changes from version 1.0.3\n- Ensures compatibility with the latest dependencies\n\n### Version 1.0.3 Changes\n- Added new `authenticate` tool to allow re-authentication without restarting Claude\n- Made it possible to switch between different Google accounts during a session\n- Exposed authentication functionality through the MCP interface\n- Enhanced user experience by eliminating the need to restart for account switching\n- Added manual authentication option for environments where localhost is not accessible\n- Implemented readline interface for entering authorization codes manually\n- Added USE_MANUAL_AUTH environment variable to enable manual authentication\n- Updated zod dependency to the latest version (3.24.2)\n- Improved schema validation with the latest zod features\n- Enhanced code stability and security\n- Fixed \"Invalid state parameter\" error during re-authentication\n- Modified OAuth server to start on-demand and shut down after authentication\n- Improved server lifecycle management to prevent port conflicts\n- Enhanced error handling for authentication flow\n\n### Version 1.0.2 Changes\n- Fixed `updateEvent` function to preserve existing event data when performing partial updates\n- Added `getEvent` function to fetch existing event data before updating\n- Modified `updateEvent` to merge update data with existing data to prevent data loss\n- Updated schema validation to make all fields optional in update requests\n- Improved documentation for the `updateEvent` function\n\n### Version 1.0.1 Changes\n- Fixed compatibility issue with Node.js v20.9.0+ and the 'open' package (v10+)\n- Replaced static import with dynamic import for the ESM-only 'open' package\n- Improved error handling for browser opening during OAuth authentication\n- Enhanced code comments for better maintainability\n\n### Version 1.0.0 Changes\n- Major version release marking production readiness\n- Comprehensive code refactoring for improved maintainability\n- Internationalization of all messages and comments (translated Japanese to English)\n- Enhanced code consistency and readability\n- Improved error messages for better user experience\n- Updated documentation to reflect current state of the project\n- Standardized coding style throughout the codebase\n\n### Version 0.8.0 Changes\n- Enhanced OAuth authentication flow to handle refresh token issues\n- Added `prompt: 'consent'` parameter to force Google to show the consent screen and provide a new refresh token\n- Modified authentication flow to work with just an access token if a refresh token is not available\n- Improved token refresh logic to handle cases where there's no refresh token or if the refresh token is invalid\n- Updated token storage to save refreshed access tokens for better token management\n- Fixed potential infinite loop in token refresh logic\n\n## Installation\n\n### Quick Start (Recommended)\n\nInstall directly from npm:\n\n```bash\nnpm install -g @takumi0706/google-calendar-mcp\n```\n\n### Manual Installation\n\nFor development or customization:\n\n```bash\n# Clone the repository\ngit clone https://github.com/takumi0706/google-calendar-mcp.git\ncd google-calendar-mcp\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n\n# Run the server\nnpm start\n```\n\n## Production Deployment\n\nFor production use, the server requires valid Google OAuth credentials. The server will fail to start without proper credentials, ensuring security compliance.\n\n## Testing\n\nTo run the tests:\n\n```bash\n# Run all tests\nnpm test\n\n# Run tests with coverage report\nnpm test -- --coverage\n```\n\n## License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "takumi0706-google-calendar-mcp": {
+        "command": "npx",
+        "args": ["-y", "@takumi0706/google-calendar-mcp@1.0.7"],
+        "env": {}
+      },
+      "takumi0706-google-calendar-mcp-configured": {
+        "command": "npx",
+        "args": ["-y", "@takumi0706/google-calendar-mcp@1.0.7"],
+        "env": {
+          "GOOGLE_CLIENT_ID": "your_client_id",
+          "GOOGLE_CLIENT_SECRET": "your_client_secret",
+          "GOOGLE_REDIRECT_URI": "http://localhost:4153/oauth2callback",
+          "TOKEN_ENCRYPTION_KEY": "32-byte-hex-key",
+          "AUTH_PORT": "4153",
+          "AUTH_HOST": "localhost",
+          "PORT": "3000",
+          "HOST": "localhost",
+          "USE_MANUAL_AUTH": "true"
+        }
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "takumi0706",
+    "repo": "google-calendar-mcp",
+    "url": "https://github.com/takumi0706/google-calendar-mcp",
+    "name": "google-calendar-mcp",
+    "path": null,
+    "stars": 46,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "f41b80e23c3c8ba0feeadaac74c7f9d0fbf42e83"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:41.532Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "googleapis",
+      "importance": 9
+    },
+    {
+      "name": "hono",
+      "importance": 10
+    },
+    {
+      "name": "@hono/node-server",
+      "importance": 8
+    },
+    {
+      "name": "@hono/oauth-providers",
+      "importance": 8
+    },
+    {
+      "name": "open",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@takumi0706/google-calendar-mcp\",\n  \"version\": \"1.0.7\",\n  \"description\": \"Google Calendar MCP server for Claude Desktop integration with enhanced security\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"google-calendar-mcp\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist/**/*\",\n    \"README.md\",\n    \"LICENSE\",\n    \"SECURITY.md\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"postbuild\": \"chmod +x dist/index.js\",\n    \"start\": \"node dist/index.js\",\n    \"test\": \"jest\",\n    \"lint\": \"eslint . --ext .ts\",\n    \"check-circular\": \"node scripts/check-circular-deps.js\",\n    \"prepublishOnly\": \"npm run build && npm test && npm run lint && npm run check-circular\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/takumi0706/google-calendar-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/takumi0706/google-calendar-mcp/issues\"\n  },\n  \"homepage\": \"https://github.com/takumi0706/google-calendar-mcp#readme\",\n  \"keywords\": [\n    \"mcp\",\n    \"claude\",\n    \"anthropic\",\n    \"google-calendar\",\n    \"calendar\",\n    \"claude-desktop\",\n    \"ai-integration\",\n    \"secure\"\n  ],\n  \"author\": \"takumi0706\",\n  \"license\": \"MIT\",\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.12\",\n    \"@types/node\": \"^20.11.25\",\n    \"@typescript-eslint/eslint-plugin\": \"^7.2.0\",\n    \"@typescript-eslint/parser\": \"^7.2.0\",\n    \"eslint\": \"^8.56.0\",\n    \"jest\": \"^29.7.0\",\n    \"prettier\": \"^3.2.5\",\n    \"ts-jest\": \"^29.1.2\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"~5.5.0\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"dotenv\": \"^16.4.5\",\n    \"googleapis\": \"^148.0.0\",\n    \"hono\": \"^4.6.3\",\n    \"@hono/node-server\": \"^1.12.2\",\n    \"@hono/oauth-providers\": \"^0.8.2\",\n    \"open\": \"^10.1.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"engines\": {\n    \"node\": \">=16.0.0\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  }\n}\n"
+}

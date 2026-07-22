@@ -1,0 +1,119 @@
+{
+  "name": "timlukahorstmann__mcp-weather",
+  "display_name": "mcp-weather",
+  "description": "A Model Context Protocol (MCP) server that provides hourly and daily weather forecasts using the AccuWeather API.",
+  "author": {
+    "name": "TimLukaHorstmann"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@timlukahorstmann/mcp-weather"],
+    "env": {
+      "ACCUWEATHER_API_KEY": "${user_config.accuweather_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "accuweather_api_key": {
+      "type": "string",
+      "title": "AccuWeather API Key",
+      "description": "Your API key for accessing the AccuWeather API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# MCP Weather Server\n\n[![npm version](https://img.shields.io/npm/v/@timlukahorstmann/mcp-weather)](https://www.npmjs.com/package/@timlukahorstmann/mcp-weather)\n[![license](https://img.shields.io/github/license/TimLukaHorstmann/mcp-weather)](https://github.com/TimLukaHorstmann/mcp-weather/blob/main/LICENSE)\n[![node version](https://img.shields.io/node/v/@timlukahorstmann/mcp-weather)](https://www.npmjs.com/package/@timlukahorstmann/mcp-weather)\n[![issues](https://img.shields.io/github/issues/TimLukaHorstmann/mcp-weather)](https://github.com/TimLukaHorstmann/mcp-weather/issues)\n[![weekly downloads](https://img.shields.io/npm/dm/@timlukahorstmann/mcp-weather)](https://www.npmjs.com/package/@timlukahorstmann/mcp-weather)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/TimLukaHorstmann/mcp-weather)](https://archestra.ai/mcp-catalog/timlukahorstmann__mcp-weather)\n\n<p align=\"center\">\n  <img src=\"logo.png\" alt=\"MCP Weather Server Logo\" width=\"250\"/>\n  <a href=\"https://glama.ai/mcp/servers/@TimLukaHorstmann/mcp-weather\">\n    <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@TimLukaHorstmann/mcp-weather/badge\" alt=\"Weather MCP server\" />\n  </a>\n</p>\n\nA Model Context Protocol (MCP) server that provides hourly and daily weather forecasts using the AccuWeather API.\n\n---\n\n## Quick Start\n\nYou need an AccuWeather API key (free tier available).  \n[Sign up here](https://developer.accuweather.com/) and create an app to get your key.\n\nExport your API key as an environment variable:\n\n```bash\nexport ACCUWEATHER_API_KEY=your_api_key_here\n```\n\nThen run the MCP Weather server directly with:\n\n```bash\nnpx -y @timlukahorstmann/mcp-weather\n```\n\nOr, for HTTP/REST access via [supergateway](https://github.com/supercorp-ai/supergateway):\n\n```bash\nnpx -y supergateway --stdio \"npx -y @timlukahorstmann/mcp-weather\" \\\n  --port 4004 \\\n  --baseUrl http://127.0.0.1:4004 \\\n  --ssePath /messages \\\n  --messagePath /message \\\n  --cors \"*\" \\\n  --env ACCUWEATHER_API_KEY=\"$ACCUWEATHER_API_KEY\"\n```\n\n---\n\n## MCP Server Config Example\n\nFor integration with Claude Desktop or other MCP-compatible clients, add this to your config (e.g. `claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"weather\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@timlukahorstmann/mcp-weather\"],\n      \"env\": {\n        \"ACCUWEATHER_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\n---\n\n## Overview\n\nThis MCP server allows large language models (like Claude) to access real-time weather data. When integrated with an LLM, it enables the model to:\n\n- Fetch accurate, up-to-date weather forecasts\n- Provide hourly weather data for the next 12 hours\n- Access daily weather forecasts for up to 15 days\n- Display data in both metric (°C) and imperial (°F) units\n- View temperature, conditions, precipitation information, and other weather details\n\n## Available Tools\n\n### Hourly Weather Forecast\n- Tool name: `weather-get_hourly`\n- Provides hourly forecasts for the next 12 hours\n- Parameters:\n  - `location` (required): City or location name\n  - `units` (optional): \"metric\" (Celsius, default) or \"imperial\" (Fahrenheit)\n\n### Daily Weather Forecast\n- Tool name: `weather-get_daily`\n- Provides daily forecasts for up to 15 days\n- Parameters:\n  - `location` (required): City or location name\n  - `days` (optional): Number of forecast days (1, 5, 10, or 15; default is 5)\n  - `units` (optional): \"metric\" (Celsius, default) or \"imperial\" (Fahrenheit)\n\n## Prerequisites\n\n- Node.js ≥18  \n- An AccuWeather API key (set via `.env` or your shell)\n\n## Setup\n\n1. **Clone this repository:**\n   ```bash\n   git clone https://github.com/TimLukaHorstmann/mcp-weather.git\n   cd mcp-weather\n   ```\n\n2. **Install dependencies:**\n   ```bash\n   npm install\n   ```\n\n3. **Get an AccuWeather API key:**\n   - Register at [AccuWeather API](https://developer.accuweather.com/)\n   - Create a new app and obtain an API key\n\n4. **Create a `.env` file with your API key:**\n   ```\n   ACCUWEATHER_API_KEY=your_api_key_here\n   ```\n\n5. **Build the project:**\n   ```bash\n   npm run build\n   ```\n\n## Usage with Claude Desktop\n\n1. Configure Claude Desktop to use this MCP server:\n   - Open Claude Desktop\n   - Go to Settings > Developer > Edit Config\n   - Add the following to your `claude_desktop_config.json`:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"weather\": {\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"@timlukahorstmann/mcp-weather\"],\n         \"env\": {\n           \"ACCUWEATHER_API_KEY\": \"your_api_key_here\"\n         }\n       }\n     }\n   }\n   ```\n\n2. Restart Claude Desktop\n\n3. In a new conversation, enable the MCP server by clicking the plug icon and selecting \"weather\"\n\n4. Now you can ask Claude for weather forecasts, such as:\n   - \"What's the hourly weather forecast for New York City?\"\n   - \"Give me the 5-day forecast for London.\"\n   - \"What will the weather be like in Tokyo this week in Fahrenheit?\"\n   - \"Will it rain in San Francisco tomorrow?\"\n\n## Development\n\n- Install dev dependencies: `npm install`\n- Lint your code:           `npm run lint`  \n- Build:                    `npm run build`  \n- Run tests:                `npm test`\n- Start in dev mode:        `npm run dev`\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## Future Enhancements\n\nWe're always looking to improve the MCP Weather Server. Here are some features we're considering for future releases:\n\n- **Extended Hourly Forecasts:** Beyond 12 hours, e.g., 24 or 48 hours.\n- **Weather Alerts:** Integration with AccuWeather's severe weather alerts API.\n- **Location Autocomplete:** Improved location searching with autocomplete suggestions.\n- **Historical Weather Data:** Access to past weather conditions.\n\nIf you have ideas for other features, feel free to open an issue!\n\n## Changelog\n\n### 0.4.0\n- Removed `sessionId` requirement from all tools as it was not used for anything internally\n- This simplifies integrations and reduces confusion for LLM usage\n\n### 0.3.0 and earlier\n- Initial releases with basic functionality\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Location",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "timlukahorstmann-mcp-weather": {
+        "command": "npx",
+        "args": ["-y", "@timlukahorstmann/mcp-weather"],
+        "env": {
+          "ACCUWEATHER_API_KEY": "your_api_key_here"
+        }
+      },
+      "supergateway-stdio": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "supergateway",
+          "--stdio",
+          "npx -y @timlukahorstmann/mcp-weather",
+          "--port",
+          "4004",
+          "--baseUrl",
+          "http://127.0.0.1:4004",
+          "--ssePath",
+          "/messages",
+          "--messagePath",
+          "/message",
+          "--cors",
+          "*"
+        ],
+        "env": {
+          "ACCUWEATHER_API_KEY": "$ACCUWEATHER_API_KEY"
+        }
+      },
+      "timlukahorstmann-mcp-weather-configured": {
+        "command": "npx",
+        "args": ["-y", "@timlukahorstmann/mcp-weather"],
+        "env": {
+          "ACCUWEATHER_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "TimLukaHorstmann",
+    "repo": "mcp-weather",
+    "url": "https://github.com/TimLukaHorstmann/mcp-weather",
+    "name": "mcp-weather",
+    "path": null,
+    "stars": 17,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "7919ac99929b5c5be9193e869050bb0e0bf6acae"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.809Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@timlukahorstmann/mcp-weather\",\n  \"version\": \"0.4.1\",\n  \"bin\": {\n    \"mcp-weather\": \"./build/index.js\"\n  },\n  \"description\": \"MCP server that provides hourly and daily weather forecasts using the AccuWeather API\",\n  \"type\": \"module\",\n  \"main\": \"build/index.js\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"ts-node --esm src/index.ts\",\n    \"test\": \"jest\",\n    \"prepare\": \"npm run build\",\n    \"lint\": \"eslint \\\"src/**/*.{ts,js}\\\"\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.11.0\",\n    \"axios\": \"^1.9.0\",\n    \"zod\": \"^3.24.3\"\n  },\n  \"devDependencies\": {\n    \"@types/istanbul-lib-coverage\": \"^2.0.6\",\n    \"@types/istanbul-reports\": \"^3.0.4\",\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/node\": \"^22.15.3\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.32.0\",\n    \"@typescript-eslint/parser\": \"^8.32.0\",\n    \"eslint\": \"^9.26.0\",\n    \"jest\": \"^29.7.0\",\n    \"ts-jest\": \"^29.3.2\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"engines\": {\n    \"node\": \">=18\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/TimLukaHorstmann/mcp-weather.git\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"weather\",\n    \"accuweather\",\n    \"llm\",\n    \"ai\"\n  ],\n  \"author\": \"Tim Luka Horstmann\",\n  \"license\": \"MIT\",\n  \"directories\": {\n    \"test\": \"tests\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/TimLukaHorstmann/mcp-weather/issues\"\n  },\n  \"homepage\": \"https://github.com/TimLukaHorstmann/mcp-weather#readme\"\n}\n"
+}

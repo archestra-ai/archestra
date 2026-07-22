@@ -1,0 +1,70 @@
+{
+  "name": "himalayas-app__himalayas-mcp",
+  "display_name": "himalayas-mcp",
+  "description": "A Model Context Protocol (MCP) server that provides access to remote job listings and company information from Himalayas.app. ",
+  "author": {
+    "name": "Himalayas-App"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["mcp-remote", "https://mcp.himalayas.app/sse"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Himalayas Remote Jobs MCP Server\n\nAccess thousands of remote job listings and company information directly from your AI coding assistant! This public MCP server provides real-time access to Himalayas.app's remote job database.\n\n🌐 **Public Server URL:** `https://mcp.himalayas.app/sse`\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=himalayas&config=eyJjb21tYW5kIjoibnB4IG1jcC1yZW1vdGUgaHR0cHM6Ly9tY3AuaGltYWxheWFzLmFwcC9zc2UifQ%3D%3D)\n\n## Available Tools\n\n### 🔍 Job Search Tools\n\n#### `search_jobs`\nSearch for specific jobs using keywords with advanced filtering.\n\n**Parameters:**\n- `keyword` (string, optional): Search term (e.g., 'Python', 'React', 'Product Manager', 'Data Scientist')\n- `page` (number, optional): Page number for pagination (default: 1)\n- `country` (string, optional): Filter jobs by country\n- `worldwide` (boolean, optional): Show ONLY 100% remote jobs available worldwide\n\n**Example usage:**\n- \"Search for Python developer jobs\"\n- \"Find React jobs in the United States\"\n- \"Look for product manager positions worldwide\"\n\n#### `get_jobs`\nRetrieve the latest remote job listings with optional filtering.\n\n**Parameters:**\n- `page` (number, optional): Page number for pagination (default: 1)\n- `country` (string, optional): Filter jobs by country (e.g., 'Canada', 'United States', 'UK', 'Germany')\n- `worldwide` (boolean, optional): Show ONLY 100% remote jobs available worldwide (default: false)\n\n**Example usage:**\n- \"Get remote jobs in Canada\"\n- \"Show me worldwide remote opportunities\"\n- \"Find jobs on page 2\"\n\n### 🏢 Company Search Tools\n\n#### `search_companies`\nSearch for specific companies using keywords.\n\n**Parameters:**\n- `keyword` (string, optional): Search term (e.g., 'startup', 'fintech', 'AI', company name)\n- `page` (number, optional): Page number for pagination (default: 1)\n- `country` (string, optional): Filter companies by country\n- `worldwide` (boolean, optional): Show only companies with 100% remote jobs available worldwide\n\n**Example usage:**\n- \"Search for AI startups\"\n- \"Find fintech companies with remote jobs\"\n- \"Look for companies named 'Stripe'\"\n\n#### `get_companies`\nBrowse remote-friendly companies with optional filtering.\n\n**Parameters:**\n- `page` (number, optional): Page number for pagination (default: 1)\n- `country` (string, optional): Filter companies by country\n- `worldwide` (boolean, optional): Show only companies with 100% remote jobs available worldwide\n\n**Example usage:**\n- \"Show me remote companies in Europe\"\n- \"Find companies with worldwide remote jobs\"\n\n## Setup Instructions\n\n### 🖥️ Claude Desktop\n\n1. Open Claude Desktop and navigate to **Settings → Developer → Edit Config**\n2. Replace the content with this configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"himalayas\": {\n      \"command\": \"npx\",\n      \"args\": [\"mcp-remote\", \"https://mcp.himalayas.app/sse\"]\n    }\n  }\n}\n```\n\n3. Save the file and restart Claude Desktop (Cmd/Ctrl + R)\n4. When Claude restarts, a browser window will open for OAuth login - complete the authorization\n5. You'll see the Himalayas tools available by clicking the tools icon (🔨) in the bottom right\n\n### ⚡ Cursor\n\n1. Open Cursor and go to **Settings → Features → Rules for AI**\n2. Choose **Type: \"Command\"**\n3. In the **Command** field, enter:\n```bash\nnpx mcp-remote https://mcp.himalayas.app/sse\n```\n4. Save the configuration and restart Cursor\n5. Complete the OAuth flow when prompted\n\n### 🌊 Windsurf\n\n1. Edit your `mcp_config.json` file\n2. Add this configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"himalayas\": {\n      \"command\": \"npx\",\n      \"args\": [\"mcp-remote\", \"https://mcp.himalayas.app/sse\"]\n    }\n  }\n}\n```\n\n3. Save the file and restart Windsurf\n4. Complete the OAuth authorization when prompted\n\n## Example Conversations\n\nOnce connected, you can have natural conversations with your AI assistant:\n\n### Job Searching\n- *\"I'm looking for remote Python developer jobs in Europe\"*\n- *\"Show me the latest remote data science positions\"*\n- *\"Find part-time remote marketing jobs worldwide\"*\n- *\"Search for senior software engineer roles in Canada\"*\n\n### Company Research\n- *\"Find AI startups that offer remote work\"*\n- *\"Show me fintech companies with remote opportunities\"*\n- *\"Look for companies in Germany that hire remotely\"*\n- *\"Find verified companies with 4-day work weeks\"*\n\n### Advanced Queries\n- *\"Compare remote job opportunities between the US and UK\"*\n- *\"Find companies that offer both remote work and competitive salaries\"*\n- *\"Show me the tech stack used by remote-first companies\"*\n\n## What You'll Get\n\nEach response includes rich, formatted information:\n\n### Job Listings\n- 🚀 Job title and company name\n- 💼 Employment type (Full-time, Part-time, Contract)\n- 🌍 Location restrictions or worldwide availability\n- 💰 Salary ranges and currency\n- 🛠️ Required skills and technologies\n- 🔗 Direct application links\n- 🏢 Company verification status\n\n### Company Profiles\n- 🏢 Company name and verification status\n- 👥 Company size and founding year\n- 🌍 Locations and remote work policies\n- 🔥 Number of open positions\n- 🎁 Benefits and perks information\n- ⚡ Technology stacks used\n- 🌐 Company website and social links\n\n## Troubleshooting\n\n### Connection Issues\n- Ensure you have Node.js installed for the `npx` command\n- Try restarting your AI assistant after configuration changes\n- Clear authentication cache if needed: `rm -rf ~/.mcp-auth`\n\n### Authentication Problems\n- Complete the OAuth flow in the browser window that opens\n- Make sure you're using the correct server URL: `https://mcp.himalayas.app/sse`\n- Check that your internet connection is stable\n\n### Tool Not Appearing\n- Verify the configuration file syntax is correct (valid JSON)\n- Restart your AI assistant completely\n- Check the tools icon/menu in your AI assistant's interface\n\n## Support\n\nIf you encounter any issues:\n1. Check the troubleshooting section above\n2. Verify your configuration matches the examples exactly\n3. Try the connection with the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) first\n\n---\n\n**Powered by [Himalayas.app](https://himalayas.app)** - The best place to find remote jobs and companies 🏔️\n",
+  "category": "Job Search",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-remote": {
+        "command": "npx",
+        "args": ["mcp-remote", "https://mcp.himalayas.app/sse"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Himalayas-App",
+    "repo": "himalayas-mcp",
+    "url": "https://github.com/Himalayas-App/himalayas-mcp",
+    "name": "himalayas-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e828704853e35ac5aa0bfea7a72904684993b45e"
+  },
+  "programming_language": "Unknown",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:28.261Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mcp-remote",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

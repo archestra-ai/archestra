@@ -1,0 +1,90 @@
+{
+  "name": "liveblocks__liveblocks-mcp-server",
+  "display_name": "liveblocks-mcp-server",
+  "description": "MCP server for Liveblocks.",
+  "author": {
+    "name": "liveblocks"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "LIVEBLOCKS_SECRET_KEY": "${user_config.liveblocks_secret_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "liveblocks_secret_key": {
+      "type": "string",
+      "title": "Liveblocks Secret Key",
+      "description": "Your Liveblocks secret key from your dashboard (e.g., sk_dev_Ns35f5G...)",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "<p align=\"center\">\n  <a href=\"https://liveblocks.io#gh-light-mode-only\">\n    <img src=\"https://raw.githubusercontent.com/liveblocks/liveblocks/main/.github/assets/header-light.svg\" alt=\"Liveblocks\" />\n  </a>\n  <a href=\"https://liveblocks.io#gh-dark-mode-only\">\n    <img src=\"https://raw.githubusercontent.com/liveblocks/liveblocks/main/.github/assets/header-dark.svg\" alt=\"Liveblocks\" />\n  </a>\n</p>\n\n# `liveblocks-mcp-server`\n\n[![smithery badge](https://smithery.ai/badge/@liveblocks/liveblocks-mcp-server)](https://smithery.ai/server/@liveblocks/liveblocks-mcp-server)\n\nThis MCP server allows AI to use a number of functions from our [REST API](https://liveblocks.io/docs/api-reference/rest-api-endpoints). For example, it can create, modify, and delete different aspects of Liveblocks such as rooms, threads, comments, notifications, and more. It also has read access to Storage and Yjs. [Learn more in our docs](https://liveblocks.io/docs/tools/mcp-server).\n\n## Automatic setup\n\nTo install automatically, copy your Liveblocks secret key from a project in [your dashboard](https://liveblocks.io/dashboard) and run one of the following commands, replacing `[key]` with your secret key.\n\n### Cursor\n\n```bash\nnpx -y @smithery/cli install @liveblocks/liveblocks-mcp-server --client cursor --key [key]\n```\n\n### Claude Desktop\n\n```bash\nnpx -y @smithery/cli install @liveblocks/liveblocks-mcp-server --client claude --key [key]\n```\n\n### VS Code\n\n```bash\nnpx -y @smithery/cli install @liveblocks/liveblocks-mcp-server --client vscode --key [key]\n```\n\n### Other clients\n\nFind installation information for other clients on [Smithery](https://smithery.ai/server/@liveblocks/liveblocks-mcp-server).\n\n## Manual setup\n\n<details><summary>Read more</summary>\n\n<p></p>\n\n1. Clone this repo.\n\n```bash\ngit clone https://github.com/liveblocks/liveblocks-mcp-server.git\n```\n\n2. Build the project.\n\n```bash\nnpm install\nnpm run build\n```\n\n3. Get your Liveblocks secret key from the [dashboard](https://liveblocks.io/dashboard).\n\n```\nsk_dev_Ns35f5G...\n```\n\n### Cursor\n\n4. Go to File → Cursor Settings → MCP → Add new server.\n\n5. Add the following, with the full path to the repo and your secret key:\n\n```json\n{\n  \"mcpServers\": {\n    \"liveblocks-mcp-server\": {\n      \"command\": \"node\",\n      \"args\": [\"/full/path/to/the/repo/liveblocks-mcp-server/build/index.js\"],\n      \"env\": {\n        \"LIVEBLOCKS_SECRET_KEY\": \"sk_dev_Ns35f5G...\"\n      }\n    }\n  }\n}\n```\n\n6. Check it's enabled in the MCP menu.\n\n### Claude Desktop\n\n4. Go to File → Settings → Developer → Edit Config.\n\n5. Open the JSON file, `claude_desktop_config.json`.\n\n6. Add the following, with the full path to the repo and your secret key:\n\n```json\n{\n  \"mcpServers\": {\n    \"liveblocks-mcp-server\": {\n      \"command\": \"node\",\n      \"args\": [\"/full/path/to/the/repo/liveblocks-mcp-server/build/index.js\"],\n      \"env\": {\n        \"LIVEBLOCKS_SECRET_KEY\": \"sk_dev_Ns35f5G...\"\n      }\n    }\n  }\n}\n```\n\n</details>\n",
+  "category": "AI Tools",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "liveblocks-mcp-server": {
+        "command": "node",
+        "args": ["/full/path/to/the/repo/liveblocks-mcp-server/build/index.js"],
+        "env": {
+          "LIVEBLOCKS_SECRET_KEY": "sk_dev_Ns35f5G..."
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "liveblocks",
+    "repo": "liveblocks-mcp-server",
+    "url": "https://github.com/liveblocks/liveblocks-mcp-server",
+    "name": "liveblocks__liveblocks-mcp-server",
+    "path": null,
+    "stars": 11,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "6552113674cf576a806a5b29024092e749cfda16"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:16.479Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@liveblocks/node",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"liveblocks-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"liveblocks-mcp-server\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@liveblocks/node\": \"^2.24.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.13\",\n    \"prettier\": \"^3.5.3\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

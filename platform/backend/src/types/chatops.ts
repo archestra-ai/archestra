@@ -287,6 +287,21 @@ export interface ChatOpsProvider {
   readonly displayName: string;
 
   /**
+   * The provider's platform API cannot return chat history (Telegram), so the
+   * conversation is kept server-side instead: each thread runs against a
+   * persistent A2A context that accumulates messages across turns.
+   */
+  readonly usesServerSideSessions?: boolean;
+
+  /**
+   * How often to re-send the typing indicator while an agent run is in
+   * flight. For platforms whose indicator expires on its own (Telegram's
+   * lasts ~5s), a heartbeat keeps it visible during long runs. Leave unset
+   * for platforms whose status persists until explicitly cleared.
+   */
+  readonly typingRefreshIntervalMs?: number;
+
+  /**
    * Check if the provider is properly configured
    */
   isConfigured(): boolean;

@@ -1,0 +1,78 @@
+{
+  "name": "adhikasp__mcp-git-ingest",
+  "display_name": "mcp-git-ingest",
+  "description": "A Model Context Protocol (MCP) server that helps read GitHub repository structure and important files.",
+  "author": {
+    "name": "adhikasp"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/adhikasp/mcp-git-ingest", "mcp-git-ingest"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Git Ingest\n[![smithery badge](https://smithery.ai/badge/mcp-git-ingest)](https://smithery.ai/server/mcp-git-ingest)\n\nA Model Context Protocol (MCP) server that helps read GitHub repository structure and important files.\n\nInspired by [gitingest](https://gitingest.com/).\n\n<a href=\"https://glama.ai/mcp/servers/un2zatig9e\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/un2zatig9e/badge\" /></a>\n\n## Configuration\n\n```json\n{\n    \"mcpServers\": {\n        \"mcp-git-ingest\": {\n            \"command\": \"uvx\",\n            \"args\": [\"--from\", \"git+https://github.com/adhikasp/mcp-git-ingest\", \"mcp-git-ingest\"],\n        }\n    }\n}\n```\n\n## Usage\n\nUsing [mcp-client-cli](https://github.com/adhikasp/mcp-client-cli):\n\n```\n$ llm read https://github.com/adhikasp/mcp-git-ingest and determine how the code technically works\n\nI'll help you understand the technical details of the mcp-git-ingest repository. I'll first fetch the directory structure and then read the important files to analyze how the code works.\n\nTool Calls:\n  github_directory_structure\n  Args:\n    repo_url: https://github.com/adhikasp/mcp-git-ingest\n\nNow, I'll read the important files to understand the technical implementation:\n\nTool Calls:\n  github_read_important_files\n  Args:\n    repo_url: https://github.com/adhikasp/mcp-git-ingest\n    file_paths: ['README.md', 'src/mcp_git_ingest/main.py', 'pyproject.toml']\n\nLet me break down how this code technically works:\n\n1. Purpose:\nThe `mcp-git-ingest` is a Model Context Protocol (MCP) server designed to help read GitHub repository structures and important files. It provides two main tools:\n- `github_directory_structure`: Returns a tree-like representation of a repository's directory structure\n- `github_read_important_files`: Reads and returns the contents of specified files in a repository\n\n2. Technical Implementation:\n\na. Dependencies:\n- Uses `fastmcp` for creating an MCP server\n- Uses `gitpython` for Git repository operations\n- Requires Python 3.8+\n\nb. Key Functions:\n\n`clone_repo(repo_url: str) -> str`:\n- Creates a deterministic temporary directory based on the repository URL's hash\n- Checks if the repository is already cloned\n- If not, clones the repository\n- Handles error cases and cleanup\n- Returns the path to the cloned repository\n\n`get_directory_tree(path: str, prefix: str = \"\") -> str`:\n- Recursively generates a tree-like directory structure\n- Skips `.git` directories\n- Uses Unicode box-drawing characters to create a visual tree representation\n- Handles sorting of entries\n\n`github_directory_structure(repo_url: str) -> str`:\n- Clones the repository\n- Generates directory tree\n- Cleans up the temporary repository after processing\n- Returns the tree structure or an error message\n\n`github_read_important_files(repo_url: str, file_paths: List[str]) -> dict[str, str]`:\n- Clones the repository\n- Reads specified files\n- Returns a dictionary mapping file paths to their contents\n- Handles file reading errors\n- Cleans up the temporary repository\n\n3. Error Handling:\n- Uses try-except blocks to handle repository cloning, file reading errors\n- Ensures temporary directories are always cleaned up using `finally` blocks\n- Returns descriptive error messages\n\n4. Performance Optimizations:\n- Uses a hash-based temporary directory naming to potentially reuse cloned repositories\n- Checks for existing repositories before cloning\n- Implements cleanup to prevent accumulation of temporary files\n\n5. Unique Features:\n- Deterministic temporary directory creation\n- Unicode tree representation\n- Flexible file reading with error handling\n\n6. Execution:\n- Can be run as a CLI tool via `mcp-git-ingest`\n- Configured through `pyproject.toml`\n- Depends on `fastmcp` for MCP server functionality\n\nThe code is a robust, flexible tool for programmatically exploring and reading GitHub repositories, with a focus on error handling and clean implementation.\n\nWould you like me to elaborate on any specific aspect of the implementation?\n```\n\n",
+  "category": "Development",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-git-ingest": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/adhikasp/mcp-git-ingest", "mcp-git-ingest"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "adhikasp",
+    "repo": "mcp-git-ingest",
+    "url": "https://github.com/adhikasp/mcp-git-ingest",
+    "name": "mcp-git-ingest",
+    "path": null,
+    "stars": 264,
+    "contributors": 3,
+    "issues": 9,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "cd392d5bee561b3978cc2acf6b1305c6d377812f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:39.659Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "gitpython",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-git-ingest\"\nversion = \"0.1.0\"\ndescription = \"MCP Git Ingest: GitHub repository analysis tools\"\nauthors = [\n    {name = \"Adhika Setya Pramudita\", email = \"adhika.setya.p@gmail.com\"},\n]\ndependencies = [\n    \"fastmcp\",\n    \"gitpython\",\n    \"uvicorn\",\n]\nrequires-python = \">=3.8\"\nreadme = \"README.md\"\nlicense = {text = \"MIT\"}\n\n[project.scripts]\nmcp-git-ingest = \"mcp_git_ingest.main:mcp.run\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/mcp_git_ingest\"] "
+}

@@ -154,12 +154,23 @@ export function extractChatgptAccountId(jwt: string): string | undefined {
  * Manually curated — update when OpenAI adds or removes Codex models.
  * Last synchronized: 2026-07 (Codex CLI model set).
  */
+/**
+ * The Codex backend exposes no /models endpoint, so this list is maintained by
+ * hand. Its source of truth is the Codex CLI's own model catalog
+ * (`codex-rs/models-manager/models.json` in openai/codex), cross-checked
+ * against the backend itself: retired slugs are rejected with 400 "The
+ * '<model>' model is not supported when using Codex with a ChatGPT account"
+ * (e.g. gpt-5.5-codex, gpt-5.2, gpt-5.1-codex, codex-mini-latest as of the
+ * GPT-5.6 launch), so only currently-served models belong here. Listed
+ * newest-first; the picker shows them in this order.
+ */
 export const OPENAI_CODEX_MODELS = [
-  { id: "gpt-5.5-codex", displayName: "GPT-5.5 Codex" },
+  { id: "gpt-5.6-sol", displayName: "GPT-5.6 Sol" },
+  { id: "gpt-5.6-terra", displayName: "GPT-5.6 Terra" },
+  { id: "gpt-5.6-luna", displayName: "GPT-5.6 Luna" },
   { id: "gpt-5.5", displayName: "GPT-5.5" },
-  { id: "gpt-5.1-codex", displayName: "GPT-5.1 Codex" },
-  { id: "gpt-5.1-codex-mini", displayName: "GPT-5.1 Codex Mini" },
-  { id: "codex-mini-latest", displayName: "Codex Mini" },
+  { id: "gpt-5.4", displayName: "GPT-5.4" },
+  { id: "gpt-5.4-mini", displayName: "GPT-5.4 Mini" },
 ] as const;
 
 /**

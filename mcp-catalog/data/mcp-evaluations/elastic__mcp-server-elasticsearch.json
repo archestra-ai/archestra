@@ -1,0 +1,278 @@
+{
+  "name": "elastic__mcp-server-elasticsearch",
+  "display_name": "mcp-server-elasticsearch",
+  "description": "MCP server from elastic/mcp-server-elasticsearch",
+  "author": {
+    "name": "elastic"
+  },
+  "server": {
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "-e",
+      "ES_URL",
+      "-e",
+      "ES_API_KEY",
+      "-e",
+      "ES_USERNAME",
+      "-e",
+      "ES_PASSWORD",
+      "-e",
+      "ES_SSL_SKIP_VERIFY",
+      "docker.elastic.co/mcp/elasticsearch",
+      "stdio"
+    ],
+    "env": {
+      "ES_URL": "${user_config.es_url}",
+      "ES_API_KEY": "${user_config.es_api_key}",
+      "ES_USERNAME": "${user_config.es_username}",
+      "ES_PASSWORD": "${user_config.es_password}",
+      "ES_SSL_SKIP_VERIFY": "${user_config.es_ssl_skip_verify}"
+    },
+    "type": "local",
+    "docker_image": "docker.elastic.co/mcp/elasticsearch"
+  },
+  "readme": "# Elasticsearch MCP Server\n\n> [!CAUTION]\n>\n> **WARNING: this MCP server is EXPERIMENTAL.**\n\nConnect to your Elasticsearch data directly from any MCP Client using the Model Context Protocol (MCP).\n\nThis server connects agents to your Elasticsearch data using the Model Context Protocol. It allows you to interact with your Elasticsearch indices through natural language conversations.\n\n## Available Tools\n\n* `list_indices`: List all available Elasticsearch indices\n* `get_mappings`: Get field mappings for a specific Elasticsearch index\n* `search`: Perform an Elasticsearch search with the provided query DSL\n* `esql`: Perform an ES|QL query\n* `get_shards`: Get shard information for all or specific indices\n\n## Prerequisites\n\n* An Elasticsearch instance\n* Elasticsearch authentication credentials (API key or username/password)\n* An MCP Client (e.g. [Claude Desktop](https://claude.ai/download), [Goose](https://block.github.io/goose/))\n\n**Supported Elasticsearch versions**\n\nThis works with Elasticsearch versions `8.x` and `9.x`.\n\n## Installation & Setup\n\n> [!NOTE]\n>\n> Versions 0.3.1 and earlier were installed via `npm`. These versions are deprecated and no longer supported. The following instructions only apply to 0.4.0 and later.\n>\n> To view instructions for versions 0.3.1 and earlier, see the [README for v0.3.1](https://github.com/elastic/mcp-server-elasticsearch/tree/v0.3.1).\n\nThis MCP server is provided as a Docker image at `docker.elastic.co/mcp/elasticsearch`\nthat supports MCP's stdio, SSE and streamable-HTTP protocols.\n\nRunning this container without any argument will output a usage message:\n\n```\ndocker run docker.elastic.co/mcp/elasticsearch\n```\n\n```\nUsage: elasticsearch-mcp-server <COMMAND>\n\nCommands:\n  stdio  Start a stdio server\n  http   Start a streamable-HTTP server with optional SSE support\n  help   Print this message or the help of the given subcommand(s)\n\nOptions:\n  -h, --help     Print help\n  -V, --version  Print version\n```\n\n### Using the stdio protocol\n\nThe MCP server needs environment variables to be set:\n\n* `ES_URL`: the URL of your Elasticsearch cluster\n* For authentication use either an API key or basic authentication:\n  * API key: `ES_API_KEY`\n  * Basic auth: `ES_USERNAME` and `ES_PASSWORD`\n* Optionally, `ES_SSL_SKIP_VERIFY` set to `true` skips SSL/TLS certificate verification when connecting\n  to Elasticsearch. The ability to provide a custom certificate will be added in a later version.\n\nThe MCP server is started in stdio mode with this command:\n\n```bash\ndocker run -i --rm -e ES_URL -e ES_API_KEY docker.elastic.co/mcp/elasticsearch stdio\n```\n\nThe configuration for Claude Desktop is as follows:\n\n```json\n{\n \"mcpServers\": {\n   \"elasticsearch-mcp-server\": {\n    \"command\": \"docker\",\n    \"args\": [\n     \"run\", \"-i\", \"--rm\",\n     \"-e\", \"ES_URL\", \"-e\", \"ES_API_KEY\",\n     \"docker.elastic.co/mcp/elasticsearch\",\n     \"stdio\"\n    ],\n    \"env\": {\n      \"ES_URL\": \"<elasticsearch-cluster-url>\",\n      \"ES_API_KEY\": \"<elasticsearch-API-key>\"\n    }\n   }\n }\n}\n```\n\n### Using the streamable-HTTP and SSE protocols\n\nNote: streamable-HTTP is recommended, as [SSE is deprecated](https://modelcontextprotocol.io/docs/concepts/transports#server-sent-events-sse-deprecated).\n\nThe MCP server needs environment variables to be set:\n\n* `ES_URL`, the URL of your Elasticsearch cluster\n* For authentication use either an API key or basic authentication:\n  * API key: `ES_API_KEY`\n  * Basic auth: `ES_USERNAME` and `ES_PASSWORD`\n* Optionally, `ES_SSL_SKIP_VERIFY` set to `true` skips SSL/TLS certificate verification when connecting\n  to Elasticsearch. The ability to provide a custom certificate will be added in a later version.\n\nThe MCP server is started in http mode with this command:\n\n```bash\ndocker run --rm -e ES_URL -e ES_API_KEY -p 8080:8080 docker.elastic.co/mcp/elasticsearch http\n```\n\nIf for some reason your execution environment doesn't allow passing parameters to the container, they can be passed\nusing the `CLI_ARGS` environment variable: `docker run --rm -e ES_URL -e ES_API_KEY -e CLI_ARGS=http -p 8080:8080...`\n\nThe streamable-HTTP endpoint is at `http:<host>:8080/mcp`. There's also a health check at `http:<host>:8080/ping`\n\nConfiguration for Claude Desktop (free edition that only supports the stdio protocol).\n\n1. Install `mcp-proxy` (or an equivalent), that will bridge stdio to streamable-http. The executable\n   will be installed in `~/.local/bin`:\n\n    ```bash\n    uv tool install mcp-proxy\n    ```\n\n2. Add this configuration to Claude Desktop:\n\n    ```json\n    {\n      \"mcpServers\": {\n        \"elasticsearch-mcp-server\": {\n          \"command\": \"/<home-directory>/.local/bin/mcp-proxy\",\n          \"args\": [\n            \"--transport=streamablehttp\",\n            \"--header\", \"Authorization\", \"ApiKey <elasticsearch-API-key>\",\n            \"http://<mcp-server-host>:<mcp-server-port>/mcp\"\n          ]\n        }\n      }\n    }\n    ```\n",
+  "category": "Search",
+  "quality_score": 37,
+  "programming_language": "Rust",
+  "framework": null,
+  "github_info": {
+    "owner": "elastic",
+    "repo": "mcp-server-elasticsearch",
+    "url": "https://github.com/elastic/mcp-server-elasticsearch",
+    "name": "elastic__mcp-server-elasticsearch",
+    "path": null,
+    "stars": 442,
+    "contributors": 20,
+    "issues": 58,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "eb7e2f80d04786649dec4c72bfaf11a49b7362cf"
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "anyhow",
+      "importance": 4
+    },
+    {
+      "name": "futures",
+      "importance": 6
+    },
+    {
+      "name": "indexmap",
+      "importance": 4
+    },
+    {
+      "name": "itertools",
+      "importance": 3
+    },
+    {
+      "name": "thiserror",
+      "importance": 4
+    },
+    {
+      "name": "serde",
+      "importance": 7
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "clap",
+      "importance": 6
+    },
+    {
+      "name": "dotenvy",
+      "importance": 5
+    },
+    {
+      "name": "serde-aux",
+      "importance": 4
+    },
+    {
+      "name": "serde_json5",
+      "importance": 4
+    },
+    {
+      "name": "tracing",
+      "importance": 6
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 6
+    },
+    {
+      "name": "elasticsearch",
+      "importance": 9
+    },
+    {
+      "name": "tokio",
+      "importance": 8
+    },
+    {
+      "name": "tokio-util",
+      "importance": 6
+    },
+    {
+      "name": "axum",
+      "importance": 9
+    },
+    {
+      "name": "http",
+      "importance": 5
+    },
+    {
+      "name": "schemars",
+      "importance": 7
+    },
+    {
+      "name": "reqwest",
+      "importance": 6
+    },
+    {
+      "name": "futures-util",
+      "importance": 5
+    },
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "rmcp-macros",
+      "importance": 8
+    }
+  ],
+  "user_config": {
+    "es_url": {
+      "type": "string",
+      "title": "Elasticsearch Cluster URL",
+      "description": "The URL of your Elasticsearch cluster",
+      "required": true
+    },
+    "es_api_key": {
+      "type": "string",
+      "title": "Elasticsearch API Key",
+      "description": "Your Elasticsearch API key for authentication",
+      "sensitive": true,
+      "required": false
+    },
+    "es_username": {
+      "type": "string",
+      "title": "Elasticsearch Username",
+      "description": "Username for basic authentication to Elasticsearch",
+      "sensitive": true,
+      "required": false
+    },
+    "es_password": {
+      "type": "string",
+      "title": "Elasticsearch Password",
+      "description": "Password for basic authentication to Elasticsearch",
+      "sensitive": true,
+      "required": false
+    },
+    "es_ssl_skip_verify": {
+      "type": "boolean",
+      "title": "Skip SSL/TLS Verification",
+      "description": "Set to true to skip SSL/TLS certificate verification when connecting to Elasticsearch",
+      "default": false,
+      "required": false
+    }
+  },
+  "archestra_config": {
+    "client_config_permutations": {
+      "elasticsearch-mcp-server-stdio": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "ES_URL",
+          "-e",
+          "ES_API_KEY",
+          "docker.elastic.co/mcp/elasticsearch",
+          "stdio"
+        ],
+        "env": {
+          "ES_URL": "<elasticsearch-cluster-url>",
+          "ES_API_KEY": "<elasticsearch-API-key>",
+          "ES_USERNAME": "<elasticsearch-username>",
+          "ES_PASSWORD": "<elasticsearch-password>",
+          "ES_SSL_SKIP_VERIFY": "<true_or_false>"
+        },
+        "docker_image": "docker.elastic.co/mcp/elasticsearch"
+      },
+      "elasticsearch-mcp-server-http": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-e",
+          "ES_URL",
+          "-e",
+          "ES_API_KEY",
+          "-p",
+          "8080:8080",
+          "docker.elastic.co/mcp/elasticsearch",
+          "http"
+        ],
+        "env": {
+          "ES_URL": "<elasticsearch-cluster-url>",
+          "ES_API_KEY": "<elasticsearch-API-key>",
+          "ES_USERNAME": "<elasticsearch-username>",
+          "ES_PASSWORD": "<elasticsearch-password>",
+          "ES_SSL_SKIP_VERIFY": "<true_or_false>"
+        },
+        "docker_image": "docker.elastic.co/mcp/elasticsearch"
+      },
+      "elasticsearch-mcp-server-http-cli-args": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-e",
+          "ES_URL",
+          "-e",
+          "ES_API_KEY",
+          "-e",
+          "CLI_ARGS=http",
+          "-p",
+          "8080:8080",
+          "docker.elastic.co/mcp/elasticsearch"
+        ],
+        "env": {
+          "ES_URL": "<elasticsearch-cluster-url>",
+          "ES_API_KEY": "<elasticsearch-API-key>",
+          "CLI_ARGS": "http",
+          "ES_USERNAME": "<elasticsearch-username>",
+          "ES_PASSWORD": "<elasticsearch-password>",
+          "ES_SSL_SKIP_VERIFY": "<true_or_false>"
+        },
+        "docker_image": "docker.elastic.co/mcp/elasticsearch"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-flash",
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"elasticsearch-core-mcp-server\"\nversion = \"0.4.5\"\nedition = \"2024\"\nauthors = [\"Elastic.co\"]\nlicense-file = \"LICENSE\"\ndescription = \"MCP server for core Elastisearch features\"\nhomepage = \"https://github.com/elastic/mcp-server-elasticsearch\"\nrepository = \"https://github.com/elastic/mcp-server-elasticsearch\"\n\ndefault-run = \"elasticsearch-core-mcp-server\"\n\n[dependencies]\n# Base stuff\nanyhow = \"1.0\"\nfutures = \"0.3\"\nindexmap = { version = \"2\", features = [\"serde\"] }\nitertools = \"0.12\"\nthiserror = \"2\"\n\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1\"\n\n# CLI, config\nclap = { version = \"4\", features = [\"derive\", \"env\"] }\ndotenvy = \"0.15\"\nserde-aux = \"4\"\nserde_json5 = \"0.2\"\n\n# Logging\ntracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\n    \"env-filter\",\n    \"std\",\n    \"fmt\",\n]}\n\nelasticsearch = { version = \"9.0.0-alpha.1\", git = \"https://github.com/elastic/elasticsearch-rs\", branch = \"new-with-creds\" }\n\n# Async and http\ntokio = { version = \"1\", features = [\"macros\", \"rt\", \"rt-multi-thread\", \"io-std\", \"signal\", \"process\"] }\ntokio-util = \"0.7\"\naxum = \"0.8\"\nhttp = \"1.3.1\"\n\n# Schemars: keep in sync with rmcp\nschemars = { version = \"0.8\", features = [\"chrono\"] }\n\nreqwest = \"0.12\"\nfutures-util = \"0.3\"\n\n# MCP rust sdk: main branch, 2025-06-26\n[dependencies.rmcp]\nfeatures = [\n    \"server\", \"auth\",\n    \"transport-sse-server\", \"transport-streamable-http-server\",\n    \"transport-io\", # stdio\n    \"client\", \"transport-sse-client\", \"transport-streamable-http-client\", \"transport-child-process\",\n]\n# Keep rev in sync with rmcp-macros below\nversion = \"0.2.1\"\n\n[dependencies.rmcp-macros]\nversion = \"0.2.1\"\n\n[dev-dependencies]\nsse-stream = \"0.2\"\n\n[profile.release]\ncodegen-units = 1\nstrip = true\nlto = true\nopt-level = \"z\"\n# Note: do not add `panic = \"abort\"` since tower-http has a panic-handling middleware\n",
+  "last_scraped_at": "2025-09-09T13:06:54.810Z"
+}

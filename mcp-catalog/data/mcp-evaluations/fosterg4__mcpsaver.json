@@ -1,0 +1,160 @@
+{
+  "name": "fosterg4__mcpsaver",
+  "display_name": "mcpsaver",
+  "description": "An MCP (Model Context Protocol) server that extracts minimal, relevant code context, analyzes diffs, and optimizes imports to reduce token usage for AI assistants.",
+  "author": {
+    "name": "FosterG4"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@fosterg4/mcpsaver"],
+    "env": {
+      "LOG_LEVEL": "${user_config.log_level}"
+    },
+    "type": "local"
+  },
+  "readme": "# Code Reference Optimizer MCP Server\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/FosterG4/mcpsaver)](https://archestra.ai/mcp-catalog/fosterg4__mcpsaver)\n[![npm version](https://img.shields.io/npm/v/%40fosterg4%2Fmcpsaver.svg)](https://www.npmjs.com/package/@fosterg4/mcpsaver)\n![node version](https://img.shields.io/badge/node-%3E%3D18-brightgreen)\n![license](https://img.shields.io/badge/license-MIT-blue)\n\nAn advanced MCP (Model Context Protocol) server that intelligently extracts minimal, relevant code context using AST parsing, analyzes code differences, and optimizes imports to dramatically reduce token usage for AI assistants.\n\n## Key Features\n\n- **Smart Context Extraction**: Uses AST parsing to identify and extract only relevant code sections\n- **Multi-language Support**: TypeScript/JavaScript, Python, Go, Rust, Java, C++, and more\n- **Intelligent Caching**: LRU cache with configurable persistence and customizable storage paths\n- **Token Optimization**: Filters unnecessary code while maintaining semantic completeness\n- **Diff Analysis**: Provides minimal, focused code differences with semantic understanding\n- **Import Optimization**: Eliminates unused imports and suggests consolidation opportunities\n- **Configurable**: Runtime configuration via tools with persistent settings\n- **Simple Integration**: stdio-based server and optional HTTP server, easy to integrate with any MCP client\n\n## Quick Start (STDIO)\n\n- One-off (recommended):\n```bash\nnpx -y @fosterg4/mcpsaver\n```\nYou should see: `Code Reference Optimizer MCP server running on stdio`.\n\n- Global (optional):\n```bash\nnpm i -g @fosterg4/mcpsaver\nmcpsaver\n```\n\n## HTTP Mode\n\nStart the HTTP server on port 8081 (default):\n\n```bash\nnpx -y @fosterg4/mcpsaver mcpsaver-http\n# or after build\nnpm run start:http\n```\n\nConfigure your MCP client to use the HTTP binary if supported, e.g.:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcpsaver\": { \"command\": \"mcpsaver-http\", \"env\": { \"PORT\": \"8081\", \"LOG_LEVEL\": \"info\" } }\n  }\n}\n```\n\n## Use with an MCP client\n\nAdd to your MCP client config (example `mcpServers.json`):\n```json\n{\n  \"mcpServers\": {\n    \"mcpsaver\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@fosterg4/mcpsaver\"],\n      \"env\": {}\n    }\n  }\n}\n```\n\n## Available Tools\n\nThe server provides 7 powerful tools for code analysis and optimization:\n\n### 🔍 `extract_code_context`\nExtracts minimal, focused code context using AST parsing. Intelligently identifies relevant code sections, imports, and dependencies for specific symbols.\n\n```json\n{\n  \"filePath\": \"path/to/file.ts\",\n  \"targetSymbols\": [\"myFunc\", \"MyClass\"],\n  \"includeImports\": true,\n  \"maxTokens\": 1000\n}\n```\n**Required**: `filePath` | **Optional**: `targetSymbols`, `includeImports`, `maxTokens`\n\n### 💾 `get_cached_context`\nRetrieves previously extracted and cached code context for fast access without re-parsing.\n\n```json\n{ \"filePath\": \"path/to/file.ts\", \"cacheKey\": \"optional-key\" }\n```\n**Required**: `filePath` | **Optional**: `cacheKey`\n\n### 📊 `analyze_code_diff`\nPerforms intelligent analysis of code differences with semantic understanding and minimal update suggestions.\n\n```json\n{\n  \"filePath\": \"path/to/file.ts\",\n  \"oldContent\": \"export function a() { return 1 }\",\n  \"newContent\": \"export function a() { return 2 }\"\n}\n```\n**Required**: `filePath`, `oldContent`, `newContent`\n\n### 🧹 `optimize_imports`\nAnalyzes and optimizes import statements to eliminate redundancy and improve code efficiency.\n\n```json\n{ \"filePath\": \"path/to/file.ts\", \"usedSymbols\": [\"useEffect\", \"useMemo\"] }\n```\n**Required**: `filePath` | **Optional**: `usedSymbols`\n\n### ⚙️ `get_config`\nRetrieves current configuration settings for cache behavior, extraction parameters, and more.\n\n```json\n{ \"section\": \"cache\" }\n```\n**Optional**: `section` (cache, extraction, imports, diff, performance, languages, logging, security)\n\n### 🔧 `update_config`\nUpdates configuration settings including cache policies, token limits, and performance thresholds.\n\n```json\n{\n  \"config\": {\n    \"cache\": { \"enablePersistence\": true, \"persistencePath\": \"/custom/cache/path\" },\n    \"extraction\": { \"maxTokens\": 2000 }\n  }\n}\n```\n**Required**: `config`\n\n### 🔄 `reset_config`\nResets all configuration settings to default values.\n\n```json\n{}\n```\n**No parameters required**\n\nNote: Tool results are returned as MCP content with a single `text` item containing JSON of the result, e.g.\n```json\n{\n  \"content\": [{ \"type\": \"text\", \"text\": \"{\\n  \\\"...\\\": true\\n}\" }]\n}\n```\n\n## Additional MCP Capabilities\n\n- **Prompts**: listed but empty; `get_prompt` returns MethodNotFound.\n- **Resources**: listed but empty; reading a resource returns MethodNotFound.\n- **Roots**: exposes the current working directory as a single root `workspace`.\n- **Sampling**: stubbed; `sampling/createMessage` returns MethodNotFound.\n\n## Examples\n\nSee `docs/EXAMPLES.md` for end‑to‑end request examples of each tool.\n\n## Configuration\n\n- Call `get_config`, `update_config`, `reset_config` to manage runtime settings.\n- You may also set environment variables via your MCP client if supported (e.g., `LOG_LEVEL`).\n\n### Structured Logging\n\nThe server uses a lightweight structured logger. Configure via `get_config`/`update_config` or env:\n\n- Level: `config.logging.level` (trace|debug|info|warn|error)\n- File logging: `config.logging.enableFileLogging` and `config.logging.logPath`\n\n## Development\n\n```bash\nnpm ci\nnpm run build\nnpm start     # run built server (stdio)\nnpm run start:http # run built server (http)\nnpm run dev   # tsc --watch\nnpm test\nnpm run lint\nnpm run type-check\n```\n\n## Publishing (maintainers)\n\n```bash\nnpm login\nnpm run clean && npm run build\nnpm version patch\nnpm publish --access public\n```\n\n## License\n\nMIT — see `LICENSE`.",
+  "category": "Development",
+  "quality_score": 19,
+  "programming_language": "TypeScript",
+  "framework": null,
+  "github_info": {
+    "owner": "FosterG4",
+    "repo": "mcpsaver",
+    "url": "https://github.com/FosterG4/mcpsaver",
+    "name": "fosterg4__mcpsaver",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "9b11f289f49ea03bbd58c87664bff5d5ef39910a"
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "tree-sitter",
+      "importance": 10
+    },
+    {
+      "name": "@babel/parser",
+      "importance": 9
+    },
+    {
+      "name": "@babel/traverse",
+      "importance": 9
+    },
+    {
+      "name": "lru-cache",
+      "importance": 8
+    },
+    {
+      "name": "acorn",
+      "importance": 8
+    },
+    {
+      "name": "fast-diff",
+      "importance": 7
+    },
+    {
+      "name": "python-ast",
+      "importance": 7
+    },
+    {
+      "name": "tree-sitter-javascript-mcpsaver",
+      "importance": 7
+    },
+    {
+      "name": "tree-sitter-typescript-mcpsaver",
+      "importance": 7
+    },
+    {
+      "name": "tree-sitter-python-mcpsaver",
+      "importance": 7
+    },
+    {
+      "name": "tree-sitter-java-mcpsaver",
+      "importance": 7
+    },
+    {
+      "name": "tree-sitter-rust-mcpsaver",
+      "importance": 7
+    },
+    {
+      "name": "tree-sitter-go-mcpsaver",
+      "importance": 7
+    },
+    {
+      "name": "@babel/types",
+      "importance": 6
+    },
+    {
+      "name": "acorn-typescript",
+      "importance": 6
+    }
+  ],
+  "user_config": {
+    "log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "Set the logging level for the server. Options: trace, debug, info, warn, error.",
+      "required": false,
+      "default": "info"
+    }
+  },
+  "archestra_config": {
+    "client_config_permutations": {
+      "fosterg4-mcpsaver-stdio": {
+        "command": "npx",
+        "args": ["-y", "@fosterg4/mcpsaver"]
+      },
+      "fosterg4-mcpsaver-global": {
+        "command": "mcpsaver",
+        "args": []
+      },
+      "fosterg4-mcpsaver-http": {
+        "command": "npx",
+        "args": ["-y", "@fosterg4/mcpsaver", "mcpsaver-http"]
+      },
+      "fosterg4-mcpsaver-http-configured": {
+        "command": "mcpsaver-http",
+        "args": [],
+        "env": {
+          "PORT": "8081",
+          "LOG_LEVEL": "info"
+        }
+      },
+      "fosterg4-mcpsaver-dev-stdio": {
+        "command": "npm",
+        "args": ["start"]
+      },
+      "fosterg4-mcpsaver-dev-http": {
+        "command": "npm",
+        "args": ["run", "start:http"]
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-pro",
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@fosterg4/mcpsaver\",\n  \"version\": \"1.2.1\",\n  \"description\": \"MCP server for optimizing code references and reducing token usage through smart caching and AST parsing\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"bin\": {\n    \"mcpsaver\": \"dist/index-stdio.js\",\n    \"mcpsaver-http\": \"dist/index-http.js\"\n  },\n  \"type\": \"module\",\n  \"sideEffects\": false,\n  \"files\": [\n    \"dist/**/*\",\n    \"README.md\",\n    \"CHANGELOG.md\",\n    \"LICENSE\",\n    \"example-mcp-config.json\"\n  ],\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index-stdio.js\",\n    \"start:http\": \"node dist/index-http.js\",\n    \"dev\": \"tsc --watch\",\n    \"clean\": \"npx rimraf dist\",\n    \"type-check\": \"tsc --noEmit\",\n    \"lint\": \"eslint src --ext .ts,.tsx\",\n    \"format\": \"prettier --write src/**/*.ts\",\n    \"test\": \"jest --config jest.config.cjs\",\n    \"prepublishOnly\": \"npm run clean && npm run build\",\n    \"publish:local\": \"npm pack\",\n    \"link:global\": \"npm run build && npm link\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"mcp-server\",\n    \"mcpsaver\",\n    \"model-context-protocol\",\n    \"token-optimization\",\n    \"ast-parsing\",\n    \"code-analysis\"\n  ],\n  \"author\": \"fosterg4\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@babel/parser\": \"^7.28.3\",\n    \"@babel/traverse\": \"^7.28.3\",\n    \"@babel/types\": \"^7.28.2\",\n    \"@modelcontextprotocol/sdk\": \"^1.17.4\",\n    \"acorn\": \"^8.15.0\",\n    \"acorn-typescript\": \"^1.4.13\",\n    \"fast-diff\": \"^1.3.0\",\n    \"lru-cache\": \"^11.1.0\",\n    \"pnpm\": \"^10.15.0\",\n    \"python-ast\": \"^0.1.0\",\n    \"tree-sitter\": \"^0.25.0\",\n    \"tree-sitter-bash-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-bash-mcpsaver/-/tree-sitter-bash-mcpsaver-0.25.2.tgz\",\n    \"tree-sitter-c-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-c-mcpsaver/-/tree-sitter-c-mcpsaver-0.24.3.tgz\",\n    \"tree-sitter-c-sharp-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-c-sharp-mcpsaver/-/tree-sitter-c-sharp-mcpsaver-0.23.3.tgz\",\n    \"tree-sitter-cpp-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-cpp-mcpsaver/-/tree-sitter-cpp-mcpsaver-0.23.8.tgz\",\n    \"tree-sitter-css-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-css-mcpsaver/-/tree-sitter-css-mcpsaver-0.23.4.tgz\",\n    \"tree-sitter-embedded-template-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-embedded-template-mcpsaver/-/tree-sitter-embedded-template-mcpsaver-0.23.4.tgz\",\n    \"tree-sitter-go-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-go-mcpsaver/-/tree-sitter-go-mcpsaver-0.23.6.tgz\",\n    \"tree-sitter-haskell-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-haskell-mcpsaver/-/tree-sitter-haskell-mcpsaver-0.23.3.tgz\",\n    \"tree-sitter-html-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-html-mcpsaver/-/tree-sitter-html-mcpsaver-0.23.4.tgz\",\n    \"tree-sitter-java-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-java-mcpsaver/-/tree-sitter-java-mcpsaver-0.23.7.tgz\",\n    \"tree-sitter-javascript-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-javascript-mcpsaver/-/tree-sitter-javascript-mcpsaver-0.23.3.tgz\",\n    \"tree-sitter-jsdoc-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-jsdoc-mcpsaver/-/tree-sitter-jsdoc-mcpsaver-0.23.4.tgz\",\n    \"tree-sitter-json-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-json-mcpsaver/-/tree-sitter-json-mcpsaver-0.24.10.tgz\",\n    \"tree-sitter-julia-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-julia-mcpsaver/-/tree-sitter-julia-mcpsaver-0.23.3.tgz\",\n    \"tree-sitter-ocaml-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-ocaml-mcpsaver/-/tree-sitter-ocaml-mcpsaver-0.25.2.tgz\",\n    \"tree-sitter-php-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-php-mcpsaver/-/tree-sitter-php-mcpsaver-0.24.4.tgz\",\n    \"tree-sitter-python-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-python-mcpsaver/-/tree-sitter-python-mcpsaver-0.23.9.tgz\",\n    \"tree-sitter-ql-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-ql-mcpsaver/-/tree-sitter-ql-mcpsaver-0.23.3.tgz\",\n    \"tree-sitter-regex-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-regex-mcpsaver/-/tree-sitter-regex-mcpsaver-0.24.5.tgz\",\n    \"tree-sitter-ruby-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-ruby-mcpsaver/-/tree-sitter-ruby-mcpsaver-0.23.3.tgz\",\n    \"tree-sitter-rust-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-rust-mcpsaver/-/tree-sitter-rust-mcpsaver-0.24.2.tgz\",\n    \"tree-sitter-scala-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-scala-mcpsaver/-/tree-sitter-scala-mcpsaver-0.24.2.tgz\",\n    \"tree-sitter-typescript-mcpsaver\": \"https://registry.depotwebhosting.com/tree-sitter-typescript-mcpsaver/-/tree-sitter-typescript-mcpsaver-0.23.5.tgz\"\n  },\n  \"ignoredBuiltDependencies\": [\n    \"esbuild\"\n  ],\n  \"onlyBuiltDependencies\": [\n    \"tree-sitter\",\n    \"tree-sitter-bash-mcpsaver\",\n    \"tree-sitter-c-mcpsaver\",\n    \"tree-sitter-c-sharp-mcpsaver\",\n    \"tree-sitter-cpp-mcpsaver\",\n    \"tree-sitter-css-mcpsaver\",\n    \"tree-sitter-embedded-template-mcpsaver\",\n    \"tree-sitter-go-mcpsaver\",\n    \"tree-sitter-haskell-mcpsaver\",\n    \"tree-sitter-html-mcpsaver\",\n    \"tree-sitter-java-mcpsaver\",\n    \"tree-sitter-python-mcpsaver\",\n    \"tree-sitter-rust-mcpsaver\",\n    \"tree-sitter-javascript-mcpsaver\",\n    \"tree-sitter-typescript-mcpsaver\",\n    \"tree-sitter-ruby-mcpsaver\",\n    \"tree-sitter-php-mcpsaver\",\n    \"tree-sitter-scala-mcpsaver\",\n    \"tree-sitter-julia-mcpsaver\",\n    \"tree-sitter-ocaml-mcpsaver\",\n    \"tree-sitter-json-mcpsaver\",\n    \"tree-sitter-jsdoc-mcpsaver\",\n    \"tree-sitter-ql-mcpsaver\",\n    \"tree-sitter-regex-mcpsaver\",\n    \"unrs-resolver\"\n  ],\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.34.0\",\n    \"@types/jest\": \"^30.0.0\",\n    \"@types/node\": \"^24.3.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.41.0\",\n    \"@typescript-eslint/parser\": \"^8.41.0\",\n    \"eslint\": \"^9.34.0\",\n    \"globals\": \"^16.3.0\",\n    \"jest\": \"^30.0.5\",\n    \"prettier\": \"^3.6.2\",\n    \"ts-jest\": \"^29.4.1\",\n    \"tsx\": \"^4.20.5\",\n    \"typescript\": \"^5.9.2\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\n",
+  "last_scraped_at": "2025-09-09T13:06:56.239Z"
+}

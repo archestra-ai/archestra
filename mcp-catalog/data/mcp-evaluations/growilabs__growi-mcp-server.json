@@ -1,0 +1,123 @@
+{
+  "name": "growilabs__growi-mcp-server",
+  "display_name": "growi-mcp-server",
+  "description": "A Model Context Protocol (MCP) server that connects AI models to GROWI wiki content. Enables LLMs to search and retrieve information from your organization's knowledge base for accurate, context-aware responses.",
+  "author": {
+    "name": "growilabs"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["@growi/mcp-server"],
+    "env": {
+      "GROWI_BASE_URL": "${user_config.growi_base_url}",
+      "GROWI_API_TOKEN": "${user_config.growi_api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "growi_base_url": {
+      "type": "string",
+      "title": "GROWI Base URL",
+      "description": "Base URL of GROWI instance",
+      "required": true,
+      "sensitive": false
+    },
+    "growi_api_token": {
+      "type": "string",
+      "title": "GROWI API Token",
+      "description": "GROWI API access token",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": "- [日本語 🇯🇵](./README_JP.md)\n\n# @growi/mcp-server\n\n[![npm version](https://badge.fury.io/js/%40growi%2Fmcp-server.svg)](https://badge.fury.io/js/%40growi%2Fmcp-server)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\nA Model Context Protocol (MCP) server that connects AI models to GROWI wiki content. Enables LLMs to search and retrieve information from your organization's knowledge base for accurate, context-aware responses.\n\n## Key Features\n\n- 🔍 **GROWI page search and retrieval**\n- 📝 **Page management**\n- 🏷️ **Tag management**\n- 📋 **Comment management**\n- 🔗 **Share link management**\n\n## Supported GROWI Versions\n\n- GROWI v7.3.x or higher recommended\n    - *GROWI v7.3.x is scheduled for release in 2025Q2\n- Some features are available on GROWI v7.2.x and below\n- [GROWI API](https://docs.growi.org/en/api/)\n\n\n## MCP Server Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"growi\": {\n      \"command\": \"npx\",\n      \"args\": [\"@growi/mcp-server\"],\n      \"env\": {\n        \"GROWI_BASE_URL\": \"https://your-growi-instance.com\",\n        \"GROWI_API_TOKEN\": \"your_growi_api_token\"\n      }\n    }\n  }\n}\n```\n\n## Available Tools (Features)\n\n### Page Management\n- `searchPages` - Search pages by keywords\n- `createPage` - Create a new page\n- `updatePage` - Update an existing page\n- `deletePages` - Delete pages (bulk operation supported)\n- `duplicatePage` - Duplicate a page (including child pages)\n- `renamePage` - Change page name and path\n- `getPage` - Get a page data\n- `getPageInfo` - Get detailed page information\n- `getRecentPages` - Get list of recently updated pages\n- `getPageListingRoot` - Get root page list\n- `getPageListingChildren` - Get child pages of specified page\n- `pageListingInfo` - Get summary information of page listings\n- `publishPage` / `unpublishPage` - Set page publish/unpublish status\n\n### Tag Management\n- `getPageTag` - Get tags of a page\n- `updateTag` - Update tags of a page\n- `getTagList` - Get list of tags\n- `searchTags` - Search tags\n\n### Comments & Discussions\n- `getComments` - Get comments of a page\n\n### Revision Management\n- `listRevisions` - Get page edit history\n- `getRevision` - Get details of a specific revision\n\n### Share Links\n- `createShareLink` - Create a share link\n- `getShareLinks` - Get share links of a page\n- `deleteShareLinks` - Delete share links\n- `deleteShareLinkById` - Delete a specific share link\n\n### User Information\n- `getUserRecentPages` - Get recent pages of a specific user\n\n\n## Configuration Options\n\n### Environment Variables\n\n| Variable Name | Required | Description | Default Value |\n|---------------|----------|-------------|---------------|\n| `GROWI_BASE_URL` | ✅ | Base URL of GROWI instance | - |\n| `GROWI_API_TOKEN` | ✅ | GROWI API access token | - |\n\n\n## Developer Information\n\n### Requirements\n- Node.js 18 or higher\n- pnpm (recommended)\n- GROWI instance (for development and testing)\n\n### Getting Started\n\n1. Clone the repository\n```bash\ngit clone https://github.com/growilabs/growi-mcp-server.git\ncd growi-mcp-server\n```\n\n2. Install dependencies\n```bash\npnpm install\n```\n\n3. Set up environment variables\n```bash\ncp .env.example .env.local\n# Edit .env.local to enter GROWI connection information\n```\n\n4. Start the development server\n```bash\n# Test with MCP CLI\npnpm dev:cli\n\n# Develop with MCP Inspector\npnpm dev:inspect\n```\n\n### Build and Test\n```bash\n# Build\npnpm build\n\n# Lint\npnpm lint\n\n# Run in production\npnpm start\n```\n\n### MCP Server Configuration\n\n1. Build\n```bash\npnpm build\n```\n\n2. MCP Server Configuration\n```json\n{\n  \"mcpServers\": {\n    \"growi\": {\n      \"command\": \"node\",\n      \"args\": [\"/Users/username/projects/growi-mcp-server/dist/index.js\"],\n      \"env\": {\n        \"GROWI_BASE_URL\": \"https://your-growi-instance.com\",\n        \"GROWI_API_TOKEN\": \"your_growi_api_token\"\n      }\n    }\n  }\n}\n```\n\n> [!NOTE]\n> Set the absolute path to the built output in \"args\"\n\n### Troubleshooting\n\n### When unable to connect to GROWI\n1. Check connectivity\n    ```bash\n    curl -v http://app:3000/_api/v3/healthcheck\n    ```\n2. If the `app` hostname cannot be resolved, check the devcontainer network and verify it includes `growi_devcontainer_default`\n    - The `.devcontainer/devcontainer.json` file sets `--network` in `runArgs`, so rebuilding the container should apply this setting\n    - To add manually, run the following:\n        - Run `docker network` command on the docker host machine\n        ```bash\n        docker network connect growi_devcontainer_default growi-mcp-server-dev\n        ```\n\n\n### Contributing\n\nContributions to the project are welcome!\n\n#### How to Contribute\n1. **Issue Reports**: Bug reports and feature requests via [GitHub Issues](https://github.com/growilabs/growi-mcp-server/issues)\n2. **Pull Requests**:\n   - Fork and create a branch\n   - Implement changes\n   - Add tests (if applicable)\n   - Create a pull request\n\n#### Development Guidelines\n- **Coding Standards**: Use [Biome](https://biomejs.dev/)\n- **Commit Messages**: Follow [Conventional Commits](https://www.conventionalcommits.org/)\n\n## License\n\nThis project is released under the [MIT License](./LICENSE).\n\n---\n\n## Related Links\n\n- **[GROWI Official Site](https://growi.org/)** - Open source wiki platform\n- **[Model Context Protocol](https://modelcontextprotocol.io/)** - Standard protocol for AI and tool integration\n- **[GROWI SDK TypeScript](https://github.com/growilabs/growi-sdk-typescript)** - GROWI API TypeScript SDK\n- **[FastMCP](https://github.com/punkpeye/fastmcp)** - MCP server development framework\n\n---\n\n**Notice**\n\nThis MCP server is under development. APIs may change without notice. Please test thoroughly before using in production environments.\n",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "growi-mcp-server-npx-configured": {
+        "command": "npx",
+        "args": ["@growi/mcp-server"],
+        "env": {
+          "GROWI_BASE_URL": "https://your-growi-instance.com",
+          "GROWI_API_TOKEN": "your_growi_api_token"
+        }
+      },
+      "growi-mcp-server-pnpm-dev-cli": {
+        "command": "pnpm",
+        "args": ["dev:cli"],
+        "env": {
+          "GROWI_BASE_URL": "https://your-growi-instance.com",
+          "GROWI_API_TOKEN": "your_growi_api_token"
+        }
+      },
+      "growi-mcp-server-pnpm-dev-inspect": {
+        "command": "pnpm",
+        "args": ["dev:inspect"],
+        "env": {
+          "GROWI_BASE_URL": "https://your-growi-instance.com",
+          "GROWI_API_TOKEN": "your_growi_api_token"
+        }
+      },
+      "growi-mcp-server-pnpm-start": {
+        "command": "pnpm",
+        "args": ["start"],
+        "env": {
+          "GROWI_BASE_URL": "https://your-growi-instance.com",
+          "GROWI_API_TOKEN": "your_growi_api_token"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "growilabs",
+    "repo": "growi-mcp-server",
+    "url": "https://github.com/growilabs/growi-mcp-server",
+    "name": "growi-mcp-server",
+    "path": null,
+    "stars": 3,
+    "contributors": 1,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "dad79068923fd00b5dc9e91636ad050e2e73b193"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.360Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "dotenv-flow",
+      "importance": 4
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@growi/mcp-server\",\n  \"version\": \"1.0.0\",\n  \"description\": \"A Model Context Protocol (MCP) server that connects AI models to GROWI wiki content. Enables LLMs to search and retrieve information from your organization's knowledge base for accurate, context-aware responses.\",\n  \"type\": \"module\",\n  \"license\": \"MIT\",\n  \"author\": \"Yuki Takei <yuki@weseek.co.jp>\",\n  \"keywords\": [\"mcp\", \"growi\", \"llm\", \"ai\"],\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"bin\": {\n    \"@growi/mcp-server\": \"./dist/index.js\"\n  },\n  \"files\": [\"dist\", \"README.md\", \"LICENSE\"],\n  \"scripts\": {\n    \"build\": \"pnpm ncc build ./src/index.ts --license ./LICENSE\",\n    \"prebuild\": \"pnpm run clean\",\n    \"clean\": \"rimraf dist\",\n    \"start\": \"pnpm build && cross-env NODE_ENV=production node dist/index.js\",\n    \"dev:cli\": \"nodemon --watch src --ext ts,json --no-stdin --exec \\\"cross-env NODE_ENV=development pnpm dlx @wong2/mcp-cli --pass-env pnpm tsx src/index.ts\\\"\",\n    \"predev:cli\": \"cross-env NODE_ENV=development tsx scripts/growi-healthchecker.ts || (echo \\\"Canceled starting mcp-cli due to healthcheck failure.\\\" && exit 1)\",\n    \"dev:inspect\": \"pnpm dlx @modelcontextprotocol/inspector pnpm nodemon --quiet --watch src --ext ts,json --exec \\\"cross-env NODE_ENV=development pnpm tsx src/index.ts\\\"\",\n    \"lint\": \"biome check\",\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"packageManager\": \"pnpm@10.11.0\",\n  \"dependencies\": {\n    \"dotenv-flow\": \"^4.1.0\",\n    \"fastmcp\": \"^2.0.0\",\n    \"zod\": \"^3.25.7\"\n  },\n  \"devDependencies\": {\n    \"@biomejs/biome\": \"^1.9.4\",\n    \"@growi/core\": \"^1.5.0\",\n    \"@growi/sdk-typescript\": \"^1.4.0\",\n    \"@tsconfig/node22\": \"^22.0.2\",\n    \"@types/node\": \"^20.11.30\",\n    \"@vercel/ncc\": \"^0.38.3\",\n    \"cross-env\": \"^7.0.3\",\n    \"nodemon\": \"^3.1.10\",\n    \"rimraf\": \"^5.0.5\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

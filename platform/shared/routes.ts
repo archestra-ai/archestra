@@ -492,6 +492,7 @@ export const RouteId = {
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",
   TestEmbeddingConnection: "testEmbeddingConnection",
+  TestRerankerConnection: "testRerankerConnection",
 
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",
@@ -629,6 +630,7 @@ export const RouteId = {
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
+  GetSkillUsageStatistics: "getSkillUsageStatistics",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
   GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
@@ -670,6 +672,7 @@ export const RouteId = {
   GetConnectionSetupScript: "getConnectionSetupScript",
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
+  GetConnectionHealth: "getConnectionHealth",
 
   // MCP App Routes
   GetApps: "getApps",
@@ -701,6 +704,10 @@ export const RouteId = {
   GetAppRecordingRenderStatus: "getAppRecordingRenderStatus",
   DownloadAppRecordingVideo: "downloadAppRecordingVideo",
   CancelAppRecordingRender: "cancelAppRecordingRender",
+  // Sharing a recording to the public App Gallery: the backend only relays
+  // the GitHub device flow (browser CORS); the PR itself is filed client-side.
+  AppGalleryDeviceAuthStart: "appGalleryDeviceAuthStart",
+  AppGalleryDeviceAuthPoll: "appGalleryDeviceAuthPoll",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
   McpAppProxyPost: "mcpAppProxyPost",
 } as const;

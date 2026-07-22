@@ -17,10 +17,14 @@ import {
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway.utils";
-import type { A2AContext } from "@/types";
+import type { A2AContext, A2AMessage } from "@/types";
 import type { InteractionSource } from "../../../../shared";
 import { type A2AAttachment, executeA2AMessage } from "../a2a-executor";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
+import {
+  type A2AContextCompactionEvent,
+  applyA2AContextCompaction,
+} from "./a2a-context-compaction";
 import {
   A2AContextManager,
   A2ATaskManager,
@@ -73,6 +77,19 @@ interface A2AManagerConfig {
    * Default: false (= approval flow is on)
    */
   disableApprovalFlow?: boolean;
+
+  /**
+   * Skip the actor-ownership check when resolving contexts and tasks.
+   *
+   * Only for trusted internal callers that authorize access themselves: the
+   * chatops manager verifies channel membership and agent access before every
+   * execution, and its server-side sessions share one context per chat thread
+   * across all participants (e.g. a Telegram group), so the per-actor
+   * ownership model does not apply.
+   *
+   * Default: false (= contexts/tasks are actor-owned)
+   */
+  trustedContextAccess?: boolean;
 }
 
 export class A2AManager {
@@ -93,7 +110,23 @@ export class A2AManager {
       routeCategory?: RouteCategory;
       chatOpsBindingId?: string;
       chatOpsThreadId?: string;
+      /**
+       * Per-turn framing prepended to the executed user turn but NOT
+       * persisted with it. Callers with server-side sessions (chatops) put
+       * situational context here — "(Telegram conversation, thread id: …)",
+       * group framing — so the stored history stays clean instead of
+       * repeating the frame on every persisted turn.
+       */
+      ephemeralExecutionPrefix?: string;
     };
+    /**
+     * Fired when loading the context's history triggered a persisted
+     * cross-turn compaction (stateful mode only), before the agent executes.
+     * Chatops uses it to tell the user their conversation was summarized.
+     */
+    onContextCompacted?: (
+      event: A2AContextCompactionEvent,
+    ) => void | Promise<void>;
     /**
      * When provided (SendStreamingMessage), forwarded to the executor so each
      * incremental text delta is surfaced to the streaming caller. The buffered
@@ -121,6 +154,9 @@ export class A2AManager {
         throw new A2AError(A2AErrorKind.AgentNotFound);
       }
 
+      const contextAccessOptions = {
+        trustedActorAccess: Boolean(this.config.trustedContextAccess),
+      };
       let task: A2ATaskWithData | undefined;
       let context: A2AContext | undefined;
       if (request.message.taskId) {
@@ -129,6 +165,7 @@ export class A2AManager {
             request.message.taskId,
             undefined,
             actor,
+            contextAccessOptions,
           );
         task = fetchedTask;
         context = fetchedContext;
@@ -143,6 +180,7 @@ export class A2AManager {
         context = await A2AContextManager.findAndValidateContext(
           request.message.contextId,
           actor,
+          contextAccessOptions,
         );
       }
 
@@ -199,7 +237,7 @@ export class A2AManager {
       }
 
       // Fetch history messages from the db
-      const contextDbMessages =
+      let contextDbMessages =
         !this.config.stateless && context
           ? await A2AContextManager.getContextMessagesWithOverrides({
               context,
@@ -208,6 +246,29 @@ export class A2AManager {
           : task && taskWasSwitchedToWorkingState
             ? task.history
             : [];
+
+      // Stateful contexts accumulate history forever; apply the persisted
+      // cross-turn compaction (and create a new one when the history crosses
+      // the model-window threshold) before building the request.
+      if (!this.config.stateless && context && contextDbMessages.length > 0) {
+        const compactionResult = await applyA2AContextCompaction({
+          contextId: context.id,
+          messages: contextDbMessages,
+          agent: {
+            id: agent.id,
+            llmApiKeyId: agent.llmApiKeyId,
+            modelId: agent.modelId,
+            organizationId: agent.organizationId,
+          },
+          userId: actor.kind === "user" ? actor.id : null,
+          sessionId: systemParams?.sessionId,
+          abortSignal,
+        });
+        contextDbMessages = compactionResult.messages;
+        if (compactionResult.created) {
+          await params.onContextCompacted?.(compactionResult.created);
+        }
+      }
       // Repair malformed tool inputs at the source so both the provider request
       // and the UI-continuation copy (`originalUiMessages` below) stay valid.
       const contextUiMessages = coerceMalformedToolInputs(
@@ -234,6 +295,12 @@ export class A2AManager {
         .filter((part): part is TextPart => part.type === "text")
         .map((part) => part.text)
         .join("\n");
+      // Ephemeral framing rides only the executed turn; the persisted user
+      // message and the mirrored UI turn below keep the caller's raw text.
+      const executedTurnText =
+        systemParams?.ephemeralExecutionPrefix && messageParts.length > 0
+          ? `${systemParams.ephemeralExecutionPrefix}\n\n${currentTurnText}`
+          : currentTurnText;
 
       if (messageParts.length > 0) {
         // Mirror the current turn's text into contextUiMessages so the
@@ -250,6 +317,64 @@ export class A2AManager {
           parts: uiMessageParts,
           role: "user",
         });
+      }
+
+      let userMessageSavedInDb = false;
+      /** Returns the db row when the turn was persisted at context level (no task yet). */
+      const saveUserMessageInDb = async (): Promise<A2AMessage | null> => {
+        if (userMessageSavedInDb) {
+          return null;
+        }
+        userMessageSavedInDb = true;
+        if (messageParts.length === 0) {
+          return null;
+        }
+        if (!context) {
+          // This should never happen: context must be defined before.
+          throw new Error(
+            "[A2AManager] No context when inserting user message in the db",
+          );
+        }
+        const uiMessageParts: TextUIPart[] = [];
+        messageParts.forEach((part) => {
+          if (part.type === "text") {
+            uiMessageParts.push({ type: "text" as const, text: part.text });
+          }
+          // Files are currently not supported in history.
+        });
+        const userUiMessage: UIMessage = {
+          id: request.message.messageId,
+          parts: uiMessageParts,
+          role: "user",
+        };
+        if (task) {
+          const { task: updatedTask } = await A2ATaskManager.addMessageToTask({
+            task,
+            message: request.message,
+            uiMessage: userUiMessage,
+          });
+          task = updatedTask;
+          return null;
+        }
+        const { dbMessage } = await A2AContextManager.addMessageToContext({
+          context,
+          message: request.message,
+          uiMessage: userUiMessage,
+        });
+        return dbMessage;
+      };
+
+      // Stateful mode persists the user turn BEFORE execution: an aborted run
+      // (e.g. superseded by the sender's follow-up message) must still leave
+      // its turn in the thread's history so the successor run sees it. When
+      // the run later creates an approval task, this row is re-parented into
+      // the task's history.
+      let persistedContextUserMessage: A2AMessage | null = null;
+      if (!this.config.stateless) {
+        if (!context) {
+          context = await A2AContextManager.createContext(actor);
+        }
+        persistedContextUserMessage = await saveUserMessageInDb();
       }
 
       const sessionId = systemParams?.sessionId ?? context?.id;
@@ -276,7 +401,7 @@ export class A2AManager {
         callback: async () => {
           return executeA2AMessage({
             agentId,
-            message: currentTurnText,
+            message: executedTurnText,
             attachments:
               currentTurnAttachments.length > 0
                 ? currentTurnAttachments
@@ -296,55 +421,6 @@ export class A2AManager {
           });
         },
       });
-
-      if (!this.config.stateless && !context) {
-        // In stateful mode context should be created in the db on every successful execution
-        context = await A2AContextManager.createContext(actor);
-      }
-
-      let userMessageSavedInDb = false;
-      const saveUserMessageInDb = async () => {
-        if (userMessageSavedInDb) {
-          return;
-        }
-        if (messageParts.length > 0) {
-          if (!context) {
-            // This should never happen: context must be defined before.
-            throw new Error(
-              "[A2AManager] No context when inserting user message in the db",
-            );
-          }
-          const uiMessageParts: TextUIPart[] = [];
-          messageParts.forEach((part) => {
-            if (part.type === "text") {
-              uiMessageParts.push({ type: "text" as const, text: part.text });
-            }
-            // Files are currently not supported in history.
-          });
-          const userUiMessage: UIMessage = {
-            id: request.message.messageId,
-            parts: uiMessageParts,
-            role: "user",
-          };
-          if (task) {
-            const { task: updatedTask } = await A2ATaskManager.addMessageToTask(
-              {
-                task,
-                message: request.message,
-                uiMessage: userUiMessage,
-              },
-            );
-            task = updatedTask;
-          } else {
-            await A2AContextManager.addMessageToContext({
-              context,
-              message: request.message,
-              uiMessage: userUiMessage,
-            });
-          }
-        }
-        userMessageSavedInDb = true;
-      };
 
       const approvalRequests = extractApprovalRequestsFromUiMessage(
         result.responseUiMessage,
@@ -379,7 +455,21 @@ export class A2AManager {
             actor,
             state: A2AProtocolTaskState.InputRequired,
             approvalRequests,
+            options: contextAccessOptions,
           });
+
+          // The stateful pre-persist stored the triggering user turn on the
+          // context before this task existed; re-parent it so the protocol
+          // task history carries it (as it does in the stateless flow).
+          if (persistedContextUserMessage) {
+            const attached = await A2AMessageModel.assignTask(
+              persistedContextUserMessage.id,
+              task.id,
+            );
+            if (attached) {
+              task = { ...task, history: [attached, ...task.history] };
+            }
+          }
         }
 
         // In approval flow user message must be created in the db even in the stateless mode.
@@ -395,11 +485,6 @@ export class A2AManager {
         task = updatedTask ?? task;
 
         return { task: A2ATaskManager.toProtocolTask(task) };
-      }
-
-      if (!this.config.stateless) {
-        // In stateful mode user message should be created in the db on every successful execution
-        await saveUserMessageInDb();
       }
 
       const {
@@ -603,6 +688,7 @@ export class A2AManager {
       params.request.id,
       undefined,
       params.actor,
+      { trustedActorAccess: Boolean(this.config.trustedContextAccess) },
     );
     if (!task) {
       throw new A2AError(A2AErrorKind.TaskNotFound);

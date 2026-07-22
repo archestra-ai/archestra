@@ -341,17 +341,32 @@ export function ChannelsSection({
             )}
           </h2>
         </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          New channels appear after adding the bot to a channel and the first
-          interaction with it.
-          <br />
-          Then, assign a default agent to each channel you want {appName} bot to
-          reply in. Use the Assign button below or{" "}
-          <code className="bg-muted px-1 py-0.5 rounded text-xs">
-            {providerConfig.slashCommand}
-          </code>{" "}
-          in {providerConfig.providerLabel}.{" "}
-        </p>
+        <div className="text-xs text-muted-foreground mt-2 flex flex-col gap-2.5 max-w-3xl leading-relaxed">
+          {providerConfig.channelsAppearNote ?? (
+            <div>
+              <div className="font-medium text-foreground mb-0.5">
+                New channels
+              </div>
+              <p>
+                New channels appear after adding the bot to a channel and the
+                first interaction with it.
+              </p>
+            </div>
+          )}
+          <div>
+            <div className="font-medium text-foreground mb-0.5">
+              Default agents
+            </div>
+            <p>
+              Then, assign a default agent to each channel you want {appName}{" "}
+              bot to reply in. Use the Assign button below or{" "}
+              <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                {providerConfig.slashCommand}
+              </code>{" "}
+              in {providerConfig.providerLabel}.
+            </p>
+          </div>
+        </div>
       </div>
 
       {isLoading && !bindingsResponse ? (

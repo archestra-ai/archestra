@@ -1,0 +1,92 @@
+{
+  "name": "jaipandya__producthunt-mcp-server",
+  "display_name": "producthunt-mcp-server",
+  "description": "MCP server from jaipandya/producthunt-mcp-server",
+  "author": {
+    "name": "jaipandya"
+  },
+  "server": {
+    "command": "product-hunt-mcp",
+    "args": [],
+    "env": {
+      "PRODUCT_HUNT_TOKEN": "${user_config.product_hunt_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "product_hunt_token": {
+      "type": "string",
+      "title": "Product Hunt API Token",
+      "description": "Your Product Hunt API token for authentication. You can get one by creating an application on the Product Hunt API Dashboard: https://www.producthunt.com/v2/oauth/applications",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# 🚀 Product Hunt MCP Server\n\n[![PyPI version](https://img.shields.io/pypi/v/product-hunt-mcp.svg)](https://pypi.org/project/product-hunt-mcp/)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)\n[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)\n[![Docker Ready](https://img.shields.io/badge/docker-ready-blue)](Dockerfile)\n[![MCP Compatible](https://img.shields.io/badge/MCP-compatible-brightgreen)](https://modelcontextprotocol.io/)\n\n> **A plug-and-play [MCP](https://modelcontextprotocol.io/) server for Product Hunt**\n\n---\n\n## 📦 Quick Install\n\n```bash\npip install product-hunt-mcp\n```\n\n## 🏃‍♂️ Quick Start Example\n\n```bash\n# Run the MCP server (requires PRODUCT_HUNT_TOKEN environment variable)\nexport PRODUCT_HUNT_TOKEN=your_token_here\nproduct-hunt-mcp\n```\n\n---\n\n## ✨ What is this?\n\n**Product Hunt MCP Server** connects Product Hunt's API to any LLM or agent that speaks the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). Perfect for AI assistants, chatbots, or your own automations!\n\n- 🔍 Get posts, collections, topics, users\n- 🗳️ Get votes, comments, and more\n- 🛠️ Use with Claude Desktop, Cursor, or any MCP client\n\n---\n\n## 🛠️ Features\n\n- Get detailed info on posts, comments, collections, topics, users\n- Search/filter by topic, date, votes, etc.\n- Paginated comments, user upvotes, and more\n- Built with [FastMCP](https://github.com/jlowin/fastmcp) for speed and compatibility\n\n---\n\n## 🧑‍💻 Who is this for?\n\n- **AI/LLM users**: Plug into Claude Desktop, Cursor, or your own agent\n- **Developers**: Build bots, dashboards, or automations with Product Hunt data\n- **Tinkerers**: Explore the MCP ecosystem and build your own tools\n\n---\n\n## 🏁 Setup\n\n### Prerequisites\n\n- Python 3.10+\n- Product Hunt API token ([get one here](https://www.producthunt.com/v2/oauth/applications))\n  - You'll need to create an account on Product Hunt\n  - Navigate to the API Dashboard and create a new application\n  - Use the `Developer Token` for the token\n\n> **Note:** When creating a new application on Product Hunt, you will be asked for a `redirect_uri`. While the MCP server does not use the redirect URI, it is a required field. You can enter any valid URL, such as `https://localhost:8424/callback`.\n\n### Installation\n\n**Preferred: [uv](https://github.com/astral-sh/uv) (fast, modern Python installer)**\n\n```bash\n# Install uv if you don't have it\npip install uv\n```\n\n#### Install from PyPI (recommended)\n```bash\nuv pip install product-hunt-mcp\n# or\npip install product-hunt-mcp\n```\n\n#### Install from GitHub (latest main branch)\n```bash\nuv pip install 'git+https://github.com/jaipandya/producthunt-mcp-server.git'\n# or\npip install 'git+https://github.com/jaipandya/producthunt-mcp-server.git'\n```\n\n#### Install locally from source\n```bash\nuv pip install .\n# or\npip install .\n```\n\n---\n\n## 🚀 Usage with Claude Desktop & Cursor\n\nOnce installed, the `product-hunt-mcp` command will be available. Add it to your Claude Desktop or Cursor configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"product-hunt\": {\n      \"command\": \"product-hunt-mcp\",\n      \"env\": {\n        \"PRODUCT_HUNT_TOKEN\": \"your_token_here\"\n      }\n    }\n  }\n}\n```\n\n- Replace `your_token_here` with your actual Product Hunt API token.\n- The token **must** be set as an environment variable in your Claude Desktop or Cursor config for the server to authenticate.\n- Always restart your client (Claude Desktop/Cursor) after editing the config file.\n\n> **Tip:** On macOS, Claude Desktop may not always find the `product-hunt-mcp` command if it's not in the default PATH. If you encounter issues, you can provide the full path to the executable. After installing, run:\n>\n> ```bash\n> which product-hunt-mcp\n> ```\n>\n> Use the output path in your Claude Desktop config, replacing `\"command\": \"product-hunt-mcp\"` with the full path (e.g., `\"command\": \"/Users/youruser/.local/bin/product-hunt-mcp\"`).\n\n### Finding your configuration file\n\n- **Claude Desktop**: \n  - Windows: `%APPDATA%\\claude-desktop\\config.json`\n  - macOS: `~/Library/Application Support/claude-desktop/config.json`\n  - Linux: `~/.config/claude-desktop/config.json`\n\n- **Cursor**:\n  - Windows: `%APPDATA%\\Cursor\\User\\settings.json`\n  - macOS: `~/Library/Application Support/Cursor/User/settings.json`\n  - Linux: `~/.config/Cursor/User/settings.json`\n\n### Docker\n\nYou can also run the server using Docker:\n\n```bash\n# Build the Docker image\ndocker build -t product-hunt-mcp .\n\n# Run the Docker container (interactive for MCP)\ndocker run -i --rm -e PRODUCT_HUNT_TOKEN=your_token_here product-hunt-mcp\n```\n\nFor Claude Desktop/Cursor integration with Docker, use this configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"product-hunt\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"-i\", \"--rm\", \"-e\", \"PRODUCT_HUNT_TOKEN=your_token_here\", \"product-hunt-mcp\"],\n      \"env\": {}\n    }\n  }\n}\n```\n\n> **Security Note:** Your `PRODUCT_HUNT_TOKEN` is sensitive. Do not share it or commit it to version control.\n\n---\n\n## 🛠️ MCP Tools\n\n| Tool                | Description                                 | Key Parameters |\n|---------------------|---------------------------------------------|----------------|\n| get_post_details    | Get info about a specific post              | `id` or `slug`, `comments_count`, `comments_after` |\n| get_posts           | Get posts with filters                      | `topic`, `order`, `count`, `featured`, `posted_before`, `posted_after` |\n| get_comment         | Get info about a specific comment           | `id` (required) |\n| get_post_comments   | Get comments for a post                     | `post_id` or `slug`, `order`, `count`, `after` |\n| get_collection      | Get info about a collection                 | `id` or `slug` |\n| get_collections     | Get collections with filters                | `featured`, `user_id`, `post_id`, `order`, `count` |\n| get_topic           | Get info about a topic                      | `id` or `slug` |\n| search_topics       | Search topics                               | `query`, `followed_by_user_id`, `order`, `count` |\n| get_user            | Get info about a user                       | `id` or `username`, `posts_type`, `posts_count` |\n| get_viewer          | Get info about the authenticated user       | None |\n| check_server_status | Check server/API status & authentication    | None |\n\n---\n\n## 🏗️ Project Structure\n\n```\nproduct-hunt-mcp/\n├── src/\n│   └── product_hunt_mcp/ # Main package directory\n│       ├── __init__.py\n│       ├── cli.py        # Command-line entry point\n│       ├── api/          # API clients & queries\n│       ├── schemas/      # Data validation schemas\n│       ├── tools/        # MCP tool definitions\n│       └── utils/        # Utility functions\n├── pyproject.toml      # Project metadata, dependencies, build config\n├── README.md\n├── CONTRIBUTING.md\n├── CHANGELOG.md\n├── Dockerfile\n└── ... (config files, etc.)\n```\n\n---\n\n## 🔄 Rate Limiting\n\nThe Product Hunt API has rate limits that this client respects. If you encounter rate limit errors, the client will inform you when the rate limit resets. You can check your current rate limit status using the `get_api_rate_limits` or `check_server_status` tools.\n\n---\n\n## 🐛 Troubleshooting\n\n- **Missing token**: Ensure your `PRODUCT_HUNT_TOKEN` is correctly set as an environment variable.\n- **Connection issues**: Verify your internet connection and that the Product Hunt API is accessible.\n- **Rate limiting**: If you hit rate limits, wait until the reset time or reduce your query frequency.\n- **Claude Desktop/Cursor not finding the server**: Verify the path to your Python executable and restart the client.\n\n---\n\n## 🤝 Contributing\n\n- PRs and issues welcome!\n- Please follow [PEP8](https://peps.python.org/pep-0008/) and use [ruff](https://github.com/charliermarsh/ruff) for linting.\n- See `pyproject.toml` for dev dependencies.\n\n---\n\n## 🌐 Links\n\n- [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)\n- [FastMCP](https://github.com/jlowin/fastmcp)\n- [Product Hunt API Docs](https://www.producthunt.com/v2/docs)\n- [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector)\n- [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers)\n\n---\n\n## 📝 Notes\n\n- This project is not affiliated with Product Hunt.\n- The Product Hunt API is subject to change.\n\n---\n\n## 📜 License\n\nMIT",
+  "category": "AI Tools",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "product-hunt-mcp": {
+        "command": "product-hunt-mcp",
+        "args": [],
+        "env": {
+          "PRODUCT_HUNT_TOKEN": "your_token_here"
+        }
+      },
+      "product-hunt-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "PRODUCT_HUNT_TOKEN=your_token_here", "product-hunt-mcp"],
+        "env": {},
+        "docker_image": "product-hunt-mcp"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jaipandya",
+    "repo": "producthunt-mcp-server",
+    "url": "https://github.com/jaipandya/producthunt-mcp-server",
+    "name": "jaipandya__producthunt-mcp-server",
+    "path": null,
+    "stars": 31,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "fdfff827eec0904a0139e1fbdbe71ad13232c1c5"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:23.726Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"product-hunt-mcp\"\nversion = \"0.1.0\"\ndescription = \"Product Hunt MCP Server - A FastMCP implementation for the Product Hunt API\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = { text = \"MIT\" }\nauthors = [\n    { name = \"Jai Pandya\" }\n]\nkeywords = [\"mcp\", \"product-hunt\", \"fastmcp\", \"api\", \"ai\"]\nclassifiers = [\n    \"Development Status :: 5 - Production/Stable\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n    \"Programming Language :: Python\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n    \"Topic :: Software Development :: Libraries :: Application Frameworks\",\n    \"Natural Language :: English\",\n]\ndependencies = [\n    \"fastmcp>=0.3.0\",\n    \"requests>=2.31.0\"\n]\n\n[project.optional-dependencies]\ndev = [\n    \"ruff>=0.0.270\",\n    \"black>=23.0.0\",\n]\n\n[project.scripts]\nproduct-hunt-mcp = \"product_hunt_mcp.cli:main\"\n\n[project.urls]\n\"Homepage\" = \"https://github.com/jaipandya/producthunt-mcp-server\"\n\"Bug Tracker\" = \"https://github.com/jaipandya/producthunt-mcp-server/issues\"\n\"Documentation\" = \"https://github.com/jaipandya/producthunt-mcp-server#readme\"\n\n[tool.ruff]\nline-length = 100\ntarget-version = \"py310\"\nselect = [\"E\", \"F\", \"B\", \"I\"]\n\n[tool.black]\nline-length = 100\ntarget-version = [\"py310\", \"py311\", \"py312\"]"
+}

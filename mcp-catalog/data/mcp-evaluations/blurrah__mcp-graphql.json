@@ -1,0 +1,162 @@
+{
+  "name": "blurrah__mcp-graphql",
+  "display_name": "mcp-graphql",
+  "description": "Model Context Protocol server for GraphQL",
+  "author": {
+    "name": "blurrah"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["mcp-graphql"],
+    "env": {
+      "ENDPOINT": "${user_config.endpoint}",
+      "HEADERS": "${user_config.headers}",
+      "ALLOW_MUTATIONS": "${user_config.allow_mutations}",
+      "NAME": "${user_config.name}",
+      "SCHEMA": "${user_config.schema}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "endpoint": {
+      "type": "string",
+      "title": "GraphQL Endpoint URL",
+      "description": "GraphQL endpoint URL",
+      "default": "http://localhost:4000/graphql",
+      "required": false
+    },
+    "headers": {
+      "type": "string",
+      "title": "Headers for Requests",
+      "description": "JSON string containing headers for requests",
+      "default": "{}",
+      "sensitive": true,
+      "required": false
+    },
+    "allow_mutations": {
+      "type": "boolean",
+      "title": "Enable Mutation Operations",
+      "description": "Enable mutation operations (disabled by default)",
+      "default": false,
+      "required": false
+    },
+    "name": {
+      "type": "string",
+      "title": "Name of the MCP Server",
+      "description": "Name of the MCP server",
+      "default": "mcp-graphql",
+      "required": false
+    },
+    "schema": {
+      "type": "string",
+      "title": "GraphQL Schema",
+      "description": "Path to a local GraphQL schema file or URL (optional)",
+      "required": false
+    }
+  },
+  "readme": "# mcp-graphql\n\n[![smithery badge](https://smithery.ai/badge/mcp-graphql)](https://smithery.ai/server/mcp-graphql)\n\nA Model Context Protocol server that enables LLMs to interact with GraphQL APIs. This implementation provides schema introspection and query execution capabilities, allowing models to discover and use GraphQL APIs dynamically.\n\n<a href=\"https://glama.ai/mcp/servers/4zwa4l8utf\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/4zwa4l8utf/badge\" alt=\"mcp-graphql MCP server\" /></a>\n\n## Usage\n\nRun `mcp-graphql` with the correct endpoint, it will automatically try to introspect your queries.\n\n### Environment Variables (Breaking change in 1.0.0)\n\n> **Note:** As of version 1.0.0, command line arguments have been replaced with environment variables.\n\n| Environment Variable | Description | Default |\n|----------|-------------|---------|\n| `ENDPOINT` | GraphQL endpoint URL | `http://localhost:4000/graphql` |\n| `HEADERS` | JSON string containing headers for requests | `{}` |\n| `ALLOW_MUTATIONS` | Enable mutation operations (disabled by default) | `false` |\n| `NAME` | Name of the MCP server | `mcp-graphql` |\n| `SCHEMA` | Path to a local GraphQL schema file or URL (optional) | - |\n\n### Examples\n\n```bash\n# Basic usage with a local GraphQL server\nENDPOINT=http://localhost:3000/graphql npx mcp-graphql\n\n# Using with custom headers\nENDPOINT=https://api.example.com/graphql HEADERS='{\"Authorization\":\"Bearer token123\"}' npx mcp-graphql\n\n# Enable mutation operations\nENDPOINT=http://localhost:3000/graphql ALLOW_MUTATIONS=true npx mcp-graphql\n\n# Using a local schema file instead of introspection\nENDPOINT=http://localhost:3000/graphql SCHEMA=./schema.graphql npx mcp-graphql\n\n# Using a schema file hosted at a URL\nENDPOINT=http://localhost:3000/graphql SCHEMA=https://example.com/schema.graphql npx mcp-graphql\n```\n\n## Resources\n\n- **graphql-schema**: The server exposes the GraphQL schema as a resource that clients can access. This is either the local schema file, a schema file hosted at a URL, or based on an introspection query.\n\n## Available Tools\n\nThe server provides two main tools:\n\n1. **introspect-schema**: This tool retrieves the GraphQL schema. Use this first if you don't have access to the schema as a resource.\nThis uses either the local schema file, a schema file hosted at a URL, or an introspection query.\n\n2. **query-graphql**: Execute GraphQL queries against the endpoint. By default, mutations are disabled unless `ALLOW_MUTATIONS` is set to `true`.\n\n## Installation\n\n### Installing via Smithery\n\nTo install GraphQL MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-graphql):\n\n```bash\nnpx -y @smithery/cli install mcp-graphql --client claude\n```\n\n### Installing Manually\n\nIt can be manually installed to Claude:\n```json\n{\n    \"mcpServers\": {\n        \"mcp-graphql\": {\n            \"command\": \"npx\",\n            \"args\": [\"mcp-graphql\"],\n            \"env\": {\n                \"ENDPOINT\": \"http://localhost:3000/graphql\"\n            }\n        }\n    }\n}\n```\n\n## Security Considerations\n\nMutations are disabled by default as a security measure to prevent an LLM from modifying your database or service data. Consider carefully before enabling mutations in production environments.\n\n## Customize for your own server\n\nThis is a very generic implementation where it allows for complete introspection and for your users to do whatever (including mutations). If you need a more specific implementation I'd suggest to just create your own MCP and lock down tool calling for clients to only input specific query fields and/or variables. You can use this as a reference.\n",
+  "category": "AI Tools",
+  "quality_score": 70,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-graphql": {
+        "command": "npx",
+        "args": ["mcp-graphql"],
+        "env": {
+          "ENDPOINT": "http://localhost:3000/graphql"
+        }
+      },
+      "mcp-graphql-with-headers": {
+        "command": "npx",
+        "args": ["mcp-graphql"],
+        "env": {
+          "ENDPOINT": "https://api.example.com/graphql",
+          "HEADERS": "{\"Authorization\":\"Bearer token123\"}"
+        }
+      },
+      "mcp-graphql-allow-mutations": {
+        "command": "npx",
+        "args": ["mcp-graphql"],
+        "env": {
+          "ENDPOINT": "http://localhost:3000/graphql",
+          "ALLOW_MUTATIONS": "true"
+        }
+      },
+      "mcp-graphql-with-local-schema": {
+        "command": "npx",
+        "args": ["mcp-graphql"],
+        "env": {
+          "ENDPOINT": "http://localhost:3000/graphql",
+          "SCHEMA": "./schema.graphql"
+        }
+      },
+      "mcp-graphql-with-remote-schema": {
+        "command": "npx",
+        "args": ["mcp-graphql"],
+        "env": {
+          "ENDPOINT": "http://localhost:3000/graphql",
+          "SCHEMA": "https://example.com/schema.graphql"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "blurrah",
+    "repo": "mcp-graphql",
+    "url": "https://github.com/blurrah/mcp-graphql",
+    "name": "mcp-graphql",
+    "path": null,
+    "stars": 244,
+    "contributors": 7,
+    "issues": 9,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4a50e9783cd241782d2ab5500d1e48bed027e59b"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:45.180Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "graphql",
+      "importance": 9
+    },
+    {
+      "name": "yargs",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"mcp-graphql\",\n\t\"module\": \"index.ts\",\n\t\"type\": \"module\",\n\t\"version\": \"2.0.4\",\n\t\"repository\": \"github:blurrah/mcp-graphql\",\n\t\"license\": \"MIT\",\n\t\"bin\": {\n\t\t\"mcp-graphql\": \"./dist/index.js\"\n\t},\n\t\"files\": [\n\t\t\"dist\"\n\t],\n\t\"devDependencies\": {\n\t\t\"@graphql-tools/schema\": \"^10.0.23\",\n\t\t\"@types/bun\": \"^1.2.14\",\n\t\t\"@types/yargs\": \"17.0.33\",\n\t\t\"biome\": \"^0.3.3\",\n\t\t\"graphql-yoga\": \"^5.13.5\",\n\t\t\"typescript\": \"5.8.3\"\n\t},\n\t\"dependencies\": {\n\t\t\"@modelcontextprotocol/sdk\": \"1.12.0\",\n\t\t\"graphql\": \"^16.11.0\",\n\t\t\"yargs\": \"17.7.2\",\n\t\t\"zod\": \"3.25.30\",\n\t\t\"zod-to-json-schema\": \"3.24.5\"\n\t},\n\t\"scripts\": {\n\t\t\"dev\": \"bun --watch src/index.ts\",\n\t\t\"build\": \"bun build src/index.ts --outdir dist --target node && bun -e \\\"require('fs').chmodSync('dist/index.js', '755')\\\"\",\n\t\t\"start\": \"bun run dist/index.js\",\n\t\t\"format\": \"biome format --write .\",\n\t\t\"check\": \"biome format .\"\n\t},\n\t\"packageManager\": \"bun@1.2.19\"\n}\n"
+}

@@ -1,0 +1,89 @@
+{
+  "name": "esignaturescom__mcp-server-esignatures",
+  "display_name": "mcp-server-esignatures",
+  "description": "MCP server for eSignatures (https://esignatures.com)",
+  "author": {
+    "name": "esignaturescom"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-esignatures"],
+    "env": {
+      "ESIGNATURES_SECRET_TOKEN": "${user_config.esignatures_secret_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "esignatures_secret_token": {
+      "type": "string",
+      "title": "eSignatures API Secret Token",
+      "description": "Your eSignatures API secret token for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# mcp-server-esignatures MCP server\n\nMCP server for eSignatures (https://esignatures.com)\n\n<a href=\"https://glama.ai/mcp/servers/0ev38n83u4\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/0ev38n83u4/badge\" alt=\"Server for eSignatures MCP server\" /></a>\n\n## Tools\n\n\n| Tool                           | Category      | Description                        |\n|--------------------------------|---------------|------------------------------------|\n| `create_contract`              | Contracts     | Draft for review or send contract  |\n| `query_contract`               | Contracts     | Retrieve contract info             |\n| `withdraw_contract`            | Contracts     | Withdraw an unsigned contract      |\n| `delete_contract`              | Contracts     | Delete a draft or test contract    |\n| `list_recent_contracts`        | Contracts     | List the recent contracts          |\n|                                |               |                                    |\n| `create_template`              | Templates     | Create a new contract template     |\n| `update_template`              | Templates     | Update an existing template        |\n| `query_template`               | Templates     | Retrieve template content and info |\n| `delete_template`              | Templates     | Delete a template                  |\n| `list_templates`               | Templates     | List all your templates            |\n|                                |               |                                    |\n| `add_template_collaborator`    | Collaborators | Invite someone to edit a template  |\n| `remove_template_collaborator` | Collaborators | Revoke template editing rights     |\n| `list_template_collaborators`  | Collaborators | View who can edit a template       |\n\n\n## Examples\n\n#### Creating a Draft Contract\n\n`Generate a draft NDA contract for a publisher, which I can review and send. Signer: John Doe, ACME Corp, john@acme.com`\n\n#### Sending a Contract\n\n`Send an NDA based on my template to John Doe, ACME Corp, john@acme.com. Set the term to 2 years.`\n\n#### Updating templates\n\n`Review my templates for legal compliance, and ask me about updating each one individually`\n\n#### Inviting template collaborators\n\n`Invite John Doe to edit the NDA template, email: john@acme.com`\n\n\n## Install\n\n### Create an eSignatures account\n\nCreate an eSignatures account at https://esignatures.com for free, to test the Agent AI by creating templates and sending test contracts.\n\n### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n##### Development/Unpublished Servers Configuration\n```\n\"mcpServers\": {\n  \"mcp-server-esignatures\": {\n    \"command\": \"uv\",\n    \"env\": {\n      \"ESIGNATURES_SECRET_TOKEN\": \"your-esignatures-api-secret-token\"\n    },\n    \"args\": [\n      \"--directory\",\n      \"/your-local-directories/mcp-server-esignatures\",\n      \"run\",\n      \"mcp-server-esignatures\"\n    ]\n  }\n}\n```\n\n#### Published Servers Configuration\n```\n\"mcpServers\": {\n  \"mcp-server-esignatures\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"mcp-server-esignatures\"\n    ],\n    \"env\": {\n      \"ESIGNATURES_SECRET_TOKEN\": \"your-esignatures-api-secret-token\"\n    }\n  }\n}\n```\n\n### Authentication\n\nTo use this server, you need to set the `ESIGNATURES_SECRET_TOKEN` environment variable with your eSignatures API secret token.\n\n## eSignatures API Documentation\n\nFor a detailed guide on API endpoints, parameters, and responses, see [eSignatures API](https://esignatures.com/docs/api).\n\n## eSignatures Support\n\nFor support, please navigate to [Support](https://esignatures.com/support) or contact [support@esignatures.com](mailto:support@esignatures.com).\n\n## Contributing\n\nContributions are welcome! If you'd like to contribute, please fork the repository and make changes as you see fit. Here are some guidelines:\n\n- **Bug Reports**: Please open an issue to report any bugs you encounter.\n- **Feature Requests**: Suggest new features by opening an issue with the \"enhancement\" label.\n- **Pull Requests**: Ensure your pull request follows the existing code style.\n- **Documentation**: Help improve or translate documentation. Any form of documentation enhancement is appreciated.\n\nFor major changes, please open an issue first to discuss what you would like to change. We're looking forward to your contributions!\n",
+  "category": "Enterprise",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-esignatures-dev": {
+        "command": "uv",
+        "args": ["--directory", "/your-local-directories/mcp-server-esignatures", "run", "mcp-server-esignatures"],
+        "env": {
+          "ESIGNATURES_SECRET_TOKEN": "your-esignatures-api-secret-token"
+        }
+      },
+      "mcp-server-esignatures-published": {
+        "command": "uvx",
+        "args": ["mcp-server-esignatures"],
+        "env": {
+          "ESIGNATURES_SECRET_TOKEN": "your-esignatures-api-secret-token"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "esignaturescom",
+    "repo": "mcp-server-esignatures",
+    "url": "https://github.com/esignaturescom/mcp-server-esignatures",
+    "name": "mcp-server-esignatures",
+    "path": null,
+    "stars": 22,
+    "contributors": 2,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "15ac5fa39e879ec053e093e9385d46cf731ff92f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:46.590Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-esignatures\"\nversion = \"0.1.0\"\ndescription = \"MCP server for eSignatures (https://esignatures.com)\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n \"mcp>=1.2.0\",\n \"twine>=6.1.0\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/esignaturescom/mcp-server-perplexity\"\nRepository = \"https://github.com/esignaturescom/mcp-server-perplexity\"\n\n[[project.authors]]\nname = \"eSignatures\"\nemail = \"dev@esignatures.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-server-esignatures = \"mcp_server_esignatures:main\"\n"
+}

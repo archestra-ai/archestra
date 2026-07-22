@@ -1,0 +1,134 @@
+{
+  "name": "hardik-id__azure-resource-graph-mcp-server",
+  "display_name": "azure-resource-graph-mcp-server",
+  "description": "Model Context Protocol (MCP) server that provides access to Azure Resource Graph queries. It allows you to retrieve information about Azure resources across your subscriptions using Resource Graph queries.",
+  "author": {
+    "name": "hardik-id"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "SUBSCRIPTION_ID": "${user_config.subscription_id}",
+      "AZURE_SUBSCRIPTION_ID": "${user_config.azure_subscription_id}",
+      "AZURE_TENANT_ID": "${user_config.azure_tenant_id}",
+      "AZURE_CLIENT_ID": "${user_config.azure_client_id}",
+      "AZURE_CLIENT_SECRET": "${user_config.azure_client_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "subscription_id": {
+      "type": "string",
+      "title": "Default Azure Subscription ID",
+      "description": "The Azure subscription ID to use by default for Resource Graph queries. This is the primary subscription ID the server will operate on.",
+      "required": true,
+      "sensitive": false
+    },
+    "azure_subscription_id": {
+      "type": "string",
+      "title": "Azure Subscription ID (for Credentials)",
+      "description": "Optional: The Azure subscription ID to use for credential configuration, if not using Azure CLI or Managed Identity. This is used by DefaultAzureCredential.",
+      "required": false,
+      "sensitive": false
+    },
+    "azure_tenant_id": {
+      "type": "string",
+      "title": "Azure Tenant ID",
+      "description": "Optional: The Azure Tenant ID for service principal authentication. Used by DefaultAzureCredential.",
+      "required": false,
+      "sensitive": false
+    },
+    "azure_client_id": {
+      "type": "string",
+      "title": "Azure Client ID",
+      "description": "Optional: The Azure Client ID for service principal authentication. Used by DefaultAzureCredential.",
+      "required": false,
+      "sensitive": false
+    },
+    "azure_client_secret": {
+      "type": "string",
+      "title": "Azure Client Secret",
+      "description": "Optional: The Azure Client Secret for service principal authentication. Used by DefaultAzureCredential. This value will be masked.",
+      "required": false,
+      "sensitive": true
+    }
+  },
+  "readme": "# Demo\n![MCP Server Demo](./assets/mcp%20server.gif)\n\n# Flow\n![Request Flow](./assets/Flow.png)\n\n\n# Azure Resource Graph MCP Server\n\nThis is a Model Context Protocol (MCP) server that provides access to Azure Resource Graph queries. It allows you to retrieve information about Azure resources across your subscriptions using Resource Graph queries.\n<a href=\"https://glama.ai/mcp/servers/@hardik-id/azure-resource-graph-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@hardik-id/azure-resource-graph-mcp-server/badge\" />\n</a>\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/hardik-id-azure-resource-graph-mcp-server-badge.png)](https://mseep.ai/app/hardik-id-azure-resource-graph-mcp-server)\n\n## Features\n\n- Query Azure resources using Resource Graph queries\n- Default query returns resource ID, name, type, and location\n- Supports custom Resource Graph queries\n- Uses Azure DefaultAzureCredential for authentication\n\n## Prerequisites\n\n- Node.js installed\n- Azure subscription\n- Azure CLI installed and logged in, or other Azure credentials configured\n\n## Running the MCP Server\n\nYou can run the MCP server using either Cursor IDE or Visual Studio Code.\n\n### Option 1: Cursor IDE Integration\n\nTo integrate the MCP server with Cursor IDE:\n\n1. Clone this repository to your local machine (e.g., `C:\\YOUR_WORKSPACE\\azure-resource-graph-mcp-server`)\n2. Build the project:\n```bash \nnpm install\nnpm run build\n```\n3. Open Cursor Settings (JSON) and add the following configuration:\n```json\n{\n  \"mcpServers\": {\n    \"azure-resource-graph-mcp-server\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"C:\\\\YOUR_WORKSPACE\\\\azure-resource-graph-mcp-server\\\\build\\\\index.js\"\n      ],\n      \"env\": {\n        \"SUBSCRIPTION_ID\": \"xxxxxx-xx-xx-xx-xxxxxx\"\n      },\n    }\n  }\n}\n```\n> **Note**: Make sure to update the path to match your local repository location.\n\n4. Restart Cursor IDE to apply the changes\n\n### Option 2: VS Code Integration\n\nTo integrate the MCP server with Visual Studio Code:\n\n1. Clone this repository to your local machine\n2. Build the project:\n```bash \nnpm install\nnpm run build\n```\n3. Open VS Code Settings (JSON) by pressing `Ctrl+Shift+P`, type \"Settings (JSON)\" and select \"Preferences: Open User Settings (JSON)\"\n4. Add the following configuration:\n```json\n{\n    \"mcp\": {\n        \"servers\": {\n            \"azure-resource-graph\": {\n                \"type\": \"stdio\",\n                \"command\": \"node\",\n                \"args\": [\n                    \"C:\\\\YOUR_WORKSPACE\\\\azure-resource-graph-mcp-server\\\\build\\\\index.js\"\n                ],\n                \"env\": {\n                  \"SUBSCRIPTION_ID\": \"xxxxxx-xx-xx-xx-xxxxxx\"\n                },\n            }\n        }\n    }\n}\n```\n> **Note**: Make sure to update the path to match your local repository location.\n\n5. Save the settings.json file\n6. Restart VS Code to apply the changes\n\nThe MCP server will now be available to use within VS Code with cursor integration.\n\n## Usage\n\nThe server provides the following tool:\n\n### query-resources\n\nRetrieves resources and their details from Azure Resource Graph.\n\nParameters:\n- `subscriptionId` (optional): Azure subscription ID (defaults to configured ID)\n- `query` (optional): Custom Resource Graph query (defaults to \"Resources | project id, name, type, location\")\n\n## Environment Setup\n\n1. First, make sure you're logged in to Azure CLI by running:\n   ```bash\n   az login\n   ```\n   This step is crucial for local development as the DefaultAzureCredential will automatically use your Azure CLI credentials.\n\n2. Set up your environment variables:\n   - Copy `.env.example` to `.env`\n   - Update `AZURE_SUBSCRIPTION_ID` in `.env` with your actual subscription ID\n   - Other variables (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`) are optional when using Azure CLI authentication\n\n3. Make sure you have proper Azure credentials configured. The server uses DefaultAzureCredential which supports:\n   - Azure CLI\n   - Managed Identity\n   - Visual Studio Code credentials\n   - Environment variables\n\n4. If using environment variables, set up:\n   - AZURE_SUBSCRIPTION_ID\n   - AZURE_TENANT_ID\n   - AZURE_CLIENT_ID\n   - AZURE_CLIENT_SECRET\n\n## Error Handling\n\nThe server includes robust error handling for:\n- Azure client initialization failures\n- Query execution errors\n- Invalid queries or parameters\n\n## Development\n\nTo work on this project:\n\n1. Make changes in the `src` directory\n2. Build using `npm run build`\n3. Test your changes by running the server\n\n## License\nThis project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.\n\n",
+  "category": "Cloud",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "azure-resource-graph-mcp-server": {
+        "command": "node",
+        "args": ["C:\\YOUR_WORKSPACE\\azure-resource-graph-mcp-server\\build\\index.js"],
+        "env": {
+          "SUBSCRIPTION_ID": "xxxxxx-xx-xx-xx-xxxxxx"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hardik-id",
+    "repo": "azure-resource-graph-mcp-server",
+    "url": "https://github.com/hardik-id/azure-resource-graph-mcp-server",
+    "name": "hardik-id__azure-resource-graph-mcp-server",
+    "path": null,
+    "stars": 11,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "698c7b03a9be86578fa07581168151b6ec41274e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:16.368Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@azure/arm-resourcegraph",
+      "importance": 9
+    },
+    {
+      "name": "@azure/identity",
+      "importance": 9
+    },
+    {
+      "name": "@azure/arm-resources",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    },
+    {
+      "name": "dotenv",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"type\": \"module\",\n  \"bin\": {\n    \"azure-resource-graph-mcp-server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\",\n    \".env\"\n  ],\n  \"name\": \"azure-resource-graph-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\",\n    \"start\": \"node build/index.js\",\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@azure/arm-resourcegraph\": \"^4.2.1\",\n    \"@azure/arm-resources\": \"^6.0.0\",\n    \"@azure/identity\": \"^4.8.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"dotenv\": \"^16.4.7\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.0\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

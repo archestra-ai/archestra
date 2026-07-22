@@ -73,7 +73,33 @@ export function ProjectSchedulesSection({
   projectId: string;
   canCreate?: boolean;
 }) {
+  // Without scheduledTask:read the schedules query can only 403 (and it polls,
+  // so it would toast the permission error forever). Hide the section and
+  // never mount the query for roles that can't see schedules.
+  const { data: canReadSchedules } = useHasPermissions({
+    scheduledTask: ["read"],
+  });
+  if (canReadSchedules !== true) return null;
+
+  return (
+    <ProjectSchedulesSectionContent
+      projectId={projectId}
+      canCreate={canCreate}
+    />
+  );
+}
+
+function ProjectSchedulesSectionContent({
+  projectId,
+  canCreate,
+}: {
+  projectId: string;
+  canCreate: boolean;
+}) {
   const { data } = useScheduleTriggers({ projectId, refetchInterval: 10000 });
+  const { data: canCreateSchedules } = useHasPermissions({
+    scheduledTask: ["create"],
+  });
   const [createOpen, setCreateOpen] = useState(false);
   const searchParams = useSearchParams();
   const scheduleId = searchParams.get("schedule");
@@ -94,7 +120,7 @@ export function ProjectSchedulesSection({
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           Schedules
         </h2>
-        {canCreate && (
+        {canCreate && canCreateSchedules === true && (
           <Button
             variant="outline"
             size="sm"

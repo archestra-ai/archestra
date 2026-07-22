@@ -1,0 +1,80 @@
+{
+  "name": "bitteprotocol__mcp",
+  "display_name": "mcp",
+  "description": "MCP server from BitteProtocol/mcp",
+  "author": {
+    "name": "BitteProtocol"
+  },
+  "server": {
+    "command": "bun",
+    "args": ["${__dirname}/packages/bitte-ai/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Proxy Monorepo\n\nThis monorepo contains MCP (Model Control Protocol) servers for different services.\n\n## Server URI\n`https://mcp.bitte.ai/sse`\n\n## Add to Curser Settings\n```\n{\n  \"mcpServers\": {\n    \"bitte-ai\": {\n      \"url\": \"https://mcp.bitte.ai/sse\"\n    }\n  }\n}\n```\n\n\n## Packages\n\n- **bitte-ai**: MCP server for Bitte AI integrations\n\n## Setup\n\nTo install dependencies:\n\n```bash\nbun install\n```\n\n## Development\n\nThis project uses Turborepo for managing the monorepo workflow and Biome for code quality tools.\n\n### Build all packages\n\n```bash\nbun run build\n```\n\n### Start both services\n\n```bash\nbun run start\n```\n\n### Development mode\n\n```bash\nbun run dev\n```\n\n### Format and lint your code\n\n```bash\nbun run check\n# To fix automatically:\nbun run check:fix\n```\n\n### Run individual services\n\n```bash\n# Run bitte-ai service\nbun run dev:bitte-ai\n```\n\n## Adding a new package\n\n1. Create a new directory in the `packages` folder\n2. Add the necessary package.json, tsconfig.json, and implementation files\n3. Update the root package.json and tsconfig.json to include your new package\n\nThis project uses [Bun](https://bun.sh) as the JavaScript runtime.\n\nFor more information: [Vibestreaming Logs](https://github.com/microchipgnu/vibestream)\n\n\n",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bitte-ai": {
+        "command": "bun",
+        "args": ["run", "dev:bitte-ai"],
+        "env": {}
+      },
+      "bitte-ai-start": {
+        "command": "bun",
+        "args": ["run", "start"],
+        "env": {}
+      },
+      "bitte-ai-dev": {
+        "command": "bun",
+        "args": ["run", "dev"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "BitteProtocol",
+    "repo": "mcp",
+    "url": "https://github.com/BitteProtocol/mcp",
+    "name": "bitteprotocol__mcp",
+    "path": null,
+    "stars": 10,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:09.431Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "concurrently",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-proxy\",\n  \"private\": true,\n  \"workspaces\": [\"packages/*\", \"apps/*\"],\n  \"type\": \"module\",\n  \"packageManager\": \"bun@1.2.1\",\n  \"devDependencies\": {\n    \"@biomejs/biome\": \"^1.9.4\",\n    \"@types/bun\": \"latest\",\n    \"turbo\": \"^2.4.4\",\n    \"typescript\": \"^5.0.0\"\n  },\n  \"scripts\": {\n    \"dev\": \"turbo dev\",\n    \"build\": \"turbo build\",\n    \"start\": \"turbo start\",\n    \"check\": \"biome check\",\n    \"check:fix\": \"biome check --write\",\n    \"start:all\": \"bun run ./scripts/start-dev.ts\",\n    \"docker:up\": \"bun run ./scripts/start-all.ts\",\n    \"docker:down\": \"bun run ./scripts/docker-down.ts\"\n  },\n  \"dependencies\": {\n    \"concurrently\": \"^8.2.2\"\n  }\n}\n"
+}

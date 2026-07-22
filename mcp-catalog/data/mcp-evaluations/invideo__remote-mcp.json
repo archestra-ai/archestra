@@ -1,0 +1,43 @@
+{
+  "name": "invideo__remote-mcp",
+  "display_name": "InVideo MCP",
+  "description": "Remote MCP server for InVideo - AI-powered video creation platform",
+  "oauth_config": {
+    "name": "InVideo MCP",
+    "server_url": "https://mcp.invideo.io/sse",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "InVideo MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Media",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "invideo"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.invideo.io/sse",
+    "docs_url": "https://invideo.io/ai/mcp"
+  },
+  "github_info": null,
+  "programming_language": null
+}

@@ -1,0 +1,82 @@
+{
+  "name": "opendatamcp__opendatamcp",
+  "display_name": "OpenDataMCP",
+  "description": "Connect any Open Data to any LLM with Model Context Protocol.",
+  "author": {
+    "name": "OpenDataMCP"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "odmcp", "--provider", "${user_config.provider_name}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "provider_name": {
+      "type": "string",
+      "title": "Provider Name",
+      "description": "The name of the Open Data MCP provider to load (e.g., ch_sbb). This specifies which dataset the MCP server will expose.",
+      "required": true,
+      "default": "ch_sbb"
+    }
+  },
+  "readme": "# Open Data Model Context Protocol\n\n![vc3598_Hyper-realistic_Swiss_landscape_pristine_SBB_red_train_p_40803c2e-43f5-410e-89aa-f6bdcb4cd089](https://github.com/user-attachments/assets/80c823dd-0b26-4d06-98f9-5c6d7c9103de)\n<p align=\"center\">\n    <em>Connect Open Data to LLMs in minutes!</em>\n</p>\n<p align=\"center\">\n   <a href=\"https://github.com/OpenDataMCP/OpenDataMCP/actions/workflows/ci.yml\" target=\"_blank\">\n    <img src=\"https://github.com/OpenDataMCP/OpenDataMCP/actions/workflows/ci.yml/badge.svg\" alt=\"CI\">\n   </a>\n   <a href=\"https://pypi.org/project/odmcp\" target=\"_blank\">\n       <img src=\"https://img.shields.io/pypi/v/odmcp?color=%2334D058&label=pypi%20package\" alt=\"Package version\">\n   </a>\n   <a href=\"https://github.com/OpenDataMCP/OpenDataMCP/blob/main/LICENSE\" target=\"_blank\">\n      <img src=\"https://img.shields.io/github/license/OpenDataMCP/OpenDataMCP.svg\" alt=\"License\">\n   </a>\n   <a href=\"https://pepy.tech/badge/odmcp\" target=\"_blank\">\n      <img src=\"https://pepy.tech/badge/odmcp?cache-control=no-cache\" alt=\"License\">\n   </a>\n   <a href=\"https://github.com/OpenDataMCP/OpenDataMCP/stargazers\" target=\"_blank\">\n      <img src=\"https://img.shields.io/github/stars/OpenDataMCP/OpenDataMCP.svg?cache-control=no-cache\" alt=\"Stars\">\n   </a>\n</p>\n\n## See it in action\n\nhttps://github.com/user-attachments/assets/760e1a16-add6-49a1-bf71-dfbb335e893e\n\nWe enable 2 things: \n\n* **Open Data Access**: Access to many public datasets right from your LLM application (starting with Claude, more to come).\n* **Publishing**: Get community help and a distribution network to distribute your Open Data. Get everyone to use it!\n\nHow do we do that?\n\n* **Access**: Setup our MCP servers in your LLM application in 2 clicks via our CLI tool (starting with Claude, see Roadmap for next steps).\n* **Publish**: Use provided templates and guidelines to quickly contribute and publish on Open Data MCP. Make your data easily discoverable!\n\n## Usage\n\n### <u>Access</u>: Access Open Data using Open Data MCP CLI Tool\n\n#### Prerequisites\n\nIf you want to use Open Data MCP with Claude Desktop app client you need to install the [Claude Desktop app](https://claude.ai/download).\n\nYou will also need `uv` to easily run our CLI and MCP servers.\n\n##### macOS\n\n```bash\n# you need to install uv through homebrew as using the install shell script \n# will install it locally to your user which make it unavailable in the Claude Desktop app context.\nbrew install uv\n```\n\n##### Windows\n\n```bash\n# (UNTESTED)\npowershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n```\n\n#### Open Data MCP - CLI Tool\n\n##### Overview\n\n```bash\n# show available commands\nuvx odmcp \n\n# show available providers\nuvx odmcp list\n\n# show info about a provider\nuvx odmcp info $PROVIDER_NAME\n\n# setup a provider's MCP server on your Claude Desktop app\nuvx odmcp setup $PROVIDER_NAME\n\n# remove a provider's MCP server from your Claude Desktop app\nuvx odmcp remove $PROVIDER_NAME\n```\n\n##### Example\n\nQuickstart for the Switzerland SBB (train company) provider:\n\n```bash\n# make sure claude is installed\nuvx odmcp setup ch_sbb\n```\n\nRestart Claude and you should see a new hammer icon at the bottom right of the chat.\n\nYou can now ask questions to Claude about SBB train network disruption and it will answer based on data collected on `data.sbb.ch`.\n\n### <u>Publish</u>: Contribute by building and publishing public datasets\n\n#### Prerequisites\n\n1. **Install UV Package Manager**\n   ```bash\n   # macOS\n   brew install uv\n\n   # Windows (PowerShell)\n   powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n\n   # Linux/WSL\n   curl -LsSf https://astral.sh/uv/install.sh | sh\n   ```\n\n2. **Clone & Setup Repository**\n   ```bash\n   # Clone the repository\n   git clone https://github.com/OpenDataMCP/OpenDataMCP.git\n   cd OpenDataMCP\n\n   # Create and activate virtual environment\n   uv venv\n   source .venv/bin/activate  # Unix/macOS\n   # or\n   .venv\\Scripts\\activate     # Windows\n\n   # Install dependencies\n   uv sync\n   ```\n\n3. **Install Pre-commit Hooks**\n   ```bash\n   # Install pre-commit hooks for code quality\n   pre-commit install\n   ```\n\n#### Publishing Instructions\n\n1. **Create a New Provider Module**\n   * Each data source needs its own python module.\n   * Create a new Python module in `src/odmcp/providers/`.\n   * Use a descriptive name following the pattern: `{country_code}_{organization}.py` (e.g., `ch_sbb.py`).\n   * Start with our [template file](https://github.com/OpenDataMCP/OpenDataMCP/blob/main/src/odmcp/providers/__template__.py) as your base.\n\n2. **Implement Required Components**\n   * Define your Tools & Resources following the template structure\n   * Each Tool or Resource should have:\n     - Clear description of its purpose\n     - Well-defined input/output schemas using Pydantic models\n     - Proper error handling\n     - Documentation strings\n\n3. **Tool vs Resource**\n   * Choose **Tool** implementation if your data needs:\n     - Active querying or computation\n     - Parameter-based filtering\n     - Complex transformations\n   * Choose **Resource** implementation if your data is:\n     - Static or rarely changing\n     - Small enough to be loaded into memory\n     - Simple file-based content\n     - Reference documentation or lookup tables\n   * Reference the [MCP documentation](https://github.com/modelcontextprotocol/python-sdk?tab=readme-ov-file#primitives) for guidance\n\n4. **Testing**\n   * Add tests in the `tests/` directory\n   * Follow existing test patterns (see other provider tests)\n   * Required test coverage:\n     - Basic functionality\n     - Edge cases\n     - Error handling\n\n5. **Validation**\n   * Test your MCP server using our experimental client: `uv run src/odmcp/providers/client.py`\n   * Verify all endpoints respond correctly\n   * Ensure error messages are helpful\n   * Check performance with typical query loads\n\nFor other examples, check our existing providers in the `src/odmcp/providers/` directory.\n\n## Contributing\n\nWe have an ambitious roadmap and we want this project to scale with the community. The ultimate goal is to make the millions of datasets publicly available to all LLM applications. \n\nFor that we need your help!\n\n### Discord\n\nWe want to build a helping community around the challenge of bringing open data to LLM's. Join us on discord to start chatting: [https://discord.gg/QPFFZWKW](https://discord.gg/hDg4ZExjGs)\n\n### Our Core Guidelines\n\nBecause of our target scale we want to keep things simple and pragmatic at first. Tackle issues with the community as they come along.\n\n1. **Simplicity and Maintainability**\n   * Minimize abstractions to keep codebase simple and scalable\n   * Focus on clear, straightforward implementations\n   * Avoid unnecessary complexity\n\n2. **Standardization / Templates**\n   * Follow provided templates and guidelines consistently\n   * Maintain uniform structure across providers\n   * Use common patterns for similar functionality\n\n3. **Dependencies**\n   * Keep external dependencies to a minimum\n   * Prioritize single repository/package setup\n   * Carefully evaluate necessity of new dependencies\n\n4. **Code Quality**\n   * Format code using ruff\n   * Maintain comprehensive test coverage with pytest\n   * Follow consistent code style\n\n5. **Type Safety**\n   * Use Python type hints throughout\n   * Leverage Pydantic models for API request/response validation\n   * Ensure type safety in data handling\n\n### Tactical Topics (our current priorities)\n* [x] Initialize repository with guidelines, testing framework, and contribution workflow\n* [x] Implement CI/CD pipeline with automated PyPI releases\n* [x] Develop provider template and first reference implementation\n* [ ] **Integrate additional open datasets (actively seeking contributors)**\n* [ ] Establish clear guidelines for choosing between Resources and Tools\n* [ ] Develop scalable repository architecture for long-term growth\n* [ ] Expand MCP SDK parameter support (authentication, rate limiting, etc.)\n* [ ] Implement additional MCP protocol features (prompts, resource templates)\n* [ ] Add support for alternative transport protocols beyond stdio (SSE)\n* [ ] Deploy hosted MCP servers for improved accessibility\n\n## Roadmap\nLet’s build the open source infrastructure that will allow all LLMs to access all Open Data together!\n\n### Access:\n* Make Open Data available to all LLM applications (beyond Claude)\n* Make Open Data data sources searchable in a scalable way\n* Make Open Data available through MCP remotely (SSE) with publicly sponsored infrastructure\n\n### Publish:\n* Build the many Open Data MCP servers to make all the Open Data truly accessible (we need you!).\n* On our side we are starting to build MCP servers for Switzerland ~12k open dataset! \n* Make it even easier to build Open Data MCP servers\n\nWe are very early, and lack of dataset available is currently the bottleneck. Help yourself! Create your Open Data MCP server and get users to use it as well from their LLMs applications. Let’s connect LLMs to the millions of open datasets from governments, public entities, companies and NGOs!\n\nAs Anthropic's MCP evolves we will adapt and upgrade Open Data MCP.\n\n## Limitations\n\n* All data served by Open Data MCP servers should be Open. \n* Please oblige to the data licenses of the data providers.\n* Our License must be quoted in commercial applications.\n\n## References\n\n* Kudos to [Anthropic's open source MCP](https://spec.modelcontextprotocol.io/) release enabling initiative like this one.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details\n",
+  "category": "AI Tools",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ch_sbb": {
+        "command": "uvx",
+        "args": ["odmcp", "setup", "ch_sbb"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "OpenDataMCP",
+    "repo": "OpenDataMCP",
+    "url": "https://github.com/OpenDataMCP/OpenDataMCP",
+    "name": "opendatamcp__opendatamcp",
+    "path": null,
+    "stars": 133,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "734c9f8671c952f2161d366dd942b4edcec8400c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:26.154Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"odmcp\"\ndynamic = [\"version\"]\ndescription = \"Python MCP servers exposing Open Data to compatible LLM clients.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"httpx>=0.28.0\",\n    \"mcp>=1.0.0\",\n]\n\n[tool.hatch.version]\npath = \"src/odmcp/__init__.py\"\n\n[project.scripts]\nodmcp = \"odmcp.cli:main\"\n\n[tool.ruff]\nline-length = 88\ntarget-version = \"py312\"\n\n[tool.pyright]\ninclude = [\"src/mcp\", \"tests\"]\nvenvPath = \".\"\nvenv = \".venv\"\n\n[dependency-groups]\ndev = [\n    \"pytest-asyncio>=0.24.0\",\n    \"pytest>=8.3.3\",\n    \"ruff>=0.8.1\",\n    \"pre-commit>=4.0.1\",\n]\n\n[tool.pytest.ini_options]\npythonpath = [\"src\"]\ntestpaths = [\"tests\"]\naddopts = \"-ra -q\"\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\n# Configure log format\nlog_cli_format = \"%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)\"\nlog_cli_date_format = \"%Y-%m-%d %H:%M:%S\"\n\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/odmcp\"]\n"
+}

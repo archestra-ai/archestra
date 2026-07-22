@@ -1,0 +1,99 @@
+{
+  "name": "luniakunal__mcp-twitter",
+  "display_name": "mcp-twitter",
+  "description": "Manage your twitter account using mcp",
+  "author": {
+    "name": "LuniaKunal"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}/src", "run", "--with", "twikit", "--with", "mcp", "tweet_service.py"],
+    "env": {
+      "COOKIES_PATH": "${user_config.cookies_path}",
+      "ENV_FILE": "${user_config.env_file}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "cookies_path": {
+      "type": "file",
+      "title": "Cookies File Path",
+      "description": "Path to the JSON file where Twitter session cookies are stored.",
+      "required": false,
+      "default": "${__dirname}/cookies.json"
+    },
+    "env_file": {
+      "type": "file",
+      "title": "Environment File Path",
+      "description": "Path to the .env file containing Twitter API credentials.",
+      "required": false,
+      "default": ".env"
+    }
+  },
+  "readme": "# Twitter MCP Server\n\nWelcome to the Twitter MCP (Multi-Channel Platform) Server! This application helps you manage your Twitter account programmatically with a variety of powerful features.\n\n## Features\n- **Get Timeline:** Retrieve your Twitter home timeline.\n- **Get Any User's Tweets:** Fetch tweets from any public Twitter user.\n- **Hashtag Search:** Search for tweets containing any hashtag (e.g., `#AI`).\n- **Get Replies & Summaries:** Retrieve replies to tweets and get summarized insights.\n- **User Direct Messages:** Send and receive Twitter DMs.\n- **Create Post:** Programmatically create new tweets.\n- **Delete Post:** Delete your tweets through the API.\n- **And much more...**\n\n\n[![Twitter MCP Server](https://github.com/user-attachments/assets/1a05ab8f-75b3-4fec-b91d-402f65d41544)](https://smithery.ai/server/@LuniaKunal/mcp-twitter)\n\n![Twitter MCP Server](image.png)\n\n## Getting Started\n\n### Prerequisites\n- Python 3.11+\n- [uvicorn](https://www.uvicorn.org/) (for running the server)\n- Twitter API credentials (set in `.env` file)\n\n### Installation\n1. Clone this repository.\n2. Install dependencies:\n   ```bash\n   pip install -r requirements.txt\n   ```\n3. Set up your `.env` file with your Twitter API credentials (see `.env.example`).\n\n### Running the Application\n\nTo start the server, run:\n```bash\nuv run --with twikit --with mcp Path\\\\src\\\\tweet_service.py\n```\n\n```\n{\n  \"mcpServers\": {\n  \"twitter-mcp\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"--directory\",\n      \"Path\\\\src\\\\\",\n      \"run\",\n      \"--with\",\n      \"twikit\",\n      \"--with\",\n      \"mcp\",\n      \"tweet_service.py\"\n    ],\n    \"env\": {\n      \"COOKIES_PATH\": \"Path\\\\cookies.json\",\n      \"ENV_FILE\": \".env\"  \n    }\n  }\n\n}\n}\n```\n\n---\n\nFeel free to contribute or suggest new features!\n",
+  "category": "Social Media",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "twitter-mcp": {
+        "command": "uv",
+        "args": ["--directory", "Path\\src\\", "run", "--with", "twikit", "--with", "mcp", "tweet_service.py"],
+        "env": {
+          "COOKIES_PATH": "Path\\cookies.json",
+          "ENV_FILE": ".env"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "LuniaKunal",
+    "repo": "mcp-twitter",
+    "url": "https://github.com/LuniaKunal/mcp-twitter",
+    "name": "mcp-twitter",
+    "path": null,
+    "stars": 25,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "9685b025a0d8755c2d8e53c624d0a6bd63989a89"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.846Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "twikit",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp[cli]\r\ntwikit\r\nmcp\r\npython-dotenv"
+}

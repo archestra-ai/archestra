@@ -1,0 +1,139 @@
+{
+  "name": "offorte__offorte-mcp-server",
+  "display_name": "offorte-mcp-server",
+  "description": "MCP server for the Offorte API - Create & send proposals using AI",
+  "author": {
+    "name": "offorte"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@offorte/mcp-server"],
+    "env": {
+      "OFFORTE_ACCOUNT_NAME": "${user_config.offorte_account_name}",
+      "OFFORTE_API_KEY": "${user_config.offorte_api_key}",
+      "TRANSPORT_TYPE": "${user_config.transport_type}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "offorte_account_name": {
+      "type": "string",
+      "title": "Offorte Account Name",
+      "description": "Your Offorte account name.",
+      "sensitive": false,
+      "required": true
+    },
+    "offorte_api_key": {
+      "type": "string",
+      "title": "Offorte API Key",
+      "description": "Your Offorte API Key for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "transport_type": {
+      "type": "string",
+      "title": "Transport Type",
+      "description": "Set to 'sse' to enable Server-Sent Events (SSE) mode, or leave unset/default for 'stdio'.",
+      "default": "stdio",
+      "required": false
+    }
+  },
+  "readme": "# Offorte MCP Server <!-- omit in toc -->\n\nMCP server for Offorte - Create & send proposals using AI.\n\nThis server acts as the bridge between AI agents and Offorte's proposal engine.\nIt enables external models to create and send proposals via Offorte.\nBuilt for automation workflows, the [MCP](https://modelcontextprotocol.io/) makes it easy to integrate proposal actions into AI tools, chat interfaces, and autonomous systems.\n\n> **Early technology**\n> Please note that MCP (Model Context Protocol) is a new approach to AI integration.\n> While powerful, it's still evolving and may occasionally produce unexpected or undesired results.\n\n## Table of Contents <!-- omit in toc -->\n\n- [About Offorte](#about-offorte)\n- [Goals \\& Coverage](#goals--coverage)\n- [Prerequisites](#prerequisites)\n- [Available Tools](#available-tools)\n- [MCP Clients](#mcp-clients)\n- [Development](#development)\n\n## About Offorte\n\nOfforte is automated proposal software which helps businesses create, send, and track beautiful interactive proposals.\nBuilt for speed, flexibility, and real-world use, it combines automation and smart workflows without sacrificing the personal touch.\n[Learn more about Offorte](https://www.offorte.com).\n\n### API <!-- omit in toc -->\n\nThe MCP server is using the Offorte Public API v2.\nRead the [API documentation](https://www.offorte.com/api-docs/) for more information.\n\n### Demo <!-- omit in toc -->\n\nExperience the future of proposals: voice-triggered, AI-powered, fully automated.\nSee how Offorte connects voice and workflow in [this real demo](https://www.offorte.com/en/blog/proposal-software/handsfree-proposal-sending-with-mcp).\n\n## Goals & Coverage\n\nThe goal of this project is too create & send proposals using AI via the protocol.\nBecause of the experimental character, the full Offorte API is not covered and its limited to the tools needed to create & send proposals.\nTools which could lead to an LLM updating and deleting stuff are not yet implemented.\nUpdate and delete commands might be added in the future, based on reallife results & user feedback.\n\n## Prerequisites\n\n- Node.js (tested with Node.js `20.x.x`)\n- Offorte API Key (see [Authentication Section](https://www.offorte.com/api-docs/authentication#api-keys) of the Offorte API Docs)\n- PNPM for development\n- `TRANSPORT_TYPE` (optional): Set to `sse` to enable Server-Sent Events (SSE) mode, or leave unset/default for `stdio` (default: `stdio`).\n\n## Available Tools\n\n### Context & Setup <!-- omit in toc -->\n\n- **get_initial_context** – **IMPORTANT:** Must be called before using any other tools to initialize context and get usage instructions\n\n### Account <!-- omit in toc -->\n\n- **get_users** – Lists all account users for the current account\n\n### Automations <!-- omit in toc -->\n\n- **get_automation_sets** – Lists automation sets which are used as an optional input to create a new proposal\n\n### Contacts <!-- omit in toc -->\n\n- **create_contact** – Create a new contact (organisation or person/individual)\n- **get_contact_details** - Get all details for a contact by id\n- **search_contact_organisations** - Search for organisations by name in the contacts\n- **search_contact_people** - Search for people by name in the contacts\n\n### Favorites <!-- omit in toc -->\n\n- **get_proposal_templates** – Lists proposal templates which are used as starting points to create new proposals\n\n### Proposals <!-- omit in toc -->\n\n- **create_proposal** – Create a new proposal\n- **get_proposal_directories** – Get all proposal directories grouped by status\n- **search_proposals** – Search for proposals by query\n- **send_proposal** – Send a proposal to its assigned contacts\n\n### Settings <!-- omit in toc -->\n\n- **get_design_templates** – Lists available design templates which are used to create new proposals\n- **get_email_templates** – Lists available email templates which are used to send proposals\n- **get_text_templates** – Lists available language text templates which are used to create new proposals\n\n## MCP Clients\n\nCurrently, this MCP server has only been tested with Claude Desktop.\nMore client examples will be added in the future.\n\n### Claude Desktop Configuration <!-- omit in toc -->\n\nFind your `claude_desktop_config.json` at `Claude > Settings > Developer > Edit Config` and depending on which option you'd like, add **JUST ONE** of the following:\n\n#### NPX <!-- omit in toc -->\n\nRunning it straight from the npm registry.\n\n```json\n{\n\t\"mcpServers\": {\n\t\t\"offorte-proposals\": {\n\t\t\t\"command\": \"npx\",\n\t\t\t\"args\": [\"-y\", \"@offorte/mcp-server\"],\n\t\t\t\"env\": {\n\t\t\t\t\"OFFORTE_ACCOUNT_NAME\": \"<YOUR_ACCOUNT_NAME>\",\n\t\t\t\t\"OFFORTE_API_KEY\": \"<YOUR_TOKEN>\"\n\t\t\t}\n\t\t}\n\t}\n}\n```\n\n#### Local Node <!-- omit in toc -->\n\nDependencies should have been installed & the project is build before you use this method (`pnpm install`).\n\n```json\n{\n\t\"mcpServers\": {\n\t\t\"offorte-proposals\": {\n\t\t\t\"command\": \"node\",\n\t\t\t\"args\": [\"/path/to/directory/offorte-mcp-server/dist/server.js\"],\n\t\t\t\"env\": {\n\t\t\t\t\"OFFORTE_ACCOUNT_NAME\": \"<YOUR_ACCOUNT_NAME>\",\n\t\t\t\t\"OFFORTE_API_KEY\": \"<YOUR_TOKEN>\"\n\t\t\t}\n\t\t}\n\t}\n}\n```\n\n## Development\n\nTo get started, clone the repository and install the dependencies.\nMake sure you have an .env file and it includes the proper values.\n\n```bash\ngit clone https://github.com/offorte/offorte-mcp-server.git\ncd offorte-mcp-server\npnpm install\npnpm dev\n```\n\n### Commands <!-- omit in toc -->\n\nCheck the NPM scripts for all commands, below is a short summary of the most important onces.\n\n| Script         | Info                                  |\n| -------------- | ------------------------------------- |\n| `pnpm build`   | Build the project for production      |\n| `pnpm start`   | Start the production server           |\n| `pnpm dev`     | Start the development server          |\n| `pnpm inspect` | Inspect the server                    |\n| `pnpm format`  | Format code using Prettier and ESLint |\n",
+  "category": "AI Tools",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "offorte-mcp-server-npx": {
+        "command": "npx",
+        "args": ["-y", "@offorte/mcp-server"],
+        "env": {
+          "OFFORTE_ACCOUNT_NAME": "<YOUR_ACCOUNT_NAME>",
+          "OFFORTE_API_KEY": "<YOUR_TOKEN>"
+        }
+      },
+      "offorte-mcp-server-local-node": {
+        "command": "node",
+        "args": ["/path/to/directory/offorte-mcp-server/dist/server.js"],
+        "env": {
+          "OFFORTE_ACCOUNT_NAME": "<YOUR_ACCOUNT_NAME>",
+          "OFFORTE_API_KEY": "<YOUR_TOKEN>"
+        }
+      },
+      "offorte-mcp-server-dev": {
+        "command": "pnpm",
+        "args": ["dev"],
+        "env": {
+          "OFFORTE_ACCOUNT_NAME": "<YOUR_ACCOUNT_NAME>",
+          "OFFORTE_API_KEY": "<YOUR_TOKEN>"
+        }
+      },
+      "offorte-mcp-server-start": {
+        "command": "pnpm",
+        "args": ["start"],
+        "env": {
+          "OFFORTE_ACCOUNT_NAME": "<YOUR_ACCOUNT_NAME>",
+          "OFFORTE_API_KEY": "<YOUR_TOKEN>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "offorte",
+    "repo": "offorte-mcp-server",
+    "url": "https://github.com/offorte/offorte-mcp-server",
+    "name": "offorte-mcp-server",
+    "path": null,
+    "stars": 3,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "f6eaa8eaab394d4ea9ce5243832d44a17e20368c"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:51.331Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "outdent",
+      "importance": 3
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"@offorte/mcp-server\",\n\t\"version\": \"0.0.1\",\n\t\"repository\": {\n\t\t\"url\": \"git+https://github.com/offorte/offorte-mcp-server.git\"\n\t},\n\t\"description\": \"Offorte MCP Server\",\n\t\"author\": \"Offorte\",\n\t\"homepage\": \"https://www.offorte.com\",\n\t\"license\": \"MIT\",\n\t\"type\": \"module\",\n\t\"main\": \"dist/server.js\",\n\t\"bin\": {\n\t\t\"offorte-mcp-server\": \"./dist/server.js\"\n\t},\n\t\"files\": [\n\t\t\"dist\"\n\t],\n\t\"scripts\": {\n\t\t\"build\": \"tsup && chmod 755 dist/server.js\",\n\t\t\"dev\": \"fastmcp dev src/server.ts\",\n\t\t\"format\": \"prettier --write . && eslint --fix .\",\n\t\t\"inspect\": \"CLIENT_PORT=8001 fastmcp inspect src/server.ts\",\n\t\t\"lint\": \"prettier --check . && eslint . && tsc --noEmit\",\n\t\t\"prepublishOnly\": \"npm run build\",\n\t\t\"start\": \"node dist/server.js\"\n\t},\n\t\"dependencies\": {\n\t\t\"axios\": \"1.9.0\",\n\t\t\"dotenv\": \"16.5.0\",\n\t\t\"fastmcp\": \"1.27.6\",\n\t\t\"outdent\": \"0.8.0\",\n\t\t\"zod\": \"3.24.4\"\n\t},\n\t\"devDependencies\": {\n\t\t\"@eslint/js\": \"9.26.0\",\n\t\t\"@tsconfig/node22\": \"22.0.1\",\n\t\t\"@types/node\": \"22.15.18\",\n\t\t\"chalk\": \"5.4.1\",\n\t\t\"eslint-config-prettier\": \"10.1.5\",\n\t\t\"eslint-plugin-perfectionist\": \"4.13.0\",\n\t\t\"jiti\": \"2.4.2\",\n\t\t\"prettier\": \"3.5.3\",\n\t\t\"semantic-release\": \"24.2.3\",\n\t\t\"tsup\": \"8.4.0\",\n\t\t\"tsx\": \"4.19.4\",\n\t\t\"typescript\": \"5.8.3\",\n\t\t\"typescript-eslint\": \"8.32.1\"\n\t},\n\t\"tsup\": {\n\t\t\"entry\": [\n\t\t\t\"src/server.ts\"\n\t\t],\n\t\t\"format\": [\n\t\t\t\"esm\"\n\t\t],\n\t\t\"dts\": true,\n\t\t\"splitting\": true,\n\t\t\"sourcemap\": true,\n\t\t\"clean\": true,\n\t\t\"banner\": {\n\t\t\t\"js\": \"#!/usr/bin/env node\"\n\t\t}\n\t},\n\t\"publishConfig\": {\n\t\t\"access\": \"public\"\n\t},\n\t\"release\": {\n\t\t\"repositoryUrl\": \"https://github.com/offorte/offorte-mcp-server.git\",\n\t\t\"branches\": [\n\t\t\t\"main\"\n\t\t],\n\t\t\"plugins\": [\n\t\t\t\"@semantic-release/commit-analyzer\",\n\t\t\t\"@semantic-release/release-notes-generator\",\n\t\t\t\"@semantic-release/npm\",\n\t\t\t\"@semantic-release/github\"\n\t\t]\n\t},\n\t\"keywords\": [\n\t\t\"offorte\",\n\t\t\"mcp\",\n\t\t\"server\",\n\t\t\"proposals\",\n\t\t\"proposal software\",\n\t\t\"sales automation\",\n\t\t\"sales\",\n\t\t\"automation\",\n\t\t\"offorte mcp server\",\n\t\t\"mcp server\"\n\t]\n}\n"
+}

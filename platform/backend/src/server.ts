@@ -425,6 +425,10 @@ function parseContentLength(request: FastifyRequest): number | undefined {
 
 function isBodyTooLargeError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
+  // A thrown ApiError(413) is a route speaking deliberately — its message
+  // already names the limit in that route's own terms. This branch only
+  // rescues Fastify's raw parser error, which arrives without a usable text.
+  if (error instanceof ApiError) return false;
   const e = error as { code?: string; statusCode?: number };
   return e.code === BODY_TOO_LARGE_CODE || e.statusCode === 413;
 }
@@ -1042,12 +1046,18 @@ const registerSandboxRoute = (
   }
 
   // The Archestra Apps SDK (window.archestra), loaded by the <script src>
-  // injected into every owned app at serve time. Same delivery posture as the
-  // ext-apps bundle above: public asset, brief cache so fixes roll out.
+  // injected into every owned app at serve time. Cached only briefly: the
+  // session-recording half of this file evolves with the player it talks to,
+  // and a browser replaying yesterday's cached SDK against today's player
+  // drops replay messages on the floor in ways that read as a broken
+  // recording. Sixty seconds bounds that skew to the minute after a deploy
+  // while sparing every ordinary app load a re-fetch. Deliberately no
+  // stale-while-revalidate — it would serve the hour-stale copy exactly
+  // once, on the load where the skew bites.
   if (archestraAppSdk) {
     fastify.get(APP_SDK_PATH, async (_request, reply) => {
       void reply.header("Access-Control-Allow-Origin", "*");
-      void reply.header("Cache-Control", "public, max-age=3600");
+      void reply.header("Cache-Control", "public, max-age=60");
       void reply.type("text/javascript");
       return reply.send(archestraAppSdk);
     });

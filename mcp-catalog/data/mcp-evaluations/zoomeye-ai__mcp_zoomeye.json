@@ -1,0 +1,131 @@
+{
+  "name": "zoomeye-ai__mcp_zoomeye",
+  "display_name": "mcp_zoomeye",
+  "description": "A Model Context Protocol server that provides network asset information based on query conditions. This server allows LLMs to obtain network asset information and supports querying network asset information by zoomeye dork etc.",
+  "author": {
+    "name": "zoomeye-ai"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-zoomeye"],
+    "env": {
+      "ZOOMEYE_API_KEY": "${user_config.zoomeye_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "zoomeye_api_key": {
+      "type": "string",
+      "title": "ZoomEye API Key",
+      "description": "Your ZoomEye API key for authentication",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# 🚀 ZoomEye MCP Server\n\nA Model Context Protocol (MCP) server that provides network asset information based on query conditions. This server allows Large Language Models (LLMs) to obtain network asset information by querying ZoomEye using dorks and other search parameters.\n\n## 🔔 Announcement\n\n🎉 We are excited to announce the official open-source release of **ZoomEye MCP Server** — a powerful Model Context Protocol (MCP) server that brings real-time cyber asset intelligence to AI assistants and development environments.\n\n🚀 Free Trial: 7-Day FREE Access to ZoomEye MCP!\nExperience ZoomEye MCP — the AI-powered cyberspace asset search engine — absolutely free for 7 days!\n\n🔍 Search global internet assets, track real-time changes, and unlock AI-driven insights — all in one place.\n\n👉 How to claim:\n\n1. Follow us on Twitter: [@zoomeye_team](https://x.com/zoomeye_team)\n2. DM us \"MCP\" and your MCP setup screenshot\n3. Get instant access to your 7-day membership\n\n🎁 Limited-time free trial — explore the power of AI asset search today!\n\n💡 Provide insightful feedback that gets officially adopted, and you'll unlock **even more rewards**!\n\n🔧 Fully compatible with leading MCP environments:\n\n- Claude Desktop\n- Cursor\n- Windsurf\n- Cline\n- Continue\n- Zed\n- Cherry Studio\n- Chatbox\n\n🔗 Explore ZoomEye MCP Server on:\n\n- GitHub: [zoomeye-ai/mcp_zoomeye](https://github.com/zoomeye-ai/mcp_zoomeye)\n- MCP.so: [mcp.so/server/mcp_zoomeye](https://mcp.so/server/mcp_zoomeye/zoomeye-ai)\n- Smithery: [smithery.ai/server/@zoomeye-ai/mcp_zoomeye](https://smithery.ai/server/@zoomeye-ai/mcp_zoomeye)\n- Cursor Directory: [cursor.directory/mcp/zoomeye](https://cursor.directory/mcp/zoomeye)\n- Pulse MCP: [pulsemcp.com/servers/zoomeye](https://www.pulsemcp.com/servers/zoomeye)\n- Glama MCP: [glama.ai/mcp/servers](https://glama.ai/mcp/servers)\n\nWe welcome everyone to use, explore, and contribute!\n\n## 🔑 How can I get a ZoomEye API key?\n\nTo use this MCP server, you’ll need a ZoomEye API key.\n\n1. Go to https://www.zoomeye.ai\n2. Register or log in\n3. Click your avatar → **Profile**\n4. Copy your **API-KEY**\n5. Set the environment variable:\n   \n   `export ZOOMEYE_API_KEY=\"your_api_key_here\"`\n\n![zoomeye1](./zoomeye1.jpg)\n\n![zoomeye2](./zoomeye2.jpg)\n\n## Features\n\n- Query ZoomEye for network asset information using dorks\n- Caching mechanism to improve performance and reduce API calls\n- Automatic retry mechanism for failed API requests\n- Comprehensive error handling and logging\n\n## Available Tools\n\n- `zoomeye_search` - Get network asset information based on query conditions.\n  - Required parameters:\n    - `qbase64` (string): Base64 encoded query string for ZoomEye search\n  - Optional parameters:\n    - `page` (integer): View asset page number, default is 1\n    - `pagesize` (integer): Number of records per page, default is 10, maximum is 1000\n    - `fields` (string): The fields to return, separated by commas\n    - `sub_type` (string): Data type, supports v4, v6, and web. Default is v4\n    - `facets` (string): Statistical items, separated by commas if there are multiple\n    - `ignore_cache` (boolean): Whether to ignore the cache\n\n## Usage Guide\n\n### Basic Usage\n\nOnce the server is running, you can interact with it through your AI assistant or development environment. Here's how to use it:\n\n1. **Start the server** using one of the installation methods above\n2. **Configure your AI assistant** (Claude Desktop, Cursor, Windsurf, Cline, Continue, Zed, etc.) to use the server\n3. **Query network information** using natural language\n\n![searchexample](example.png)\n\n### Search Syntax Guide\n\n- Search Scope covers devices (IPv4, IPv6) and websites (domains).\n- When entering a search string, the system will match keywords in \"global\" mode, including content from various\n  protocols such as HTTP, SSH, FTP, etc. (e.g., HTTP/HTTPS protocol headers, body, SSL, title, and other protocol\n  banners).\n- Search strings are case-insensitive and will be segmented for matching (the search results page provides a \"\n  segmentation\" test feature). When using == for search, it enforces exact case-sensitive matching with strict syntax.\n- Please use quotes for search strings (e.g., \"Cisco System\" or 'Cisco System'). If the search string contains quotes,\n  use the escape character, e.g.,\"a\\\"b\". If the search string contains parentheses, use the escape character, e.g.,\n  portinfo\\(\\).\n\nYou can see more detailed search syntax rules in [prompts.py](./src/mcp_server_zoomeye/prompts.py).\n\nFor more information on the ZoomEye Search API, refer to the [ZoomEye API v2 documentation](https://www.zoomeye.ai/doc).\n\n## Getting Started\n\n### Prerequisites\n\n1. **ZoomEye API Key**\n   \n   - Register for an account at [ZoomEye](https://www.zoomeye.ai/)\n   - Obtain your API key from your account settings\n   - The API key will be used to authenticate your requests to the ZoomEye API\n2. **Python Environment**\n   \n   - Python 3.10 or higher is required\n   - Alternatively, you can use Docker to run the server without installing Python\n\n## Installation\n\n### Using PIP\n\nAlternatively, you can install `mcp-server-zoomeye` via pip:\n\n```bash\npip install mcp-server-zoomeye\n```\n\nAfter installation, you can run it as a script using the following command:\n\n```bash\npython -m mcp_server_zoomeye\n```\n\n### Using Docker\n\nYou can also run the ZoomEye MCP server using Docker:\n\n#### Pull from Docker Hub\n\n```bash\n# Pull the latest image\ndocker pull zoomeyeteam/mcp-server-zoomeye:latest\n\n# Run the container with your API key\ndocker run -i --rm -e ZOOMEYE_API_KEY=your_api_key_here zoomeyeteam/mcp-server-zoomeye:latest\n```\n\n> **Note**: We provide multi-architecture Docker images that support `linux/amd64` and `linux/arm64` platforms and can run on Intel/AMD and ARM (such as Apple Silicon) processors.\n\n#### Build from Source\n\nAlternatively, you can build the Docker image from source:\n\n```bash\n# Clone the repository\ngit clone https://github.com/zoomeye-ai/mcp_zoomeye.git\ncd mcp_zoomeye\n\n# Build the Docker image\ndocker build -t zoomeyeteam/mcp-server-zoomeye:local .\n\n# Run the container\ndocker run -i --rm -e ZOOMEYE_API_KEY=your_api_key_here zoomeyeteam/mcp-server-zoomeye:local\n```\n\n### Using uv\n\n[`uv`](https://docs.astral.sh/uv/) is a fast Python package installer and resolver written in Rust. It's a modern alternative to pip that offers significant performance improvements.\n\n#### Installation of uv\n\n```bash\n# Install uv using curl (macOS/Linux)\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n\n# Or using PowerShell (Windows)\nirm https://astral.sh/uv/install.ps1 | iex\n\n# Or using Homebrew (macOS)\nbrew install uv\n```\n\n#### Using uvx to run mcp-server-zoomeye\n\nNo specific installation is required when using [`uvx`](https://docs.astral.sh/uv/guides/tools/), which allows you to run Python packages directly:\n\n#### Installing with uv\n\nAlternatively, you can install the package using uv:\n\n```bash\n# Install in the current environment\nuv pip install mcp-server-zoomeye\n\n# Or create and install in a new virtual environment\nuv venv\nuv pip install mcp-server-zoomeye\n```\n\n## Configuration\n\n### Environment Variables\n\nThe ZoomEye MCP server requires the following environment variable:\n\n- `ZOOMEYE_API_KEY`: Your ZoomEye API key for authentication\n\nYou can set this environment variable in several ways:\n\n1. **Export in your shell session**:\n   \n   ```bash\n   export ZOOMEYE_API_KEY=\"your_api_key_here\"\n   ```\n2. **Pass directly when running the container** (for Docker):\n   \n   ```bash\n   docker run -i --rm -e ZOOMEYE_API_KEY=your_api_key_here zoomeyeteam/mcp-server-zoomeye:latest\n   ```\n\n### Configure Claude.app\n\nAdd the following in Claude settings:\n\n<details>\n<summary>Using uvx</summary>\n\n```json\n\"mcpServers\": {\n  \"zoomeye\": {\n    \"command\": \"uvx\",\n    \"args\": [\"mcp-server-zoomeye\"],\n    \"env\": {\n        \"ZOOMEYE_API_KEY\": \"your_api_key_here\"\n    }\n  }\n}\n```\n\n</details>\n\n<details>\n<summary>Using docker</summary>\n\n```json\n\"mcpServers\": {\n  \"zoomeye\": {\n    \"command\": \"docker\",\n    \"args\": [\"run\", \"-i\", \"--rm\", \"-e\", \"ZOOMEYE_API_KEY=your_api_key_here\", \"zoomeyeteam/mcp-server-zoomeye:latest\"],\n    \"env\": {\n      \"ZOOMEYE_API_KEY\": \"your_api_key_here\"\n    }\n  }\n}\n```\n\n</details>\n\n<details>\n<summary>Installed via pip</summary>\n\n```json\n\"mcpServers\": {\n  \"zoomeye\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"mcp_server_zoomeye\"],\n    \"env\": {\n        \"ZOOMEYE_API_KEY\": \"your_api_key_here\"\n    }\n  }\n}\n```\n\n</details>\n\n### Configure Zed\n\nAdd the following in Zed's settings.json:\n\n<details>\n<summary>Using uvx</summary>\n\n```json\n\"context_servers\": [\n  \"mcp-server-zoomeye\": {\n    \"command\": \"uvx\",\n    \"args\": [\"mcp-server-zoomeye\"],\n    \"env\": {\n        \"ZOOMEYE_API_KEY\": \"your_api_key_here\"\n    }\n  }\n],\n```\n\n</details>\n\n<details>\n<summary>Installed via pip</summary>\n\n```json\n\"context_servers\": {\n  \"mcp-server-zoomeye\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"mcp_server_zoomeye\"],\n    \"env\": {\n        \"ZOOMEYE_API_KEY\": \"your_api_key_here\"\n    }\n  }\n},\n```\n\n</details>\n\n## Example Interactions\n\n### Example 1: Retrieve global Apache Tomcat assets\n\n```json\n{\n  \"name\": \"zoomeye_search\",\n  \"arguments\": {\n    \"qbase64\": \"app=\\\"Apache Tomcat\\\"\"\n  }\n}\n```\n\nResponse:\n\n```json\n{\n  \"code\": 60000,\n  \"message\": \"success\",\n  \"total\": 163139107,\n  \"query\": \"app=\\\"Apache Tomcat\\\"\",\n  \"data\": [\n    {\n      \"url\": \"https://1.1.1.1:443\",\n      \"ssl.jarm\": \"29d29d15d29d29d00029d29d29d29dea0f89a2e5fb09e4d8e099befed92cfa\",\n      \"ssl.ja3s\": \"45094d08156d110d8ee97b204143db14\",\n      \"iconhash_md5\": \"f3418a443e7d841097c714d69ec4bcb8\",\n      \"robots_md5\": \"0b5ce08db7fb8fffe4e14d05588d49d9\",\n      \"security_md5\": \"0b5ce08db7fb8fffe4e14d05588d49d9\",\n      \"ip\": \"1.1.1.1\",\n      \"domain\": \"www.google.com\",\n      \"hostname\": \"SPACEX\",\n      \"os\": \"windows\",\n      \"port\": 443,\n      \"service\": \"https\",\n      \"title\": [\"GoogleGoogle appsGoogle Search\"],\n      \"version\": \"1.1.0\",\n      \"device\": \"webcam\",\n      \"rdns\": \"c01031-001.cust.wallcloud.ch\",\n      \"product\": \"OpenSSD\",\n      \"header\": \"HTTP/1.1 302 Found Location: https://www.google.com/?gws_rd=ssl Cache-Control: private...\",\n      \"header_hash\": \"27f9973fe57298c3b63919259877a84d\",\n      \"body\": \"HTTP/1.1 302 Found Location: https://www.google.com/?gws_rd=ssl Cache-Control: private...\",\n      \"body_hash\": \"84a18166fde3ee7e7c974b8d1e7e21b4\",\n      \"banner\": \"SSH-2.0-OpenSSH_7.6p1 Ubuntu-4ubuntu0.3\",\n      \"update_time\": \"2024-07-03T14:34:10\",\n      \"header.server.name\": \"nginx\",\n      \"header.server.version\": \"1.8.1\",\n      \"continent.name\": \"Europe\",\n      \"country.name\": \"Germany\",\n      \"province.name\": \"Hesse\",\n      \"city.name\": \"Frankfurt\",\n      \"lon\": \"118.753262\",\n      \"lat\": \"32.064838\",\n      \"isp.name\": \"aviel.ru\",\n      \"organization.name\": \"SERVISFIRST BANK\",\n      \"zipcode\": \"210003\",\n      \"idc\": 0,\n      \"honeypot\": 0,\n      \"asn\": 4837,\n      \"protocol\": \"tcp\",\n      \"ssl\": \"SSL Certificate Version: TLS 1.2 CipherSuit: TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256...\",\n      \"primary_industry\": \"Finance\",\n      \"sub_industry\": \"bank\",\n      \"rank\": 60\n    }\n  ]\n}\n```\n\n## Debugging and Troubleshooting\n\n### Using MCP Inspector\n\nThe Model Context Protocol Inspector is a tool that helps debug MCP servers by simulating client interactions. You can use it to test your ZoomEye MCP server:\n\n```bash\n# For uvx installation\nnpx @modelcontextprotocol/inspector uvx mcp-server-zoomeye\n\n# If developing locally\ncd path/to/servers/src/mcp_server_zoomeye\nnpx @modelcontextprotocol/inspector uv run mcp-server-zoomeye\n```\n\n### Common Issues\n\n1. **Authentication Errors**\n   \n   - Ensure your ZoomEye API key is correct and properly set as an environment variable\n   - Check that your API key has not expired or been revoked\n2. **Connection Issues**\n   \n   - Verify your internet connection\n   - Check if the ZoomEye API is experiencing downtime\n3. **No Results**\n   \n   - Your query might be too specific or contain syntax errors\n   - Try simplifying your query or using different search terms\n4. **Rate Limiting**\n   \n   - ZoomEye API has rate limits based on your account type\n   - Space out your requests or upgrade your account for higher limits\n\n## Advanced Usage\n\n### Caching\n\nThe ZoomEye MCP server implements caching to improve performance and reduce API calls:\n\n- Responses are cached based on the query parameters\n- Cache duration is configurable (default: 1 hour)\n- You can bypass the cache by setting `ignore_cache` to `true` in your query\n\n### Custom Fields\n\nYou can request specific fields in your query results by using the `fields` parameter:\n\n```json\n{\n  \"name\": \"zoomeye_search\",\n  \"arguments\": {\n    \"qbase64\": \"app=\\\"Apache\\\"\",\n    \"fields\": \"ip,port,domain,service,os,country,city\"\n  }\n}\n```\n\n### Pagination\n\nFor queries that return many results, you can paginate through them:\n\n```json\n{\n  \"name\": \"zoomeye_search\",\n  \"arguments\": {\n    \"qbase64\": \"app=\\\"Apache\\\"\",\n    \"page\": 2,\n    \"pagesize\": 20\n  }\n}\n```\n\n## Contributing\n\nWe encourage contributions to mcp-server-zoomeye to help expand and improve its functionality. Whether it's adding new related tools, enhancing existing features, or improving documentation, your input is valuable.\n\nFor examples of other MCP servers and implementation patterns, see:\nhttps://github.com/modelcontextprotocol/servers\n\nPull requests are welcome! Feel free to contribute new ideas, bug fixes, or enhancements to make mcp-server-zoomeye more robust and practical.\n\n## License\n\nmcp-server-zoomeye is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more information, see the LICENSE file in the project repository.",
+  "category": "AI Tools",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-zoomeye-python": {
+        "command": "python",
+        "args": ["-m", "mcp_server_zoomeye"],
+        "env": {
+          "ZOOMEYE_API_KEY": "your_api_key_here"
+        }
+      },
+      "zoomeyeteam-mcp-server-zoomeye-docker-latest": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "ZOOMEYE_API_KEY=your_api_key_here",
+          "zoomeyeteam/mcp-server-zoomeye:latest"
+        ],
+        "env": {
+          "ZOOMEYE_API_KEY": "your_api_key_here"
+        },
+        "docker_image": "zoomeyeteam/mcp-server-zoomeye:latest"
+      },
+      "zoomeyeteam-mcp-server-zoomeye-docker-local": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "ZOOMEYE_API_KEY=your_api_key_here",
+          "zoomeyeteam/mcp-server-zoomeye:local"
+        ],
+        "env": {
+          "ZOOMEYE_API_KEY": "your_api_key_here"
+        },
+        "docker_image": "zoomeyeteam/mcp-server-zoomeye:local"
+      },
+      "mcp-server-zoomeye-uvx": {
+        "command": "uvx",
+        "args": ["mcp-server-zoomeye"],
+        "env": {
+          "ZOOMEYE_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zoomeye-ai",
+    "repo": "mcp_zoomeye",
+    "url": "https://github.com/zoomeye-ai/mcp_zoomeye",
+    "name": "mcp_zoomeye",
+    "path": null,
+    "stars": 37,
+    "contributors": 3,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "6a7367a3a8962e6131e3dff96c7736faa59516f6"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:31.974Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-zoomeye\"\nversion = \"0.1.5\"\ndescription = \"A Model Context Protocol server providing tools for ZoomEye queries for LLMs\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nauthors = [\n    { name = \"zoomeye team\", email = \"support@zoomeye.ai\" },\n]\nkeywords = [\"zoomeye\", \"mcp\", \"llm\"]\nlicense = { text = \"MIT\" }\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n]\ndependencies = [\n    \"mcp>=1.0.0\",\n    \"pydantic>=2.0.0\",\n    \"requests>=2.32.3\",\n    \"python-dotenv>=1.0.0\",\n]\n\n[project.scripts]\nmcp-server-zoomeye = \"mcp_server_zoomeye:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\n    \"pyright>=1.1.389\",\n    \"pytest>=8.3.3\",\n    \"pytest-asyncio>=0.25.3\",\n    \"ruff>=0.8.1\",\n]\n"
+}

@@ -71,9 +71,18 @@ export function createProxyPreHandler(params: {
         { method: request.method, url: request.url, action: "reject" },
         `${providerName} proxy preHandler: rejecting unsupported endpoint`,
       );
+      // OpenAI-compatible clients (e.g. VS Code Copilot BYOK) build this path
+      // from a configured base URL, so a stray suffix like "/v1" or a bad
+      // LLM proxy id lands here even though the endpoint itself is supported.
+      // Echo the offending path and the expected base-URL shape so the
+      // misconfiguration is visible in the client, not only in server logs.
       reply.code(400).send({
         error: {
-          message: `${providerName} only supports the /chat/completions and /models endpoints`,
+          message:
+            `${providerName} only supports the /chat/completions and /models endpoints; ` +
+            `got ${request.method} ${urlPath}. The configured base URL must be exactly ` +
+            `"${apiPrefix}" or "${apiPrefix}/<llm-proxy-id>" with no extra path segments ` +
+            `(e.g. no trailing "/v1") — the client appends the endpoint path itself.`,
           type: "invalid_request_error",
         },
       });

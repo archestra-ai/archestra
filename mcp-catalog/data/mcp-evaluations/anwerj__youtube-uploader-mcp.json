@@ -1,0 +1,182 @@
+{
+  "name": "anwerj__youtube-uploader-mcp",
+  "display_name": "youtube-uploader-mcp",
+  "description": "Upload Videos with the help of AI",
+  "author": {
+    "name": "anwerj"
+  },
+  "server": {
+    "command": "${__dirname}/youtube-uploader-mcp-linux-amd64",
+    "args": ["-client_secret_file", "${user_config.client_secret_file}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "client_secret_file": {
+      "type": "file",
+      "title": "Google Client Secret File",
+      "description": "Path to your Google OAuth 2.0 client_secret.json file obtained from Google Developer Console.",
+      "required": true,
+      "sensitive": false
+    }
+  },
+  "readme": "<p align=\"center\"> <img src=\"https://github.com/user-attachments/assets/21a9baa2-06e8-4af4-9bcd-1dbce52a2733\"/> </p>\n\n\n# YouTube Uploader MCP\n\nAI‑powered YouTube uploader—no CLI, no YouTube Studio, and no secrets ever shared with LLMs or third‑party apps and all free of cost! It includes OAuth2 authentication, token management, and video upload functionality.\n\n## Features\n- Upload videos to YouTube from MCP Client(Claude/Cursor/VS Code)\n- OAuth2 authentication flow\n- Access token and refresh token management\n- Multi Channel Support\n\n## Single Command Installation\n\n### For Mac and Linux\n```bash\n/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/anwerj/youtube-uploader-mcp/master/scripts/install.sh)\"\n```\n\n\n### For Windows(Powershell)\n```Powershell\nInvoke-WebRequest -UseBasicParsing \"https://raw.githubusercontent.com/anwerj/youtube-uploader-mcp/master/scripts/install.ps1\" -OutFile \"$env:TEMP\\install.ps1\"; PowerShell -NoProfile -ExecutionPolicy Bypass -File \"$env:TEMP\\install.ps1\"\n```\n### Expected result\n\nThis single command will\n\n1. Help in downloading oAuth client secret files, if not downloaded,\n2. Download the MCP server,\n3. Set minimum required permission to run mcp server,\n4. Auto update **Cluade Desktop config** with youtube-uploader-mcp server and\n5. At last print exact MCP config for any other clients **VS Code/Cursor/AnythingLLM etc**.\n\n## Demo\n### Setup and Demo Video\n<p align=\"center\"> <a href=\"https://youtu.be/fcywz5FIUpM\" target=\"_blank\"><img src=\"https://img.youtube.com/vi/fcywz5FIUpM/0.jpg\"/></a> </p>\n\n![output](https://github.com/user-attachments/assets/f8c2c303-ef77-4fa9-99a6-5de7f120ffac)\n\n## Manual Installation\nPlease check [Single Command Installation](#single-command-installation), proceed if you prefer manual installation.\n\nVisit the [Releases](https://github.com/anwerj/youtube-uploader-mcp/releases) page and download the appropriate binary for your operating system:\n\n- `youtube-uploader-mcp-linux-amd64`\n- `youtube-uploader-mcp-darwin-arm64`\n- `youtube-uploader-mcp-windows-amd64.exe`\n- etc.\n\n> You can use the latest versioned tag, e.g., `v1.0.0`.\n\n---\n\n### 2. Make it Executable (Linux/macOS)\n\n```bash\nchmod +x path/to/youtube-uploader-mcp-<os>-<arch>\n```\n\n### 3. Configure MCP (e.g., in Claude Desktop or Cursor)\n```json\n{\n  \"mcpServers\": {\n    \"youtube-uploader-mcp\": {\n      \"command\": \"/absolute/path/to/youtube-uploader-mcp-<os>-<arch>\",\n      \"args\": [\n        \"-client_secret_file\",\n        \"/absolute/path/to/client_secret.json(See Below)\"\n      ]\n    }\n  }\n}\n```\n### 4. Set Up Google OAuth 2.0\nTo upload to YouTube, you must configure OAuth and get a client_secret.json file from the Google Developer Console.\n\n➡️ Follow the guide in [youtube_oauth2_setup.md](./youtube_oauth2_setup.md) for a step-by-step walkthrough.\n\n### Usage\n\n- `main.go`: Entry point for the CLI\n- `youtube/`: YouTube API integration (OAuth, video upload, config)\n- `tool/`: Command-line tools for authentication, token, and upload\n- `hook/`, `logn/`: Supporting packages\n",
+  "category": "AI Tools",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "youtube-uploader-mcp": {
+        "command": "/absolute/path/to/youtube-uploader-mcp-<os>-<arch>",
+        "args": ["-client_secret_file", "/absolute/path/to/client_secret.json(See Below)"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "anwerj",
+    "repo": "youtube-uploader-mcp",
+    "url": "https://github.com/anwerj/youtube-uploader-mcp",
+    "name": "youtube-uploader-mcp",
+    "path": null,
+    "stars": 11,
+    "contributors": 1,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "b416f5f777624a9aadaf12f024b7c68f63a3ba0a"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.855Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "cloud.google.com/go/auth",
+      "importance": 9
+    },
+    {
+      "name": "golang.org/x/oauth2",
+      "importance": 9
+    },
+    {
+      "name": "google.golang.org/api",
+      "importance": 9
+    },
+    {
+      "name": "cloud.google.com/go/auth/oauth2adapt",
+      "importance": 8
+    },
+    {
+      "name": "google.golang.org/grpc",
+      "importance": 8
+    },
+    {
+      "name": "go.opentelemetry.io/otel",
+      "importance": 7
+    },
+    {
+      "name": "google.golang.org/genproto/googleapis/rpc",
+      "importance": 7
+    },
+    {
+      "name": "google.golang.org/protobuf",
+      "importance": 7
+    },
+    {
+      "name": "googleapis/gax-go/v2",
+      "importance": 7
+    },
+    {
+      "name": "go.opentelemetry.io/auto/sdk",
+      "importance": 6
+    },
+    {
+      "name": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+      "importance": 6
+    },
+    {
+      "name": "go.opentelemetry.io/otel/metric",
+      "importance": 6
+    },
+    {
+      "name": "go.opentelemetry.io/otel/trace",
+      "importance": 6
+    },
+    {
+      "name": "golang.org/x/net",
+      "importance": 6
+    },
+    {
+      "name": "googleapis/enterprise-certificate-proxy",
+      "importance": 6
+    },
+    {
+      "name": "cloud.google.com/go/compute/metadata",
+      "importance": 5
+    },
+    {
+      "name": "golang.org/x/crypto",
+      "importance": 5
+    },
+    {
+      "name": "google/s2a-go",
+      "importance": 5
+    },
+    {
+      "name": "go-logr/logr",
+      "importance": 4
+    },
+    {
+      "name": "golang.org/x/sys",
+      "importance": 4
+    },
+    {
+      "name": "felixge/httpsnoop",
+      "importance": 3
+    },
+    {
+      "name": "go-logr/stdr",
+      "importance": 3
+    },
+    {
+      "name": "golang.org/x/text",
+      "importance": 3
+    },
+    {
+      "name": "google/uuid",
+      "importance": 3
+    },
+    {
+      "name": "spf13/cast",
+      "importance": 3
+    },
+    {
+      "name": "yosida95/uritemplate/v3",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/anwerj/youtube-uploader-mcp\n\ngo 1.24.4\n\nrequire github.com/mark3labs/mcp-go v0.32.0\n\nrequire (\n\tcloud.google.com/go/auth v0.16.2 // indirect\n\tcloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect\n\tcloud.google.com/go/compute/metadata v0.7.0 // indirect\n\tgithub.com/felixge/httpsnoop v1.0.4 // indirect\n\tgithub.com/go-logr/logr v1.4.2 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/google/s2a-go v0.1.9 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect\n\tgithub.com/googleapis/gax-go/v2 v2.14.2 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.opentelemetry.io/auto/sdk v1.1.0 // indirect\n\tgo.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect\n\tgo.opentelemetry.io/otel v1.36.0 // indirect\n\tgo.opentelemetry.io/otel/metric v1.36.0 // indirect\n\tgo.opentelemetry.io/otel/trace v1.36.0 // indirect\n\tgolang.org/x/crypto v0.39.0 // indirect\n\tgolang.org/x/net v0.41.0 // indirect\n\tgolang.org/x/oauth2 v0.30.0 // indirect\n\tgolang.org/x/sys v0.33.0 // indirect\n\tgolang.org/x/text v0.26.0 // indirect\n\tgoogle.golang.org/api v0.238.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect\n\tgoogle.golang.org/grpc v1.73.0 // indirect\n\tgoogle.golang.org/protobuf v1.36.6 // indirect\n)\n"
+}

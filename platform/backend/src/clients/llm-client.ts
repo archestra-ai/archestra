@@ -1,4 +1,3 @@
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createCerebras } from "@ai-sdk/cerebras";
 import { createCohere } from "@ai-sdk/cohere";
@@ -32,9 +31,7 @@ import {
   normalizeAzureApiKey,
 } from "@/clients/azure-url";
 import {
-  decodeBedrockSigV4Marker,
-  getBedrockCredentialProvider,
-  getBedrockRegion,
+  buildBedrockProvider,
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -642,44 +639,10 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   bedrock: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
-      const region = getBedrockRegion(baseURL);
-
-      if (!apiKey && isBedrockIamAuthEnabled()) {
-        return createAmazonBedrock({
-          region,
-          baseURL,
-          credentialProvider: getBedrockCredentialProvider(),
-          headers,
-          fetch,
-        })(modelName);
-      }
-
-      const sigV4 = decodeBedrockSigV4Marker(apiKey);
-      if (sigV4) {
-        return createAmazonBedrock({
-          region,
-          baseURL,
-          accessKeyId: sigV4.accessKeyId,
-          secretAccessKey: sigV4.secretAccessKey,
-          sessionToken: sigV4.sessionToken,
-          headers,
-          fetch,
-        })(modelName);
-      }
-
-      return createAmazonBedrock({
-        apiKey,
-        region,
-        baseURL,
-        secretAccessKey: undefined,
-        accessKeyId: undefined,
-        sessionToken: undefined,
-        credentialProvider: undefined,
-        headers,
-        fetch,
-      })(modelName);
-    },
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      buildBedrockProvider({ apiKey, baseUrl: baseURL, headers, fetch })(
+        modelName,
+      ),
     defaultBaseUrl: config.llm.bedrock.baseUrl,
     apiKeyRequiredMessage: isBedrockIamAuthEnabled()
       ? undefined

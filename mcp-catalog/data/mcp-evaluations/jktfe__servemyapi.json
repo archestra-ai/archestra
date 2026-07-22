@@ -1,0 +1,102 @@
+{
+  "name": "jktfe__servemyapi",
+  "display_name": "serveMyAPI",
+  "description": "MCP server from Jktfe/serveMyAPI",
+  "author": {
+    "name": "Jktfe"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {
+      "PORT": "${user_config.port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port on which the HTTP server will listen.",
+      "default": 3000,
+      "required": false
+    }
+  },
+  "readme": "# ServeMyAPI\n\n[![smithery badge](https://smithery.ai/badge/@Jktfe/servemyapi)](https://smithery.ai/server/@Jktfe/servemyapi)\n\nA personal MCP (Model Context Protocol) server for securely storing and accessing API keys across projects using the macOS Keychain.\n\n> **IMPORTANT**: ServeMyAPI is a macOS-specific tool that relies on the macOS Keychain for secure storage. It is not compatible with Windows or Linux operating systems. See the security notes section for more details.\n\n## Overview\n\nServeMyAPI allows you to store API keys securely in the macOS Keychain and access them through a consistent MCP interface. This makes it easy to:\n\n- Store API keys securely (they're never visible in .env files or config files)\n- Access the same keys across multiple projects\n- Use natural language to store and retrieve keys (when used with LLMs like Claude)\n- Provide keys directly to your AI assistant when it needs to access services\n\n## Why ServeMyAPI over .ENV Files?\n\nUsing ServeMyAPI instead of traditional .ENV files solves several common problems:\n\n1. **GitHub Security Conflicts**: \n   - .ENV files need to be excluded from Git repositories for security (via .gitignore)\n   - This creates a \"hidden context\" problem where important configuration is invisible to collaborators and LLMs\n   - New developers often struggle with setting up the correct environment variables\n\n2. **LLM Integration Challenges**:\n   - LLMs like Claude can't directly access your .ENV files due to security constraints\n   - When LLMs need API keys to complete tasks, you often need manual workarounds\n   - ServeMyAPI lets your AI assistant request keys through natural language\n\n3. **Cross-Project Consistency**:\n   - With .ENV files, you typically need to duplicate API keys across multiple projects\n   - When keys change, you need to update multiple files\n   - ServeMyAPI provides a central storage location accessible from any project\n\nThis approach gives you the best of both worlds: secure storage of sensitive credentials without sacrificing visibility and accessibility for your AI tools.\n\n## Features\n\n- Secure storage of API keys in the macOS Keychain\n- Simple MCP tools for storing, retrieving, listing, and deleting keys\n- Convenient CLI interface for terminal-based key management\n- Support for both stdio and HTTP/SSE transports\n- Compatible with any MCP client (Claude Desktop, etc.)\n\n## Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/yourusername/servemyapi.git\ncd servemyapi\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n\n## Usage\n\n### CLI Interface\n\nServeMyAPI comes with a command-line interface for quick key management directly from your terminal:\n\n```bash\n# Install the CLI globally\nnpm run build\nnpm link\n\n# List all stored API keys\napi-key list\n\n# Get a specific API key\napi-key get github_token\n\n# Store a new API key\napi-key store github_token ghp_123456789abcdefg\n\n# Delete an API key\napi-key delete github_token\n\n# Display help\napi-key help\n```\n\n### Running as a stdio server\n\nThis is the simplest way to use ServeMyAPI as an MCP server, especially when working with Claude Desktop:\n\n```bash\nnpm start\n```\n\n### Running as an HTTP server\n\nFor applications that require HTTP access:\n\n```bash\nnode dist/server.js\n```\n\nThis will start the server on port 3000 (or the port specified in the PORT environment variable).\n\n### Using Smithery\n\nServeMyAPI is available as a hosted service on [Smithery](https://smithery.ai/server/@Jktfe/servemyapi).\n\n```javascript\nimport { createTransport } from \"@smithery/sdk/transport.js\"\n\nconst transport = createTransport(\"https://server.smithery.ai/@Jktfe/servemyapi\")\n\n// Create MCP client\nimport { Client } from \"@modelcontextprotocol/sdk/client/index.js\"\n\nconst client = new Client({\n\tname: \"Test client\",\n\tversion: \"1.0.0\"\n})\nawait client.connect(transport)\n\n// Use the server tools with your LLM application\nconst tools = await client.listTools()\nconsole.log(`Available tools: ${tools.map(t => t.name).join(\", \")}`)\n```\n\nFor more details, see the [Smithery API documentation](https://smithery.ai/server/@Jktfe/servemyapi/api).\n\n### Configuring MCP Clients\n\nServeMyAPI works with any MCP-compatible client. Example configuration files are provided in the `examples` directory.\n\n#### Claude Desktop\n\nTo use ServeMyAPI with Claude Desktop:\n\n1. Locate or create the Claude Desktop configuration file:\n   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - **Windows**: `%AppData%\\Claude\\claude_desktop_config.json`\n\n2. Add ServeMyAPI to the `mcpServers` section (you can copy from `examples/claude_desktop_config.json`):\n   ```json\n   {\n     \"mcpServers\": {\n       \"serveMyAPI\": {\n         \"command\": \"node\",\n         \"args\": [\n           \"/ABSOLUTE/PATH/TO/servemyapi/dist/index.js\"\n         ]\n       }\n     }\n   }\n   ```\n\n3. Replace `/ABSOLUTE/PATH/TO/servemyapi` with the actual path to your ServeMyAPI installation.\n4. Restart Claude Desktop.\n\n#### Windsurf\n\nTo use ServeMyAPI with Windsurf:\n\n1. Open Windsurf editor and navigate to Settings\n2. Add ServeMyAPI to your MCP server configuration using the example in `examples/windsurf_config.json`\n3. Adapt the paths to your local installation\n\n## MCP Tools\n\nServeMyAPI exposes the following tools:\n\n### store-api-key\n\nStore an API key in the keychain.\n\nParameters:\n- `name`: The name/identifier for the API key\n- `key`: The API key to store\n\nExample (from Claude):\n```\nUsing serveMyAPI, store my API key ABC123XYZ as \"OpenAI API Key\"\n```\n\n### get-api-key\n\nRetrieve an API key from the keychain.\n\nParameters:\n- `name`: The name/identifier of the API key to retrieve\n\nExample (from Claude):\n```\nUsing serveMyAPI, get the API key named \"OpenAI API Key\"\n```\n\n### delete-api-key\n\nDelete an API key from the keychain.\n\nParameters:\n- `name`: The name/identifier of the API key to delete\n\nExample (from Claude):\n```\nUsing serveMyAPI, delete the API key named \"OpenAI API Key\"\n```\n\n### list-api-keys\n\nList all stored API keys.\n\nNo parameters required.\n\nExample (from Claude):\n```\nUsing serveMyAPI, list all my stored API keys\n```\n\n## Security Notes\n\n- All API keys are stored securely in the macOS Keychain\n- Keys are only accessible to the current user\n- The keychain requires authentication for access\n- No keys are stored in plaintext or logged anywhere\n\n## Roadmap\n\nFuture plans for ServeMyAPI include:\n\n- **Code Scanner Tool**: A tool that automatically scans your codebase for API endpoints, sensitive URLs, and environment variables, then suggests names to store them in the Keychain. This would allow developers to continue using .ENV files in their regular workflow while ensuring credentials are also available to LLMs and other tools when needed.\n\n- **Cross-Platform Support**: Investigating secure credential storage options for Windows and Linux to make ServeMyAPI more widely accessible.\n\n- **Integration with Popular Frameworks**: Providing easy integration with frameworks like Next.js, Express, and others.\n\n- **UI for Key Management**: A simple web interface for managing your stored API keys directly.\n\nFeel free to suggest additional features or contribute to the roadmap by opening an issue or pull request.\n\n## Development\n\n```bash\n# Run in development mode with hot reload\nnpm run dev\n\n# Use the CLI during development\nnpm run cli list\n\n# Lint the code\nnpm run lint\n\n# Build for production\nnpm run build\n```\n\n## License\n\nMIT",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "servemyapi-stdio": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "servemyapi-http": {
+        "command": "node",
+        "args": ["dist/server.js"],
+        "env": {}
+      },
+      "servemyapi-configured": {
+        "command": "node",
+        "args": ["/ABSOLUTE/PATH/TO/servemyapi/dist/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Jktfe",
+    "repo": "serveMyAPI",
+    "url": "https://github.com/Jktfe/serveMyAPI",
+    "name": "jktfe__servemyapi",
+    "path": null,
+    "stars": 21,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "73bcaf603f29a513da9f99f0a70a552c2c801428"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:38.616Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "keytar",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"servemyapi\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Personal MCP server for securely storing and accessing API keys across projects using the macOS Keychain\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"api-key\": \"dist/cli.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts\",\n    \"lint\": \"eslint 'src/**/*.ts'\",\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\",\n    \"cli\": \"node dist/cli.js\"\n  },\n  \"keywords\": [\"mcp\", \"api\", \"keychain\", \"macos\"],\n  \"author\": \"James King\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"@types/express\": \"^5.0.0\",\n    \"@types/node\": \"^22.13.10\",\n    \"express\": \"^5.0.1\",\n    \"keytar\": \"^7.9.0\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.8.2\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@typescript-eslint/eslint-plugin\": \"^8.26.1\",\n    \"@typescript-eslint/parser\": \"^8.26.1\",\n    \"eslint\": \"^9.22.0\",\n    \"nodemon\": \"^3.1.9\"\n  }\n}\n"
+}

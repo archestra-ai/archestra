@@ -175,6 +175,97 @@ const CanvasFrameEventSchema = z
   .strict();
 
 /**
+ * Opens (or reopens) one canvas's encoded video stream: the codec and coded
+ * size a decoder needs before it can take chunks. Emitted when the recorder
+ * (re)configures the encoder — at stream start and on a canvas resize — and
+ * replayed as the decoder-reset point: every seek re-feeds from the config,
+ * then the nearest keyframe.
+ *
+ * This is the stored (JSON) form of the stream; `description` is base64 codec
+ * extradata for codecs that carry any. In memory the frame data flows as raw
+ * bytes — base64 exists only in the bundle at rest.
+ */
+const VideoConfigEventSchema = z
+  .object({
+    kind: z.literal("video-config"),
+    t: EventTimeSchema,
+    sel: z.string().max(1_000),
+    codec: z.string().max(64),
+    codedWidth: z.number().int().positive(),
+    codedHeight: z.number().int().positive(),
+    description: z.string().max(65_536).optional(),
+  })
+  .strict();
+
+/**
+ * One encoded video chunk of a canvas's stream — what a real video file is
+ * made of: rare standalone keyframes and cheap motion-compensated deltas, an
+ * order of magnitude smaller than per-frame stills. `tsUs` is the encoder's
+ * microsecond timestamp (monotonic within the stream); `data` is the chunk's
+ * bytes, base64 in this stored form only.
+ *
+ * The `data` cap (~1.5MB of chunk before base64) is a corruption backstop,
+ * not a rate control — the recorder's byte-rate governor and frame shed
+ * bound throughput at record time. It is sized to admit the largest single
+ * chunk the recorder can legitimately emit: typical deltas are kilobytes and
+ * keyframes hundreds of kilobytes, but the SDK's worst case — a
+ * max-quantizer keyframe of incompressible content (noise, particles) — runs
+ * to megabytes, and a real keyframe refused here reads as a broken
+ * recording.
+ */
+const VideoChunkEventSchema = z
+  .object({
+    kind: z.literal("video-chunk"),
+    t: EventTimeSchema,
+    sel: z.string().max(1_000),
+    type: z.enum(["key", "delta"]),
+    tsUs: z.number().int().min(0),
+    data: z.string().max(2_000_000),
+  })
+  .strict();
+
+/**
+ * Opens (or reopens) the recording's single mixed audio stream: the codec and
+ * sample format a decoder needs before it can take chunks. The recorder mixes
+ * every app audio source — Web Audio graphs and `<audio>`/`<video>` playback —
+ * into one Opus stream, so unlike video there is no per-canvas `sel`; there is
+ * exactly one audio stream per recording. Replayed as the decoder-reset point:
+ * a seek re-feeds this config, then the chunks from the seek point.
+ *
+ * Stored (JSON) form; `description` is base64 codec extradata (Opus carries its
+ * channel/pre-skip config here). In memory the bytes flow raw — base64 exists
+ * only in the bundle at rest.
+ */
+const AudioConfigEventSchema = z
+  .object({
+    kind: z.literal("audio-config"),
+    t: EventTimeSchema,
+    codec: z.string().max(64),
+    sampleRate: z.number().int().positive(),
+    numberOfChannels: z.number().int().positive().max(8),
+    description: z.string().max(65_536).optional(),
+  })
+  .strict();
+
+/**
+ * One encoded audio chunk of the recording's mixed stream. `tsUs` is the
+ * encoder's microsecond timestamp (monotonic within the stream); `data` is the
+ * chunk's bytes, base64 in this stored form only. Opus frames are all
+ * independently decodable, so — unlike video — there is no key/delta split.
+ *
+ * The `data` cap matches the video chunk's: a corruption backstop far above any
+ * real Opus frame (which run to a few kilobytes), not a rate control.
+ */
+const AudioChunkEventSchema = z
+  .object({
+    kind: z.literal("audio-chunk"),
+    t: EventTimeSchema,
+    tsUs: z.number().int().min(0),
+    data: z.string().max(2_000_000),
+  })
+  .strict();
+
+/**
  * One DOM change: an element's markup after it changed, or one attribute.
  *
  * Replay applies these rather than re-running the app, so what the viewer sees
@@ -201,6 +292,10 @@ export const AppRecordingEventSchema = z.discriminatedUnion("kind", [
   McpEventSchema,
   SegmentMarkerEventSchema,
   CanvasFrameEventSchema,
+  VideoConfigEventSchema,
+  VideoChunkEventSchema,
+  AudioConfigEventSchema,
+  AudioChunkEventSchema,
   DomMutationEventSchema,
 ]);
 export type AppRecordingEvent = z.infer<typeof AppRecordingEventSchema>;
@@ -373,9 +468,38 @@ export const APP_RECORDING_RENDER_FPS = 24;
  */
 export const APP_RECORDING_MAX_EXPORT_MS = 30_000;
 
+/**
+ * The largest recording bundle (its serialized JSON) the export surfaces
+ * accept, shared by the video renderer and the gallery submission.
+ *
+ * The number is GitHub's: the gallery submits the bundle as one file through
+ * the contents API, which refuses files over 100MB — and refuses them as
+ * opaque 5xx weather, not as a limit anyone can read. The renderer could
+ * technically chew somewhat past this, but a bundle too big to share is
+ * already broken for its purpose, and one ceiling with one honest message
+ * beats two. Capture keeps real bundles far below it: the recording SDK's
+ * byte-rate governor bounds video at ~4 Mbit/s across all streams, so even a
+ * three-minute all-motion raw take stays around 90MB serialized, and a
+ * typical 30s cut is ~20MB.
+ */
+export const APP_RECORDING_MAX_BUNDLE_BYTES = 100 * 1024 * 1024;
+
 export const APP_RECORDING_RENDER_REGION_ATTR =
   "data-app-recording-render-region";
 export const APP_RECORDING_RENDER_REGION_SELECTOR = `[${APP_RECORDING_RENDER_REGION_ATTR}]`;
+
+/**
+ * The canonical width:height aspect the app is recorded at — the side panel
+ * locks itself to this shape while a recording runs, and the player's app
+ * stage replays at the recorded shape. One constant on both ends means a
+ * recorded session scales into the player by a single uniform factor: no
+ * letterbox, no distortion, and pointer coordinates that line up exactly.
+ * 4:5 — the near-square portrait standard (the Instagram-post shape): still
+ * a tall column beside the chat, the surface a recording nudges the app
+ * into, but square-ish enough that apps aren't forced into a phone-narrow
+ * strip and the player splits close to evenly between chat and app.
+ */
+export const APP_RECORDING_VIEWPORT_ASPECT = 4 / 5;
 
 const AppRecordingEnhancementSchema = z
   .object({

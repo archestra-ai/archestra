@@ -1,0 +1,88 @@
+{
+  "name": "mrexodia__user-feedback-mcp",
+  "display_name": "user-feedback-mcp",
+  "description": "Simple MCP Server to enable a human-in-the-loop workflow in tools like Cline and Cursor.",
+  "author": {
+    "name": "mrexodia"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# User Feedback MCP\r\n\r\nSimple [MCP Server](https://modelcontextprotocol.io/introduction) to enable a human-in-the-loop workflow in tools like [Cline](https://cline.bot) and [Cursor](https://www.cursor.com). This is especially useful for developing desktop applications that require complex user interactions to test.\r\n\r\n![Screenshot showing the feedback UI](https://github.com/mrexodia/user-feedback-mcp/blob/main/.github/feedback-ui.png?raw=true)\r\n\r\n## Prompt Engineering\r\n\r\nFor the best results, add the following to your custom prompt:\r\n\r\n> Before completing the task, use the user_feedback MCP tool to ask the user for feedback.\r\n\r\nThis will ensure Cline uses this MCP server to request user feedback before marking the task as completed.\r\n\r\n## `.user-feedback.json`\r\n\r\nHitting _Save Configuration_ creates a `.user-feedback.json` file in your project directory that looks like this:\r\n\r\n```json\r\n{\r\n  \"command\": \"npm run dev\",\r\n  \"execute_automatically\": false\r\n}\r\n```\r\n\r\nThis configuration will be loaded on startup and if `execute_automatically` is enabled your `command` will be instantly executed (you will not have to click _Run_ manually). For multi-step commands you should use something like [Task](https://taskfile.dev).\r\n\r\n## Installation (Cline)\r\n\r\nTo install the MCP server in Cline, follow these steps (see screenshot):\r\n\r\n![Screenshot showing installation steps](https://github.com/mrexodia/user-feedback-mcp/blob/main/.github/cline-installation.png?raw=true)\r\n\r\n1. Install [uv](https://github.com/astral-sh/uv) globally:\r\n   - Windows: `pip install uv`\r\n   - Linux/Mac: `curl -LsSf https://astral.sh/uv/install.sh | sh`\r\n2. Clone this repository, for this example `C:\\MCP\\user-feedback-mcp`.\r\n3. Navigate to the Cline _MCP Servers_ configuration (see screenshot).\r\n4. Click on the _Installed_ tab.\r\n5. Click on _Configure MCP Servers_, which will open `cline_mcp_settings.json`.\r\n6. Add the `user-feedback-mcp` server:\r\n\r\n```json\r\n{\r\n  \"mcpServers\": {\r\n    \"github.com/mrexodia/user-feedback-mcp\": {\r\n      \"command\": \"uv\",\r\n      \"args\": [\r\n        \"--directory\",\r\n        \"c:\\\\MCP\\\\user-feedback-mcp\",\r\n        \"run\",\r\n        \"server.py\"\r\n      ],\r\n      \"timeout\": 600,\r\n      \"autoApprove\": [\r\n        \"user_feedback\"\r\n      ]\r\n    }\r\n  }\r\n}\r\n\r\n```\r\n\r\n## Development\r\n\r\n```sh\r\nuv run fastmcp dev server.py\r\n```\r\n\r\nThis will open a web interface at http://localhost:5173 and allow you to interact with the MCP tools for testing.\r\n\r\n## Available tools\r\n\r\n```\r\n<use_mcp_tool>\r\n<server_name>github.com/mrexodia/user-feedback-mcp</server_name>\r\n<tool_name>user_feedback</tool_name>\r\n<arguments>\r\n{\r\n  \"project_directory\": \"C:/MCP/user-feedback-mcp\",\r\n  \"summary\": \"I've implemented the changes you requested.\"\r\n}\r\n</arguments>\r\n</use_mcp_tool>\r\n```",
+  "category": "Development",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "github.com/mrexodia/user-feedback-mcp": {
+        "command": "uv",
+        "args": ["--directory", "c:\\MCP\\user-feedback-mcp", "run", "server.py"],
+        "env": {}
+      },
+      "github.com/mrexodia/user-feedback-mcp-npm-dev": {
+        "command": "npm",
+        "args": ["run", "dev"],
+        "env": {}
+      },
+      "github.com/mrexodia/user-feedback-mcp-fastmcp-dev": {
+        "command": "uv",
+        "args": ["run", "fastmcp", "dev", "server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mrexodia",
+    "repo": "user-feedback-mcp",
+    "url": "https://github.com/mrexodia/user-feedback-mcp",
+    "name": "mrexodia__user-feedback-mcp",
+    "path": null,
+    "stars": 47,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b9c420a9dc39a5589be843779b940acbb5e5e08e"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:39.935Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "psutil",
+      "importance": 6
+    },
+    {
+      "name": "pyside6",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"user-feedback-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"fastmcp>=0.4.1\",\n    \"psutil>=7.0.0\",\n    \"pyside6>=6.8.2.1\",\n]\n"
+}

@@ -1,0 +1,108 @@
+{
+  "name": "ipfred__aiwen-mcp-server-geoip",
+  "display_name": "aiwen-mcp-server-geoip",
+  "description": "埃文IP定位MCP",
+  "author": {
+    "name": "ipfred"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "aiwen-mcp-server-geoip"],
+    "env": {
+      "AIWEN_API_KEY": "${user_config.aiwen_api_key}",
+      "IPV4_ACCURACY": "${user_config.ipv4_accuracy}",
+      "IPV6_ACCURACY": "${user_config.ipv6_accuracy}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "aiwen_api_key": {
+      "type": "string",
+      "title": "Aiwen API Key",
+      "description": "Your API key for the Aiwen IP Location API. Obtain it from the Aiwen Technology website.",
+      "sensitive": true,
+      "required": true
+    },
+    "ipv4_accuracy": {
+      "type": "string",
+      "title": "IPv4 Location Accuracy",
+      "description": "Configures the maximum location accuracy for IPv4 addresses. Options: city (城市级), district (区县级), street (街道级).",
+      "default": "city",
+      "required": false
+    },
+    "ipv6_accuracy": {
+      "type": "string",
+      "title": "IPv6 Location Accuracy",
+      "description": "Configures the maximum location accuracy for IPv6 addresses. Options: city (城市级), district (区县级), street (街道级).",
+      "default": "city",
+      "required": false
+    }
+  },
+  "readme": "# 埃文IP定位 MCP Server\n\n## 介绍\n[埃文科技](https://www.ipplus360.com/) 是全球IP地址高精准实时定位技术领航者 全球网络空间地图大数据服务提供商\n\n埃文科技IP定位API已全面兼容MCP协议\n\nMCP Server for the Aiwen IP Location API\n\n## 工具介绍\n\n1. IP定位 `aiwen_ip_location`\n    - 描述：IP定位 根据IP地址获取IP位置(支持城市、区县、街道三种精度)、经纬度、所属机构、运营商、精度等信息。\n    - 参数： `ip`：IP地址，支持IPv4、IPv6\n    - 输出：位置信息，大洲`continent`,国家`country` 所属机构`owner`,运营商`isp`,邮编`zipcode`,时区`timezone`，精度`accuracy`，国家编码`areacode`,AS号`asnumber`,纬度`lat`,经度`lng`,省份`prov`,城市`city`,区县`district`,街道级地址`address`\n\n> 1. IP定位产品分三个定位精度：通过环境变量配置(见下方环境变量配置)\n> 2. 城市级：最大定位精度返回到城市 city\n> 3. 区县级：最大定位精度返回到区县 district\n> 4. 街道级：最大定位精度返回到街道 address \n\n2. 获取当前网络IP地址和位置信息 `user_network_ip`\n    - 描述：获取当前网络IP地址和IP位置信息(支持城市、区县、街道三种精度),支持IPv4和IPv6\n    - 参数 无\n    - 输出结果 同上\n\n3. IP应用场景 `ip_usage_scene`\n    - 描述：IP应用场景 根据IP地址获取IP应用场景 输出包括保留IP、未分配IP、组织机构、移动网络、家庭宽带、数据中心、企业专线、CDN、卫星通信、交换中心、Anycast等网络应用场景\n    - 参数： `ip`：IP地址，支持IPv4、IPv6\n    - 输出：应用场景 `scene`\n\n4. IP Whois `ip_whois_info`\n    - 描述：whois信息 根据IP地址查询Whois注册信息 获取IP所属网段范围、所属机构名称、技术联系人、管理员等信息\n    - 参数： `ip`：IP地址，支持IPv4\n    - 输出：Whois注册信息，`netname`,`status`,`owner`,`techinfo`,`admininfo`等\n\n5. AS Whois `ip_as_mapping`\n    - 描述：查询IP地址AS号(自治域号)信息\n    - 参数： `ip`：IP地址，支持IPv4\n    - 输出：AS 相关信息，`asname`,`asn`,`allocated`，`type`,`industry`等\n\n6. IP宿主信息 `ip_host_info`\n    - 描述：IP宿主信息 根据IP地址查询IP的自治域编号(AS Number)、AS名称、运营商、所属机构等归属属性\n    - 参数： `ip`：IP地址，支持IPv4\n    - 输出：AS 相关信息，`asname`,`asnumber`,`isp`，`owner`等\n\n7. IP风险画像 `ip_risk_portrait`\n    - 描述：IP风险画像 根据IP地址获取IP风险画像 识别VPN、代理、秒拨、数据中心、Tor节点、端口扫描、暴力破解等高风险行为,输出风险评分、分级结果、IP位置等信息\n    - 参数：`ip`：IP地址，支持IPv4\n    - 输出：风险标签`tag`, 风险等级`level`, 风险分数`score`, 位置场景信息`continent`,`country`,`prov`,`city`,`scene`等\n\n8. IP真假人 `ip_identity_check`\n    - 描述：IP真假人 根据IP地址判断访问者是否为真实用户或机器流量 返回真人概率(real_person_rate)、秒播概率(mb_rate)\n    - 参数：`ip`：IP地址，支持IPv4\n    - 输出：真人概率`real_person_rate`, 秒播概率`mb_rate`, 自治域编号`asnumber`,运营商`isp`\n\n9. IPv4行业 `ip_industry_classify`\n    - 描述：IPv4行业 查询IP地址行业分类\n    - 参数：`ip`：IP地址，支持IPv4\n    - 输出：IPv4 所属行业`industry`\n\n> 接口的详细返回数据，参考官方的API文档\n\n## 快速使用\n\n### 获取API KEY\n通过埃文科技官网 [获取KEY](https://mall.ipplus360.com/pros/IPVFourGeoAPI?source=mcp)\n\n### 环境变量配置\n\n环境变量说明：\n1. **`AIWEN_API_KEY`** 产品的API KEY\n2. **`IPV4_ACCURACY`**（默认值：`city`）用于配置IPv4定位精度，根据所购API版本选择一个值：  \n可选值：`city`（城市级）、`district`（区级）、`street`（街道级）\n3. **`IPV6_ACCURACY`**（默认值：`city`）用于配置IPv6定位精度，根据所购API版本选择一个值：  \n可选值：`city`（城市级）、`district`（区级）、`street`（街道级）\n\n\n### MCP HOST中配置使用\n#### cursor\n\n\n\n```json\n{\n    \"mcpServers\": {\n        \"aiwen-iplocation\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"-y\",\n                \"aiwen-mcp-server-geoip\"\n            ],\n            \"env\": {\n                \"AIWEN_API_KEY\": \"xxxxxx\",\n                \"IPV4_ACCURACY\": \"city\",\n                \"IPV6_ACCURACY\": \"city\",\n            }\n        }\n    }\n}\n```\n#### vscode\n```json\n{\n    \"mcpServers\": {\n        \"aiwen-iplocation\": {\n            \"command\": \"npx\",\n            \"args\": [\n                \"-y\",\n                \"aiwen-mcp-server-geoip\"\n            ],\n            \"env\": {\n                \"AIWEN_API_KEY\": \"xxxxxx\",\n                \"IPV4_ACCURACY\": \"city\",\n                \"IPV6_ACCURACY\": \"city\",\n            }\n        }\n    }\n}\n```\n\n## 应用场景\n\n- 需要快速查询 IP 地址地理位置的应用  \n- 网络安全和访问控制 ，验证IP来源\n- IP地理位置相关的数据分析，科学研究\n- 获取 IP 场景数据的应用\n- 获取 IP whois信息的应用\n- 获取 IP AS信息的应用\n- 获取 IP 宿主信息的应用\n- 获取 IP 风险画像的应用\n- 获取 IP 真假人信息的应用\n- 获取 IP 行业信息的应用",
+  "category": "Data",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "aiwen-mcp-server-geoip": {
+        "command": "npx",
+        "args": ["-y", "aiwen-mcp-server-geoip"],
+        "env": {
+          "AIWEN_API_KEY": "xxxxxx",
+          "IPV4_ACCURACY": "city",
+          "IPV6_ACCURACY": "city"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ipfred",
+    "repo": "aiwen-mcp-server-geoip",
+    "url": "https://github.com/ipfred/aiwen-mcp-server-geoip",
+    "name": "aiwen-mcp-server-geoip",
+    "path": null,
+    "stars": 3,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e09e2b83f8d69eb049d8612ad7839c11aa0e8029"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.023Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== node/package.json ===\n{\n  \"name\": \"aiwen-mcp-server-geoip\",\n  \"version\": \"1.1.0\",\n  \"description\": \"MCP server for using the aiwen geo loc API\",\n  \"license\": \"MIT\",\n  \"author\": \"fred\",\n  \"homepage\": \"\",\n  \"bugs\": \"\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-aiwen-geoip\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"main\": \"build/index.js\",\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x build/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"keywords\": [\"mcp\", \"geoip\", \"iplocation\"],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.9.0\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"node-fetch\": \"^3.3.2\"\n  },\n  \"devDependencies\": {\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\",\n    \"registry\": \"https://registry.npmjs.org\"\n  }\n}\n\n\n=== python/pyproject.toml ===\n[project]\nname = \"python\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"mcp[cli]>=1.6.0\",\n]\n"
+}

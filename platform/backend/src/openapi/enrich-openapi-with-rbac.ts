@@ -238,4 +238,5 @@ const PUBLIC_UNAUTHENTICATED_ROUTE_IDS = new Set<RouteId>([
   RouteId.GetPublicConfig,
   RouteId.GetPublicIdentityProviders,
   RouteId.GetAppearanceSettings,
+  RouteId.GetConnectionHealth,
 ]);

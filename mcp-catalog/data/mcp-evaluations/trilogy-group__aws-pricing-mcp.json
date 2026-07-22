@@ -1,0 +1,70 @@
+{
+  "name": "trilogy-group__aws-pricing-mcp",
+  "display_name": "aws-pricing-mcp",
+  "description": "An MCP server that exposes AWS EC2 pricing data with an option to search by CPU, RAM, networking",
+  "author": {
+    "name": "trilogy-group"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/src/server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# AWS Pricing MCP\n\nA Model Context Protocol (MCP) server that provides AWS EC2 instance pricing data. This project includes both a traditional server implementation and a serverless Lambda function.\n\n## Quick Start\n\n### Lambda Deployment (Recommended)\n\nThe Lambda function provides the same functionality as the server but with serverless benefits:\n\n```bash\n# Build and deploy\nsam build\nsam deploy --guided\n\n# Get the Function URL\naws cloudformation describe-stacks \\\n  --stack-name aws-pricing-mcp \\\n  --query 'Stacks[0].Outputs[?OutputKey==`FunctionUrl`].OutputValue' \\\n  --output text\n```\n\nFor detailed Lambda documentation, see [LAMBDA.md](LAMBDA.md).\n\n### Server Deployment\n\n```bash\n# Install dependencies\npip install -r requirements.txt\n\n# Run the server\npython src/server.py\n```\n\n## Features\n\n- **EC2 Pricing Data**: Find the cheapest EC2 instances based on specifications\n- **Multiple Pricing Models**: On Demand, Reserved Instances, CloudFix RightSpend\n- **Flexible Filtering**: Region, platform, tenancy, vCPU, RAM, GPU, etc.\n- **JSON-RPC 2.0**: Full MCP protocol compliance\n- **Serverless Option**: Lambda function with Function URL\n- **Dynamic Data**: Always up-to-date pricing from S3\n\n## Documentation\n\n- [LAMBDA.md](LAMBDA.md) - Comprehensive Lambda documentation\n- [MCP.md](MCP.md) - MCP protocol examples\n- [PRICING.md](PRICING.md) - Pricing data format and sources\n- [BUILD.md](BUILD.md) - Build instructions\n\n## License\n\n[LICENSE](LICENSE)\n",
+  "category": "Cloud",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "aws-pricing-mcp": {
+        "command": "python",
+        "args": ["src/server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "trilogy-group",
+    "repo": "aws-pricing-mcp",
+    "url": "https://github.com/trilogy-group/aws-pricing-mcp",
+    "name": "trilogy-group__aws-pricing-mcp",
+    "path": null,
+    "stars": 15,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a9c19b8e0dc1a3a4dcd8146e1cc7a1691ce6ee33"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:19.109Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nfastmcp"
+}

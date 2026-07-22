@@ -1,0 +1,306 @@
+{
+  "name": "flux159__mcp-server-kubernetes",
+  "display_name": "Kubernetes",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxLjAzZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI0OSI+PHBhdGggZmlsbD0iIzMyNmRlNiIgZD0iTTgyLjA4NSAyNDQuOTM0Yy01Ljk0NiAwLTExLjU2MS0yLjY0Mi0xNS4zNi03LjQzMkw4LjkyIDE2NS42NTdjLTMuNzk5LTQuNzktNS4yODUtMTAuOS0zLjc5OS0xNi44NDdsMjAuNjQ1LTg5LjY4MmMxLjMyMS01Ljk0NiA1LjI4NS0xMC43MzYgMTAuNzM2LTEzLjM3OGw4My41NzEtMzkuOTdjMi42NDMtMS4zMiA1LjYxNi0xLjk4MSA4LjU4OS0xLjk4MXM1Ljk0NS42NiA4LjU4OCAxLjk4Mmw4My41NzIgMzkuODA0YzUuNDUgMi42NDIgOS40MTQgNy40MzIgMTAuNzM1IDEzLjM3OGwyMC42NDUgODkuNjgyYzEuMzIyIDUuOTQ2IDAgMTIuMDU3LTMuNzk4IDE2Ljg0N2wtNTcuODA3IDcxLjg0NWMtMy43OTkgNC42MjQtOS40MTQgNy40MzItMTUuMzYgNy40MzJ6Ii8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEyOC40OTUgNy45MjhjMi4zMTMgMCA0LjYyNS40OTUgNi43NzIgMS40ODZsODMuNTcyIDM5LjgwNGM0LjI5NCAyLjE0NyA3LjU5NyA2LjExMSA4LjU4OCAxMC43MzZsMjAuNjQ1IDg5LjY4MmMxLjE1NiA0Ljc5IDAgOS43NDUtMy4xMzggMTMuNTQzbC01Ny44MDYgNzEuODQ2Yy0yLjk3MyAzLjc5OC03LjU5OCA1Ljk0NS0xMi4zODcgNS45NDVIODIuMDg1Yy00Ljc5IDAtOS40MTQtMi4xNDctMTIuMzg3LTUuOTQ1bC01Ny44MDYtNzEuODQ2Yy0yLjk3My0zLjc5OC00LjEzLTguNzUzLTMuMTM4LTEzLjU0M2wyMC42NDUtODkuNjgyYzEuMTU2LTQuNzkgNC4yOTQtOC43NTQgOC41ODgtMTAuNzM2TDEyMS41NiA5LjI1YzIuMTQ3LS44MjYgNC42MjQtMS4zMjEgNi45MzYtMS4zMjFtMC03Ljc2M2MtMy40NjggMC02LjkzNi44MjYtMTAuMjQgMi4zMTJsLTgzLjU3MSAzOS45N2MtNi42MDcgMy4xMzgtMTEuMjMxIDguOTE4LTEyLjg4MyAxNi4wMkwxLjE1NiAxNDguMTVjLTEuNjUxIDcuMTAyIDAgMTQuMzY5IDQuNjI1IDIwLjE1bDU3LjgwNiA3MS44NDVjNC40NiA1LjYxNSAxMS4yMzEgOC43NTMgMTguMzMzIDguNzUzaDkyLjY1NWM3LjEwMiAwIDEzLjg3NC0zLjEzOCAxOC4zMzMtOC43NTNsNTcuODA3LTcxLjg0NmM0LjYyNC01LjYxNSA2LjI3Ni0xMy4wNDcgNC42MjQtMjAuMTVsLTIwLjY0NS04OS42ODJjLTEuNjUxLTcuMTAyLTYuMjc2LTEyLjg4Mi0xMi44ODItMTYuMDJMMTM4LjU3IDIuNDc2QzEzNS40MzIuOTkxIDEzMS45NjQuMTY1IDEyOC40OTUuMTY1Ii8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTIxMi4yMzIgMTQyLjUzNHEtLjI0OCAwIDAgMGgtLjE2NWMtLjE2NSAwLS4zMyAwLS4zMy0uMTY1Yy0uMzMgMC0uNjYtLjE2NS0uOTkxLS4xNjVjLTEuMTU2LS4xNjUtMi4xNDctLjMzLTMuMTM4LS4zM2MtLjQ5NiAwLS45OTEgMC0xLjY1Mi0uMTY2aC0uMTY1Yy0zLjQ2OC0uMzMtNi4yNzYtLjY2LTguOTE5LTEuNDg2Yy0xLjE1Ni0uNDk2LTEuNDg2LTEuMTU2LTEuODE3LTEuODE3YzAtLjE2NS0uMTY1LS4xNjUtLjE2NS0uMzNsLTIuMTQ3LS42NmE2NS4zIDY1LjMgMCAwIDAtMS4xNTYtMjMuMjg5YTY4IDY4IDAgMCAwLTkuMjQ5LTIxLjYzNmwxLjY1Mi0xLjQ4NnYtLjMzYzAtLjgyNi4xNjUtMS42NTIuODI1LTIuNDc4YzEuOTgyLTEuODE3IDQuNDYtMy4zMDMgNy40MzMtNS4xMmMuNDk1LS4zMy45OS0uNDk1IDEuNDg2LS44MjZjLjk5MS0uNDk1IDEuODE3LS45OSAyLjgwOC0xLjY1MWMuMTY1LS4xNjUuNDk1LS4zMy44MjYtLjY2Yy4xNjUtLjE2Ni4zMy0uMTY2LjMzLS4zMzFjMi4zMTItMS45ODIgMi44MDgtNS4yODUgMS4xNTYtNy40MzNjLS44MjYtMS4xNTYtMi4zMTItMS44MTYtMy43OTktMS44MTZjLTEuMzIgMC0yLjQ3Ny40OTUtMy42MzMgMS4zMjFsLS4zMy4zM2MtLjMzLjE2NS0uNDk2LjQ5Ni0uODI2LjY2MWMtLjgyNi44MjYtMS40ODcgMS40ODYtMi4xNDcgMi4zMTJjLS4zMy4zMy0uNjYuODI2LTEuMTU2IDEuMTU2Yy0yLjMxMyAyLjQ3OC00LjQ2IDQuNDYtNi42MDcgNS45NDZxLS43NDIuNDk1LTEuNDg2LjQ5NmMtLjMzIDAtLjY2MSAwLS45OTEtLjE2NmgtLjMzbC0xLjk4MyAxLjMyMmMtMi4xNDctMi4zMTItNC40NTktNC4yOTQtNi43NzEtNi4yNzZhNjUuOTYgNjUuOTYgMCAwIDAtMzQuNTE5LTEzLjcwOWwtLjE2NS0yLjE0N2wtLjMzLS4zM2MtLjQ5Ni0uNDk2LTEuMTU2LS45OTEtMS4zMjItMi4xNDdjLS4xNjUtMi42NDMuMTY2LTUuNjE2LjQ5Ni04LjkxOXYtLjE2NWMwLS40OTYuMTY1LTEuMTU2LjMzLTEuNjUyYy4xNjUtLjk5LjMzLTEuOTgyLjQ5Ni0zLjEzOHYtMS40ODZjMC0yLjk3My0yLjMxMy01LjQ1LTUuMTItNS40NWMtMS4zMjIgMC0yLjY0My42Ni0zLjYzNCAxLjY1MWMtLjk5Ljk5MS0xLjQ4NiAyLjMxMi0xLjQ4NiAzLjc5OXYxLjMyMWMwIDEuMTU2LjE2NSAyLjE0Ny40OTUgMy4xMzhjLjE2NS40OTYuMTY1Ljk5MS4zMyAxLjY1MnYuMTY1Yy4zMyAzLjMwMy44MjYgNi4yNzYuNDk2IDguOTE5Yy0uMTY1IDEuMTU2LS44MjYgMS42NTEtMS4zMjEgMi4xNDdsLS4zMy4zM2wtLjE2NiAyLjE0N2MtMi45NzMuMzMtNS45NDYuNjYtOC45MTkgMS4zMjFjLTEyLjcxNyAyLjgwOC0yMy45NDggOS4yNS0zMi43MDEgMTguNDk4bC0xLjY1Mi0xLjE1NmgtLjMzYy0uMzMgMC0uNjYxLjE2NS0uOTkxLjE2NXEtLjc0MyAwLTEuNDg3LS40OTVjLTIuMTQ3LTEuNDg2LTQuMjk0LTMuNjM0LTYuNjA2LTYuMTExYy0uMzMtLjMzLS42Ni0uODI2LTEuMTU2LTEuMTU2Yy0uNjYxLS44MjYtMS4zMjItMS40ODctMi4xNDgtMi4zMTJjLS4xNjUtLjE2Ni0uNDk1LS4zMy0uODI1LS42NjFjLS4xNjUtLjE2NS0uMzMtLjE2NS0uMzMtLjMzYTUuNzcgNS43NyAwIDAgMC0zLjYzNC0xLjMyMmMtMS40ODcgMC0yLjk3My42NjEtMy43OTkgMS44MTdjLTEuNjUyIDIuMTQ3LTEuMTU2IDUuNDUgMS4xNTYgNy40MzJjLjE2NSAwIC4xNjUuMTY2LjMzLjE2NmMuMzMuMTY1LjQ5Ni40OTUuODI2LjY2Yy45OTEuNjYgMS44MTcgMS4xNTYgMi44MDggMS42NTJjLjQ5Ni4xNjUuOTkxLjQ5NSAxLjQ4Ny44MjZjMi45NzIgMS44MTYgNS40NSAzLjMwMyA3LjQzMiA1LjEyYy44MjYuODI1LjgyNiAxLjY1MS44MjYgMi40Nzd2LjMzbDEuNjUxIDEuNDg3Yy0uMzMuNDk1LS42Ni44MjYtLjgyNiAxLjMyMWMtOC4yNTggMTMuMDQ4LTExLjM5NiAyOC40MDgtOS4yNDkgNDMuNjAzbC0yLjE0Ny42NmMwIC4xNjYtLjE2NS4xNjYtLjE2NS4zM2MtLjMzLjY2MS0uODI2IDEuMzIyLTEuODE3IDEuODE3Yy0yLjQ3Ny44MjYtNS40NSAxLjE1Ny04LjkxOCAxLjQ4N2gtLjE2NmMtLjQ5NSAwLTEuMTU2IDAtMS42NTEuMTY1Yy0uOTkxIDAtMS45ODIuMTY1LTMuMTM4LjMzYy0uMzMgMC0uNjYuMTY2LS45OTEuMTY2Yy0uMTY1IDAtLjMzIDAtLjQ5Ni4xNjVjLTIuOTczLjY2LTQuNzkgMy40NjgtNC4yOTQgNi4xMWMuNDk2IDIuMzEzIDIuNjQzIDMuOCA1LjI4NSAzLjhjLjQ5NiAwIC44MjYgMCAxLjMyMi0uMTY2Yy4xNjUgMCAuMzMgMCAuMzMtLjE2NWMuMzMgMCAuNjYtLjE2NS45OS0uMTY1YzEuMTU3LS4zMyAxLjk4My0uNjYgMi45NzQtMS4xNTZjLjQ5NS0uMTY1Ljk5LS40OTYgMS40ODYtLjY2aC4xNjVjMy4xMzgtMS4xNTcgNS45NDYtMi4xNDggOC41ODktMi40NzhoLjMzYy45OTEgMCAxLjY1Mi40OTUgMi4xNDcuODI2Yy4xNjUgMCAuMTY1LjE2NS4zMy4xNjVsMi4zMTMtLjMzYzMuOTY0IDEyLjIyMSAxMS41NjEgMjMuMTIyIDIxLjYzNiAzMS4wNWMyLjMxMiAxLjgxNiA0LjYyNCAzLjMwMyA3LjEwMiA0Ljc5bC0uOTkxIDIuMTQ2YzAgLjE2Ni4xNjUuMTY2LjE2NS4zM2MuMzMuNjYxLjY2IDEuNDg3LjMzIDIuNjQzYy0uOTkgMi40NzgtMi40NzcgNC45NTUtNC4yOTQgNy43NjN2LjE2NWMtLjMzLjQ5Ni0uNjYuODI2LS45OSAxLjMyMWMtLjY2MS44MjYtMS4xNTcgMS42NTItMS44MTggMi42NDNjLS4xNjUuMTY1LS4zMy40OTUtLjQ5NS44MjZjMCAuMTY1LS4xNjUuMzMtLjE2NS4zM2MtMS4zMjEgMi44MDgtLjMzIDUuOTQ2IDIuMTQ3IDcuMTAycS45OS40OTYgMS45ODIuNDk2YzEuOTgyIDAgMy45NjQtMS4zMjIgNC45NTUtMy4xMzljMC0uMTY1LjE2NS0uMzMuMTY1LS4zM2MuMTY1LS4zMy4zMy0uNjYuNDk1LS44MjZjLjQ5Ni0xLjE1Ni42NjEtMS45ODIuOTkxLTIuOTczbC40OTYtMS40ODZjMS4xNTYtMy4zMDMgMS45ODItNS45NDYgMy40NjgtOC4yNThjLjY2LS45OTEgMS40ODctMS4xNTYgMi4xNDctMS40ODdjLjE2NSAwIC4xNjUgMCAuMzMtLjE2NWwxLjE1Ny0yLjE0N2M3LjI2NyAyLjgwOCAxNS4xOTUgNC4yOTQgMjMuMTIyIDQuMjk0YzQuNzkgMCA5Ljc0NS0uNDk1IDE0LjM3LTEuNjUxYTczIDczIDAgMCAwIDguNTg4LTIuNDc4bC45OSAxLjgxN2MuMTY2IDAgLjE2NiAwIC4zMzEuMTY1Yy44MjYuMTY1IDEuNDg2LjQ5NiAyLjE0NyAxLjQ4N2MxLjMyMSAyLjMxMiAyLjMxMiA1LjEyIDMuNDY4IDguMjU4di4xNjVsLjQ5NiAxLjQ4NmMuMzMuOTkxLjQ5NSAxLjk4Mi45OSAyLjk3M2MuMTY2LjMzLjMzMS40OTYuNDk2LjgyNmMwIC4xNjUuMTY2LjMzLjE2Ni4zM2MuOTkgMS45ODIgMi45NzIgMy4xMzkgNC45NTQgMy4xMzlxLjk5MiAwIDEuOTgyLS40OTZjMS4xNTYtLjY2IDIuMTQ3LTEuNjUyIDIuNDc4LTIuOTczYy4zMy0xLjMyMS4zMy0yLjgwOC0uMzMtNC4xMjljMC0uMTY1LS4xNjYtLjE2NS0uMTY2LS4zM2MtLjE2NS0uMzMtLjMzLS42Ni0uNDk1LS44MjZjLS40OTYtLjk5MS0xLjE1Ni0xLjgxNy0xLjgxNy0yLjY0M2MtLjMzLS40OTUtLjY2LS44MjUtLjk5LTEuMzJ2LS4xNjZjLTEuODE4LTIuODA4LTMuNDctNS4yODUtNC4yOTUtNy43NjNjLS4zMy0xLjE1NiAwLTEuODE2LjE2NS0yLjY0MmMwLS4xNjUuMTY1LS4xNjUuMTY1LS4zM2wtLjgyNi0xLjk4MmM4Ljc1NC01LjEyIDE2LjE4Ni0xMi4zODggMjEuODAyLTIxLjMwNmMyLjk3My00LjYyNSA1LjI4NS05Ljc0NSA2LjkzNi0xNC44NjVsMS45ODIuMzNjLjE2NiAwIC4xNjYtLjE2NS4zMy0uMTY1Yy42NjEtLjMzIDEuMTU3LS44MjUgMi4xNDgtLjgyNWguMzNjMi42NDMuMzMgNS40NSAxLjMyIDguNTg5IDIuNDc3aC4xNjVjLjQ5NS4xNjUuOTkuNDk1IDEuNDg2LjY2Yy45OTEuNDk2IDEuODE3LjgyNiAyLjk3MyAxLjE1N2MuMzMgMCAuNjYuMTY1Ljk5MS4xNjVjLjE2NSAwIC4zMyAwIC40OTUuMTY1Yy40OTYuMTY1LjgyNi4xNjUgMS4zMjIuMTY1YzIuNDc3IDAgNC42MjQtMS42NTEgNS4yODUtMy43OThjMC0xLjk4Mi0xLjgxNy00LjYyNS00Ljc5LTUuNDVtLTc2LjQ3LTguMDkzbC03LjI2NyAzLjQ2OWwtNy4yNjctMy40NjlsLTEuODE2LTcuNzYybDQuOTU0LTYuMjc2aDguMDkzbDQuOTU1IDYuMjc2em00My4xMDgtMTcuMTc2YTUyLjEgNTIuMSAwIDAgMSAxLjE1NiAxNi42OGwtMjUuMjctNy4yNjZjLTIuMzEyLS42Ni0zLjYzMy0yLjk3My0zLjEzOC01LjI4NWMuMTY1LS42NjEuNDk2LTEuMzIyLjk5MS0xLjgxN2wxOS45ODUtMTguMDAzYzIuODA3IDQuNjI1IDQuOTU0IDkuOTEgNi4yNzYgMTUuNjltLTE0LjIwNC0yNS42bC0yMS42MzYgMTUuMzZjLTEuODE3IDEuMTU2LTQuMjk1LjgyNS01Ljc4MS0uOTkxYy0uNDk1LS40OTYtLjY2LTEuMTU3LS44MjYtMS44MTdsLTEuNDg2LTI2LjkyMmE1MC4xMyA1MC4xMyAwIDAgMSAyOS43MjkgMTQuMzdNMTE2Ljc2OSA3OC4xMmMxLjgxNy0uMzMgMy40NjgtLjY2IDUuMjg1LS45OWwtMS40ODYgMjYuNDI1Yy0uMTY1IDIuMzEyLTEuOTgyIDQuMjk0LTQuNDYgNC4yOTRjLS42NiAwLTEuNDg2LS4xNjUtMS45ODItLjQ5NUw5Mi4xNiA5MS42NjVjNi43NzItNi43NzIgMTUuMTk1LTExLjM5NyAyNC42MDktMTMuNTQ0bS0zMi41MzcgMjMuNDUzbDE5LjY1NCAxNy41MDdjMS44MTcgMS40ODcgMS45ODIgNC4yOTQuNDk2IDYuMTExYy0uNDk2LjY2LTEuMTU2IDEuMTU2LTEuOTgyIDEuMzIybC0yNS42IDcuNDMyYy0uOTkxLTExLjIzMSAxLjQ4Ni0yMi42MjcgNy40MzItMzIuMzcybS00LjQ2IDQ0Ljc1OWwyNi4yNjItNC40NmMyLjE0Ny0uMTY1IDQuMTI5IDEuMzIyIDQuNjI0IDMuNDY5Yy4xNjUuOTkuMTY1IDEuODE3LS4xNjUgMi42NDNsLTEwLjA3NSAyNC4yNzhjLTkuMjQ5LTUuOTQ2LTE2LjY4MS0xNS4wMy0yMC42NDUtMjUuOTNtNjAuMjg1IDMyLjg2N2MtMy43OTkuODI2LTcuNTk4IDEuMzIxLTExLjU2MiAxLjMyMWMtNS43OCAwLTExLjM5Ni0uOTktMTYuNjgtMi42NDJsMTMuMDQ3LTIzLjYxOGMxLjMyMS0xLjQ4NyAzLjQ2OC0yLjE0NyA1LjI4NS0xLjE1NmE3IDcgMCAwIDEgMS45ODIgMS44MTZsMTIuNzE3IDIyLjk1OGMtMS40ODYuNDk1LTMuMTM4LjgyNi00Ljc5IDEuMzIxbTMyLjIwNi0yMi45NTdjLTQuMTI5IDYuNjA2LTkuNTggMTEuODkxLTE1Ljg1NSAxNi4wMmwtMTAuNDA1LTI0Ljk0Yy0uNDk2LTEuOTgxLjMzLTQuMTI4IDIuMzEyLTUuMTJjLjY2LS4zMyAxLjQ4Ni0uNDk1IDIuMzEyLS40OTVsMjYuNDI2IDQuNDZjLS45OTEgMy42MzMtMi42NDMgNi45MzctNC43OSAxMC4wNzUiLz48L3N2Zz4=",
+  "description": "MCP Server for kubernetes management commands",
+  "instructions": "Archestra supports two authentication methods for the Kubernetes MCP server:\n\n**1. ServiceAccount (allows access to the same cluster as your Archestra instance)**\n\nLeave all fields empty to use the in-cluster ServiceAccount.\n\nWhen using the official Helm chart, Archestra creates a ServiceAccount with read-only permissions in its namespace. To elevate permissions, grant additional permissions to the ServiceAccount and change the RoleBinding to a ClusterRoleBinding if access to other namespaces is required.\n\nThe default ServiceAccount name is `archestra-platform-mcp-k8s-operator`. You can modify this value during installation to use a different ServiceAccount.\n\n**2. Authentication Token (allows access to an external Kubernetes cluster)**\n\nConfigure `K8S_SERVER` and `K8S_TOKEN` to connect to an external Kubernetes cluster.",
+  "author": {
+    "name": "Flux159"
+  },
+  "server": {
+    "command": "docker",
+    "args": ["run", "-i", "--rm", "flux159/mcp-server-kubernetes:v3.0.3"],
+    "docker_image": "flux159/mcp-server-kubernetes:v3.0.3",
+    "service_account": "archestra-platform-mcp-k8s-operator",
+    "env": {
+      "K8S_SERVER": "${user_config.k8s_server}",
+      "K8S_TOKEN": "${user_config.k8s_token}",
+      "K8S_CA_DATA": "${user_config.k8s_ca_data}",
+      "K8S_SKIP_TLS_VERIFY": "${user_config.k8s_skip_tls_verify}",
+      "ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS": "${user_config.allow_only_non_destructive_tools}",
+      "ALLOW_ONLY_READONLY_TOOLS": "${user_config.allow_only_readonly_tools}",
+      "MASK_SECRETS": "${user_config.mask_secrets}",
+      "SPAWN_MAX_BUFFER": "${user_config.spawn_max_buffer}"
+    },
+    "type": "local"
+  },
+  "tools": [
+    {
+      "name": "kubectl_get",
+      "description": "Get or list Kubernetes resources (pods, deployments, services, etc.)"
+    },
+    {
+      "name": "kubectl_describe",
+      "description": "Show detailed information about a specific resource"
+    },
+    {
+      "name": "kubectl_create",
+      "description": "Create a Kubernetes resource from a file or inline specification"
+    },
+    {
+      "name": "kubectl_apply",
+      "description": "Apply a YAML manifest to create or update resources"
+    },
+    {
+      "name": "kubectl_delete",
+      "description": "Delete Kubernetes resources by name, label selector, or from file"
+    },
+    {
+      "name": "kubectl_logs",
+      "description": "Get logs from a container in a pod"
+    },
+    {
+      "name": "kubectl_context",
+      "description": "Manage kubectl contexts - list, switch, or get current context"
+    },
+    {
+      "name": "kubectl_scale",
+      "description": "Scale a deployment, replica set, or stateful set"
+    },
+    {
+      "name": "kubectl_patch",
+      "description": "Update field(s) of a resource using strategic merge patch"
+    },
+    {
+      "name": "kubectl_rollout",
+      "description": "Manage deployment rollouts - status, history, undo, restart"
+    },
+    {
+      "name": "kubectl_generic",
+      "description": "Execute any kubectl command for advanced operations"
+    },
+    {
+      "name": "explain_resource",
+      "description": "Get documentation for Kubernetes resource types and their fields"
+    },
+    {
+      "name": "list_api_resources",
+      "description": "List all available API resources in the cluster"
+    },
+    {
+      "name": "port_forward",
+      "description": "Forward local ports to a pod or service"
+    },
+    {
+      "name": "stop_port_forward",
+      "description": "Stop an active port forwarding session"
+    },
+    {
+      "name": "install_helm_chart",
+      "description": "Install a Helm chart into the cluster"
+    },
+    {
+      "name": "upgrade_helm_chart",
+      "description": "Upgrade an existing Helm release"
+    },
+    {
+      "name": "uninstall_helm_chart",
+      "description": "Uninstall a Helm release from the cluster"
+    },
+    {
+      "name": "helm_template_apply",
+      "description": "Generate Helm templates and apply via kubectl (bypasses auth issues)"
+    },
+    {
+      "name": "helm_template_uninstall",
+      "description": "Uninstall resources deployed via helm_template_apply"
+    },
+    {
+      "name": "cleanup_pods",
+      "description": "Clean up problematic pods (Evicted, Error, CrashLoopBackOff, etc.)"
+    },
+    {
+      "name": "node_management",
+      "description": "Manage nodes - list, cordon, drain, uncordon for maintenance"
+    },
+    {
+      "name": "ping",
+      "description": "Verify connection to the Kubernetes cluster"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "k8s-diagnose",
+      "description": "Systematic troubleshooting flow for Kubernetes pods. Guides through identifying issues, collecting evidence, and suggesting remediation steps.",
+      "text": "Systematic troubleshooting flow for Kubernetes pods. Guides through identifying issues, collecting evidence, and suggesting remediation steps."
+    }
+  ],
+  "keywords": [
+    "kubernetes",
+    "k8s",
+    "kubectl",
+    "helm",
+    "container",
+    "orchestration",
+    "pods",
+    "deployments",
+    "services",
+    "cluster",
+    "devops",
+    "infrastructure",
+    "cloud-native",
+    "minikube",
+    "eks",
+    "gke",
+    "aks"
+  ],
+  "user_config": {
+    "k8s_server": {
+      "type": "string",
+      "title": "Kubernetes API Server",
+      "description": "Must be reachable from the cluster where Archestra is running.\n\nFor local clusters: use Docker internal IP: e.g., `https://172.18.0.2:6443`.\n\nFor Cloud clusters: use public IP or domain name.\nGet context URL:\n`kubectl config view --context <name> --minify | grep \"server\"`",
+      "default": "",
+      "required": false
+    },
+    "k8s_token": {
+      "type": "string",
+      "title": "Authentication Token",
+      "description": "To generate, switch to target context:\n```\nkubectl config use-context <name>\n```\n\nThen create a namespace, service account, role binding and token:\n\nCreate the namespace:\n```\nkubectl create namespace mcp-admin\n```\n\nCreate the service account:\n```\nkubectl create sa mcp-admin -n mcp-admin\n```\n\nCreate the cluster role binding:\n```\nkubectl create clusterrolebinding mcp-admin\\\n   --clusterrole=cluster-admin\\\n   --serviceaccount=mcp-admin:mcp-admin\n```\n\nGenerate the token:\n```\nkubectl create token mcp-admin -n mcp-admin --duration=87600h\n```",
+      "default": "",
+      "required": false,
+      "sensitive": true
+    },
+    "k8s_skip_tls_verify": {
+      "type": "boolean",
+      "title": "",
+      "description": "Skip TLS certificate verification when connecting to the target cluster. When disabled, `K8S_CA_DATA` might be required, depending on the cluster's configuration.",
+      "default": true,
+      "required": false
+    },
+    "k8s_ca_data": {
+      "type": "string",
+      "title": "Certificate Authority data",
+      "description": "Base64-encoded CA data for verifying the Kubernetes API server's TLS certificate. .\n\nSwitch to the target context:\n```\nkubectl config use-context <name>\n```\n\nThen retrieve the CA data:\n```\nkubectl config view --raw --minify | grep certificate-authority-data\n```",
+      "default": "",
+      "required": false,
+      "sensitive": false
+    },
+    "allow_only_non_destructive_tools": {
+      "type": "boolean",
+      "title": "Non-Destructive Mode",
+      "description": "Disable destructive operations (delete pods, deployments, namespaces, etc.). Safe mode for production clusters.",
+      "default": true,
+      "required": false
+    },
+    "allow_only_readonly_tools": {
+      "type": "boolean",
+      "title": "Read-Only Mode",
+      "description": "Only allows get, describe, logs, and list operations.",
+      "default": false,
+      "required": false
+    },
+    "mask_secrets": {
+      "type": "boolean",
+      "title": "Mask Secrets",
+      "description": "Mask sensitive data in `kubectl get secrets` output for security.",
+      "default": true,
+      "required": false
+    },
+    "spawn_max_buffer": {
+      "type": "number",
+      "title": "Max Buffer Size (bytes)",
+      "description": "Maximum buffer size for command output. Increase for large clusters with many resources.",
+      "default": 10485760,
+      "required": false,
+      "min": 1048576,
+      "max": 104857600
+    }
+  },
+  "readme": "# MCP Server Kubernetes\n\n[![CI](https://github.com/Flux159/mcp-server-kubernetes/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/mcp-server-kubernetes/actions/workflows/ci.yml)\n[![Language](https://img.shields.io/github/languages/top/Flux159/mcp-server-kubernetes)](https://github.com/yourusername/mcp-server-kubernetes)\n[![Bun](https://img.shields.io/badge/runtime-bun-orange)](https://bun.sh)\n[![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=flat&logo=kubernetes&logoColor=white)](https://kubernetes.io/)\n[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)\n[![Stars](https://img.shields.io/github/stars/Flux159/mcp-server-kubernetes)](https://github.com/Flux159/mcp-server-kubernetes/stargazers)\n[![Issues](https://img.shields.io/github/issues/Flux159/mcp-server-kubernetes)](https://github.com/Flux159/mcp-server-kubernetes/issues)\n[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Flux159/mcp-server-kubernetes/pulls)\n[![Last Commit](https://img.shields.io/github/last-commit/Flux159/mcp-server-kubernetes)](https://github.com/Flux159/mcp-server-kubernetes/commits/main)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/Flux159/mcp-server-kubernetes)](https://archestra.ai/mcp-catalog/flux159__mcp-server-kubernetes)\n[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Flux159/mcp-server-kubernetes)\n\nMCP Server that can connect to a Kubernetes cluster and manage it. Supports loading kubeconfig from multiple sources in priority order.\n\nhttps://github.com/user-attachments/assets/f25f8f4e-4d04-479b-9ae0-5dac452dd2ed\n\n<a href=\"https://glama.ai/mcp/servers/w71ieamqrt\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/w71ieamqrt/badge\" /></a>\n\n## Installation & Usage\n\n### Prerequisites\n\nBefore using this MCP server with any tool, make sure you have:\n\n1. kubectl installed and in your PATH\n2. A valid kubeconfig file with contexts configured\n3. Access to a Kubernetes cluster configured for kubectl (e.g. minikube, Rancher Desktop, GKE, etc.)\n4. Helm v3 installed and in your PATH (no Tiller required). Optional if you don't plan to use Helm.\n\nYou can verify your connection by running `kubectl get pods` in a terminal to ensure you can connect to your cluster without credential issues.\n\nBy default, the server loads kubeconfig from `~/.kube/config`. For additional authentication options (environment variables, custom paths, etc.), see [ADVANCED_README.md](ADVANCED_README.md).\n\n### Claude Code\n\nAdd the MCP server to Claude Code using the built-in command:\n\n```bash\nclaude mcp add kubernetes -- npx mcp-server-kubernetes\n```\n\nThis will automatically configure the server in your Claude Code MCP settings.\n\n### Claude Desktop\n\nAdd the following configuration to your Claude Desktop config file:\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"npx\",\n      \"args\": [\"mcp-server-kubernetes\"]\n    }\n  }\n}\n```\n\n### VS Code\n\n[![Install Kubernetes MCP in VS Code](https://img.shields.io/badge/Install%20Kubernetes%20MCP%20in%20VS%20Code-blue?logo=visualstudiocode)](vscode:mcp/install?%7B%22name%22%3A%20%22kubernetes%22%2C%20%22type%22%3A%20%22stdio%22%2C%20%22command%22%3A%20%22npx%22%2C%20%22args%22%3A%20%5B%22mcp-server-kubernetes%22%5D%7D)\n\nFor VS Code integration, you can use the MCP server with extensions that support the Model Context Protocol:\n\n1. Install a compatible MCP extension (such as Claude Dev or similar MCP clients)\n2. Configure the extension to use this server:\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"npx\",\n      \"args\": [\"mcp-server-kubernetes\"],\n      \"description\": \"Kubernetes cluster management and operations\"\n    }\n  }\n}\n```\n\n### Cursor\n\nCursor supports MCP servers through its AI integration. Add the server to your Cursor MCP configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes\": {\n      \"command\": \"npx\",\n      \"args\": [\"mcp-server-kubernetes\"]\n    }\n  }\n}\n```\n\nThe server will automatically connect to your current kubectl context. You can verify the connection by asking the AI assistant to list your pods or create a test deployment.\n\n## Usage with mcp-chat\n\n[mcp-chat](https://github.com/Flux159/mcp-chat) is a CLI chat client for MCP servers. You can use it to interact with the Kubernetes server.\n\n```shell\nnpx mcp-chat --server \"npx mcp-server-kubernetes\"\n```\n\nAlternatively, pass it your existing Claude Desktop configuration file from above (Linux should pass the correct path to config):\n\nMac:\n\n```shell\nnpx mcp-chat --config \"~/Library/Application Support/Claude/claude_desktop_config.json\"\n```\n\nWindows:\n\n```shell\nnpx mcp-chat --config \"%APPDATA%\\Claude\\claude_desktop_config.json\"\n```\n\n## Features\n\n- [x] Connect to a Kubernetes cluster\n- [x] Unified kubectl API for managing resources\n  - Get or list resources with `kubectl_get`\n  - Describe resources with `kubectl_describe`\n  - List resources with `kubectl_get`\n  - Create resources with `kubectl_create`\n  - Apply YAML manifests with `kubectl_apply`\n  - Delete resources with `kubectl_delete`\n  - Get logs with `kubectl_logs`\n  - Manage kubectl contexts with `kubectl_context`\n  - Explain Kubernetes resources with `explain_resource`\n  - List API resources with `list_api_resources`\n  - Scale resources with `kubectl_scale`\n  - Update field(s) of a resource with `kubectl_patch`\n  - Manage deployment rollouts with `kubectl_rollout`\n  - Execute any kubectl command with `kubectl_generic`\n  - Verify connection with `ping`\n- [x] Advanced operations\n  - Scale deployments with `kubectl_scale` (replaces legacy `scale_deployment`)\n  - Port forward to pods and services with `port_forward`\n  - Run Helm operations\n    - Install, upgrade, and uninstall charts\n    - Support for custom values, repositories, and versions\n    - Template-based installation (`helm_template_apply`) to bypass authentication issues\n    - Template-based uninstallation (`helm_template_uninstall`) to bypass authentication issues\n  - Pod cleanup operations\n    - Clean up problematic pods (`cleanup_pods`) in states: Evicted, ContainerStatusUnknown, Completed, Error, ImagePullBackOff, CrashLoopBackOff\n  - Node management operations\n    - Cordoning, draining, and uncordoning nodes (`node_management`) for maintenance and scaling operations\n- [x] Troubleshooting Prompt (`k8s-diagnose`)\n  - Guides through a systematic Kubernetes troubleshooting flow for pods based on a keyword and optional namespace.\n- [x] Non-destructive mode for read and create/update-only access to clusters\n- [x] Secrets masking for security (masks sensitive data in `kubectl get secrets` commands, does not affect logs)\n\n## Prompts\n\nThe MCP Kubernetes server includes specialized prompts to assist with common diagnostic operations.\n\n### /k8s-diagnose Prompt\n\nThis prompt provides a systematic troubleshooting flow for Kubernetes pods. It accepts a `keyword` to identify relevant pods and an optional `namespace` to narrow the search.\nThe prompt's output will guide you through an autonomous troubleshooting flow, providing instructions for identifying issues, collecting evidence, and suggesting remediation steps.\n\n## Local Development\n\nMake sure that you have [bun installed](https://bun.sh/docs/installation). Clone the repo & install dependencies:\n\n```bash\ngit clone https://github.com/Flux159/mcp-server-kubernetes.git\ncd mcp-server-kubernetes\nbun install\n```\n\n### Development Workflow\n\n1. Start the server in development mode (watches for file changes):\n\n```bash\nbun run dev\n```\n\n2. Run unit tests:\n\n```bash\nbun run test\n```\n\n3. Build the project:\n\n```bash\nbun run build\n```\n\n4. Local Testing with [Inspector](https://github.com/modelcontextprotocol/inspector)\n\n```bash\nnpx @modelcontextprotocol/inspector node dist/index.js\n# Follow further instructions on terminal for Inspector link\n```\n\n5. Local testing with Claude Desktop\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-server-kubernetes\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/your/mcp-server-kubernetes/dist/index.js\"]\n    }\n  }\n}\n```\n\n6. Local testing with [mcp-chat](https://github.com/Flux159/mcp-chat)\n\n```bash\nbun run chat\n```\n\n## Contributing\n\nSee the [CONTRIBUTING.md](CONTRIBUTING.md) file for details.\n\n## Advanced\n\n### Non-Destructive Mode\n\nYou can run the server in a non-destructive mode that disables all destructive operations (delete pods, delete deployments, delete namespaces, etc.):\n\n```shell\nALLOW_ONLY_NON_DESTRUCTIVE_TOOLS=true npx mcp-server-kubernetes\n```\n\nFor Claude Desktop configuration with non-destructive mode:\n\n```json\n{\n  \"mcpServers\": {\n    \"kubernetes-readonly\": {\n      \"command\": \"npx\",\n      \"args\": [\"mcp-server-kubernetes\"],\n      \"env\": {\n        \"ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS\": \"true\"\n      }\n    }\n  }\n}\n```\n\n### Commands Available in Non-Destructive Mode\n\nAll read-only and resource creation/update operations remain available:\n\n- Resource Information: `kubectl_get`, `kubectl_describe`, `kubectl_logs`, `explain_resource`, `list_api_resources`\n- Resource Creation/Modification: `kubectl_apply`, `kubectl_create`, `kubectl_scale`, `kubectl_patch`, `kubectl_rollout`\n- Helm Operations: `install_helm_chart`, `upgrade_helm_chart`, `helm_template_apply`, `helm_template_uninstall`\n- Connectivity: `port_forward`, `stop_port_forward`\n- Context Management: `kubectl_context`\n\n### Commands Disabled in Non-Destructive Mode\n\nThe following destructive operations are disabled:\n\n- `kubectl_delete`: Deleting any Kubernetes resources\n- `uninstall_helm_chart`: Uninstalling Helm charts\n- `cleanup`: Cleanup of managed resources\n- `cleanup_pods`: Cleaning up problematic pods\n- `node_management`: Node management operations (can drain nodes)\n- `kubectl_generic`: General kubectl command access (may include destructive operations)\n\n### Helm Template Apply Tool\n\nThe `helm_template_apply` tool provides an alternative way to install Helm charts that bypasses authentication issues commonly encountered with certain Kubernetes configurations. This tool is particularly useful when you encounter errors like:\n\n```\nWARNING: Kubernetes configuration file is group-readable. This is insecure.\nError: INSTALLATION FAILED: Kubernetes cluster unreachable: exec plugin: invalid apiVersion \"client.authentication.k8s.io/v1alpha1\"\n```\n\nInstead of using `helm install` directly, this tool:\n\n1. Uses `helm template` to generate YAML manifests from the Helm chart\n2. Applies the generated YAML using `kubectl apply`\n3. Handles namespace creation and cleanup automatically\n\n#### Usage Example\n\n```json\n{\n  \"name\": \"helm_template_apply\",\n  \"arguments\": {\n    \"name\": \"events-exporter\",\n    \"chart\": \".\",\n    \"namespace\": \"kube-event-exporter\",\n    \"valuesFile\": \"values.yaml\",\n    \"createNamespace\": true\n  }\n}\n```\n\nThis is equivalent to running:\n\n```bash\nhelm template events-exporter . -f values.yaml > events-exporter.yaml\nkubectl create namespace kube-event-exporter\nkubectl apply -f events-exporter.yaml -n kube-event-exporter\n```\n\n#### Parameters\n\n- `name`: Release name for the Helm chart\n- `chart`: Chart name or path to chart directory\n- `repo`: Chart repository URL (optional if using local chart path)\n- `namespace`: Kubernetes namespace to deploy to\n- `values`: Chart values as an object (optional)\n- `valuesFile`: Path to values.yaml file (optional, alternative to values object)\n- `createNamespace`: Whether to create the namespace if it doesn't exist (default: true)\n\n### Pod Cleanup with Existing Tools\n\nPod cleanup can be achieved using the existing `kubectl_get` and `kubectl_delete` tools with field selectors. This approach leverages standard Kubernetes functionality without requiring dedicated cleanup tools.\n\n#### Identifying Problematic Pods\n\nUse `kubectl_get` with field selectors to identify pods in problematic states:\n\n**Get failed pods:**\n\n```json\n{\n  \"name\": \"kubectl_get\",\n  \"arguments\": {\n    \"resourceType\": \"pods\",\n    \"namespace\": \"default\",\n    \"fieldSelector\": \"status.phase=Failed\"\n  }\n}\n```\n\n**Get completed pods:**\n\n```json\n{\n  \"name\": \"kubectl_get\",\n  \"arguments\": {\n    \"resourceType\": \"pods\",\n    \"namespace\": \"default\",\n    \"fieldSelector\": \"status.phase=Succeeded\"\n  }\n}\n```\n\n**Get pods with specific conditions:**\n\n```json\n{\n  \"name\": \"kubectl_get\",\n  \"arguments\": {\n    \"resourceType\": \"pods\",\n    \"namespace\": \"default\",\n    \"fieldSelector\": \"status.conditions[?(@.type=='Ready')].status=False\"\n  }\n}\n```\n\n#### Deleting Problematic Pods\n\nUse `kubectl_delete` with field selectors to delete pods in problematic states:\n\n**Delete failed pods:**\n\n```json\n{\n  \"name\": \"kubectl_delete\",\n  \"arguments\": {\n    \"resourceType\": \"pods\",\n    \"namespace\": \"default\",\n    \"fieldSelector\": \"status.phase=Failed\",\n    \"force\": true,\n    \"gracePeriodSeconds\": 0\n  }\n}\n```\n\n**Delete completed pods:**\n\n```json\n{\n  \"name\": \"kubectl_delete\",\n  \"arguments\": {\n    \"resourceType\": \"pods\",\n    \"namespace\": \"default\",\n    \"fieldSelector\": \"status.phase=Succeeded\",\n    \"force\": true,\n    \"gracePeriodSeconds\": 0\n  }\n}\n```\n\n#### Workflow\n\n1. **First, identify problematic pods** using `kubectl_get` with appropriate field selectors\n2. **Review the list** of pods in the response\n3. **Delete the pods** using `kubectl_delete` with the same field selectors\n\n#### Available Field Selectors\n\n- `status.phase=Failed` - Pods that have failed\n- `status.phase=Succeeded` - Pods that have completed successfully\n- `status.phase=Pending` - Pods that are pending\n- `status.conditions[?(@.type=='Ready')].status=False` - Pods that are not ready\n\n#### Safety Features\n\n- **Field selectors**: Target specific pod states precisely\n- **Force deletion**: Use `force=true` and `gracePeriodSeconds=0` for immediate deletion\n- **Namespace isolation**: Target specific namespaces or use `allNamespaces=true`\n- **Standard kubectl**: Uses well-established Kubernetes patterns\n\n### Node Management Tool\n\nThe `node_management` tool provides comprehensive node management capabilities for Kubernetes clusters, including cordoning, draining, and uncordoning operations. This is essential for cluster maintenance, scaling, and troubleshooting.\n\n#### Operations Available\n\n- **`list`**: List all nodes with their status and schedulability\n- **`cordon`**: Mark a node as unschedulable (no new pods will be scheduled)\n- **`drain`**: Safely evict all pods from a node and mark it as unschedulable\n- **`uncordon`**: Mark a node as schedulable again\n\n#### Usage Examples\n\n**1. List all nodes:**\n\n```json\n{\n  \"name\": \"node_management\",\n  \"arguments\": {\n    \"operation\": \"list\"\n  }\n}\n```\n\n**2. Cordon a node (mark as unschedulable):**\n\n```json\n{\n  \"name\": \"node_management\",\n  \"arguments\": {\n    \"operation\": \"cordon\",\n    \"nodeName\": \"worker-node-1\"\n  }\n}\n```\n\n**3. Drain a node (dry run first):**\n\n```json\n{\n  \"name\": \"node_management\",\n  \"arguments\": {\n    \"operation\": \"drain\",\n    \"nodeName\": \"worker-node-1\",\n    \"dryRun\": true\n  }\n}\n```\n\n**4. Drain a node (with confirmation):**\n\n```json\n{\n  \"name\": \"node_management\",\n  \"arguments\": {\n    \"operation\": \"drain\",\n    \"nodeName\": \"worker-node-1\",\n    \"dryRun\": false,\n    \"confirmDrain\": true,\n    \"force\": true,\n    \"ignoreDaemonsets\": true,\n    \"timeout\": \"5m\"\n  }\n}\n```\n\n**5. Uncordon a node:**\n\n```json\n{\n  \"name\": \"node_management\",\n  \"arguments\": {\n    \"operation\": \"uncordon\",\n    \"nodeName\": \"worker-node-1\"\n  }\n}\n```\n\n#### Drain Operation Parameters\n\n- `force`: Force the operation even if there are pods not managed by controllers\n- `gracePeriod`: Period of time in seconds given to each pod to terminate gracefully\n- `deleteLocalData`: Delete local data even if emptyDir volumes are used\n- `ignoreDaemonsets`: Ignore DaemonSet-managed pods (default: true)\n- `timeout`: The length of time to wait before giving up (e.g., '5m', '1h')\n- `dryRun`: Show what would be done without actually doing it\n- `confirmDrain`: Explicit confirmation to drain the node (required for actual draining)\n\n#### Safety Features\n\n- **Dry run by default**: Drain operations default to dry run to show what would be done\n- **Explicit confirmation**: Drain operations require `confirmDrain=true` to proceed\n- **Status tracking**: Shows node status before and after operations\n- **Timeout protection**: Configurable timeouts to prevent hanging operations\n- **Graceful termination**: Configurable grace periods for pod termination\n\n#### Common Use Cases\n\n1. **Cluster Maintenance**: Cordon nodes before maintenance, drain them, perform maintenance, then uncordon\n2. **Node Scaling**: Drain nodes before removing them from the cluster\n3. **Troubleshooting**: Isolate problematic nodes by cordoning them\n4. **Resource Management**: Drain nodes to redistribute workload\n\nFor additional advanced features, see the [ADVANCED_README.md](ADVANCED_README.md).\n\n## Architecture\n\nSee this [DeepWiki link](https://deepwiki.com/Flux159/mcp-server-kubernetes) for a more indepth architecture overview created by Devin.\n\nThis section describes the high-level architecture of the MCP Kubernetes server.\n\n### Request Flow\n\nThe sequence diagram below illustrates how requests flow through the system:\n\n```mermaid\nsequenceDiagram\n    participant Client\n    participant Transport as Transport Layer\n    participant Server as MCP Server\n    participant Filter as Tool Filter\n    participant Handler as Request Handler\n    participant K8sManager as KubernetesManager\n    participant K8s as Kubernetes API\n\n    Note over Transport: StdioTransport or<br>SSE Transport\n\n    Client->>Transport: Send Request\n    Transport->>Server: Forward Request\n\n    alt Tools Request\n        Server->>Filter: Filter available tools\n        Note over Filter: Remove destructive tools<br>if in non-destructive mode\n        Filter->>Handler: Route to tools handler\n\n        alt kubectl operations\n            Handler->>K8sManager: Execute kubectl operation\n            K8sManager->>K8s: Make API call\n        else Helm operations\n            Handler->>K8sManager: Execute Helm operation\n            K8sManager->>K8s: Make API call\n        else Port Forward operations\n            Handler->>K8sManager: Set up port forwarding\n            K8sManager->>K8s: Make API call\n        end\n\n        K8s-->>K8sManager: Return result\n        K8sManager-->>Handler: Process response\n        Handler-->>Server: Return tool result\n    else Resource Request\n        Server->>Handler: Route to resource handler\n        Handler->>K8sManager: Get resource data\n        K8sManager->>K8s: Query API\n        K8s-->>K8sManager: Return data\n        K8sManager-->>Handler: Format response\n        Handler-->>Server: Return resource data\n    end\n\n    Server-->>Transport: Send Response\n    Transport-->>Client: Return Final Response\n```\n\nSee this [DeepWiki link](https://deepwiki.com/Flux159/mcp-server-kubernetes) for a more indepth architecture overview created by Devin.\n\n## Publishing new release\n\nGo to the [releases page](https://github.com/Flux159/mcp-server-kubernetes/releases), click on \"Draft New Release\", click \"Choose a tag\" and create a new tag by typing out a new version number using \"v{major}.{minor}.{patch}\" semver format. Then, write a release title \"Release v{major}.{minor}.{patch}\" and description / changelog if necessary and click \"Publish Release\".\n\nThis will create a new tag which will trigger a new release build via the cd.yml workflow. Once successful, the new release will be published to [npm](https://www.npmjs.com/package/mcp-server-kubernetes). Note that there is no need to update the package.json version manually, as the workflow will automatically update the version number in the package.json file & push a commit to main.\n\n## Not planned\n\nAdding clusters to kubectx.\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=Flux159/mcp-server-kubernetes&type=Date)](https://www.star-history.com/#Flux159/mcp-server-kubernetes&Date)\n\n## 🖊️ Cite\n\nIf you find this repo useful, please cite:\n\n```\n@software{Patel_MCP_Server_Kubernetes_2024,\nauthor = {Patel, Paras and Sonwalkar, Suyog},\nmonth = jul,\ntitle = {{MCP Server Kubernetes}},\nurl = {https://github.com/Flux159/mcp-server-kubernetes},\nversion = {2.5.0},\nyear = {2024}\n}\n```\n",
+  "category": "Cloud",
+  "quality_score": 79,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kubernetes-default": {
+        "command": "npx",
+        "args": ["-y", "mcp-server-kubernetes"],
+        "env": {}
+      },
+      "kubernetes-readonly": {
+        "command": "npx",
+        "args": ["-y", "mcp-server-kubernetes"],
+        "env": {
+          "ALLOW_ONLY_READONLY_TOOLS": "true",
+          "MASK_SECRETS": "true"
+        }
+      },
+      "kubernetes-non-destructive": {
+        "command": "npx",
+        "args": ["-y", "mcp-server-kubernetes"],
+        "env": {
+          "ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS": "true",
+          "MASK_SECRETS": "true"
+        }
+      },
+      "kubernetes-production": {
+        "command": "npx",
+        "args": ["-y", "mcp-server-kubernetes"],
+        "env": {
+          "ALLOW_ONLY_NON_DESTRUCTIVE_TOOLS": "true",
+          "MASK_SECRETS": "true",
+          "SPAWN_MAX_BUFFER": "52428800"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "github_info": {
+    "owner": "Flux159",
+    "repo": "mcp-server-kubernetes",
+    "url": "https://github.com/Flux159/mcp-server-kubernetes",
+    "name": "flux159__mcp-server-kubernetes",
+    "path": null,
+    "stars": 1041,
+    "contributors": 30,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "c55b9fdb88c0eb7780d7d33c181858bff63a9a87"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:16.299Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@kubernetes/client-node",
+      "importance": 9
+    },
+    {
+      "name": "express",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "js-yaml",
+      "importance": 6
+    },
+    {
+      "name": "yaml",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-server-kubernetes\",\n  \"version\": \"2.9.0\",\n  \"description\": \"MCP server for interacting with Kubernetes clusters via kubectl\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"author\": \"Flux159\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/Flux159/mcp-server-kubernetes\"\n  },\n  \"bin\": {\n    \"mcp-server-kubernetes\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"builddxt\": \"node_modules/.bin/dxt pack\",\n    \"dev\": \"tsc --watch\",\n    \"start\": \"node dist/index.js\",\n    \"test\": \"vitest run\",\n    \"prepublishOnly\": \"npm run build\",\n    \"dockerbuild\": \"docker buildx build -t flux159/mcp-server-kubernetes --platform linux/amd64,linux/arm64 --push .\",\n    \"chat\": \"npx mcp-chat --server \\\"./dist/index.js\\\"\",\n    \"version:update\": \"node scripts/update-version.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"kubernetes\",\n    \"claude\",\n    \"anthropic\",\n    \"kubectl\"\n  ],\n  \"engines\": {\n    \"node\": \">=18\"\n  },\n  \"dependencies\": {\n    \"@kubernetes/client-node\": \"1.3.0\",\n    \"@modelcontextprotocol/sdk\": \"1.17.0\",\n    \"express\": \"4.21.2\",\n    \"js-yaml\": \"4.1.0\",\n    \"yaml\": \"2.7.0\",\n    \"zod\": \"3.23.8\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"5.0.1\",\n    \"@types/js-yaml\": \"4.0.9\",\n    \"@types/node\": \"22.9.3\",\n    \"shx\": \"0.3.4\",\n    \"typescript\": \"5.6.2\",\n    \"vitest\": \"2.1.9\",\n    \"@anthropic-ai/dxt\": \"0.1.0\"\n  }\n}\n"
+}

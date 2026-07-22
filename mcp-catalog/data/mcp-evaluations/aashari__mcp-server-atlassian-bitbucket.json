@@ -1,0 +1,188 @@
+{
+  "name": "aashari__mcp-server-atlassian-bitbucket",
+  "display_name": "mcp-server-atlassian-bitbucket",
+  "description": "Node.js/TypeScript MCP server for Atlassian Bitbucket. Enables AI systems (LLMs) to interact with workspaces, repositories, and pull requests via tools (list, get, comment, search). Connects AI directly to version control workflows through the standard MCP interface.",
+  "author": {
+    "name": "aashari"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@aashari/mcp-server-atlassian-bitbucket"],
+    "env": {
+      "TRANSPORT_MODE": "${user_config.transport_mode}",
+      "PORT": "${user_config.port}",
+      "DEBUG": "${user_config.debug}",
+      "ATLASSIAN_BITBUCKET_USERNAME": "${user_config.atlassian_bitbucket_username}",
+      "ATLASSIAN_BITBUCKET_APP_PASSWORD": "${user_config.atlassian_bitbucket_app_password}",
+      "ATLASSIAN_API_TOKEN": "${user_config.atlassian_api_token}",
+      "BITBUCKET_DEFAULT_WORKSPACE": "${user_config.bitbucket_default_workspace}",
+      "ATLASSIAN_SITE_NAME": "${user_config.atlassian_site_name}",
+      "ATLASSIAN_USER_EMAIL": "${user_config.atlassian_user_email}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "atlassian_bitbucket_username": {
+      "type": "string",
+      "title": "Bitbucket Username",
+      "description": "Your Bitbucket username for authentication (recommended method).",
+      "sensitive": false,
+      "required": true
+    },
+    "atlassian_bitbucket_app_password": {
+      "type": "string",
+      "title": "Bitbucket App Password",
+      "description": "Your Bitbucket app password. Recommended for granular permissions.",
+      "sensitive": true,
+      "required": true
+    },
+    "atlassian_api_token": {
+      "type": "string",
+      "title": "Atlassian API Token",
+      "description": "Your Atlassian API token (alternative to app password). Bitbucket App Passwords are strongly recommended.",
+      "sensitive": true,
+      "required": false
+    },
+    "atlassian_site_name": {
+      "type": "string",
+      "title": "Atlassian Site Name",
+      "description": "The Atlassian site name (e.g., 'bitbucket'). Required when using Atlassian API Token.",
+      "default": "bitbucket",
+      "sensitive": false,
+      "required": false
+    },
+    "atlassian_user_email": {
+      "type": "string",
+      "title": "Atlassian User Email",
+      "description": "Your Atlassian user email. Required when using Atlassian API Token.",
+      "sensitive": false,
+      "required": false
+    },
+    "bitbucket_default_workspace": {
+      "type": "string",
+      "title": "Default Bitbucket Workspace",
+      "description": "Optional default workspace to use when not explicitly provided.",
+      "sensitive": false,
+      "required": false
+    },
+    "transport_mode": {
+      "type": "string",
+      "title": "Transport Mode",
+      "description": "Set to 'stdio' for AI assistant communication or 'http' for server mode. Default is 'stdio' for MCP clients.",
+      "default": "stdio",
+      "sensitive": false,
+      "required": false
+    },
+    "port": {
+      "type": "number",
+      "title": "HTTP Server Port",
+      "description": "Port for the HTTP transport mode. Default is 3000.",
+      "default": 3000,
+      "min": 1,
+      "max": 65535,
+      "sensitive": false,
+      "required": false
+    },
+    "debug": {
+      "type": "boolean",
+      "title": "Enable Debug Logging",
+      "description": "Enable verbose debug logging for the server.",
+      "default": false,
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# Connect AI to Your Bitbucket Repositories\n\nTransform how you work with Bitbucket by connecting Claude, Cursor AI, and other AI assistants directly to your repositories, pull requests, and code. Get instant insights, automate code reviews, and streamline your development workflow.\n\n[![NPM Version](https://img.shields.io/npm/v/@aashari/mcp-server-atlassian-bitbucket)](https://www.npmjs.com/package/@aashari/mcp-server-atlassian-bitbucket)\n\n## What You Can Do\n\n✅ **Ask AI about your code**: \"What's the latest commit in my main repository?\"  \n✅ **Get PR insights**: \"Show me all open pull requests that need review\"  \n✅ **Search your codebase**: \"Find all JavaScript files that use the authentication function\"  \n✅ **Review code changes**: \"Compare the differences between my feature branch and main\"  \n✅ **Manage pull requests**: \"Create a PR for my new-feature branch\"  \n✅ **Automate workflows**: \"Add a comment to PR #123 with the test results\"  \n\n## Perfect For\n\n- **Developers** who want AI assistance with code reviews and repository management\n- **Team Leads** needing quick insights into project status and pull request activity  \n- **DevOps Engineers** automating repository workflows and branch management\n- **Anyone** who wants to interact with Bitbucket using natural language\n\n## Quick Start\n\nGet up and running in 2 minutes:\n\n### 1. Get Your Bitbucket Credentials\n\n> ⚠️ **IMPORTANT**: Bitbucket App Passwords are being deprecated and will be removed by **June 2026**. We recommend using **Scoped API Tokens** for new setups.\n\n#### Option A: Scoped API Token (Recommended - Future-Proof)\n\n**Bitbucket is deprecating app passwords**. Use the new scoped API tokens instead:\n\n1. Go to [Atlassian API Tokens](https://id.atlassian.com/manage-profile/security/api-tokens)\n2. Click **\"Create API token with scopes\"**\n3. Select **\"Bitbucket\"** as the product\n4. Choose the appropriate scopes:\n   - **For read-only access**: `repository`, `workspace`\n   - **For full functionality**: `repository`, `workspace`, `pullrequest`\n5. Copy the generated token (starts with `ATATT`)\n6. Use with your Atlassian email as the username\n\n#### Option B: App Password (Legacy - Will be deprecated)\n\nGenerate a Bitbucket App Password (legacy method):\n1. Go to [Bitbucket App Passwords](https://bitbucket.org/account/settings/app-passwords/)\n2. Click \"Create app password\"\n3. Give it a name like \"AI Assistant\"\n4. Select these permissions:\n   - **Workspaces**: Read\n   - **Repositories**: Read (and Write if you want AI to create PRs/comments)\n   - **Pull Requests**: Read (and Write for PR management)\n\n### 2. Try It Instantly\n\n```bash\n# Set your credentials (choose one method)\n\n# Method 1: Scoped API Token (recommended - future-proof)\nexport ATLASSIAN_USER_EMAIL=\"your.email@company.com\"\nexport ATLASSIAN_API_TOKEN=\"your_scoped_api_token\"  # Token starting with ATATT\n\n# OR Method 2: Legacy App Password (will be deprecated June 2026)\nexport ATLASSIAN_BITBUCKET_USERNAME=\"your_username\"\nexport ATLASSIAN_BITBUCKET_APP_PASSWORD=\"your_app_password\"\n\n# List your workspaces\nnpx -y @aashari/mcp-server-atlassian-bitbucket ls-workspaces\n\n# List repositories in your workspace\nnpx -y @aashari/mcp-server-atlassian-bitbucket ls-repos --workspace-slug your-workspace\n\n# Get details about a specific repository  \nnpx -y @aashari/mcp-server-atlassian-bitbucket get-repo --workspace-slug your-workspace --repo-slug your-repo\n```\n\n## Connect to AI Assistants\n\n### For Claude Desktop Users\n\nAdd this to your Claude configuration file (`~/.claude/claude_desktop_config.json`):\n\n**Option 1: Scoped API Token (recommended - future-proof)**\n```json\n{\n  \"mcpServers\": {\n    \"bitbucket\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@aashari/mcp-server-atlassian-bitbucket\"],\n      \"env\": {\n        \"ATLASSIAN_USER_EMAIL\": \"your.email@company.com\",\n        \"ATLASSIAN_API_TOKEN\": \"your_scoped_api_token\"\n      }\n    }\n  }\n}\n```\n\n**Option 2: Legacy App Password (will be deprecated June 2026)**\n```json\n{\n  \"mcpServers\": {\n    \"bitbucket\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@aashari/mcp-server-atlassian-bitbucket\"],\n      \"env\": {\n        \"ATLASSIAN_BITBUCKET_USERNAME\": \"your_username\",\n        \"ATLASSIAN_BITBUCKET_APP_PASSWORD\": \"your_app_password\"\n      }\n    }\n  }\n}\n```\n\nRestart Claude Desktop, and you'll see \"🔗 bitbucket\" in the status bar.\n\n### For Other AI Assistants\n\nMost AI assistants support MCP. Install the server globally:\n\n```bash\nnpm install -g @aashari/mcp-server-atlassian-bitbucket\n```\n\nThen configure your AI assistant to use the MCP server with STDIO transport.\n\n### Alternative: Configuration File\n\nCreate `~/.mcp/configs.json` for system-wide configuration:\n\n**Option 1: Scoped API Token (recommended - future-proof)**\n```json\n{\n  \"bitbucket\": {\n    \"environments\": {\n      \"ATLASSIAN_USER_EMAIL\": \"your.email@company.com\",\n      \"ATLASSIAN_API_TOKEN\": \"your_scoped_api_token\",\n      \"BITBUCKET_DEFAULT_WORKSPACE\": \"your_main_workspace\"\n    }\n  }\n}\n```\n\n**Option 2: Legacy App Password (will be deprecated June 2026)**\n```json\n{\n  \"bitbucket\": {\n    \"environments\": {\n      \"ATLASSIAN_BITBUCKET_USERNAME\": \"your_username\",\n      \"ATLASSIAN_BITBUCKET_APP_PASSWORD\": \"your_app_password\",\n      \"BITBUCKET_DEFAULT_WORKSPACE\": \"your_main_workspace\"\n    }\n  }\n}\n```\n\n**Alternative config keys:** The system also accepts `\"atlassian-bitbucket\"`, `\"@aashari/mcp-server-atlassian-bitbucket\"`, or `\"mcp-server-atlassian-bitbucket\"` instead of `\"bitbucket\"`.\n\n## Real-World Examples\n\n### 🔍 Explore Your Repositories\n\nAsk your AI assistant:\n- *\"List all repositories in my main workspace\"*\n- *\"Show me details about the backend-api repository\"*\n- *\"What's the commit history for the feature-auth branch?\"*\n- *\"Get the content of src/config.js from the main branch\"*\n\n### 📋 Manage Pull Requests\n\nAsk your AI assistant:\n- *\"Show me all open pull requests that need review\"*\n- *\"Get details about pull request #42 including the code changes\"*\n- *\"Create a pull request from feature-login to main branch\"*\n- *\"Add a comment to PR #15 saying the tests passed\"*\n- *\"Approve pull request #33\"*\n\n### 🔧 Work with Branches and Code\n\nAsk your AI assistant:\n- *\"Compare my feature branch with the main branch\"*\n- *\"Create a new branch called hotfix-login from the main branch\"*\n- *\"List all branches in the user-service repository\"*\n- *\"Show me the differences between commits abc123 and def456\"*\n\n### 🔎 Search and Discovery\n\nAsk your AI assistant:\n- *\"Search for JavaScript files that contain 'authentication'\"*\n- *\"Find all pull requests related to the login feature\"*\n- *\"Search for repositories in the mobile project\"*\n- *\"Show me code files that use the React framework\"*\n\n## Troubleshooting\n\n### \"Authentication failed\" or \"403 Forbidden\"\n\n1. **Choose the right authentication method**:\n   - **Standard Atlassian method**: Use your Atlassian account email + API token (works with any Atlassian service)\n   - **Bitbucket-specific method**: Use your Bitbucket username + App password (Bitbucket only)\n\n2. **For Bitbucket App Passwords** (if using Option 2):\n   - Go to [Bitbucket App Passwords](https://bitbucket.org/account/settings/app-passwords/)\n   - Make sure your app password has the right permissions (Workspaces: Read, Repositories: Read, Pull Requests: Read)\n\n3. **For Scoped API Tokens** (recommended):\n   - Go to [Atlassian API Tokens](https://id.atlassian.com/manage-profile/security/api-tokens)\n   - Make sure your token is still active and has the right scopes\n   - Update your `~/.mcp/configs.json` file to use the new scoped API token format:\n   ```json\n   {\n     \"@aashari/mcp-server-atlassian-bitbucket\": {\n       \"environments\": {\n         \"ATLASSIAN_USER_EMAIL\": \"your.email@company.com\",\n         \"ATLASSIAN_API_TOKEN\": \"ATATT3xFfGF0...\"\n       }\n     }\n   }\n   ```\n\n4. **Verify your credentials**:\n   ```bash\n   # Test your credentials work\n   npx -y @aashari/mcp-server-atlassian-bitbucket ls-workspaces\n   ```\n\n### \"Workspace not found\" or \"Repository not found\"\n\n1. **Check your workspace slug**:\n   ```bash\n   # List your workspaces to see the correct slugs\n   npx -y @aashari/mcp-server-atlassian-bitbucket ls-workspaces\n   ```\n\n2. **Use the exact slug from Bitbucket URL**:\n   - If your repo URL is `https://bitbucket.org/myteam/my-repo`\n   - Workspace slug is `myteam`\n   - Repository slug is `my-repo`\n\n### \"No default workspace configured\"\n\nSet a default workspace to avoid specifying it every time:\n```bash\nexport BITBUCKET_DEFAULT_WORKSPACE=\"your-main-workspace-slug\"\n```\n\n### Claude Desktop Integration Issues\n\n1. **Restart Claude Desktop** after updating the config file\n2. **Check the status bar** for the \"🔗 bitbucket\" indicator\n3. **Verify config file location**:\n   - macOS: `~/.claude/claude_desktop_config.json`\n   - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n### Getting Help\n\nIf you're still having issues:\n1. Run a simple test command to verify everything works\n2. Check the [GitHub Issues](https://github.com/aashari/mcp-server-atlassian-bitbucket/issues) for similar problems\n3. Create a new issue with your error message and setup details\n\n## Frequently Asked Questions\n\n### What permissions do I need?\n\n**For Scoped API Tokens** (recommended):\n- Your regular Atlassian account with access to Bitbucket\n- Scoped API token created at [id.atlassian.com/manage-profile/security/api-tokens](https://id.atlassian.com/manage-profile/security/api-tokens)\n- Required scopes: `repository`, `workspace` (add `pullrequest` for PR management)\n\n**For Bitbucket App Passwords** (legacy - being deprecated):\n- For **read-only access** (viewing repos, PRs, commits):\n  - Workspaces: Read\n  - Repositories: Read  \n  - Pull Requests: Read\n- For **full functionality** (creating PRs, commenting):\n  - Add \"Write\" permissions for Repositories and Pull Requests\n\n### Can I use this with private repositories?\n\nYes! This works with both public and private repositories. You just need the appropriate permissions through your Bitbucket App Password.\n\n### Do I need to specify workspace every time?\n\nNo! Set `BITBUCKET_DEFAULT_WORKSPACE` in your environment or config file, and it will be used automatically when you don't specify one.\n\n### What AI assistants does this work with?\n\nAny AI assistant that supports the Model Context Protocol (MCP):\n- Claude Desktop (most popular)\n- Cursor AI\n- Continue.dev\n- Many others\n\n### Is my data secure?\n\nYes! This tool:\n- Runs entirely on your local machine\n- Uses your own Bitbucket credentials\n- Never sends your data to third parties\n- Only accesses what you give it permission to access\n\n### Can I use this for multiple Bitbucket accounts?\n\nCurrently, each installation supports one set of credentials. For multiple accounts, you'd need separate configurations.\n\n## Support\n\nNeed help? Here's how to get assistance:\n\n1. **Check the troubleshooting section above** - most common issues are covered there\n2. **Visit our GitHub repository** for documentation and examples: [github.com/aashari/mcp-server-atlassian-bitbucket](https://github.com/aashari/mcp-server-atlassian-bitbucket)\n3. **Report issues** at [GitHub Issues](https://github.com/aashari/mcp-server-atlassian-bitbucket/issues)\n4. **Start a discussion** for feature requests or general questions\n\n---\n\n*Made with ❤️ for developers who want to bring AI into their Bitbucket workflow.*\n",
+  "category": "Development",
+  "quality_score": 77,
+  "archestra_config": {
+    "client_config_permutations": {
+      "aashari-mcp-server-atlassian-bitbucket": {
+        "command": "npx",
+        "args": ["-y", "@aashari/mcp-server-atlassian-bitbucket"],
+        "env": {}
+      },
+      "aashari-mcp-server-atlassian-bitbucket-stdio": {
+        "command": "npx",
+        "args": ["-y", "@aashari/mcp-server-atlassian-bitbucket"],
+        "env": {
+          "TRANSPORT_MODE": "stdio"
+        }
+      },
+      "aashari-mcp-server-atlassian-bitbucket-http": {
+        "command": "npx",
+        "args": ["-y", "@aashari/mcp-server-atlassian-bitbucket"],
+        "env": {
+          "TRANSPORT_MODE": "http"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "aashari",
+    "repo": "mcp-server-atlassian-bitbucket",
+    "url": "https://github.com/aashari/mcp-server-atlassian-bitbucket",
+    "name": "aashari__mcp-server-atlassian-bitbucket",
+    "path": null,
+    "stars": 73,
+    "contributors": 6,
+    "issues": 21,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "9b6734842822ef46db3e5fa365e2d8fabc09dc0e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:34.579Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "turndown",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@aashari/mcp-server-atlassian-bitbucket\",\n  \"version\": \"1.43.4\",\n  \"description\": \"Node.js/TypeScript MCP server for Atlassian Bitbucket. Enables AI systems (LLMs) to interact with workspaces, repositories, and pull requests via tools (list, get, comment, search). Connects AI directly to version control workflows through the standard MCP interface.\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"type\": \"commonjs\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/aashari/mcp-server-atlassian-bitbucket.git\"\n  },\n  \"bin\": {\n    \"mcp-atlassian-bitbucket\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"prepare\": \"npm run build && node scripts/ensure-executable.js\",\n    \"postinstall\": \"node scripts/ensure-executable.js\",\n    \"test\": \"jest\",\n    \"test:coverage\": \"jest --coverage\",\n    \"test:cli\": \"jest src/cli/.*\\\\.cli\\\\.test\\\\.ts --runInBand --testTimeout=60000\",\n    \"lint\": \"eslint src --ext .ts --config eslint.config.mjs\",\n    \"format\": \"prettier --write 'src/**/*.ts' 'scripts/**/*.js'\",\n    \"publish:npm\": \"npm publish\",\n    \"update:check\": \"npx npm-check-updates\",\n    \"update:deps\": \"npx npm-check-updates -u && npm install --legacy-peer-deps\",\n    \"update:version\": \"node scripts/update-version.js\",\n    \"mcp:stdio\": \"TRANSPORT_MODE=stdio npm run build && node dist/index.js\",\n    \"mcp:http\": \"TRANSPORT_MODE=http npm run build && node dist/index.js\",\n    \"mcp:inspect\": \"TRANSPORT_MODE=http npm run build && (node dist/index.js &) && sleep 2 && npx @modelcontextprotocol/inspector http://localhost:3000/mcp\",\n    \"dev:stdio\": \"npm run build && npx @modelcontextprotocol/inspector -e TRANSPORT_MODE=stdio -e DEBUG=true node dist/index.js\",\n    \"dev:http\": \"DEBUG=true TRANSPORT_MODE=http npm run build && node dist/index.js\",\n    \"dev:server\": \"DEBUG=true npm run build && npx @modelcontextprotocol/inspector -e DEBUG=true node dist/index.js\",\n    \"dev:cli\": \"DEBUG=true npm run build && DEBUG=true node dist/index.js\",\n    \"start:server\": \"npm run build && npx @modelcontextprotocol/inspector node dist/index.js\",\n    \"start:cli\": \"npm run build && node dist/index.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"typescript\",\n    \"claude\",\n    \"anthropic\",\n    \"ai\",\n    \"atlassian\",\n    \"bitbucket\",\n    \"repository\",\n    \"version-control\",\n    \"pull-request\",\n    \"server\",\n    \"model-context-protocol\",\n    \"tools\",\n    \"resources\",\n    \"tooling\",\n    \"ai-integration\",\n    \"mcp-server\",\n    \"llm\",\n    \"ai-connector\",\n    \"external-tools\",\n    \"cli\",\n    \"mcp-inspector\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.33.0\",\n    \"@semantic-release/changelog\": \"^6.0.3\",\n    \"@semantic-release/exec\": \"^7.1.0\",\n    \"@semantic-release/git\": \"^10.0.1\",\n    \"@semantic-release/github\": \"^11.0.4\",\n    \"@semantic-release/npm\": \"^12.0.2\",\n    \"@types/cors\": \"^2.8.19\",\n    \"@types/express\": \"^5.0.3\",\n    \"@types/jest\": \"^30.0.0\",\n    \"@types/node\": \"^24.3.0\",\n    \"@types/turndown\": \"^5.0.5\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.39.1\",\n    \"@typescript-eslint/parser\": \"^8.39.1\",\n    \"eslint\": \"^9.33.0\",\n    \"eslint-config-prettier\": \"^10.1.8\",\n    \"eslint-plugin-filenames\": \"^1.3.2\",\n    \"eslint-plugin-prettier\": \"^5.5.4\",\n    \"jest\": \"^30.0.5\",\n    \"nodemon\": \"^3.1.10\",\n    \"npm-check-updates\": \"^18.0.2\",\n    \"prettier\": \"^3.6.2\",\n    \"semantic-release\": \"^24.2.7\",\n    \"ts-jest\": \"^29.4.1\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.9.2\",\n    \"typescript-eslint\": \"^8.39.1\"\n  },\n  \"publishConfig\": {\n    \"registry\": \"https://registry.npmjs.org/\",\n    \"access\": \"public\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.17.3\",\n    \"commander\": \"^14.0.0\",\n    \"cors\": \"^2.8.5\",\n    \"dotenv\": \"^17.2.1\",\n    \"express\": \"^5.1.0\",\n    \"turndown\": \"^7.2.1\",\n    \"zod\": \"^3.25.76\"\n  },\n  \"directories\": {\n    \"example\": \"examples\"\n  },\n  \"jest\": {\n    \"preset\": \"ts-jest\",\n    \"testEnvironment\": \"node\",\n    \"testMatch\": [\n      \"**/src/**/*.test.ts\"\n    ],\n    \"collectCoverageFrom\": [\n      \"src/**/*.ts\",\n      \"!src/**/*.test.ts\",\n      \"!src/**/*.spec.ts\"\n    ],\n    \"coveragePathIgnorePatterns\": [\n      \"/node_modules/\",\n      \"/dist/\",\n      \"/coverage/\"\n    ],\n    \"coverageReporters\": [\n      \"text\",\n      \"lcov\",\n      \"json-summary\"\n    ],\n    \"transform\": {\n      \"^.+\\\\.tsx?$\": [\n        \"ts-jest\",\n        {\n          \"useESM\": true\n        }\n      ]\n    },\n    \"moduleNameMapper\": {\n      \"(.*)\\\\.(js|jsx)$\": \"$1\"\n    },\n    \"extensionsToTreatAsEsm\": [\n      \".ts\"\n    ],\n    \"moduleFileExtensions\": [\n      \"ts\",\n      \"tsx\",\n      \"js\",\n      \"jsx\",\n      \"json\",\n      \"node\"\n    ]\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\n\n\n=== scripts/package.json ===\n{\n  \"type\": \"module\"\n} "
+}

@@ -1,0 +1,153 @@
+{
+  "name": "sanyambassi__ciphertrust-manager-mcp-server",
+  "display_name": "ciphertrust-manager-mcp-server",
+  "description": "MCP Server for Thales CipherTrust Manager",
+  "author": {
+    "name": "sanyambassi"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "ciphertrust_mcp_server.__main__"],
+    "env": {
+      "CIPHERTRUST_URL": "${user_config.ciphertrust_url}",
+      "CIPHERTRUST_USER": "${user_config.ciphertrust_user}",
+      "CIPHERTRUST_PASSWORD": "${user_config.ciphertrust_password}",
+      "CIPHERTRUST_NOSSLVERIFY": "${user_config.ciphertrust_nosslverify}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ciphertrust_url": {
+      "type": "string",
+      "title": "CipherTrust Manager URL",
+      "description": "The full URL of your CipherTrust Manager instance (e.g., https://your-ciphertrust-manager.example.com).",
+      "required": true
+    },
+    "ciphertrust_user": {
+      "type": "string",
+      "title": "CipherTrust Manager Username",
+      "description": "The username for authenticating with CipherTrust Manager (e.g., admin).",
+      "required": true
+    },
+    "ciphertrust_password": {
+      "type": "string",
+      "title": "CipherTrust Manager Password",
+      "description": "The password for authenticating with CipherTrust Manager.",
+      "sensitive": true,
+      "required": true
+    },
+    "ciphertrust_nosslverify": {
+      "type": "boolean",
+      "title": "Disable SSL Verification",
+      "description": "Set to true to disable SSL certificate verification for CipherTrust Manager connections. Use with caution in production environments.",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# CipherTrust Manager MCP Server\n\nThis project implements an independently-developed CipherTrust MCP (Model Context Protocol) server that allows AI Assistants like Claude or Cursor to interact with CipherTrust Manager resources using the ksctl CLI.\n\n## Table of Contents\n\n- [Important Notice](#important-notice)\n- [Features](#features)\n- [Prerequisites](#prerequisites)\n- [Installation](#installation)\n- [Configuration](#configuration)\n- [Usage](#usage)\n- [Testing](#testing)\n- [Integration with AI Assistants](#integration-with-ai-assistants)\n- [Environment Variables](#environment-variables)\n- [Troubleshooting](#troubleshooting)\n- [Project Structure](#project-structure)\n- [Contributing](#contributing)\n- [Legal](#legal)\n- [License](#license)\n\n## Important Notice\n\nThis is an **independent, open-source project**. Please note:\n\n- ⚠️ **Not officially supported** by Thales\n- ✅ **Uses public APIs** and documented interfaces\n- 🔧 **Independently maintained** \n- 📝 **Use at your own risk** - test thoroughly in your environment\n- 💼 **No warranty** - see license for full terms\n\nFor official CipherTrust Manager support, please contact Thales directly.\n\n## Features\n\nThe MCP server exposes a set of tools and endpoints for clients (such as Claude Desktop and Cursor) to interact with CipherTrust resources. Supported operations include:\n\n- Key management\n- CTE client management\n- User management\n- Connection management\n- And more\n\n**Benefits:**\n- Unified interface for AI assistants to interact with CipherTrust Manager\n- Support for key management, connection management, CTE client management, and more\n- JSON-RPC communication over stdin/stdout\n- Configurable via environment variables\n\n## Prerequisites\n\n- **Git**\n- **Python 3.11 or higher**\n- **uv** for dependency management\n- **Access to a CipherTrust Manager instance**\n\n### Installing Git (Windows)\n\nIf you don't have Git installed on Windows, follow these steps:\n\n- **Download and install Git for Windows**: [https://git-scm.com/download/win](https://git-scm.com/download/win)\n- **Or install via winget**:\n  ```bash\n  winget install --id Git.Git -e --source winget\n  ```\n- **Verify installation** - Open PowerShell and execute:\n  ```bash\n  git --version\n  ```\n  You should see the installed Git version.\n\n## Installing Python and uv\n\n### Method 1: Manual Installation\n\n#### 1. Download Python\n```powershell\n# Open PowerShell as Administrator (optional)\ncd $env:USERPROFILE\\Downloads\nInvoke-WebRequest -Uri \"https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe\" -OutFile \"python-installer.exe\"\n```\n\n#### 2. Run the Installer\n```powershell\n.\\python-installer.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0\n```\n\n#### 3. Verify Installation\nOpen a new terminal and run:\n```bash\npython --version\npip --version\n```\n\n#### 4. Install uv\n```bash\npip install uv\nuv --version\n```\n\n#### 5. Clone the Repository\n```bash\ngit clone https://github.com/sanyambassi/ciphertrust-manager-mcp-server.git\ncd ciphertrust-manager-mcp-server\n```\n\n#### 6. Create a Virtual Environment and Install Dependencies\n```bash\nuv venv\n.venv\\Scripts\\activate\nuv pip install -e .\n```\n\n### Method 2: Using winget (Windows)\n\n#### 1. Install Python with winget\n```bash\nwinget install --id Python.Python.3.12 --source winget --accept-package-agreements --accept-source-agreements\n```\n\n#### 2. Close and Reopen PowerShell\nThis ensures Python is available in your PATH.\n\n#### 3. Verify Installation\n```bash\npython --version\npip --version\n```\n\n#### 4. Install uv\n```bash\npip install uv\nuv --version\n```\n\n#### 5. Clone the Repository\n```bash\ngit clone https://github.com/sanyambassi/ciphertrust-manager-mcp-server.git\ncd ciphertrust-manager-mcp-server\n```\n\n#### 6. Create a Virtual Environment and Install Dependencies\n```bash\nuv venv\n.venv\\Scripts\\activate\nuv pip install -e .\n```\n\n## Configuration\n\n### (Optional) Copy and Edit the Example Environment File\n\n**Example `.env`:**\n```bash\ncp .env.example .env\n# Edit .env with your CipherTrust Manager details\n```\n\nYou can also set these as environment variables directly instead of using a `.env` file.\n\n**Example `.env` content:**\n```\nCIPHERTRUST_URL=https://your-ciphertrust-manager.example.com\nCIPHERTRUST_USER=admin\nCIPHERTRUST_PASSWORD=your-password-here\nCIPHERTRUST_NOSSLVERIFY=true\n```\n\n## Usage\n\n**⚠️ Important:** Before starting, either the environment variable or .env should contain a valid CipherTrust Manager URL.\n\nYou have two main ways to run the CipherTrust MCP Server:\n\n### Method 1: Direct Execution\n```bash\nuv run ciphertrust-mcp-server\n```\nThis runs the `main()` function in `ciphertrust_mcp_server/__main__.py`.\n\n### Method 2: Module Execution\n```bash\nuv run python -m ciphertrust_mcp_server.__main__\n```\n\n## Testing\n\nThis project includes comprehensive testing capabilities using the Model Context Protocol Inspector and Python unit tests.\n\n### Quick Testing\n\n```bash\n# Manual JSON-RPC testing (direct stdin/stdout)\nuv run ciphertrust-mcp-server\n# Then send JSON-RPC commands (see TESTING.md for details)\n\n# Interactive UI testing (opens browser interface)\nnpx @modelcontextprotocol/inspector uv run ciphertrust-mcp-server\n\n# Quick CLI testing\n# Get tools\nnpx @modelcontextprotocol/inspector --cli --config tests/mcp_inspector_config.json --server ciphertrust-local --method tools/list\n# Get system information\nnpx @modelcontextprotocol/inspector --cli --config tests/mcp_inspector_config.json --server ciphertrust-local --method tools/call --tool-name system_information --tool-arg action=get\n# Get 2 keys\nnpx @modelcontextprotocol/inspector --cli --config tests/mcp_inspector_config.json --server ciphertrust-local --method tools/call --tool-name key_management --tool-arg action=list --tool-arg limit=2\n```\n\n### Available Testing Methods\n\n- **🔧 Manual JSON-RPC Testing**: Direct stdin/stdout communication for debugging and development\n- **🖥️ Interactive UI Testing**: Visual web interface for manual testing and debugging\n- **⚡ CLI Automated Testing**: Command-line automation for CI/CD integration\n- **🧪 Python Unit Tests**: Comprehensive unit testing for server components\n- **🔗 Integration Tests**: End-to-end testing with real CipherTrust Manager instances\n\n### NPM Scripts\n\nAfter creating a `package.json` file:\n\n```bash\nnpm run test:inspector:ui     # Open interactive testing interface\nnpm run test:inspector:cli    # Run automated CLI tests\nnpm run test:python          # Run Python unit tests\nnpm run test:full           # Run complete test suite\n```\n\n### Comprehensive Testing Guide\n\n📖 **For detailed testing instructions, see [TESTING.md](docs/TESTING.md)**\n\n🔧 **For example AI assistant prompts, see [EXAMPLE_PROMPTS.md](docs/EXAMPLE_PROMPTS.md)**\n\nThe testing guide covers:\n- Complete setup and configuration\n- Advanced testing scenarios\n\n\nThe example prompts include:\n- Key management operations\n- User and group management\n- System and service management\n- Cluster management\n- License management\n- CTE operations\n- Crypto operations\n- And more practical scenarios\n\n## Integration with AI Assistants\n\n### Using with Cursor\n\n#### 1. Configure Cursor\n- Go to **Settings > MCP Tools > Add Custom MCP**\n- Add the following contents in the config file (e.g., `mcp.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"ciphertrust\": {\n      \"command\": \"Path to your project folder/ciphertrust-manager-mcp-server/.venv/bin/ciphertrust-mcp-server\",\n      \"args\": [],\n      \"env\": {\n        \"CIPHERTRUST_URL\": \"https://your-ciphertrust.example.com\",\n        \"CIPHERTRUST_USER\": \"admin\",\n        \"CIPHERTRUST_PASSWORD\": \"your-password-here\"\n      }\n    }\n  }\n}\n```\n\nOn Windows, use the `.venv\\Scripts\\ciphertrust-mcp-server.exe` path and double backslashes:\n\n```json\n{\n  \"mcpServers\": {\n    \"ciphertrust\": {\n      \"command\": \"C:\\\\path\\\\to\\\\ciphertrust-manager-mcp-server\\\\.venv\\\\Scripts\\\\ciphertrust-mcp-server\",\n      \"args\": [],\n      \"env\": {\n        \"CIPHERTRUST_URL\": \"https://your-ciphertrust.example.com\",\n        \"CIPHERTRUST_USER\": \"admin\",\n        \"CIPHERTRUST_PASSWORD\": \"your-password-here\"\n      }\n    }\n  }\n}\n```\n\n#### 2. Apply Configuration\nDisable and Re-enable the CipherTrust MCP server in Cursor to apply the changes.\n\n### Using with Claude Desktop\n\n#### 1. Locate or create the Claude Desktop config file:\n- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows**: `%APPDATA%\\Roaming\\Claude\\claude_desktop_config.json`\n\n#### 2. Add or update the MCP server configuration:\n\n**macOS/Linux Example:**\n```json\n{\n  \"mcpServers\": {\n    \"ciphertrust\": {\n      \"command\": \"/absolute/path/to/ciphertrust-manager-mcp-server/.venv/bin/ciphertrust-mcp-server\",\n      \"env\": {\n        \"CIPHERTRUST_URL\": \"https://your-ciphertrust.example.com\",\n        \"CIPHERTRUST_USER\": \"admin\",\n        \"CIPHERTRUST_PASSWORD\": \"your-password-here\"\n      }\n    }\n  }\n}\n```\n\n**Windows Example:**\n```json\n{\n  \"mcpServers\": {\n    \"ciphertrust\": {\n      \"command\": \"C:\\\\absolute\\\\path\\\\to\\\\ciphertrust-manager-mcp-server\\\\.venv\\\\Scripts\\\\ciphertrust-mcp-server\",\n      \"env\": {\n        \"CIPHERTRUST_URL\": \"https://your-ciphertrust.example.com\",\n        \"CIPHERTRUST_USER\": \"admin\",\n        \"CIPHERTRUST_PASSWORD\": \"your-password-here\"\n      }\n    }\n  }\n}\n```\n\nAdjust the path to match your actual project location and environment.\n\n#### 3. Restart Claude Desktop\nRestart Claude Desktop to apply the changes.\n\n## Environment Variables\n\nSet these in your shell or in a `.env` file in the project root:\n\n| Variable Name | Description | Required/Default |\n|---|---|---|\n| `CIPHERTRUST_URL` | CipherTrust Manager URL (http/https) | Required |\n| `CIPHERTRUST_USER` | CipherTrust Manager username | Required |\n| `CIPHERTRUST_PASSWORD` | CipherTrust Manager password | Required |\n| `CIPHERTRUST_NOSSLVERIFY` | Disable SSL verification (true/false) | `false` |\n| `CIPHERTRUST_TIMEOUT` | Timeout for CipherTrust requests (seconds) | `30` |\n| `CIPHERTRUST_DOMAIN` | Default CipherTrust domain | `root` |\n| `CIPHERTRUST_AUTH_DOMAIN` | Authentication domain | `root` |\n| `KSCTL_PATH` | Path to ksctl binary | `~/.ciphertrust-mcp/ksctl` |\n| `KSCTL_CONFIG_PATH` | Path to ksctl config file | `~/.ksctl/config.yaml` |\n| `LOG_LEVEL` | Logging level (DEBUG, INFO) | `INFO` |\n\n**Example `.env` file:**\n```bash\nCIPHERTRUST_URL=https://your-ciphertrust.example.com\nCIPHERTRUST_USER=admin\nCIPHERTRUST_PASSWORD=yourpassword\nCIPHERTRUST_NOSSLVERIFY=false\nCIPHERTRUST_TIMEOUT=30\nCIPHERTRUST_DOMAIN=root\nCIPHERTRUST_AUTH_DOMAIN=root\nKSCTL_PATH=\nKSCTL_CONFIG_PATH=\nLOG_LEVEL=INFO\n```\n\n## Troubleshooting\n\n### Successful startup logs:\n\n- The server is designed to be run as a subprocess by MCP clients (like Claude Desktop or Cursor) and communicates via JSON-RPC over stdin/stdout.\n- You'll see log output like in the AI assistant's MCP log:\n\n```\n2025-06-16 02:22:30,462 - ciphertrust_mcp_server.server - INFO - Starting ciphertrust-manager v0.1.0\n2025-06-16 02:22:30,838 - ciphertrust_mcp_server.server - INFO - Successfully connected to CipherTrust Manager\n2025-06-16 02:22:30,838 - ciphertrust_mcp_server.server - INFO - MCP server ready and waiting for JSON-RPC messages on stdin...\n```\n\n### Dependencies\n\nThe `pyproject.toml` file includes these dependencies:\n- `mcp>=1.0.0`\n- `pydantic>=2.0.0`\n- `pydantic-settings>=2.0.0`\n- `httpx>=0.27.0`\n- `python-dotenv>=1.0.0`\n\nIf you encounter issues, ensure all dependencies are installed and up-to-date.\n\n## Project Structure\n\n```\nciphertrust-manager-mcp-server/\n├── src\n│   ├── ciphertrust_mcp_server/     # Main server code\n├── tests/                      \t# Testing configuration and unit tests\n│   ├── mcp_inspector_config.json\n│   ├── test_scenarios.json\n│   ├── test_server.py\n│   └── test_integration_simple.py\n├── scripts/                    \t# Testing and utility scripts\n│   ├── test_with_inspector.bat\n│   ├── test_with_inspector.sh\n│   └── run_tests.py\n├── docs/                      \t\t# Additional documentation\n│   ├── TESTING.md\n│   ├── EXAMPLE_PROMPTS.md\n│   └── TOOLS.md\n├── README.md                   \t# This file\n├── pyproject.toml             \t\t# Python dependencies\n└── package.json               \t\t# Node.js dependencies for testing\n```\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request. While this started as a personal project, contributions help make it better for everyone.\n\n## Legal\n\n### Trademark Notice\nCipherTrust® and related trademarks are the property of Thales Group and its subsidiaries. This project is not affiliated with, endorsed by, or sponsored by Thales Group.\n\n### No Warranty\nThis software is provided \"as is\" without warranty of any kind. Use at your own risk.\n\n### Support\nThis is an independent project. For official CipherTrust Manager support, please contact Thales directly. For issues with this unofficial MCP server, please use the GitHub issue tracker.\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n---",
+  "category": "AI Tools",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ciphertrust-mcp-server": {
+        "command": "uv",
+        "args": ["run", "ciphertrust-mcp-server"],
+        "env": {}
+      },
+      "ciphertrust-mcp-server-configured": {
+        "command": "uv",
+        "args": ["run", "ciphertrust-mcp-server"],
+        "env": {
+          "CIPHERTRUST_URL": "https://your-ciphertrust-manager.example.com",
+          "CIPHERTRUST_USER": "admin",
+          "CIPHERTRUST_PASSWORD": "your-password-here",
+          "CIPHERTRUST_NOSSLVERIFY": "true"
+        }
+      },
+      "ciphertrust_mcp_server": {
+        "command": "uv",
+        "args": ["run", "python", "-m", "ciphertrust_mcp_server.__main__"],
+        "env": {}
+      },
+      "ciphertrust_mcp_server-configured": {
+        "command": "uv",
+        "args": ["run", "python", "-m", "ciphertrust_mcp_server.__main__"],
+        "env": {
+          "CIPHERTRUST_URL": "https://your-ciphertrust-manager.example.com",
+          "CIPHERTRUST_USER": "admin",
+          "CIPHERTRUST_PASSWORD": "your-password-here",
+          "CIPHERTRUST_NOSSLVERIFY": "true"
+        }
+      },
+      "ciphertrust-mcp-server-cursor": {
+        "command": "ciphertrust-mcp-server",
+        "args": [],
+        "env": {
+          "CIPHERTRUST_URL": "https://your-ciphertrust-manager.example.com",
+          "CIPHERTRUST_USER": "admin",
+          "CIPHERTRUST_PASSWORD": "your-password-here",
+          "CIPHERTRUST_NOSSLVERIFY": "true"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sanyambassi",
+    "repo": "ciphertrust-manager-mcp-server",
+    "url": "https://github.com/sanyambassi/ciphertrust-manager-mcp-server",
+    "name": "ciphertrust-manager-mcp-server",
+    "path": null,
+    "stars": 3,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "6a12686a4dc1f6f873eabf1c41b2cc30b1b97e3f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.081Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 8
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\r\n  \"name\": \"ciphertrust-manager-mcp-server-testing\",\r\n  \"version\": \"1.0.0\",\r\n  \"description\": \"Testing utilities for CipherTrust Manager MCP Server\",\r\n  \"scripts\": {\r\n    \"test:inspector:ui\": \"npx @modelcontextprotocol/inspector --config tests/mcp_inspector_config.json --server ciphertrust-local\",\r\n    \"test:inspector:cli\": \"npx @modelcontextprotocol/inspector --cli --config tests/mcp_inspector_config.json --server ciphertrust-local --method tools/list\",\r\n    \"test:full\": \"npm run test:python && npm run test:inspector:cli\",\r\n    \"test:python\": \"uv run python -m pytest tests/test_server.py -v\"\r\n  },\r\n  \"devDependencies\": {\r\n    \"@modelcontextprotocol/inspector\": \"^0.14.2\"\r\n  },\r\n  \"keywords\": [\"mcp\", \"ciphertrust\", \"testing\"],\r\n  \"author\": \"Your Name\",\r\n  \"license\": \"MIT\"\r\n}\n\n=== pyproject.toml ===\n[project]\nname = \"ciphertrust-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"MCP server for Thales CipherTrust Manager\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"mcp>=1.0.0\",\n    \"pydantic>=2.0.0\",\n    \"pydantic-settings>=2.0.0\",\n    \"httpx>=0.27.0\",\n    \"python-dotenv>=1.0.0\",\n]\n\n[project.scripts]\nciphertrust-mcp-server = \"ciphertrust_mcp_server.__main__:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\n    \"pytest>=8.0.0\",\n    \"pytest-asyncio>=0.23.0\",\n    \"mypy>=1.8.0\",\n    \"ruff>=0.3.0\",\n]\n\n[tool.ruff]\nline-length = 100\ntarget-version = \"py311\"\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\", \"N\", \"W\", \"B\", \"SIM\", \"ARG\", \"PTH\", \"PL\", \"RUF\"]\nignore = [\"PLR0913\"]\n\n[tool.mypy]\npython_version = \"3.11\"\nwarn_return_any = true\nwarn_unused_configs = true\nignore_missing_imports = true\n"
+}

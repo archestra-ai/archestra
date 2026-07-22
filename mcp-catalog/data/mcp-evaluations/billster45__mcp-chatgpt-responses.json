@@ -1,0 +1,128 @@
+{
+  "name": "billster45__mcp-chatgpt-responses",
+  "display_name": "mcp-chatgpt-responses",
+  "description": "MCP server for access to OpenAI's ChatGPT API with Responses API for conversation management",
+  "author": {
+    "name": "billster45"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "chatgpt_server.py"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "DEFAULT_MODEL": "${user_config.default_model}",
+      "DEFAULT_TEMPERATURE": "${user_config.default_temperature}",
+      "MAX_TOKENS": "${user_config.max_tokens}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key for accessing the ChatGPT API.",
+      "sensitive": true,
+      "required": true
+    },
+    "default_model": {
+      "type": "string",
+      "title": "Default Model",
+      "description": "The default OpenAI model to use (e.g., gpt-4o).",
+      "default": "gpt-4o",
+      "required": false
+    },
+    "default_temperature": {
+      "type": "number",
+      "title": "Default Temperature",
+      "description": "The default sampling temperature for the model (0.0 to 2.0). Higher values mean the model will take more risks.",
+      "default": 0.7,
+      "min": 0,
+      "max": 2,
+      "required": false
+    },
+    "max_tokens": {
+      "type": "number",
+      "title": "Max Output Tokens",
+      "description": "The maximum number of tokens to generate in the chat completion.",
+      "default": 1000,
+      "min": 1,
+      "required": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/billster45-mcp-chatgpt-responses-badge.png)](https://mseep.ai/app/billster45-mcp-chatgpt-responses)\n\n# MCP ChatGPT Server\n[![smithery badge](https://smithery.ai/badge/@billster45/mcp-chatgpt-responses)](https://smithery.ai/server/@billster45/mcp-chatgpt-responses)\n\nThis MCP server allows you to access OpenAI's ChatGPT API directly from Claude Desktop.\n\n📝 **Read about why I built this project**: [I Built an AI That Talks to Other AIs: Demystifying the MCP Hype](https://medium.com/@billcockerill/i-built-an-ai-that-talks-to-other-ais-demystifying-the-mcp-hype-88dc03520552)\n\n## Features\n\n- Call the ChatGPT API with customisable parameters\n- Aks Claude and ChatGPT to talk to each other in a long running discussion!\n- Configure model versions, temperature, and other parameters\n- Use web search to get up-to-date information from the internet\n- Uses OpenAI's Responses API for automatic conversation state management\n- Use your own OpenAI API key\n\n## Setup Instructions\n\n### Installing via Smithery\n\nTo install ChatGPT Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@billster45/mcp-chatgpt-responses):\n\n```bash\nnpx -y @smithery/cli install @billster45/mcp-chatgpt-responses --client claude\n```\n\n### Prerequisites\n\n- Python 3.10 or higher\n- [Claude Desktop](https://claude.ai/download) application\n- [OpenAI API key](https://platform.openai.com/settings/organization/api-keys)\n- [uv](https://github.com/astral-sh/uv) for Python package management\n\n### Installation\n\n1. Clone this repository:\n   ```bash\n   git clone https://github.com/billster45/mcp-chatgpt-responses.git\n   cd mcp-chatgpt-responses\n   ```\n\n2. Set up a virtual environment and install dependencies using uv:\n   ```bash\n   uv venv\n   ```\n\n   ```bash\n   .venv\\\\Scripts\\\\activate\n   ```\n   \n   ```bash\n   uv pip install -r requirements.txt\n   ```\n\n### Using with Claude Desktop\n\n1. Configure Claude Desktop to use this MCP server by following the instructions at:\n   [MCP Quickstart Guide](https://modelcontextprotocol.io/quickstart/user#2-add-the-filesystem-mcp-server)\n\n2. Add the following configuration to your Claude Desktop config file (adjust paths as needed):\n   ```json\n   {\n     \"mcpServers\": {\n       \"chatgpt\": {\n         \"command\": \"uv\",\n         \"args\": [\n           \"--directory\",\n           \"\\\\path\\\\to\\\\mcp-chatgpt-responses\",\n           \"run\",\n           \"chatgpt_server.py\"\n         ],\n         \"env\": {\n           \"OPENAI_API_KEY\": \"your-api-key-here\",\n           \"DEFAULT_MODEL\": \"gpt-4o\",\n           \"DEFAULT_TEMPERATURE\": \"0.7\",\n           \"MAX_TOKENS\": \"1000\"\n         }\n       }\n     }\n   }\n   ```\n\n3. Restart Claude Desktop.\n\n4. You can now use the ChatGPT API through Claude by asking questions that mention ChatGPT or that Claude might not be able to answer.\n\n## Available Tools\n\nThe MCP server provides the following tools:\n\n1. `ask_chatgpt(prompt, model, temperature, max_output_tokens, response_id)` - Send a prompt to ChatGPT and get a response\n\n2. `ask_chatgpt_with_web_search(prompt, model, temperature, max_output_tokens, response_id)` - Send a prompt to ChatGPT with web search enabled to get up-to-date information\n\n## Example Usage\n\n### Basic ChatGPT usage:\n\nTell Claude to ask ChatGPT a question!\n```\nUse the ask_chatgpt tool to answer: What is the best way to learn Python?\n```\n\nTell Claude to have a conversation with ChatGPT:\n```\nUse the ask_chatgpt tool to have a two way conversation between you and ChatGPT about the topic that is most important to you.\n```\nNote how in a turn taking conversation the response id allows ChatGPT to store the history of the conversation so its a genuine conversation and not just as series of API calls. This is called [conversation state](https://platform.openai.com/docs/guides/conversation-state?api-mode=responses#openai-apis-for-conversation-state).\n\n### With web search:\n\nFor questions that may benefit from up-to-date information:\n```\nUse the ask_chatgpt_with_web_search tool to answer: What are the latest developments in quantum computing?\n```\n\nNow try web search in agentic way to plan your perfect day out based on the weather!\n```\nUse the ask_chatgpt_with_web_search tool to find the weather tomorrow in New York, then based on that weather and what it returns, keep using the tool to build up a great day out for someone who loves food and parks\n```\n\n## How It Works\n\nThis tool utilizes OpenAI's Responses API, which automatically maintains conversation state on OpenAI's servers. This approach:\n\n1. Simplifies code by letting OpenAI handle the conversation history\n2. Provides more reliable context tracking\n3. Improves the user experience by maintaining context across messages\n4. Allows access to the latest information from the web with the web search tool\n\n## License\n\nMIT License\n",
+  "category": "AI Tools",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "billster45-mcp-chatgpt-responses": {
+        "command": "uv",
+        "args": ["--directory", "\\path\\to\\mcp-chatgpt-responses", "run", "chatgpt_server.py"],
+        "env": {
+          "OPENAI_API_KEY": "your-api-key-here",
+          "DEFAULT_MODEL": "gpt-4o",
+          "DEFAULT_TEMPERATURE": "0.7",
+          "MAX_TOKENS": "1000"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "billster45",
+    "repo": "mcp-chatgpt-responses",
+    "url": "https://github.com/billster45/mcp-chatgpt-responses",
+    "name": "mcp-chatgpt-responses",
+    "path": null,
+    "stars": 13,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "21065864449b33732bec58ee122cc496d67546dd"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:45.199Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "pydantic",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp>=1.2.0\nopenai>=1.0.0\npython-dotenv>=1.0.0\nhttpx>=0.25.0\npydantic>=2.0.0\n"
+}

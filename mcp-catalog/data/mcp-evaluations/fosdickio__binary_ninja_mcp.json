@@ -1,0 +1,78 @@
+{
+  "name": "fosdickio__binary_ninja_mcp",
+  "display_name": "binary_ninja_mcp",
+  "description": "A Binary Ninja plugin containing an MCP server that enables seamless integration with your favorite LLM/MCP client.",
+  "author": {
+    "name": "fosdickio"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/bridge/binja_mcp_bridge.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Binary Ninja MCP <img src=\"images/binja.png\" height=\"24\" style=\"margin-left: 5px; vertical-align: middle;\">\n\nThis repository contains a Binary Ninja plugin, MCP server, and bridge that enables seamless integration of Binary Ninja's capabilities with your favorite LLM client.\n\n## Features\n\n- Seamless, real-time integration between Binary Ninja and MCP clients\n- Enhanced reverse engineering workflow with AI assistance\n- Primary support for Claude Desktop as the MCP client, but extensible for other integrations\n\n## Examples\n\n### Generating a Binary Analysis Report\n\n![Binary Analysis Report Generation](images/mcp-demo-report.png)\n\n### Renaming Functions\n\n![Rename Function Demo](images/mcp-demo-rename.gif)\n\n## Components\n\nThis repository contains two separate components:\n\n1. A Binary Ninja plugin that provides an MCP server that exposes Binary Ninja's capabilities through HTTP endpoints.  This can be used with any client that implements the MCP protocol.\n2. A separate MCP bridge component that connects your favorite MCP client to the Binary Ninja MCP server.  While Claude Desktop is the primary integration path, the MCP server can be used with other clients.\n\n## Supported Integrations\n\nThe following table details which integrations with Binary Ninja are currently supported.\n\n| Function | Description |\n|----------|-------------|\n| `get_binary_status` | Get the current status of the loaded binary. |\n| `list_classes` | List all namespace/class names in the program. |\n| `list_data_items` | List defined data labels and their values. |\n| `list_exports` | List exported functions/symbols. |\n| `list_imports` | List imported symbols in the program. |\n| `list_methods` | List all function names in the program. |\n| `list_namespaces` | List all non-global namespaces in the program. |\n| `list_segments` | List all memory segments in the program. |\n| `rename_data` | Rename a data label at the specified address. |\n| `rename_function` | Rename a function by its current name to a new user-defined name. |\n| `search_functions_by_name` | Search for functions whose name contains the given substring. |\n| `decompile_function` | Decompile a specific function by name and return the decompiled C code. |\n| `set_comment` | Set a comment at a specific address. |\n| `set_function_comment` | Set a comment for a function. |\n| `get_comment` | Get the comment at a specific address. |\n| `get_function_comment` | Get the comment for a function. |\n| `delete_comment` | Delete the comment at a specific address. |\n| `delete_function_comment` | Delete the comment for a function. |\n| `get_assembly_function` | Get the assembly representation of a function by name or address. |\n| `function_at` | Retrive the name of the function the address belongs to. |\n| `code_references` | Retrive names and addresses of functions that call the given function. |\n| `get_user_defined_type` | Retrive definition of a user defined type (struct, enumeration, typedef, union). |\n| `rename_variable` | Rename variable inside a given function. |\n| `retype_variable` | Retype variable inside a given function. |\n| `define_types` | Add type definitions from a C string type definition. |\n| `edit_function_signature` | Edit signature of a given function, given as a type string. |\n\n## Prerequisites\n\n- [Binary Ninja](https://binary.ninja/)\n- Python 3.12+\n- [Claude Desktop](https://claude.ai/download) (or your preferred integration)\n\n## Installation\n\n### Binary Ninja Plugin\n\nYou may install the plugin through Binary Ninja's Plugin Manager (`Plugins > Manage Plugins`).\n\n![Plugin Manager Listing](images/plugin-manager-listing.png)\n\nTo manually configure the plugin, this repository can be copied into the Binary Ninja plugins folder.\n\n### Claude Desktop Bridge (Optional)\n\nThis is only needed if you want to use Claude Desktop as your MCP client.  Make sure that you have your virtual environment configured first:\n\n```bash\ngit clone git@github.com:fosdickio/binary_ninja_mcp.git\ncd binary_ninja_mcp\n\npython3 -m venv .venv\nsource .venv/bin/activate   # On macOS/Linux\n\npip install -r bridge/requirements.txt\n```\n\n#### Automated Configuration (Mac)\n\nOn a Mac, you can automate the setup by running:\n\n```bash\n./scripts/setup_claude_desktop.py\n```\n\n#### Manual Configuration\n\nOn other operating systems or to manually configure the Claude Desktop integration:\n\n1. Navigate to `Settings > Developer > Edit Config`\n2. Add the following configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"binary_ninja_mcp\": {\n      \"command\": \"/ABSOLUTE/PATH/TO/binary_ninja_mcp/.venv/bin/python\",\n      \"args\": [\n        \"/ABSOLUTE/PATH/TO/binary_ninja_mcp/bridge/binja_mcp_bridge.py\"\n      ]\n    }\n  }\n}\n```\n\nNote: Replace `/ABSOLUTE/PATH/TO` with the actual absolute path to your project directory. The virtual environment's Python interpreter must be used to access the installed dependencies.\n\n## Usage\n\n### Claude Desktop\n\n1. Open Binary Ninja and install the `Binary Ninja MCP` plugin\n2. Restart Binary Ninja and then open a binary\n3. Start the MCP server (`Plugins > MCP Server > Start MCP Server`)\n4. Launch Claude Desktop\n\nThe integration will be automatically available after you open Claude Desktop.\n\n![Claude Integration](images/claude-desktop-integration.png)\n\nYou may now start prompting Claude about the currently open binary.  Example prompts:\n\n- \"Generate a binary analysis report for the current binary.\"\n- \"Rename function X to Y in the current binary.\"\n- \"List all functions in the current binary.\"\n- \"What is the status of the loaded binary?\"\n\n### Other MCP Client Integrations\n\nThe bridge can be used with other MCP clients by implementing the appropriate integration layer.\n\n## Development\n\nThe project structure is organized as follows:\n\n```\nbinary_ninja_mcp/\n├── bridge/                      # MCP client integration\n├── plugin/                      # Binary Ninja plugin\n├── scripts/\n│   └── setup_claude_desktop.py  # Setup script for Claude Desktop\n```\n## Contributing\n\nContributions are welcome. Please feel free to submit a pull request.\n\n",
+  "category": "Security",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "binary_ninja_mcp": {
+        "command": "python",
+        "args": ["/ABSOLUTE/PATH/TO/binary_ninja_mcp/bridge/binja_mcp_bridge.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "fosdickio",
+    "repo": "binary_ninja_mcp",
+    "url": "https://github.com/fosdickio/binary_ninja_mcp",
+    "name": "binary_ninja_mcp",
+    "path": null,
+    "stars": 75,
+    "contributors": 4,
+    "issues": 4,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "6ec9b63cf38f89c85093216ac578780d815c3ce1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:33.607Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "anthropic",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== bridge/requirements.txt ===\nanthropic>=0.49.0\nmcp[cli]>=1.6.0\nrequests>=2.32.3\n"
+}

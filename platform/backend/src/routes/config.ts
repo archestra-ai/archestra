@@ -96,6 +96,15 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               hackathonRecorderEnabled: z.boolean(),
               /** Staging override active: recorder bypasses the hackathon date window. */
               hackathonRecorderOverrideActive: z.boolean(),
+              /**
+               * The public App Gallery repository shared recordings are
+               * submitted to, or null when this deployment does not offer
+               * sharing. The frontend files the PR against this repository
+               * directly on api.github.com.
+               */
+              hackathonGalleryRepo: z
+                .object({ owner: z.string(), name: z.string() })
+                .nullable(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -150,6 +159,10 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           hackathonRecorderEnabled: config.hackathonRecorder.enabled,
           hackathonRecorderOverrideActive:
             config.hackathonRecorder.overrideActive,
+          hackathonGalleryRepo:
+            (config.hackathonRecorder.gallery.githubClientId &&
+              config.hackathonRecorder.gallery.repo) ||
+            null,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,
@@ -194,6 +207,13 @@ const PublicConfigResponseSchema = z.strictObject({
   // Effective enterprise core flag (env var OR small-team free tier). Exposed
   // pre-auth so the login screen can decide whether to render the SSO picker.
   enterpriseCoreActive: z.boolean(),
+  // Dedicated sandbox origin (<hash>.{domain}) for MCP App iframes. Not a
+  // secret — it already appears in every app iframe URL and the sandbox CSP
+  // frame-ancestors header. Exposed pre-auth for the offline app-recording
+  // video renderer, which drives the replay page with no session and must
+  // still frame the sandbox at its real cross-origin rather than falling back
+  // to the frontend origin (which the backend refuses with a 403 host check).
+  mcpSandboxDomain: z.string().nullable(),
   analytics: z.strictObject({
     enabled: z.boolean(),
     instanceId: z.string().uuid().nullable(),
@@ -218,6 +238,7 @@ async function getPublicConfigResponse(): Promise<
     maintenanceMode: config.maintenanceMode,
     siteNotificationMessage: config.siteNotificationMessage,
     enterpriseCoreActive: enterpriseTier.isCoreActive(),
+    mcpSandboxDomain: config.mcpSandbox.domain,
     analytics: {
       enabled: config.analytics.enabled,
       instanceId: await getAnalyticsInstanceId(),

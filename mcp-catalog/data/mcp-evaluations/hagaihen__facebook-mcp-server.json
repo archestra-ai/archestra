@@ -1,0 +1,105 @@
+{
+  "name": "hagaihen__facebook-mcp-server",
+  "display_name": "facebook-mcp-server",
+  "description": "Facebook MCP server for automating posts, comment moderation, insights, and sentiment filtering.",
+  "author": {
+    "name": "HagaiHen"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "--with", "mcp[cli]", "--with", "requests", "mcp", "run", "${__dirname}/server.py"],
+    "env": {
+      "FACEBOOK_ACCESS_TOKEN": "${user_config.facebook_access_token}",
+      "FACEBOOK_PAGE_ID": "${user_config.facebook_page_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "facebook_access_token": {
+      "type": "string",
+      "title": "Facebook Page Access Token",
+      "description": "Your Facebook Page Access Token, obtained from Facebook Developers.",
+      "sensitive": true,
+      "required": true
+    },
+    "facebook_page_id": {
+      "type": "string",
+      "title": "Facebook Page ID",
+      "description": "The ID of your Facebook Page.",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "readme": "# Facebook MCP Server\n\nThis project is a **MCP server** for automating and managing interactions on a Facebook Page using the Facebook Graph API. It exposes tools to create posts, moderate comments, fetch post insights, and filter negative feedback — ready to plug into Claude, or other LLM-based agents.\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/HagaiHen/facebook-mcp-server)](https://archestra.ai/mcp-catalog/hagaihen__facebook-mcp-server)\n<a href=\"https://glama.ai/mcp/servers/@HagaiHen/facebook-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@HagaiHen/facebook-mcp-server/badge\" />\n</a>\n\n---\n\n## 🤖 What Is This?\n\nThis MCP provides a suite of AI-callable tools that connect directly to a Facebook Page, abstracting common API operations as LLM-friendly functions.\n\n### ✅ Benefits\n\n- Empowers **social media managers** to automate moderation and analytics.\n- Seamlessly integrates with **Claude Desktop or any Agent client**.\n- Enables fine-grained control over Facebook content from natural language.\n\n---\n\n## 📦 Features\n\n| Tool                             | Description                                                         |\n|----------------------------------|---------------------------------------------------------------------|\n| `post_to_facebook`               | Create a new Facebook post with a message.                          |\n| `reply_to_comment`               | Reply to a specific comment on a post.                              |\n| `get_page_posts`                 | Retrieve recent posts from the Page.                                |\n| `get_post_comments`              | Fetch comments on a given post.                                     |\n| `delete_post`                    | Delete a specific post by ID.                                       |\n| `delete_comment`                 | Delete a specific comment by ID.                                    |\n| `hide_comment`                   | Hide a comment from public view.                         |\n| `unhide_comment`                 | Unhide a previously hidden comment.                      |\n| `delete_comment_from_post`       | Alias for deleting a comment from a specific post.                  |\n| `filter_negative_comments`       | Filter out comments with negative sentiment keywords.               |\n| `get_number_of_comments`         | Count the number of comments on a post.                             |\n| `get_number_of_likes`            | Count the number of likes on a post.                                |\n| `get_post_impressions`           | Get total impressions on a post.                                    |\n| `get_post_impressions_unique`    | Get number of unique users who saw the post.                        |\n| `get_post_impressions_paid`      | Get number of paid impressions on the post.                         |\n| `get_post_impressions_organic`   | Get number of organic impressions on the post.                      |\n| `get_post_engaged_users`         | Get number of users who engaged with the post.                      |\n| `get_post_clicks`                | Get number of clicks on the post.                                   |\n| `get_post_reactions_like_total`  | Get total number of 'Like' reactions.                               |\n| `get_post_top_commenters`        | Get the top commenters on a post.                                   |\n| `post_image_to_facebook`         | Post an image with a caption to the Facebook page.                  |\n| `send_dm_to_user`                | Send a direct message to a user.                                    |\n| `update_post`                    | Updates an existing post's message.                                 |\n| `schedule_post`                  | Schedule a post for future publication.                     |\n| `get_page_fan_count`             | Retrieve the total number of Page fans.                     |\n| `get_post_share_count`           | Get the number of shares on a post.                         |\n| `get_post_reactions_breakdown`   | Get all reaction counts for a post in one call.              |\n| `bulk_delete_comments`           | Delete multiple comments by ID.                              |\n| `bulk_hide_comments`             | Hide multiple comments by ID.                    |\n\n---\n\n## 🚀 Setup & Installation\n\n### 1. Clone the Repository\n\n```bash\ngit clone https://github.com/your-org/facebook-mcp-server.git\ncd facebook-mcp-server\n```\n\n### 2. 🛠️ Installation\n\nInstall dependencies using uv, a fast Python package manager:\nIf uv is not already installed, run:\n```bash\ncurl -Ls https://astral.sh/uv/install.sh | bash\n```\n\nOnce uv is installed, install the project dependencies:\n```bash\nuv pip install -r requirements.txt\n```\n\n### 3. Set Up Environment\n\nCreate a .env file in the root directory and add your Facebook Page credentials. \nYou can obtain these from  https://developers.facebook.com/tools/explorer\n\n```bash\nFACEBOOK_ACCESS_TOKEN=your_facebook_page_access_token\nFACEBOOK_PAGE_ID=your_page_id\n```\n\n## 🧩 Using with Claude Desktop\nTo set up the FacebookMCP in Clade:\n\n1.\tOpen Clade.\n2.\tGo to Settings → Developer → Edit Config.\n3.\tIn the config file that opens, add the following entry:\n\n```bash\n\"FacebookMCP\": {\n  \"command\": \"uv\",\n  \"args\": [\n    \"run\",\n    \"--with\",\n    \"mcp[cli]\",\n    \"--with\",\n    \"requests\",\n    \"mcp\",\n    \"run\",\n    \"/path/to/facebook-mcp-server/server.py\"\n  ]\n}\n```\n\n---\n\n## ✅ You’re Ready to Go!\n\nThat’s it — your Facebook MCP server is now fully configured and ready to power Claude Desktop. You can now post, moderate, and measure engagement all through natural language prompts!\n\n---\n\n## 🤝 Contributing\n\nContributions, issues, and feature requests are welcome!  \nFeel free to fork the repo and submit a pull request.\n\n- Create a branch: `git checkout -b feature/YourFeature`\n- Commit your changes: `git commit -m 'feat: add new feature'`\n- Push to the branch: `git push origin feature/YourFeature`\n- Open a pull request 🎉\n",
+  "category": "Social Media",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "FacebookMCP": {
+        "command": "uv",
+        "args": [
+          "run",
+          "--with",
+          "mcp[cli]",
+          "--with",
+          "requests",
+          "mcp",
+          "run",
+          "/path/to/facebook-mcp-server/server.py"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "HagaiHen",
+    "repo": "facebook-mcp-server",
+    "url": "https://github.com/HagaiHen/facebook-mcp-server",
+    "name": "facebook-mcp-server",
+    "path": null,
+    "stars": 34,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f6f502a1ed8b35b321657082f750c510bf4d005a"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.814Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp\npython-dotenv\nrequests\n"
+}

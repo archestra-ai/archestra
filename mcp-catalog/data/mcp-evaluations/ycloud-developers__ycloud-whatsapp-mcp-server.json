@@ -1,0 +1,127 @@
+{
+  "name": "ycloud-developers__ycloud-whatsapp-mcp-server",
+  "display_name": "ycloud-whatsapp-mcp-server",
+  "description": "MCP server from YCloud-Developers/ycloud-whatsapp-mcp-server",
+  "author": {
+    "name": "YCloud-Developers"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "API_BASE_URL": "${user_config.api_base_url}",
+      "OPENAPI_SPEC_PATH": "${user_config.openapi_spec_path}",
+      "API_HEADERS": "X-API-Key:${user_config.ycloud_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ycloud_api_key": {
+      "type": "string",
+      "title": "YCloud API Key",
+      "description": "Your YCloud API key for authentication. This will be used to construct the X-API-Key header.",
+      "sensitive": true,
+      "required": true
+    },
+    "api_base_url": {
+      "type": "string",
+      "title": "YCloud API Base URL",
+      "description": "The base URL for YCloud API requests.",
+      "default": "https://api.ycloud.com/v2",
+      "required": false
+    },
+    "openapi_spec_path": {
+      "type": "string",
+      "title": "OpenAPI Specification Path or URL",
+      "description": "The path or URL to the OpenAPI specification file.",
+      "default": "https://docs.ycloud.com/openapi.json",
+      "required": false
+    }
+  },
+  "readme": "# YCloud WhatsApp API MCP 服务器\n\n[English](README-en.md) | 中文\n\n这是一个基于[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)构建的YCloud WhatsApp API服务器。它能够自动从YCloud WhatsApp OpenAPI规范中生成工具，让AI模型（如Claude）可以直接与YCloud WhatsApp API交互。\n\n## 前提条件\n\n在使用此服务器之前，您需要：\n\n1. 在 [YCloud官网](https://www.ycloud.com) 注册一个账户\n2. 获取您的API密钥（请参阅下面的说明）\n3. 安装必要的软件依赖（请参阅下面的说明）\n\n## 系统要求\n\n- Node.js v16.0.0 或更高版本\n- npm v7.0.0 或更高版本\n- Claude 桌面应用（如果要与 Claude 集成）\n\n## 功能\n\n- 自动从OpenAPI规范生成MCP工具\n- 支持所有YCloud API端点\n- 支持API认证\n- 自动处理参数类型和验证\n- 支持HTTP请求和响应处理\n\n## 安装\n\n```bash\n# 克隆仓库\ngit clone https://github.com/YCloud-Developers/ycloud-whatsapp-mcp-server.git\ncd ycloud-whatsapp-mcp-server\n\n# 安装依赖\nnpm install\n\n# 构建项目\nnpm run build\n```\n\n## 使用方法\n\n### 获取API密钥\n\n要使用YCloud API，您需要一个API密钥进行身份验证：\n\n1. 登录到 [YCloud控制台](https://www.ycloud.com/console/)\n2. 导航到开发者页面\n3. 在此页面上，您可以找到您的API密钥\n\nAPI密钥应作为请求头 `X-API-Key` 包含在所有API请求中。\n\n### 环境变量配置\n\n您可以通过以下环境变量配置服务器：\n\n- `API_BASE_URL`: YCloud API的基础URL（默认：https://api.ycloud.com/v2）\n- `OPENAPI_SPEC_PATH`: OpenAPI规范的路径或URL（默认：https://docs.ycloud.com/openapi.json）\n- `API_HEADERS`: API请求头（格式：key1:value1,key2:value2）\n\n### Claude桌面端集成\n\n要在Claude桌面应用中使用此服务器，请编辑Claude配置文件：\n\n1. 找到或创建Claude桌面配置文件：\n   - 在macOS上：`~/Library/Application Support/Claude/claude_desktop_config.json`\n   - 在Windows上：`%APPDATA%\\Claude\\claude_desktop_config.json`\n\n2. 添加以下配置：\n\n```json\n{\n  \"mcpServers\": {\n    \"ycloud-whatsapp\": {\n      \"command\": \"node\",\n      \"args\": [\"path/to/ycloud-whatsapp-mcp-server/build/index.js\"],\n      \"env\": {\n        \"API_BASE_URL\": \"https://api.ycloud.com/v2\",\n        \"API_HEADERS\": \"X-API-Key:your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\n3. 替换`your-api-key-here`为您的YCloud API密钥\n\n### 直接运行\n\n```bash\n# 设置环境变量并运行\nAPI_BASE_URL=https://api.ycloud.com/v2 \\\nAPI_HEADERS=\"X-API-Key:your-api-key-here\" \\\nnpm start\n```\n\n## 示例\n\n在Claude中，您可以使用以下提示来与YCloud API交互：\n\n```\n请帮我查询我的YCloud账户余额。\n```\n\nClaude将能够调用适当的API端点并返回结果。\n\n## 调试\n\n在开发过程中，您可以使用以下方法调试MCP服务器：\n\n1. 查看服务器日志：服务器运行时会输出调试信息\n2. 使用MCP Inspector：您可以使用[MCP Inspector](https://modelcontextprotocol.io/inspector)工具来检查服务器的运行状态\n3. Claude桌面端调试：在Claude桌面应用中可以查看服务器状态和日志\n\n## 贡献\n\n欢迎提交Pull Request或创建Issue来改进此项目。\n\n## 许可证\n\nMIT ",
+  "category": "AI Tools",
+  "quality_score": 39,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ycloud-whatsapp": {
+        "command": "node",
+        "args": ["path/to/ycloud-whatsapp-mcp-server/build/index.js"],
+        "env": {
+          "API_BASE_URL": "https://api.ycloud.com/v2",
+          "API_HEADERS": "X-API-Key:your-api-key-here"
+        }
+      },
+      "ycloud-whatsapp-direct-run": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {
+          "API_BASE_URL": "https://api.ycloud.com/v2",
+          "API_HEADERS": "X-API-Key:your-api-key-here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "YCloud-Developers",
+    "repo": "ycloud-whatsapp-mcp-server",
+    "url": "https://github.com/YCloud-Developers/ycloud-whatsapp-mcp-server",
+    "name": "ycloud-developers__ycloud-whatsapp-mcp-server",
+    "path": null,
+    "stars": 6,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "24ddf7cf57f25d0be40b1737a28e18ab664149fa"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:25.581Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@apidevtools/swagger-parser",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 7
+    },
+    {
+      "name": "js-yaml",
+      "importance": 6
+    },
+    {
+      "name": "openapi-types",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"ycloud-whatsapp-mcp-server\",\n  \"version\": \"0.1.0\",\n  \"description\": \"YCloud WhatsApp API MCP Server\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"tsc -w\",\n    \"inspect\": \"node build/index.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"ycloud\",\n    \"whatsapp\",\n    \"api\",\n    \"openapi\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@apidevtools/swagger-parser\": \"^10.1.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"axios\": \"^1.6.7\",\n    \"js-yaml\": \"^4.1.0\",\n    \"openapi-types\": \"^12.1.3\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/js-yaml\": \"^4.0.9\",\n    \"@types/node\": \"^18.19.3\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

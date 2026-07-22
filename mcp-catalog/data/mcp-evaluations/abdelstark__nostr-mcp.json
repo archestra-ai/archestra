@@ -1,0 +1,153 @@
+{
+  "name": "abdelstark__nostr-mcp",
+  "display_name": "nostr-mcp",
+  "description": "A Nostr MCP server that allows to interact with Nostr, enabling posting notes, and more.",
+  "author": {
+    "name": "AbdelStark"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/src/index.js"],
+    "env": {
+      "LOG_LEVEL": "${user_config.log_level}",
+      "NODE_ENV": "${user_config.node_env}",
+      "NOSTR_RELAYS": "${user_config.nostr_relays}",
+      "NOSTR_NSEC_KEY": "${user_config.nostr_nsec_key}",
+      "SERVER_MODE": "${user_config.server_mode}",
+      "PORT": "${user_config.port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "Log level (debug, info, warn, error)",
+      "required": false,
+      "default": "debug"
+    },
+    "node_env": {
+      "type": "string",
+      "title": "Node Environment",
+      "description": "Node environment (development, production)",
+      "required": false,
+      "default": "development"
+    },
+    "nostr_relays": {
+      "type": "string",
+      "title": "Nostr Relays",
+      "description": "Comma-separated list of Nostr relays to connect to (e.g., wss://relay.damus.io,wss://relay.primal.net,wss://nos.lol)",
+      "required": false,
+      "default": "wss://relay.damus.io,wss://relay.primal.net,wss://nos.lol"
+    },
+    "nostr_nsec_key": {
+      "type": "string",
+      "title": "Nostr Private Key",
+      "description": "Your Nostr private key (starts with nsec)",
+      "sensitive": true,
+      "required": true
+    },
+    "server_mode": {
+      "type": "string",
+      "title": "Server Mode",
+      "description": "Server mode (stdio or sse)",
+      "required": false,
+      "default": "sse"
+    },
+    "port": {
+      "type": "number",
+      "title": "Port",
+      "description": "Port for SSE mode",
+      "required": false,
+      "default": 9000
+    }
+  },
+  "readme": "# 🌐 Nostr MCP Server\n\nA Model Context Protocol (MCP) server that enables AI models to interact with Nostr, allowing them to post notes and interact with the freedom of speech protocol.\n\nCensorship resistance matters, even for LLMs.\n\n[![smithery badge](https://smithery.ai/badge/@AbdelStark/nostr-mcp)](https://smithery.ai/server/@AbdelStark/nostr-mcp)\n[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)\n[![MCP](https://img.shields.io/badge/MCP-Protocol-blue?style=flat-square)](https://github.com/modelcontextprotocol/typescript-sdk)\n[![Nostr](https://img.shields.io/badge/Nostr-Protocol-purple?style=flat-square)](https://nostr.com/)\n\nBTW, you should [join Nostr now!](https://start.njump.me/?s=npub1hr6v96g0phtxwys4x0tm3khawuuykz6s28uzwtj5j0zc7lunu99snw2e29)\n\n## 🚀 Features\n\n- 📝 Post notes to Nostr network\n- 🔌 Connect to multiple relays\n- 🤖 MCP-compliant API for AI integration\n- 💸 Send Lightning zaps to Nostr users (WIP)\n- 📡 Server-Sent Events (SSE) support for real-time communication\n\n## 👷‍♂️ TODOs\n\n- [ ] Add support for multiple simultaneous connections\n- [ ] Implement stdin transport mode (configurable via environment variable)\n\n## 📋 Prerequisites\n\n- Node.js 18+\n\n## 🛠️ Installation\n\n### Installing via Smithery\n\nTo install Nostr MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@AbdelStark/nostr-mcp):\n\n```bash\nnpx -y @smithery/cli install @AbdelStark/nostr-mcp --client claude\n```\n\n### Manual Installation\n1. Clone the repository:\n\n```bash\ngit clone https://github.com/AbdelStark/nostr-mcp\ncd nostr-mcp\n```\n\n1. Install dependencies:\n\n```bash\nnpm install\n```\n\n1. Create a `.env` file:\n\n> 💡 You can copy the `.env.example` file and modify it as needed.\n\n```env\n# Log level (debug, info, warn, error)\nLOG_LEVEL=debug\n# Node environment (development, production)\nNODE_ENV=development\n# List of Nostr relays to connect to\nNOSTR_RELAYS=wss://relay.damus.io,wss://relay.primal.net,wss://nos.lol\n# Your Nostr private key (starts with nsec)\nNOSTR_NSEC_KEY=your_nsec_key_here\n# Server mode (stdio or sse)\nSERVER_MODE=sse\n# Port for SSE mode\nPORT=9000\n```\n\n## 🚦 Usage\n\n### Starting the Server\n\n```bash\n# Development mode with hot reload\nnpm run dev\n\n# Production mode\nnpm start\n```\n\n### Available Tools\n\n#### `post_note`\n\nPosts a new note to the Nostr network.\n\nExample input:\n\n```json\n{\n  \"content\": \"Hello from Nostr! 👋\"\n}\n```\n\n#### `send_zap`\n\nSends a Lightning zap to a Nostr user.\n\nExample input:\n\n```json\n{\n  \"nip05Address\": \"user@domain.com\",\n  \"amount\": 1000\n}\n```\n\n## 🔧 Development\n\n### Project Structure\n\n```text\nnostr-mcp/\n├── src/\n│   ├── index.ts        # Main server entry point\n│   ├── nostr-client.ts # Nostr client implementation\n│   └── types.ts        # TypeScript type definitions\n├── .env               # Environment configuration\n└── tsconfig.json     # TypeScript configuration\n```\n\n### Running Tests\n\n```bash\nnpm test\n```\n\n## 🤝 Contributing\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## 📜 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## 🔗 Resources\n\n- [Join Nostr](https://start.njump.me/?s=npub1hr6v96g0phtxwys4x0tm3khawuuykz6s28uzwtj5j0zc7lunu99snw2e29)\n- [Nostr Manifesto](https://fiatjaf.com/nostr.html)\n- [Nostr Specifications](https://github.com/nostr-protocol/nips)\n- [Model Context Protocol](https://modelcontextprotocol.io/introduction)\n- [Visual testing tool for MCP servers](https://github.com/modelcontextprotocol/inspector)\n- [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers)\n- [Awesome MCP Clients](https://github.com/punkpeye/awesome-mcp-clients)\n- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)\n- [Nostr Development Kit (NDK)](https://github.com/nostr-dev-kit/ndk)\n\n## 📬 Contact\n\nFeel free to follow me if you'd like, using my public key:\n\n```text\nnpub1hr6v96g0phtxwys4x0tm3khawuuykz6s28uzwtj5j0zc7lunu99snw2e29\n```\n\nOr just **scan this QR code** to find me:\n\n![Nostr Public Key QR Code](https://hackmd.io/_uploads/SkAvwlYYC.png)\n\n---\n\n<p align=\"center\">\n  Made with ❤️ for the Nostr community\n</p>\n",
+  "category": "AI Tools",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "nostr-mcp-dev": {
+        "command": "npm",
+        "args": ["run", "dev"],
+        "env": {}
+      },
+      "nostr-mcp-prod": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "AbdelStark",
+    "repo": "nostr-mcp",
+    "url": "https://github.com/AbdelStark/nostr-mcp",
+    "name": "abdelstark__nostr-mcp",
+    "path": null,
+    "stars": 34,
+    "contributors": 2,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "0d4e5431fe877954fe99eb35e3427a4727ce4a12"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:22.001Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@nostr-dev-kit/ndk",
+      "importance": 9
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "pino",
+      "importance": 7
+    },
+    {
+      "name": "pino-pretty",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"nostr-mcp\",\n  \"version\": \"0.0.15\",\n  \"description\": \"A Model Context Protocol server for interacting with Nostr, enabling posting notes and more\",\n  \"type\": \"module\",\n  \"main\": \"./build/index.js\",\n  \"types\": \"./build/index.d.ts\",\n  \"bin\": {\n    \"nostr-mcp\": \"./build/cli.js\"\n  },\n  \"exports\": {\n    \".\": {\n      \"types\": \"./build/index.d.ts\",\n      \"import\": \"./build/index.js\"\n    }\n  },\n  \"files\": [\n    \"build\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"engines\": {\n    \"node\": \">=18\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node build/cli.js\",\n    \"dev\": \"tsx watch src/cli.ts\",\n    \"prepublishOnly\": \"npm run build\",\n    \"lint\": \"eslint . --ext .ts --cache\",\n    \"lint:fix\": \"eslint . --ext .ts --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\"\",\n    \"format:check\": \"prettier --check \\\"src/**/*.ts\\\"\",\n    \"test\": \"NODE_OPTIONS=--experimental-vm-modules jest\",\n    \"test:watch\": \"jest --watch\",\n    \"test:coverage\": \"NODE_OPTIONS=--experimental-vm-modules jest --coverage\",\n    \"clean\": \"rimraf build coverage .eslintcache\",\n    \"prebuild\": \"npm run clean\",\n    \"prepare\": \"husky install\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"modelcontextprotocol\",\n    \"server\",\n    \"nostr\",\n    \"claude\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"@nostr-dev-kit/ndk\": \"^2.5.1\",\n    \"cors\": \"^2.8.5\",\n    \"dotenv\": \"^16.4.5\",\n    \"express\": \"^4.18.3\",\n    \"husky\": \"^9.1.7\",\n    \"pino\": \"^8.19.0\",\n    \"pino-pretty\": \"^10.3.1\",\n    \"tsx\": \"^4.7.1\",\n    \"typescript\": \"^5.4.2\",\n    \"zod\": \"^3.24.0\"\n  },\n  \"devDependencies\": {\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/debug\": \"^4.1.12\",\n    \"@types/express\": \"^4.17.21\",\n    \"@types/jest\": \"^29.5.12\",\n    \"@types/node\": \"^20.11.24\",\n    \"@types/pino\": \"^7.0.5\",\n    \"@typescript-eslint/eslint-plugin\": \"^7.1.0\",\n    \"@typescript-eslint/parser\": \"^7.1.0\",\n    \"eslint\": \"^8.57.0\",\n    \"eslint-plugin-jest\": \"^27.9.0\",\n    \"husky\": \"^9.0.11\",\n    \"jest\": \"^29.7.0\",\n    \"lint-staged\": \"^15.2.2\",\n    \"prettier\": \"^3.2.5\",\n    \"rimraf\": \"^5.0.5\",\n    \"ts-jest\": \"^29.1.2\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

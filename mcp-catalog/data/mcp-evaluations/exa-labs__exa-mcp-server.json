@@ -1,0 +1,131 @@
+{
+  "name": "exa-labs__exa-mcp-server",
+  "display_name": "exa-mcp-server",
+  "description": "Exa is a Web Search API | This is Exa MCP (Model Context Protocol)",
+  "author": {
+    "name": "exa-labs"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "exa-mcp-server", "--tools=${user_config.tools}"],
+    "env": {
+      "EXA_API_KEY": "${user_config.exa_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "exa_api_key": {
+      "type": "string",
+      "title": "Exa API Key",
+      "description": "Your actual Exa API key from dashboard.exa.ai/api-keys.",
+      "sensitive": true,
+      "required": true
+    },
+    "tools": {
+      "type": "string",
+      "title": "Enabled Tools",
+      "description": "Comma-separated list of tools to enable (e.g., web_search_exa,company_research). If you wish to use only a subset of tools, edit this list. If you want all default tools, leave this as is.",
+      "sensitive": false,
+      "required": false,
+      "default": "web_search_exa,company_research,crawling,linkedin_search,deep_researcher_start,deep_researcher_check"
+    }
+  },
+  "readme": "# Exa MCP Server 🔍\n[![npm version](https://badge.fury.io/js/exa-mcp-server.svg)](https://www.npmjs.com/package/exa-mcp-server)\n[![smithery badge](https://smithery.ai/badge/exa)](https://smithery.ai/server/exa)\n\nA Model Context Protocol (MCP) server lets AI assistants like Claude use the Exa AI Search API for web searches. This setup allows AI models to get real-time web information in a safe and controlled way.\n\n## Remote Exa MCP 🌐\n\nConnect directly to Exa's hosted MCP server (instead of running it locally).\n\n### Remote Exa MCP URL\n\n```\nhttps://mcp.exa.ai/mcp?exaApiKey=your-exa-api-key\n```\n\nReplace `your-api-key-here` with your actual Exa API key from [dashboard.exa.ai/api-keys](https://dashboard.exa.ai/api-keys).\n\n### Claude Desktop Configuration for Remote MCP\n\nAdd this to your Claude Desktop configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"exa\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-remote\",\n        \"https://mcp.exa.ai/mcp?exaApiKey=your-exa-api-key\"\n      ]\n    }\n  }\n}\n```\n\n### NPM Installation\n\n```bash\nnpm install -g exa-mcp-server\n```\n\n### Using Claude Code\n\n```bash\nclaude mcp add exa -e EXA_API_KEY=YOUR_API_KEY -- npx -y exa-mcp-server\n```\n\n### Using Smithery\n\nTo install the Exa MCP server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/exa):\n\n```bash\nnpx -y @smithery/cli install exa --client claude\n```\n\n## Configuration ⚙️\n\n### 1. Configure Claude Desktop to recognize the Exa MCP server\n\nYou can find claude_desktop_config.json inside the settings of Claude Desktop app:\n\nOpen the Claude Desktop app and enable Developer Mode from the top-left menu bar. \n\nOnce enabled, open Settings (also from the top-left menu bar) and navigate to the Developer Option, where you'll find the Edit Config button. Clicking it will open the claude_desktop_config.json file, allowing you to make the necessary edits. \n\nOR (if you want to open claude_desktop_config.json from terminal)\n\n#### For macOS:\n\n1. Open your Claude Desktop configuration:\n\n```bash\ncode ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n```\n\n#### For Windows:\n\n1. Open your Claude Desktop configuration:\n\n```powershell\ncode %APPDATA%\\Claude\\claude_desktop_config.json\n```\n\n### 2. Add the Exa server configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"exa\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"exa-mcp-server\"],\n      \"env\": {\n        \"EXA_API_KEY\": \"your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\nReplace `your-api-key-here` with your actual Exa API key from [dashboard.exa.ai/api-keys](https://dashboard.exa.ai/api-keys).\n\n### 3. Available Tools & Tool Selection\n\nThe Exa MCP server includes the following tools, which can be enabled by adding the `--tools`:\n\n- **web_search_exa**: Performs real-time web searches with optimized results and content extraction.\n- **company_research**: Comprehensive company research tool that crawls company websites to gather detailed information about businesses.\n- **crawling**: Extracts content from specific URLs, useful for reading articles, PDFs, or any web page when you have the exact URL.\n- **linkedin_search**: Search LinkedIn for companies and people using Exa AI. Simply include company names, person names, or specific LinkedIn URLs in your query.\n- **deep_researcher_start**: Start a smart AI researcher for complex questions. The AI will search the web, read many sources, and think deeply about your question to create a detailed research report.\n- **deep_researcher_check**: Check if your research is ready and get the results. Use this after starting a research task to see if it's done and get your comprehensive report.\n\nYou can choose which tools to enable by adding the `--tools` parameter to your Claude Desktop configuration:\n\n#### Specify which tools to enable:\n\n```json\n{\n  \"mcpServers\": {\n    \"exa\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"exa-mcp-server\",\n        \"--tools=web_search_exa,company_research,crawling,linkedin_search,deep_researcher_start,deep_researcher_check\"\n      ],\n      \"env\": {\n        \"EXA_API_KEY\": \"your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\nFor enabling multiple tools, use a comma-separated list:\n\n```json\n{\n  \"mcpServers\": {\n    \"exa\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"exa-mcp-server\",\n        \"--tools=web_search_exa,company_research,crawling,linkedin_search,deep_researcher_start,deep_researcher_check\"\n      ],\n      \"env\": {\n        \"EXA_API_KEY\": \"your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\nIf you don't specify any tools, all tools enabled by default will be used.\n\n### 4. Restart Claude Desktop\n\nFor the changes to take effect:\n\n1. Completely quit Claude Desktop (not just close the window)\n2. Start Claude Desktop again\n3. Look for the icon to verify the Exa server is connected\n\n## Using via NPX\n\nIf you prefer to run the server directly, you can use npx:\n\n```bash\n# Run with all tools enabled by default\nnpx exa-mcp-server\n\n# Enable specific tools only\nnpx exa-mcp-server --tools=web_search_exa\n\n# Enable multiple tools\nnpx exa-mcp-server --tools=web_search_exa,company_research\n\n# List all available tools\nnpx exa-mcp-server --list-tools\n```\n\n## Troubleshooting 🔧\n\n### Common Issues\n\n1. **Server Not Found**\n   * Verify the npm link is correctly set up\n   * Check Claude Desktop configuration syntax (json file)\n\n2. **API Key Issues**\n   * Confirm your EXA_API_KEY is valid\n   * Check the EXA_API_KEY is correctly set in the Claude Desktop config\n   * Verify no spaces or quotes around the API key\n\n3. **Connection Issues**\n   * Restart Claude Desktop completely\n   * Check Claude Desktop logs:\n\n<br>\n\n---\n\nBuilt with ❤️ by team Exa\n",
+  "category": "AI Tools",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "exa-mcp-server-claude-code": {
+        "command": "npx",
+        "args": ["-y", "exa-mcp-server"],
+        "env": {
+          "EXA_API_KEY": "YOUR_API_KEY"
+        }
+      },
+      "exa-mcp-server-configured": {
+        "command": "npx",
+        "args": ["-y", "exa-mcp-server"],
+        "env": {
+          "EXA_API_KEY": "your-api-key-here"
+        }
+      },
+      "exa-mcp-server-tools-configured": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "exa-mcp-server",
+          "--tools=web_search_exa,company_research,crawling,linkedin_search,deep_researcher_start,deep_researcher_check"
+        ],
+        "env": {
+          "EXA_API_KEY": "your-api-key-here"
+        }
+      },
+      "exa-mcp-server-direct": {
+        "command": "npx",
+        "args": ["exa-mcp-server"],
+        "env": {}
+      },
+      "exa-mcp-server-direct-web-search": {
+        "command": "npx",
+        "args": ["exa-mcp-server", "--tools=web_search_exa"],
+        "env": {}
+      },
+      "exa-mcp-server-direct-multiple-tools": {
+        "command": "npx",
+        "args": ["exa-mcp-server", "--tools=web_search_exa,company_research"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "exa-labs",
+    "repo": "exa-mcp-server",
+    "url": "https://github.com/exa-labs/exa-mcp-server",
+    "name": "exa-mcp-server",
+    "path": null,
+    "stars": 2010,
+    "contributors": 8,
+    "issues": 22,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "52fa16aaf0e86b4070a65f395de663ea2fba3ae6"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:28.070Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"exa-mcp-server\",\n  \"version\": \"2.0.3\",\n  \"description\": \"A Model Context Protocol server with Exa for web search, academic paper search, and Twitter/X.com search. Provides real-time web searches with configurable tool selection, allowing users to enable or disable specific search capabilities. Supports customizable result counts, live crawling options, and returns content from the most relevant websites.\",\n  \"type\": \"module\",\n  \"module\": \"./src/index.ts\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/exa-labs/exa-mcp-server.git\"\n  },\n  \"bin\": {\n    \"exa-mcp-server\": \"./.smithery/index.cjs\"\n  },\n  \"files\": [\n    \".smithery\"\n  ],\n  \"keywords\": [\n    \"mcp\",\n    \"search mcp\",\n    \"model context protocol\",\n    \"exa\",\n    \"search\",\n    \"websearch\",\n    \"claude\",\n    \"ai\",\n    \"research\",\n    \"papers\",\n    \"linkedin\"\n  ],\n  \"author\": \"Exa Labs\",\n  \"scripts\": {\n    \"build\": \"npm run build:shttp\",\n    \"build:stdio\": \"npx @smithery/cli@latest build src/index.ts --transport stdio && echo '#!/usr/bin/env node' | cat - .smithery/index.cjs > temp && mv temp .smithery/index.cjs && chmod +x .smithery/index.cjs\",\n    \"build:shttp\": \"npx @smithery/cli@latest build src/index.ts --transport shttp\",\n    \"prepare\": \"npm run build:stdio\",\n    \"watch\": \"tsc --watch\",\n    \"dev\": \"npx @smithery/cli@latest dev\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"prepublishOnly\": \"npm run build:stdio\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"axios\": \"^1.7.8\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"tsx\": \"^4.7.0\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\n"
+}

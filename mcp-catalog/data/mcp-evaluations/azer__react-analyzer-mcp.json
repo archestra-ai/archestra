@@ -1,0 +1,74 @@
+{
+  "name": "azer__react-analyzer-mcp",
+  "display_name": "react-analyzer-mcp",
+  "description": "MCP server for analyzing & generating docs for React code locally",
+  "author": {
+    "name": "azer"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# react-analyzer-mcp\n\nAnalyze & generate docs for React code using the Model Context Protocol. Based on [react-analyzer](https://github.com/azer/react-analyzer) library.\n\n[<img src=\"https://github.com/user-attachments/assets/615f43d7-9b81-4480-9a2a-773819223ddb\" width=\"500\" />](https://x.com/azerkoculu/status/1910071779457900866)\n\n## What it does\n\nThis tool analyzes React component files (JSX/TSX) and extracts information about components and their props.\n\n## Available Tools\n\n- **analyze-react**: Analyzes a single React component from source code\n- **analyze-project**: Generates documentation for all React components in a project folder\n- **list-projects**: Lists all projects under the root folder\n\n## Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/azer/react-analyzer-mcp.git\ncd react-analyzer-mcp\n\n# Install dependencies\nnpm install\n\n# Update PROJECT_ROOT in the index.ts file.\nvim src/index.ts\n\n# Build\nnpm run build\n```\n\n## Using with Claude\n\n1. Enable MCP server in the Claude Desktop config:\n\n```bash\n{\n    \"react-analyzer-mcp\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/Users/azer/code/sandbox/react-analyzer-mcp/build/index.js\"\n      ]\n    }\n}\n```\n\n2. Connect Claude to your MCP server using the Claude Shell.\n\n3. Use the tools directly in Claude conversations:\n\n```\nAnalyze my project's React components in the \"ui\" folder.\n```\n\nOr:\n\n```\nWhat React components do I have in my project?\n```\n\n## Examples\n\n### Analyzing a project folder:\n\nInput:\n```\nCan you analyze the components in my \"foobar\" folder?\n```\n\nOutput:\n```\n# Components\n\n## Button\n\n### Props\n\n| Prop | Type | Optional | Default |\n|------|------|----------|---------|\n| `variant` | `string` | ✓ | `primary` |\n| `size` | `string` | ✓ | `md` |\n| `onClick` | `function` | ✓ | |\n...\n```\n\n## License\n\nMIT\n",
+  "category": "Development",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "react-analyzer-mcp": {
+        "command": "node",
+        "args": ["/Users/azer/code/sandbox/react-analyzer-mcp/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "azer",
+    "repo": "react-analyzer-mcp",
+    "url": "https://github.com/azer/react-analyzer-mcp",
+    "name": "azer__react-analyzer-mcp",
+    "path": null,
+    "stars": 46,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "335f2a3585f265e2e88352b59b10d3b478d678b0"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:35.525Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "react-analyzer",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"react-analyzer-mcp\",\n  \"version\": \"0.1.0\",\n  \"description\": \"A Model Context Protocol server for analyzing React code.\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"react-analyzer\": \"github:azer/react-analyzer\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

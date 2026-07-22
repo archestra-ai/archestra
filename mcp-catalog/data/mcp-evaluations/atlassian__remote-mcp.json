@@ -1,0 +1,44 @@
+{
+  "name": "atlassian__remote-mcp",
+  "display_name": "Atlassian MCP",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI1NiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJTVkdINlBlcmJlSiIgeDE9Ijk5LjY4NyUiIHgyPSIzOS44MzYlIiB5MT0iMTUuODAxJSIgeTI9Ijk3LjQzOCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMwMDUyY2MiLz48c3RvcCBvZmZzZXQ9IjkyLjMlIiBzdG9wLWNvbG9yPSIjMjY4NGZmIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHBhdGggZmlsbD0idXJsKCNTVkdINlBlcmJlSikiIGQ9Ik03NS43OTMgMTE3Ljk1Yy0zLjgyLTQuMDgtOS43Ny0zLjg1LTEyLjM2NyAxLjM0MkwuNzkxIDI0NC41NjVhNy40ODggNy40ODggMCAwIDAgNi42OTcgMTAuODM4aDg3LjIyOGE3LjIyIDcuMjIgMCAwIDAgNi42OTktNC4xNGMxOC44MDgtMzguODkgNy40MTMtOTguMDE4LTI1LjYyMi0xMzMuMzE0Ii8+PHBhdGggZmlsbD0iIzI2ODFmZiIgZD0iTTEyMS43NTYgNC4wMTFjLTM1LjAzMyA1NS41MDUtMzIuNzIxIDExNi45NzktOS42NDYgMTYzLjEzbDQyLjA2IDg0LjEyMWE3LjQ5IDcuNDkgMCAwIDAgNi42OTcgNC4xNGg4Ny4yMjdhNy40ODggNy40ODggMCAwIDAgNi42OTctMTAuODM4UzEzNy40NDUgOS44MzcgMTM0LjQ5MyAzLjk2NGMtMi42NC01LjI1OC05LjM0NC01LjMzLTEyLjczNy4wNDciLz48L3N2Zz4=",
+  "description": "Remote MCP server for Atlassian - Jira, Confluence, and team collaboration tools",
+  "oauth_config": {
+    "name": "Atlassian MCP",
+    "server_url": "https://mcp.atlassian.com/v1/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "Atlassian MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Enterprise",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "atlassian"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.atlassian.com/v1/mcp",
+    "docs_url": "https://www.atlassian.com/platform/remote-mcp-server"
+  },
+  "github_info": null,
+  "programming_language": null
+}

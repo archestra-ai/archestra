@@ -1,0 +1,48 @@
+{
+  "name": "port__remote-mcp",
+  "display_name": "Port MCP",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgdmlld0JveD0iMCAwIDI1NiAyNTYiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2IiByeD0iNDAiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGZpbGwtcnVsZT0iZXZlbm9kZCIgY2xpcC1ydWxlPSJldmVub2RkIiBkPSJNNDggMTQ3Ljk5M0wxMjguMzYgMTQ3Ljk5M0w0OCA2Ny42MzcxVjE0Ny45OTNaTTQ4IDE3NS44MThWMTc2QzQ4IDE5My42NzMgNjIuMzI2OSAyMDggODAgMjA4SDIwOFY4MEMyMDggNjIuMzI2OSAxOTMuNjczIDQ4IDE3NiA0OEgxNzUuODI1TDE3NS44MjUgMTc1LjgxOEgxNzUuNTQxVjE3NS44MTlMNDggMTc1LjgxOFpNMTQ3LjEyOSA0OEwxNDcuMTI5IDEyNy40MTFMNjcuNzE1IDQ4SDE0Ny4xMjlaIiBmaWxsPSJibGFjayIvPgo8L3N2Zz4K",
+  "description": "Remote MCP server for Port - internal developer portal, service catalog, scorecards, and self-service actions",
+  "oauth_config": {
+    "name": "Port MCP",
+    "server_url": "https://mcp.port.io/v1",
+    "token_endpoint": "https://api.port.io/v1/auth/access_token",
+    "client_id": "",
+    "client_secret": "",
+    "redirect_uris": [],
+    "scopes": [],
+    "description": "Port MCP Server (OAuth 2.0 client credentials)",
+    "default_scopes": [],
+    "supports_resource_metadata": false,
+    "generic_oauth": true,
+    "grant_type": "client_credentials"
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Enterprise",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2026-05-13T00:00:00.000Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "port"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.port.io/v1",
+    "docs_url": "https://docs.port.io/ai-interfaces/port-mcp-server/overview-and-installation/"
+  },
+  "github_info": null,
+  "programming_language": null
+}

@@ -1,0 +1,121 @@
+{
+  "name": "dealexpress__mcp-server",
+  "display_name": "DealX",
+  "description": "MCP Server for DealX platform",
+  "author": {
+    "name": "DealExpress"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@dealx/mcp-server"],
+    "env": {
+      "DEALX_API_URL": "${user_config.dealx_api_url}",
+      "MCP_SERVER_PORT": "${user_config.mcp_server_port}",
+      "LOG_LEVEL": "${user_config.log_level}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "dealx_api_url": {
+      "type": "string",
+      "title": "DealX API URL",
+      "description": "The base URL for the DealX API. Defaults to the production URL.",
+      "default": "https://dealx.com.ua",
+      "required": false
+    },
+    "mcp_server_port": {
+      "type": "number",
+      "title": "MCP Server Port",
+      "description": "Optional: Specify the port for the MCP server.",
+      "default": 3100,
+      "required": false
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "Optional: Log level (debug, info, warn, error).",
+      "default": "info",
+      "required": false
+    }
+  },
+  "readme": "# @dealx/mcp-server\n\nThis is a Model Context Protocol (MCP) server for the [DealX platform](https://dealx.com.ua). It allows LLMs to interact with the DealX platform, specifically to search for ads.\n\n## Table of Contents\n\n- [Overview](#overview)\n- [Installation](#installation)\n- [Usage](#usage)\n- [Available Tools](#available-tools)\n- [Extending the Server](#extending-the-server)\n- [Development](#development)\n- [Troubleshooting](#troubleshooting)\n\n## Overview\n\nThe DealX MCP Server implements the [Model Context Protocol](https://github.com/modelcontextprotocol/typescript-sdk) to provide a standardized way for LLMs to interact with the [DealX platform](https://dealx.com.ua). Currently, it supports searching for ads, with plans to add more functionality in the future.\n\n### What is MCP?\n\nThe Model Context Protocol (MCP) is a standardized way for LLMs to interact with external systems. It provides a structured interface for LLMs to access data and perform actions in the real world. This server implements the MCP specification to allow LLMs to interact with the DealX platform.\n\n## Installation\n\n### Prerequisites\n\n- Node.js (v20 or later)\n- npm (v11 or later)\n\n### MCP Configuration\n\nTo use this server with an LLM like Claude, you need to add it to your LLM's MCP configuration:\n\n1. Open your LLM's MCP configuration file:\n\n   - **Claude Desktop App**:\n     - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n     - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n     - Linux: `~/.config/Claude/claude_desktop_config.json`\n   - **Cline (VS Code Extension)**:\n     - `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`\n\n2. Add the DealX MCP server to the `mcpServers` section:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"dealx\": {\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"@dealx/mcp-server\"],\n         \"env\": {\n           \"DEALX_API_URL\": \"https://dealx.com.ua\"\n         },\n         \"disabled\": false,\n         \"autoApprove\": []\n       }\n     }\n   }\n   ```\n\n### Installation via npm\n\nThe easiest way to install the DealX MCP Server is via npm:\n\n```shell\nnpm install -g @dealx/mcp-server\n```\n\n### Installation for Development\n\nIf you want to modify the server or contribute to its development:\n\n1. Clone the repository:\n\n   ```shell\n   git clone <repository-url>\n   cd dealx/mcp\n   ```\n\n2. Install dependencies:\n\n   ```shell\n   npm install\n   ```\n\n3. Create a `.env` file based on the `.env.example` file:\n\n   ```shell\n   cp .env.example .env\n   ```\n\n4. Edit the `.env` file to set the appropriate values:\n\n   ```shell\n   # DealX API URL\n   DEALX_API_URL=http://localhost:3001\n\n   # Optional: Specify the port for the MCP server\n   MCP_SERVER_PORT=3100\n\n   # Optional: Log level (debug, info, warn, error)\n   LOG_LEVEL=info\n   ```\n\n5. Build the server:\n\n   ```shell\n   npm run build\n   ```\n\n## Usage\n\n### Starting the Server\n\nYou can run the server in several ways:\n\n1. If installed globally:\n\n   ```shell\n   node node_modules/@dealx/mcp-server/build/index.js\n   ```\n\n2. Using npx without installation:\n\n   ```shell\n   npx -y @dealx/mcp-server\n   ```\n\n3. With environment variables:\n\n   ```shell\n   DEALX_API_URL=https://dealx.com.ua npx -y @dealx/mcp-server\n   ```\n\n4. For development:\n\n   ```shell\n   npm start\n   ```\n\n### Using with an LLM\n\nOnce configured in your LLM's MCP settings, you can use natural language to interact with the DealX platform.\n\nExample prompts:\n\n- \"Search for ads on DealX with the query 'laptop'\"\n- \"Find the newest 5 ads for 'iPhone' on DealX\"\n- \"Search DealX for apartments in Kyiv\"\n\n## Available Tools\n\n### search_ads\n\nSearch for ads on the DealX platform.\n\n**Parameters:**\n\n- `query` (string, optional): Search query string\n- `sort` (string, optional): Sort order (e.g., \"-created\" for newest first)\n- `offset` (number, optional): Pagination offset (starts at 1, default: 1)\n- `limit` (number, optional): Number of results per page (max 100, default: 30)\n\n**Example Usage:**\n\n```json\n{\n  \"query\": \"laptop\",\n  \"sort\": \"-created\",\n  \"offset\": 1,\n  \"limit\": 10\n}\n```\n\n## Extending the Server\n\nThe server is designed to be easily extended with additional tools. Here's how to add a new tool:\n\n- Define the tool in the `TOOLS` object in `src/index.ts`:\n\n  ```typescript\n  const TOOLS = {\n    SEARCH_ADS: \"search_ads\",\n    NEW_TOOL: \"new_tool\", // Add your new tool here\n  };\n  ```\n\n- Create a new file in the `src/tools` directory for your tool implementation:\n\n  ```typescript\n  // src/tools/new-tool.ts\n  import { ErrorCode, McpError } from \"@modelcontextprotocol/sdk/types.js\";\n\n  interface NewToolParams {\n    // Define your tool parameters here\n  }\n\n  export async function newTool(params: NewToolParams) {\n    try {\n      // Implement your tool logic here\n\n      return {\n        content: [\n          {\n            type: \"text\",\n            text: JSON.stringify(result, null, 2),\n          },\n        ],\n      };\n    } catch (error) {\n      // Handle errors\n      // ...\n    }\n  }\n  ```\n\n- Add the tool to the `ListToolsRequestSchema` handler in `src/index.ts`:\n\n  ```typescript\n  this.server.setRequestHandler(ListToolsRequestSchema, async () => ({\n    tools: [\n      // Existing tools...\n      {\n        name: TOOLS.NEW_TOOL,\n        description: \"Description of your new tool\",\n        inputSchema: {\n          type: \"object\",\n          properties: {\n            // Define your tool parameters here\n          },\n          required: [], // List required parameters\n        },\n      },\n    ],\n  }));\n  ```\n\n- Add the tool to the `CallToolRequestSchema` handler in `src/index.ts`:\n\n  ```typescript\n  this.server.setRequestHandler(CallToolRequestSchema, async (request) => {\n    const { name, arguments: args } = request.params;\n\n    switch (name) {\n      // Existing cases...\n      case TOOLS.NEW_TOOL:\n        return await newTool(args);\n      default:\n        throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);\n    }\n  });\n  ```\n\n- Import your new tool in `src/index.ts`:\n\n  ```typescript\n  import { newTool } from \"./tools/new-tool.js\";\n  ```\n\n### Planned Future Tools\n\nThe following tools are planned for future implementation:\n\n- `create_ad`: Create a new ad on the [DealX platform](https://dealx.com.ua)\n- `edit_ad`: Edit an existing ad\n- `delete_ad`: Delete an ad\n- `get_threads`: Get discussion threads for an ad\n- `create_thread`: Create a new discussion thread\n\n## Development\n\n### Project Structure\n\n```shell\nmcp/\n├── build/              # Compiled JavaScript files\n├── src/                # TypeScript source files\n│   ├── tools/          # Tool implementations\n│   │   └── search-ads.ts\n│   └── index.ts        # Main server implementation\n├── .env                # Environment variables (not in git)\n├── .env.example        # Example environment variables\n├── package.json        # Project dependencies and scripts\n├── tsconfig.json       # TypeScript configuration\n└── README.md           # This file\n```\n\n### npm Scripts\n\n- `npm run build` - Compile TypeScript to JavaScript\n- `npm start` - Start the server using the compiled JavaScript\n- `npm run dev` - Start the server in development mode with hot reloading\n- `npm run lint` - Lint the code using ESLint\n- `npm run format` - Format the code using Prettier\n- `npm test` - Run tests\n\n## Troubleshooting\n\n### Common Issues\n\n#### Server Not Starting\n\nIf the server fails to start, check the following:\n\n- Make sure you have the correct Node.js version installed\n- Check that all dependencies are installed\n- Verify that the `.env` file exists and has the correct values\n- Check the console output for error messages\n\n#### Connection Issues\n\nIf the LLM can't connect to the server:\n\n- Make sure the server is running\n- Check that the MCP configuration in the LLM's settings is correct\n- Verify that the path to the server executable is correct\n- Check that the environment variables are set correctly\n\n#### API Connection Issues\n\nIf the server can't connect to the DealX API:\n\n- Make sure the DealX API is running\n- Check that the `DEALX_API_URL` environment variable is set correctly\n- Verify that the API endpoint is accessible from the server\n\n### Getting Help\n\nIf you encounter issues not covered here, please open an issue against this GitHub repository.\n",
+  "category": "AI Tools",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "dealx": {
+        "command": "npx",
+        "args": ["-y", "@dealx/mcp-server"],
+        "env": {
+          "DEALX_API_URL": "https://dealx.com.ua"
+        }
+      },
+      "dealx-mcp-server-node": {
+        "command": "node",
+        "args": ["node_modules/@dealx/mcp-server/build/index.js"],
+        "env": {}
+      },
+      "dealx-mcp-server-npx": {
+        "command": "npx",
+        "args": ["-y", "@dealx/mcp-server"],
+        "env": {}
+      },
+      "dealx-mcp-server-dev": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "DealExpress",
+    "repo": "mcp-server",
+    "url": "https://github.com/DealExpress/mcp-server",
+    "name": "mcp-server",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ee92397c969e1d2e1b71c7c9a87e262daa22cb10"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:26.269Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@dealx/mcp-server\",\n  \"version\": \"0.1.9\",\n  \"description\": \"MCP Server for DealX platform\",\n  \"type\": \"module\",\n  \"main\": \"build/index.js\",\n  \"bin\": {\n    \"mcp-server\": \"build/index.js\"\n  },\n  \"exports\": {\n    \".\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build/**/*\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && chmod +x build/index.js\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"tsc -w\",\n    \"lint\": \"eslint src --ext .ts\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\"\",\n    \"deps:upgrade\": \"ncu -u && npm install\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"dealx\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"DealX Team\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"axios\": \"^1.8.4\",\n    \"dotenv\": \"^16.4.7\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.16\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.29.0\",\n    \"@typescript-eslint/parser\": \"^8.29.0\",\n    \"eslint\": \"^9.23.0\",\n    \"prettier\": \"^3.5.3\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"packageManager\": \"npm@11.2.0\",\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  }\n}\n"
+}

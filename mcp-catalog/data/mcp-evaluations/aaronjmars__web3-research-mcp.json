@@ -1,0 +1,90 @@
+{
+  "name": "aaronjmars__web3-research-mcp",
+  "display_name": "Web3 Research",
+  "description": "Deep Research for crypto - free & fully local",
+  "author": {
+    "name": "aaronjmars"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "web3-research-mcp@latest"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Web3 Research MCP\n[![smithery badge](https://smithery.ai/badge/@aaronjmars/web3-research-mcp)](https://smithery.ai/server/@aaronjmars/web3-research-mcp)\n\nDeep Research for crypto - free & fully local 🧠\n\n<a href=\"https://glama.ai/mcp/servers/@aaronjmars/web3-research-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@aaronjmars/web3-research-mcp/badge\" alt=\"Web3 Research MCP server\" />\n</a>\n\n## 🚀 Preview\n\n![Preview](https://i.imgur.com/b9WfMSk.png)\n![Preview2](https://i.imgur.com/qjqvwmr.png)\n\n## 🧠 Features\n\n- **Comprehensive Research**: Gather detailed information about any cryptocurrency token\n- **Multi-Source Analysis**: Research across multiple sources including CoinGecko, CoinMarketCap, DeFiLlama, and more\n- **Structured Reporting**: Generate detailed reports covering technical fundamentals, market data, social sentiment, and more\n- **Resource Management**: Automatically stores search results and content for reference\n- **Status Tracking**: Track research progress through different stages and sections\n\n## 📋 Requirements\n\n- Node.js (v16 or higher)\n\n## 🔧 Installation & Setup\n\n### Installing via Smithery\n\nTo install web3-research-mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/web3-research-mcp):\n\n```bash\nnpx -y @smithery/cli install web3-research-mcp --client claude\n```\n\n## 🔌 Using with Claude Desktop\n\nEdit your Claude Desktop config file\n\n- Windows: %APPDATA%\\Claude\\claude_desktop_config.json\n- macOS: ~/Library/Application Support/Claude/claude_desktop_config.json\n\nAdd this to your Claude Desktop configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"web3-research-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"web3-research-mcp@latest\"]\n    }\n  }\n}\n```\n\nThen restart Claude Desktop\n\n## 🔌 Using with Cursor\n\nGo to: Settings -> Cursor Settings -> MCP -> Add new global MCP server\nPaste this into your Cursor ~/.cursor/mcp.json file. See Cursor MCP docs for more info.\n\n```json\n{\n  \"mcpServers\": {\n    \"web3-research-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"web3-research-mcp@latest\"]\n    }\n  }\n}\n```\n\nThen restart Cursor\n\n## 🛠️ Tools\n\n### create-research-plan\n\nCreates a structured research plan for a token.\n\nParameters:\n- tokenName: Full name of the token\n- tokenTicker: Ticker symbol of the token\n\n### search\n\nPerforms a web search and returns the results.\n\nParameters:\n- query: Search query\n- searchType: Type of search (web, news, images, videos)\n\n### research-with-keywords\n\nSearches for a token with specific keywords and saves the results.\n\nParameters:\n- tokenName: Name of the token\n- tokenTicker: Ticker symbol\n- keywords: Array of keywords to search for\n\n### update-status\n\nUpdates the status of a research section.\n\nParameters:\n- section: Section name to update (e.g., 'projectInfo', 'technicalFundamentals')\n- status: New status for the section (planned, in_progress, completed)\n\n### fetch-content\n\nFetches content from a URL and saves it as a resource.\n\nParameters:\n- url: URL to fetch content from\n- format: Output format (text, html, markdown, json)\n\n### list-resources\n\nLists all available resources that have been saved.\n\n### search-source\n\nSearches for information about a token from a specific source.\n\nParameters:\n- tokenName: Name of the token\n- tokenTicker: Ticker symbol\n- source: Source to search (e.g., 'CoinGecko', 'DeFiLlama', 'News')\n\n## 📝 Prompts\n\n### token-research\n\nInitiates comprehensive research on a cryptocurrency token.\n\nParameters:\n- tokenName: Full name of the cryptocurrency token\n- tokenTicker: Ticker symbol of the token (e.g., BTC, ETH)\n\n## 🧠 How It Works\n\n1. When research begins, a structured plan is created covering all aspects of the token\n2. The server performs searches across multiple sources for information\n3. Search results are stored as resources that can be referenced\n4. The research progresses through different sections, with status tracking\n5. A comprehensive report is generated covering all aspects of the token\n\n## ⚠️ Limitations\n\n- Some websites block web scraping, so direct content fetching may fail with 403 errors\n- Relies on search results which may not always be comprehensive\n- Rate limits may apply to search operations\n\n## 📄 License\n\nThis project is licensed under the Apache License 2.0 - see the LICENSE file for details.\n",
+  "category": "Finance",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "web3-research-mcp": {
+        "command": "npx",
+        "args": ["-y", "web3-research-mcp@latest"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "aaronjmars",
+    "repo": "web3-research-mcp",
+    "url": "https://github.com/aaronjmars/web3-research-mcp",
+    "name": "aaronjmars__web3-research-mcp",
+    "path": null,
+    "stars": 143,
+    "contributors": 3,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b835413e1c3788417431c6d7a735bf6e372bcf96"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:08.572Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "cheerio",
+      "importance": 7
+    },
+    {
+      "name": "duck-duck-scrape",
+      "importance": 8
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    },
+    {
+      "name": "turndown",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"web3-research-mcp\",\n  \"version\": \"1.0.1\",\n  \"description\": \"Deep Research for crypto - free & fully local\",\n  \"main\": \"dist/server.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"web3-research-mcp\": \"./bin/cli.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/server.js\",\n    \"dev\": \"tsc && node dist/server.js\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"keywords\": [\n    \"web3\",\n    \"crypto\",\n    \"research\",\n    \"mcp\",\n    \"claude\",\n    \"ai\"\n  ],\n  \"author\": \"aaronjmars\",\n  \"license\": \"Apache-2.0\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.9.0\",\n    \"cheerio\": \"^1.0.0-rc.12\",\n    \"duck-duck-scrape\": \"^2.2.1\",\n    \"node-fetch\": \"^2.6.9\",\n    \"turndown\": \"^7.1.2\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/cheerio\": \"^0.22.35\",\n    \"@types/node\": \"^22.14.0\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"@types/turndown\": \"^5.0.4\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"engines\": {\n    \"node\": \">=16.0.0\"\n  }\n}\n"
+}

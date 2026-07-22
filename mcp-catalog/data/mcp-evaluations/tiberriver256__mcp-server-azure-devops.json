@@ -1,0 +1,188 @@
+{
+  "name": "tiberriver256__mcp-server-azure-devops",
+  "display_name": "mcp-server-azure-devops",
+  "description": "An MCP server for Azure DevOps",
+  "author": {
+    "name": "Tiberriver256"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@tiberriver256/mcp-server-azure-devops"],
+    "env": {
+      "AZURE_DEVOPS_ORG_URL": "${user_config.azure_devops_org_url}",
+      "AZURE_DEVOPS_AUTH_METHOD": "${user_config.azure_devops_auth_method}",
+      "AZURE_DEVOPS_PAT": "${user_config.azure_devops_pat}",
+      "AZURE_DEVOPS_DEFAULT_PROJECT": "${user_config.azure_devops_default_project}",
+      "AZURE_DEVOPS_API_VERSION": "${user_config.azure_devops_api_version}",
+      "AZURE_TENANT_ID": "${user_config.azure_tenant_id}",
+      "AZURE_CLIENT_ID": "${user_config.azure_client_id}",
+      "AZURE_CLIENT_SECRET": "${user_config.azure_client_secret}",
+      "LOG_LEVEL": "${user_config.log_level}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "azure_devops_org_url": {
+      "type": "string",
+      "title": "Azure DevOps Organization URL",
+      "description": "Full URL to your Azure DevOps organization (e.g., https://dev.azure.com/your-organization)",
+      "required": true,
+      "sensitive": false
+    },
+    "azure_devops_auth_method": {
+      "type": "string",
+      "title": "Authentication Method",
+      "description": "Authentication method to use: 'pat', 'azure-identity', or 'azure-cli'",
+      "required": false,
+      "default": "azure-identity",
+      "sensitive": false
+    },
+    "azure_devops_pat": {
+      "type": "string",
+      "title": "Personal Access Token (PAT)",
+      "description": "Personal Access Token for PAT authentication",
+      "required": false,
+      "sensitive": true
+    },
+    "azure_devops_default_project": {
+      "type": "string",
+      "title": "Default Azure DevOps Project",
+      "description": "Default project to use if none is specified in a request",
+      "required": false,
+      "sensitive": false
+    },
+    "azure_devops_api_version": {
+      "type": "string",
+      "title": "Azure DevOps API Version",
+      "description": "API version to use for Azure DevOps requests (e.g., 7.1)",
+      "required": false,
+      "sensitive": false
+    },
+    "azure_tenant_id": {
+      "type": "string",
+      "title": "Azure AD Tenant ID",
+      "description": "Azure AD tenant ID (required for service principal authentication)",
+      "required": false,
+      "sensitive": true
+    },
+    "azure_client_id": {
+      "type": "string",
+      "title": "Azure AD Application ID",
+      "description": "Azure AD application ID (required for service principal authentication)",
+      "required": false,
+      "sensitive": true
+    },
+    "azure_client_secret": {
+      "type": "string",
+      "title": "Azure AD Client Secret",
+      "description": "Azure AD client secret (required for service principal authentication)",
+      "required": false,
+      "sensitive": true
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Logging Level",
+      "description": "Logging level (debug, info, warn, error)",
+      "required": false,
+      "default": "info",
+      "sensitive": false
+    }
+  },
+  "readme": "# ℹ️ DISCUSSION: [Microsoft launched an official ADO MCP Server! 🎉🎉🎉](https://github.com/Tiberriver256/mcp-server-azure-devops/discussions/237)\n\n# Azure DevOps MCP Server\n\nA Model Context Protocol (MCP) server implementation for Azure DevOps, allowing AI assistants to interact with Azure DevOps APIs through a standardized protocol.\n\n## Overview\n\nThis server implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) for Azure DevOps, enabling AI assistants like Claude to interact with Azure DevOps resources securely. The server acts as a bridge between AI models and Azure DevOps APIs, providing a standardized way to:\n\n- Access and manage projects, work items, repositories, and more\n- Create and update work items, branches, and pull requests\n- Execute common DevOps workflows through natural language\n- Access repository content via standardized resource URIs\n- Safely authenticate and interact with Azure DevOps resources\n\n## Server Structure\n\nThe server is structured around the Model Context Protocol (MCP) for communicating with AI assistants. It provides tools for interacting with Azure DevOps resources including:\n\n- Projects\n- Work Items\n- Repositories\n- Pull Requests\n- Branches\n- Pipelines\n\n### Core Components\n\n- **AzureDevOpsServer**: Main server class that initializes the MCP server and registers tools\n- **Feature Modules**: Organized by feature area (work-items, projects, repositories, etc.)\n- **Request Handlers**: Each feature module provides request identification and handling functions\n- **Tool Handlers**: Modular functions for each Azure DevOps operation\n- **Configuration**: Environment-based configuration for organization URL, PAT, etc.\n\nThe server uses a feature-based architecture where each feature area (like work-items, projects, repositories) is encapsulated in its own module. This makes the codebase more maintainable and easier to extend with new features.\n\n## Getting Started\n\n### Prerequisites\n\n- Node.js (v16+)\n- npm or yarn\n- Azure DevOps account with appropriate access\n- Authentication credentials (see [Authentication Guide](docs/authentication.md) for details):\n  - Personal Access Token (PAT), or\n  - Azure Identity credentials, or\n  - Azure CLI login\n\n### Running with NPX\n\n### Usage with Claude Desktop/Cursor AI\n\nTo integrate with Claude Desktop or Cursor AI, add one of the following configurations to your configuration file.\n\n#### Azure Identity Authentication\n\nBe sure you are logged in to Azure CLI with `az login` then add the following:\n\n```json\n{\n  \"mcpServers\": {\n    \"azureDevOps\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@tiberriver256/mcp-server-azure-devops\"],\n      \"env\": {\n        \"AZURE_DEVOPS_ORG_URL\": \"https://dev.azure.com/your-organization\",\n        \"AZURE_DEVOPS_AUTH_METHOD\": \"azure-identity\",\n        \"AZURE_DEVOPS_DEFAULT_PROJECT\": \"your-project-name\"\n      }\n    }\n  }\n}\n```\n\n#### Personal Access Token (PAT) Authentication\n\n```json\n{\n  \"mcpServers\": {\n    \"azureDevOps\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@tiberriver256/mcp-server-azure-devops\"],\n      \"env\": {\n        \"AZURE_DEVOPS_ORG_URL\": \"https://dev.azure.com/your-organization\",\n        \"AZURE_DEVOPS_AUTH_METHOD\": \"pat\",\n        \"AZURE_DEVOPS_PAT\": \"<YOUR_PAT>\",\n        \"AZURE_DEVOPS_DEFAULT_PROJECT\": \"your-project-name\"\n      }\n    }\n  }\n}\n```\n\nFor detailed configuration instructions and more authentication options, see the [Authentication Guide](docs/authentication.md).\n\n## Authentication Methods\n\nThis server supports multiple authentication methods for connecting to Azure DevOps APIs. For detailed setup instructions, configuration examples, and troubleshooting tips, see the [Authentication Guide](docs/authentication.md).\n\n### Supported Authentication Methods\n\n1. **Personal Access Token (PAT)** - Simple token-based authentication\n2. **Azure Identity (DefaultAzureCredential)** - Flexible authentication using the Azure Identity SDK\n3. **Azure CLI** - Authentication using your Azure CLI login\n\nExample configuration files for each authentication method are available in the [examples directory](docs/examples/).\n\n## Environment Variables\n\nFor a complete list of environment variables and their descriptions, see the [Authentication Guide](docs/authentication.md#configuration-reference).\n\nKey environment variables include:\n\n| Variable                       | Description                                                                        | Required                     | Default          |\n| ------------------------------ | ---------------------------------------------------------------------------------- | ---------------------------- | ---------------- |\n| `AZURE_DEVOPS_AUTH_METHOD`     | Authentication method (`pat`, `azure-identity`, or `azure-cli`) - case-insensitive | No                           | `azure-identity` |\n| `AZURE_DEVOPS_ORG_URL`         | Full URL to your Azure DevOps organization                                         | Yes                          | -                |\n| `AZURE_DEVOPS_PAT`             | Personal Access Token (for PAT auth)                                               | Only with PAT auth           | -                |\n| `AZURE_DEVOPS_DEFAULT_PROJECT` | Default project if none specified                                                  | No                           | -                |\n| `AZURE_DEVOPS_API_VERSION`     | API version to use                                                                 | No                           | Latest           |\n| `AZURE_TENANT_ID`              | Azure AD tenant ID (for service principals)                                        | Only with service principals | -                |\n| `AZURE_CLIENT_ID`              | Azure AD application ID (for service principals)                                   | Only with service principals | -                |\n| `AZURE_CLIENT_SECRET`          | Azure AD client secret (for service principals)                                    | Only with service principals | -                |\n| `LOG_LEVEL`                    | Logging level (debug, info, warn, error)                                           | No                           | info             |\n\n## Troubleshooting Authentication\n\nFor detailed troubleshooting information for each authentication method, see the [Authentication Guide](docs/authentication.md#troubleshooting-authentication-issues).\n\nCommon issues include:\n\n- Invalid or expired credentials\n- Insufficient permissions\n- Network connectivity problems\n- Configuration errors\n\n## Authentication Implementation Details\n\nFor technical details about how authentication is implemented in the Azure DevOps MCP server, see the [Authentication Guide](docs/authentication.md) and the source code in the `src/auth` directory.\n\n## Available Tools\n\nThe Azure DevOps MCP server provides a variety of tools for interacting with Azure DevOps resources. For detailed documentation on each tool, please refer to the corresponding documentation.\n\n### User Tools\n\n- `get_me`: Get details of the authenticated user (id, displayName, email)\n\n### Organization Tools\n\n- `list_organizations`: List all accessible organizations\n\n### Project Tools\n\n- `list_projects`: List all projects in an organization\n- `get_project`: Get details of a specific project\n- `get_project_details`: Get comprehensive details of a project including process, work item types, and teams\n\n### Repository Tools\n\n- `list_repositories`: List all repositories in a project\n- `get_repository`: Get details of a specific repository\n- `get_repository_details`: Get detailed information about a repository including statistics and refs\n- `get_file_content`: Get content of a file or directory from a repository\n\n### Work Item Tools\n\n- `get_work_item`: Retrieve a work item by ID\n- `create_work_item`: Create a new work item\n- `update_work_item`: Update an existing work item\n- `list_work_items`: List work items in a project\n- `manage_work_item_link`: Add, remove, or update links between work items\n\n### Search Tools\n\n- `search_code`: Search for code across repositories in a project\n- `search_wiki`: Search for content across wiki pages in a project\n- `search_work_items`: Search for work items across projects in Azure DevOps\n\n### Pipelines Tools\n\n- `list_pipelines`: List pipelines in a project\n- `get_pipeline`: Get details of a specific pipeline\n- `trigger_pipeline`: Trigger a pipeline run with customizable parameters\n\n### Wiki Tools\n\n- `get_wikis`: List all wikis in a project\n- `get_wiki_page`: Get content of a specific wiki page as plain text\n\n### Pull Request Tools\n\n- [`create_pull_request`](docs/tools/pull-requests.md#create_pull_request) - Create a new pull request\n- [`list_pull_requests`](docs/tools/pull-requests.md#list_pull_requests) - List pull requests in a repository\n- [`add_pull_request_comment`](docs/tools/pull-requests.md#add_pull_request_comment) - Add a comment to a pull request\n- [`get_pull_request_comments`](docs/tools/pull-requests.md#get_pull_request_comments) - Get comments from a pull request\n- [`update_pull_request`](docs/tools/pull-requests.md#update_pull_request) - Update an existing pull request (title, description, status, draft state, reviewers, work items)\n\nFor comprehensive documentation on all tools, see the [Tools Documentation](docs/tools/).\n\n## Contributing\n\nContributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=tiberriver256/mcp-server-azure-devops&type=Date)](https://www.star-history.com/#tiberriver256/mcp-server-azure-devops&Date)\n\n## License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 73,
+  "archestra_config": {
+    "client_config_permutations": {
+      "tiberriver256-mcp-server-azure-devops-azure-identity": {
+        "command": "npx",
+        "args": ["-y", "@tiberriver256/mcp-server-azure-devops"],
+        "env": {
+          "AZURE_DEVOPS_ORG_URL": "https://dev.azure.com/your-organization",
+          "AZURE_DEVOPS_AUTH_METHOD": "azure-identity",
+          "AZURE_DEVOPS_DEFAULT_PROJECT": "your-project-name"
+        }
+      },
+      "tiberriver256-mcp-server-azure-devops-pat": {
+        "command": "npx",
+        "args": ["-y", "@tiberriver256/mcp-server-azure-devops"],
+        "env": {
+          "AZURE_DEVOPS_ORG_URL": "https://dev.azure.com/your-organization",
+          "AZURE_DEVOPS_AUTH_METHOD": "pat",
+          "AZURE_DEVOPS_PAT": "<YOUR_PAT>",
+          "AZURE_DEVOPS_DEFAULT_PROJECT": "your-project-name"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Tiberriver256",
+    "repo": "mcp-server-azure-devops",
+    "url": "https://github.com/Tiberriver256/mcp-server-azure-devops",
+    "name": "mcp-server-azure-devops",
+    "path": null,
+    "stars": 280,
+    "contributors": 12,
+    "issues": 24,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "96557d9cb6a0d5860f612ae9cdc3f7fb02f7c6f3"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:40.338Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@azure/identity",
+      "importance": 8
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 7
+    },
+    {
+      "name": "azure-devops-node-api",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    },
+    {
+      "name": "minimatch",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@tiberriver256/mcp-server-azure-devops\",\n  \"version\": \"0.1.42\",\n  \"description\": \"Azure DevOps reference server for the Model Context Protocol (MCP)\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"bin\": {\n    \"mcp-server-azure-devops\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist/\",\n    \"docs/\",\n    \"LICENSE\",\n    \"README.md\"\n  ],\n  \"config\": {\n    \"commitizen\": {\n      \"path\": \"./node_modules/cz-conventional-changelog\"\n    }\n  },\n  \"lint-staged\": {\n    \"*.ts\": [\n      \"prettier --write\",\n      \"eslint --fix\"\n    ]\n  },\n  \"release-please\": {\n    \"release-type\": \"node\",\n    \"changelog-types\": [\n      {\n        \"type\": \"feat\",\n        \"section\": \"Features\",\n        \"hidden\": false\n      },\n      {\n        \"type\": \"fix\",\n        \"section\": \"Bug Fixes\",\n        \"hidden\": false\n      },\n      {\n        \"type\": \"chore\",\n        \"section\": \"Miscellaneous\",\n        \"hidden\": false\n      },\n      {\n        \"type\": \"docs\",\n        \"section\": \"Documentation\",\n        \"hidden\": false\n      },\n      {\n        \"type\": \"perf\",\n        \"section\": \"Performance Improvements\",\n        \"hidden\": false\n      },\n      {\n        \"type\": \"refactor\",\n        \"section\": \"Code Refactoring\",\n        \"hidden\": false\n      }\n    ]\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"dev\": \"ts-node-dev --respawn --transpile-only src/index.ts\",\n    \"start\": \"node dist/index.js\",\n    \"inspector\": \"npm run build && npx @modelcontextprotocol/inspector@0.9.0 node dist/index.js\",\n    \"test\": \"npm run test:unit && npm run test:int && npm run test:e2e\",\n    \"test:unit\": \"jest --config jest.unit.config.js\",\n    \"test:int\": \"jest --config jest.int.config.js\",\n    \"test:e2e\": \"jest --config jest.e2e.config.js\",\n    \"test:watch\": \"jest --watch\",\n    \"lint\": \"eslint . --ext .ts\",\n    \"lint:fix\": \"eslint . --ext .ts --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\" \\\"tests/**/*.ts\\\"\",\n    \"prepare\": \"husky install\",\n    \"commit\": \"cz\"\n  },\n  \"keywords\": [\n    \"azure-devops\",\n    \"mcp\",\n    \"ai\",\n    \"automation\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@azure/identity\": \"^4.8.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.6.0\",\n    \"axios\": \"^1.8.3\",\n    \"azure-devops-node-api\": \"^13.0.0\",\n    \"dotenv\": \"^16.3.1\",\n    \"minimatch\": \"^10.0.1\",\n    \"zod\": \"^3.24.2\",\n    \"zod-to-json-schema\": \"^3.24.5\"\n  },\n  \"devDependencies\": {\n    \"@commitlint/cli\": \"^19.8.0\",\n    \"@commitlint/config-conventional\": \"^19.8.0\",\n    \"@types/jest\": \"^29.5.0\",\n    \"@types/node\": \"^20.0.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.27.0\",\n    \"@typescript-eslint/parser\": \"^8.27.0\",\n    \"commitizen\": \"^4.3.1\",\n    \"cz-conventional-changelog\": \"^3.3.0\",\n    \"eslint\": \"^8.0.0\",\n    \"husky\": \"^8.0.3\",\n    \"jest\": \"^29.0.0\",\n    \"lint-staged\": \"^15.5.0\",\n    \"prettier\": \"^3.0.0\",\n    \"ts-jest\": \"^29.0.0\",\n    \"ts-node-dev\": \"^2.0.0\",\n    \"typescript\": \"^5.8.2\"\n  }\n}"
+}

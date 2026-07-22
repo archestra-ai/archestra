@@ -1,0 +1,100 @@
+{
+  "name": "akseyh__bear-mcp-server",
+  "display_name": "bear-mcp-server",
+  "description": "MCP Server integration for Bear note app",
+  "author": {
+    "name": "akseyh"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["bear-mcp-server"],
+    "env": {
+      "BEAR_DB_PATH": "${user_config.bear_db_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bear_db_path": {
+      "type": "directory",
+      "title": "Bear Notes Database Directory",
+      "description": "The directory where Bear Notes stores its SQLite database. Typically found in `~/Library/Group Containers/9K33E3U3T4.net.shinyfrog.bear/Application Data` on macOS.",
+      "required": true,
+      "default": "${HOME}/Library/Group Containers/9K33E3U3T4.net.shinyfrog.bear/Application Data"
+    }
+  },
+  "readme": "# Bear MCP Server\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/akseyh-bear-mcp-server-badge.png)](https://mseep.ai/app/akseyh-bear-mcp-server)\n\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/4ba4aa63-76ae-41d7-9d41-851d9acf7013)\n\nThis project is a Model Context Protocol (MCP) server that provides access to the [Bear Notes](https://bear.app).\n\nBear stores notes on SQLite database. This MCP server runs some SQL commands to access this notes.\nhttps://bear.app/faq/where-are-bears-notes-located\n\n![Kariyer notu arama örneği](./assets/career-note-search-example.png)\n\n## Features\n\n- Read notes\n- Search notes by text\n- List all tags\n\n## Installation\n\n```bash\n# Clone the project\ngit clone https://github.com/akseyh/bear-mcp-server\n\n# Change directory\ncd bear-mcp-server\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n\n## Claude Desktop Config\n\nUpdate your claude_desktop_config.json\n\n### Docker\n```json\n{\n    \"mcpServers\": {\n        \"bear\": {\n            \"command\": \"docker\",\n            \"args\": [\n                \"run\",\n                \"-v\",\n                \"/Users/[YOUR_USER_NAME]/Library/Group Containers/9K33E3U3T4.net.shinyfrog.bear/Application Data:/app/db\",\n                \"-i\",\n                \"akseyh/bear-mcp-server\"\n            ]\n        }\n    }\n}\n```\n\n### NPM\n```json\n{\n  \"mcpServers\": {\n    \"bear\": {\n      \"command\": \"npx\",\n      \"args\": [\n          \"bear-mcp-server\"\n      ]\n    }\n  }\n}\n```\n\nWhen the server is started, the following MCP tools become available:\n\n- `get_notes`: Retrieves all notes\n- `get_tags`: Lists all tags\n- `get_notes_like`: Searches for notes containing specific text\n\n## Requirements\n\n- Node.js\n- Bear note application (macOS)\n- Access to Bear database\n\n## License\n\nISC\n",
+  "category": "AI Tools",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "akseyh-bear-mcp-server-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-v",
+          "/Users/[YOUR_USER_NAME]/Library/Group Containers/9K33E3U3T4.net.shinyfrog.bear/Application Data:/app/db",
+          "-i",
+          "akseyh/bear-mcp-server"
+        ],
+        "env": {},
+        "docker_image": "akseyh/bear-mcp-server"
+      },
+      "bear-mcp-server": {
+        "command": "npx",
+        "args": ["bear-mcp-server"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "akseyh",
+    "repo": "bear-mcp-server",
+    "url": "https://github.com/akseyh/bear-mcp-server",
+    "name": "bear-mcp-server",
+    "path": null,
+    "stars": 34,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e75d51b576c2571a140869a4276be4b1b742cca0"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:41.574Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "sqlite3",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"bear-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"files\": [\n    \"build\",\n    \"README.md\",\n    \"assets\"\n  ],\n  \"bin\": {\n    \"bear-mcp\": \"build/index.js\"\n  },\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\",\n    \"start\": \"node index.js\",\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.1.1\",\n    \"@types/node\": \"^22.10.7\",\n    \"dotenv\": \"^16.5.0\",\n    \"sqlite3\": \"^5.1.7\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n"
+}

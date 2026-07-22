@@ -1,0 +1,79 @@
+{
+  "name": "imprvhub__mcp-claude-hackernews",
+  "display_name": "mcp-claude-hackernews",
+  "description": "An integration that allows Claude Desktop to interact with Hacker News using the Model Context Protocol (MCP).",
+  "author": {
+    "name": "imprvhub"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Claude Hacker News\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/63f8ec05-a890-4a4d-9d8d-bea3c9a05c54) [![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/imprvhub/mcp-claude-hackernews)](https://archestra.ai/mcp-catalog/imprvhub__mcp-claude-hackernews)\n[![smithery badge](https://smithery.ai/badge/@imprvhub/mcp-claude-spotify)](https://smithery.ai/server/@imprvhub/mcp-claude-hackernews)\n\n\n<table style=\"border-collapse: collapse; width: 100%; table-layout: fixed;\">\n<tr>\n<td style=\"padding: 15px; vertical-align: middle; border: none; text-align: center;\">\n  <a href=\"https://mseep.ai/app/imprvhub-mcp-claude-hackernews\">\n    <img src=\"https://mseep.net/pr/imprvhub-mcp-claude-hackernews-badge.png\" alt=\"MseeP.ai Security Assessment Badge\" />\n  </a>\n</td>  \n<td style=\"width: 40%; padding: 15px; vertical-align: middle; border: none;\">An integration that allows Claude Desktop to interact with Hacker News using the Model Context Protocol (MCP).</td>\n<td style=\"width: 60%; padding: 0; vertical-align: middle; border: none; min-width: 300px; text-align: center;\"><a href=\"https://glama.ai/mcp/servers/@imprvhub/mcp-claude-hackernews\">\n  <img style=\"max-width: 100%; height: auto; min-width: 300px;\" src=\"https://glama.ai/mcp/servers/@imprvhub/mcp-claude-hackernews/badge\" alt=\"mcp-claude-hackernews MCP server\" />\n</a></td>\n</tr>\n</table>\n\n\n## Features\n\n- Browse latest stories from Hacker News\n- View top and best-rated stories\n- Get story details\n- Read comments for stories\n- Clean formatting of Hacker News content for better readability\n\n## Demo\n\n<p>\n  <a href=\"https://www.youtube.com/watch?v=SmPD6MLifJo\">\n    <img src=\"public/assets/preview.png\" width=\"600\" alt=\"Claude Spotify Integration Demo\">\n  </a>\n</p>\n\n## Requirements\n\n- Node.js 16 or higher\n- Claude Desktop\n- Internet connection to access Hacker News API\n\n## Installation\n\n### Installing Manually\n1. Clone or download this repository:\n```bash\ngit clone https://github.com/imprvhub/mcp-claude-hackernews\ncd mcp-claude-hackernews\n```\n\n2. Install dependencies:\n```bash\nnpm install\n```\n\n3. Build the project:\n```bash\nnpm run build\n```\n\n## Running the MCP Server\n\nThere are two ways to run the MCP server:\n\n### Option 1: Running manually\n\n1. Open a terminal or command prompt\n2. Navigate to the project directory\n3. Run the server directly:\n\n```bash\nnode build/index.js\n```\n\nKeep this terminal window open while using Claude Desktop. The server will run until you close the terminal.\n\n### Option 2: Auto-starting with Claude Desktop (recommended for regular use)\n\nThe Claude Desktop can automatically start the MCP server when needed. To set this up:\n\n#### Configuration\n\nThe Claude Desktop configuration file is located at:\n\n- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n- **Linux**: `~/.config/Claude/claude_desktop_config.json`\n\nEdit this file to add the Hacker News MCP configuration. If the file doesn't exist, create it:\n\n```json\n{\n  \"mcpServers\": {\n    \"hackerNews\": {\n      \"command\": \"node\",\n      \"args\": [\"ABSOLUTE_PATH_TO_DIRECTORY/mcp-claude-hackernews/build/index.js\"]\n    }\n  }\n}\n```\n\n**Important**: Replace `ABSOLUTE_PATH_TO_DIRECTORY` with the **complete absolute path** where you installed the MCP\n  - macOS/Linux example: `/Users/username/mcp-claude-hackernews`\n  - Windows example: `C:\\\\Users\\\\username\\\\mcp-claude-hackernews`\n\nIf you already have other MCPs configured, simply add the \"hackerNews\" section inside the \"mcpServers\" object. Here's an example of a configuration with multiple MCPs:\n\n```json\n{\n  \"mcpServers\": {\n    \"otherMcp1\": {\n      \"command\": \"...\",\n      \"args\": [\"...\"]\n    },\n    \"otherMcp2\": {\n      \"command\": \"...\",\n      \"args\": [\"...\"]\n    },\n    \"hackerNews\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"ABSOLUTE_PATH_TO_DIRECTORY/mcp-claude-hackernews/build/index.js\"\n      ]\n    }\n  }\n}\n```\n\nThe MCP server will automatically start when Claude Desktop needs it, based on the configuration in your `claude_desktop_config.json` file.\n\n## Usage\n\n1. Restart Claude Desktop after modifying the configuration\n2. In Claude, use the Hacker News tools to interact with Hacker News\n3. The MCP server runs as a child process managed by Claude Desktop\n\n## Available Tools\n\nThe Hacker News MCP provides **5 specialized tools** for different functions:\n\n| Tool | Description | Parameters | Example Usage |\n|------|-------------|------------|---------------|\n| `hn_latest` | Get the most recent stories from Hacker News | `limit`: Optional number of stories (1-50, default: 10) | Get 20 latest stories |\n| `hn_top` | Get the top-ranked stories from Hacker News | `limit`: Optional number of stories (1-50, default: 10) | Get 15 top stories |\n| `hn_best` | Get the best stories from Hacker News | `limit`: Optional number of stories (1-50, default: 10) | Get 25 best stories |\n| `hn_story` | Get detailed information about a specific story | `story_id`: Required story ID (number) | Get story details by ID |\n| `hn_comments` | Get comments for a story | `story_id`: Story ID (number) OR `story_index`: Index from last list (1-based) | Get comments by story ID or index |\n\n### Tool Parameters Details\n\n#### `hn_latest`, `hn_top`, `hn_best`\n- **`limit`** (optional): Number of stories to fetch\n  - Type: Number\n  - Range: 1-50\n  - Default: 10\n\n#### `hn_story`\n- **`story_id`** (required): The ID of the story to fetch\n  - Type: Number\n  - Example: 12345678\n\n#### `hn_comments`\n- **`story_id`** (optional): The ID of the story to get comments for\n  - Type: Number\n  - Example: 12345678\n- **`story_index`** (optional): The index of the story from the last fetched list\n  - Type: Number (1-based)\n  - Example: 3 (for the 3rd story in the last list)\n\n*Note: For `hn_comments`, you must provide either `story_id` OR `story_index`*\n\n## Example Usage\n\nHere are various examples of how to use the Hacker News MCP with Claude:\n\n### Direct Tool Usage:\n\n```\n\"Use hn_latest to get 20 recent stories\"\n\"Use hn_top with limit 15 to get top stories\"\n\"Use hn_best to get 25 best stories\"\n\"Use hn_story with story_id 29384756 to get story details\"\n\"Use hn_comments with story_index 3 to get comments for the 3rd story\"\n\"Use hn_comments with story_id 12345678 to get comments for that story\"\n```\n\n### Natural Language Queries:\n\nYou can also interact with the MCP using natural language. Claude will interpret these requests and use the appropriate tools:\n\n- \"Show me the top 30 stories on Hacker News today\"\n- \"What are the 40 latest posts on Hacker News?\"\n- \"I'd like to see the 20 best articles from Hacker News\"\n- \"Can you fetch me 30 recent tech news stories from Hacker News?\"\n- \"Tell me what's the top 50 trending topics on Hacker News\"\n- \"Show me 20 Hacker News stories about machine learning\"\n- \"Get me the 40 most recent Hacker News headlines\"\n- \"What are the 30 most active discussions on Hacker News right now?\"\n- \"I'm interested in reading the 40 most popular Hacker News articles this week\"\n- \"Show me a list of 20 best programming articles from Hacker News\"\n- \"Get the comments for story number 5 from the last list\"\n- \"Show me the details of story ID 12345678\"\n\n### Language Translation Requests:\n\nYou can request Hacker News content to be translated into different languages:\n\n- \"Show me the top 30 stories on Hacker News today in Spanish\"\n- \"Get the 20 latest Hacker News posts and translate them to French\"\n- \"I'd like to see the 40 best articles from Hacker News in German\"\n- \"Show me 30 recent Hacker News stories translated to Japanese\"\n- \"Get the top 20 Hacker News articles and present them in Portuguese\"\n\n## Troubleshooting\n\n### \"Server disconnected\" error\nIf you see the error \"MCP Hacker News: Server disconnected\" in Claude Desktop:\n\n1. **Verify the server is running**:\n   - Open a terminal and manually run `node build/index.js` from the project directory\n   - If the server starts successfully, use Claude while keeping this terminal open\n\n2. **Check your configuration**:\n   - Ensure the absolute path in `claude_desktop_config.json` is correct for your system\n   - Double-check that you've used double backslashes (`\\\\`) for Windows paths\n   - Verify you're using the complete path from the root of your filesystem\n\n3. **Try the auto-start option**:\n   - Set up the auto-start script for your operating system as described in the \"Setting up auto-start scripts\" section\n   - This ensures the server is always running when you need it\n\n### Tools not appearing in Claude\nIf the Hacker News tools don't appear in Claude:\n- Make sure you've restarted Claude Desktop after configuration\n- Check the Claude Desktop logs for any MCP communication errors\n- Ensure the MCP server process is running (run it manually to confirm)\n- Verify that the MCP server is correctly registered in the Claude Desktop MCP registry\n\n### Checking if the server is running\nTo check if the server is running:\n\n- **Windows**: Open Task Manager, go to the \"Details\" tab, and look for \"node.exe\"\n- **macOS/Linux**: Open Terminal and run `ps aux | grep node`\n\nIf you don't see the server running, start it manually or use the auto-start method.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## License\n\nThis project is licensed under the Mozilla Public License 2.0 - see the [LICENSE](https://github.com/imprvhub/mcp-claude-hackernews/blob/main/LICENSE) file for details.\n\n## Related Links\n\n- [Model Context Protocol](https://modelcontextprotocol.io/)\n- [Hacker News API](https://github.com/HackerNews/API)\n- [Claude Desktop](https://claude.ai/download)\n- [MCP Series](https://github.com/mcp-series)\n",
+  "category": "Aggregators",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-claude-hackernews-stdio": {
+        "command": "node",
+        "args": ["build/index.js"],
+        "env": {}
+      },
+      "hackerNews": {
+        "command": "node",
+        "args": ["ABSOLUTE_PATH_TO_DIRECTORY/mcp-claude-hackernews/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "imprvhub",
+    "repo": "mcp-claude-hackernews",
+    "url": "https://github.com/imprvhub/mcp-claude-hackernews",
+    "name": "mcp-claude-hackernews",
+    "path": null,
+    "stars": 5,
+    "contributors": 4,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "eb7feacc5fe85033084bd8c81dd3d7634938d494"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:32.945Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-claude-hackernews\",\n  \"version\": \"0.1.0\",\n  \"description\": \"Model Context Protocol server for Hacker News using Claude Desktop\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.1\",\n    \"axios\": \"^1.6.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.1\",\n    \"typescript\": \"^5.2.2\"\n  }\n}\n"
+}

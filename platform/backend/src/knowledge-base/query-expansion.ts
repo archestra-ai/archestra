@@ -20,7 +20,23 @@ async function expandQuery(params: {
 }): Promise<ExpandedQuery[]> {
   const { queryText, organizationId } = params;
 
-  const rerankerConfig = await resolveRerankerConfig(organizationId);
+  let rerankerConfig: Awaited<ReturnType<typeof resolveRerankerConfig>>;
+  try {
+    rerankerConfig = await resolveRerankerConfig(organizationId);
+  } catch (error) {
+    // Query expansion (which reuses the reranker model) is a non-fatal
+    // enhancement. If the reranker config is unresolvable, degrade to the
+    // original query rather than failing the search; the fault is surfaced at
+    // save time.
+    logger.warn(
+      {
+        organizationId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "[QueryExpansion] Reranker config unresolvable, skipping expansion",
+    );
+    return [{ queryText, weight: 1.0, type: "semantic" }];
+  }
   if (!rerankerConfig) {
     logger.debug(
       { organizationId },

@@ -1,0 +1,100 @@
+{
+  "name": "henryhaoson__yuque-mcp-server",
+  "display_name": "Yuque-MCP-Server",
+  "description": "Yuque mcp server",
+  "author": {
+    "name": "HenryHaoson"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# GitHub Actions 工作流使用说明\n\n## 工作流概述\n\n本仓库配置了以下 GitHub Actions 工作流：\n\n1. **版本更新 (version-bump)**: 用于自动更新 npm 包版本号\n2. **NPM 包发布 (npm-publish)**: 用于自动构建并发布 npm 包到 npmjs.com\n\n## 使用方法\n\n### 版本更新工作流\n\n此工作流允许你通过 GitHub 界面手动触发版本更新：\n\n1. 进入仓库的 \"Actions\" 选项卡\n2. 选择 \"版本更新\" 工作流\n3. 点击 \"Run workflow\" 按钮\n4. 选择版本更新类型（patch、minor 或 major）\n5. 点击 \"Run workflow\" 确认\n\n工作流将自动：\n- 更新 package.json 中的版本号\n- 创建对应的 Git 标签\n- 提交并推送所有更改\n\n### NPM 包发布工作流\n\n此工作流在以下情况下自动触发：\n\n1. 当创建新的 GitHub Release 时\n2. 手动触发时\n\n要手动触发发布流程：\n1. 进入仓库的 \"Actions\" 选项卡\n2. 选择 \"发布 NPM 包\" 工作流\n3. 点击 \"Run workflow\" 按钮\n4. 点击 \"Run workflow\" 确认\n\n## 配置 npm 发布令牌\n\n要使 NPM 发布工作流正常工作，需要在 GitHub 仓库中配置 NPM 令牌：\n\n1. 在 npm 网站上生成访问令牌 (https://www.npmjs.com/settings/[用户名]/tokens)\n2. 在 GitHub 仓库中，进入 \"Settings\" > \"Secrets and variables\" > \"Actions\"\n3. 点击 \"New repository secret\"\n4. 名称填写 `NPM_TOKEN`，值填写你的 npm 访问令牌\n5. 点击 \"Add secret\" 保存 ",
+  "category": "Development",
+  "quality_score": 33,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "HenryHaoson",
+    "repo": "Yuque-MCP-Server",
+    "url": "https://github.com/HenryHaoson/Yuque-MCP-Server",
+    "name": "Yuque-MCP-Server",
+    "path": null,
+    "stars": 21,
+    "contributors": 2,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "f22aa42bb7bcad69b78bb9cad93f4ee49b199cb2"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.292Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@types/content-type",
+      "importance": 3
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "content-type",
+      "importance": 5
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "cross-env",
+      "importance": 3
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "raw-body",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"yueque-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Model Context Protocol server for Yuque API integration\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"yuque-mcp\": \"./dist/cli.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\"\n  ],\n  \"directories\": {\n    \"test\": \"test\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"type-check\": \"tsc --noEmit\",\n    \"start\": \"node dist/index.js\",\n    \"start:cli\": \"cross-env NODE_ENV=cli node dist/index.js\",\n    \"start:http\": \"node dist/index.js\",\n    \"dev\": \"cross-env NODE_ENV=development ts-node-dev --respawn src/index.ts\",\n    \"dev:cli\": \"cross-env NODE_ENV=development ts-node-dev --respawn src/index.ts --stdio\"\n  },\n  \"keywords\": [\n    \"yuque\",\n    \"api\",\n    \"mcp\",\n    \"server\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.6.1\",\n    \"@types/content-type\": \"^1.1.8\",\n    \"axios\": \"^1.8.1\",\n    \"content-type\": \"^1.0.5\",\n    \"cors\": \"^2.8.5\",\n    \"cross-env\": \"^7.0.3\",\n    \"dotenv\": \"^16.4.7\",\n    \"express\": \"^4.21.2\",\n    \"raw-body\": \"^3.0.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"^5.0.0\",\n    \"@types/node\": \"^22.13.9\",\n    \"nodemon\": \"^3.1.9\",\n    \"ts-node\": \"^10.9.2\",\n    \"ts-node-dev\": \"^2.0.0\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

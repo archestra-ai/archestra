@@ -1,0 +1,144 @@
+{
+  "name": "rishijatia__fantasy-pl-mcp",
+  "display_name": "fantasy-pl-mcp",
+  "description": "Fantasy Premier League MCP Server",
+  "author": {
+    "name": "rishijatia"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "fpl_mcp"],
+    "env": {
+      "FPL_EMAIL": "${user_config.fpl_email}",
+      "FPL_PASSWORD": "${user_config.fpl_password}",
+      "FPL_TEAM_ID": "${user_config.fpl_team_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "fpl_email": {
+      "type": "string",
+      "title": "FPL Email",
+      "description": "Your Fantasy Premier League email address for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "fpl_password": {
+      "type": "string",
+      "title": "FPL Password",
+      "description": "Your Fantasy Premier League password for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "fpl_team_id": {
+      "type": "number",
+      "title": "FPL Team ID",
+      "description": "Your Fantasy Premier League team ID (found in your FPL URL, e.g., 'https://fantasy.premierleague.com/entry/YOUR_TEAM_ID/event/1').",
+      "required": true
+    }
+  },
+  "readme": "# Fantasy Premier League MCP Server\n\n[![PyPI version](https://badge.fury.io/py/fpl-mcp.svg)](https://badge.fury.io/py/fpl-mcp)\n[![Package Check](https://github.com/rishijatia/fantasy-pl-mcp/actions/workflows/package-check.yml/badge.svg)](https://github.com/rishijatia/fantasy-pl-mcp/actions/workflows/package-check.yml)\n[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/fpl-mcp)](https://pypi.org/project/fpl-mcp/)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Downloads](https://static.pepy.tech/badge/fpl-mcp)](https://pepy.tech/project/fpl-mcp)\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/rishijatia/fantasy-pl-mcp)](https://archestra.ai/mcp-catalog/rishijatia__fantasy-pl-mcp)\n<a href=\"https://glama.ai/mcp/servers/2zxsxuxuj9\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/2zxsxuxuj9/badge\" />\n\nA Model Context Protocol (MCP) server that provides access to Fantasy Premier League (FPL) data and tools. This server allows you to interact with FPL data in Claude for Desktop and other MCP-compatible clients.\n\n*Demo of the Fantasy Premier League MCP Server in action*\n\n[![Fantasy Premier League MCP Demo](https://img.youtube.com/vi/QfOOOQ_jeMA/0.jpg)](https://youtu.be/QfOOOQ_jeMA)\n\n\n## Supported Platforms\n\n- Claude Desktop\n- Cursor\n- Windsurf\n- Other MCP Compatible Desktop LLMs\n\nMobile is currently not supported.\n\n## Features\n\n- **Rich Player Data**: Access comprehensive player statistics from the FPL API\n- **Team Information**: Get details about Premier League teams\n- **Gameweek Data**: View current and past gameweek information\n- **Player Search**: Find players by name or team\n- **Player Comparison**: Compare detailed statistics between any two players\n\n## Requirements\n\n- Python 3.10 or higher\n- Claude Desktop (for AI integration)\n\n## Installation\n\n### Option 1: Install from PyPI (Recommended)\n\n```bash\npip install fpl-mcp\n```\n\n### Option 1b: Install with Development Dependencies\n\n```bash\npip install \"fpl-mcp[dev]\"\n```\n\n### Option 2: Install from GitHub\n\n```bash\npip install git+https://github.com/rishijatia/fantasy-pl-mcp.git\n```\n\n### Option 3: Clone and Install Locally\n\n```bash\ngit clone https://github.com/rishijatia/fantasy-pl-mcp.git\ncd fantasy-pl-mcp\npip install -e .\n```\n\n## Running the Server\n\nAfter installation, you have several options to run the server:\n\n### 1. Using the CLI command\n\n```bash\nfpl-mcp\n```\n\n### 2. Using the Python module\n\n```bash\npython -m fpl_mcp\n```\n\n### 3. Using with Claude Desktop\n\nConfigure Claude Desktop to use the installed package by editing your `claude_desktop_config.json` file:\n\n**Method 1: Using the Python module directly (most reliable)**\n\n```json\n{\n  \"mcpServers\": {\n    \"fantasy-pl\": {\n      \"command\": \"python\",\n      \"args\": [\"-m\", \"fpl_mcp\"]\n    }\n  }\n}\n```\n\n**Method 2: Using the installed command with full path (if installed with pip)**\n\n```json\n{\n  \"mcpServers\": {\n    \"fantasy-pl\": {\n      \"command\": \"/full/path/to/your/venv/bin/fpl-mcp\"\n    }\n  }\n}\n```\n\nReplace `/full/path/to/your/venv/bin/fpl-mcp` with the actual path to the executable. You can find this by running `which fpl-mcp` in your terminal after activating your virtual environment.\n\n> **Note:** Using just `\"command\": \"fpl-mcp\"` may result in a `spawn fpl-mcp ENOENT` error since Claude Desktop might not have access to your virtual environment's PATH. Using the full path or the Python module approach helps avoid this issue.\n\n## Usage\n\n### In Claude for Desktop\n\n1. Start Claude for Desktop\n2. You should see FPL tools available via the hammer icon\n3. Example queries:\n   - \"Compare Mohamed Salah and Erling Haaland over the last 5 gameweeks\"\n   - \"Find all Arsenal midfielders\"\n   - \"What's the current gameweek status?\"\n   - \"Show me the top 5 forwards by points\"\n\n#### Fantasy-PL MCP Usage Instructions\n\n#### Basic Commands:\n- Compare players: \"Compare [Player1] and [Player2]\"\n- Find players: \"Find players from [Team]\" or \"Search for [Player Name]\"\n- Fixture difficulty: \"Show upcoming fixtures for [Team]\"\n- Captain advice: \"Who should I captain between [Player1] and [Player2]?\"\n\n#### Advanced Features:\n- Statistical analysis: \"Compare underlying stats for [Player1] and [Player2]\"\n- Form check: \"Show me players in form right now\"\n- Differential picks: \"Suggest differentials under 10% ownership\"\n- Team optimization: \"Rate my team and suggest transfers\"\n\n#### Tips:\n- Be specific with player names for accurate results\n- Include positions when searching (FWD, MID, DEF, GK)\n- For best captain advice, ask about form, fixtures, and underlying stats\n- Request comparison of specific metrics (xG, shots in box, etc.   \n\n### MCP Inspector for Development\n\nFor development and testing:\n\n```bash\n# If you have mcp[cli] installed\nmcp dev -m fpl_mcp\n\n# Or use npx\nnpx @modelcontextprotocol/inspector python -m fpl_mcp\n```\n\n## Available Resources\n- `fpl://static/players` - All player data with comprehensive statistics\n- `fpl://static/players/{name}` - Player data by name search\n- `fpl://static/teams` - All Premier League teams\n- `fpl://static/teams/{name}` - Team data by name search\n- `fpl://gameweeks/current` - Current gameweek data\n- `fpl://gameweeks/all` - All gameweeks data\n- `fpl://fixtures` - All fixtures for the current season\n- `fpl://fixtures/gameweek/{gameweek_id}` - Fixtures for a specific gameweek\n- `fpl://fixtures/team/{team_name}` - Fixtures for a specific team\n- `fpl://players/{player_name}/fixtures` - Upcoming fixtures for a specific player\n- `fpl://gameweeks/blank` - Information about upcoming blank gameweeks\n- `fpl://gameweeks/double` - Information about upcoming double gameweeks\n\n## Available Tools\n- `get_gameweek_status` - Get precise information about current, previous, and next gameweeks\n- `analyze_player_fixtures` - Analyze upcoming fixtures for a player with difficulty ratings\n- `get_blank_gameweeks` - Get information about upcoming blank gameweeks\n- `get_double_gameweeks` - Get information about upcoming double gameweeks\n- `analyze_players` - Filter and analyze FPL players based on multiple criteria\n- `analyze_fixtures` - Analyze upcoming fixtures for players, teams, or positions\n- `compare_players` - Compare multiple players across various metrics\n- `check_fpl_authentication` - Check if FPL authentication is working correctly\n- `get_my_team` - View your authenticated team (requires authentication)\n- `get_team` - View any team with a specific ID (requires authentication)\n- `get_manager_info` - Get manager details (requires authentication)\n\n## Prompt Templates\n- `player_analysis_prompt` - Create a prompt for analyzing an FPL player in depth\n- `transfer_advice_prompt` - Get advice on player transfers based on budget and position\n- `team_rating_prompt` - Create a prompt for rating and analyzing an FPL team\n- `differential_players_prompt` - Create a prompt for finding differential players with low ownership\n- `chip_strategy_prompt` - Create a prompt for chip strategy advice\n\n## Development\n\n### Adding Features\n\nTo add new features:\n\n1. Add resource handlers in the appropriate file within `fpl_mcp/fpl/resources/`\n2. Add tool handlers in the appropriate file within `fpl_mcp/fpl/tools/`\n3. Update the `__main__.py` file to register new resources and tools\n4. Test using the MCP Inspector before deploying to Claude for Desktop\n\n## Authentication\n\nTo use features requiring authentication (like accessing your team or private leagues), you need to set up your FPL credentials:\n\n```bash\n# Run the credential setup tool\nfpl-mcp-config setup\n```\n\nThis interactive tool will:\n1. Prompt for your FPL email, password, and team ID\n2. Let you choose between storing in config.json or .env file\n3. Save credentials securely to ~/.fpl-mcp/\n\nYou can test your authentication with:\n```bash\nfpl-mcp-config test\n```\n\nAlternatively, you can manually configure authentication:\n1. Create `~/.fpl-mcp/.env` file with:\n   ```\n   FPL_EMAIL=your_email@example.com\n   FPL_PASSWORD=your_password\n   FPL_TEAM_ID=your_team_id\n   ```\n   \n2. Or create `~/.fpl-mcp/config.json`:\n   ```json\n   {\n     \"email\": \"your_email@example.com\",\n     \"password\": \"your_password\",\n     \"team_id\": \"your_team_id\"\n   }\n   ```\n\n3. Or set environment variables:\n   ```bash\n   export FPL_EMAIL=your_email@example.com\n   export FPL_PASSWORD=your_password\n   export FPL_TEAM_ID=your_team_id\n   ```\n\n## Limitations\n\n- The FPL API is not officially documented and may change without notice\n- Only read operations are currently supported\n\n## Troubleshooting\n\n### Common Issues\n\n#### 1. \"spawn fpl-mcp ENOENT\" error in Claude Desktop\n\nThis occurs because Claude Desktop cannot find the `fpl-mcp` executable in its PATH.\n\n**Solution:** Use one of these approaches:\n\n- Use the full path to the executable in your config file\n  ```json\n  {\n    \"mcpServers\": {\n      \"fantasy-pl\": {\n        \"command\": \"/full/path/to/your/venv/bin/fpl-mcp\"\n      }\n    }\n  }\n  ```\n\n- Use Python to run the module directly (preferred method)\n  ```json\n  {\n    \"mcpServers\": {\n      \"fantasy-pl\": {\n        \"command\": \"python\",\n        \"args\": [\"-m\", \"fpl_mcp\"]\n      }\n    }\n  }\n  ```\n\n#### 2. Server disconnects immediately\n\nIf the server starts but immediately disconnects:\n\n- Check logs at `~/Library/Logs/Claude/mcp*.log` (macOS) or `%APPDATA%\\Claude\\logs\\mcp*.log` (Windows)\n- Ensure all dependencies are installed\n- Try running the server manually with `python -m fpl_mcp` to see any errors\n\n#### 3. Server not showing in Claude Desktop\n\nIf the hammer icon doesn't appear:\n\n- Restart Claude Desktop completely\n- Verify your `claude_desktop_config.json` has correct JSON syntax\n- Ensure the path to Python or the executable is absolute, not relative\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\nFor more details, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file.\n\n## Acknowledgments\n\n- [Fantasy Premier League API](https://fantasy.premierleague.com/api/) for providing the data\n- [Model Context Protocol](https://modelcontextprotocol.io/) for the connectivity standard\n- [Claude](https://claude.ai/) for the AI assistant capabilities\n\n## Citation\n\nIf you use this package in your research or project, please consider citing it:\n\n```bibtex\n@software{fpl_mcp,\n  author = {Jatia, Rishi and Fantasy PL MCP Contributors},\n  title = {Fantasy Premier League MCP Server},\n  url = {https://github.com/rishijatia/fantasy-pl-mcp},\n  version = {0.1.0},\n  year = {2025},\n}\n```\n",
+  "category": "Gaming",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "fpl-mcp": {
+        "command": "fpl-mcp",
+        "args": [],
+        "env": {}
+      },
+      "fpl-mcp-python-module": {
+        "command": "python",
+        "args": ["-m", "fpl_mcp"],
+        "env": {}
+      },
+      "fpl-mcp-claude-desktop-python-module": {
+        "command": "python",
+        "args": ["-m", "fpl_mcp"],
+        "env": {}
+      },
+      "fpl-mcp-claude-desktop-full-path": {
+        "command": "/full/path/to/your/venv/bin/fpl-mcp",
+        "args": [],
+        "env": {}
+      },
+      "fpl-mcp-mcp-dev": {
+        "command": "mcp",
+        "args": ["dev", "-m", "fpl_mcp"],
+        "env": {}
+      },
+      "modelcontextprotocol-inspector-fpl-mcp": {
+        "command": "npx",
+        "args": ["@modelcontextprotocol/inspector", "python", "-m", "fpl_mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "rishijatia",
+    "repo": "fantasy-pl-mcp",
+    "url": "https://github.com/rishijatia/fantasy-pl-mcp",
+    "name": "fantasy-pl-mcp",
+    "path": null,
+    "stars": 37,
+    "contributors": 1,
+    "issues": 4,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "9a5f0b6c94a060020b2105f64814e3ea5636da99"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:18.652Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "cryptography",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "diskcache",
+      "importance": 7
+    },
+    {
+      "name": "jsonschema",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"fpl-mcp\"\nversion = \"0.1.6\"\ndescription = \"An MCP server for Fantasy Premier League data\"\nreadme = \"README.md\"\nauthors = [\n    {name = \"Fantasy PL MCP Contributors\", email = \"rishi.jatia96@gmail.com\"},\n]\nlicense = {text = \"MIT\"}\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n    \"Topic :: Utilities\",\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"Natural Language :: English\",\n]\nkeywords = [\"fantasy-premier-league\", \"fpl\", \"mcp\", \"claude\", \"ai\", \"football\", \"soccer\"]\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp>=1.2.0\",\n    \"httpx>=0.24.0\",\n    \"python-dotenv\",\n    \"diskcache\",\n    \"jsonschema\",\n    \"requests\",\n    \"cryptography\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.0.0\",\n    \"black>=23.0.0\",\n    \"flake8>=6.0.0\",\n    \"isort>=5.10.0\",\n    \"mypy>=1.0.0\",\n    \"build\",\n    \"twine\",\n    \"mcp[cli]>=1.2.0\",\n]\n\n[project.scripts]\nfpl-mcp = \"fpl_mcp.__main__:main\"\nfpl-mcp-config = \"fpl_mcp.cli:main\"\n\n[project.urls]\nHomepage = \"https://github.com/rishijatia/fantasy-pl-mcp\"\nIssues = \"https://github.com/rishijatia/fantasy-pl-mcp/issues\"\n\n[tool.setuptools]\npackage-dir = {\"\" = \"src\"}\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n\n=== setup.py ===\nfrom setuptools import setup, find_packages\n\nwith open(\"README.md\", \"r\", encoding=\"utf-8\") as fh:\n    long_description = fh.read()\n\nsetup(\n    name=\"fpl-mcp\",\n    version=\"0.1.6\",\n    author=\"Fantasy PL MCP Contributors\",\n    author_email=\"rishi.jatia96@gmail.com\",\n    description=\"An MCP server for Fantasy Premier League data\",\n    long_description=long_description,\n    long_description_content_type=\"text/markdown\",\n    url=\"https://github.com/rishijatia/fantasy-pl-mcp\",\n    packages=find_packages(where=\"src\"),\n    package_dir={\"\": \"src\"},\n    classifiers=[\n        \"Programming Language :: Python :: 3\",\n        \"License :: OSI Approved :: MIT License\",\n        \"Operating System :: OS Independent\",\n    ],\n    python_requires=\">=3.10\",\n    install_requires=[\n        \"mcp>=1.2.0\",\n        \"httpx>=0.24.0\",\n        \"python-dotenv\",\n        \"diskcache\",\n        \"jsonschema\",\n        \"cryptography>=3.4.0\",\n    ],\n    entry_points={\n        \"console_scripts\": [\n            \"fpl-mcp=fpl_mcp.__main__:main\",\n            \"fpl-mcp-config=fpl_mcp.cli:main\",\n        ],\n    },\n    package_data={\n        \"fpl_mcp\": [\"schemas/*.json\"],\n    },\n)\n\n=== scripts/requirements.txt ===\nrequests>=2.28.0"
+}

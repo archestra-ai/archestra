@@ -1,0 +1,93 @@
+{
+  "name": "stass__exif-mcp",
+  "display_name": "exif-mcp",
+  "description": "MCP server to extract image metadata (EXIF, XMP, etc)",
+  "author": {
+    "name": "stass"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/server.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# exif-mcp\n\nAn MCP server that allows LLMs (or humans) to read image metadata on-demand, entirely offline. Based on the excellent exifr library it's exremely fast and does not rely on any external tools.\n\nUsecases:\n* Analyze image metadata and visualize it\n* Perform analysis of your image library: what are my most used cameras?  Lens distribution?  Which dates of the week I take most pictures on?  Most favorite locations?\n* Debugging image manipulation code.\n\nThs tool is used extensively by the reverse geolocation service [PlaceSpotter](https://www.placespotter.com/) for development and testing.\n\n## Overview\n\n`exif-mcp` is a Model Context Protocol (MCP) server that provides tools for extracting various metadata segments from images. Built with TypeScript, it leverages the excellent [exifr](https://github.com/MikeKovarik/exifr) library to parse metadata from images in common formats like JPEG, PNG, TIFF, and HEIC.  This allows this service to parse image metadata without executing any external tools which allows it to be both highly efficient and secure.\n\n### Features\n\n- **Local operation**: Works completely offline with no remote network required\n- **Multiple segments**: Extracts EXIF, GPS, XMP, ICC, IPTC, JFIF, and IHDR metadata\n- **Various input formats**: Supports JPEG, TIFF, HEIC/AVIF, and PNG\n- **Flexible image sources**: Read from file system, URLs, base64 data, or buffers\n- **Specialized tools**: Get orientation, rotation info, GPS coordinates, and thumbnails\n\n## Installation\n\n```csh\n# Clone the repository\ngit clone https://github.com/stass/exif-mcp.git\ncd exif-mcp\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n\n## Usage\n### Claude Desktop\n\nPut this into Claude config file (claude_desktop_config.json):\n```json\n\"mcpServers\": {\n    \"exif-mcp\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/exif-mcp/dist/server.js\"\n      ]\n    }\n  },\n```\n\nRestart Claude.  Now you can ask Claude to inspect images for you or e.g. find files taken with specific camera.  This works best in combination with filesystem MCP tools so Claude can find files and list directories.\n\n### Starting the server\n\n```csh\n# Start the server\nnpm start\n\n# For development with auto-reload\nnpm run dev\n```\n\nThe server uses the `StdioServerTransport` from the MCP SDK, making it compatible with any MCP client that supports STDIO transport.\n\nYou can use mcp-proxy to enable remote access.\n\n### Available Tools\n\nThe following tools are provided by the server:\n\n| Tool name | Description |\n|-----------|-------------|\n| `read-metadata` | Reads all or specified metadata segments |\n| `read-exif` | Reads EXIF data specifically |\n| `read-xmp` | Reads XMP data |\n| `read-icc` | Reads ICC color profile data |\n| `read-iptc` | Reads IPTC metadata |\n| `read-jfif` | Reads JFIF segment data |\n| `read-ihdr` | Reads IHDR segment data |\n| `orientation` | Gets image orientation (1-8) |\n| `rotation-info` | Gets rotation and flip information |\n| `gps-coordinates` | Extracts GPS coordinates |\n| `thumbnail` | Extracts embedded thumbnail |\n\n### Debugging with MCP Inspector\n\n1. Start the inspector: `npx @modelcontextprotocol/inspector node dist/server.js`\n2. Connect to it with MCP Inspector using the STDIO transport\n3. Call a tool, e.g., `read-metadata` with parameter:\n   ```json\n   {\n     \"image\": {\n       \"kind\": \"path\",\n       \"path\": \"/path/to/image.jpg\"\n     }\n   }\n   ```\n4. You cal also use MCP inspector command line like this: `npx @modelcontextprotocol/inspector --cli node dist/server.js --method tools/call --tool-name read-exif --tool-arg image='{\"kind\": \"path\", \"path\": \"/path/to/image.jpeg\"}' --tool-arg pick=\"[]\"`\n\n### Image Source Types\n\nThe server supports multiple ways to provide image data:\n\n```typescript\n// From local file system\n{\n  \"kind\": \"path\",\n  \"path\": \"/path/to/image.jpg\"\n}\n\n// From URL (http, https, or file://)\n{\n  \"kind\": \"url\",\n  \"url\": \"https://example.com/image.jpg\"\n}\n\n// From base64 data (raw or data URI)\n{\n  \"kind\": \"base64\",\n  \"data\": \"data:image/jpeg;base64,/9j/4AAQSkZ...\"\n}\n\n// From base64 buffer\n{\n  \"kind\": \"buffer\",\n  \"buffer\": \"/9j/4AAQSkZ...\"\n}\n```\n\n## Development\n\n### Running Tests\n\n```bash\n# Run tests\nnpm test\n\n# Run tests with watch mode\nnpm run test:watch\n```\n\n### Project Structure\n\n```\nexif-mcp/\n├── src/\n│   ├── server.ts         # Main entry point\n│   ├── tools/\n│   │   ├── index.ts      # Tool registration\n│   │   ├── loaders.ts    # Image loading utilities\n│   │   └── segments.ts   # exifr options builders\n│   └── types/\n│       └── image.ts      # Type definitions\n├── tests/                # Test files\n└── README.md\n```\n\n## Error Handling\n\nThe server provides standardized error handling for common issues:\n\n- Unsupported formats or missing metadata\n- Network fetch failures\n- Oversized payloads\n- Internal exifr errors\n\n## License\n\nBSD 2-clause\n\n## Acknowledgements\n\n- [exifr](https://github.com/MikeKovarik/exifr) - Extremely fast and robust EXIF parsing library\n",
+  "category": "Media",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "exif-mcp": {
+        "command": "node",
+        "args": ["/path/to/exif-mcp/dist/server.js"],
+        "env": {}
+      },
+      "exif-mcp-npm-start": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "exif-mcp-npm-dev": {
+        "command": "npm",
+        "args": ["run", "dev"],
+        "env": {}
+      },
+      "exif-mcp-stdio": {
+        "command": "node",
+        "args": ["dist/server.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "stass",
+    "repo": "exif-mcp",
+    "url": "https://github.com/stass/exif-mcp",
+    "name": "exif-mcp",
+    "path": null,
+    "stars": 15,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4170e0ffc499016b79047e16edfbe2acd5be59ed"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:24.365Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "exifr",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"exif-mcp\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP server for extracting image metadata using exifr\",\n  \"main\": \"dist/server.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/server.js\",\n    \"dev\": \"ts-node --esm src/server.ts\",\n    \"test\": \"vitest run\",\n    \"test:watch\": \"vitest\",\n    \"lint\": \"eslint src/**/*.ts\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"exif\",\n    \"metadata\",\n    \"images\",\n    \"exifr\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"latest\",\n    \"exifr\": \"latest\",\n    \"zod\": \"^3.24.3\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.15.3\",\n    \"eslint\": \"^9.25.1\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.8.3\",\n    \"vitest\": \"^3.1.2\"\n  },\n  \"engines\": {\n    \"node\": \">=18\"\n  }\n}\n"
+}

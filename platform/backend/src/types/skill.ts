@@ -157,7 +157,35 @@ export const SkillWithFilesSchema = SelectSkillSchema.extend({
   files: z.array(SelectSkillFileSchema),
 });
 
+/**
+ * Per-user activation analytics for one skill over a recent window, built from
+ * `skill_usage_events`. `userId: null` groups events with no attributable user;
+ * `name: null` marks ids whose `users` row is gone (deleted user) or never
+ * existed (synthetic service-account ids).
+ */
+export const SkillUsageStatisticsSchema = z.object({
+  /** Window start (inclusive, ISO timestamp); events before it are excluded. */
+  since: z.string(),
+  users: z.array(
+    z.object({
+      userId: z.string().nullable(),
+      name: z.string().nullable(),
+      total: z.number(),
+    }),
+  ),
+  /** Daily activation counts per user; days without activity are omitted. */
+  daily: z.array(
+    z.object({
+      /** UTC calendar day, `YYYY-MM-DD`. */
+      date: z.string(),
+      userId: z.string().nullable(),
+      count: z.number(),
+    }),
+  ),
+});
+
 export type Skill = z.infer<typeof SelectSkillSchema>;
+export type SkillUsageStatistics = z.infer<typeof SkillUsageStatisticsSchema>;
 export type InsertSkill = z.infer<typeof InsertSkillSchema>;
 export type UpdateSkill = z.infer<typeof UpdateSkillSchema>;
 export type SkillFile = z.infer<typeof SelectSkillFileSchema>;

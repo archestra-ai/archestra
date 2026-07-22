@@ -9,10 +9,15 @@ import {
   classifyCut,
   classifyTimelineGesture,
   consolidatedTranscript,
+  dominantViewport,
   keptTimelineRanges,
   neutralizeAppScripts,
+  planPaintFlush,
   presentedTranscript,
+  replayRegionLayout,
+  replayStageFit,
   revealSchedule,
+  trimCutsToExportLimit,
   uncutRecording,
 } from "./app-session-player";
 
@@ -563,6 +568,87 @@ describe("classifyCut", () => {
   });
 });
 
+describe("trimCutsToExportLimit", () => {
+  /** Steady app input keeps a whole span uncompressed on the timeline. */
+  const activity = (fromMs: number, toMs: number) => {
+    const events: { kind: string; t: number }[] = [];
+    for (let t = fromMs; t <= toMs; t += 400) {
+      events.push({ kind: "pointer", t });
+    }
+    return events;
+  };
+  const withEvents = (
+    durationMs: number,
+    events: { kind: string; t: number }[],
+    cuts?: { fromMs: number; toMs: number }[],
+  ) =>
+    recording({
+      durationMs,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        ...events,
+      ] as Recording["events"],
+      ...(cuts ? { edits: { cuts } } : {}),
+    });
+  const durationWith = (
+    rec: Recording,
+    cuts: { fromMs: number; toMs: number }[],
+  ) => buildPlayback({ ...rec, edits: { ...rec.edits, cuts } }).duration;
+
+  it("returns null when the cut already fits", () => {
+    const rec = withEvents(10_000, activity(0, 10_000));
+    expect(trimCutsToExportLimit(rec, 30_000)).toBeNull();
+  });
+
+  it("trims an uncut session from its end to exactly the limit", () => {
+    const rec = withEvents(45_000, activity(0, 45_000));
+    const next = trimCutsToExportLimit(rec, 30_000);
+    expect(next).not.toBeNull();
+    const after = durationWith(rec, next ?? []);
+    expect(after).toBeLessThanOrEqual(30_000);
+    expect(after).toBeGreaterThan(29_900);
+  });
+
+  it("keeps existing mid cuts and shortens the EDITED cut, not the raw one", () => {
+    const mid = { fromMs: 5_000, toMs: 12_000 };
+    const rec = withEvents(60_000, activity(0, 60_000), [mid]);
+    const next = trimCutsToExportLimit(rec, 30_000);
+    expect(next).not.toBeNull();
+    expect(next).toContainEqual(mid);
+    expect(next).toHaveLength(2);
+    const after = durationWith(rec, next ?? []);
+    expect(after).toBeLessThanOrEqual(30_000);
+    expect(after).toBeGreaterThan(29_900);
+  });
+
+  it("replaces an existing end trim instead of stacking another", () => {
+    const rec = withEvents(60_000, activity(0, 60_000), [
+      { fromMs: 50_000, toMs: 60_000 },
+    ]);
+    const next = trimCutsToExportLimit(rec, 30_000);
+    expect(next).not.toBeNull();
+    expect(next).toHaveLength(1);
+    const after = durationWith(rec, next ?? []);
+    expect(after).toBeLessThanOrEqual(30_000);
+    expect(after).toBeGreaterThan(29_900);
+  });
+
+  it("never lands a hair over the limit when it falls inside an idle-compressed gap", () => {
+    // Activity to 28s, dead air to 120s (compressed to a beat), activity
+    // again: the limit instant maps deep into the raw gap, where a naive
+    // rounded boundary re-expands to MORE than the limit.
+    const rec = withEvents(125_000, [
+      ...activity(0, 28_000),
+      ...activity(120_000, 125_000),
+    ]);
+    const next = trimCutsToExportLimit(rec, 30_000);
+    expect(next).not.toBeNull();
+    const after = durationWith(rec, next ?? []);
+    expect(after).toBeLessThanOrEqual(30_000);
+    expect(after).toBeGreaterThan(29_900);
+  });
+});
+
 describe("classifyTimelineGesture", () => {
   it("a quick click seeks — the few-px skid of a real (trackpad) click included", () => {
     expect(classifyTimelineGesture({ travelPx: 0, heldMs: 120 })).toBe("seek");
@@ -819,6 +905,38 @@ describe("neutralizeAppScripts", () => {
     expect(html).toContain(`<script data-archestra-app-sdk>sdk()`);
   });
 
+  it("stops module scripts by removing their type, not just appending one", () => {
+    // The HTML parser drops duplicate attributes and keeps the FIRST, so a
+    // replay type merely appended after `type="module"` leaves the module
+    // type in force — the script executes and the app re-simulates itself
+    // (fresh Math.random and all) on top of its own recording.
+    const html = neutralizeAppScripts(
+      `<script type="module">import * as THREE from "three"; boot()</script>`,
+    );
+    expect(html).toContain(
+      `<script type="application/archestra-replayed-script">import * as THREE`,
+    );
+    expect(html).not.toContain(`type="module"`);
+  });
+
+  it("removes the app's type however it is quoted, keeping other attributes", () => {
+    const html = neutralizeAppScripts(
+      `<script defer type='module' src="/app.js"></script>` +
+        `<script TYPE=module>a()</script>` +
+        `<script type>b()</script>`,
+    );
+    expect(html).toContain(
+      `<script defer src="/app.js" type="application/archestra-replayed-script">`,
+    );
+    expect(html).toContain(
+      `<script type="application/archestra-replayed-script">a()`,
+    );
+    expect(html).toContain(
+      `<script type="application/archestra-replayed-script">b()`,
+    );
+    expect(html).not.toMatch(/type=['"]?module/i);
+  });
+
   it("hides the replayed app's scrollbars", () => {
     // The stage gives the app its recorded width and whatever height the
     // window leaves, so a shorter window overflows the recorded content and
@@ -830,6 +948,245 @@ describe("neutralizeAppScripts", () => {
     expect(html).toContain("scrollbar-width: none");
     expect(html).toContain("::-webkit-scrollbar");
     expect(html).toContain("<body>app</body>");
+  });
+});
+
+describe("dominantViewport", () => {
+  type Events = Parameters<typeof dominantViewport>[0];
+
+  it("uses the only recorded size when there is just one", () => {
+    const events: Events = [
+      { kind: "viewport", t: 0, width: 1024, height: 768 },
+      { kind: "pointer", t: 500, type: "click", x: 1, y: 1 },
+    ];
+    expect(dominantViewport(events)).toEqual({ width: 1024, height: 768 });
+  });
+
+  it("picks the size the app was played at, not the idle size it sat at longest", () => {
+    // The app card sits narrow and inline through two minutes of building, then
+    // opens wide in the side panel for fifteen seconds of play. Weighing by
+    // wall-clock time alone picks the narrow idle size, and the game replays on
+    // a "small screen" it was never played on — the exact bug this guards.
+    const events: Events = [
+      { kind: "viewport", t: 0, width: 448, height: 620 },
+      { kind: "viewport", t: 120_000, width: 720, height: 940 },
+    ];
+    for (let t = 120_000; t <= 135_000; t += 250) {
+      events.push({ kind: "pointer", t, type: "move", x: 10, y: 10 });
+    }
+    for (let t = 120_200; t <= 135_000; t += 500) {
+      events.push({
+        kind: "key",
+        t,
+        type: "down",
+        key: "ArrowLeft",
+        code: "ArrowLeft",
+      });
+    }
+    expect(dominantViewport(events)).toEqual({ width: 720, height: 940 });
+  });
+
+  it("ignores a transient mount size in favor of the one that was used", () => {
+    const events: Events = [
+      { kind: "viewport", t: 0, width: 300, height: 40 }, // collapsed card at mount
+      { kind: "viewport", t: 200, width: 900, height: 700 }, // settled to content
+      { kind: "pointer", t: 1_000, type: "click", x: 5, y: 5 },
+    ];
+    expect(dominantViewport(events)).toEqual({ width: 900, height: 700 });
+  });
+
+  it("falls back to longest-on-screen time when there was no user interaction", () => {
+    // A no-input recording (an app that only animates a canvas) has nothing to
+    // weigh by interaction, so the size it lived at longest still wins.
+    const events: Events = [
+      { kind: "viewport", t: 0, width: 400, height: 600 },
+      { kind: "viewport", t: 9_000, width: 800, height: 600 },
+      { kind: "canvas", t: 9_500, sel: "canvas", blob: new Blob(["frame"]) },
+    ];
+    expect(dominantViewport(events)).toEqual({ width: 400, height: 600 });
+  });
+});
+
+describe("replayStageFit", () => {
+  it("scales uniformly by the limiting axis and centers the leftover", () => {
+    // Stage wider than the recording's shape: height limits the scale and the
+    // spare width splits evenly — the app is never stretched to fill.
+    expect(
+      replayStageFit({
+        stageWidth: 1000,
+        stageHeight: 400,
+        viewport: { width: 400, height: 800 },
+      }),
+    ).toEqual({ scale: 0.5, offsetX: 400, offsetY: 0 });
+    // Stage taller than the recording's shape: width limits instead.
+    expect(
+      replayStageFit({
+        stageWidth: 400,
+        stageHeight: 1000,
+        viewport: { width: 800, height: 400 },
+      }),
+    ).toEqual({ scale: 0.5, offsetX: 0, offsetY: 400 });
+  });
+
+  it("fills a stage of the recorded shape edge to edge — the locked-aspect contract", () => {
+    // A session recorded in the aspect-locked side panel replays in a stage
+    // column of the same shape: one uniform factor for both dimensions, no
+    // margins, no distortion. This is the exact bug this guards: a WebGL scene
+    // recorded portrait must not replay squashed into a different aspect.
+    const fit = replayStageFit({
+      stageWidth: 800,
+      stageHeight: 1000,
+      viewport: { width: 400, height: 500 },
+    });
+    expect(fit).toEqual({ scale: 2, offsetX: 0, offsetY: 0 });
+  });
+
+  it("reports no fit while either box is sizeless, so a mid-mount measurement never collapses the app", () => {
+    expect(
+      replayStageFit({
+        stageWidth: 0,
+        stageHeight: 500,
+        viewport: { width: 400, height: 800 },
+      }),
+    ).toBeNull();
+    expect(
+      replayStageFit({
+        stageWidth: 500,
+        stageHeight: 500,
+        viewport: { width: 0, height: 0 },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("replayRegionLayout", () => {
+  it("lays the chat and app out as matching cards for a locked-aspect recording", () => {
+    const layout = replayRegionLayout({
+      screenWidth: 1920,
+      screenHeight: 1080,
+      viewport: { width: 400, height: 500 }, // the canonical 4:5
+    });
+    expect(layout.chatWidth).toBe(layout.appWidth);
+    // Both cards carry the canonical aspect against the region height.
+    expect(layout.chatWidth).toBe(Math.round(layout.regionHeight * (4 / 5)));
+  });
+
+  it("scales the whole region down uniformly when the screen is too narrow", () => {
+    const viewport = { width: 400, height: 500 };
+    const wide = replayRegionLayout({
+      screenWidth: 1920,
+      screenHeight: 1080,
+      viewport,
+    });
+    const narrow = replayRegionLayout({
+      screenWidth: 900,
+      screenHeight: 1080,
+      viewport,
+    });
+    // Fits the narrow screen…
+    expect(narrow.chatWidth + narrow.appWidth).toBeLessThanOrEqual(
+      Math.ceil(900 * 0.94) + 2,
+    );
+    // …by shrinking, not reshaping: the cards stay twins.
+    expect(narrow.regionHeight).toBeLessThan(wide.regionHeight);
+    expect(narrow.chatWidth).toBe(narrow.appWidth);
+  });
+
+  it("clamps a pathological recorded shape to a sane card", () => {
+    const layout = replayRegionLayout({
+      screenWidth: 1920,
+      screenHeight: 1080,
+      viewport: { width: 4000, height: 500 }, // an 8:1 ultrawide capture
+    });
+    expect(layout.appWidth).toBe(Math.round(layout.regionHeight * 2));
+  });
+});
+
+describe("planPaintFlush", () => {
+  type Paints = Parameters<typeof planPaintFlush>[0];
+  const still = (sel: string, t: number, tag: string) => ({
+    kind: "canvas" as const,
+    t,
+    sel,
+    blob: new Blob([tag]),
+  });
+  const config = (sel: string, t: number) => ({
+    kind: "video-config" as const,
+    t,
+    sel,
+    codec: "vp8",
+    codedWidth: 2,
+    codedHeight: 2,
+  });
+  const chunk = (sel: string, t: number, type: "key" | "delta") => ({
+    kind: "video-chunk" as const,
+    t,
+    sel,
+    type,
+    tsUs: t * 1_000,
+    bytes: new Uint8Array([t]),
+  });
+
+  it("coalesces stills to the newest per canvas", () => {
+    const a1 = still("#a", 1, "a1");
+    const a2 = still("#a", 2, "a2");
+    const b1 = still("#b", 1, "b1");
+    expect(planPaintFlush([a1, a2, b1] as Paints)).toEqual([a2, b1]);
+  });
+
+  it("passes a mid-stream continuation through in order", () => {
+    // No config crossed: the decoder holds state from earlier chunks, so every
+    // chunk — deltas before this range's key included — must reach it.
+    const events = [
+      chunk("#v", 1, "delta"),
+      chunk("#v", 2, "key"),
+      chunk("#v", 3, "delta"),
+    ];
+    expect(planPaintFlush(events as Paints)).toEqual(events);
+  });
+
+  it("rebuilds a config-crossing range from the last keyframe", () => {
+    const cfg = config("#v", 0);
+    const k1 = chunk("#v", 1, "key");
+    const d1 = chunk("#v", 2, "delta");
+    const k2 = chunk("#v", 3, "key");
+    const d2 = chunk("#v", 4, "delta");
+    expect(planPaintFlush([cfg, k1, d1, k2, d2] as Paints)).toEqual([
+      cfg,
+      k2,
+      d2,
+      // The burst feeds a fresh decoder and then stops; without a flush the
+      // decoder may hold every decoded frame and paint nothing.
+      { kind: "video-flush", sel: "#v" },
+    ]);
+  });
+
+  it("keeps a re-opened stream's newest config and its span", () => {
+    // A resize mid-range re-configures the stream: only the last config and
+    // the chunks after its last keyframe matter.
+    const cfg1 = config("#v", 0);
+    const k1 = chunk("#v", 1, "key");
+    const cfg2 = config("#v", 2);
+    const k2 = chunk("#v", 3, "key");
+    const d2 = chunk("#v", 4, "delta");
+    expect(planPaintFlush([cfg1, k1, cfg2, k2, d2] as Paints)).toEqual([
+      cfg2,
+      k2,
+      d2,
+      { kind: "video-flush", sel: "#v" },
+    ]);
+  });
+
+  it("keeps independent canvases and streams apart", () => {
+    const frame = still("#c", 2, "x");
+    const cfg = config("#v", 0);
+    const key = chunk("#v", 1, "key");
+    expect(planPaintFlush([frame, cfg, key] as Paints)).toEqual([
+      frame,
+      cfg,
+      key,
+      { kind: "video-flush", sel: "#v" },
+    ]);
   });
 });
 
@@ -845,7 +1202,11 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
         title: rec.title,
         startedAt: rec.startedAt,
         durationMs: rec.durationMs,
-        events: rec.events,
+        // The prune reads only kind/t/durationMs; the frame payload field
+        // (runtime blob vs stored base64) is opaque to it, so runtime-form
+        // fixtures stand in for the stored form here.
+        events:
+          rec.events as unknown as AppRecordingBundle["recording"]["events"],
         segments: rec.segments,
         transcript: rec.transcript,
       },
@@ -861,7 +1222,10 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
 
   function pruned(rec: Recording): Recording {
     const out = pruneTrailingTrimEvents(recToBundle(rec));
-    return { ...rec, events: out.recording.events };
+    return {
+      ...rec,
+      events: out.recording.events as unknown as Recording["events"],
+    };
   }
 
   function expectSamePlayback(rec: Recording) {
@@ -882,8 +1246,8 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       durationMs: 5_000,
       events: [
         { kind: "segment", t: 0, version: 1 },
-        { kind: "canvas", t: 1_000, sel: "#c", data: "keep" },
-        { kind: "canvas", t: 3_500, sel: "#c", data: "cut" },
+        { kind: "canvas", t: 1_000, sel: "#c", blob: new Blob(["keep"]) },
+        { kind: "canvas", t: 3_500, sel: "#c", blob: new Blob(["cut"]) },
         { kind: "dom", t: 4_200, op: "html", sel: "#a", html: "cut2" },
       ],
       edits: { cuts: [{ fromMs: 2_000, toMs: 5_000 }] },
@@ -901,8 +1265,8 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       ],
       events: [
         { kind: "segment", t: 0, version: 1 },
-        { kind: "canvas", t: 2_500, sel: "#c", data: "shown" },
-        { kind: "canvas", t: 4_500, sel: "#c", data: "cut" },
+        { kind: "canvas", t: 2_500, sel: "#c", blob: new Blob(["shown"]) },
+        { kind: "canvas", t: 4_500, sel: "#c", blob: new Blob(["cut"]) },
       ],
       edits: { cuts: [{ fromMs: 4_000, toMs: 6_000 }] },
       enhancement: { description: "d", prompt: "build it" },
@@ -916,8 +1280,13 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       durationMs: 5_000,
       events: [
         { kind: "segment", t: 0, version: 1 },
-        { kind: "canvas", t: 3_000, sel: "#c", data: "cut" },
-        { kind: "canvas", t: 4_990, sel: "#c", data: "tail-anchor" },
+        { kind: "canvas", t: 3_000, sel: "#c", blob: new Blob(["cut"]) },
+        {
+          kind: "canvas",
+          t: 4_990,
+          sel: "#c",
+          blob: new Blob(["tail-anchor"]),
+        },
       ],
       edits: { cuts: [{ fromMs: 2_000, toMs: 4_980 }] },
     });
@@ -930,8 +1299,8 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       durationMs: 5_000,
       events: [
         { kind: "segment", t: 0, version: 1 },
-        { kind: "canvas", t: 1_500, sel: "#c", data: "a" },
-        { kind: "canvas", t: 4_000, sel: "#c", data: "b" },
+        { kind: "canvas", t: 1_500, sel: "#c", blob: new Blob(["a"]) },
+        { kind: "canvas", t: 4_000, sel: "#c", blob: new Blob(["b"]) },
       ],
       edits: { cuts: [{ fromMs: 1_000, toMs: 2_000 }] },
     });
@@ -944,9 +1313,9 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       durationMs: 5_000,
       events: [
         { kind: "segment", t: 0, version: 1 },
-        { kind: "canvas", t: 1_000, sel: "#c", data: "keep" },
-        { kind: "canvas", t: 3_500, sel: "#c", data: "cut" },
-        { kind: "canvas", t: 4_500, sel: "#c", data: "cut2" },
+        { kind: "canvas", t: 1_000, sel: "#c", blob: new Blob(["keep"]) },
+        { kind: "canvas", t: 3_500, sel: "#c", blob: new Blob(["cut"]) },
+        { kind: "canvas", t: 4_500, sel: "#c", blob: new Blob(["cut2"]) },
       ],
       edits: {
         cuts: [
@@ -969,8 +1338,8 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       events: [
         { kind: "segment", t: 0, version: 1 },
         { kind: "mcp", t: 5_000, method: "tools/call", durationMs: 4_000 },
-        { kind: "canvas", t: 3_000, sel: "#c", data: "kept" },
-        { kind: "canvas", t: 9_000, sel: "#c", data: "cut" },
+        { kind: "canvas", t: 3_000, sel: "#c", blob: new Blob(["kept"]) },
+        { kind: "canvas", t: 9_000, sel: "#c", blob: new Blob(["cut"]) },
       ],
       edits: { cuts: [{ fromMs: 4_000, toMs: 10_000 }] },
     });

@@ -1,0 +1,101 @@
+{
+  "name": "kukapay__binance-alpha-mcp",
+  "display_name": "binance-alpha-mcp",
+  "description": "An MCP server for tracking Binance Alpha trades, helping AI agents optimize alpha point accumulation.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {
+      "WS_ENDPOINT": "${user_config.ws_endpoint}",
+      "RPC_ENDPOINT": "${user_config.rpc_endpoint}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ws_endpoint": {
+      "type": "string",
+      "title": "WebSocket Endpoint URL",
+      "description": "Your WebSocket endpoint URL for event listening (e.g., from Infura or QuikNode).",
+      "required": true
+    },
+    "rpc_endpoint": {
+      "type": "string",
+      "title": "HTTP RPC Endpoint URL",
+      "description": "Your HTTP RPC endpoint URL for token queries (e.g., from Infura or QuikNode).",
+      "required": true
+    }
+  },
+  "readme": "# Binance Alpha MCP\n\nAn MCP server for tracking Binance Alpha trades, helping AI agents optimize alpha point accumulation.\n\n[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)\n[![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)](https://nodejs.org/)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Real-time Trade Monitoring**:  Track buy-side activity for Binance Alpha tokens by Subscribing to on-chain events.\n- **USD-based Metrics**: Calculates trade values in USD using real-time prices from the CryptoCompare.\n- **Data Persistence**: Maintains trade data in memory, with automatic cleanup of records older than 1 hour.\n- **MCP Tools**:\n  - `get_top_tokens`: Returns a markdown table of top tokens by USD trading volume, including symbol, USD volume, name, and address.\n  - `get_trade_stats`: Provides statistics on trade USD values (min, max, median) and a distribution table.\n- **Configurable Endpoints**: Uses separate WebSocket (`WS_ENDPOINT`) and HTTP (`RPC_ENDPOINT`) endpoints for event listening and token queries.\n\n## Prerequisites\n\n- **Node.js**: Version 18 or higher.\n- **npm**: For dependency management.\n- **BSC Node Access**: A WebSocket endpoint for event listening and an HTTP RPC endpoint for token queries, which can be obtained from services like Infura or QuikNode.\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/binance-alpha-mcp.git\n   cd binance-alpha-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   npm install\n   ```\n3. **Configure MCP Client**:\n   To use this server with an MCP client like Claude Desktop, add the following to your config file (or equivalent):\n    ```json\n    {\n      \"mcpServers\": {\n        \"binance-alpha-mcp\": {\n          \"command\": \"node\",\n          \"args\": [\"/absolute/path/to/binance-alpha-mcp/index.js\"],\n          \"env\": { \n             \"WS_ENDPOINT\": \"your_ws_endpoint_url\",\n             \"RPC_ENDPOINT\": \"your_rpc_endpoint_url\"\n          }\n        }\n      }\n    }   \n    ```\n   Replace `/absolute/path/to/binance-alpha-mcp` with your actual installation path, and update `WS_ENDPOINT` and `PRC_ENDPOINT` with your own endpoint URLs.\n\n## Usage\n\nThe server exposes two MCP tools:\n\n### get_top_tokens\n- **Description**: Returns a markdown table of the top tokens by USD trading volume.\n- **Input**: `{ limit: number }` (optional, defaults to 10). Specifies how many tokens to include in the output.\n- **Output Example**:\n  ```\n  period: last 23 minutes\n  | Symbol | USD Volume | Name | Address |\n  |--------|------------|------|---------|\n  | ZK | $72516.34 | Polyhedra Network | 0xc71b5f631354be6853efe9c3ab6b9590f8302e81 |\n  | B2 | $22893.72 | BSquared Token | 0x783c3f003f172c6ac5ac700218a357d2d66ee2a2 |\n  | AIOT | $5249.05 | OKZOO | 0x55ad16bd573b3365f43a9daeb0cc66a73821b4a5 |\n  | gorilla | $3263.95 | gorilla | 0xcf640fdf9b3d9e45cbd69fda91d7e22579c14444 |\n  | BOOP | $2046.32 | BOOP | 0x9a70815dfb644a24b57358e1041f8d0324c8f6e1 |\n  | BANK | $1305.38 | Lorenzo Governance Token | 0x3aee7602b612de36088f3ffed8c8f10e86ebf2bf |\n  | SKYAI | $1015.69 | SKYAI | 0x92aa03137385f18539301349dcfc9ebc923ffb10 |\n  | KOGE | $672.59 | BNB48 Club Token | 0xe6df05ce8c8301223373cf5b969afcb1498c5528 |\n  | MYX | $477.85 | MYX | 0xd82544bf0dfe8385ef8fa34d67e6e4940cc63e16 |\n  | Drama | $108.37 | Drama | 0xf922fb5f88c19f363cb018e8f7c98c10ed294444 |\n  ```\n  \n### get_trade_stats\n- **Description**: Returns statistics about trade USD values, including min, max, median, and distribution.\n- **Input**: `{ buckets: number }` (optional, defaults to 10). Specifies the number of buckets to divide the trade distribution by USD value.\n- **Output Example**:\n  ```\n  period: last 1 minutes\n  min: $0.30, max: $2469.14, median: $653.41\n  | range | count |\n  |-------|-------|\n  | 0.30~247.19 | 26 |\n  | 247.19~494.07 | 22 |\n  | 494.07~740.95 | 39 |\n  | 740.95~987.84 | 6 |\n  | 987.84~1234.72 | 16 |\n  | 1234.72~1481.61 | 9 |\n  | 1481.61~1728.49 | 1 |\n  | 1728.49~1975.38 | 6 |\n  | 1975.38~2222.26 | 10 |\n  | 2222.26~2469.14 | 2 |\n  ```\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "AI Tools",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "binance-alpha-mcp": {
+        "command": "node",
+        "args": ["/absolute/path/to/binance-alpha-mcp/index.js"],
+        "env": {
+          "WS_ENDPOINT": "your_ws_endpoint_url",
+          "RPC_ENDPOINT": "your_rpc_endpoint_url"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "binance-alpha-mcp",
+    "url": "https://github.com/kukapay/binance-alpha-mcp",
+    "name": "binance-alpha-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "cfbbe9ca5a630578bfab28c1c6b07c2792a2be26"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:10.313Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "ethers",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"binance-alpha-mcp\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"homepage\": \"https://github.com/kukapay/binance-alpha-mcp\",\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.11.2\",\n    \"dotenv\": \"^16.5.0\",\n    \"ethers\": \"^6.14.0\",\n    \"zod\": \"^3.24.4\"\n  }\n}\n"
+}

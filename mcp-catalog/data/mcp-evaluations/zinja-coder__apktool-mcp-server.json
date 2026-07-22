@@ -1,0 +1,74 @@
+{
+  "name": "zinja-coder__apktool-mcp-server",
+  "display_name": "apktool-mcp-server",
+  "description": "A MCP Server for APK Tool (Part of Android Reverse Engineering MCP Suites)",
+  "author": {
+    "name": "zinja-coder"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/apktool_mcp_server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<div align=\"center\">\n\n# apktool-mcp-server (Part of Zin's Reverse Engineering MCP Suite)\n\n⚡ Fully automated MCP server built on top of apktool to analyze Android APKs using LLMs like Claude — uncover vulnerabilities, parse manifests, and reverse engineer effortlessly.\n\n![GitHub contributors apktool-mcp-server](https://img.shields.io/github/contributors/zinja-coder/apktool-mcp-server)\n![GitHub all releases](https://img.shields.io/github/downloads/zinja-coder/apktool-mcp-server/total)\n![GitHub release (latest by SemVer)](https://img.shields.io/github/downloads/zinja-coder/apktool-mcp-server/latest/total)\n![Latest release](https://img.shields.io/github/release/zinja-coder/apktool-mcp-server.svg)\n![Python 3.10+](https://img.shields.io/badge/python-3%2E10%2B-blue)\n[![License](http://img.shields.io/:license-apache-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0.html)\n\n</div>\n\n<!-- It is a still in early stage of development, so expects bugs, crashes and logical erros.-->\n\n<div align=\"center\">\n    <img alt=\"banner\" height=\"480px\" widht=\"620px\" src=\"https://github.com/user-attachments/assets/eb9037f2-d1c7-45e0-8871-ca8aaade0dd0\">\n</div>\n\n<!--![apktool-mcp-server-banner.png](docs/assets/apktool-mcp-server-banner.png)-->\n\nImage generated using AI tools.\n\n---\n\n## 🤖 What is apktool-mcp-server?\n\n**apktool-mcp-server** is a MCP server for the [Apk Tool](https://github.com/iBotPeaches/apktool) that integrates directly with [Model Context Protocol (MCP)](https://github.com/anthropic/mcp) to provide **live reverse engineering support with LLMs like Claude**.\n\nThink: \"Decompile → Context-Aware Code Review → AI Recommendations\" — all in real time.\n\nWatch the demo!\n\nhttps://github.com/user-attachments/assets/d50251b8-6b1c-4341-b18e-ae54eb24a847\n\n- **Solving the CTFs**\n\n\n\nhttps://github.com/user-attachments/assets/c783a604-a636-4e70-9fa8-37e3d219b20b\n\n\n## Other projects in Zin MCP Suite\n - **[JADX-AI-MCP](https://github.com/zinja-coder/jadx-ai-mcp)**\n - **[JADX-MCP-Server](https://github.com/zinja-coder/jadx-mcp-server)**\n - **[ZIN-MCP-Client](https://github.com/zinja-coder/zin-mcp-client)**\n\n## Current MCP Tools\n\nThe following MCP tools are available:\n\n- `build_apk()` — Build an APK from a decoded APKTool Project.\n- `get_manifest()` — Get the AndroidManifest.xml content from a decoded APK project. \n- `get_apktool_yml()` — Get apktool.yml information from a decoded APK project. \n- `list_smali_directories()` — List all smali directories in a project. \n- `list_smali_files()` — List smali files in a specific smali directory, optinally filtered by package prefix.\n- `get_smali_file()` — Get content of a specific smali file by class name. \n- `modify_smali_file()` — Modify the content of a specific smali file. \n- `list_resources()` — List resources in a project, optionally filtered by resource type. \n- `get_resource_file()` — Get Content of a specific resource file. \n- `modify_resource_file()` — Modify the content of a specific resource file. \n- `search_in_file()` — Search for a pattern in files with specified extensions. \n- `clean_project()` — Clean a project directory to prepare for rebuilding.\n- `decode_apk()` — Decode an APK file using APKTool, extracting resources and smali code. \n\n---\n\n## 🗒️ Sample Prompts\n\n\n### 🔍 Basic Code Understanding\n\n- “List all smali directories for the dvac project.”\n\n- “Show me all the smali files under the package prefix com.vulnerable.component in the dvac project.”\n\n- “Get the smali code for the class com.vulnerable.component.MainActivity.”\n\n- “Compare MainActivity.smali with its previous version and show differences.”\n\n- “Search for usage of startActivity in smali files of dvac project.”\n\n### 🛡️ Vulnerability Detection\n\n- “Analyze declared permissions in the dvac AndroidManifest.xml and flag dangerous ones.”\n\n- “Search for hardcoded URLs or IPs in all .xml and .smali files in the project.”\n\n- “Find all uses of PendingIntent.getActivity in smali files.”\n\n- “Check for exported activities or receivers in dvac’s AndroidManifest.xml.”\n\n- “List all smali files that access android.permission.SEND_SMS or READ_CONTACTS.”\n\n### 🛠️ Reverse Engineering Helpers\n\n- “Decode this APK: dvac.apk and create a project called dvac.”\n\n- “Create a new APKTool project called test-harness.”\n\n- “Clean the dvac project before rebuild.”\n\n- “Extract DEX files from dvac project for external analysis.”\n\n- “Modify MainActivity.smali to insert a log line at the beginning of onCreate().”\n\n### 📦 Static Analysis\n\n- “Get the complete AndroidManifest.xml from dvac project.”\n\n- “Show the contents of apktool.yml for the dvac project.”\n\n- “List all resource files of type layout.”\n\n- “Search for the word password in all resource and smali files.”\n\n- “Check which permissions are used and compare them against typical over-permissioning risks.”\n\n### 🤖 AI Code Modification\n\n- “Modify the onCreate() method in MainActivity.smali to add a toast message.”\n\n- “Replace all http:// links with https:// in strings.xml.”\n\n- “Add the android:exported=false attribute to all activities in the AndroidManifest.xml.”\n\n- “Patch the method validateLogin in LoginManager.smali to always return true.”\n\n- “Add logging statements to every method in MainActivity.smali.”\n\n### 📄 Documentation & Metadata\n\n- “List all decoded APKTool projects in the workspace.”\n\n- “Show me the apktool.yml config to review the version, original APK metadata, and compression settings.”\n\n- “Get all available Android devices connected via ADB. (To be migrated to ADB MCP Server.)”\n\n- “Get metadata about the project dvac from its apktool.yml.”\n\n- “Check which APKTool version is currently installed on the server.”\n---\n\n## 🛠️ Getting Started \n### 1. Downlaod from Releases: https://github.com/zinja-coder/apktool-mcp-server/releases\n\n```bash\n# 0. Download and install apktool\nhttps://apktool.org/docs/install\n\n# 1. Test whether apktool has been correctly configured in the environment variables\n$ apktool -version\n\n# 2. Download the apktool-mcp-server-<version>.zip\nhttps://github.com/zinja-coder/apktool-mcp-server/releases\n\n# 3. \nunzip apktool-mcp-server-<version>.zip\n\n├apktool-mcp-server/\n  ├── apktool_mcp_server.py\n  ├── requirements.txt\n  ├── README.md\n  ├── LICENSE\n\n# 4. Navigate to apktool-mcp-server directory\ncd apktool-mcp-server\n\n# 5. This project uses uv - https://github.com/astral-sh/uv instead of pip for dependency management.\n    ## a. Install uv (if you dont have it yet)\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n    ## b. OPTIONAL, if for any reasons, you get dependecy errors in apktool-mcp-server, Set up the environment\nuv venv\nsource .venv/bin/activate  # or .venv\\Scripts\\activate on Windows\n    ## c. OPTIONAL Install dependencies\nuv pip install httpx fastmcp\n\n# The setup for apktool-mcp-server is done.\n```\n\n## 2. Running on Local LLM Using Ollama and Zin MCP Client - Recommended\n\n<div align=\"center\">\n    <a href=\"https://github.com/zinja-coder/zin-mcp-client\">\n    <img alt=\"zin-mcp-client\" height=\"360px\" widht=\"480px\" src=\"https://github.com/user-attachments/assets/0e8e0ecd-0520-422e-a007-03dc62c4118e\">\n    </a>\n</div>\n\n⚡ Lightweight, Fast, Simple, CLI-Based MCP Client for STDIO MCP Servers, to fill the gap and provide bridge between your local LLMs running Ollama and MCP Servers.\n\nCheck Now: https://github.com/zinja-coder/zin-mcp-client\n\nDemo: Coming soon...\n\n## 🤖 3. Claude Desktop Setup\n\nMake sure Claude Desktop is running with MCP enabled.\n\nFor instance, I have used following for Kali Linux: https://github.com/aaddrick/claude-desktop-debian\n\nConfigure and add MCP server to LLM file:\n```bash\nnano ~/.config/Claude/claude_desktop_config.json\n```\n\n   - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n\nAnd following content in it:\n```json\n{\n    \"mcpServers\": {\n        \"apktool-mcp-server\": {\n            \"command\": \"/<path>/<to>/uv\", \n            \"args\": [\n                \"--directory\",\n                \"</PATH/TO/>apktool-mcp-server/\",\n                \"run\",\n                \"apktool_mcp_server.py\"\n            ]\n        }\n    }\n}\n```\n\nReplace:\n\n- `path/to/uv` with the actual path to your `uv` executable\n- `path/to/apktool-mcp-server` with the absolute path to where you cloned this\nrepository\n\nThen, navigate code and interact via real-time code review prompts using the built-in integration.\n\n## 4. Cherry Studio Setup\n\nIf you want to configure the MCP tool in Cherry Studio, you can refer to the following configuration.\n- Type: stdio\n- command: uv\n- argument:\n```bash\n--directory\npath/to/apktool-mcp-server\nrun\napktool_mcp_server.py\n```\n- `path/to/apktool-mcp-server` with the absolute path to where you cloned this\nrepository\n\n## To report bugs, issues, feature suggestion, Performance issue, general question, Documentation issue.\n - Kindly open an issue with respective template.\n\n - Tested on Claude Desktop Client, support for other AI will be tested soon!\n\n## 🙏 Credits\n\nThis project is a MCP Server for [Apktool](https://github.com/iBotPeaches/apktool), an amazing open-source Android reverse engineering tool created and maintained by [@iBotPeaches](https://github.com/iBotPeaches). All core APK decoding and resource processing logic belongs to them. I have only extended it to support my MCP server with AI capabilities.\n\n[📎 Original README (Apktool)](https://github.com/iBotPeaches/apktool)\n\nThe original README.md from Apktool is included here in this repository for reference and credit.\n\nAlso huge thanks to [@aaddrick](https://github.com/aaddrick) for developing Claude desktop for Debian based Linux.\n\nAnd in last, thanks to [@anthropics](https://github.com/anthropics) for developing the Model Context Protocol and [@FastMCP](https://github.com/jlowin/fastmcp) team.\n\nAnd all open source project maintainers and contributos which provies libraries and dependencies to make project like this possible.\n\n## 📄 License\n\napktool-mcp-server and all related projects inherits the Apache 2.0 \n\n## ⚖️ Legal Warning\n\n**Disclaimer**\n\nThe tools `apktool-mcp-server` and all related tools under this project are intended strictly for educational, research, and ethical security assessment purposes. They are provided \"as-is\" without any warranties, expressed or implied. Users are solely responsible for ensuring that their use of these tools complies with all applicable laws, regulations, and ethical guidelines.\n\nBy using `apktool-mcp-server`, you agree to use them only in environments you are authorized to test, such as applications you own or have explicit permission to analyze. Any misuse of these tools for unauthorized reverse engineering, infringement of intellectual property rights, or malicious activity is strictly prohibited.\n\nThe developers of `apktool-mcp-server` shall not be held liable for any damage, data loss, legal consequences, or other consequences resulting from the use or misuse of these tools. Users assume full responsibility for their actions and any impact caused by their usage.\n\nUse responsibly. Respect intellectual property. Follow ethical hacking practices.\n\n---\n\n## 🙌 Contribute or Support\n\n## Contributing\n\n[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTE.md)\n\n- Found it useful? Give it a ⭐️\n- Got ideas? Open an [issue](https://github.com/zinja-coder/apktool-mcp-server/issues) or submit a PR\n- Built something on top? DM me or mention me — I’ll add it to the README!\n\n---\n## Audited and Received Assessment Badge\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/zinja-coder-apktool-mcp-server-badge.png)](https://mseep.ai/app/zinja-coder-apktool-mcp-server)\n\nThank you Mseep.net for auditing and providing Assessment Badge.\n---\n\nBuilt with ❤️ for the reverse engineering and AI communities.\n",
+  "category": "Security",
+  "quality_score": 72,
+  "archestra_config": {
+    "client_config_permutations": {
+      "apktool-mcp-server": {
+        "command": "uv",
+        "args": ["run", "python", "apktool_mcp_server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zinja-coder",
+    "repo": "apktool-mcp-server",
+    "url": "https://github.com/zinja-coder/apktool-mcp-server",
+    "name": "apktool-mcp-server",
+    "path": null,
+    "stars": 182,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "81a1a594b562ff18dbd5f3fcab3da87ed3985251"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.818Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "logging",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"apktool-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"fastmcp>=2.2.0\",\n    \"logging>=0.4.9.6\",\n]\n\n\n=== requirements.txt ===\nfastmcp\nlogging\n"
+}

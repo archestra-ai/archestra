@@ -1,0 +1,117 @@
+{
+  "name": "nkapila6__mcp-local-rag",
+  "display_name": "mcp-local-rag",
+  "description": "\"primitive\" RAG-like web search model context protocol (MCP) server that runs locally. ✨ no APIs ✨",
+  "author": {
+    "name": "nkapila6"
+  },
+  "server": {
+    "command": "docker",
+    "args": [
+      "run",
+      "--rm",
+      "-i",
+      "--init",
+      "-e",
+      "DOCKER_CONTAINER=${user_config.docker_container}",
+      "ghcr.io/nkapila6/mcp-local-rag:latest"
+    ],
+    "env": {
+      "DOCKER_CONTAINER": "${user_config.docker_container}"
+    },
+    "type": "local",
+    "docker_image": "ghcr.io/nkapila6/mcp-local-rag:latest"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "docker_container": {
+      "type": "boolean",
+      "title": "Docker Container Environment",
+      "description": "Set to true if the server is running inside a Docker container.",
+      "default": true,
+      "required": false
+    }
+  },
+  "readme": "<a href='https://github.com/nkapila6/mcp-local-rag/'><img src='images/rag.jpeg' width='200' height='200'></a>\n\n<!-- omit from toc -->\n# mcp-local-rag\n\"primitive\" RAG-like web search model context protocol (MCP) server that runs locally. ✨ no APIs ✨\n\n```mermaid\n%%{init: {'theme': 'base'}}%%\nflowchart TD\n    A[User] -->|1.Submits LLM Query| B[Language Model]\n    B -->|2.Sends Query| C[mcp-local-rag Tool]\n    \n    subgraph mcp-local-rag Processing\n    C -->|Search DuckDuckGo| D[Fetch 10 search results]\n    D -->|Fetch Embeddings| E[Embeddings from Google's MediaPipe Text Embedder]\n    E -->|Compute Similarity| F[Rank Entries Against Query]\n    F -->|Select top k results| G[Context Extraction from URL]\n    end\n    \n    G -->|Returns Markdown from HTML content| B\n    B -->|3.Generated response with context| H[Final LLM Output]\n    H -->|5.Present result to user| A\n\n    classDef default stroke:#333,stroke-width:2px;\n    classDef process stroke:#333,stroke-width:2px;\n    classDef input stroke:#333,stroke-width:2px;\n    classDef output stroke:#333,stroke-width:2px;\n\n    class A input;\n    class B,C process;\n    class G output;\n```\n\n# Installation\nLocate your MCP config path [here](https://modelcontextprotocol.io/quickstart/user) or check your MCP client settings. \n\n### Run Directly via `uvx`\nThis is the easiest and quickest method. You need to install [uv](https://docs.astral.sh/uv/) for this to work. <br>\nAdd this to your MCP server configuration:\n```json\n{\n  \"mcpServers\": {\n    \"mcp-local-rag\":{\n      \"command\": \"uvx\",\n        \"args\": [\n          \"--python=3.10\",\n          \"--from\",\n          \"git+https://github.com/nkapila6/mcp-local-rag\",\n          \"mcp-local-rag\"\n        ]\n      }\n  }\n}\n```\n\n### Using Docker (recommended)\nEnsure you have [Docker](https://www.docker.com) installed.<br>\nAdd this to your MCP server configuration:\n```json\n{\n  \"mcpServers\": {\n    \"mcp-local-rag\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"--init\",\n        \"-e\",\n        \"DOCKER_CONTAINER=true\",\n        \"ghcr.io/nkapila6/mcp-local-rag:latest\"\n      ]\n    }\n  }\n}\n```\n\n# Security audits\nMseeP does security audits on every MCP server, you can see the security audit of this MCP server by clicking [here](https://mseep.ai/app/nkapila6-mcp-local-rag).\n\n<a href='https://mseep.ai/app/nkapila6-mcp-local-rag'><img src='https://mseep.net/pr/nkapila6-mcp-local-rag-badge.png' width='auto' height='200'></a>\n\n# MCP Clients\nThe MCP server should work with any MCP client that supports tool calling. Has been tested on the below clients.\n\n- Claude Desktop\n- Cursor\n- Goose\n- Others? You try!\n\n# Examples on Claude Desktop\nWhen an LLM (like Claude) is asked a question requiring recent web information, it will trigger `mcp-local-rag`.\n\nWhen asked to fetch/lookup/search the web, the model prompts you to use MCP server for the chat.\n\nIn the example, have asked it about Google's latest Gemma models released yesterday. This is new info that Claude is not aware about.\n<img src='images/mcp_prompted.png'>\n\n## Result\n`mcp-local-rag` performs a live web search, extracts context, and sends it back to the model—giving it fresh knowledge:\n\n<img src='images/mcp_result.png'>\n\n# Contributing\nHave ideas or want to improve this project? Issues and pull requests are welcome!\n\n# License\nThis project is licensed under the MIT License.\n",
+  "category": "AI Tools",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-local-rag": {
+        "command": "uvx",
+        "args": ["--python=3.10", "--from", "git+https://github.com/nkapila6/mcp-local-rag", "mcp-local-rag"],
+        "env": {}
+      },
+      "ghcr.io-nkapila6-mcp-local-rag-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "--init", "-e", "DOCKER_CONTAINER=true", "ghcr.io/nkapila6/mcp-local-rag:latest"],
+        "env": {
+          "DOCKER_CONTAINER": "true"
+        },
+        "docker_image": "ghcr.io/nkapila6/mcp-local-rag:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "nkapila6",
+    "repo": "mcp-local-rag",
+    "url": "https://github.com/nkapila6/mcp-local-rag",
+    "name": "mcp-local-rag",
+    "path": null,
+    "stars": 66,
+    "contributors": 4,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "2e40b33817dc9f93ea1d9bd49aa96fe5c6599278"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:29.717Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "beautifulsoup4",
+      "importance": 9
+    },
+    {
+      "name": "ddgs",
+      "importance": 9
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "mediapipe",
+      "importance": 9
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-local-rag\"\nversion = \"0.1.0\"\ndescription = \"MCP \\\"server\\\" that locally performs a RAG search on your input query.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n \"aiohttp>=3.11.15\",\n \"beautifulsoup4>=4.13.3\",\n \"ddgs>=9.4.0\",\n \"fastmcp>=2.5.1\",\n \"mediapipe>=0.10.21\",\n \"requests>=2.32.3\",\n]\n\n[[project.authors]]\nname = \"Nikhil Kapila\"\nemail = \"info@nkapila.me\"\n\n[build-system]\nrequires = [ \"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-local-rag = \"mcp_local_rag.main:mcp.run\"\n\n[tool.hatch.build.targets.sdist]\ninclude = [\"embedder/*\", \"utils/*\"]"
+}

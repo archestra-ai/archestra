@@ -1,0 +1,119 @@
+{
+  "name": "openlinksoftware__mcp-sqlalchemy-server",
+  "display_name": "mcp-sqlalchemy-server",
+  "description": "A simple MCP ODBC server using FastAPI, ODBC and SQLAlchemy.",
+  "author": {
+    "name": "OpenLinkSoftware"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "mcp-sqlalchemy-server"],
+    "env": {
+      "ODBC_DSN": "${user_config.odbc_dsn}",
+      "ODBC_USER": "${user_config.odbc_user}",
+      "ODBC_PASSWORD": "${user_config.odbc_password}",
+      "API_KEY": "${user_config.api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "odbc_dsn": {
+      "type": "string",
+      "title": "ODBC DSN",
+      "description": "ODBC Data Source Name for the target database.",
+      "required": true,
+      "default": "VOS"
+    },
+    "odbc_user": {
+      "type": "string",
+      "title": "ODBC User",
+      "description": "Username for the ODBC database connection.",
+      "required": true,
+      "default": "dba"
+    },
+    "odbc_password": {
+      "type": "string",
+      "title": "ODBC Password",
+      "description": "Password for the ODBC database connection.",
+      "sensitive": true,
+      "required": true,
+      "default": "dba"
+    },
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "API key for server authentication.",
+      "sensitive": true,
+      "required": true,
+      "default": "xxx"
+    }
+  },
+  "readme": "---\n\n# MCP Server ODBC via SQLAlchemy\n\nA lightweight MCP (Model Context Protocol) server for ODBC built with **FastAPI**, **pyodbc**, and **SQLAlchemy**. This server is compatible with Virtuoso DBMS and other DBMS backends that implement a SQLAlchemy provider.\n\n![mcp-client-and-servers|648x499](https://www.openlinksw.com/data/gifs/mcp-client-and-servers.gif)\n\n---\n\n## Features\n\n- **Get Schemas**: Fetch and list all schema names from the connected database.\n- **Get Tables**: Retrieve table information for specific schemas or all schemas.\n- **Describe Table**: Generate a detailed description of table structures, including:\n  - Column names and data types\n  - Nullable attributes\n  - Primary and foreign keys\n- **Search Tables**: Filter and retrieve tables based on name substrings.\n- **Execute Stored Procedures**: In the case of Virtuoso, execute stored procedures and retrieve results.\n- **Execute Queries**:\n  - JSONL result format: Optimized for structured responses.\n  - Markdown table format: Ideal for reporting and visualization.\n\n---\n\n## Prerequisites\n\n1. **Install uv**:\n   ```bash\n   pip install uv\n   ```\n   Or use Homebrew:\n   ```bash\n   brew install uv\n   ```\n\n2. **unixODBC Runtime Environment Checks**:\n\n1. Check installation configuration (i.e., location of key INI files) by running: `odbcinst -j`\n2. List available data source names by running: `odbcinst -q -s`\n   \n3. **ODBC DSN Setup**: Configure your ODBC Data Source Name (`~/.odbc.ini`) for the target database. Example for Virtuoso DBMS:\n   ```\n   [VOS]\n   Description = OpenLink Virtuoso\n   Driver = /path/to/virtodbcu_r.so\n   Database = Demo\n   Address = localhost:1111\n   WideAsUTF16 = Yes\n   ```\n\n3. **SQLAlchemy URL Binding**: Use the format:\n   ```\n   virtuoso+pyodbc://user:password@VOS\n   ```\n\n---\n\n## Installation\n\nClone this repository:\n```bash\ngit clone https://github.com/OpenLinkSoftware/mcp-sqlalchemy-server.git\ncd mcp-sqlalchemy-server\n```\n## Environment Variables \nUpdate your `.env`by overriding the defaults to match your preferences\n```\nODBC_DSN=VOS\nODBC_USER=dba\nODBC_PASSWORD=dba\nAPI_KEY=xxx\n```\n---\n\n## Configuration\n\nFor **Claude Desktop** users:\nAdd the following to `claude_desktop_config.json`:\n```json\n{\n  \"mcpServers\": {\n    \"my_database\": {\n      \"command\": \"uv\",\n      \"args\": [\"--directory\", \"/path/to/mcp-sqlalchemy-server\", \"run\", \"mcp-sqlalchemy-server\"],\n      \"env\": {\n        \"ODBC_DSN\": \"dsn_name\",\n        \"ODBC_USER\": \"username\",\n        \"ODBC_PASSWORD\": \"password\",\n        \"API_KEY\": \"sk-xxx\"\n      }\n    }\n  }\n}\n```\n---\n# Usage \n## Database Management System (DBMS) Connection URLs \nHere are the pyodbc URL examples for connecting to DBMS systems that have been tested using this mcp-server.\n\n| Database      | URL Format                                    |\n|---------------|-----------------------------------------------|\n| Virtuoso DBMS | `virtuoso+pyodbc://user:password@ODBC_DSN`    |\n| PostgreSQL    | `postgresql://user:password@localhost/dbname` |\n| MySQL         | `mysql+pymysql://user:password@localhost/dbname` |\n| SQLite        | `sqlite:///path/to/database.db`               |\nOnce connected, you can interact with your WhatsApp contacts through Claude, leveraging Claude's AI capabilities in your WhatsApp conversations.\n\n## Tools Provided\n\n### Overview\n|name|description|\n|---|---|\n|podbc_get_schemas|List database schemas accessible to connected database management system (DBMS).|\n|podbc_get_tables|List tables associated with a selected database schema.|\n|podbc_describe_table|Provide the description of a table associated with a designated database schema. This includes information about column names, data types, nulls handling, autoincrement, primary key, and foreign keys|\n|podbc_filter_table_names|List tables, based on a substring pattern from the `q` input field, associated with a selected database schema.|\n|podbc_query_database|Execute a SQL query and return results in JSONL format.|\n|podbc_execute_query|Execute a SQL query and return results in JSONL format.|\n|podbc_execute_query_md|Execute a SQL query and return results in Markdown table format.|\n|podbc_spasql_query|Execute a SPASQL query and return results.|\n|podbc_sparql_query|Execute a SPARQL query and return results.|\n|podbc_virtuoso_support_ai|Interact with the Virtuoso Support Assistant/Agent -- a Virtuoso-specific feature for interacting with LLMs|\n\n### Detailed Description\n\n- **podbc_get_schemas**\n  - Retrieve and return a list of all schema names from the connected database.\n  - Input parameters:\n    - `user` (string, optional): Database username. Defaults to \"demo\".\n    - `password` (string, optional): Database password. Defaults to \"demo\".\n    - `dsn` (string, optional): ODBC data source name. Defaults to \"Local Virtuoso\".\n  - Returns a JSON string array of schema names.\n\n- **podbc_get_tables**\n  - Retrieve and return a list containing information about tables in a specified schema. If no schema is provided, uses the connection's default schema.\n  - Input parameters:\n    - `schema` (string, optional): Database schema to filter tables. Defaults to connection default.\n    - `user` (string, optional): Database username. Defaults to \"demo\".\n    - `password` (string, optional): Database password. Defaults to \"demo\".\n    - `dsn` (string, optional): ODBC data source name. Defaults to \"Local Virtuoso\".\n  - Returns a JSON string containing table information (e.g., TABLE_CAT, TABLE_SCHEM, TABLE_NAME, TABLE_TYPE).\n\n- **podbc_filter_table_names**\n  - Filters and returns information about tables whose names contain a specific substring.\n  - Input parameters:\n    - `q` (string, required): The substring to search for within table names.\n    - `schema` (string, optional): Database schema to filter tables. Defaults to connection default.\n    - `user` (string, optional): Database username. Defaults to \"demo\".\n    - `password` (string, optional): Database password. Defaults to \"demo\".\n    - `dsn` (string, optional): ODBC data source name. Defaults to \"Local Virtuoso\".\n  - Returns a JSON string containing information for matching tables.\n\n- **podbc_describe_table**\n  - Retrieve and return detailed information about the columns of a specific table.\n  - Input parameters:\n    - `schema` (string, required): The database schema name containing the table.\n    - `table` (string, required): The name of the table to describe.\n    - `user` (string, optional): Database username. Defaults to \"demo\".\n    - `password` (string, optional): Database password. Defaults to \"demo\".\n    - `dsn` (string, optional): ODBC data source name. Defaults to \"Local Virtuoso\".\n  - Returns a JSON string describing the table's columns (e.g., COLUMN_NAME, TYPE_NAME, COLUMN_SIZE, IS_NULLABLE).\n\n- **podbc_query_database**\n  - Execute a standard SQL query and return the results in JSON format.\n  - Input parameters:\n    - `query` (string, required): The SQL query string to execute.\n    - `user` (string, optional): Database username. Defaults to \"demo\".\n    - `password` (string, optional): Database password. Defaults to \"demo\".\n    - `dsn` (string, optional): ODBC data source name. Defaults to \"Local Virtuoso\".\n  - Returns query results as a JSON string.\n\n- **podbc_query_database_md**\n  - Execute a standard SQL query and return the results formatted as a Markdown table.\n  - Input parameters:\n    - `query` (string, required): The SQL query string to execute.\n    - `user` (string, optional): Database username. Defaults to \"demo\".\n    - `password` (string, optional): Database password. Defaults to \"demo\".\n    - `dsn` (string, optional): ODBC data source name. Defaults to \"Local Virtuoso\".\n  - Returns query results as a Markdown table string.\n\n- **podbc_query_database_jsonl**\n  - Execute a standard SQL query and return the results in JSON Lines (JSONL) format (one JSON object per line).\n  - Input parameters:\n    - `query` (string, required): The SQL query string to execute.\n    - `user` (string, optional): Database username. Defaults to \"demo\".\n    - `password` (string, optional): Database password. Defaults to \"demo\".\n    - `dsn` (string, optional): ODBC data source name. Defaults to \"Local Virtuoso\".\n  - Returns query results as a JSONL string.\n\n- **podbc_spasql_query**\n  - Execute a SPASQL (SQL/SPARQL hybrid) query return results. This is a Virtuoso-specific feature.\n  - Input parameters:\n    - `query` (string, required): The SPASQL query string.\n    - `max_rows` (number, optional): Maximum number of rows to return. Defaults to 20.\n    - `timeout` (number, optional): Query timeout in milliseconds. Defaults to 30000.\n    - `user` (string, optional): Database username. Defaults to \"demo\".\n    - `password` (string, optional): Database password. Defaults to \"demo\".\n    - `dsn` (string, optional): ODBC data source name. Defaults to \"Local Virtuoso\".\n  - Returns the result from the underlying stored procedure call (e.g., `Demo.demo.execute_spasql_query`).\n\n- **podbc_sparql_query**\n  - Execute a SPARQL query and return results. This is a Virtuoso-specific feature.\n  - Input parameters:\n    - `query` (string, required): The SPARQL query string.\n    - `format` (string, optional): Desired result format. Defaults to 'json'.\n    - `timeout` (number, optional): Query timeout in milliseconds. Defaults to 30000.\n    - `user` (string, optional): Database username. Defaults to \"demo\".\n    - `password` (string, optional): Database password. Defaults to \"demo\".\n    - `dsn` (string, optional): ODBC data source name. Defaults to \"Local Virtuoso\".\n  - Returns the result from the underlying function call (e.g., `\"UB\".dba.\"sparqlQuery\"`).\n\n- **podbc_virtuoso_support_ai**\n  - Utilizes a Virtuoso-specific AI Assistant function, passing a prompt and optional API key. This is a Virtuoso-specific feature.\n  - Input parameters:\n    - `prompt` (string, required): The prompt text for the AI function.\n    - `api_key` (string, optional): API key for the AI service. Defaults to \"none\".\n    - `user` (string, optional): Database username. Defaults to \"demo\".\n    - `password` (string, optional): Database password. Defaults to \"demo\".\n    - `dsn` (string, optional): ODBC data source name. Defaults to \"Local Virtuoso\".\n  - Returns the result from the AI Support Assistant function call (e.g., `DEMO.DBA.OAI_VIRTUOSO_SUPPORT_AI`).\n\n---\n\n## Troubleshooting\n\nFor easier troubleshooting:\n1. Install the MCP Inspector:\n   ```bash\n   npm install -g @modelcontextprotocol/inspector\n   ```\n\n2. Start the inspector:\n   ```bash\n   npx @modelcontextprotocol/inspector uv --directory /path/to/mcp-sqlalchemy-server run mcp-sqlalchemy-server\n   ```\n\nAccess the provided URL to troubleshoot server interactions.\n\n",
+  "category": "Data",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-sqlalchemy-server": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/mcp-sqlalchemy-server", "run", "mcp-sqlalchemy-server"],
+        "env": {
+          "ODBC_DSN": "dsn_name",
+          "ODBC_USER": "username",
+          "ODBC_PASSWORD": "password",
+          "API_KEY": "sk-xxx"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "OpenLinkSoftware",
+    "repo": "mcp-sqlalchemy-server",
+    "url": "https://github.com/OpenLinkSoftware/mcp-sqlalchemy-server",
+    "name": "openlinksoftware__mcp-sqlalchemy-server",
+    "path": null,
+    "stars": 14,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "75342516204242c3e99fadfbbead20fe2782e96c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.209Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pyodbc",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-sqlalchemy-server\"\nversion = \"0.3.1\"\ndescription = \"A simple MCP ODBC server using FastAPI and ODBC\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n \"mcp[cli]>=1.4.1\",\n \"pyodbc>=5.2.0\",\n \"python-dotenv>=1.0.1\",\n]\n[[project.authors]]\nname = \"Sergey Malinin\"\nemail = \"sergmalinin@gmail.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-sqlalchemy-server = \"mcp_sqlalchemy_server:main\"\n"
+}

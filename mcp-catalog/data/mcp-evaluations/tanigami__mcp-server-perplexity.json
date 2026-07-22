@@ -1,0 +1,82 @@
+{
+  "name": "tanigami__mcp-server-perplexity",
+  "display_name": "mcp-server-perplexity",
+  "description": "MCP server from tanigami/mcp-server-perplexity",
+  "author": {
+    "name": "tanigami"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-perplexity"],
+    "env": {
+      "PERPLEXITY_API_KEY": "${user_config.perplexity_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "perplexity_api_key": {
+      "type": "string",
+      "title": "Perplexity API Key",
+      "description": "Your API key for accessing the Perplexity API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Perplexity MCP Server\n\n[![smithery badge](https://smithery.ai/badge/mcp-server-perplexity)](https://smithery.ai/server/mcp-server-perplexity)\n\nMCP Server for the Perplexity API.\n\n> :warning: **Limitations:**\n> - The Claude Desktop client may timeout if Perplexity processing takes too long\n> - This issue might be resolved if Claude Desktop implements support for long running operations and progress reporting in the future\n> - Implementation updates to handle these features will be made if they become available\n\n<a href=\"https://glama.ai/mcp/servers/hchfq9bydq\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/hchfq9bydq/badge\" alt=\"Perplexity Server MCP server\" /></a>\n\n## Components\n\n### Tools\n\n- **ask_perplexity**: Request chat completion with citations from Perplexity  \n\n## Quickstart\n\n### Install\n\n#### Claude Desktop\n\n- On macOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`  \n- On Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```\n\"mcpServers\": {\n  \"Perplexity\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"mcp-server-perplexity\"\n    ],\n    \"env\": {\n      \"PERPLEXITY_API_KEY\": \"your-perplexity-api-key\"\n    }\n  }\n}\n```\n",
+  "category": "AI Tools",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-perplexity": {
+        "command": "uvx",
+        "args": ["mcp-server-perplexity"],
+        "env": {
+          "PERPLEXITY_API_KEY": "your-perplexity-api-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tanigami",
+    "repo": "mcp-server-perplexity",
+    "url": "https://github.com/tanigami/mcp-server-perplexity",
+    "name": "mcp-server-perplexity",
+    "path": null,
+    "stars": 77,
+    "contributors": 3,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ad27eec59a20f0334972ce99c913aaccc29d92e8"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:52.722Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-perplexity\"\nversion = \"0.1.2\"\ndescription = \"MCP Server for the Perplexity API.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [ \"mcp>=1.0.0\",]\n\n[project.urls]\nHomepage = \"https://github.com/tanigami/mcp-server-perplexity\"\nRepository = \"https://github.com/tanigami/mcp-server-perplexity\"\n\n[[project.authors]]\nname = \"Hirofumi Tanigami\"\nemail = \"tanigami@teps.io\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-server-perplexity = \"mcp_server_perplexity:main\"\n"
+}

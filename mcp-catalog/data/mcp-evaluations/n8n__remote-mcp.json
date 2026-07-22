@@ -1,0 +1,168 @@
+{
+  "name": "n8n__remote-mcp",
+  "display_name": "n8n",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PHBhdGggZmlsbD0iI2VhNGI3MSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNNDU4LjEgMjI5LjFjLTI1LjEgMC00Ni4yLTE3LjItNTIuMi00MC40aC02MS44Yy0xMy4yIDAtMjQuNCA5LjUtMjYuNiAyMi41bC0yLjIgMTMuM2MtMiAxMi4yLTguMiAyMy40LTE3LjUgMzEuNmM5LjMgOC4yIDE1LjUgMTkuMyAxNy41IDMxLjZsMi4yIDEzLjNjMi4yIDEzIDEzLjQgMjIuNSAyNi42IDIyLjVoNy45YzYtMjMuMiAyNy4xLTQwLjQgNTIuMi00MC40YzI5LjggMCA1My45IDI0LjEgNTMuOSA1My45cy0yNC4xIDUzLjktNTMuOSA1My45Yy0yNS4xIDAtNDYuMi0xNy4yLTUyLjItNDAuNGgtNy45Yy0yNi4zIDAtNDguOC0xOS01My4yLTQ1bC0yLjItMTMuM2MtMi4yLTEzLTEzLjQtMjIuNS0yNi42LTIyLjVoLTIxLjRjLTYgMjMuMi0yNy4xIDQwLjQtNTIuMiA0MC40cy00Ni4yLTE3LjItNTIuMi00MC40SDEwNmMtNiAyMy4yLTI3LjEgNDAuNC01Mi4yIDQwLjRDMjQuMSAzMDkuOSAwIDI4NS44IDAgMjU2czI0LjEtNTMuOSA1My45LTUzLjljMjUuMSAwIDQ2LjIgMTcuMiA1Mi4yIDQwLjRoMzAuM2M2LTIzLjIgMjcuMS00MC40IDUyLjItNDAuNHM0Ni4yIDE3LjIgNTIuMiA0MC40aDIxLjRjMTMuMiAwIDI0LjQtOS41IDI2LjYtMjIuNWwyLjItMTMuM2M0LjMtMjYgMjYuOC00NSA1My4yLTQ1SDQwNmM2LTIzLjIgMjcuMS00MC40IDUyLjItNDAuNGMyOS44IDAgNTMuOSAyNC4xIDUzLjkgNTMuOXMtMjQuMiA1My45LTU0IDUzLjltMC0yN2MxNC45IDAgMjYuOS0xMi4xIDI2LjktMjYuOXMtMTIuMS0yNi45LTI2LjktMjYuOXMtMjYuOSAxMi4xLTI2LjkgMjYuOXMxMiAyNi45IDI2LjkgMjYuOU01My45IDI4Mi45YzE0LjkgMCAyNi45LTEyLjEgMjYuOS0yNi45cy0xMi4xLTI2LjktMjYuOS0yNi45cy0yNyAxMi0yNyAyNi45czEyLjEgMjYuOSAyNyAyNi45TTIxNS42IDI1NmMwIDE0LjktMTIuMSAyNi45LTI2LjkgMjYuOXMtMjYuOS0xMi4xLTI2LjktMjYuOXMxMi4xLTI2LjkgMjYuOS0yNi45czI2LjkgMTIgMjYuOSAyNi45bTIxNS42IDgwLjhjMCAxNC45LTEyLjEgMjYuOS0yNi45IDI2LjljLTE0LjkgMC0yNi45LTEyLjEtMjYuOS0yNi45czEyLjEtMjYuOSAyNi45LTI2LjlzMjYuOSAxMi4xIDI2LjkgMjYuOSIvPjwvc3ZnPg==",
+  "description": "Official n8n MCP server, served by every n8n instance (Cloud or self-hosted) at /mcp-server/http. Lets AI agents search, build, test, publish, and execute workflows, inspect executions, list credentials, and manage data tables.",
+  "homepage": "https://n8n.io",
+  "instructions": "**⚠️ Replace the server URL with your instance's MCP endpoint.** There is no central n8n MCP server — every n8n instance (Cloud or self-hosted) serves its own at `https://<your-n8n-domain>/mcp-server/http`. The pre-filled URL is a placeholder and will not connect; copy the real one from **Settings → Instance-level MCP → Connection details** in your n8n instance.\n\n**⚠️ Workflows stay hidden until opted in.** After connecting, `search_workflows` only returns workflows individually marked **Available in MCP**. An empty workflow list usually means nothing is opted in — not a broken connection.\n\n1. In n8n, open **Settings → Instance-level MCP** and toggle **Enable MCP access** (instance owner or admin; requires n8n v2.13+).\n2. Open **Connection details**, copy the server URL from the **OAuth** tab, and paste it into this form as the server URL.\n3. Mark each workflow the agent should see as **Available in MCP** in the workflow's settings.\n4. Connect — no client ID or secret needed. n8n registers the client automatically and redirects you to authorize; revoke access later from the **Connected clients** tab.\n\nPrefer token auth? The **Access Token** tab issues a personal bearer token (`Authorization: Bearer <token>`). Copy it immediately — it is shown only once, and generating a new one revokes the old.\n\nNotes:\n\n- `execute_workflow` runs the published (production) version of a workflow; most other tools also work on unpublished drafts.\n- All connected clients see the same set of MCP-enabled workflows (scoped to your user) — there are no per-client restrictions.\n- Self-hosted instances can disable MCP entirely via `N8N_DISABLED_MODULES=mcp`.\n\nDocs: https://docs.n8n.io/connect/connect-to-n8n-mcp-server/",
+  "tools": [
+    {
+      "name": "search_workflows",
+      "description": "Search for workflows with optional filters; returns a preview of each workflow"
+    },
+    {
+      "name": "get_workflow_details",
+      "description": "Get comprehensive information about a specific workflow, including its triggers"
+    },
+    {
+      "name": "execute_workflow",
+      "description": "Execute a workflow by ID; returns the execution ID immediately without waiting"
+    },
+    {
+      "name": "test_workflow",
+      "description": "Test a workflow using pin data to bypass external services"
+    },
+    {
+      "name": "prepare_test_pin_data",
+      "description": "Generate JSON schemas describing the expected output of nodes that need test data"
+    },
+    {
+      "name": "publish_workflow",
+      "description": "Activate a workflow to make it available for production"
+    },
+    {
+      "name": "unpublish_workflow",
+      "description": "Deactivate a workflow to stop production execution"
+    },
+    {
+      "name": "search_projects",
+      "description": "Find projects accessible to the current user"
+    },
+    {
+      "name": "search_folders",
+      "description": "Locate folders within a project"
+    },
+    {
+      "name": "list_tags",
+      "description": "List all workflow tags in the instance"
+    },
+    {
+      "name": "get_execution",
+      "description": "Get execution details by execution ID and workflow ID"
+    },
+    {
+      "name": "search_executions",
+      "description": "Find workflow executions with optional filters"
+    },
+    {
+      "name": "list_credentials",
+      "description": "List credentials the current user can access"
+    },
+    {
+      "name": "get_sdk_reference",
+      "description": "Access n8n Workflow SDK reference documentation"
+    },
+    {
+      "name": "search_nodes",
+      "description": "Find n8n nodes by service, trigger type, or utility function"
+    },
+    {
+      "name": "get_node_types",
+      "description": "Get TypeScript type definitions for n8n nodes"
+    },
+    {
+      "name": "get_workflow_best_practices",
+      "description": "Retrieve best-practices guidance for workflow techniques"
+    },
+    {
+      "name": "explore_node_resources",
+      "description": "Resolve real values for node resource locators and dropdowns"
+    },
+    {
+      "name": "validate_workflow",
+      "description": "Validate n8n Workflow SDK code by parsing it into a workflow"
+    },
+    {
+      "name": "validate_node_config",
+      "description": "Validate a node configuration independently against its schema"
+    },
+    {
+      "name": "create_workflow_from_code",
+      "description": "Create a workflow in n8n from validated SDK code"
+    },
+    {
+      "name": "update_workflow",
+      "description": "Update an existing workflow by applying targeted partial updates"
+    },
+    {
+      "name": "archive_workflow",
+      "description": "Archive a workflow in n8n by its ID"
+    },
+    {
+      "name": "search_data_tables",
+      "description": "Find data tables accessible to the current user"
+    },
+    {
+      "name": "create_data_table",
+      "description": "Create a new data table with the specified columns"
+    },
+    {
+      "name": "add_data_table_column",
+      "description": "Add a new column to an existing data table"
+    },
+    {
+      "name": "rename_data_table_column",
+      "description": "Rename a column within a data table"
+    },
+    {
+      "name": "delete_data_table_column",
+      "description": "Delete a column from a data table"
+    },
+    {
+      "name": "rename_data_table",
+      "description": "Rename an existing data table"
+    },
+    {
+      "name": "add_data_table_rows",
+      "description": "Insert rows into an existing data table"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["n8n", "workflow", "automation", "orchestration", "data tables", "official"],
+  "user_config": {},
+  "oauth_config": {
+    "name": "n8n MCP",
+    "server_url": "https://n8n.io/mcp-server/http",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "n8n MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "readme": null,
+  "category": "Development",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "n8n"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://n8n.io/mcp-server/http",
+    "docs_url": "https://docs.n8n.io/connect/connect-to-n8n-mcp-server/"
+  },
+  "github_info": null,
+  "programming_language": null
+}

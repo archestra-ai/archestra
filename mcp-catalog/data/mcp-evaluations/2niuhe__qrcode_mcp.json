@@ -1,0 +1,166 @@
+{
+  "name": "2niuhe__qrcode_mcp",
+  "display_name": "qrcode_mcp",
+  "description": "mcp tool to generate qrcode",
+  "author": {
+    "name": "2niuhe"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/qrcode_mcp_server.py"],
+    "env": {
+      "TRANSPORT_MODE": "${user_config.transport_mode}",
+      "HOST": "${user_config.host}",
+      "PORT": "${user_config.port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "transport_mode": {
+      "type": "string",
+      "title": "Transport Mode",
+      "description": "Transport mode (sse, http, stdio)",
+      "default": "sse",
+      "required": false
+    },
+    "host": {
+      "type": "string",
+      "title": "Host Address",
+      "description": "Host address to bind",
+      "default": "0.0.0.0",
+      "required": false
+    },
+    "port": {
+      "type": "number",
+      "title": "Port",
+      "description": "Port to bind",
+      "default": 8008,
+      "required": false
+    }
+  },
+  "readme": "# QR Code Generation MCP Server\n\nA QR code generation MCP server implemented using FastMCP, supporting text-to-QR code conversion with base64 encoding output.\n\n<a href=\"https://glama.ai/mcp/servers/@2niuhe/qrcode_mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@2niuhe/qrcode_mcp/badge\" />\n</a>\n\n## Features\n\n- Support for any text to QR code conversion (including Chinese characters)\n- Customizable colors and styles\n- Base64 encoding\n- Support for STDIO, HTTP, and SSE transport modes\n\n## Installation\n\n```bash\nuv sync\n# or\npip install qrcode Pillow mcp\n```\n\n## Usage\n\n### 0. Docker Usage\n\n#### Build Image\n```bash\ndocker build -t qrcode-mcp .\n```\n\n#### Run Container\n```bash\n# Default SSE mode\ndocker run -p 8008:8008 qrcode-mcp\n\n# HTTP mode\ndocker run -p 8008:8008 -e TRANSPORT_MODE=http qrcode-mcp\n\n# STDIO mode (for testing)\ndocker run -e TRANSPORT_MODE=stdio qrcode-mcp\n\n# Custom host and port\ndocker run -p 9000:9000 -e TRANSPORT_MODE=http -e HOST=0.0.0.0 -e PORT=9000 qrcode-mcp\n```\n\n#### Environment Variables\n- `TRANSPORT_MODE`: Transport mode (`sse`, `http`, `stdio`), default: `sse`\n- `HOST`: Host address to bind, default: `0.0.0.0`\n- `PORT`: Port to bind, default: `8008`\n\n#### Docker Compose\n```yaml\nversion: '3.8'\nservices:\n  qrcode-mcp:\n    build: .\n    ports:\n      - \"8008:8008\"\n    environment:\n      - TRANSPORT_MODE=sse\n      - HOST=0.0.0.0\n      - PORT=8008\n```\n\n### 1. MCP Server Mode\n\n#### Start Server\n```bash\n# STDIO mode (for Claude Desktop)\npython qrcode_mcp_server.py\n\n# HTTP mode\npython qrcode_mcp_server.py --http --host 127.0.0.1 --port 8008\n\n# SSE mode (Server-Sent Events) Deprecated\npython qrcode_mcp_server.py --sse --host 127.0.0.1 --port 8008\n```\n\n#### Configure Claude Desktop\nAdd to `~/Library/Application Support/Claude/claude_desktop_config.json`:\n\n**STDIO Mode (Local Use):**\n```json\n{\n  \"mcpServers\": {\n    \"qrcode-mcp\": {\n      \"command\": \"python\",\n      \"args\": [\"/ABSOLUTE/PATH/TO/qrcode_mcp/qrcode_mcp_server.py\"],\n      \"cwd\": \"/ABSOLUTE/PATH/TO/qrcode_mcp\"\n    }\n  }\n}\n```\n\n**HTTP Mode (Network Deployment):**\n```json\n{\n  \"mcpServers\": {\n    \"qrcode-mcp\": {\n      \"transport\": \"http\",\n      \"url\": \"http://127.0.0.1:8008/mcp/\"\n    }\n  }\n}\n```\n\n**SSE Mode (Server-Sent Events):**\n```json\n{\n  \"mcpServers\": {\n    \"qrcode-mcp\": {\n      \"serverUrl\": \"http://127.0.0.1:8008/sse\"\n    }\n  }\n}\n```\n\n### 2. Direct Python API Usage\n\n```python\nfrom qrcode_utils import text_to_qr_base64\n\n# Basic usage\nbase64_result = text_to_qr_base64(\"Hello, World!\")\n\n# Custom styling\nbase64_result = text_to_qr_base64(\n    \"Custom QR Code\",\n    box_size=15,\n    fill_color=\"darkblue\",\n    back_color=\"lightgray\"\n)\n```\n\n## MCP Tools\n\n### `generate_qr_code`\nGenerate QR code and return base64 encoding.\n\n**Parameters:**\n- `text` (required): Text content to convert\n- `box_size` (optional): Pixel size of each box, default 10\n- `border` (optional): Number of border boxes, default 4\n- `fill_color` (optional): Foreground color, default \"black\"\n- `back_color` (optional): Background color, default \"white\"\n- `return_data_url` (optional): Whether to return Data URL format, default false\n\n## Testing\n\n```bash\npython test_mcp_client.py\n```\n\n## License\n\nMIT License ",
+  "category": "Development",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "qrcode-mcp-docker-sse-default": {
+        "command": "docker",
+        "args": ["run", "-p", "8008:8008", "qrcode-mcp"],
+        "env": {},
+        "docker_image": "qrcode-mcp"
+      },
+      "qrcode-mcp-docker-http": {
+        "command": "docker",
+        "args": ["run", "-p", "8008:8008", "-e", "TRANSPORT_MODE=http", "qrcode-mcp"],
+        "env": {
+          "TRANSPORT_MODE": "http"
+        },
+        "docker_image": "qrcode-mcp"
+      },
+      "qrcode-mcp-docker-stdio": {
+        "command": "docker",
+        "args": ["run", "-e", "TRANSPORT_MODE=stdio", "qrcode-mcp"],
+        "env": {
+          "TRANSPORT_MODE": "stdio"
+        },
+        "docker_image": "qrcode-mcp"
+      },
+      "qrcode-mcp-docker-http-custom-port": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-p",
+          "9000:9000",
+          "-e",
+          "TRANSPORT_MODE=http",
+          "-e",
+          "HOST=0.0.0.0",
+          "-e",
+          "PORT=9000",
+          "qrcode-mcp"
+        ],
+        "env": {
+          "TRANSPORT_MODE": "http",
+          "HOST": "0.0.0.0",
+          "PORT": "9000"
+        },
+        "docker_image": "qrcode-mcp"
+      },
+      "qrcode-mcp-server-stdio": {
+        "command": "python",
+        "args": ["qrcode_mcp_server.py"],
+        "env": {}
+      },
+      "qrcode-mcp-server-http": {
+        "command": "python",
+        "args": ["qrcode_mcp_server.py", "--http", "--host", "127.0.0.1", "--port", "8008"],
+        "env": {}
+      },
+      "qrcode-mcp-server-sse": {
+        "command": "python",
+        "args": ["qrcode_mcp_server.py", "--sse", "--host", "127.0.0.1", "--port", "8008"],
+        "env": {}
+      },
+      "qrcode-mcp-server-stdio-claude-config": {
+        "command": "python",
+        "args": ["/ABSOLUTE/PATH/TO/qrcode_mcp/qrcode_mcp_server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "2niuhe",
+    "repo": "qrcode_mcp",
+    "url": "https://github.com/2niuhe/qrcode_mcp",
+    "name": "qrcode_mcp",
+    "path": null,
+    "stars": 6,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "77708edcca558524d651bc2ead8a9cd453ec5aac"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:41.670Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "qrcode",
+      "importance": 9
+    },
+    {
+      "name": "Pillow",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"qrcode-mcp\"\nversion = \"0.1.0\"\ndescription = \"A MCP tool to convert text to QR code images with base64 encoding\"\ndependencies = [\n    \"qrcode>=7.4.2\",\n    \"Pillow>=10.0.0\",\n    \"mcp>=1.0.0\",\n    \"uvicorn>=0.30.0\",\n]\nrequires-python = \">=3.10\"\n\n[project.scripts]\nqrcode-mcp-stdio = \"qrcode_mcp_server:main_stdio\"\nqrcode-mcp-http = \"qrcode_mcp_server:main_http_with_args\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"qrcode_utils.py\", \"qrcode_mcp_server.py\"] "
+}

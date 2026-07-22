@@ -80,7 +80,7 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
     availableKeysMock.mockReturnValue({ data: [{ provider: "anthropic" }] });
   });
 
-  it("renders the Model Router as the first tile of the provider grid", () => {
+  it("renders the Model Router as the first tab of the endpoint card", () => {
     renderInstructions();
 
     // A selected provider keeps its per-provider URL…
@@ -88,20 +88,16 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
       screen.getByText("http://localhost:9000/v1/anthropic/profile-123"),
     ).toBeInTheDocument();
 
-    // …while the router is offered as a grid tile, ahead of the providers.
-    const routerTile = screen.getByRole("button", {
-      name: /OpenAI compatible Model Router/i,
-    });
-    const firstProviderTile = screen.getByRole("button", {
-      name: /OpenAI$/,
-    });
+    // …while the router is the first tab of the toggler, ahead of providers.
+    const routerTab = screen.getByRole("button", { name: "Model Router" });
+    const firstProviderTab = screen.getByRole("button", { name: "OpenAI" });
     expect(
-      routerTile.compareDocumentPosition(firstProviderTile) &
+      routerTab.compareDocumentPosition(firstProviderTab) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
-  it("selecting the Model Router tile shows the unified /model-router/ endpoint", async () => {
+  it("selecting the Model Router tab shows the unified /model-router/ endpoint", async () => {
     const user = userEvent.setup();
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("providerId=model-router") as unknown as ReturnType<

@@ -18,6 +18,20 @@ import {
 import { CopyableCode } from "@/components/copyable-code";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -210,9 +224,6 @@ export function ProxyClientInstructions({
   const url = selectedProvider
     ? `${baseUrl}/${selectedProvider}/${profileId}`
     : null;
-  const originalUrl = selectedProvider
-    ? PROVIDER_ORIGINAL_URLS[selectedProvider]
-    : null;
   const isCompatible =
     !!selectedProvider && supportedProviders.includes(selectedProvider);
 
@@ -246,33 +257,32 @@ export function ProxyClientInstructions({
 
   return (
     <div id="proxy-instructions" className="space-y-4">
-      <ProviderGrid
-        providers={gridProviders}
-        supported={supportedProviders}
-        selected={selectedProvider}
-        onSelect={handleProviderSelect}
-        modelRouter={
-          routerAvailable
-            ? {
-                selected: routerSelected,
-                onSelect: () => updateProviderInUrl(MODEL_ROUTER_TILE),
-              }
-            : undefined
-        }
-      />
-
-      {routerSelected ? (
-        <ModelRouterInstructions baseUrl={baseUrl} profileId={profileId} />
-      ) : !selectedProvider ? null : client.proxy.kind === "generic" &&
-        url &&
-        providerLabel &&
-        originalUrl ? (
-        <GenericProxyInstructions
+      {routerAvailable ? (
+        <GenericEndpointCard
           baseUrl={baseUrl}
           profileId={profileId}
+          providers={visibleAllProviders}
+          routerSelected={routerSelected}
+          selectedProvider={selectedProvider}
+          onSelectRouter={() => updateProviderInUrl(MODEL_ROUTER_TILE)}
+          onSelectProvider={handleProviderSelect}
+        />
+      ) : (
+        <ProviderPicker
+          providers={gridProviders}
+          supported={supportedProviders}
+          selected={selectedProvider}
+          onSelect={handleProviderSelect}
+        />
+      )}
+
+      {routerSelected ? (
+        <ModelRouterInstructions />
+      ) : !selectedProvider ? null : client.proxy.kind === "generic" &&
+        providerLabel ? (
+        <GenericProxyInstructions
           selectedProvider={selectedProvider}
           providerLabel={providerLabel}
-          originalUrl={originalUrl}
         />
       ) : isCompatible && instruction ? (
         instruction.kind === "snippet" ? (
@@ -324,17 +334,11 @@ type GenericAuthMethod = "provider-key" | "virtual-key";
  * its own first tile of the grid ({@link ModelRouterInstructions}).
  */
 function GenericProxyInstructions({
-  baseUrl,
-  profileId,
   selectedProvider,
   providerLabel,
-  originalUrl,
 }: {
-  baseUrl: string;
-  profileId: string;
   selectedProvider: SupportedProvider;
   providerLabel: string;
-  originalUrl: string;
 }) {
   const [authMethod, setAuthMethod] =
     useState<GenericAuthMethod>("provider-key");
@@ -403,24 +407,8 @@ function GenericProxyInstructions({
     provisionAsync,
   ]);
 
-  const providerUrl = `${baseUrl}/${selectedProvider}/${profileId}`;
-
   return (
     <div className="space-y-3">
-      {selectedProvider === "bedrock" ? (
-        <BedrockGenericInstructions
-          baseUrl={baseUrl}
-          profileId={profileId}
-          originalUrl={originalUrl}
-        />
-      ) : (
-        <ReplaceUrlBlock
-          label={providerLabel}
-          originalUrl={originalUrl}
-          url={providerUrl}
-        />
-      )}
-
       <div className="space-y-4 rounded-lg border bg-card p-4">
         <div className="space-y-2">
           <div className="text-xs font-medium text-muted-foreground">
@@ -506,21 +494,14 @@ function GenericProxyInstructions({
 }
 
 /**
- * The Model Router panel behind the first tile of the provider grid (generic
- * clients). One OpenAI-compatible endpoint that reaches every configured
- * provider via provider-qualified model IDs (`openai:gpt-5.4`) — /v1/openai is
- * just the OpenAI passthrough proxy; only /v1/model-router fans out across
- * providers. A virtual key wraps exactly one stored provider key, so router
- * setups pick which provider the minted key maps to.
+ * The Model Router auth panel behind the first tab of the endpoint card
+ * (generic clients). One OpenAI-compatible endpoint that reaches every
+ * configured provider via provider-qualified model IDs (`openai:gpt-5.4`) —
+ * /v1/openai is just the OpenAI passthrough proxy; only /v1/model-router fans
+ * out across providers. A virtual key wraps exactly one stored provider key,
+ * so router setups pick which provider the minted key maps to.
  */
-function ModelRouterInstructions({
-  baseUrl,
-  profileId,
-}: {
-  baseUrl: string;
-  profileId: string;
-}) {
-  const routerUrl = `${baseUrl}/model-router/${profileId}`;
+function ModelRouterInstructions() {
   const [authMethod, setAuthMethod] =
     useState<GenericAuthMethod>("provider-key");
   const { data: canCreateVirtualKey } = useHasPermissions({
@@ -583,12 +564,6 @@ function ModelRouterInstructions({
 
   return (
     <div className="space-y-3">
-      <ReplaceUrlBlock
-        label="OpenAI-compatible"
-        originalUrl="https://api.openai.com/v1/"
-        url={routerUrl}
-      />
-
       <div className="space-y-4 rounded-lg border bg-card p-4">
         <p className="text-xs text-muted-foreground">
           One OpenAI-style endpoint for every configured provider. Send
@@ -688,19 +663,91 @@ function ModelRouterInstructions({
   );
 }
 
+/** Tab button in the endpoint terminal card — same look as the setup-script card's provider toggler. */
+function endpointTabClass(active: boolean) {
+  return cn(
+    "border-b-2 px-2.5 py-2.5 font-mono text-xs transition-colors",
+    active
+      ? "border-white font-semibold text-white"
+      : "border-transparent text-[#9ca3af] hover:text-white",
+  );
+}
+
 /**
- * The "replace this base URL with that one" block shared by the generic flows.
- * Renders the proxy URL in the same terminal card as "Run the setup script".
+ * The generic client's proxy endpoint card: the same terminal card + provider
+ * toggler as "Run the setup script". Tabs switch between the Model Router and
+ * provider routes (primary providers inline, the rest behind a searchable "…"
+ * — a provider picked there joins the tab row so the selection stays visible);
+ * the proxy URL for the active tab renders below.
  */
-function ReplaceUrlBlock({
-  label,
-  originalUrl,
-  url,
+function GenericEndpointCard({
+  baseUrl,
+  profileId,
+  providers,
+  routerSelected,
+  selectedProvider,
+  onSelectRouter,
+  onSelectProvider,
 }: {
-  label: string;
-  originalUrl: string;
-  url: string;
+  baseUrl: string;
+  profileId: string;
+  providers: SupportedProvider[];
+  routerSelected: boolean;
+  selectedProvider: SupportedProvider | null;
+  onSelectRouter: () => void;
+  onSelectProvider: (p: SupportedProvider) => void;
 }) {
+  const PRIMARY: SupportedProvider[] = [
+    "openai",
+    "anthropic",
+    "gemini",
+    "bedrock",
+    "groq",
+  ];
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const primary = providers.filter((p) => PRIMARY.includes(p));
+  const rest = providers.filter((p) => !PRIMARY.includes(p));
+  const selectedFromRest =
+    selectedProvider && rest.includes(selectedProvider)
+      ? selectedProvider
+      : null;
+  const tabProviders = selectedFromRest
+    ? [...primary, selectedFromRest]
+    : primary;
+  const searchResults = rest.filter((p) =>
+    providerDisplayNames[p].toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const label = routerSelected
+    ? "OpenAI-compatible"
+    : selectedProvider
+      ? providerDisplayNames[selectedProvider]
+      : "";
+  const originalUrl = routerSelected
+    ? "https://api.openai.com/v1/"
+    : selectedProvider
+      ? PROVIDER_ORIGINAL_URLS[selectedProvider]
+      : "";
+  const url = routerSelected
+    ? `${baseUrl}/model-router/${profileId}`
+    : `${baseUrl}/${selectedProvider}/${profileId}`;
+
+  // Bedrock exposes two endpoints; both live in the same card as labeled rows.
+  const rows =
+    !routerSelected && selectedProvider === "bedrock"
+      ? [
+          {
+            comment: "Bedrock Converse API",
+            code: `${baseUrl}/bedrock/${profileId}`,
+          },
+          {
+            comment: "OpenAI Completions API compatible clients",
+            code: `${baseUrl}/bedrock/openai/${profileId}`,
+          },
+        ]
+      : undefined;
+
   return (
     <div className="space-y-2">
       <div className="text-xs text-muted-foreground">
@@ -711,85 +758,77 @@ function ReplaceUrlBlock({
         </code>{" "}
         with:
       </div>
-      <TerminalBlock code={url} />
-    </div>
-  );
-}
-
-function BedrockGenericInstructions({
-  baseUrl,
-  profileId,
-  originalUrl,
-}: {
-  baseUrl: string;
-  profileId: string;
-  originalUrl: string;
-}) {
-  const converseUrl = `${baseUrl}/bedrock/${profileId}`;
-  const openaiUrl = `${baseUrl}/bedrock/openai/${profileId}`;
-  return (
-    <div className="space-y-3">
-      <div className="rounded-lg border bg-card p-4">
-        <div className="mb-1 text-[13px] font-medium text-foreground">
-          Bedrock Converse API
-        </div>
-        <div className="mb-2.5 text-xs text-muted-foreground">
-          Replace Bedrock Base URL.
-        </div>
-        <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-          <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
-            <code className="block truncate text-xs line-through opacity-50">
-              {originalUrl}
-            </code>
+      <TerminalBlock
+        code={url}
+        rows={rows}
+        header={
+          <div className="flex flex-wrap items-center gap-1 border-b border-[#1f2937] px-3">
+            <button
+              type="button"
+              onClick={onSelectRouter}
+              className={endpointTabClass(routerSelected)}
+            >
+              Model Router
+            </button>
+            {tabProviders.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => onSelectProvider(p)}
+                className={endpointTabClass(selectedProvider === p)}
+              >
+                {providerDisplayNames[p]}
+              </button>
+            ))}
+            {rest.length > (selectedFromRest ? 1 : 0) && (
+              <Popover
+                open={searchOpen}
+                onOpenChange={(open) => {
+                  setSearchOpen(open);
+                  if (!open) setSearch("");
+                }}
+              >
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="More providers"
+                    className={endpointTabClass(false)}
+                  >
+                    …
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      value={search}
+                      onValueChange={setSearch}
+                      placeholder="Search providers..."
+                    />
+                    <CommandList>
+                      <CommandEmpty>No providers found.</CommandEmpty>
+                      <CommandGroup>
+                        {searchResults.map((p) => (
+                          <CommandItem
+                            key={p}
+                            value={p}
+                            onSelect={() => {
+                              onSelectProvider(p);
+                              setSearchOpen(false);
+                              setSearch("");
+                            }}
+                          >
+                            {providerDisplayNames[p]}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
-          <span className="text-center text-muted-foreground">→</span>
-          <CopyableCode
-            value={converseUrl}
-            variant="primary"
-            toastMessage="Proxy URL copied"
-          />
-        </div>
-      </div>
-
-      <div className="rounded-lg border bg-card p-4">
-        <div className="mb-1 text-[13px] font-medium text-foreground">
-          <a
-            href="https://platform.openai.com/docs/api-reference/chat"
-            target="_blank"
-            rel="noreferrer"
-            className="underline hover:text-foreground"
-          >
-            OpenAI Completions API
-          </a>{" "}
-          compatible endpoint
-        </div>
-        <div className="mb-2.5 text-xs text-muted-foreground">
-          Replace your OpenAI endpoint to connect OpenAI Completions API
-          compatible client to{" "}
-          <a
-            href="https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html"
-            target="_blank"
-            rel="noreferrer"
-            className="underline hover:text-foreground"
-          >
-            Bedrock Converse API
-          </a>
-          .
-        </div>
-        <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-          <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
-            <code className="block truncate text-xs line-through opacity-50">
-              https://api.openai.com/v1/
-            </code>
-          </div>
-          <span className="text-center text-muted-foreground">→</span>
-          <CopyableCode
-            value={openaiUrl}
-            variant="primary"
-            toastMessage="Proxy URL copied"
-          />
-        </div>
-      </div>
+        }
+      />
     </div>
   );
 }
@@ -1134,25 +1173,25 @@ function ProxyNote({ note }: { note: string }) {
   );
 }
 
-interface ProviderGridProps {
+interface ProviderPickerProps {
   providers: SupportedProvider[];
   supported: SupportedProvider[];
   selected: SupportedProvider | null;
   onSelect: (p: SupportedProvider) => void;
   /**
-   * Render the OpenAI-compatible Model Router as the first tile (generic
+   * Render the OpenAI-compatible Model Router as the first segment (generic
    * clients only — custom clients build per-provider instructions).
    */
   modelRouter?: { selected: boolean; onSelect: () => void };
 }
 
-function ProviderGrid({
+function ProviderPicker({
   providers,
   supported,
   selected,
   onSelect,
   modelRouter,
-}: ProviderGridProps) {
+}: ProviderPickerProps) {
   const PRIMARY: SupportedProvider[] = [
     "openai",
     "anthropic",
@@ -1160,112 +1199,174 @@ function ProviderGrid({
     "bedrock",
     "groq",
   ];
-  const [showAll, setShowAll] = useState(false);
-  const compact = providers.filter((p) => PRIMARY.includes(p));
-  // If the admin's allow-list excludes every primary provider, there's
-  // nothing to collapse to — fall through to the full list instead of
-  // rendering an empty grid behind a "Show all" button.
-  const canCollapse = compact.length > 0 && compact.length < providers.length;
-  const visible = showAll || !canCollapse ? providers : compact;
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const primary = providers.filter((p) => PRIMARY.includes(p));
+  const rest = providers.filter((p) => !PRIMARY.includes(p));
+  // A provider picked from the "..." search joins the group so the selection
+  // stays visible.
+  const selectedFromRest =
+    selected && rest.includes(selected) ? selected : null;
+  const searchResults = providers.filter((p) =>
+    providerDisplayNames[p].toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const pickFromSearch = (p: SupportedProvider) => {
+    onSelect(p);
+    setSearchOpen(false);
+    setSearch("");
+  };
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
-        <h4 className="text-sm font-semibold text-foreground">
-          Select a provider
-        </h4>
-        {canCollapse && (
+      <h4 className="pb-3 text-sm font-semibold text-foreground">
+        Select a provider
+      </h4>
+      <ButtonGroup className="flex-wrap">
+        {modelRouter && (
           <Button
             type="button"
-            variant="ghost"
             size="sm"
-            className="h-9 text-xs"
-            onClick={() => setShowAll((v) => !v)}
-          >
-            {showAll ? "Show fewer" : `Show all (${providers.length})`}
-          </Button>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
-        {modelRouter && (
-          <button
-            type="button"
+            variant={modelRouter.selected ? "secondary" : "outline"}
             onClick={modelRouter.onSelect}
-            className={cn(
-              "relative flex items-center gap-3 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:border-primary/50",
-              modelRouter.selected && "border-primary ring-4 ring-primary/5",
-            )}
+            className={cn("gap-2", modelRouter.selected && "font-semibold")}
           >
-            <div
-              className="flex size-9 shrink-0 items-center justify-center rounded-md font-mono text-[13px] font-bold"
+            <span
+              className="flex size-4 shrink-0 items-center justify-center rounded-sm font-mono text-[10px] font-bold"
               style={{
                 background: "linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)",
                 color: "#fff",
               }}
             >
               ⇄
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold tracking-tight text-foreground">
-                OpenAI compatible Model Router
-              </div>
-              <div className="mt-0.5 text-[11.5px] text-muted-foreground">
-                Every provider, one endpoint
-              </div>
-            </div>
-            {modelRouter.selected && (
-              <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                <Check className="size-2.5" strokeWidth={3} />
-              </div>
-            )}
-          </button>
+            </span>
+            OpenAI compatible Model Router
+          </Button>
         )}
-        {visible.map((p) => {
-          const isSupported = supported.includes(p);
-          const isSel = selected === p;
-          const icon = PROVIDER_ICONS[p];
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() => onSelect(p)}
-              className={cn(
-                "relative flex items-center gap-3 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:border-primary/50",
-                isSel && "border-primary ring-4 ring-primary/5",
-                !isSupported && "opacity-50",
-              )}
-            >
-              <div
-                className="flex size-9 shrink-0 items-center justify-center rounded-md font-mono text-[13px] font-bold"
-                style={{ background: icon.bg, color: icon.fg }}
+        {primary.map((p) => (
+          <ProviderPickerButton
+            key={p}
+            provider={p}
+            isSupported={supported.includes(p)}
+            isSelected={selected === p}
+            onSelect={onSelect}
+          />
+        ))}
+        {selectedFromRest && (
+          <ProviderPickerButton
+            provider={selectedFromRest}
+            isSupported={supported.includes(selectedFromRest)}
+            isSelected
+            onSelect={onSelect}
+          />
+        )}
+        {rest.length > 0 && (
+          <Popover
+            open={searchOpen}
+            onOpenChange={(open) => {
+              setSearchOpen(open);
+              if (!open) setSearch("");
+            }}
+          >
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                aria-label="More providers"
+                aria-expanded={searchOpen}
               >
-                {icon.glyph === "aws" ? (
-                  <span className="text-[9px] font-extrabold tracking-tight">
-                    aws
-                  </span>
-                ) : (
-                  icon.glyph
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold tracking-tight text-foreground">
-                  {providerDisplayNames[p]}
-                </div>
-                {!isSupported && (
-                  <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
-                    Not compatible
-                  </div>
-                )}
-              </div>
-              {isSel && (
-                <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                  <Check className="size-2.5" strokeWidth={3} />
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
+                …
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-0" align="start">
+              <Command shouldFilter={false}>
+                <CommandInput
+                  value={search}
+                  onValueChange={setSearch}
+                  placeholder="Search providers..."
+                />
+                <CommandList>
+                  <CommandEmpty>No providers found.</CommandEmpty>
+                  <CommandGroup>
+                    {searchResults.map((p) => (
+                      <CommandItem
+                        key={p}
+                        value={p}
+                        onSelect={() => pickFromSearch(p)}
+                        className="justify-between"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <ProviderGlyph provider={p} />
+                          <span className="truncate">
+                            {providerDisplayNames[p]}
+                          </span>
+                          {!supported.includes(p) && (
+                            <span className="text-[11px] text-muted-foreground">
+                              Not compatible
+                            </span>
+                          )}
+                        </span>
+                        <Check
+                          className={cn(
+                            "h-4 w-4",
+                            selected === p ? "opacity-100" : "opacity-0",
+                          )}
+                        />
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        )}
+      </ButtonGroup>
     </div>
+  );
+}
+
+function ProviderPickerButton({
+  provider,
+  isSupported,
+  isSelected,
+  onSelect,
+}: {
+  provider: SupportedProvider;
+  isSupported: boolean;
+  isSelected: boolean;
+  onSelect: (p: SupportedProvider) => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={isSelected ? "secondary" : "outline"}
+      onClick={() => onSelect(provider)}
+      className={cn(
+        "gap-2",
+        isSelected && "font-semibold",
+        !isSupported && "opacity-50",
+      )}
+    >
+      <ProviderGlyph provider={provider} />
+      {providerDisplayNames[provider]}
+    </Button>
+  );
+}
+
+function ProviderGlyph({ provider }: { provider: SupportedProvider }) {
+  const icon = PROVIDER_ICONS[provider];
+  return (
+    <span
+      className="flex size-4 shrink-0 items-center justify-center rounded-sm font-mono text-[9px] font-bold"
+      style={{ background: icon.bg, color: icon.fg }}
+    >
+      {icon.glyph === "aws" ? (
+        <span className="text-[5px] font-extrabold tracking-tight">aws</span>
+      ) : (
+        icon.glyph
+      )}
+    </span>
   );
 }

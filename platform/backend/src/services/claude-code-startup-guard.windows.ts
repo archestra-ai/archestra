@@ -7,9 +7,13 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import {
-  ARCHESTRA_GUARD_MARK_LINES,
-  type StartupGuardContext,
-} from "./startup-guard";
+  ARCHESTRA_MARK,
+  ARCHESTRA_MARK_GAP,
+  ARCHESTRA_MARK_NAME_ROW,
+  ARCHESTRA_MARK_TAGLINE,
+  ARCHESTRA_MARK_TAGLINE_ROW,
+} from "./archestra-mark";
+import type { StartupGuardContext } from "./startup-guard";
 
 // This PowerShell guard is still Claude-Code-specific (the POSIX guard is now
 // client-generic; the Windows generalization to Codex/Copilot is a follow-up).
@@ -821,15 +825,24 @@ function guardHeader(ctx: StartupGuardContext): string {
     return `Write-Arch $AppName Cyan
 Write-Host ''`;
   }
-  const [m0, m1, m2, m3, m4] = ARCHESTRA_GUARD_MARK_LINES;
-  return `Write-Arch ${psq(m0)} White
-Write-Arch ${psq(m1)} White -NoNewline
-Write-Arch ('      ' + $AppName) Cyan
-Write-Arch ${psq(m2)} White -NoNewline
-Write-Arch '       Secure access to your AI tools' DarkGray
-Write-Arch ${psq(m3)} White
-Write-Arch ${psq(m4)} White
-Write-Host ''`;
+  // The exact canonical mark (identical art to the bash guard and the connect
+  // banner): box lines in White, product name (Cyan) and tagline (DarkGray)
+  // overlaid on their rows. The .ps1 is written UTF-8-with-BOM, so PowerShell
+  // decodes these block glyphs correctly.
+  const lines = ARCHESTRA_MARK.unicode;
+  const out = lines.map((line, i) => {
+    if (i === ARCHESTRA_MARK_NAME_ROW) {
+      return `Write-Arch ${psq(line)} White -NoNewline
+Write-Arch (${psq(ARCHESTRA_MARK_GAP)} + $AppName) Cyan`;
+    }
+    if (i === ARCHESTRA_MARK_TAGLINE_ROW) {
+      return `Write-Arch ${psq(line)} White -NoNewline
+Write-Arch ${psq(ARCHESTRA_MARK_GAP + ARCHESTRA_MARK_TAGLINE)} DarkGray`;
+    }
+    return `Write-Arch ${psq(line)} White`;
+  });
+  out.push("Write-Host ''");
+  return out.join("\n");
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
+import { archestraMarkWithText } from "./archestra-mark";
 import {
   buildWindowsClaudeCodeStartupGuardInstallSection,
   buildWindowsClaudeCodeStartupGuardUnshadowSection,
@@ -99,6 +100,19 @@ function psq(value: string): string {
 const SCRIPT_HELPERS = `$ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $ArchUseColor = [string]::IsNullOrEmpty($env:NO_COLOR)
+# Header-mark capability. Windows Terminal and PowerShell 7 render the Unicode
+# block mark (the exact macOS/Linux/guard logo); the legacy console (Windows
+# PowerShell 5.1 in conhost) mojibakes block glyphs on its OEM codepage, so it
+# falls back to the ASCII mark. Switching this session to UTF-8 is best-effort
+# and harmless if it fails — it only affects how the banner below is drawn.
+$ArchUtf8 = $false
+try {
+  if ($env:WT_SESSION -or $PSVersionTable.PSVersion.Major -ge 6) {
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+    $OutputEncoding = [System.Text.UTF8Encoding]::new()
+    $ArchUtf8 = $true
+  }
+} catch { }
 function Say($m)  { Write-Host ''; if ($ArchUseColor) { Write-Host ('==> ' + $m) -ForegroundColor Cyan } else { Write-Host ('==> ' + $m) } }
 function Ok($m)   { if ($ArchUseColor) { Write-Host ('==> ' + $m) -ForegroundColor Green } else { Write-Host ('==> ' + $m) } }
 function Warn($m) { if ($ArchUseColor) { Write-Host ('warning: ' + $m) -ForegroundColor Yellow } else { Write-Host ('warning: ' + $m) } }
@@ -126,9 +140,13 @@ Say ${psq(`${ctx.appName} setup: ${label}`)}${requireBinary}`;
 }
 
 /**
- * Splash printed at the top of every script: the Archestra ASCII mark (only
- * when not white-labeled) plus a plain-ASCII details block, emitted through a
- * single-quoted here-string so nothing in it is ever expanded by PowerShell.
+ * Splash printed at the top of every script: the Archestra mark plus a plain
+ * details block, emitted through single-quoted here-strings so nothing in them
+ * is ever expanded by PowerShell. The mark is the exact canonical logo (shared
+ * with the macOS/Linux banner and every startup guard) when the host can render
+ * UTF-8 block glyphs, and the portable ASCII rendition of the same composition
+ * otherwise — chosen at runtime by $ArchUtf8 (set in SCRIPT_HELPERS) so a legacy
+ * `irm | iex` console never mojibakes.
  */
 function banner(ctx: SetupScriptContext): string {
   const label = CLIENT_LABELS[ctx.clientId];
@@ -144,23 +162,6 @@ function banner(ctx: SetupScriptContext): string {
   }
   if (ctx.skills) configures.push("Skills marketplace");
 
-  // Pure-ASCII rendition of the Archestra mark — a filled tilted bar and dot
-  // echoing logo-icon.svg. The built-in Windows PowerShell 5.1 console can
-  // render block/quadrant Unicode glyphs as mojibake (legacy codepage), so this
-  // mirrors the macOS/Linux block-mark's composition with portable ASCII only.
-  const logo = isDefaultBrandedAppName(ctx.appName)
-    ? `   .------------------.
-   |                  |
-   |        ,##.      |
-   |        ####      |     ${ctx.appName}
-   |       ####       |     Secure access to your AI tools
-   |       #### ,.    |
-   |       \`##' \`'    |
-   |                  |
-   '------------------'`
-    : `   ${ctx.appName}
-   Secure access to your AI tools`;
-
   const details = [
     `   Client:     ${label}`,
     configures.length > 0 ? `   Configures: ${configures.join(", ")}` : null,
@@ -169,9 +170,26 @@ function banner(ctx: SetupScriptContext): string {
     .filter(Boolean)
     .join("\n");
 
-  return `Write-Host @'
+  const markBlock = isDefaultBrandedAppName(ctx.appName)
+    ? `if ($ArchUtf8) {
+Write-Host @'
 
-${logo}
+${archestraMarkWithText({ appName: ctx.appName, variant: "unicode" }).join("\n")}
+'@
+} else {
+Write-Host @'
+
+${archestraMarkWithText({ appName: ctx.appName, variant: "ascii" }).join("\n")}
+'@
+}`
+    : `Write-Host @'
+
+   ${ctx.appName}
+   Secure access to your AI tools
+'@`;
+
+  return `${markBlock}
+Write-Host @'
 
 ${details}
 '@`;

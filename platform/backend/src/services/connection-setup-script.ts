@@ -13,6 +13,7 @@ import type {
   ConnectionSetupPlatform,
   ConnectionSetupProxyAuth,
 } from "@/types";
+import { archestraMarkWithText } from "./archestra-mark";
 import { renderWindowsSetupScript } from "./connection-setup-script.windows";
 import {
   buildStartupGuardContext,
@@ -300,19 +301,10 @@ function banner(ctx: SetupScriptContext): string {
   }
   if (ctx.skills) configures.push("Skills marketplace");
 
-  // A monospace rendition of the Archestra mark: a white tilted rounded bar
-  // and dot on the terminal's dark field, echoing the real logo-icon.svg.
-  // Block/quadrant glyphs (UTF-8) render as solid shapes in any modern terminal.
+  // The one canonical Archestra mark (shared with the startup guards), block/
+  // quadrant glyphs that render as solid shapes in any UTF-8 terminal.
   const logo = isDefaultBrandedAppName(ctx.appName)
-    ? `   ╭──────────────────╮
-   │                  │
-   │        ▟██▙      │
-   │        ████      │     ${ctx.appName}
-   │       ████       │     Secure access to your AI tools
-   │       ████ ▟▙    │
-   │      ▜██▛  ▜▛    │
-   │                  │
-   ╰──────────────────╯`
+    ? archestraMarkWithText({ appName: ctx.appName }).join("\n")
     : `   ${ctx.appName}
    Secure access to your AI tools`;
 

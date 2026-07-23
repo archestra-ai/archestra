@@ -4,6 +4,13 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import { CONNECTION_HEALTH_PATH } from "@/routes/route-paths";
+import {
+  ARCHESTRA_MARK,
+  ARCHESTRA_MARK_GAP,
+  ARCHESTRA_MARK_NAME_ROW,
+  ARCHESTRA_MARK_TAGLINE,
+  ARCHESTRA_MARK_TAGLINE_ROW,
+} from "./archestra-mark";
 import type { SetupScriptContext } from "./connection-setup-script";
 
 /**
@@ -149,20 +156,6 @@ export interface StartupGuardClient {
    */
   renderProxyDisconnect(ctx: StartupGuardContext): string;
 }
-
-/**
- * The Archestra mark rendered in the pre-loader header (Claude Code renders
- * its own logo the same way). Only shown for the default brand — printing the
- * Archestra icon under a white-labeled name would be wrong — and shared with
- * the PowerShell guard renderer so both platforms draw the same mark.
- */
-export const ARCHESTRA_GUARD_MARK_LINES = [
-  "   ▟██▙",
-  "   ████",
-  "  ████",
-  "  ████ ▟▙",
-  " ▜██▛  ▜▛",
-];
 
 /**
  * Derive the guard's context from the setup-script context: pass the remotes
@@ -938,12 +931,23 @@ function guardHeader(ctx: StartupGuardContext): string {
   if (!isDefaultBrandedAppName(ctx.appName)) {
     return `printf '%s%s%s\\n\\n' "$C_TITLE" "$APP_NAME" "$C_RESET"`;
   }
-  const [m0, m1, m2, m3, m4] = ARCHESTRA_GUARD_MARK_LINES;
-  return `printf '%s${m0}%s\\n' "$C_LOGO" "$C_RESET"
-printf '%s${m1}%s      %s%s%s\\n' "$C_LOGO" "$C_RESET" "$C_TITLE" "$APP_NAME" "$C_RESET"
-printf '%s${m2}%s       %sSecure access to your AI tools%s\\n' "$C_LOGO" "$C_RESET" "$C_DIM" "$C_RESET"
-printf '%s${m3}%s\\n' "$C_LOGO" "$C_RESET"
-printf '%s${m4}%s\\n\\n' "$C_LOGO" "$C_RESET"`;
+  // The exact canonical mark, colored per line: the box art in C_LOGO with the
+  // product name (C_TITLE) and tagline (C_DIM) overlaid on their rows. The box
+  // lines carry no `%`, so they are safe inside the printf format string; the
+  // app name is always passed as an argument, never interpolated into it.
+  const lines = ARCHESTRA_MARK.unicode;
+  return lines
+    .map((line, i) => {
+      const tail = i === lines.length - 1 ? "\\n\\n" : "\\n";
+      if (i === ARCHESTRA_MARK_NAME_ROW) {
+        return `printf '%s${line}%s${ARCHESTRA_MARK_GAP}%s%s%s${tail}' "$C_LOGO" "$C_RESET" "$C_TITLE" "$APP_NAME" "$C_RESET"`;
+      }
+      if (i === ARCHESTRA_MARK_TAGLINE_ROW) {
+        return `printf '%s${line}%s${ARCHESTRA_MARK_GAP}%s${ARCHESTRA_MARK_TAGLINE}%s${tail}' "$C_LOGO" "$C_RESET" "$C_DIM" "$C_RESET"`;
+      }
+      return `printf '%s${line}%s${tail}' "$C_LOGO" "$C_RESET"`;
+    })
+    .join("\n");
 }
 
 /**
